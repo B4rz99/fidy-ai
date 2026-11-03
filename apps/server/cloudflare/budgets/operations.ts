@@ -1,4 +1,3 @@
-import { Money } from "../../src/core/_shared/money";
 import { findDashboardAggregate } from "../transactions/operations";
 import {
   acceptsGroupCapPrecision,
@@ -22,7 +21,7 @@ import {
   type CreateBudgetInput,
   type UpdateBudgetInput,
 } from "../../src/core/budgets/contract";
-import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import {
   type QueryCaller,
   type TransactionBoundaryFailure,
@@ -39,9 +38,10 @@ import {
   transactionNoStore,
   transactionUnavailable,
 } from "../canonical-work/operations";
-import { monthlySpending } from "./internal/monthly-cash-flow";
 import { recordBudgetCall } from "./internal/budget-audit";
-import { budgetFromRow } from "./internal/budget-row";
+import { decodePlannedCaps, preparePlannedCaps, readPlannedCaps } from "./internal/planned-caps";
+import { readBudgetWorkspace } from "./internal/workspace-read";
+import { assembleBudgetReport } from "./internal/budget-report";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
@@ -50,7 +50,6 @@ import {
 import { type OAuthMutationReview } from "../oauth-confirmation/contract";
 import { recordLivePATUse } from "../../src/shell/tokens/operations";
 import { budgetOutcome, findOwnedBudget } from "./internal/budget-outcome";
-import { calculateBudgetStatus } from "../../src/core/budgets/operations";
 import { type UserContext, UserId } from "../../src/core/identity/contract";
 import { readUserContext } from "../identity/user-context/operations";
 import { budgetParameters, budgetPeriod } from "./internal/budget-queries";
@@ -480,50 +479,7 @@ export const prepareDeleteBudget = ({
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
-const maximumBudgetCount = 128;
 const monthLabelLength = 7;
-
-const preparePlannedCaps = ({
-  db,
-  userId,
-  month,
-  includeInactive,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  month: string;
-  includeInactive: boolean;
-}>): D1PreparedStatement =>
-  db
-    .prepare(`SELECT b.id,b.category_id,
-      COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=? ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
-      COALESCE((SELECT p.cap FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') p WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) AS cap,
-      b.created_at_ms,b.updated_at_ms,b.group_name FROM budgets b WHERE b.user_id=? AND (?=1 OR b.starts_month IS NULL OR b.starts_month<=?)
-      ORDER BY b.currency,b.category_id LIMIT ${maximumBudgetCount + 1}`)
-    .bind(month, month, userId, includeInactive ? 1 : 0, month);
-
-const decodePlannedCaps = (
-  rows: ReadonlyArray<unknown>
-): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
-  rows.length > maximumBudgetCount
-    ? Effect.succeedNone
-    : Effect.forEach(rows, budgetFromRow).pipe(
-        Effect.asSome,
-        Effect.orElseSucceed(() => Option.none())
-      );
-
-const readPlannedCaps = (
-  input: Readonly<{
-    db: D1Database;
-    userId: string;
-    month: string;
-    includeInactive: boolean;
-  }>
-): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
-  Effect.tryPromise(() => preparePlannedCaps(input).all()).pipe(
-    Effect.flatMap((rows) => decodePlannedCaps(rows.results)),
-    Effect.orElseSucceed(() => Option.none())
-  );
 
 /**
  * Prepare the complete peer cap projection for one explicitly planned local month. Calendar inputs
@@ -625,31 +581,15 @@ export const readBudgetSpending = ({
       toExclusive: DateTime.toEpochMillis(period.to),
     });
     if (Option.isNone(aggregates)) return Option.none<BudgetStatusReport>();
-    const statuses = yield* Effect.forEach(
-      budgets.value.filter(
-        (budget) =>
-          (query.categoryId === undefined || budget.categoryId === query.categoryId) &&
-          (query.currency === undefined || budget.cap.currency === query.currency)
-      ),
-      (budget) =>
-        calculateBudgetStatus({
-          budget,
-          period,
-          spent:
-            aggregates.value.find(
-              (row) =>
-                row.direction === "outflow" &&
-                row.categoryId === budget.categoryId &&
-                row.sum.currency === budget.cap.currency
-            )?.sum ?? Money.make({ amount: BigDecimal.make(0n, 0), currency: budget.cap.currency }),
-        })
+    return Option.some(
+      yield* assembleBudgetReport({
+        budgets: budgets.value,
+        aggregates: aggregates.value,
+        period,
+        query,
+        initialized,
+      })
     );
-    return Option.some({
-      period,
-      statuses,
-      initialized,
-      ...monthlySpending({ aggregates: aggregates.value, query, statuses }),
-    });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 const readAuthorizedBudget = ({
@@ -680,27 +620,14 @@ const readAuthorizedBudget = ({
         ? respond(Schema.toCodecJson(Schema.Array(Budget)), all.value)
         : transactionUnavailable();
     }
-    const report = yield* readBudgetSpending({
+    const workspace = yield* readBudgetWorkspace({
       db,
       userId: subject.userId,
       query: Option.getOrThrow(query),
       now,
     });
-    if (Option.isNone(report)) return transactionUnavailable();
-    // Keep dependent Promise-owned reads behind the caller's live deadline fence.
-    const budgets = yield* readPlannedCaps({
-      db,
-      userId: subject.userId,
-      month: DateTime.formatIsoDate(
-        DateTime.setZone(
-          budgetPeriod({ now, query: Option.getOrThrow(query) }).from,
-          DateTime.zoneMakeNamedUnsafe(Option.getOrThrow(query).timeZone)
-        )
-      ).slice(0, monthLabelLength),
-      includeInactive: true,
-    });
-    return Option.isSome(budgets)
-      ? respond(Schema.toCodecJson(BudgetWorkspace), { ...report.value, budgets: budgets.value })
+    return Option.isSome(workspace)
+      ? respond(Schema.toCodecJson(BudgetWorkspace), workspace.value)
       : transactionUnavailable();
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 

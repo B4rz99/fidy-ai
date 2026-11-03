@@ -408,7 +408,6 @@ export const createWebRouter = (options: WebRouterOptions) =>
     context: {
       registry: options.registry,
       sessionBinding: options.sessionBinding,
-      browserRequestsIdle: options.browserRequestsIdle,
       apiClient: options.apiClient,
       webAuthClient: options.webAuthClient,
       hostedTurnClient: options.hostedTurnClient,

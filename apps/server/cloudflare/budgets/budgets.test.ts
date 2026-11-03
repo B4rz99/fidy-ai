@@ -3,7 +3,7 @@ import { type ConsentUnavailable } from "../consent/contract";
 import { type InsightUnavailable, type ProactivityDeliveryWork } from "../insights/contract";
 import { type WorkflowStep } from "cloudflare:workers";
 import { type ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
-import { type Cause, DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
+import { type Cause, Config, DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
 import {
   evaluateBudgetAlerts,
   prepareDeleteBudget,
@@ -50,12 +50,13 @@ import {
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   Budget,
   BudgetId,
   BudgetStatusReport,
+  BudgetWorkspace,
   UpdateBudgetInput,
 } from "../../src/core/budgets/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
@@ -339,6 +340,254 @@ const Captured = Schema.Struct({
   data: Schema.toCodecJson(Transaction),
   next: Schema.Array(Schema.Unknown),
 });
+
+const Workspace = Schema.Struct({
+  data: Schema.toCodecJson(BudgetWorkspace),
+  next: Schema.Array(Schema.Unknown),
+});
+const seedWorkspaceRead = Effect.fnUntraced(function* (db: D1Database, future: boolean) {
+  const period = deriveCurrentBudgetMonth({
+    now: DateTime.nowUnsafe(),
+    timeZone: IanaTimeZone.make("America/Bogota"),
+  });
+  const selected = DateTime.setZone(period.from, DateTime.zoneMakeNamedUnsafe(period.timeZone));
+  const month = DateTime.formatIsoDate(DateTime.add(selected, { months: future ? 1 : 0 })).slice(
+    0,
+    7
+  );
+  const created = yield* Effect.tryPromise(() =>
+    send(db, request(0, "/budgets", "POST", { ...payload(), month }))
+  );
+  expect(created.status).toBe(201);
+  const budget = yield* Schema.decodeUnknownEffect(Created)(
+    yield* Effect.tryPromise(() => created.json())
+  );
+  expect(
+    (yield* Effect.tryPromise(() =>
+      send(
+        db,
+        request(0, "/transactions", "POST", {
+          money: { amount: "80.01", currency: "COP" },
+          categoryId: category,
+          direction: "outflow",
+          occurredAt: DateTime.formatIso(period.from),
+        })
+      )
+    )).status
+  ).toBe(201);
+  return budget.data;
+});
+
+it.each([false, true])("reads a fresh Budget workspace once with a future cap: %s", (future) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedWorkspaceRead(db, future);
+      const observed = observeRetentionCost(db);
+      const response = yield* Effect.tryPromise(() =>
+        send(observed.database, request(0, "/budget-status?timeZone=America%2FBogota"))
+      );
+      expect(response.status).toBe(200);
+      const workspace = yield* Schema.decodeUnknownEffect(Workspace)(
+        yield* Effect.tryPromise(() => response.json())
+      );
+      expect(workspace.data.budgets).toHaveLength(1);
+      expect(workspace.data.statuses).toHaveLength(future ? 0 : 1);
+      const spent = future
+        ? EffectArray.head(workspace.data.unbudgetedExpenses).pipe(Option.map((row) => row.spent))
+        : EffectArray.head(workspace.data.statuses).pipe(Option.map((row) => row.spent));
+      expect(encodeMoneyAmount(Option.getOrThrow(spent).amount)).toBe("80.01");
+      const plannedReads = observed
+        .statements()
+        .filter((statement) => statement.sql.includes("FROM budgets b"));
+      expect(observed.roundTrips()).toBeLessThanOrEqual(5);
+      expect(plannedReads).toHaveLength(1);
+    })
+  )
+);
+
+const afterAggregateSnapshot = (db: D1Database, change: () => Promise<unknown>): D1Database => {
+  let selected = false;
+  let changed = false;
+  return {
+    prepare: (sql) => {
+      if (sql.includes("transaction_projection_state")) selected = true;
+      return db.prepare(sql);
+    },
+    batch: <Row>(statements: D1PreparedStatement[]) =>
+      db.batch<Row>(statements).then((rows) => {
+        if (selected && !changed) {
+          changed = true;
+          return change().then(() => rows);
+        }
+        return rows;
+      }),
+    exec: db.exec.bind(db),
+    dump: db.dump.bind(db),
+    withSession: db.withSession.bind(db),
+  };
+};
+
+it("keeps Budget report and editing caps in one snapshot across a concurrent cap change", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const budget = yield* seedWorkspaceRead(db, false);
+      const concurrent = afterAggregateSnapshot(db, () =>
+        db.batch([
+          db
+            .prepare("UPDATE budgets SET cap='200' WHERE user_id=? AND id=?")
+            .bind(users[0], budget.id),
+          db
+            .prepare(
+              "UPDATE budget_month_plan_records SET cap='200' WHERE kind='cap' AND user_id=? AND budget_id=?"
+            )
+            .bind(users[0], budget.id),
+        ])
+      );
+      const response = yield* Effect.tryPromise(() =>
+        send(concurrent, request(0, "/budget-status?timeZone=America%2FBogota"))
+      );
+      expect(response.status).toBe(200);
+      const workspace = yield* Schema.decodeUnknownEffect(Workspace)(
+        yield* Effect.tryPromise(() => response.json())
+      );
+      const status = Option.getOrThrow(EffectArray.head(workspace.data.statuses));
+      const editing = Option.getOrThrow(EffectArray.head(workspace.data.budgets));
+      expect(encodeMoneyAmount(status.budget.cap.amount)).toBe("100");
+      expect(encodeMoneyAmount(editing.cap.amount)).toBe("100");
+      expect(encodeMoneyAmount(status.spent.amount)).toBe("80.01");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT cap FROM budgets WHERE id=?").bind(budget.id).first("cap")
+        )
+      ).toBe("200");
+      const refreshed = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
+      );
+      const fresh = yield* Schema.decodeUnknownEffect(Workspace)(
+        yield* Effect.tryPromise(() => refreshed.json())
+      );
+      expect(
+        encodeMoneyAmount(Option.getOrThrow(EffectArray.head(fresh.data.budgets)).cap.amount)
+      ).toBe("200");
+      expect(
+        encodeMoneyAmount(
+          Option.getOrThrow(EffectArray.head(fresh.data.statuses)).budget.cap.amount
+        )
+      ).toBe("200");
+    })
+  ));
+
+const readBenchmarkEnabled =
+  (await Effect.runPromise(
+    Config.String("FIDY_BUDGET_READ_BENCHMARK").pipe(Config.withDefault("0"))
+  )) === "1";
+const seedBoundaryWorkspace = Effect.fnUntraced(function* (db: D1Database) {
+  yield* Effect.tryPromise(() =>
+    db.batch([
+      db.prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM seq WHERE n<126)
+      INSERT INTO categories(id,label,display_order) SELECT printf('10000000-0000-4000-8000-%012d',n+8000),'Read fixture '||n,n+8000 FROM seq`),
+      db
+        .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM seq WHERE n<126)
+      INSERT INTO budgets(id,user_id,category_id,currency,cap,created_at_ms,updated_at_ms)
+      SELECT printf('20000000-0000-4000-8000-%012d',n+8000),?,printf('10000000-0000-4000-8000-%012d',n+8000),'COP','100',0,0 FROM seq`)
+        .bind(users[0]),
+    ])
+  );
+  const period = deriveCurrentBudgetMonth({
+    now: DateTime.nowUnsafe(),
+    timeZone: IanaTimeZone.make("America/Bogota"),
+  });
+  yield* seedMonthlyMovements(db, {
+    categoryId: category,
+    currency: "COP",
+    occurredAt: DateTime.formatIso(period.from),
+    count: 5001,
+    offset: 90000,
+  });
+});
+const benchmarkBody = (data: typeof BudgetWorkspace.Type, primaryId: string): string => {
+  const normalize = (budget: Budget): Budget =>
+    budget.id === primaryId
+      ? { ...budget, id: BudgetId.make("20000000-0000-4000-8000-000000009999") }
+      : budget;
+  return JSON.stringify({
+    data: Schema.encodeSync(Schema.toCodecJson(BudgetWorkspace))({
+      ...data,
+      budgets: data.budgets.map(normalize),
+      statuses: data.statuses.map((status) => ({ ...status, budget: normalize(status.budget) })),
+    }),
+    next: [],
+  });
+};
+const readBenchmarkSamples = Effect.fnUntraced(function* (db: D1Database, primaryId: string) {
+  const samples: Array<
+    Readonly<{
+      elapsedMs: number;
+      roundTrips: number;
+      rowsRead: number;
+      rowsWritten: number;
+      responseBytes: number;
+      bodyHash: string;
+    }>
+  > = [];
+  for (let sample = 0; sample < 21; sample++) {
+    const observed = observeRetentionCost(db);
+    const started = performance.now();
+    const response = yield* Effect.tryPromise(() =>
+      send(observed.database, request(0, "/budget-status?timeZone=America%2FBogota"))
+    );
+    const text = yield* Effect.tryPromise(() => response.text());
+    const elapsedMs = performance.now() - started;
+    expect(response.status).toBe(200);
+    const workspace = yield* Schema.decodeEffect(Schema.fromJsonString(Workspace))(text);
+    expect(workspace.next).toEqual([]);
+    const bodyHash = new Bun.CryptoHasher("sha256")
+      .update(benchmarkBody(workspace.data, primaryId))
+      .digest("hex");
+    samples.push({
+      elapsedMs,
+      roundTrips: observed.roundTrips(),
+      ...observed.cost(),
+      responseBytes: new TextEncoder().encode(text).length,
+      bodyHash,
+    });
+  }
+  return samples;
+});
+it.skipIf(!readBenchmarkEnabled).each(["empty", "typical", "boundary"] as const)(
+  "measures the fresh Budget public-handler native-D1 adapter workload: %s",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.setSystemTime(DateTime.makeUnsafe("2026-11-03T12:00:00Z").epochMilliseconds);
+        const db = yield* setup();
+        const primaryId = scenario === "empty" ? "" : (yield* seedWorkspaceRead(db, false)).id;
+        if (scenario === "boundary") yield* seedBoundaryWorkspace(db);
+        const samples = yield* readBenchmarkSamples(db, primaryId);
+        const ordered = samples
+          .map((sample) => sample.elapsedMs)
+          .sort((left, right) => left - right);
+        yield* Effect.logInfo("[budget-read-benchmark]", {
+          scenario,
+          scope: "public-handlers-native-D1-local-coordinator-adapter",
+          samples,
+          firstRequestMs: samples[0]?.elapsedMs,
+          medianMs: ordered[10],
+          p95Ms: ordered[19],
+          minimumMs: ordered[0],
+          maximumMs: ordered[20],
+          includesFirstRequest: true,
+          freshDataEveryRequest: true,
+          productionLatencyClaim: false,
+        });
+        expect(new Set(samples.map((sample) => sample.bodyHash)).size).toBe(1);
+        expect(ordered[10]).toBeLessThanOrEqual(6.94);
+        expect(ordered[19]).toBeLessThanOrEqual(6.94);
+      })
+    )
+);
 
 it.each([
   { label: "after hours", createdAt: "2026-10-07T01:00:00Z", unstarted: false },

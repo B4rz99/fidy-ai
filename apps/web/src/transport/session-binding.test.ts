@@ -12,7 +12,6 @@ import { vi } from "vitest";
 import { TestClock } from "effect/testing";
 import {
   bindBrowserSession,
-  browserRequestsIdle,
   coordinateBrowserRequests,
   loadBrowserSessionBinding,
 } from "./session-binding";
@@ -20,7 +19,7 @@ import { browserHttpClientLayer } from "./browser-http-policy";
 
 for (const interrupted of [false, true]) {
   it.effect(
-    `keeps speculative work out of retry pacing and releases activity after ${interrupted ? "cancellation" : "completion"}`,
+    `respects retry pacing and settles after ${interrupted ? "cancellation" : "completion"}`,
     () => {
       const lifetime = new AbortController();
       return Effect.gen(function* () {
@@ -53,7 +52,6 @@ for (const interrupted of [false, true]) {
             lifetime: { binding: "session-a", signal: lifetime.signal, recheck: vi.fn() },
           })
         );
-        expect(browserRequestsIdle(lifetime.signal)).toBe(true);
         const work = yield* Effect.forkChild(
           Context.get(services, HttpClient.HttpClient).get(
             "https://api.test.fidyapp.com/categories"
@@ -61,16 +59,16 @@ for (const interrupted of [false, true]) {
         );
         yield* Deferred.await(started);
         yield* TestClock.adjust("1 millis");
-        expect(browserRequestsIdle(lifetime.signal)).toBe(false);
         expect(attempts).toBe(1);
         if (interrupted) {
           yield* Fiber.interrupt(work);
+          yield* TestClock.adjust("1 second");
+          expect(attempts).toBe(1);
         } else {
           yield* TestClock.adjust("1 second");
           expect((yield* Fiber.join(work)).status).toBe(200);
           expect(attempts).toBe(2);
         }
-        expect(browserRequestsIdle(lifetime.signal)).toBe(true);
       }).pipe(Effect.scoped);
     }
   );

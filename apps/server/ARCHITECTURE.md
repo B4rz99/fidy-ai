@@ -72,7 +72,10 @@ caller capabilities and confirmation requirements; Canonical Operations invokes 
 
 Workspace read projections remain specific declared observations. Budget status includes bounded
 editing metadata for the selected reporting month under the same authorization and accounting;
-its report and metadata reads can run concurrently within the coordinated User query. Monthly cash flow and uncapped Category/Currency outflows derive from the same complete Transaction-owned aggregate snapshot as cap spending. The Review
+its effective caps, month-plan existence, Transaction readiness/revision and exact aggregate reads
+share one native snapshot within the coordinated User query. Future-month caps remain editing
+metadata and do not contribute to active spending. Assembly uses request-local Category/Currency
+indexes and exact per-Currency totals; no response or working index survives the request. Monthly cash flow and uncapped Category/Currency outflows derive from the same complete Transaction-owned aggregate snapshot as cap spending. The Review
 workspace projects the first revision-bound item detail from its already-read rows, using the same
 draft expiry and Category suggestion policy as an individual read, and never includes original
 material. A separate WebSession-only `ingestion.getReviewPageContext` read shares its page selection

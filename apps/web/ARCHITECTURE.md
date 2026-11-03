@@ -559,24 +559,15 @@ Dashboard off-route. Consent and session binding retain their fresh access check
 retain their previous display for five minutes while rechecking both lists on every mount and
 focus; pending or failed refreshes disable decisions. Manual PAT bearer disclosure and account
 proofs still dispose with their mounted owners.
-Router intent preloading prepares destination code without executing writes. The owned
-navigation hook prepares display reads only while an authenticated product route is active,
-including Transactions with observed Granted Consent;
-independent controls such as OAuth do not start product reads on hover. Automatic Budget and Recurring
-loader preloads are disabled so a code-only speculative match cannot satisfy the actual visit.
-The owned product intent retains data preparation and the active product route's AbortSignal,
-including after deferred code import. Idle preparation starts after the foreground Transaction,
-Dashboard, Budget, Recurring or Review display is available. Review waits for its source context
-when it has items. The queue prepares Budget, Recurring and Dashboard display data at most once
-per authentication lifetime, skipping the current destination, and warms the remaining destination
-code, including settings and Subscription. Display preparation waits for one second without pointer
-or keyboard activity and for all bound logical requests to settle, including queued transfers and
-retry pacing. It starts one destination preparation at a time, pauses in hidden documents, and
-route disposal stops unstarted work. Code warming yields independently between imports.
-Composition supplies these preparations through a context
-so features do not import application orchestration. Reported data-saving and slow network connections
-skip broad idle preparation; explicit destination intent remains available. Preparation reuses the
-existing query owners and starts no writes or off-route Dashboard initialization.
+Router intent preloading prepares destination code only. Pointer, keyboard focus and touch intent
+start no API read or original-material fetch. Destination data reads belong to the actual route
+entry under its access checks and AbortSignal. Automatic Budget and Recurring loader preloads
+remain disabled so a speculative code match cannot satisfy the actual visit.
+After the foreground workspace is ready, idle preparation may load the remaining destination code,
+yielding between imports and stopping unstarted work on disposal. Composition supplies code loaders
+through context; features do not import application orchestration. Reported data-saving and slow
+connections skip broad code preparation. No idle display-data queue or session-lifetime preparation
+registry remains.
 Needs Review and Recurring route loaders preload the same presentation component used by their
 retained workspace, so resolving destination code does not introduce another lazy suspension. Retained panels activate
 only for successful route matches after destination code and mandatory access checks complete.
@@ -584,9 +575,8 @@ Transactions and Review return their registry data-preparation promise as deferr
 owned by the route's AbortSignal. A held data read therefore leaves the workspace's approved
 pending/error controls available instead of blocking the entire route. Pending reads expose screen-reader status without visible skeletons or placeholder layouts. A cached Review route commits
 its retained display while its loader revalidates in the background. Transactions still awaits
-fresh Consent before starting its entry preparation or revealing the destination. Budget, Dashboard, Transactions and first Recurring intent prepare
-their display data, preserving immediate cached returns. Recurring intent does not mark the
-retained planning workspace as visited.
+fresh Consent before starting its entry preparation or revealing the destination. Actual destination visits start their display reads. Code preparation does not mark a planning
+workspace as visited.
 Actual Transactions entries refresh the shared Consent source before revealing the destination.
 Its 400 ms idle retention bridges loader-to-React subscription only; every actual entry refreshes
 it, including Back and rapid re-entry. Transaction loader preloads are disabled, so an in-flight
@@ -594,9 +584,8 @@ code-only speculative result cannot satisfy the actual entry; idle code preparat
 The route stores no copy of Consent or product data. Preparation observes the authentication
 registry's existing query and leaves failures there for the ordinary error view. Cached product
 information can remain visible during revalidation; waiting and failed refreshes still gate decisions.
-First destination reads can complete before reveal, with code-only preparation yielding until the
-foreground information is ready. Pointer, keyboard focus and touch intent prepare only
-the requested display resource or first Review material, within the same two transport permits. Transaction intent prepares data without donating an access decision to the actual entry; every actual entry still performs its fresh Consent check.
+First destination reads can complete before reveal. Every actual Transaction entry still performs
+its fresh Consent check; destination intent supplies no data or access decision.
 The browser's protected User response includes an optional bounded Category display catalog;
 category views derive it from that one source and explicit category recovery refreshes its owner.
 Other transports retain the independent Category read when the inline catalog is absent.

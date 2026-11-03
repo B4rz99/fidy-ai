@@ -2,8 +2,26 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "d6e74cf20d009133c2fc1f81941f686f91e713934f647083a447dd089913f454";
+const expectedEdgePolicyDigest = "68d4f2721b99147bb8b3227fb19456b61c71f9bee3bee4389135067b6a502b27";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/planned-caps.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/workspace-read.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/budget-report.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/monthly-cash-flow.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/transactions/internal/dashboard-projection.ts",
+      import.meta.url
+    )
+  ).text(),
   await Bun.file(new URL("../../patches/alchemy@2.0.0-beta.80.patch", import.meta.url)).text(),
   await Bun.file(new URL("./smoke-exchange.ts", import.meta.url)).text(),
   await Bun.file(

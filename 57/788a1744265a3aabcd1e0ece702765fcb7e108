@@ -1,0 +1,21 @@
+apps/web/e2e/workspace-requests.spec.ts
+  s_12ede6869163f4::t_f454ff6a5b6216 85,121-123,128
+apps/web/e2e/budgets.spec.ts
+  s_12ede6869163f4::t_f454ff6a5b6216 1012,1016-1017,1019-1022,1024
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "57788a1744265a3aabcd1e0ece702765fcb7e108",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

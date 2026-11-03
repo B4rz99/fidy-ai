@@ -1,4 +1,5 @@
-import { PrivacyAuthorizationSkeleton } from "@/ui/components/settings-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import {
   ArrowUpRight01Icon,
   CreditCardIcon,
@@ -102,7 +103,7 @@ const ConsentContent = ({
   client: WebAuthClient;
 }>): JSX.Element => {
   if (status._tag === "Initial") {
-    return <PrivacyAuthorizationSkeleton />;
+    return <PendingRead label="Consultando autorización" />;
   }
   if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
     return (

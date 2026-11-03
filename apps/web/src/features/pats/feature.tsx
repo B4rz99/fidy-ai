@@ -1,7 +1,8 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { Effect, Option } from "effect";
-import { type Atom, Reactivity } from "effect/reactivity";
+import { Atom, Reactivity } from "effect/reactivity";
+import { workspaceQueryRetention } from "@/transport/workspace-query";
 import { type JSX, type ReactNode, useState } from "react";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { type BrowserAuthentication, useSession } from "@/session/session-context";
@@ -104,17 +105,29 @@ const makeRevokeAllActivePATsCommand = (
     { concurrent: false }
   );
 
+const activePATListing = Atom.family((apiClient: FidyClient) =>
+  apiClient
+    .query("pats", "listPATs", {
+      ...workspaceQueryRetention,
+      reactivityKeys: [activePATReactivityKey],
+    })
+    .pipe(
+      Atom.swr({
+        staleTime: 0,
+        revalidateOnMount: true,
+        revalidateOnFocus: "always",
+        focusSignal: Atom.windowFocusSignal,
+      })
+    )
+);
+
 /** Pairing never receives a bearer; manual disclosure expires with the mounted view. */
 export const PATManagementFeature = ({
   children,
 }: Pick<PATManagementContentProps, "children">): JSX.Element => {
   const router = useRouter();
   const { authentication } = useSession();
-  const [activePATs] = useState(() =>
-    router.options.context.apiClient.query("pats", "listPATs", {
-      reactivityKeys: [activePATReactivityKey],
-    })
-  );
+  const [activePATs] = useState(() => activePATListing(router.options.context.apiClient));
   const activePATResult = useAtomValue(activePATs);
   const refreshActivePATs = useAtomRefresh(activePATs);
   const queryState = presentCanonicalQuery(activePATResult);

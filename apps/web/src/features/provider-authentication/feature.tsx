@@ -1,4 +1,5 @@
-import { ConsentDisclosureSkeleton } from "@/ui/components/settings-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { Option } from "effect";
 import type { AuthenticationProvider } from "@/transport/client";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
@@ -33,7 +34,7 @@ const ConsentNotice = ({
   return (
     <div data-access-consent="">
       {AsyncResult.match(disclosure, {
-        onInitial: () => <ConsentDisclosureSkeleton />,
+        onInitial: () => <PendingRead label="Cargando información de Consentimiento" />,
         onFailure: () => (
           <>
             <p role="alert">No pudimos cargar el Consentimiento.</p>

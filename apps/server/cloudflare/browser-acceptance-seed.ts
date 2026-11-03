@@ -77,6 +77,8 @@ export const navigationIdentities = [
   { key: "navigationBudget", userId: "24000000-0000-4000-8000-000000000461" },
   { key: "navigationRecurring", userId: "24000000-0000-4000-8000-000000000471" },
   { key: "navigationDashboard", userId: "24000000-0000-4000-8000-000000000481" },
+  { key: "navigationFirstDashboard", userId: "24000000-0000-4000-8000-000000001931" },
+  { key: "navigationPicker", userId: "24000000-0000-4000-8000-000000001941" },
 ] as const;
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;

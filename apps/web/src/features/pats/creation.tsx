@@ -1,4 +1,5 @@
-import { PATCreationSkeleton } from "@/ui/components/settings-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
 import { type JSX, type RefCallback, useCallback, useRef, useState } from "react";
@@ -56,7 +57,7 @@ const ResumedPATCreation = (props: CreationProps): JSX.Element => {
   if (Option.isNone(draft)) {
     return (
       <div ref={mounted}>
-        <PATCreationSkeleton />
+        <PendingRead label="Comprobando tu identidad" />
       </div>
     );
   }

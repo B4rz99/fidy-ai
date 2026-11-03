@@ -1,4 +1,8 @@
-import { TransactionSearch } from "@/features/transactions/feature";
+import {
+  PrivacyTransactionFeature,
+  TransactionCaptureFeature,
+  TransactionSearch,
+} from "@/features/transactions/feature";
 import { Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { BudgetRoute, RecurringRoute } from "./destination-components";
@@ -10,15 +14,12 @@ import {
 import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
 import { NeedsReviewRoute } from "@/features/needs-review/feature";
 import { LoginSearch } from "@/session/login-destination";
-import type { AtomRegistry } from "effect/reactivity";
+import type { WebRouterContext } from "./router-context";
 import {
   BudgetMonth,
-  type FidyClient,
-  type HostedTurnClient,
   OAuthConnectionListQuery,
   PATPairingPublicCode,
   RecurringMonth,
-  type WebAuthClient,
 } from "@/transport/client";
 import { createElement } from "react";
 import {
@@ -31,14 +32,6 @@ import {
 } from "@tanstack/react-router";
 import { RouteFailure } from "./route-failure";
 
-type WebRouterContext = Readonly<{
-  registry: AtomRegistry.AtomRegistry;
-  /** Display identity already checked by BrowserSessionBoundary; never grants authority. */
-  sessionBinding: string;
-  apiClient: FidyClient;
-  webAuthClient: WebAuthClient;
-  hostedTurnClient: HostedTurnClient;
-}>;
 type WebRouterOptions = WebRouterContext &
   Readonly<{
     history: Option.Option<RouterHistory>;
@@ -206,7 +199,9 @@ const recurringPlansRoute = createRoute({
   loader: ({ context, deps, preload, abortController }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* Effect.tryPromise(() => Promise.resolve(RecurringWorkspace.preload?.()));
+        yield* Effect.tryPromise(() =>
+          Promise.all([RecurringWorkspace.preload?.(), TransactionCaptureFeature.preload()])
+        );
         if (preload) return;
         const { RecurringRoute } = yield* Effect.tryPromise(
           () => import("@/features/recurring/feature")
@@ -286,6 +281,9 @@ const transactionsRoute = createRoute({
               })
             );
             const status = context.registry.get(consent);
+            if (AsyncResult.isSuccess(status) && status.value.status === "Revoked") {
+              yield* Effect.tryPromise(() => PrivacyTransactionFeature.preload());
+            }
             if (
               AsyncResult.isSuccess(status) &&
               !status.waiting &&

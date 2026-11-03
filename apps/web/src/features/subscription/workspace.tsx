@@ -1,4 +1,5 @@
-import { SubscriptionStandingSkeleton } from "@/ui/components/subscription-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import {
   Cancel01Icon,
   CreditCardIcon,
@@ -306,7 +307,7 @@ export const SubscriptionStandingView = ({
   state,
   onRetry,
 }: Readonly<{ state: StandingViewState; onRetry: () => void }>): JSX.Element => {
-  if (state._tag === "Initial") return <SubscriptionStandingSkeleton />;
+  if (state._tag === "Initial") return <PendingRead label="Cargando suscripción" />;
   if (state._tag === "Failure") {
     return (
       <PaymentFeedback tone="unavailable" title="Estado no disponible">

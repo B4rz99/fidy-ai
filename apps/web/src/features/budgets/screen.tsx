@@ -1,9 +1,10 @@
-import { BudgetSkeleton } from "@/ui/components/budget-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { workspaceProfileQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter, useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
-import { type JSX, Suspense, lazy, useState } from "react";
+import { type JSX, type ReactNode, Suspense, lazy, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { currentBudgetMonth } from "./model";
@@ -35,7 +36,13 @@ const MonthlyBudgets = ({
   user,
   month,
   profileCurrent,
-}: Readonly<{ user: CurrentUser; month: string; profileCurrent: boolean }>): JSX.Element => {
+  children,
+}: Readonly<{
+  user: CurrentUser;
+  month: string;
+  profileCurrent: boolean;
+  children: ReactNode;
+}>): JSX.Element => {
   const router = useRouter();
   const state = useMonthlyBudgets({
     apiClient: router.options.context.apiClient,
@@ -44,14 +51,15 @@ const MonthlyBudgets = ({
     profileCurrent,
   });
   if (state._tag === "Failure") return <Failure retry={state.refresh} waiting={state.waiting} />;
-  if (state._tag !== "Ready") return <BudgetSkeleton />;
+  if (state._tag !== "Ready") return <PendingRead label="Cargando presupuestos" />;
   return (
     <>
       {state.stale ? (
         <Failure retry={state.workspace.editing.refresh} waiting={state.waiting} />
       ) : null}
-      <Suspense fallback={<BudgetSkeleton />}>
+      <Suspense fallback={<PendingRead label="Cargando presupuestos" />}>
         <Workspace {...state.workspace} />
+        {children}
       </Suspense>
     </>
   );
@@ -60,7 +68,8 @@ const MonthlyBudgets = ({
 const UserBudgets = ({
   user,
   profileCurrent,
-}: Readonly<{ user: CurrentUser; profileCurrent: boolean }>): JSX.Element => {
+  children,
+}: Readonly<{ user: CurrentUser; profileCurrent: boolean; children: ReactNode }>): JSX.Element => {
   const search = useSearch({ strict: false });
   const currentMonth = currentBudgetMonth(user);
   const month = "month" in search && typeof search.month === "string" ? search.month : currentMonth;
@@ -70,18 +79,20 @@ const UserBudgets = ({
       user={user}
       month={month}
       profileCurrent={profileCurrent}
-    />
+    >
+      {children}
+    </MonthlyBudgets>
   );
 };
 
-export const BudgetScreen = (): JSX.Element => {
+export const BudgetScreen = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => {
   const router = useRouter();
   const [profile] = useState(() => workspaceProfileQuery(router.options.context.apiClient));
   const state = useAtomValue(profile).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(profile);
   if (state._tag === "Failure") return <Failure retry={refresh} waiting={state.waiting} />;
   if (state._tag !== "Ready") {
-    return <BudgetSkeleton />;
+    return <PendingRead label="Cargando presupuestos" />;
   }
   return (
     <>
@@ -91,7 +102,9 @@ export const BudgetScreen = (): JSX.Element => {
       <UserBudgets
         user={state.value.data}
         profileCurrent={!state.waiting && Option.isNone(state.refreshFailure)}
-      />
+      >
+        {children}
+      </UserBudgets>
     </>
   );
 };

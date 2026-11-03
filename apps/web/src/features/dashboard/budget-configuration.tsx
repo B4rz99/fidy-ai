@@ -1,3 +1,4 @@
+import { PendingRead } from "@/ui/components/pending-read";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -17,7 +18,7 @@ import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { DashboardBudgetDialog } from "@/ui/components/dashboard-budget-dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Label } from "@/ui/components/label";
-import { SelectionListSkeleton } from "@/ui/components/loading-skeletons";
+
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import type { BudgetTarget, BudgetWidget, DashboardGesture } from "./editor-model";
 import type { DashboardLayout, DashboardView } from "./presentation";
@@ -177,7 +178,7 @@ const BudgetConfigurationContent = ({
     />
   );
   if (budgets._tag === "Initial" || categories._tag === "Initial") {
-    return <SelectionListSkeleton label="Cargando presupuestos" />;
+    return <PendingRead label="Cargando presupuestos" />;
   }
   if (budgets._tag !== "Ready" || categories._tag !== "Ready") return retry;
   if ([budgets.refreshFailure, categories.refreshFailure].some(Option.isSome)) return retry;

@@ -178,7 +178,7 @@ for (const theme of ["light", "dark"] as const) {
 }
 const abortCancellation = (route: Route): Promise<void> => route.abort("failed");
 
-test("Subscription cancellation initial read uses a loading skeleton", ({ page }) =>
+test("Subscription cancellation waits for actual standing without placeholders", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
@@ -207,10 +207,8 @@ test("Subscription cancellation initial read uses a loading skeleton", ({ page }
             management(page).getByText("Renovaciones no disponibles", { exact: true })
           ).toHaveCount(0, { signal })
         );
-        yield* captureState(
-          page,
-          { width: intermediateWidth, theme: "light", enlarged: false },
-          "initial-loading"
+        yield* Effect.tryPromise(() =>
+          expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0)
         );
         completion.resolve();
         yield* Effect.tryPromise((signal) =>

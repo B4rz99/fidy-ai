@@ -444,7 +444,9 @@ type NavigationFixture = SignInFixture &
       | "navigationReviewBudget"
       | "navigationReviewTransactions"
       | "navigationClock"
-      | "navigationDashboard";
+      | "navigationDashboard"
+      | "navigationFirstDashboard"
+      | "navigationPicker";
   }>;
 /** Navigation journeys own their User and retained data. */
 export const signInNavigationThroughCore = (input: NavigationFixture): Promise<void> =>

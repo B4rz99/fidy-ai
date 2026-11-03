@@ -1,4 +1,5 @@
-import { AuthorizationSkeleton } from "@/ui/components/authorization-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useParams, useRouter, useSearch } from "@tanstack/react-router";
 import { Effect, Option, Schema } from "effect";
@@ -83,7 +84,7 @@ const CancelledRequest = (): JSX.Element => (
 );
 const LoadingRequest = (): JSX.Element => (
   <OAuthWorkspace title="Conectar con Fidy">
-    <AuthorizationSkeleton />
+    <PendingRead label="Cargando solicitud" />
   </OAuthWorkspace>
 );
 const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Element => {

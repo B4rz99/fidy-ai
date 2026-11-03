@@ -1,4 +1,5 @@
-import { ConsentRenewalSkeleton } from "@/ui/components/settings-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { Disclosure } from "@/ui/components/disclosure";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link } from "@tanstack/react-router";
@@ -129,7 +130,7 @@ export const ConsentRenewal = ({
   const queryResult = useAtomValue(query);
   const status = presentCanonicalQuery(queryResult);
   const refresh = useAtomRefresh(query);
-  if (status._tag === "Initial") return <ConsentRenewalSkeleton />;
+  if (status._tag === "Initial") return <PendingRead label="Consultando aviso para renovar" />;
   if (status._tag === "Failure" || Option.isSome(status.refreshFailure)) {
     return (
       <div>

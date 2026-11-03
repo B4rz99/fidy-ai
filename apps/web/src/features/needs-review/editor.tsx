@@ -1,5 +1,5 @@
-import { ReviewDetailSkeleton } from "@/ui/components/review-detail-loading";
-import { TextSkeleton } from "@/ui/components/loading-skeletons";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { reviewItemQuery } from "./query";
 import { workspaceCategoriesQuery } from "@/transport/workspace-query";
 import { ReviewDraftFooter, ReviewNotice } from "@/ui/components/review-workspace";
@@ -131,7 +131,7 @@ const ReviewItemUnavailable = ({
   <ReviewItemFrame item={item}>
     {loading ? (
       <div>
-        <ReviewDetailSkeleton />
+        <PendingRead label="Cargando elemento" />
       </div>
     ) : (
       <ReviewItemFailure recover={recover} />
@@ -156,7 +156,7 @@ const RecoveringReviewItem = ({
   recover: () => void;
 }>): JSX.Element => (
   <div className="p-5">
-    <TextSkeleton label="Actualizando la versión guardada" lines={2} />
+    <PendingRead label="Actualizando la versión guardada" />
     <Button variant="outline" onClick={recover}>
       Reintentar actualización
     </Button>

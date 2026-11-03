@@ -1,4 +1,5 @@
-import { RecurringSkeleton } from "@/ui/components/recurring-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { DateTime, Effect, Option } from "effect";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
 import type { AtomRegistry } from "effect/reactivity";
@@ -8,7 +9,7 @@ import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Atom } from "effect/reactivity";
-import { type ComponentType, type JSX, Suspense, lazy, useState } from "react";
+import { type ComponentType, type JSX, type ReactNode, Suspense, lazy, useState } from "react";
 import { CaptureEditorContext, type CaptureEditorProps } from "./capture-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { RecurringQueryFailure } from "./query-failure";
@@ -29,6 +30,7 @@ const PreviewWorkspace = import.meta.env.DEV
   ? lazy(() => import("./dev-preview").then((module) => ({ default: module.RecurringDataPreview })))
   : RecurringWorkspace;
 type Props = Readonly<{
+  children: ReactNode;
   profileStale: boolean;
   profileWaiting: boolean;
   refreshProfile: () => void;
@@ -62,7 +64,7 @@ const Resources = (props: Props): JSX.Element => {
     );
   }
   if (state._tag !== "Ready" || categoryState._tag !== "Ready") {
-    return <RecurringSkeleton />;
+    return <PendingRead label="Cargando recurrentes" />;
   }
   const navigate = (month: string): void => {
     router.navigate({ to: "/app/recurring", search: { month } }).catch(() => undefined);
@@ -70,7 +72,7 @@ const Resources = (props: Props): JSX.Element => {
   const readState = planning.stale ? "stale" : "current";
 
   return (
-    <Suspense fallback={<RecurringSkeleton />}>
+    <Suspense fallback={<PendingRead label="Cargando recurrentes" />}>
       <PreviewWorkspace
         key={`${props.month}:${JSON.stringify(props.filters)}:${Option.getOrElse(props.previous, () => "")}`}
         calendar={calendar}
@@ -90,15 +92,18 @@ const Resources = (props: Props): JSX.Element => {
         earlier={props.earlier}
         timeZone={props.timeZone}
       />
+      {props.children}
     </Suspense>
   );
 };
 export const RecurringFeature = ({
   month: selectedMonth,
   captureEditor,
+  children,
 }: Readonly<{
   month: Option.Option<string>;
   captureEditor: ComponentType<CaptureEditorProps>;
+  children: ReactNode;
 }>): JSX.Element => {
   const router = useRouter();
   const [profile] = useState(() => workspaceProfileQuery(router.options.context.apiClient));
@@ -120,7 +125,7 @@ export const RecurringFeature = ({
     );
   }
   if (state._tag !== "Ready") {
-    return <RecurringSkeleton />;
+    return <PendingRead label="Cargando recurrentes" />;
   }
   const user = state.value.data;
   const currentMonth = DateTime.formatIsoDate(
@@ -140,7 +145,9 @@ export const RecurringFeature = ({
         applyFilters={setFilters}
         previous={Option.filter(previous, (value) => value < month)}
         earlier={(value) => setPrevious(Option.some(value))}
-      />
+      >
+        {children}
+      </Resources>
     </CaptureEditorContext>
   );
 };

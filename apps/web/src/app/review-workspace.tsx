@@ -1,4 +1,5 @@
-import { ReviewPageSkeleton } from "@/ui/components/review-page-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { ReviewWorkspace } from "./workspace-components";
 import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -38,7 +39,7 @@ const VisitedReviewWorkspace = (): JSX.Element => {
   if (Option.isNone(current)) return <></>;
   return (
     <div hidden={!active} inert={!active}>
-      <Suspense fallback={<ReviewPageSkeleton />}>
+      <Suspense fallback={<PendingRead label="Cargando elementos" />}>
         <ReviewWorkspace
           active={active}
           filter={current.value.status ?? "pending"}

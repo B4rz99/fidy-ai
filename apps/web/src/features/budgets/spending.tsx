@@ -1,3 +1,4 @@
+import { PendingRead } from "@/ui/components/pending-read";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option, Schema } from "effect";
@@ -6,7 +7,7 @@ import { type CanonicalSuccess, TransactionQueryValues } from "@/transport/clien
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { formatMoneyWithCode } from "@/transport/money";
 import { Button } from "@/ui/components/button";
-import { SelectionListSkeleton } from "@/ui/components/loading-skeletons";
+
 import {
   Sheet,
   SheetContent,
@@ -104,7 +105,7 @@ const SpendingPage = ({ category, spent, period, user, cursor, next }: PageProps
   const state = useAtomValue(resource).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(resource);
   if (state._tag === "Failure") return <SpendingRetry retry={refresh} waiting={state.waiting} />;
-  if (state._tag !== "Ready") return <SelectionListSkeleton label="Cargando movimientos" />;
+  if (state._tag !== "Ready") return <PendingRead label="Cargando movimientos" />;
   return (
     <div className="grid gap-3">
       {Option.isSome(state.refreshFailure) ? (

@@ -1,3 +1,4 @@
+import { PendingRead } from "@/ui/components/pending-read";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Option, Predicate } from "effect";
@@ -6,7 +7,7 @@ import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type CanonicalInput } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
-import { TransactionsSkeleton } from "@/ui/components/transaction-loading";
+
 import type { Transaction } from "./presentation";
 import { transactionDestinationQuery } from "./destination-query";
 
@@ -22,7 +23,7 @@ export const TransactionDestination = ({
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   if (state._tag === "Initial" || (state._tag === "Ready" && state.waiting)) {
-    return <TransactionsSkeleton readOnly={false} notice={null} />;
+    return <PendingRead label="Cargando transacciones" />;
   }
   if (state._tag === "Ready" && Option.isNone(state.refreshFailure)) {
     return <>{children(state.value.data)}</>;

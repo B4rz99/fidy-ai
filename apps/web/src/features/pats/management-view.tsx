@@ -1,4 +1,5 @@
-import { AccessListSkeleton } from "@/ui/components/settings-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { Key01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { DateTime, Option } from "effect";
@@ -393,9 +394,9 @@ const PATQueryContent = ({
   controller: ReturnType<typeof useRevocationController>;
 }>): JSX.Element => {
   if (state._tag === "Initial") {
-    return <AccessListSkeleton kind="tokens" />;
+    return <PendingRead label="Cargando tokens activos" />;
   }
-  if (state._tag === "Loading") return <AccessListSkeleton kind="tokens" />;
+  if (state._tag === "Loading") return <PendingRead label="Cargando tokens activos" />;
   if (state._tag === "Ready") {
     return (
       <>

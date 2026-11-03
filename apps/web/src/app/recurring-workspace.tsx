@@ -1,4 +1,5 @@
-import { RecurringSkeleton } from "@/ui/components/recurring-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { RecurringWorkspace } from "./workspace-components";
 import type { CaptureEditorProps } from "@/features/recurring/feature";
 import { TransactionCaptureFeature } from "@/features/transactions/feature";
@@ -7,6 +8,7 @@ import { Option } from "effect";
 import { type JSX, Suspense, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { useWorkspaceResume } from "./workspace-resume";
+import { DestinationCodePreload } from "./destination-code-preload";
 
 /** Preserve the visited planning display only inside its current authentication lifetime. */
 export const RetainedRecurringWorkspace = (): JSX.Element => {
@@ -42,11 +44,13 @@ const VisitedRecurringWorkspace = (): JSX.Element => {
   if (Option.isNone(current)) return <></>;
   return (
     <div hidden={!active} inert={!active} ref={resume}>
-      <Suspense fallback={<RecurringSkeleton />}>
+      <Suspense fallback={<PendingRead label="Cargando recurrentes" />}>
         <RecurringWorkspace
           month={Option.fromUndefinedOr(current.value.month)}
           captureEditor={RecurringTransactionCapture}
-        />
+        >
+          {active ? <DestinationCodePreload /> : null}
+        </RecurringWorkspace>
       </Suspense>
     </div>
   );

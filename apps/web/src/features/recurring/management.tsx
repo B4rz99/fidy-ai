@@ -1,4 +1,5 @@
-import { HistoricalSuggestionsSkeleton } from "@/ui/components/recurring-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -147,7 +148,7 @@ const LoadedSuggestions = ({
       </div>
     );
   }
-  if (state._tag !== "Ready") return <HistoricalSuggestionsSkeleton />;
+  if (state._tag !== "Ready") return <PendingRead label="Cargando patrones históricos" />;
   return (
     <SuggestionResults
       data={state.value.data}

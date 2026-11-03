@@ -1,4 +1,5 @@
-import { TransactionsSkeleton } from "@/ui/components/transaction-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { transactionEntryConsent } from "@/session/transaction-entry";
 import { DestinationCodePreload } from "./destination-code-preload";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
@@ -46,7 +47,7 @@ export const TransactionsPage = (): JSX.Element => {
     if (consent.value.status === "Revoked") return <PrivacyTransactionFeature />;
   }
   if (status._tag === "Initial") {
-    return <TransactionsSkeleton readOnly={false} notice={null} />;
+    return <PendingRead label="Cargando transacciones" />;
   }
   return (
     <main className="p-5">

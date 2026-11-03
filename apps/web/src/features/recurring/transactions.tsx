@@ -1,4 +1,5 @@
-import { SelectionListSkeleton } from "@/ui/components/loading-skeletons";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
@@ -6,6 +7,7 @@ import { Option, Schema } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
 import { type CanonicalSuccess, TransactionQueryValues } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { Button } from "@/ui/components/button";
 import { TransactionCandidate } from "@/ui/components/transaction-candidate";
 import { TransactionSearchForm } from "./transaction-search-form";
@@ -100,9 +102,14 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
       ...filters,
       ...(Option.isNone(props.cursor) ? {} : { cursor: props.cursor.value }),
     };
-    return Option.isNone(text)
-      ? client.query("transactions", "listTransactions", { query })
-      : client.query("transactions", "searchTransactions", { query: { ...query, q: text.value } });
+    return (
+      Option.isNone(text)
+        ? client.query("transactions", "listTransactions", { query, ...workspaceQueryRetention })
+        : client.query("transactions", "searchTransactions", {
+            query: { ...query, q: text.value },
+            ...workspaceQueryRetention,
+          })
+    ).pipe(revalidateWorkspaceQuery);
   });
   const [selectedId, setSelectedId] = useState<Option.Option<Transaction["id"]>>(() =>
     Option.none()
@@ -164,7 +171,7 @@ const SearchResults = (props: ResultsProps): JSX.Element => {
       </div>
     );
   }
-  if (state._tag !== "Ready") return <SelectionListSkeleton label="Cargando transacciones" />;
+  if (state._tag !== "Ready") return <PendingRead label="Cargando transacciones" />;
   return (
     <section
       aria-label="Resultados de transacciones"

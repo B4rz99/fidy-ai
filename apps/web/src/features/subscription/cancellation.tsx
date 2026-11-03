@@ -1,10 +1,11 @@
+import { PendingRead } from "@/ui/components/pending-read";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { DateTime, Option } from "effect";
 import { type JSX, type RefCallback, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import type { FidyClient, SubscriptionStatus } from "@/transport/client";
 import { Button } from "@/ui/components/button";
-import { SubscriptionCancellationSkeleton } from "@/ui/components/subscription-loading";
+
 import { PaymentFeedback } from "./workspace";
 
 import {
@@ -212,7 +213,7 @@ export const SubscriptionCancellationManagement = ({
   if (current.loading) {
     return (
       <section aria-label="Renovaciones de la suscripción" className="py-5">
-        <SubscriptionCancellationSkeleton />
+        <PendingRead label="Cargando renovaciones" />
       </section>
     );
   }

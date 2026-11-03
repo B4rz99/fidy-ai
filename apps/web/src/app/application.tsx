@@ -1,4 +1,5 @@
-import { ApplicationSkeleton } from "@/ui/components/application-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import type { InitialBrowserSession } from "@/transport/initial-session";
 import { BrowserSessionBoundary } from "@/session/browser-session-boundary";
 import { useAtomValue } from "@effect/atom-react";
@@ -35,11 +36,7 @@ const BoundApplication = ({
   const loaded = useAtomValue(applicationCode);
   if (AsyncResult.isFailure(loaded)) throw new ApplicationCodeUnavailable();
   if (!AsyncResult.isSuccess(loaded)) {
-    return (
-      <ApplicationSkeleton
-        surface={window.location.pathname === "/login" ? "access" : "application"}
-      />
-    );
+    return <PendingRead label="Cargando aplicación" />;
   }
   return Result.match(loaded.value, {
     onSuccess: (module) => (
@@ -58,11 +55,7 @@ const RoutedApplication = ({
     <BrowserSessionBoundary
       apiOrigin={apiOrigin}
       initial={initial}
-      pending={
-        <ApplicationSkeleton
-          surface={window.location.pathname === "/login" ? "access" : "application"}
-        />
-      }
+      pending={<PendingRead label="Cargando aplicación" />}
     >
       {(session, observation) => (
         <BoundApplication apiOrigin={apiOrigin} session={session} initial={observation} />

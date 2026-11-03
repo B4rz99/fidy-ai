@@ -1,6 +1,5 @@
 import { captureInThemes } from "./themed-capture";
 import { analyzeAccessibility } from "./accessibility";
-import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import type { Page } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
@@ -270,26 +269,20 @@ for (const destination of destinations) {
           )
         );
         yield* capture(page, `${destination.name}-loading`);
-        const frameParts = [
-          "settings-columns",
-          "settings-main",
-          "settings-panel",
-          "oauth-client",
-        ].map((name) => ({ name, selector: `.${name}` }));
-        const loadingFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
+
         const controls = page.locator(
           ".oauth-duration > [data-slot=button], .oauth-actions > [data-slot=button]"
         );
-        const loadingHeights = yield* Effect.tryPromise(() => controls.evaluateAll(controlHeights));
+        yield* Effect.tryPromise(() =>
+          expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0)
+        );
         observed.release();
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: destination.action, exact: true })).toBeVisible()
         );
-        const loadedFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
-        expectSameLoadingFrame(loadingFrame, loadedFrame);
+
         const loadedHeights = yield* Effect.tryPromise(() => controls.evaluateAll(controlHeights));
-        expect(loadingHeights).toHaveLength(reviewControlCount);
-        expect(loadingHeights).toEqual(loadedHeights);
+        expect(loadedHeights).toHaveLength(reviewControlCount);
         expect(observed.unexpected).toEqual([]);
         expect(observed.mutations).toEqual([]);
       })

@@ -1,4 +1,5 @@
-import { AccessListSkeleton } from "@/ui/components/settings-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { UserGroupIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { RefreshButton } from "@/ui/components/refresh-button";
@@ -21,6 +22,7 @@ import {
 } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { OAuthManagementView } from "./management-view";
+import { workspaceQueryRetention } from "@/transport/workspace-query";
 
 const connectionKey = "oauth-connections";
 type RevocationResult = "revoked" | "identity-required" | "failed";
@@ -58,7 +60,7 @@ const ManagementContent = ({
   revoke: (id: Option.Option<OAuthConnectionId>) => void;
   next: (id: OAuthConnectionId) => void;
 }>): JSX.Element => {
-  if (listing._tag === "Initial") return <AccessListSkeleton kind="agents" />;
+  if (listing._tag === "Initial") return <PendingRead label="Cargando agentes" />;
   if (listing._tag === "Failure") {
     return <ConnectionReadFailure failure={listing.failure} />;
   }
@@ -144,18 +146,31 @@ const ManagementHeading = (): JSX.Element => (
   </div>
 );
 
+const connectionListing = (
+  client: WebAuthClient,
+  after: Option.Option<OAuthConnectionId>
+): Atom.Atom<AsyncResult.AsyncResult<OAuthConnectionList, unknown>> =>
+  client
+    .query("oauthConnections", "list", {
+      query: { after },
+      reactivityKeys: [connectionKey],
+      ...workspaceQueryRetention,
+    })
+    .pipe(
+      Atom.swr({
+        staleTime: 0,
+        revalidateOnMount: true,
+        revalidateOnFocus: "always",
+        focusSignal: Atom.windowFocusSignal,
+      })
+    );
+
 export const ManagementPage = ({
   after,
 }: Readonly<{ after: Option.Option<OAuthConnectionId> }>): JSX.Element => {
   const router = useRouter();
   const client = router.options.context.webAuthClient;
-  const [query] = useState(() =>
-    client.query("oauthConnections", "list", {
-      query: { after },
-      reactivityKeys: [connectionKey],
-      timeToLive: "0 seconds",
-    })
-  );
+  const [query] = useState(() => connectionListing(client, after));
   const listingResult = useAtomValue(query);
   const listing = presentCanonicalQuery(listingResult);
   const refreshQuery = useAtomRefresh(query);

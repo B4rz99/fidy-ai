@@ -65,7 +65,7 @@ import {
 } from "../../transactions/operations";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
-import { budgetRefusal } from "../../budgets/operations";
+import { budgetRefusal, prepareBoundBudgetWorkspace } from "../../budgets/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 import {
@@ -1472,6 +1472,12 @@ const supportsBoundHistory = (operation: CatalogOperation): boolean =>
   operation.policy.kind === "query" &&
   operation.policy.access._tag === "UserOwnedAgentScoped";
 
+const supportsBoundBudgetWorkspace = (operation: CatalogOperation): boolean =>
+  operation.id === "budgets.getBudgetStatus" &&
+  operation.policy.requiredTier === "free" &&
+  operation.policy.kind === "query" &&
+  operation.policy.access._tag === "UserOwnedAgentScoped";
+
 const browserCanonicalResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
@@ -1479,6 +1485,15 @@ const browserCanonicalResponse = (
 ): Effect.Effect<Response> =>
   Clock.currentTimeMillis.pipe(
     Effect.flatMap((current) => {
+      if (supportsBoundBudgetWorkspace(operation) && request.method === "GET") {
+        return protectCanonicalBrowserSnapshot({
+          request,
+          db: environment.DB,
+          current,
+          operation: "budgets.getBudgetStatus",
+          read: prepareBoundBudgetWorkspace(request),
+        }).pipe(observeCanonicalResponse(operation.id));
+      }
       if (supportsBoundHistory(operation) && request.method === "GET") {
         return protectCanonicalBrowserSnapshot({
           request,

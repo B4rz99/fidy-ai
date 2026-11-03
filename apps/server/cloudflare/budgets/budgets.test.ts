@@ -1,3 +1,4 @@
+import { recordBudgetCall } from "./internal/budget-audit";
 import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type ConsentUnavailable } from "../consent/contract";
 import { type InsightUnavailable, type ProactivityDeliveryWork } from "../insights/contract";
@@ -23,6 +24,7 @@ import {
   createProactivityConsentOffer,
   findCurrentProactivityOffer,
   findProactivityConsentGrant,
+  recordConsentRevocation,
   recordProactivityConsentDisclosure,
 } from "../consent/operations";
 import {
@@ -400,10 +402,75 @@ it.each([false, true])("reads a fresh Budget workspace once with a future cap: %
       const plannedReads = observed
         .statements()
         .filter((statement) => statement.sql.includes("FROM budgets b"));
-      expect(observed.roundTrips()).toBeLessThanOrEqual(5);
+      expect(observed.roundTrips()).toBe(1);
       expect(plannedReads).toHaveLength(1);
     })
   )
+);
+
+it.each(["live", "revoked", "expired", "foreign-user", "foreign-digest", "withdrawn"] as const)(
+  "accounts for Budget access in one live-authority write: %s",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const current = DateTime.nowUnsafe().epochMilliseconds;
+        const subject = {
+          id: sessions[0],
+          userId: kind === "foreign-user" ? users[1] : users[0],
+          digest: yield* Effect.tryPromise(() => digest(bearer(kind === "foreign-digest" ? 1 : 0))),
+        };
+        if (kind === "revoked") {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("UPDATE web_sessions SET revoked_at_ms=? WHERE id=?")
+              .bind(current, sessions[0])
+              .run()
+          );
+        }
+        if (kind === "withdrawn") {
+          yield* seedCrossingConsent(db);
+          const withdrawal = yield* Effect.tryPromise(() =>
+            recordConsentRevocation({
+              db,
+              subject,
+              current,
+              evidenceId: "10000000-0000-4000-8000-000000000099",
+            }).run()
+          );
+          expect(withdrawal.meta.changes).toBe(1);
+        }
+        const observed = observeRetentionCost(db);
+        expect(
+          yield* recordBudgetCall({
+            db: observed.database,
+            subject,
+            operation: "budgets.getBudgetStatus",
+            outcome: "accepted",
+            current: current + (kind === "expired" ? 7_776_000_001 : 0),
+          })
+        ).toBe(kind === "live" ? "recorded" : "credential_refused");
+        expect(observed.roundTrips()).toBe(1);
+        const recorded = yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT user_id,session_id,outcome FROM audit_entries WHERE operation='budgets.getBudgetStatus'"
+            )
+            .all()
+        );
+        expect(recorded.results).toEqual(
+          kind === "live"
+            ? [
+                {
+                  user_id: users[0],
+                  session_id: sessions[0],
+                  outcome: "accepted",
+                },
+              ]
+            : []
+        );
+      })
+    )
 );
 
 const afterAggregateSnapshot = (db: D1Database, change: () => Promise<unknown>): D1Database => {
@@ -507,6 +574,30 @@ const seedBoundaryWorkspace = Effect.fnUntraced(function* (db: D1Database) {
     offset: 90000,
   });
 });
+it("keeps the single-trip Budget cap selection indexed at the workspace boundary", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedWorkspaceRead(db, false);
+      yield* seedBoundaryWorkspace(db);
+      const observed = observeRetentionCost(db);
+      const response = yield* Effect.tryPromise(() =>
+        send(observed.database, request(0, "/budget-status?timeZone=America%2FBogota"))
+      );
+      expect(response.status).toBe(200);
+      const workspace = yield* Schema.decodeUnknownEffect(Workspace)(
+        yield* Effect.tryPromise(() => response.json())
+      );
+      expect(workspace.data.budgets).toHaveLength(128);
+      expect(observed.roundTrips()).toBe(1);
+      const caps = observed
+        .statements()
+        .filter((statement) => statement.sql.includes("FROM budgets b"));
+      expect(caps).toHaveLength(1);
+      expect(caps[0]?.rowsRead).toBeLessThanOrEqual(259);
+    })
+  ));
+
 const benchmarkBody = (data: typeof BudgetWorkspace.Type, primaryId: string): string => {
   const normalize = (budget: Budget): Budget =>
     budget.id === primaryId

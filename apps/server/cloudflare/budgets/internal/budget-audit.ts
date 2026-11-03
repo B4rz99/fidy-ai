@@ -9,7 +9,6 @@ import {
   type QueryCaller,
   callerAuthority,
   isPATCaller,
-  liveTransactionAuthority,
   transactionId,
 } from "../../canonical-work/operations";
 
@@ -27,7 +26,7 @@ type BudgetAuditCall = Readonly<{
   current: number;
 }>;
 
-/** Attribute an accepted or rejected Budget call only under live User/PAT authority. */
+/** Account for a Budget call through the write's live caller-authority predicate. */
 export const recordBudgetCall = ({
   db,
   subject,
@@ -35,51 +34,40 @@ export const recordBudgetCall = ({
   outcome,
   current,
 }: BudgetAuditCall): Effect.Effect<"recorded" | "credential_refused" | "unavailable"> =>
-  Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current })).pipe(
-    Effect.flatMap((live) => {
-      if (!live) return Effect.succeed("credential_refused" as const);
-      if (isPATCaller(subject)) {
-        return Effect.tryPromise(() =>
-          db.batch(
-            [
-              recordLivePATUse({ subject, current }),
-
-              recordCanonicalPATWork({
-                authority: livePATAuthority({ subject, current }),
-                input: {
-                  id: transactionId(),
-                  current,
-                  operation,
-                  outcome,
-                  afterOwnerWrite: false,
-                },
-              }),
-            ].map(({ sql, params }) => db.prepare(sql).bind(...params))
-          )
-        ).pipe(
-          Effect.map((rows) =>
-            rows.every((row) => row.meta.changes === 1)
-              ? ("recorded" as const)
-              : ("credential_refused" as const)
-          )
-        );
-      }
-      const authority = callerAuthority({ subject, current });
-      return Effect.tryPromise(() =>
-        prepareAuthorizedAuditCall({
-          db,
-          authority,
-          id: transactionId(),
-          operation,
-          outcome,
-          current,
-          afterOwnerWrite: false,
-        }).run()
-      ).pipe(
-        Effect.map((row) =>
-          row.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const)
+  Effect.gen(function* () {
+    if (isPATCaller(subject)) {
+      const rows = yield* Effect.tryPromise(() =>
+        db.batch(
+          [
+            recordLivePATUse({ subject, current }),
+            recordCanonicalPATWork({
+              authority: livePATAuthority({ subject, current }),
+              input: {
+                id: transactionId(),
+                current,
+                operation,
+                outcome,
+                afterOwnerWrite: false,
+              },
+            }),
+          ].map(({ sql, params }) => db.prepare(sql).bind(...params))
         )
       );
-    }),
-    Effect.orElseSucceed(() => "unavailable" as const)
-  );
+      return rows.every((row) => row.meta.changes === 1)
+        ? ("recorded" as const)
+        : ("credential_refused" as const);
+    }
+    const authority = callerAuthority({ subject, current });
+    const row = yield* Effect.tryPromise(() =>
+      prepareAuthorizedAuditCall({
+        db,
+        authority,
+        id: transactionId(),
+        operation,
+        outcome,
+        current,
+        afterOwnerWrite: false,
+      }).run()
+    );
+    return row.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const);
+  }).pipe(Effect.orElseSucceed(() => "unavailable" as const));

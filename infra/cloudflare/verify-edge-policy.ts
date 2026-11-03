@@ -2,8 +2,14 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "68d4f2721b99147bb8b3227fb19456b61c71f9bee3bee4389135067b6a502b27";
+const expectedEdgePolicyDigest = "5bb6204ac4a7cf7ac89fd0a35adb15771faf8e42e5c3adffdb80a03f288b8344";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/budget-audit.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/bound-workspace.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/internal/planned-caps.ts", import.meta.url)
   ).text(),

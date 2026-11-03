@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type {
   CompletePeriodAggregates,
   EffectiveTransactionAggregate,
@@ -84,22 +85,27 @@ const selectedDigits = selectedBuckets.replaceAll(
   "transaction_projection_digit"
 );
 
-export const projectionQueries = ({
-  db,
-  userId,
-  range,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  range: Readonly<{
-    firstDay: number;
-    lastDay: number;
-    firstMinute: number;
-    lastMinute: number;
-  }>;
-}>): Array<D1PreparedStatement> => {
+export const projectionQueries = (
+  input: Readonly<{
+    db: D1Database;
+    range: Readonly<{
+      firstDay: number;
+      lastDay: number;
+      firstMinute: number;
+      lastMinute: number;
+    }>;
+  }> &
+    (Readonly<{ userId: string }> | Readonly<{ userSelection: OwnedStatement }>)
+): Array<D1PreparedStatement> => {
+  const { db, range } = input;
+  const selection =
+    "userId" in input ? { sql: "SELECT ? AS userId", params: [input.userId] } : input.userSelection;
+  const predicate =
+    "userId" in input ? "user_id = ?" : `user_id = (SELECT userId FROM (${selection.sql}))`;
+  const buckets = selectedBuckets.replace("user_id = ?", predicate);
+  const digits = selectedDigits.replace("user_id = ?", predicate);
   const params = [
-    userId,
+    ...selection.params,
     range.firstDay,
     range.lastDay,
     range.firstMinute,
@@ -111,14 +117,14 @@ export const projectionQueries = ({
     db
       .prepare(`WITH chosen AS (SELECT currency, direction, category_id, count, max_minor,
       ROW_NUMBER() OVER (PARTITION BY currency, direction, category_id
-        ORDER BY length(max_minor) DESC, max_minor DESC) AS rank ${selectedBuckets})
+        ORDER BY length(max_minor) DESC, max_minor DESC) AS rank ${buckets})
       SELECT currency, direction, category_id, SUM(count) AS count,
         MAX(CASE WHEN rank = 1 THEN max_minor END) AS max_minor
       FROM chosen GROUP BY currency, direction, category_id ORDER BY currency, direction, category_id`)
       .bind(...params),
     db
       .prepare(`SELECT currency, direction, category_id, position,
-      SUM(digit_sum) AS digit_sum ${selectedDigits}
+      SUM(digit_sum) AS digit_sum ${digits}
       GROUP BY currency, direction, category_id, position`)
       .bind(...params),
   ];
@@ -240,6 +246,25 @@ export const prepareTransactionAggregate = (
         statement: revisionSelection(UserId.make(input.userId)),
       }),
       ...projectionQueries({ db: input.db, userId: input.userId, range }),
+    ],
+    decode: (rows) =>
+      Option.flatMap(decodeAggregateSnapshot({ rows, count: 1 }), (snapshot) =>
+        Option.fromUndefinedOr(snapshot.values[0])
+      ),
+  }));
+
+/** Resolve the exact mounted caller inside the same native transaction as its aggregate facts. */
+export const prepareBoundTransactionAggregate = (
+  input: Readonly<{ db: D1Database; userSelection: OwnedStatement }> & AggregateRange
+): ReturnType<typeof prepareTransactionAggregate> =>
+  Option.map(projectionRange(input), (range) => ({
+    statements: [
+      input.db
+        .prepare(`SELECT COALESCE(p.fact_revision, 0) AS revision
+        FROM transaction_projection_state p WHERE p.user_id = (SELECT userId FROM (${input.userSelection.sql}))
+        AND p.version = 1 AND p.readiness = 'ready'`)
+        .bind(...input.userSelection.params),
+      ...projectionQueries({ db: input.db, userSelection: input.userSelection, range }),
     ],
     decode: (rows) =>
       Option.flatMap(decodeAggregateSnapshot({ rows, count: 1 }), (snapshot) =>

@@ -16,7 +16,11 @@ import { makeCoreHttp } from "./runtime";
 
 const databases = isolatedTestDatabases();
 const storage = isolatedTestStorage();
-const atomicListings = ["categories.listCategories", "transactions.listTransactions"] as const;
+const atomicListings = [
+  "categories.listCategories",
+  "transactions.listTransactions",
+  "budgets.getBudgetStatus",
+] as const;
 afterAll(() => databases.dispose());
 afterAll(() => storage.dispose());
 
@@ -119,13 +123,16 @@ const browserFixture = (
     ).route;
     const request = (headers: Readonly<Record<string, string>> = {}): Promise<Response> =>
       core(
-        new Request(`https://api.fidyapp.com${categoryRoute}`, {
-          headers: {
-            cookie: `__Host-fidy_session=${token}`,
-            [browserSessionBindingHeader]: sessionId,
-            ...headers,
-          },
-        }),
+        new Request(
+          `https://api.fidyapp.com${categoryRoute}${operationId === "budgets.getBudgetStatus" ? "?timeZone=America%2FBogota" : ""}`,
+          {
+            headers: {
+              cookie: `__Host-fidy_session=${token}`,
+              [browserSessionBindingHeader]: sessionId,
+              ...headers,
+            },
+          }
+        ),
         environment
       );
     return {
@@ -146,6 +153,7 @@ it.each([
   ["quota.getQuota", 3],
   ["categories.listCategories", 1],
   ["transactions.listTransactions", 1],
+  ["budgets.getBudgetStatus", 1],
 ] as const)("serves %s within %i fresh recovery-generation checks", (operationId, checks) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -155,12 +163,15 @@ it.each([
       );
       const response = yield* Effect.tryPromise(() =>
         core(
-          new Request(`https://api.fidyapp.com${operation.route}`, {
-            headers: {
-              cookie: `__Host-fidy_session=${token}`,
-              [browserSessionBindingHeader]: sessionId,
-            },
-          }),
+          new Request(
+            `https://api.fidyapp.com${operation.route}${operationId === "budgets.getBudgetStatus" ? "?timeZone=America%2FBogota" : ""}`,
+            {
+              headers: {
+                cookie: `__Host-fidy_session=${token}`,
+                [browserSessionBindingHeader]: sessionId,
+              },
+            }
+          ),
           environment
         )
       );
@@ -417,7 +428,7 @@ it.each(atomicListings)(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "CREATE TRIGGER ignore_category_audit BEFORE INSERT ON audit_entries WHEN NEW.operation IN ('categories.listCategories','transactions.listTransactions') BEGIN SELECT RAISE(IGNORE); END"
+              "CREATE TRIGGER ignore_category_audit BEFORE INSERT ON audit_entries WHEN NEW.operation IN ('categories.listCategories','transactions.listTransactions','budgets.getBudgetStatus') BEGIN SELECT RAISE(IGNORE); END"
             )
             .run()
         );
@@ -514,7 +525,7 @@ it.each(atomicListings)(
           },
         });
         const request = new Request(
-          `https://api.fidyapp.com${Option.getOrThrow(Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(operationId))).route}`,
+          `https://api.fidyapp.com${Option.getOrThrow(Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(operationId))).route}${operationId === "budgets.getBudgetStatus" ? "?timeZone=America%2FBogota" : ""}`,
           {
             headers: {
               cookie: `__Host-fidy_session=${fixture.token}`,

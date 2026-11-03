@@ -97,6 +97,12 @@ User + selected month + time zone
       Consent, exact credential checks, resource admission, Audit and recovery fencing.
 - [x] Compare complete before/after responses and work counts on the declared workloads.
 
+- [ ] Deliver the mounted Budget workspace through one protected native batch, including exact
+      credential/Consent selection, request pressure, Audit, owner facts and allowance standing.
+      Prove refusal, recovery and lost-response behavior; verify the production release.
+- [ ] Measure that single-trip candidate against the same full responses and declared workloads.
+      Keep all first requests and target failures; one trip alone does not prove 6.94 ms.
+
 ## 4. Remove the compute-to-storage latency floor
 
 - [ ] Measure the batched Budget candidate to determine whether remote storage still prevents

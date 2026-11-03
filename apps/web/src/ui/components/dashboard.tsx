@@ -188,7 +188,7 @@ export const DashboardChart = ({
   children,
   dense,
 }: Readonly<{ children: ReactNode; dense: boolean }>): JSX.Element => {
-  const [portal, setPortal] = useState(Option.none<HTMLDivElement>());
+  const [portal, setPortal] = useState(() => Option.none<HTMLDivElement>());
   const bindPortal = useCallback<RefCallback<HTMLDivElement>>((element) => {
     setPortal(Option.fromNullishOr(element));
   }, []);

@@ -656,6 +656,8 @@ shown in chat history. Delivery acknowledgement remains automatic and separate f
 
 Use `AmountInput` for decimal drafts. It composes `Input`, refuses letters, places the caret at the end on click, and offers full or content width. Its controlled `onValueChange` preserves Colombian grouping and decimal separators; features retain exact parsing, Currency precision, and command ownership.
 
+The Budget workspace uses explicit Currency codes instead of symbols in group figures, Category amounts, monthly totals and summaries. Group headings retain the code when collapsed; editable caps show it beside the input and include it in the accessible name. Keep Colombian number formatting and exact nominal amounts without conversion.
+
 Use `SearchableChoiceDropdown` for long single-choice lists. It composes the shadcn Base UI Combobox pattern with the existing outline pill trigger, an accessible search input, keyboard selection, dismissal, and an explicit empty result. Short lists retain `ChoiceDropdown` or summary currency pills. Both the Budget group editor and large summary currency lists share this searchable control.
 
 Use `FinancialSummaryCard` for a formatted top amount, label, positive/negative treatment, and child summary content. It adapts typography to available width and formatted text length without calculating Money. Its approved Budget exception uses green for income not yet assigned to the spending plan; ordinary balances and totals remain main text. Negative allocation uses the paired error-subtle background and error foreground in each theme. Income remains recorded income, with no progress bar or implied income plan. Preserve Disponible, restantes, and excedido wording.

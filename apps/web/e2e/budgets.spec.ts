@@ -140,6 +140,75 @@ const checkSummaryViews = (page: Page): Effect.Effect<void, Cause.UnknownError> 
     );
   });
 
+const checkCurrencyPresentation = Effect.fn(function* (page: Page) {
+  const group = page.getByRole("region", { name: "Grupo Alimentación USD", exact: true });
+  yield* Effect.tryPromise(() => expect(group).toBeVisible());
+  yield* Effect.tryPromise(() =>
+    expect(group.getByRole("heading", { name: "Alimentación USD" })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() => expect(group.getByText("USD 50,25")).toBeVisible());
+  yield* Effect.tryPromise(() =>
+    expect(group.getByText("USD 40,15", { exact: true })).toHaveCount(2)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(group.getByRole("button", { name: /Ver movimientos de Restaurantes/u })).toHaveText(
+      "USD 10,10"
+    )
+  );
+  const input = group.getByRole("textbox", { name: "Presupuesto de Restaurantes (USD)" });
+  yield* Effect.tryPromise(() => expect(input).toHaveValue("50.25"));
+  yield* Effect.tryPromise(() => expect(input).toHaveAccessibleDescription("USD"));
+  yield* Effect.tryPromise(() =>
+    expect(group.getByRole("progressbar")).toHaveAccessibleName("Gasto de Restaurantes: USD 10,10")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("region", { name: "Grupo Hogar COP", exact: true }).getByText("COP 100.000,00")
+    ).toBeVisible()
+  );
+});
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`identifies Budget Group and Category currencies without settings in ${colorScheme}`, ({
+    page,
+  }, testInfo) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() => installBudgetUser(page));
+        yield* Effect.tryPromise(() => installCategories({ page, categories }));
+        yield* Effect.tryPromise(() => installBudgetReport(page));
+        yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme }));
+        yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+        for (const viewport of [
+          { width: 1920, height: 1080 },
+          { width: 1440, height: 900 },
+          { width: 715, height: 900 },
+          { width: 320, height: 640 },
+        ]) {
+          yield* Effect.tryPromise(() => page.setViewportSize(viewport));
+          yield* checkCurrencyPresentation(page);
+          const group = page.getByRole("region", { name: "Grupo Alimentación USD", exact: true });
+          expect(yield* Effect.tryPromise(() => page.evaluate(fitsViewport))).toBe(true);
+          yield* Effect.tryPromise(() => group.scrollIntoViewIfNeeded());
+          yield* Effect.tryPromise(() =>
+            page.screenshot({
+              path: testInfo.outputPath(`currency-${viewport.width}.png`),
+              fullPage: true,
+            })
+          );
+          const toggle = group.getByRole("button", { name: "Alimentación USD", exact: true });
+          yield* Effect.tryPromise(() => toggle.click());
+          yield* Effect.tryPromise(() => expect(toggle).toHaveAttribute("aria-expanded", "false"));
+          yield* Effect.tryPromise(() =>
+            expect(group.getByRole("heading", { name: "Alimentación USD" })).toBeVisible()
+          );
+          yield* Effect.tryPromise(() => toggle.click());
+        }
+        yield* checkAccessibility(page);
+      })
+    ));
+}
+
 test("shows grouped currency totals and prevents replay after a lost save acknowledgement", ({
   page,
 }) =>
@@ -412,7 +481,7 @@ test("saves a monthly cap from the view through real Core and retains it after r
         page.getByRole("button", { name: "Guardar presupuesto" }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Comida", exact: true })).toBeVisible()
+        expect(page.getByRole("heading", { name: "Comida COP", exact: true })).toBeVisible()
       );
       yield* checkEarlierMonth(page);
       yield* checkGroupCurrency(page);
@@ -550,7 +619,7 @@ const checkLargeReport = Effect.fn(function* (page: Page) {
   yield* installLargeReport(page);
   yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
   yield* Effect.tryPromise(() =>
-    expect(page.getByRole("button", { name: /^Grupo [0-9]+$/u })).toHaveCount(largeGroupCount)
+    expect(page.getByRole("button", { name: /^Grupo [0-9]+ COP$/u })).toHaveCount(largeGroupCount)
   );
   yield* Effect.tryPromise(() =>
     expect(page.getByLabel(/^Presupuesto de Categoría/u)).toHaveCount(0)
@@ -559,7 +628,7 @@ const checkLargeReport = Effect.fn(function* (page: Page) {
     expect(page.getByRole("region", { name: "Resumen COP" })).toContainText("1.000")
   );
   yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: "Grupo 7", exact: true }).click()
+    page.getByRole("button", { name: "Grupo 7 COP", exact: true }).click()
   );
   yield* Effect.tryPromise(() =>
     expect(page.getByLabel("Presupuesto de Categoría 999 (COP)", { exact: true })).toHaveValue("1")

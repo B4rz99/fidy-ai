@@ -38,7 +38,7 @@ const status = ({
   return { ...common, type: "under", remaining: { amount: difference, currency } };
 };
 
-it("preserves cents above the numeric precision limit and keeps currency totals separate", () => {
+it("identifies each Currency while preserving exact cents and separate Budget totals", () => {
   const statuses = [
     status({ cap: "9007199254740993.12", spent: "9007199254740993.10", currency: "COP" }),
     status({ cap: "50.25", spent: "10.1", currency: "USD" }),
@@ -52,8 +52,8 @@ it("preserves cents above the numeric precision limit and keeps currency totals 
       over: figure.over,
     }))
   ).toEqual([
-    { currency: "COP", remaining: "$ 0,02", over: false },
-    { currency: "USD", remaining: "-$ 0,15", over: true },
+    { currency: "COP", remaining: "COP 0,02", over: false },
+    { currency: "USD", remaining: "-USD 0,15", over: true },
   ]);
   expect(figures.map((figure) => figure.percentage).every((value) => value <= 100)).toBe(true);
   expect(
@@ -88,11 +88,16 @@ it("counts uncapped expenses and recorded income with exact currency balances", 
   ).toEqual([
     {
       currency: "COP",
-      balance: "$ 0,02",
-      remaining: "-$ 9.007.199.254.740.993,10",
-      allocationAmount: "$ 9.007.199.254.740.993,12",
+      balance: "COP 0,02",
+      remaining: "-COP 9.007.199.254.740.993,10",
+      allocationAmount: "COP 9.007.199.254.740.993,12",
     },
-    { currency: "USD", balance: "-$ 20,15", remaining: "$ 30,10", allocationAmount: "$ 50,25" },
+    {
+      currency: "USD",
+      balance: "-USD 20,15",
+      remaining: "USD 30,10",
+      allocationAmount: "USD 50,25",
+    },
   ]);
 });
 
@@ -111,9 +116,9 @@ it("calculates unallocated income from planned caps rather than actual spending"
     },
   })[0];
   expect(figure).toMatchObject({
-    unallocated: "$ 2.320.000,00",
-    balance: "$ 2.877.000,00",
-    remaining: "$ 557.000,00",
+    unallocated: "COP 2.320.000,00",
+    balance: "COP 2.877.000,00",
+    remaining: "COP 557.000,00",
     overallocated: false,
   });
 });

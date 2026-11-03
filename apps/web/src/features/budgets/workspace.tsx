@@ -13,6 +13,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Option } from "effect";
 import { type JSX, useState } from "react";
 import { Button } from "@/ui/components/button";
+import { Badge } from "@/ui/components/badge";
 import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { WorkspacePanel } from "@/ui/components/workspace-panel";
 import { BudgetBalance } from "@/ui/components/budget-meter";
@@ -159,11 +160,13 @@ const BudgetHead = (): JSX.Element => (
 );
 type GroupHeadingProps = Readonly<{
   group: string;
+  currencies: ReadonlyArray<BudgetStatus["budget"]["cap"]["currency"]>;
   statuses: ReadonlyArray<BudgetStatus>;
   locale: string;
 }>;
 const GroupHeading = ({
   group,
+  currencies,
   statuses,
   locale,
   open,
@@ -193,8 +196,15 @@ const GroupHeading = ({
             strokeWidth={1.5}
             className={open ? "shrink-0" : "shrink-0 -rotate-90"}
           />
-          <span className="budget-name" title={group}>
-            {group}
+          <span className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="budget-name" title={group}>
+              {group}
+            </span>
+            {currencies.map((currency) => (
+              <Badge key={currency} variant="secondary">
+                {currency}
+              </Badge>
+            ))}
           </span>
         </Button>
       </h2>
@@ -280,10 +290,15 @@ const BudgetGroup = ({
   const statuses = props.report.statuses.filter(
     (status) => groupFor({ status, categories: props.categories }) === group
   );
+  const currencies = [...new Set(statuses.map((status) => status.budget.cap.currency))];
   return (
-    <section className="budget-group relative rounded-lg border bg-card">
+    <section
+      aria-label={`Grupo ${group} ${currencies.join(" ")}`.trim()}
+      className="budget-group relative rounded-lg border bg-card"
+    >
       <GroupHeading
         group={group}
+        currencies={currencies}
         statuses={statuses}
         locale={props.user.locale}
         open={open}

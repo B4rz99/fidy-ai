@@ -1,6 +1,6 @@
 import { BigDecimal } from "effect";
 import type { CanonicalSuccess } from "@/transport/client";
-import { formatMoney } from "@/transport/money";
+import { formatMoneyWithCode } from "@/transport/money";
 
 export type Budget = CanonicalSuccess<"budgets.listBudgets">["data"][number];
 export type BudgetReport = Omit<CanonicalSuccess<"budgets.getBudgetStatus">["data"], "budgets">;
@@ -56,7 +56,7 @@ export const budgetFigures = ({
     const spent = BigDecimal.sumAll(selected.map((status) => status.spent.amount));
     const remaining = BigDecimal.subtract(cap, spent);
     const format = (amount: BigDecimal.BigDecimal): string =>
-      formatMoney({ locale, money: { amount, currency } });
+      formatMoneyWithCode({ locale, money: { amount, currency } });
     return {
       currency,
       budgeted: format(cap),
@@ -114,7 +114,7 @@ export const summaryFigures = ({
       );
       const remaining = BigDecimal.subtract(cap, expenses);
       const format = (amount: BigDecimal.BigDecimal): string =>
-        formatMoney({ locale, money: { currency, amount } });
+        formatMoneyWithCode({ locale, money: { currency, amount } });
       return {
         currency,
         income: format(income),

@@ -1,0 +1,51 @@
+apps/server/cloudflare/outbound-http/runtime.test.ts
+  s_a61e47ac31e249::t_56e68242e81fe7 5,189-219
+apps/server/cloudflare/pro-grants.test.ts
+  s_602780a86ff22d::t_aed44f421f6d0a 16,55-64,68,73-78,81-84
+apps/server/src/shell/pro-grants/operations.ts
+  s_602780a86ff22d::t_ca51eb6cf49c96 39
+apps/web/e2e/pro-grants.spec.ts
+  s_602780a86ff22d::t_93da0f339f4220 23-99,101-161
+apps/web/src/features/subscription/feature.tsx
+  s_602780a86ff22d::t_bf3ac0e28b9a0f 885-886,891,896,902,911-918,1024-1031
+docs/operations/manual-pro-grants.md
+  s_602780a86ff22d::t_6c5b4d072ad5de 27-28,31-34
+scripts/pro/main.ts
+  s_602780a86ff22d::t_75daf192d11444 4,29,37,53
+scripts/pro/runtime.ts
+  s_a2c53913592773::t_769c30075f7bce 1-54
+tools/depcruise/boundaries.mjs
+  s_a61e47ac31e249::t_a408e54346096a 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "82aa3b513f475c3ae976e5940eea86f4433ff924",
+  "prompts": {},
+  "sessions": {
+    "s_602780a86ff22d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19f25-969c-7091-b4e2-5708c0c4a059",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a2c53913592773": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19a90-29d3-7942-b8c8-a3b3b300156a",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a61e47ac31e249": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19f3f-c72b-77e2-8d9e-0652d7a85983",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

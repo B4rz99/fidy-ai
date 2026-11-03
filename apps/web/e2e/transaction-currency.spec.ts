@@ -39,10 +39,13 @@ const registerForeignExpense = Effect.fn(function* (page: Page) {
   yield* wait(() => page.getByLabel("Notas (opcional)").fill("Conservar el monto exacto"));
   yield* wait(() => chooseCurrency(page, "JPY"));
   yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("25,50"));
-  yield* wait(() => expect(page.getByRole("alert")).toContainText("JPY no admite decimales"));
   yield* wait(() =>
-    expect(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
+    expect(page.getByLabel("Monto", { exact: true })).toHaveAccessibleDescription(
+      "JPY no admite decimales. Ingresa un monto entero."
+    )
   );
+  yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+  yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toBeFocused());
   yield* wait(() => chooseCurrency(page, "USD"));
   yield* wait(() => expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Moneda QA USD"));
   yield* wait(() =>

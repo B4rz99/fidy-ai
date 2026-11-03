@@ -778,3 +778,17 @@
   color: var(--muted-foreground);
   line-height: 1.7;
 }
+
+@media (min-width: 901px) {
+  [data-review="detail"] {
+    height: var(--review-height);
+  }
+  [data-review="columns"] {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  [data-review="detail-heading"],
+  [data-review="footer"] {
+    flex-shrink: 0;
+  }
+}

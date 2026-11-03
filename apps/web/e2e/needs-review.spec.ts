@@ -536,7 +536,7 @@ test("rereads the saved draft after a lost acknowledgement on mobile", ({ page }
         expect(page.getByLabel("Valor", { exact: true })).toBeDisabled()
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Actualizar elemento" }).click()
+        page.getByRole("button", { name: "Actualizar revisión" }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Valor", { exact: true })).toBeEnabled()
@@ -2108,3 +2108,60 @@ const unavailableContextRoute = (route: Route): Promise<void> =>
     status: 503,
     body: '{"error":{"code":"service_unavailable","message":"Synthetic context refusal"}}',
   });
+
+test("explains invalid review amounts before enabling confirmation", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, amountReviewRoute)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      const amount = page.getByLabel("Valor", { exact: true });
+      const confirm = page.getByRole("button", { name: "Confirmar", exact: true });
+      yield* Effect.tryPromise(() => expect(amount).toHaveValue("12,5"));
+      yield* Effect.tryPromise(() => amount.fill("0"));
+      yield* Effect.tryPromise(() => amount.press("Tab"));
+      yield* Effect.tryPromise(() =>
+        expect(amount).toHaveAccessibleDescription("El monto debe ser mayor que cero.")
+      );
+      yield* Effect.tryPromise(() => expect(amount).toHaveAttribute("aria-invalid", "true"));
+      yield* Effect.tryPromise(() => expect(confirm).toBeDisabled());
+      yield* Effect.tryPromise(() => amount.fill(""));
+      yield* Effect.tryPromise(() =>
+        expect(amount).toHaveAccessibleDescription("Ingresa un monto mayor que cero.")
+      );
+      yield* Effect.tryPromise(() => amount.fill("12,501"));
+      yield* Effect.tryPromise(() =>
+        expect(amount).toHaveAccessibleDescription("Para COP, ingresa máximo 2 decimales.")
+      );
+      yield* Effect.tryPromise(() => amount.fill("12.500,50"));
+      yield* Effect.tryPromise(() => expect(confirm).toBeEnabled());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Café de prueba")
+      );
+    })
+  ));
+
+const amountReviewRoute = (route: Route): Promise<void> => {
+  if (new URL(route.request().url()).pathname.endsWith(id)) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({
+        item,
+        revision: 0,
+        suggestions: {
+          amount: "12.5",
+          currency: "COP",
+          direction: "outflow",
+          occurredAt: "2026-10-15T12:00:00Z",
+          counterparty: "Café de prueba",
+          userProvidedFields: [],
+        },
+      }),
+    });
+  }
+  return reviewRoute(route);
+};

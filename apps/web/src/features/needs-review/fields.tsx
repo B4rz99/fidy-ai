@@ -4,7 +4,8 @@ import { CalendarField } from "@/ui/components/calendar-field";
 import { Currency } from "@/transport/client";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { Option } from "effect";
-import { type JSX, memo } from "react";
+import { moneyInputError, moneyInputHint } from "@/transport/money-input";
+import { type JSX, memo, useState } from "react";
 import { useDismissedPickerScope } from "@/ui/use-dismissed-picker-scope";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
@@ -43,26 +44,7 @@ const ReviewFieldControls = memo((props: Props): JSX.Element => (
   <div data-review="fields">
     <ReviewCounterparty {...props} />
     <div data-review="money" className="grid grid-cols-2 items-start gap-3">
-      <div className="grid content-start gap-2.5">
-        <Label htmlFor="review-amount">Valor</Label>
-        <Input
-          id="review-amount"
-          inputMode="decimal"
-          value={props.draft.amount}
-          maxLength={120}
-          disabled={props.locked}
-          aria-invalid={props.draft.amount === ""}
-          onChange={(event) =>
-            props.change(
-              editDraft({
-                draft: props.draft,
-                field: "money",
-                value: { amount: event.target.value },
-              })
-            )
-          }
-        />
-      </div>
+      <ReviewAmount {...props} />
       <div className="grid content-start gap-2.5">
         <Label htmlFor="review-currency">Moneda</Label>
         <SearchableChoiceDropdown
@@ -85,6 +67,42 @@ const ReviewFieldControls = memo((props: Props): JSX.Element => (
     </div>
   </div>
 ));
+const ReviewAmount = ({ draft, change, locked }: Props): JSX.Element => {
+  const [visited, setVisited] = useState(false);
+  const error = visited
+    ? Option.match(draft.currency, {
+        onNone: () => Option.some("Selecciona una moneda para validar el monto."),
+        onSome: (currency) => moneyInputError({ text: draft.amount, currency }),
+      })
+    : Option.none();
+  const hint = Option.match(draft.currency, {
+    onNone: () => "Selecciona una moneda para validar el monto.",
+    onSome: moneyInputHint,
+  });
+  return (
+    <div className="grid content-start gap-2.5">
+      <Label htmlFor="review-amount">Valor</Label>
+      <Input
+        id="review-amount"
+        inputMode="decimal"
+        value={draft.amount}
+        maxLength={120}
+        disabled={locked}
+        aria-invalid={Option.isSome(error)}
+        aria-describedby="review-amount-help"
+        onBlur={() => setVisited(true)}
+        onValueChange={(amount) => change(editDraft({ draft, field: "money", value: { amount } }))}
+      />
+      <p
+        id="review-amount-help"
+        aria-live="polite"
+        className={visited ? "text-sm text-muted-foreground" : "sr-only"}
+      >
+        {visited ? Option.getOrElse(error, () => hint) : ""}
+      </p>
+    </div>
+  );
+};
 const ReviewCounterparty = (props: Props): JSX.Element => (
   <div className="grid content-start gap-2.5">
     <Label htmlFor="review-counterparty">Contraparte (opcional)</Label>

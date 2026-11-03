@@ -111,3 +111,88 @@ test("captures a Transaction by canonical mutation and displays the confirmed re
       });
     })
   ));
+
+test("explains invalid registration amounts and preserves the other fields", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [category] }));
+      yield* installRoute(page, transactionsRoute, (route) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: response([]) })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "+ Registrar", exact: true }).click()
+      );
+      const amount = page.getByLabel("Monto", { exact: true });
+      const counterparty = page.getByLabel("Contraparte (opcional)");
+      yield* Effect.tryPromise(() => counterparty.fill("Café de prueba"));
+      yield* Effect.tryPromise(() => amount.focus());
+      yield* Effect.tryPromise(() => amount.press("Tab"));
+      yield* Effect.tryPromise(() =>
+        expect(amount).toHaveAccessibleDescription("Ingresa un monto mayor que cero.")
+      );
+      yield* Effect.tryPromise(() => amount.fill("0"));
+      yield* Effect.tryPromise(() => expect(amount).toHaveAttribute("aria-invalid", "true"));
+      yield* Effect.tryPromise(() =>
+        expect(amount).toHaveAccessibleDescription("El monto debe ser mayor que cero.")
+      );
+      yield* Effect.tryPromise(() => amount.fill("12,501"));
+      yield* Effect.tryPromise(() =>
+        expect(amount).toHaveAccessibleDescription("Para COP, ingresa máximo 2 decimales.")
+      );
+      yield* Effect.tryPromise(() => amount.fill("12.50"));
+      yield* Effect.tryPromise(() =>
+        expect(amount).toHaveAccessibleDescription(
+          "Usa punto para miles y coma para decimales. Por ejemplo: 12.500,50."
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Registrar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(amount).toBeFocused());
+      yield* Effect.tryPromise(() => expect(counterparty).toHaveValue("Café de prueba"));
+      yield* Effect.tryPromise(() => amount.fill("12.500,50"));
+      yield* Effect.tryPromise(() => expect(amount).toHaveAttribute("aria-invalid", "false"));
+    })
+  ));
+
+test("a refused registration offers retry while retaining a valid amount", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [category] }));
+      yield* installRoute(page, transactionsRoute, (route) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: response([]) })
+      );
+      yield* installRoute(page, `${apiOrigin}/transactions`, (route) =>
+        route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: { code: "validation_failed", message: "Refused", fields: [] },
+            next: [],
+          }),
+        })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "+ Registrar", exact: true }).click()
+      );
+      const amount = page.getByLabel("Monto", { exact: true });
+      yield* Effect.tryPromise(() => amount.fill("25.000"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Registrar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toHaveText(
+          "No pudimos guardar la transacción. Tus datos siguen en el formulario. Intenta de nuevo."
+        )
+      );
+      yield* Effect.tryPromise(() => expect(amount).toHaveValue("25.000"));
+      yield* Effect.tryPromise(() => expect(amount).toHaveAttribute("aria-invalid", "false"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Registrar", exact: true })).toBeEnabled()
+      );
+    })
+  ));

@@ -89,7 +89,12 @@ const maximumTimerMilliseconds = 2_147_483_647;
 const now = (): number => DateTime.toEpochMillis(DateTime.nowUnsafe());
 const draftFor = (detail: Detail): Draft =>
   Option.getOrElse(
-    Option.orElse(detail.draft, () => detail.suggestions),
+    Option.orElse(detail.draft, () =>
+      Option.map(detail.suggestions, (draft) => ({
+        ...draft,
+        amount: draft.amount.replace(".", ","),
+      }))
+    ),
     emptyDraft
   );
 const makeEntry = (detail: Detail): Entry => ({

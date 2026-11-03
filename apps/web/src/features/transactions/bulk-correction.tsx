@@ -84,6 +84,7 @@ const BulkAmount = ({
   return (
     <div className="flex flex-col gap-2">
       <MoneyField
+        revealErrors={false}
         id="bulk-amount"
         currency={props.transactions[0].money.currency}
         label={`Monto · ${mixedCurrencies ? "Varias monedas" : props.transactions[0].money.currency}`}

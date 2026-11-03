@@ -97,6 +97,7 @@ const DraftInputs = ({
 }>): JSX.Element => (
   <>
     <MoneyField
+      revealErrors={false}
       id="correction-amount"
       currency={currency}
       label={`Monto · ${currency}`}

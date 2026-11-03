@@ -1,3 +1,4 @@
+import { parseMoneyInput } from "@/transport/money-input";
 import { ReviewCommand, ReviewDraft } from "@/transport/client";
 import { DateTime, Option, Schema } from "effect";
 import type { CanonicalSuccess } from "@/transport/client";
@@ -62,8 +63,12 @@ export const editDraft = ({
 export const creation = ({
   detail,
   draft,
-}: Readonly<{ detail: Detail; draft: Draft }>): Option.Option<Command> =>
-  Schema.decodeOption(Schema.toCodecJson(ReviewCommand))({
+}: Readonly<{ detail: Detail; draft: Draft }>): Option.Option<Command> => {
+  const money = Option.flatMap(draft.currency, (currency) =>
+    parseMoneyInput({ text: draft.amount, currency })
+  );
+  if (Option.isNone(money)) return Option.none();
+  return Schema.decodeOption(Schema.toCodecJson(ReviewCommand))({
     _tag: "Create",
     id: detail.item.id,
     revision: detail.revision,
@@ -73,7 +78,7 @@ export const creation = ({
     }),
     extraction: {
       money: {
-        amount: draft.amount.trim().replace(",", "."),
+        amount: draft.amount.trim().replaceAll(".", "").replace(",", "."),
         ...Option.match(draft.currency, {
           onNone: () => ({}),
           onSome: (currency) => ({ currency }),
@@ -87,6 +92,7 @@ export const creation = ({
       occurredAt: draft.occurredAt,
     },
   });
+};
 
 export const localOccurrence = ({
   value,

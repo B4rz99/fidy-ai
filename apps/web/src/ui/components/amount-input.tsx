@@ -24,7 +24,7 @@ export const AmountInput = ({
     inputMode="decimal"
     variant="amount"
     onValueChange={(text, eventDetails) => {
-      if (/^[0-9.,]*$/u.test(text)) onValueChange?.(text, eventDetails);
+      if (/^-?[0-9.,]*$/u.test(text)) onValueChange?.(text, eventDetails);
     }}
     style={{
       ...style,

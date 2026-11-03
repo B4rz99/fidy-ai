@@ -413,7 +413,10 @@ const checkTransactionForm = Effect.fnUntraced(function* (page: Page, theme: The
   yield* capture(page, `transactions-notes-focus-${theme}`);
   yield* Effect.tryPromise((signal) => submit.click({ signal }));
   yield* Effect.tryPromise((signal) =>
-    expect(page.getByRole("alert")).toContainText("No pudimos confirmar el registro", { signal })
+    expect(page.getByRole("alert")).toContainText(
+      "No pudimos confirmar si la transacción se guardó",
+      { signal }
+    )
   );
   for (const input of [amount, notes, category, submit]) {
     yield* Effect.tryPromise((signal) => expect(input).toBeDisabled({ signal }));

@@ -1230,7 +1230,7 @@ const loseCapturedPayment = (page: Page): Effect.Effect<void, Cause.UnknownError
     );
     yield* Effect.tryPromise(() =>
       expectPayment(page.getByRole("alert")).toContainText(
-        "No pudimos confirmar el registro de la transacción"
+        "No pudimos confirmar si la transacción se guardó"
       )
     );
     yield* Effect.tryPromise(() => page.unroute(transactionRoute, loseCapture));

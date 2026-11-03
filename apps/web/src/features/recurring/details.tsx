@@ -9,6 +9,8 @@ import { DefaultChoiceField, RecurringDateField } from "./fields";
 import { FulfillmentHistory } from "./fulfillment-history";
 import { PaymentCapture } from "./payment-capture";
 import { manualMarks, replacementOptions, settlementOptions } from "./payment-association";
+import { hasOccurrenceTracking, preservesOccurrence } from "./edit-scope";
+import { EditScope } from "./edit-guidance";
 import { PlanForm } from "./plan-form";
 import { Field } from "./form-fields";
 import {
@@ -23,6 +25,7 @@ import {
 
 type Props = Readonly<{
   item: Occurrence;
+  document: Workspace["document"];
   transactions: Workspace["linkedTransactions"];
   invalidMarks: Occurrence["fulfillments"];
   categories: ReadonlyArray<Category>;
@@ -192,6 +195,7 @@ const AssociationFields = ({ item }: Pick<Props, "item">): JSX.Element => (
 
 const OccurrenceEditor = ({
   item,
+  document,
   save,
   categories,
   disabled,
@@ -199,7 +203,8 @@ const OccurrenceEditor = ({
 }: Props & Readonly<{ reviewTracking: () => void }>): JSX.Element => {
   const [scope, setScope] = useState<"once" | "forward">("once");
   const descriptionId = useId();
-  const hasTracking = item.fulfillments.length > 0;
+  const hasTracking = hasOccurrenceTracking({ document, item });
+  const preserved = preservesOccurrence({ document, item });
   return (
     <>
       <Disclosure title="Editar recurrente">
@@ -209,7 +214,7 @@ const OccurrenceEditor = ({
             focusAppearance="subtle"
             variant="outline"
             aria-pressed={scope === "once"}
-            aria-describedby={`${descriptionId}-once`}
+            aria-describedby={descriptionId}
             onClick={() => setScope("once")}
           >
             Solo esta vez
@@ -219,16 +224,17 @@ const OccurrenceEditor = ({
             focusAppearance="subtle"
             variant="outline"
             aria-pressed={scope === "forward"}
-            aria-describedby={`${descriptionId}-forward`}
+            aria-describedby={descriptionId}
             onClick={() => setScope("forward")}
           >
-            Esta y próximas
+            {preserved ? "Actualizar plan" : "Esta y próximas"}
           </Button>
         </div>
-        <ScopeGuidance
+        <EditScope
+          id={descriptionId}
+          item={item}
+          document={document}
           scope={scope}
-          descriptionId={descriptionId}
-          hasTracking={hasTracking}
           reviewTracking={reviewTracking}
         />
         <PlanForm
@@ -243,36 +249,6 @@ const OccurrenceEditor = ({
     </>
   );
 };
-
-const ScopeGuidance = ({
-  scope,
-  descriptionId,
-  hasTracking,
-  reviewTracking,
-}: Readonly<{
-  scope: "once" | "forward";
-  descriptionId: string;
-  hasTracking: boolean;
-  reviewTracking: () => void;
-}>): JSX.Element => (
-  <div className="my-4 grid gap-3 text-sm text-muted-foreground" aria-live="polite">
-    <p id={`${descriptionId}-once`} hidden={scope !== "once"}>
-      {hasTracking
-        ? "Esta fecha ya tiene seguimiento registrado y no se puede editar solo esta vez. Revisa las transacciones vinculadas y las marcas manuales. Si el seguimiento es incorrecto, usa Desvincular transacción en los vínculos y Revertir en las marcas manuales de esta fecha antes de editarla. Esto solo retira el seguimiento: no elimina transacciones ni revierte pagos reales."
-        : "Los cambios se aplican solo a esta fecha. Las próximas fechas conservan sus datos."}
-    </p>
-    <p id={`${descriptionId}-forward`} hidden={scope !== "forward"}>
-      Los cambios se aplican al recurrente desde esta fecha en adelante. Las fechas con seguimiento
-      conservan sus datos, incluida esta si ya tiene registros. Esta opción no corrige el
-      seguimiento de una sola fecha.
-    </p>
-    {scope === "once" && hasTracking ? (
-      <Button variant="outline" onClick={reviewTracking}>
-        Revisar seguimiento
-      </Button>
-    ) : null}
-  </div>
-);
 
 const paymentCommand = (form: FormData, item: Occurrence): Option.Option<RecurringCommand> => {
   const transactionId = formText(form, "transactionId").trim();

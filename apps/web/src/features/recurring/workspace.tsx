@@ -113,6 +113,7 @@ const Editor = ({
         {lifecycle}
         <OccurrenceDetails
           item={item.value}
+          document={view.document}
           transactions={view.linkedTransactions}
           invalidMarks={view.document.fulfillments.filter(
             (mark) =>

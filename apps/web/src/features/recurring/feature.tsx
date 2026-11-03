@@ -73,6 +73,7 @@ const Resources = (props: Props): JSX.Element => {
       stale={planning.stale}
       saveState={planning.saveState}
       confirmation={planning.confirmation}
+      editConfirmation={planning.editConfirmation}
       waiting={waiting}
       retry={retry}
     />
@@ -171,15 +172,24 @@ const SaveNotice = ({
   waiting,
   retry,
   confirmation,
+  editConfirmation,
 }: Readonly<{
   stale: boolean;
   saveState: SaveState;
   waiting: boolean;
   retry: () => void;
   confirmation: Option.Option<LifecycleConfirmation>;
+  editConfirmation: Option.Option<string>;
 }>): JSX.Element => (
   <>
     {saveState === "saving" ? <output>Guardando cambio…</output> : null}
+    {Option.isSome(editConfirmation) ? (
+      <output>
+        <Alert variant="success" role="presentation">
+          <AlertDescription>{editConfirmation.value}</AlertDescription>
+        </Alert>
+      </output>
+    ) : null}
     {Option.isSome(confirmation) ? (
       <output>
         <Alert variant="success" role="presentation">

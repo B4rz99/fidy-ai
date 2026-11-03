@@ -9,6 +9,7 @@ import {
   workspaceCategoriesQuery,
   workspaceQueryRetention,
 } from "@/transport/workspace-query";
+import { preservedDates, restoredDates } from "./edit-scope";
 import { type Edit, type Plan, type Save, type Workspace, planStatus } from "./model";
 
 type Query = CanonicalInput<"recurringPlans.getRecurringWorkspace">["query"];
@@ -18,6 +19,7 @@ type WriteOutcome =
       state: "saved";
       revision: Workspace["document"]["revision"];
       confirmation: Option.Option<LifecycleConfirmation>;
+      editConfirmation: Option.Option<string>;
     }>
   | Readonly<{ state: "rejected" | "uncertain" }>;
 export type LifecycleConfirmation = Readonly<{
@@ -26,7 +28,6 @@ export type LifecycleConfirmation = Readonly<{
   revision: Workspace["document"]["revision"];
   action: Extract<Edit, { kind: "lifecycle" }>["action"];
 }>;
-type ConfirmedLifecycle = Option.Option<LifecycleConfirmation>;
 const lifecycleConfirmation = (
   document: Workspace["document"],
   edit: Edit
@@ -37,11 +38,31 @@ const lifecycleConfirmation = (
     ? Option.none()
     : Option.some({ name, action: edit.action, planId: edit.planId, revision: document.revision });
 };
+const editConfirmation = (document: Workspace["document"], edit: Edit): Option.Option<string> => {
+  if (edit.kind !== "edit") return Option.none();
+  if (edit.scope === "once") {
+    return Option.some(
+      `Se actualizó solo la expectativa de ${edit.date}. Las próximas fechas y las transacciones se conservan.`
+    );
+  }
+  const restored = restoredDates({ document, planId: edit.planId, from: edit.date });
+  const retained =
+    restored.length === 0
+      ? "Las fechas con ajustes individuales, seguimiento u omisión se conservan."
+      : `Los ajustes individuales y las omisiones se conservan. Las fechas ${restored.join(", ")} se volvieron a incluir sin ajustes individuales y siguen el nuevo plan, aunque tengan seguimiento.`;
+  const selected = preservedDates({ document, planId: edit.planId, from: edit.date }).includes(
+    edit.date
+  );
+  return Option.some(
+    `Se actualizó el plan desde ${edit.date}. ${selected ? `${edit.date} conserva sus ajustes.` : "Las fechas sin ajustes ni seguimiento siguen el calendario guardado y pueden dejar de generarse si cambió."} ${retained} Las transacciones no se modificaron.`
+  );
+};
 type PlanningState = Readonly<{
   state: CanonicalQueryState<CanonicalSuccess<"recurringPlans.getRecurringWorkspace">, unknown>;
   categoryState: CanonicalQueryState<CanonicalSuccess<"categories.listCategories">, unknown>;
   saveState: SaveState;
   confirmation: Option.Option<LifecycleConfirmation>;
+  editConfirmation: Option.Option<string>;
   statusFor: typeof planStatus;
   stale: boolean;
   waiting: boolean;
@@ -134,6 +155,7 @@ const makeCommands = (apiClient: FidyClient): Commands => {
             state: "saved",
             revision: result.data.revision,
             confirmation: lifecycleConfirmation(result.data, input.payload.edit),
+            editConfirmation: editConfirmation(result.data, input.payload.edit),
           } as const;
         }).pipe(
           Effect.catch((failure) =>
@@ -200,6 +222,22 @@ const useSaveCompletion = (
       .catch(() => undefined);
   };
 };
+const useSaveFeedback = (): Pick<PlanningState, "confirmation" | "editConfirmation"> &
+  Readonly<{
+    clear: () => void;
+    confirm: (outcome: Extract<WriteOutcome, { state: "saved" }>) => void;
+  }> => {
+  const [receipt, setReceipt] = useState<Option.Option<Extract<WriteOutcome, { state: "saved" }>>>(
+    Option.none
+  );
+  return {
+    confirmation: Option.flatMap(receipt, (value) => value.confirmation),
+    editConfirmation: Option.flatMap(receipt, (value) => value.editConfirmation),
+    clear: (): void => setReceipt(Option.none()),
+    confirm: (outcome: Extract<WriteOutcome, { state: "saved" }>): void =>
+      setReceipt(Option.some(outcome)),
+  };
+};
 type PlanningOptions = Readonly<{
   apiClient: FidyClient;
   query: Query;
@@ -217,7 +255,7 @@ export const useRecurringPlanning = (options: PlanningOptions): PlanningState =>
   const reread = useAtomSet(commands.refresh, { mode: "promiseExit" });
   const admission = useRef(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [confirmation, setConfirmation] = useState<ConfirmedLifecycle>(Option.none);
+  const feedback = useSaveFeedback();
   const stale = profileStale || queryStale(state) || queryStale(categoryState);
   const waiting =
     profileWaiting || state.waiting || categoryState.waiting || saveState === "refreshing";
@@ -227,12 +265,12 @@ export const useRecurringPlanning = (options: PlanningOptions): PlanningState =>
     if (disabled || admission.current || state._tag !== "Ready") return;
     admission.current = true;
     setSaveState("saving");
-    setConfirmation(Option.none());
+    feedback.clear();
     const finish = (outcome: WriteOutcome): void => {
       admission.current = false;
       setSaveState(outcome.state === "saved" ? "idle" : outcome.state);
       if (outcome.state !== "saved") return;
-      setConfirmation(outcome.confirmation);
+      feedback.confirm(outcome);
       complete(outcome.revision, onSaved);
     };
     submit({
@@ -244,12 +282,11 @@ export const useRecurringPlanning = (options: PlanningOptions): PlanningState =>
   const retry = (): void => {
     if (admission.current) return;
     admission.current = true;
-    const previous = saveState;
     setSaveState("refreshing");
     refreshProfile();
     const finish = (succeeded: boolean): void => {
       admission.current = false;
-      setSaveState(succeeded ? "idle" : previous);
+      setSaveState(succeeded ? "idle" : saveState);
     };
     reread(query)
       .then((exit) => finish(Exit.isSuccess(exit) && exit.value))
@@ -259,8 +296,9 @@ export const useRecurringPlanning = (options: PlanningOptions): PlanningState =>
     state,
     categoryState,
     saveState,
-    confirmation,
-    statusFor: confirmedPlanStatus(state, confirmation),
+    confirmation: feedback.confirmation,
+    editConfirmation: feedback.editConfirmation,
+    statusFor: confirmedPlanStatus(state, feedback.confirmation),
     stale,
     waiting,
     disabled,

@@ -161,9 +161,7 @@ export const renderDashboardView = ({
   facts: DashboardFacts;
   now: DateTime.Utc;
 }>): Effect.Effect<DashboardView, DashboardUnavailable> => {
-  const render = (
-    node: LayoutNode
-  ): Effect.Effect<DashboardView["layout"], DashboardUnavailable> =>
+  const render = (node: LayoutNode): Effect.Effect<DashboardView["layout"], DashboardUnavailable> =>
     node.kind === "leaf"
       ? renderWidget(node.widget, facts, now).pipe(
           Effect.map((widget) => ({ kind: "leaf" as const, widget }))

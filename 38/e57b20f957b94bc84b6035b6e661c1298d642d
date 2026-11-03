@@ -1,0 +1,19 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_602780a86ff22d::t_b370df6cbac150 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38e57b20f957b94bc84b6035b6e661c1298d642d",
+  "prompts": {},
+  "sessions": {
+    "s_602780a86ff22d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19f25-969c-7091-b4e2-5708c0c4a059",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

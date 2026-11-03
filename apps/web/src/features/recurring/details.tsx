@@ -1,12 +1,12 @@
 import { browserCrypto } from "@/browser/crypto";
-import { Link } from "@tanstack/react-router";
 import { BigDecimal, Effect, Option, Schema } from "effect";
-import { type FormEvent, type JSX, type Ref, useId, useRef, useState } from "react";
+import { type FormEvent, type JSX, useId, useRef, useState } from "react";
 import { RecurringCommand } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Disclosure } from "@/ui/components/disclosure";
 import { DefaultChoiceField, RecurringDateField } from "./fields";
+import { FulfillmentHistory } from "./fulfillment-history";
 import { PaymentCapture } from "./payment-capture";
 import { manualMarks, replacementOptions, settlementOptions } from "./payment-association";
 import { PlanForm } from "./plan-form";
@@ -15,6 +15,7 @@ import {
   type Category,
   type Occurrence,
   type Save,
+  type Workspace,
   expectedAmount,
   money,
   statuses,
@@ -22,6 +23,8 @@ import {
 
 type Props = Readonly<{
   item: Occurrence;
+  transactions: Workspace["linkedTransactions"];
+  invalidMarks: Occurrence["fulfillments"];
   categories: ReadonlyArray<Category>;
   save: Save;
   disabled: boolean;
@@ -123,7 +126,7 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
         Completado en recurrentes: {money(item.completed)}
         {item.remaining === undefined ? "" : ` · Restante: ${money(item.remaining)}`}
       </p>
-      <FulfillmentHistory item={item} save={save} disabled={disabled} heading={trackingHeading} />
+      <FulfillmentHistory {...props} heading={trackingHeading} />
       {manualMarks(item).length > 1 ? (
         <p className="text-sm text-muted-foreground">
           Hay varias marcas manuales. Antes de crear o vincular transacciones, revierte las marcas
@@ -165,53 +168,6 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
     </div>
   );
 };
-
-const FulfillmentHistory = ({
-  item,
-  save,
-  disabled,
-  heading,
-}: Pick<Props, "item" | "save" | "disabled"> &
-  Readonly<{ heading: Ref<HTMLHeadingElement> }>): JSX.Element => (
-  <div className="grid gap-3">
-    {item.fulfillments.length > 0 ? (
-      <h3 ref={heading} tabIndex={-1} className="font-medium">
-        Seguimiento de esta fecha
-      </h3>
-    ) : null}
-    {item.fulfillments.map((mark) => (
-      <div key={mark.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <span>
-          {mark.actualDate} · {money(mark.money)} ·{" "}
-          {mark.transactionId === undefined ? "Sin transacción vinculada" : "Transacción vinculada"}
-          {mark.transactionId === undefined ? (
-            <span className="block text-muted-foreground">
-              Esta marca no modifica tus gastos o presupuestos. Si la transacción ya está en tu
-              historial, vincúlala; si falta, créala y vincúlala.
-            </span>
-          ) : (
-            <span className="block text-muted-foreground">
-              El vínculo usa la transacción de tu historial. Revertir solo retira el seguimiento; no
-              elimina la transacción.{" "}
-              <Link to="/app/transactions" className="underline">
-                Ver transacciones
-              </Link>
-            </span>
-          )}
-        </span>
-        <Button
-          contentLayout="wrap"
-          focusAppearance="subtle"
-          variant="destructive"
-          disabled={disabled}
-          onClick={() => save({ kind: "reverse", fulfillmentId: mark.id })}
-        >
-          Revertir
-        </Button>
-      </div>
-    ))}
-  </div>
-);
 
 const AssociationFields = ({ item }: Pick<Props, "item">): JSX.Element => (
   <>
@@ -302,7 +258,7 @@ const ScopeGuidance = ({
   <div className="my-4 grid gap-3 text-sm text-muted-foreground" aria-live="polite">
     <p id={`${descriptionId}-once`} hidden={scope !== "once"}>
       {hasTracking
-        ? "Esta fecha ya tiene seguimiento registrado y no se puede editar solo esta vez. Revisa las transacciones vinculadas y las marcas manuales. Si el seguimiento es incorrecto, usa Revertir en cada registro de esta fecha antes de editarla. Esto solo retira el seguimiento: no elimina transacciones ni revierte pagos reales."
+        ? "Esta fecha ya tiene seguimiento registrado y no se puede editar solo esta vez. Revisa las transacciones vinculadas y las marcas manuales. Si el seguimiento es incorrecto, usa Desvincular transacción en los vínculos y Revertir en las marcas manuales de esta fecha antes de editarla. Esto solo retira el seguimiento: no elimina transacciones ni revierte pagos reales."
         : "Los cambios se aplican solo a esta fecha. Las próximas fechas conservan sus datos."}
     </p>
     <p id={`${descriptionId}-forward`} hidden={scope !== "forward"}>

@@ -382,6 +382,7 @@ it(
               money: planInput.money,
               direction: "outflow",
               counterparty: "Propietario",
+              notes: "Abono del arriendo",
               categoryId: "10000000-0000-4000-8000-000000000001",
               occurredAt: "2026-10-10T12:00:00.000Z",
             },
@@ -413,6 +414,25 @@ it(
         expect(replaced.occurrences[0]?.status).toBe("completed");
         expect(replaced.occurrences[0]?.fulfillments).toHaveLength(1);
         expect(replaced.occurrences[0]?.completed).toEqual(replaced.occurrences[0]?.plan.money);
+        expect(replaced.linkedTransactions).toEqual([
+          expect.objectContaining({
+            id: transaction.data.id,
+            counterparty: Option.some("Propietario"),
+            notes: Option.some("Abono del arriendo"),
+          }),
+        ]);
+        const corrected = yield* call(db, owner, {
+          _tag: "Call",
+          operation: CanonicalOperationId.make("transactions.updateTransaction"),
+          input: {
+            params: { id: transaction.data.id },
+            payload: { expectedRevision: 0, changes: { notes: "Nota corregida" } },
+          },
+        });
+        expect(corrected.status).toBe(200);
+        expect((yield* read(db, owner)).linkedTransactions[0]?.notes).toEqual(
+          Option.some("Nota corregida")
+        );
         expect(yield* transactionCount(db, owner)).toBe(1);
       })
     ),
@@ -501,6 +521,15 @@ it.each([
         ).toBe(200);
         const matched = yield* read(db, owner);
         expect(matched.matchesComplete).toBe(true);
+        expect(matched.linkedTransactions).toEqual([
+          expect.objectContaining({
+            id: transaction.data.id,
+            counterparty: Option.some("Propietario"),
+            direction: "outflow",
+            categoryId: "10000000-0000-4000-8000-000000000001",
+          }),
+        ]);
+        expect((yield* read(db, other)).linkedTransactions).toEqual([]);
         expect(matched.occurrences[0]?.status).toBe("completed");
         expect(matched.document.fulfillments).toEqual([]);
         expect((yield* read(db, owner)).document.revision).toBe(1);

@@ -143,6 +143,7 @@ const workspaceMatching = ({
 }: ProjectionWork & Readonly<{ prior: string }>): Effect.Effect<
   Readonly<{
     preferences: UserPreferences;
+    transactions: ReadonlyArray<Transaction>;
     invalid: ReadonlyArray<string>;
     earlier: AutomaticProjection;
     matched: AutomaticProjection;
@@ -180,6 +181,12 @@ const workspaceMatching = ({
       });
     return {
       preferences: observed.value.snapshot,
+      transactions: [
+        ...observed.value.selected,
+        ...observed.value.ranges.flatMap((range) =>
+          Option.isSome(range) ? range.value.transactions : []
+        ),
+      ],
       invalid: checked.invalid,
       earlier: projection(prior, 0),
       matched: projection(month, 1),
@@ -227,7 +234,7 @@ export const workspaceValue = ({
   Effect.gen(function* () {
     const now = yield* DateTime.now;
     const prior = query.previousMonth ?? previousMonth(query.month);
-    const { preferences, earlier, matched, invalid } = yield* workspaceMatching({
+    const { preferences, transactions, earlier, matched, invalid } = yield* workspaceMatching({
       db,
       userId,
       document,
@@ -254,6 +261,11 @@ export const workspaceValue = ({
       previous,
       ...(prior > earliest ? { previousMonth: previousMonth(prior) } : {}),
       summary: summarizeRecurring(items),
+      linkedTransactions: transactionSummaries({
+        transactions,
+        marks: [...items, ...previous].flatMap((item) => item.fulfillments),
+        invalid: document.fulfillments.filter((mark) => invalid.includes(mark.id)),
+      }),
       invalidFulfillmentIds: invalid,
       matches: matched.matches.filter(({ item }) => item.expectedDate.startsWith(query.month)),
       matchesComplete: matched.complete && earlier.complete,
@@ -299,3 +311,26 @@ const retainedOccurrencePlan = (
 ): RecurringDocument["plans"][number]["revisions"][number]["plan"] =>
   document.exceptions.find((entry) => entry.planId === plan.id && entry.date === date)
     ?.replacement ?? planAt({ plan, date });
+
+const transactionSummaries = ({
+  transactions,
+  marks,
+  invalid,
+}: Readonly<{
+  transactions: ReadonlyArray<Transaction>;
+  marks: RecurringDocument["fulfillments"];
+  invalid: RecurringDocument["fulfillments"];
+}>): (typeof RecurringWorkspace.Type)["linkedTransactions"] => {
+  const ids = new Set([...marks, ...invalid].map((mark) => mark.transactionId));
+  return [...new Map(transactions.map((transaction) => [transaction.id, transaction])).values()]
+    .filter((transaction) => ids.has(transaction.id))
+    .map(({ id, money, counterparty, direction, categoryId, notes, occurredAt }) => ({
+      id,
+      money,
+      counterparty,
+      direction,
+      categoryId,
+      notes,
+      occurredAt,
+    }));
+};

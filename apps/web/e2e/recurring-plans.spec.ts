@@ -995,9 +995,6 @@ test("manual recurring tracking leaves financial totals unchanged and capturing 
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
       yield* Effect.tryPromise(() =>
-        expectPayment(page.getByRole("dialog")).toContainText("Transacción vinculada")
-      );
-      yield* Effect.tryPromise(() =>
         expectPayment(page.getByText("Sin transacción vinculada", { exact: true })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
@@ -1006,6 +1003,7 @@ test("manual recurring tracking leaves financial totals unchanged and capturing 
         )
       );
       yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
+      yield* inspectAndRemoveLinkedPayment(page);
     })
   ));
 
@@ -1203,6 +1201,15 @@ const captureMarkedPayment = (page: Page): Effect.Effect<void, Cause.UnknownErro
       expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("90000")
     );
     yield* Effect.tryPromise(() => chooseOption(page, "Categoría", "Restaurantes"));
+    yield* Effect.tryPromise(() =>
+      page
+        .getByRole("form", { name: "Registrar transacción" })
+        .getByLabel("Contraparte (opcional)", { exact: true })
+        .fill("Mercado QA")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Notas (opcional)", { exact: true }).fill("Compra de la semana")
+    );
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Registrar", exact: true }).click()
     );
@@ -1717,7 +1724,7 @@ const reviewOlderTransaction = (page: Page): Effect.Effect<void, Cause.UnknownEr
     );
     yield* Effect.tryPromise(() => recurringItem(page, /Internet del hogar/u).click());
     yield* Effect.tryPromise(() =>
-      expect(page.getByRole("dialog")).toContainText("Transacción vinculada")
+      expect(page.getByRole("article", { name: /^Transacción vinculada:/u })).toHaveCount(1)
     );
   });
 
@@ -1868,3 +1875,82 @@ const inspectAppliedAmountScope = (page: Page): Effect.Effect<void, Cause.Unknow
     );
     yield* Effect.tryPromise(() => amount.fill("45.000"));
   });
+
+const inspectLinkedPayment = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const record = page.getByRole("article", {
+      name: "Transacción vinculada: Mercado QA",
+      exact: true,
+    });
+    yield* Effect.tryPromise(() => expect(record).toContainText("Restaurantes"));
+    yield* Effect.tryPromise(() => expect(record).toContainText("Compra de la semana"));
+    yield* Effect.tryPromise(() => expect(record).toContainText("Salida"));
+    yield* Effect.tryPromise(() => expect(record.getByRole("link")).toHaveCount(0));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Ver transacción", exact: true })).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() =>
+      record.getByRole("button", { name: "Desvincular transacción", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect(record).toContainText("La transacción no se elimina"));
+    yield* Effect.tryPromise(() =>
+      record.getByRole("button", { name: "Volver", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        record.getByRole("button", { name: "Desvincular transacción", exact: true })
+      ).toBeFocused()
+    );
+  });
+
+const inspectLinkedPaymentLayouts = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    for (const width of [desktopLifecycleWidth, mobileLifecycleWidth]) {
+      yield* Effect.tryPromise(() => page.setViewportSize({ width, height: 900 }));
+      for (const theme of ["light", "dark"]) {
+        if (theme === "dark") {
+          yield* Effect.tryPromise(() =>
+            page
+              .getByRole("button", { name: "Activar tema oscuro", exact: true })
+              .filter({ visible: true })
+              .click()
+          );
+        }
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("article", { name: "Transacción vinculada: Mercado QA", exact: true })
+          ).toContainText("Compra de la semana")
+        );
+        yield* Effect.tryPromise(() =>
+          page.screenshot({ path: test.info().outputPath(`linked-${width}-${theme}.png`) })
+        );
+        yield* Effect.tryPromise(() => page.evaluate(enlargeRecurringCaptureText));
+        yield* Effect.tryPromise(() => expect.poll(() => panelFits(page)).toBe(true));
+        yield* Effect.tryPromise(() => page.evaluate(resetRecurringCaptureText));
+      }
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("button", { name: "Activar tema claro", exact: true })
+          .filter({ visible: true })
+          .click()
+      );
+    }
+  });
+
+const inspectAndRemoveLinkedPayment = (
+  page: Page
+): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    yield* inspectLinkedPayment(page);
+    yield* inspectLinkedPaymentLayouts(page);
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Desvincular transacción", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Confirmar desvinculación", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+    yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
+  });
+const panelFits = (page: Page): Promise<boolean> =>
+  page.getByRole("dialog").evaluate((element) => element.scrollWidth <= element.clientWidth);

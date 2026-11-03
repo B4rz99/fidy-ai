@@ -505,3 +505,42 @@
   font-size: 14px;
   line-height: 1.6;
 }
+
+:is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"])
+  [data-recurring-slot="fulfillment"] {
+  display: grid;
+  gap: 12px;
+  padding-block: 18px;
+  border-bottom: 1px solid var(--application-line);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+[data-recurring-slot="fulfillment-identity"] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px 16px;
+  font-size: 16px;
+}
+[data-recurring-slot="fulfillment-identity"] h3,
+[data-recurring-slot="fulfillment-identity"] strong {
+  font-weight: 600;
+}
+[data-recurring-slot="fulfillment-facts"] {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+}
+[data-recurring-slot="fulfillment-facts"] > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+}
+[data-recurring-slot="fulfillment-facts"] dt {
+  color: var(--fidy-text-muted);
+}
+[data-recurring-slot="fulfillment-facts"] dd {
+  min-width: 0;
+  white-space: pre-wrap;
+}

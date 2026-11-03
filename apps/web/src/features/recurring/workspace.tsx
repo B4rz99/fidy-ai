@@ -110,6 +110,13 @@ const Editor = ({
         {lifecycle}
         <OccurrenceDetails
           item={item.value}
+          transactions={view.linkedTransactions}
+          invalidMarks={view.document.fulfillments.filter(
+            (mark) =>
+              mark.planId === panel.planId &&
+              mark.date === panel.date &&
+              view.invalidFulfillmentIds.includes(mark.id)
+          )}
           categories={categories}
           disabled={disabled}
           save={save}

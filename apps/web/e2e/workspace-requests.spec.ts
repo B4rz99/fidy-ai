@@ -205,6 +205,9 @@ test("updates the persistent Review count after a decision", ({ page, request })
       const pending = Number(yield* Effect.tryPromise(() => badge.textContent()));
       expect(pending).toBeGreaterThan(0);
       yield* Effect.tryPromise(() => skip.click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("1 elementos omitidos.", { exact: true })).toBeVisible()
+      );
       yield* Effect.tryPromise(() => expect(badge).toHaveText(String(pending - 1)));
     })
   ));

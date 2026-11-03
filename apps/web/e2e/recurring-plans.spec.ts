@@ -1325,6 +1325,9 @@ test("recurring capture refuses incompatible manual marks and completes unknown 
       yield* prepareSplitMarks(page, request);
       yield* captureSplitPayment(page, "40", false);
       yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes.*Parcial/u).click());
+      yield* inspectBlockedOccurrence(page);
+      yield* editTrackedPlan(page);
+      yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes.*Parcial/u).click());
       yield* Effect.tryPromise(() =>
         page.getByText("Crear y vincular transacción", { exact: true }).click()
       );
@@ -1339,8 +1342,112 @@ test("recurring capture refuses incompatible manual marks and completes unknown 
         expectPayment(recurringItem(page, /Pago por partes.*Completados/u)).toBeVisible()
       );
       yield* inspectSplitHistory(page.request);
+      yield* correctTrackedOccurrence(page);
+      yield* inspectSplitHistory(page.request);
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-11"));
+      yield* Effect.tryPromise(() =>
+        expectPayment(recurringItem(page, /Pago futuro/u)).toContainText("100,00")
+      );
     })
   ));
+
+const editTrackedPlan = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Esta y próximas", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => page.getByLabel("Nombre", { exact: true }).fill("Pago futuro"));
+    yield* Effect.tryPromise(() => chooseOption(page, "Tipo de importe", "Fijo"));
+    yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill("100"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Guardar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+  });
+
+const correctTrackedOccurrence = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Revertir", exact: true }).first().click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
+    yield* inspectBlockedOccurrence(page);
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Revertir", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
+    yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", { name: "Solo esta vez", exact: true })
+      ).toHaveAccessibleDescription(
+        "Los cambios se aplican solo a esta fecha. Las próximas fechas conservan sus datos."
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Revisar seguimiento", exact: true })).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Nombre", { exact: true }).fill("Solo esta fecha")
+    );
+    yield* Effect.tryPromise(() => chooseOption(page, "Tipo de importe", "Fijo"));
+    yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill("120"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Guardar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(recurringItem(page, /Solo esta fecha/u)).toContainText("120,00")
+    );
+  });
+
+const inspectBlockedOccurrence = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
+    const once = page.getByRole("button", { name: "Solo esta vez", exact: true });
+    const forward = page.getByRole("button", { name: "Esta y próximas", exact: true });
+    yield* Effect.tryPromise(() => expect(once).toHaveAttribute("aria-pressed", "true"));
+    yield* Effect.tryPromise(() =>
+      expect(once).toHaveAccessibleDescription(/Esta fecha ya tiene seguimiento registrado/u)
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText(/Esta fecha ya tiene seguimiento registrado/u)).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(once).toHaveAccessibleDescription(/no elimina transacciones ni revierte pagos reales/u)
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Nombre", { exact: true })).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() => forward.click());
+    yield* Effect.tryPromise(() =>
+      expect(forward).toHaveAccessibleDescription(/Las fechas con seguimiento conservan sus datos/u)
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() => once.click());
+    yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
+    yield* Effect.tryPromise(() => page.keyboard.press("Tab"));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Revisar seguimiento", exact: true })).toBeFocused()
+    );
+    yield* Effect.tryPromise(() => page.keyboard.press("Enter"));
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("heading", { name: "Seguimiento de esta fecha", exact: true })
+      ).toBeFocused()
+    );
+    const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
+    expect(accessibility.violations).toEqual([]);
+    yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
+  });
 
 const markSplitPayment = (page: Page, amount: string): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -1379,6 +1486,7 @@ const prepareSplitMarks = (
     yield* Effect.tryPromise(() =>
       expectPayment(page.getByRole("dialog")).toContainText("Hay varias marcas manuales")
     );
+    yield* inspectBlockedOccurrence(page);
     yield* Effect.tryPromise(() =>
       page.getByText("Crear y vincular transacción", { exact: true }).click()
     );
@@ -1391,6 +1499,7 @@ const prepareSplitMarks = (
     );
     yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
     yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
+    yield* inspectBlockedOccurrence(page);
     yield* Effect.tryPromise(() =>
       page.getByText("Crear y vincular transacción", { exact: true }).click()
     );

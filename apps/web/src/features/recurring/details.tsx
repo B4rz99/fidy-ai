@@ -1,7 +1,7 @@
 import { browserCrypto } from "@/browser/crypto";
 import { Link } from "@tanstack/react-router";
 import { BigDecimal, Effect, Option, Schema } from "effect";
-import { type FormEvent, type JSX, useState } from "react";
+import { type FormEvent, type JSX, type Ref, useId, useRef, useState } from "react";
 import { RecurringCommand } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
@@ -112,6 +112,7 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
 );
 export const OccurrenceDetails = (props: Props): JSX.Element => {
   const { item, save, disabled } = props;
+  const trackingHeading = useRef<HTMLHeadingElement>(null);
   return (
     <div data-recurring-slot="occurrence-detail" className="grid gap-5">
       <p>
@@ -122,7 +123,7 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
         Completado en recurrentes: {money(item.completed)}
         {item.remaining === undefined ? "" : ` · Restante: ${money(item.remaining)}`}
       </p>
-      <FulfillmentHistory item={item} save={save} disabled={disabled} />
+      <FulfillmentHistory item={item} save={save} disabled={disabled} heading={trackingHeading} />
       {manualMarks(item).length > 1 ? (
         <p className="text-sm text-muted-foreground">
           Hay varias marcas manuales. Antes de crear o vincular transacciones, revierte las marcas
@@ -135,7 +136,7 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
       </Button>
       <PaymentCapture {...props} />
       <PaymentForm {...props} />
-      <OccurrenceEditor {...props} />
+      <OccurrenceEditor {...props} reviewTracking={() => trackingHeading.current?.focus()} />
       {item.status === "completed" ? (
         <Button
           contentLayout="wrap"
@@ -169,8 +170,15 @@ const FulfillmentHistory = ({
   item,
   save,
   disabled,
-}: Pick<Props, "item" | "save" | "disabled">): JSX.Element => (
+  heading,
+}: Pick<Props, "item" | "save" | "disabled"> &
+  Readonly<{ heading: Ref<HTMLHeadingElement> }>): JSX.Element => (
   <div className="grid gap-3">
+    {item.fulfillments.length > 0 ? (
+      <h3 ref={heading} tabIndex={-1} className="font-medium">
+        Seguimiento de esta fecha
+      </h3>
+    ) : null}
     {item.fulfillments.map((mark) => (
       <div key={mark.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <span>
@@ -226,8 +234,16 @@ const AssociationFields = ({ item }: Pick<Props, "item">): JSX.Element => (
   </>
 );
 
-const OccurrenceEditor = ({ item, save, categories, disabled }: Props): JSX.Element => {
+const OccurrenceEditor = ({
+  item,
+  save,
+  categories,
+  disabled,
+  reviewTracking,
+}: Props & Readonly<{ reviewTracking: () => void }>): JSX.Element => {
   const [scope, setScope] = useState<"once" | "forward">("once");
+  const descriptionId = useId();
+  const hasTracking = item.fulfillments.length > 0;
   return (
     <>
       <Disclosure title="Editar recurrente">
@@ -237,6 +253,7 @@ const OccurrenceEditor = ({ item, save, categories, disabled }: Props): JSX.Elem
             focusAppearance="subtle"
             variant="outline"
             aria-pressed={scope === "once"}
+            aria-describedby={`${descriptionId}-once`}
             onClick={() => setScope("once")}
           >
             Solo esta vez
@@ -246,15 +263,22 @@ const OccurrenceEditor = ({ item, save, categories, disabled }: Props): JSX.Elem
             focusAppearance="subtle"
             variant="outline"
             aria-pressed={scope === "forward"}
+            aria-describedby={`${descriptionId}-forward`}
             onClick={() => setScope("forward")}
           >
             Esta y próximas
           </Button>
         </div>
+        <ScopeGuidance
+          scope={scope}
+          descriptionId={descriptionId}
+          hasTracking={hasTracking}
+          reviewTracking={reviewTracking}
+        />
         <PlanForm
           initial={{ ...item.plan, firstDate: item.expectedDate }}
           categories={categories}
-          disabled={disabled || (scope === "once" && item.fulfillments.length > 0)}
+          disabled={disabled || (scope === "once" && hasTracking)}
           onSubmit={(plan) =>
             save({ kind: "edit", planId: item.planId, date: item.date, scope, plan })
           }
@@ -263,6 +287,36 @@ const OccurrenceEditor = ({ item, save, categories, disabled }: Props): JSX.Elem
     </>
   );
 };
+
+const ScopeGuidance = ({
+  scope,
+  descriptionId,
+  hasTracking,
+  reviewTracking,
+}: Readonly<{
+  scope: "once" | "forward";
+  descriptionId: string;
+  hasTracking: boolean;
+  reviewTracking: () => void;
+}>): JSX.Element => (
+  <div className="my-4 grid gap-3 text-sm text-muted-foreground" aria-live="polite">
+    <p id={`${descriptionId}-once`} hidden={scope !== "once"}>
+      {hasTracking
+        ? "Esta fecha ya tiene seguimiento registrado y no se puede editar solo esta vez. Revisa las transacciones vinculadas y las marcas manuales. Si el seguimiento es incorrecto, usa Revertir en cada registro de esta fecha antes de editarla. Esto solo retira el seguimiento: no elimina transacciones ni revierte pagos reales."
+        : "Los cambios se aplican solo a esta fecha. Las próximas fechas conservan sus datos."}
+    </p>
+    <p id={`${descriptionId}-forward`} hidden={scope !== "forward"}>
+      Los cambios se aplican al recurrente desde esta fecha en adelante. Las fechas con seguimiento
+      conservan sus datos, incluida esta si ya tiene registros. Esta opción no corrige el
+      seguimiento de una sola fecha.
+    </p>
+    {scope === "once" && hasTracking ? (
+      <Button variant="outline" onClick={reviewTracking}>
+        Revisar seguimiento
+      </Button>
+    ) : null}
+  </div>
+);
 
 const paymentCommand = (form: FormData, item: Occurrence): Option.Option<RecurringCommand> => {
   const transactionId = formText(form, "transactionId").trim();

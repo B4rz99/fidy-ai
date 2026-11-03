@@ -149,6 +149,9 @@ const LoadedSuggestions = ({
       disabled={disabled}
       timeZone={timeZone}
       next={next}
+      waiting={state.waiting}
+      refreshFailed={Option.isSome(state.refreshFailure)}
+      refresh={refresh}
       ready={
         state.value.data.evaluation.kind === "current" &&
         Option.isNone(state.refreshFailure) &&
@@ -265,6 +268,9 @@ const SuggestionResults = ({
   timeZone,
   next,
   ready,
+  waiting,
+  refreshFailed,
+  refresh,
 }: Readonly<{
   data: CanonicalSuccess<"recurring.listRecurringSeries">["data"];
   view: Workspace;
@@ -274,20 +280,19 @@ const SuggestionResults = ({
   timeZone: PlanInput["timeZone"];
   next: (cursor: string) => void;
   ready: boolean;
+  waiting: boolean;
+  refreshFailed: boolean;
+  refresh: () => void;
 }>): JSX.Element => (
   <div className="mt-3 grid gap-3">
-    <SuggestionStatus data={data} view={view} ready={ready} />
-    <ReviewState
+    <SuggestionStatus
+      data={data}
+      view={view}
       ready={ready}
-      hasSuggestions={data.series.some(
-        (series) => !view.document.suggestions.some((decision) => decision.seriesId === series.id)
-      )}
+      waiting={waiting}
+      refreshFailed={refreshFailed}
+      refresh={refresh}
     />
-    {data.evaluation.kind === "updating" ? (
-      <output className="text-sm text-muted-foreground">
-        La evaluación está actualizándose. Las sugerencias no forman parte de tus próximos pagos.
-      </output>
-    ) : null}
     {data.series.flatMap((series) =>
       view.document.suggestions.some((decision) => decision.seriesId === series.id)
         ? []
@@ -398,38 +403,110 @@ const SuggestionStatus = ({
   data,
   view,
   ready,
+  waiting,
+  refreshFailed,
+  refresh,
 }: Readonly<{
   data: CanonicalSuccess<"recurring.listRecurringSeries">["data"];
   view: Workspace;
   ready: boolean;
+  waiting: boolean;
+  refreshFailed: boolean;
+  refresh: () => void;
 }>): JSX.Element => {
   const count = data.series.filter(
     (series) => !view.document.suggestions.some((decision) => decision.seriesId === series.id)
   ).length;
-  const message = ready
-    ? `${count} sugerencias nuevas · Revisar`
-    : "Sin evaluación completa · Ver estado";
-  return <p className="text-xs text-muted-foreground">{message}</p>;
+  return (
+    <div className="grid gap-4">
+      <h2 className="text-sm font-medium">Revisión de patrones</h2>
+      <div aria-live="polite" className="grid gap-3">
+        {waiting ? <p className="text-sm text-muted-foreground">Consultando el estado…</p> : null}
+        {!waiting && refreshFailed ? (
+          <p className="text-sm text-muted-foreground">
+            No pudimos actualizar el estado. Conservamos la última información disponible, pero no
+            pudimos comprobar si hay cambios. Intenta consultar el estado de nuevo. Este mensaje no
+            significa que el análisis se haya detenido.
+          </p>
+        ) : null}
+        {!waiting && !refreshFailed ? (
+          <EvaluationExplanation evaluation={data.evaluation} count={count} />
+        ) : null}
+      </div>
+      <div>
+        <Button
+          contentLayout="wrap"
+          variant="outline"
+          disabled={waiting}
+          focusableWhenDisabled
+          onClick={refresh}
+        >
+          Actualizar estado
+        </Button>
+      </div>
+      <p className="border-t pt-4 text-xs text-muted-foreground">
+        Las sugerencias son patrones de tu historial, no próximos pagos. Puedes crear un recurrente
+        desde «Nuevo recurrente» sin esperar sugerencias.
+      </p>
+      {!ready && count > 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Podrás usar estas sugerencias cuando el análisis esté al día y hayamos consultado su
+          estado.
+        </p>
+      ) : null}
+    </div>
+  );
 };
-const ReviewState = ({
-  ready,
-  hasSuggestions,
-}: Readonly<{ ready: boolean; hasSuggestions: boolean }>): JSX.Element => (
-  <>
-    <h2 className="text-sm font-medium">Revisión de patrones</h2>
-    {ready && !hasSuggestions ? (
-      <p className="text-sm text-muted-foreground">
-        No hay patrones nuevos para revisar en esta página.
-      </p>
-    ) : null}
-    {!ready ? (
-      <p className="text-sm text-muted-foreground">
-        Aún no hay una evaluación completa. Aquí podrás crear un recurrente desde un patrón,
-        vincularlo a uno existente o descartarlo cuando haya sugerencias disponibles.
-      </p>
-    ) : null}
-  </>
-);
+const EvaluationExplanation = ({
+  evaluation,
+  count,
+}: Readonly<{
+  evaluation: CanonicalSuccess<"recurring.listRecurringSeries">["data"]["evaluation"];
+  count: number;
+}>): JSX.Element => {
+  const countLabel = count === 1 ? "1 sugerencia nueva" : `${count} sugerencias nuevas`;
+  switch (evaluation.kind) {
+    case "not-evaluated":
+      return (
+        <>
+          <h3 className="text-base font-semibold">Aún no hay un análisis completo</h3>
+          <p className="text-sm text-muted-foreground">
+            Fidy analiza tus transacciones automáticamente para encontrar patrones mensuales. Las
+            sugerencias aparecerán aquí cuando haya un análisis completo y se detecten patrones.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            No necesitas iniciar el análisis. Puedes volver más tarde o consultar el estado de
+            nuevo.
+          </p>
+        </>
+      );
+    case "updating":
+      return (
+        <>
+          <h3 className="text-base font-semibold">El análisis está actualizándose</h3>
+          <p className="text-sm text-muted-foreground">
+            Fidy vuelve a analizar tu historial cuando cambian tus transacciones. Las sugerencias
+            disponibles todavía no reflejan todos los cambios.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            No necesitas iniciar el análisis. Puedes volver más tarde o consultar el estado de
+            nuevo.
+          </p>
+        </>
+      );
+    case "current":
+      return (
+        <>
+          <h3 className="text-base font-semibold">El análisis está al día</h3>
+          <p className="text-sm text-muted-foreground">
+            {count === 0
+              ? "No hay patrones nuevos para revisar en esta página."
+              : `${countLabel} en esta página. Puedes crear un recurrente desde un patrón, vincularlo a uno existente o descartarlo.`}
+          </p>
+        </>
+      );
+  }
+};
 
 const SuggestionNext = ({
   cursor,

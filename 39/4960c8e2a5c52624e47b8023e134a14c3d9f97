@@ -1,0 +1,49 @@
+apps/server/cloudflare/core-http/runtime.ts
+  s_12ede6869163f4::t_7ce1d1a4472294 10,49,59,73
+apps/server/cloudflare/erasure/internal/database.ts
+  s_12ede6869163f4::t_7ce1d1a4472294 5,16,20,26,34-35,89,108,114
+  s_12ede6869163f4::t_c996092e91cc3a 21-25,30-33,85-86,103,106
+  s_12ede6869163f4::t_8ee65b610635e7 29,107
+  s_12ede6869163f4::t_cf1fe78553243f 104-105
+apps/server/cloudflare/erasure/runtime.ts
+  s_12ede6869163f4::t_8ee65b610635e7 14,42
+  s_12ede6869163f4::t_cf1fe78553243f 30
+  s_12ede6869163f4::t_7ce1d1a4472294 16-17,20-22,38-39,43-48
+  s_12ede6869163f4::t_c996092e91cc3a 35-37,40-41
+  s_12ede6869163f4::t_0f4e58d03974f9 15,49
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_12ede6869163f4::t_8c58daf180dc91 322-324
+  s_12ede6869163f4::t_a24eeee2564f07 136
+apps/server/cloudflare/erasure/internal/measurement.ts
+  s_12ede6869163f4::t_7458db87b2d35c 39
+  s_12ede6869163f4::t_fbdb993ec0998f 38,40,43-55,59-61,73-74,85,87,91,93,104
+  s_12ede6869163f4::t_a47dee60c21c7d 26-37,56-58,62-72,77-83,108-111
+  s_12ede6869163f4::t_8ee65b610635e7 13-23,76,96,112
+  s_12ede6869163f4::t_c996092e91cc3a 86,88,92,94,107
+  s_12ede6869163f4::t_7ce1d1a4472294 1-12,24-25,41-42,75,84,89-90,95,101-103,105-106,113-114
+  s_12ede6869163f4::t_cf1fe78553243f 97-100
+infra/cloudflare/verify-edge-policy.ts
+  s_12ede6869163f4::t_cf1fe78553243f 5
+  s_12ede6869163f4::t_a3e022814d586c 7-15
+apps/server/cloudflare/erasure/measurement.test.ts
+  s_12ede6869163f4::t_907b17efcb4279 62-87,89-90,92-98
+  s_12ede6869163f4::t_3a259538e91b62 2-7,9-10,61,99-100
+  s_12ede6869163f4::t_0fee70d39631f1 1,8,88,91
+  s_12ede6869163f4::t_a47dee60c21c7d 11-60,101-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "394960c8e2a5c52624e47b8023e134a14c3d9f97",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

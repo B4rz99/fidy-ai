@@ -3,8 +3,8 @@ import { it } from "@effect/vitest";
 import { Data, Effect, Exit } from "effect";
 import { afterAll } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
-import { WorkersAiAdmissionUnavailable } from "./contract";
-import { sweepExpiredWorkersAiAdmission } from "./runtime";
+import { OpenAiAdmissionUnavailable } from "./contract";
+import { sweepExpiredOpenAiAdmission } from "./runtime";
 
 class TestDatabaseUnavailable extends Data.TaggedError("TestDatabaseUnavailable") {}
 const databases = isolatedTestDatabases();
@@ -16,9 +16,7 @@ it.effect("closes unavailable retention storage without exposing database failur
       try: () => databases.acquire(),
       catch: () => new TestDatabaseUnavailable(),
     });
-    const result = yield* Effect.exit(
-      sweepExpiredWorkersAiAdmission({ db, now: 1_800_000_000_000 })
-    );
-    deepStrictEqual(result, Exit.fail(new WorkersAiAdmissionUnavailable()));
+    const result = yield* Effect.exit(sweepExpiredOpenAiAdmission({ db, now: 1_800_000_000_000 }));
+    deepStrictEqual(result, Exit.fail(new OpenAiAdmissionUnavailable()));
   })
 );

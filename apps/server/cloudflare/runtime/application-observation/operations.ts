@@ -107,9 +107,7 @@ const finishApplication = (
               operation: descriptor.operation,
               error: Option.getOrElse(outcome.error, () => "operational_failure" as const),
               provider:
-                descriptor.workKind === "model_round"
-                  ? Option.some("cloudflare-workers-ai")
-                  : Option.none(),
+                descriptor.workKind === "model_round" ? Option.some("openai") : Option.none(),
               retryable: outcome.retryable,
               cause: exit.cause,
             }

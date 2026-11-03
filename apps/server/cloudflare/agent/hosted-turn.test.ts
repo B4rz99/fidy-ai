@@ -1,3 +1,4 @@
+import { withOpenAiFetch } from "../openai.test-fixture";
 import {
   HostedAgentSessionId,
   ToolCallId,
@@ -567,7 +568,7 @@ it("refuses an exhausted User spend budget before purchasing a hosted model roun
               `INSERT INTO resource_admission_events
              (grant_id, policy_key, dimension, scope_key, policy_kind, units,
               admitted_at_epoch_ms, window_start_epoch_ms, expires_at_epoch_ms)
-             VALUES ('prior-spend', 'workers-ai.spend.user.v1', 'spend', ?,
+             VALUES ('prior-spend', 'openai.spend.user.v1', 'spend', ?,
                      'rolling_window', 31999999, ?, ?, ?)`
             )
             .bind(users[0], current, current - 86_400_000, current + 86_400_000),
@@ -606,7 +607,7 @@ it("refuses an exhausted User spend budget before purchasing a hosted model roun
       const rows = yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "SELECT count(*) AS total FROM resource_admission_events WHERE policy_key = 'workers-ai.spend.user.v1' AND scope_key = ?"
+            "SELECT count(*) AS total FROM resource_admission_events WHERE policy_key = 'openai.spend.user.v1' AND scope_key = ?"
           )
           .bind(users[0])
           .first<{ total: number }>()
@@ -615,7 +616,7 @@ it("refuses an exhausted User spend budget before purchasing a hosted model roun
     })
   ));
 
-it("delivers a no-tool Workers AI reply and retains exact User and assistant evidence before completion", () =>
+it("delivers a no-tool OpenAI reply and retains exact User and assistant evidence before completion", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
@@ -669,7 +670,7 @@ it("keeps recovered WhatsApp inference alive past the soft deadline and settles 
           })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const owner = coordinatorFor({
         options: { index: 0, sandboxPhoneNumberId: "" },
         db,
@@ -791,7 +792,7 @@ it("times out recovered inference at the original Turn deadline rather than gran
         return gate.promise.then(() => reply());
       });
       const provider = vi.fn(() => Promise.resolve(new Response(null, { status: 500 })));
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const owner = coordinatorFor({
         options: { index: 0, sandboxPhoneNumberId: "" },
         db,
@@ -860,7 +861,7 @@ it.each([
         const before = yield* Effect.tryPromise(() => retainedChannelState(db));
         const model = vi.fn(() => Promise.resolve(reply()));
         const provider = vi.fn(() => Promise.resolve(new Response(null, { status: 500 })));
-        vi.stubGlobal("fetch", provider);
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         const owner = coordinatorFor({
           options: { index: 0, sandboxPhoneNumberId: "" },
           db,
@@ -920,7 +921,7 @@ it("rejects crossed User and Turn queue identities before inference, delivery or
           })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const owners = [
         coordinatorFor({ options: { index: 0, sandboxPhoneNumberId: "" }, db, run: model }),
         coordinatorFor({ db, run: model, options: { index: 1, sandboxPhoneNumberId: "" } }),
@@ -971,7 +972,7 @@ it("retries malformed retained WhatsApp continuation without acknowledging or ex
       const before = yield* Effect.tryPromise(() => retainedChannelState(db));
       const model = vi.fn(() => Promise.resolve(reply("No debe ejecutarse")));
       const provider = vi.fn(() => Promise.resolve(new Response(null, { status: 500 })));
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const owner = coordinatorFor({
         options: { index: 0, sandboxPhoneNumberId: "" },
         db,
@@ -1121,7 +1122,7 @@ it.each([false, true])(
         expect(offered).toHaveLength(2);
         const addresses: Array<unknown> = [];
         const provider = vi.fn(captureReplyAddresses(addresses));
-        vi.stubGlobal("fetch", provider);
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         const work = offered[0];
         if (work === undefined) return yield* Effect.die("missing queue work");
         const retry = vi.fn();
@@ -1364,7 +1365,7 @@ it("retains a failed WhatsApp Turn without sending invalid model output", () =>
           .run()
       );
       const provider = vi.fn(() => Promise.resolve(Response.json({ messages: [] })));
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const coordinator = coordinatorFor({
         options: { index: 0, sandboxPhoneNumberId: "" },
         db,
@@ -1427,7 +1428,7 @@ it("serializes duplicate verified WhatsApp admissions and completes only after t
           })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const coordinator = coordinatorFor({
         options: { index: 0, sandboxPhoneNumberId: "" },
         db,

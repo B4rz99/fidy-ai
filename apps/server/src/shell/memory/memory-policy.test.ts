@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
 import { Cause, DateTime, Effect, Exit, Option } from "effect";
 import { Memory, MemoryCapacityExceeded, MemoryId, MemoryText } from "~/core/memory/contract";
-import { approvedWorkersAiModel } from "~/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "~/shell/hosted-inference/contract";
 import { HostedInference } from "~/shell/hosted-inference/operations";
-import { makeWorkersAiHostedInference } from "~/shell/hosted-inference/runtime";
+import { makeOpenAiHostedInference } from "~/shell/hosted-inference/runtime";
 import { countAndAdmitMemory, countAndAdmitMemoryRevision } from "./operations";
 
 const assertTypedFailure = <E>(exit: Exit.Exit<unknown, E>, expected: E): void => {
@@ -24,9 +24,9 @@ const memory = (index: number, text: string): Memory =>
     updatedAt: at,
   });
 
-const localInference = makeWorkersAiHostedInference({
-  model: Option.some(approvedWorkersAiModel),
-  run: Option.some(() => Effect.die("Memory counting must not invoke Workers AI")),
+const localInference = makeOpenAiHostedInference({
+  model: Option.some(approvedOpenAiModel),
+  run: Option.some(() => Effect.die("Memory counting must not invoke OpenAI")),
 });
 
 it.effect("admits the complete ASCII aggregate at 15,000 bytes and rejects one extra byte", () =>

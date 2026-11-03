@@ -11,7 +11,7 @@ import { Hex } from "effect/encoding";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { WhatsAppBusinessPhoneNumberId } from "@fidy/server/whatsapp-contract";
-import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-contract";
+import { ApprovedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { EmailAddress } from "@fidy/server/email-authentication-contract";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
@@ -74,7 +74,8 @@ const initializeLocalErasureRegistry = Effect.fn(function* (
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
-const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
+const hostedAiModel = Config.schema(ApprovedOpenAiModel, "HOSTED_AI_MODEL");
+const openAiApiKey = Config.Redacted("OPENAI_API_KEY");
 const kapsoWebhookSecret = Config.Redacted("KAPSO_WEBHOOK_SECRET");
 const kapsoApiKey = Config.Redacted("KAPSO_API_KEY");
 const microsoftClientId = Config.String("MICROSOFT_CLIENT_ID");
@@ -395,7 +396,9 @@ export default Alchemy.Stack(
         BANCOLOMBIA_SANDBOX_GRANT_KEY: yield* Config.Redacted("BANCOLOMBIA_SANDBOX_GRANT_KEY").pipe(
           Config.withDefault(Redacted.make(""))
         ),
-        AI: Cloudflare.Workers.AI(),
+        OPENAI_API_KEY: yield* development
+          ? openAiApiKey.pipe(Config.withDefault(Redacted.make("")))
+          : openAiApiKey,
         CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
         SMOKE_LIMITER: Cloudflare.RateLimit("ReleaseSmokeAdmission", {
           namespaceId: 1493,

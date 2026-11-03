@@ -1,12 +1,9 @@
 import { admitResourceWithAttemptPressure } from "../../resource-admission/operations";
 import { Cause, Clock, Effect, Option, Schema } from "effect";
-import {
-  HostedInferenceError,
-  type WorkersAiRun,
-} from "../../../src/shell/hosted-inference/contract";
+import { HostedInferenceError, type OpenAiRun } from "../../../src/shell/hosted-inference/contract";
 import type { TranscriptTurnId } from "../../../src/core/agent/contract";
 import { withConsentEgress } from "../../consent/operations";
-import { spendRequest, workersAiPolicies } from "./admission-policy";
+import { openAiPolicies, spendRequest } from "./admission-policy";
 import {
   ResourceAdmissionEpochMs,
   ResourceAdmissionRefused,
@@ -27,7 +24,7 @@ const inferenceAdmissionFailure = (failure: unknown): HostedInferenceError =>
  * token proxy even on failure. Only an exact, still-Pending admitted Turn can retain its accepted
  * Consent basis after revocation; preflight and standalone work require current standing.
  */
-export const makeAdmittedWorkersAiRun =
+export const makeAdmittedOpenAiRun =
   ({
     db,
     userId,
@@ -36,22 +33,22 @@ export const makeAdmittedWorkersAiRun =
   }: Readonly<{
     db: D1Database;
     userId: string;
-    run: WorkersAiRun;
+    run: OpenAiRun;
     admittedTurnId: () => Option.Option<TranscriptTurnId>;
-  }>): WorkersAiRun =>
+  }>): OpenAiRun =>
   (model, request) =>
     Effect.gen(function* () {
       const current = ResourceAdmissionEpochMs.make(yield* Clock.currentTimeMillis);
       const authority = {
         database: db,
         nowEpochMs: (): ResourceAdmissionEpochMs => current,
-        policies: workersAiPolicies,
+        policies: openAiPolicies,
       };
       const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
         request
       ).pipe(Effect.mapError(inferenceAdmissionFailure));
       const cost = ResourceAdmissionUnits.make(
-        new TextEncoder().encode(encoded).length + request.max_tokens
+        new TextEncoder().encode(encoded).length + request.max_completion_tokens
       );
       return yield* admitResourceWithAttemptPressure(
         authority,

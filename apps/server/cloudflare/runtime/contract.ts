@@ -1,6 +1,6 @@
 import { Data, type Effect, type Option } from "effect";
 import type { ProactivityEnvironment } from "../insights/contract";
-import type { WorkersAiEnvironment } from "../ai/contract";
+import type { OpenAiEnvironment } from "../ai/contract";
 
 /** Platform-owned scheduled work exposes completion only, never diagnostic or provider details. */
 export class PlatformMaintenanceUnavailable extends Data.TaggedError(
@@ -13,7 +13,7 @@ export type PlatformMaintenanceInput = Readonly<{
   USER_TRANSACTION_COORDINATOR: Readonly<{
     getByName: (name: string) => Pick<Fetcher, "fetch">;
   }>;
-  AI: WorkersAiEnvironment["AI"];
+  OPENAI_API_KEY: OpenAiEnvironment["OPENAI_API_KEY"];
   RELEASE_GIT_SHA: string;
   KAPSO_API_KEY: string;
   KAPSO_WEBHOOK_SECRET: string;

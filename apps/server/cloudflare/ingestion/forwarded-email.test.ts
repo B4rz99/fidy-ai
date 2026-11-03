@@ -1,6 +1,7 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { DurableTraceContext, TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { TestClock } from "effect/testing";
@@ -464,8 +465,10 @@ const coordinatorFor = (
     {
       DB: db,
       EMAIL_BUCKET: bucket,
-      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-      HOSTED_AI_MODEL: approvedWorkersAiModel,
+      OPENAI_API_KEY: openAiTestKey({
+        run: (): Promise<never> => Promise.reject(new Error("unused")),
+      }),
+      HOSTED_AI_MODEL: approvedOpenAiModel,
     }
   );
 

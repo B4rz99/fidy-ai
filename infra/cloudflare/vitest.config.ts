@@ -5,7 +5,7 @@ import { BaseSequencer, type TestSpecification } from "vitest/node";
 // Estimates are from successful fixed-runner CI 39163060495; ties keep Vitest's order.
 const nativeFileMilliseconds: Readonly<Record<string, number>> = {
   "local-emulation.test.ts": 15_300,
-  "workers-ai-conformance-script.test.ts": 14_800,
+  "openai-conformance-script.test.ts": 14_800,
   "release-controller.test.ts": 13_200,
   "diagnose-smoke-routing.test.ts": 7_600,
   "d1-migrations.test.ts": 7_100,

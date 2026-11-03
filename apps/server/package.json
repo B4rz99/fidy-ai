@@ -283,7 +283,7 @@
     "contracts:digest": "bun tools/contracts/digest-artifacts.ts contracts/openapi.json contracts/operation-policy.json",
     "test:contracts": "bun --bun vitest run --config tools/contracts/vitest.config.ts",
     "test": "bun --bun vitest run --config vitest.config.ts",
-    "test:hosted-inference": "bun --bun vitest run src/shell/hosted-inference/conformance.test.ts src/shell/hosted-inference/operations.test.ts src/shell/hosted-inference/workers-ai.test.ts --coverage.enabled=false",
+    "test:hosted-inference": "bun --bun vitest run src/shell/hosted-inference/conformance.test.ts src/shell/hosted-inference/operations.test.ts src/shell/hosted-inference/openai.test.ts --coverage.enabled=false",
     "test:core": "bun --bun vitest run --config vitest.core.config.ts",
     "test:whatsapp": "bun --bun vitest run --config vitest.whatsapp.config.ts",
     "test:cloudflare": "bun --bun vitest run --config cloudflare/vitest.config.ts",

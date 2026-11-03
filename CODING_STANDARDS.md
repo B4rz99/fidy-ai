@@ -165,11 +165,11 @@ whether the published behavior is substantive and whether the owner is honest.
 > **A `Context.Service` exists where there is something to construct, or something to substitute.
 > Everything else is a plain function.**
 
-|                                     | construct                                       | substitute                                    |                 |
-| ----------------------------------- | ----------------------------------------------- | --------------------------------------------- | --------------- |
-| repos                               | no — the Cloudflare data adapter is the service | no — the API seam owns the binding            | plain function  |
-| Workers AI · Kapso · Resend · Wompi | yes                                             | yes — hosted inference is stubbed at the edge | service + layer |
-| core                                | no                                              | no, and the type forbids it                   | plain function  |
+|                                 | construct                                       | substitute                                    |                 |
+| ------------------------------- | ----------------------------------------------- | --------------------------------------------- | --------------- |
+| repos                           | no — the Cloudflare data adapter is the service | no — the API seam owns the binding            | plain function  |
+| OpenAI · Kapso · Resend · Wompi | yes                                             | yes — hosted inference is stubbed at the edge | service + layer |
+| core                            | no                                              | no, and the type forbids it                   | plain function  |
 
 Repos are not services because the main thing that buys is substitution, and we have decided not to
 substitute them. Thirteen unused substitution seams would sit there inviting someone to mock a repo.

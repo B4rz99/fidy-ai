@@ -21,7 +21,7 @@ import {
 } from "~/shell/hosted-inference/internal/conformance";
 import { makeHostedInferenceStubInternal } from "~/shell/hosted-inference/internal/stub";
 
-/** Hosted inference authority supplied by the Cloudflare Workers AI adapter. */
+/** Hosted inference authority supplied by the Cloudflare OpenAI adapter. */
 export class HostedInference extends Context.Service<HostedInference, HostedInferenceService>()(
   "@fidy/server/shell/hosted-inference/operations/HostedInference"
 ) {

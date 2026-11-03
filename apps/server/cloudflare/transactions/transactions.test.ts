@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import {
   type AtomicBatchCall,
   AtomicBatchCallId,
@@ -22,7 +23,7 @@ import {
 import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { UserTransactionCoordinator } from "./runtime";
 import { ErrorCode, ScopeMissing } from "../../src/shell/public-http/contract";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { CategoryId, CategoryKeyword, KeywordRuleId } from "../../src/core/categories/contract";
 import { keywordRuleGuardFailure } from "../categories/operations";
@@ -98,8 +99,8 @@ const input = (changes: Partial<TestTransactionPayload> = {}): TestTransactionPa
 type CoordinatorTestEnvironment = ConstructorParameters<typeof UserTransactionCoordinator>[1];
 const coordinatorEnvironment = (db: D1Database): CoordinatorTestEnvironment => ({
   DB: db,
-  AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-  HOSTED_AI_MODEL: approvedWorkersAiModel,
+  OPENAI_API_KEY: openAiTestKey({ run: (): Promise<never> => Promise.reject(new Error("unused")) }),
+  HOSTED_AI_MODEL: approvedOpenAiModel,
 });
 
 let platformBundle = Option.none<Promise<string>>();
@@ -148,8 +149,8 @@ const platformDatabase = (): Promise<D1Database> =>
                   worker: name,
                   exportName: "UserTransactionCoordinator",
                 },
-                AI: { type: "json", value: { run: null } },
-                HOSTED_AI_MODEL: { type: "text", value: approvedWorkersAiModel },
+                OPENAI_API_KEY: { type: "text", value: "" },
+                HOSTED_AI_MODEL: { type: "text", value: approvedOpenAiModel },
               },
               manifest: {
                 mainModule: "index.mjs",
@@ -738,10 +739,12 @@ const sendPublicRequest = (
       fetch: (internal) =>
         coreWorker.fetch(new Request(internal), {
           DB: db,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
           CONTRACT_DIGEST: "a".repeat(64),
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
           BROWSER_ORIGIN: "https://app.fidyapp.com",
           WOMPI_ENVIRONMENT: "",
           WOMPI_PUBLIC_KEY: "",
@@ -775,7 +778,7 @@ const sendPublicRequest = (
   });
 };
 effectIt.effect(
-  "routes a browser Turn through public ingress, Core and the per-User coordinator to Workers AI",
+  "routes a browser Turn through public ingress, Core and the per-User coordinator to OpenAI",
   () =>
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
@@ -802,7 +805,7 @@ effectIt.effect(
         },
         {
           ...coordinatorEnvironment(db),
-          AI: {
+          OPENAI_API_KEY: openAiTestKey({
             run: (): Promise<Response> =>
               Promise.resolve(
                 Response.json({
@@ -815,7 +818,7 @@ effectIt.effect(
                   usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
                 })
               ),
-          },
+          }),
         }
       );
       const hostedCoordinator = {
@@ -950,7 +953,7 @@ const hostedNegativeFixture = (
             setAlarm: (): Promise<void> => Promise.resolve(),
           },
         },
-        { ...coordinatorEnvironment(db), AI: { run } }
+        { ...coordinatorEnvironment(db), OPENAI_API_KEY: openAiTestKey({ run }) }
       );
       return {
         db,
@@ -1026,7 +1029,9 @@ effectIt.effect(
         },
         {
           ...coordinatorEnvironment(db),
-          AI: { run: (): Promise<never> => Promise.reject(new Error("must not run")) },
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("must not run")),
+          }),
         }
       );
       const binding = {
@@ -1156,7 +1161,7 @@ effectIt.effect(
         },
         {
           ...coordinatorEnvironment(controlledDb),
-          AI: {
+          OPENAI_API_KEY: openAiTestKey({
             run: (): Promise<Response> =>
               Promise.resolve(
                 Response.json({
@@ -1166,7 +1171,7 @@ effectIt.effect(
                   usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
                 })
               ),
-          },
+          }),
         }
       );
       const binding = {
@@ -1324,7 +1329,7 @@ effectIt.effect("refuses repeated public over-allowance Turns before buying mode
       },
       {
         ...coordinatorEnvironment(db),
-        AI: {
+        OPENAI_API_KEY: openAiTestKey({
           run: (): Promise<Response> => {
             calls++;
             return Promise.resolve(
@@ -1336,7 +1341,7 @@ effectIt.effect("refuses repeated public over-allowance Turns before buying mode
               })
             );
           },
-        },
+        }),
       }
     );
     const binding = {
@@ -1443,7 +1448,7 @@ effectIt.effect(
         },
         {
           ...coordinatorEnvironment(db),
-          AI: {
+          OPENAI_API_KEY: openAiTestKey({
             run: (): Promise<Response> => {
               calls++;
               return Promise.resolve(
@@ -1455,7 +1460,7 @@ effectIt.effect(
                 })
               );
             },
-          },
+          }),
         }
       );
       const binding = {
@@ -3872,10 +3877,10 @@ it("executes non-Memory work when hosted inference is unusable and refuses Memor
         },
         {
           DB: db,
-          AI: {
+          OPENAI_API_KEY: openAiTestKey({
             run: (): Promise<Response> =>
               Promise.reject(new Error("the model check must fail first")),
-          },
+          }),
           HOSTED_AI_MODEL: "unsupported-model",
         }
       );

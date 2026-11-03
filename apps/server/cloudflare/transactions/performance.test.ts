@@ -68,12 +68,12 @@ it.skipIf(!enabled)(
             db.batch([
               db
                 .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4096)
-          INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) SELECT 'workers-ai-expired-'||i, 'workers-ai',
+          INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) SELECT 'openai-expired-'||i, 'openai',
           'operation','test','rolling_window',1,?,?,?,NULL FROM n`)
                 .bind(now - 90_000_000, now - 90_000_000, now - 1),
               db
                 .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<4096)
-          INSERT INTO resource_admission_grants SELECT 'workers-ai-expired-'||i,?,1 FROM n`)
+          INSERT INTO resource_admission_grants SELECT 'openai-expired-'||i,?,1 FROM n`)
                 .bind(now - 90_000_000),
             ])
           );
@@ -133,7 +133,7 @@ it.skipIf(!enabled)(
           const remainingExpired = yield* Effect.tryPromise(() =>
             db
               .prepare(
-                "SELECT count(*) AS remaining FROM resource_admission_grants WHERE id GLOB 'workers-ai-expired-*'"
+                "SELECT count(*) AS remaining FROM resource_admission_grants WHERE id GLOB 'openai-expired-*'"
               )
               .first<number>("remaining")
           );

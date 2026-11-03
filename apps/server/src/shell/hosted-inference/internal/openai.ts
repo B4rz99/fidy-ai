@@ -8,14 +8,14 @@ import {
   hostedToolDescription,
 } from "~/shell/canonical-operations/operations";
 import {
-  type ApprovedWorkersAiModel,
+  type ApprovedOpenAiModel,
   HostedInferenceError,
   type HostedInferenceService,
   type HostedInvalidOutputDescription,
   type HostedTextResult,
   type HostedTextToolPolicy,
-  type WorkersAiRequest,
-  type WorkersAiRun,
+  type OpenAiRequest,
+  type OpenAiRun,
 } from "~/shell/hosted-inference/contract";
 import type {
   HostedInferenceAdapter,
@@ -25,30 +25,30 @@ import type {
 import { makeHostedInferenceInternal } from "./inference";
 import { hostedOutputTokenReserve } from "./limits";
 import { exactTranscriptPromptInternal } from "./prompt";
-import { workersAiProviderSchema } from "./provider-schema";
+import { openAiProviderSchema } from "./provider-schema";
 
-type WorkersAiInputItem = WorkersAiRequest["messages"][number];
-type WorkersAiFunctionCall = NonNullable<
-  Extract<WorkersAiInputItem, { readonly role: "assistant" }>["tool_calls"]
+type OpenAiInputItem = OpenAiRequest["messages"][number];
+type OpenAiFunctionCall = NonNullable<
+  Extract<OpenAiInputItem, { readonly role: "assistant" }>["tool_calls"]
 >[number];
-type WorkersAiRequestBase = Pick<
-  WorkersAiRequest,
-  "messages" | "max_tokens" | "temperature" | "stream" | "chat_template_kwargs"
+type OpenAiRequestBase = Pick<
+  OpenAiRequest,
+  "messages" | "max_completion_tokens" | "temperature" | "stream" | "reasoning_effort" | "store"
 >;
-type WorkersAiTool = Extract<WorkersAiRequest, { readonly tool_choice: "auto" }>["tools"][number];
+type OpenAiTool = Extract<OpenAiRequest, { readonly tool_choice: "auto" }>["tools"][number];
 
-type WorkersAiContinuation = ReadonlyArray<WorkersAiInputItem>;
-type PreparedWorkersAiRequest = Readonly<{
-  continuationPrefix: WorkersAiContinuation;
+type OpenAiContinuation = ReadonlyArray<OpenAiInputItem>;
+type PreparedOpenAiRequest = Readonly<{
+  continuationPrefix: OpenAiContinuation;
   maximumToolCalls: number;
-  request: WorkersAiRequest;
+  request: OpenAiRequest;
   visibleOperations: HostedTextToolPolicy["availableOperations"];
 }>;
 
 const bytesPerKibibyte = 1024;
 const providerResponseMaximumKibibytes = 512;
 const providerResponseMaximumBytes = providerResponseMaximumKibibytes * bytesPerKibibyte;
-const workersAiContextTokens = 256_000;
+const hostedContextTokens = 256_000;
 const HTTP_OK_MINIMUM = 200;
 const HTTP_REDIRECTION_MINIMUM = 300;
 const HTTP_REQUEST_TIMEOUT = 408;
@@ -109,29 +109,34 @@ const ProviderResponse = Schema.Struct({
     })
   ),
   usage: Schema.Struct({
-    prompt_tokens: Schema.Finite,
-    completion_tokens: Schema.Finite,
-    total_tokens: Schema.Finite,
+    prompt_tokens: Schema.Int,
+    completion_tokens: Schema.Int,
+    total_tokens: Schema.Int,
+    prompt_tokens_details: Schema.optionalKey(
+      Schema.Struct({
+        cached_tokens: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      })
+    ),
   }),
 });
 
 type ProviderResponse = typeof ProviderResponse.Type;
 type FunctionCallItem = typeof ProviderFunctionCall.Type;
 
-const workersAiOperationBindings = hostedOperationBindings(operationCatalog).map(
+const openAiOperationBindings = hostedOperationBindings(operationCatalog).map(
   ({ operation, wireName }) => ({
     operation,
     wireName,
-    parameters: workersAiProviderSchema(operation.input),
+    parameters: openAiProviderSchema(operation.input),
   })
 );
 
 const operationByWireName = new Map(
-  workersAiOperationBindings.map((binding) => [binding.wireName, binding])
+  openAiOperationBindings.map((binding) => [binding.wireName, binding])
 );
 
-if (operationByWireName.size !== workersAiOperationBindings.length) {
-  throw new Error("Hosted operation aliases must remain unique for Workers AI");
+if (operationByWireName.size !== openAiOperationBindings.length) {
+  throw new Error("Hosted operation aliases must remain unique for OpenAI");
 }
 
 const byteLength = (text: string): number => new TextEncoder().encode(text).length;
@@ -147,10 +152,10 @@ const promptParts = (
 
 const projectAssistant = (
   message: Prompt.AssistantMessageEncoded
-): ReadonlyArray<WorkersAiInputItem> => {
+): ReadonlyArray<OpenAiInputItem> => {
   const parts = promptParts(message.content);
   const text = parts.flatMap((part) => (part.type === "text" ? [part.text] : []));
-  const toolCalls = parts.flatMap((part): ReadonlyArray<WorkersAiFunctionCall> =>
+  const toolCalls = parts.flatMap((part): ReadonlyArray<OpenAiFunctionCall> =>
     part.type === "tool-call"
       ? [
           {
@@ -173,7 +178,7 @@ const projectAssistant = (
   ];
 };
 
-const projectTool = (message: Prompt.ToolMessageEncoded): ReadonlyArray<WorkersAiInputItem> =>
+const projectTool = (message: Prompt.ToolMessageEncoded): ReadonlyArray<OpenAiInputItem> =>
   message.content.map((part) => {
     if (part.type !== "tool-result") {
       throw new Error("Hosted context contains unsupported tool content");
@@ -181,7 +186,7 @@ const projectTool = (message: Prompt.ToolMessageEncoded): ReadonlyArray<WorkersA
     return { role: "tool", tool_call_id: part.id, content: JSON.stringify(part.result) };
   });
 
-const projectMessage = (message: Prompt.MessageEncoded): ReadonlyArray<WorkersAiInputItem> => {
+const projectMessage = (message: Prompt.MessageEncoded): ReadonlyArray<OpenAiInputItem> => {
   switch (message.role) {
     case "system":
       return [{ role: "system", content: message.content }];
@@ -209,9 +214,9 @@ const projectMessage = (message: Prompt.MessageEncoded): ReadonlyArray<WorkersAi
 const projectMessages = (
   basePrefix: ReadonlyArray<Prompt.MessageEncoded>,
   projection: HostedPromptProjection,
-  continuation: Option.Option<WorkersAiContinuation>
+  continuation: Option.Option<OpenAiContinuation>
 ): Effect.Effect<
-  Readonly<{ input: ReadonlyArray<WorkersAiInputItem>; continuationPrefix: WorkersAiContinuation }>,
+  Readonly<{ input: ReadonlyArray<OpenAiInputItem>; continuationPrefix: OpenAiContinuation }>,
   HostedInferenceError
 > =>
   Effect.try({
@@ -229,9 +234,9 @@ const projectMessages = (
 
 const toolsFor = (
   availableOperations: HostedTextToolPolicy["availableOperations"]
-): ReadonlyArray<WorkersAiTool> => {
+): ReadonlyArray<OpenAiTool> => {
   const available = new Set(availableOperations);
-  return workersAiOperationBindings
+  return openAiOperationBindings
     .filter(({ operation }) => available.has(operation.id))
     .map(({ operation, parameters, wireName }) => ({
       type: "function",
@@ -239,25 +244,26 @@ const toolsFor = (
         name: wireName,
         description: hostedToolDescription(operation),
         parameters,
-        strict: true,
+        strict: false,
       },
     }));
 };
 
-const makeRequest = (messages: ReadonlyArray<WorkersAiInputItem>): WorkersAiRequestBase => ({
+const makeRequest = (messages: ReadonlyArray<OpenAiInputItem>): OpenAiRequestBase => ({
   messages,
-  max_tokens: hostedOutputTokenReserve,
+  max_completion_tokens: hostedOutputTokenReserve,
   temperature: 0,
   stream: false,
-  chat_template_kwargs: { enable_thinking: false },
+  reasoning_effort: "none",
+  store: false,
 });
 
 const makeTextRequest = (
-  messages: ReadonlyArray<WorkersAiInputItem>,
+  messages: ReadonlyArray<OpenAiInputItem>,
   policy: HostedTextToolPolicy
-): WorkersAiRequest => {
+): OpenAiRequest => {
   const tools = policy.toolChoice === "auto" ? toolsFor(policy.availableOperations) : [];
-  const capabilityFrame: WorkersAiInputItem = {
+  const capabilityFrame: OpenAiInputItem = {
     role: "system",
     content:
       tools.length === 0
@@ -269,9 +275,9 @@ const makeTextRequest = (
   return policy.toolChoice === "auto" ? { ...request, tool_choice: "auto", tools } : request;
 };
 
-const capacityCheck = (request: WorkersAiRequest): Effect.Effect<number, HostedInferenceError> => {
+const capacityCheck = (request: OpenAiRequest): Effect.Effect<number, HostedInferenceError> => {
   const inputTokens = tokenUpperBound(JSON.stringify(request));
-  return inputTokens + hostedOutputTokenReserve > workersAiContextTokens
+  return inputTokens + hostedOutputTokenReserve > hostedContextTokens
     ? Effect.fail(
         new HostedInferenceError({
           reason: { _tag: "CapacityExceeded", inputTokens },
@@ -347,10 +353,10 @@ const readBoundedBody = (
 };
 
 type InvokeInput = Readonly<{
-  model: ApprovedWorkersAiModel;
+  model: ApprovedOpenAiModel;
   overflow: () => HostedInferenceError;
-  request: WorkersAiRequest;
-  run: WorkersAiRun;
+  request: OpenAiRequest;
+  run: OpenAiRun;
   timeout: Duration.Input;
   timeoutFailure: () => HostedInferenceError;
 }>;
@@ -359,7 +365,8 @@ const hasInvalidUsage = (usage: ProviderResponse["usage"]): boolean =>
   usage.prompt_tokens < 0 ||
   usage.completion_tokens < 0 ||
   usage.total_tokens < 0 ||
-  usage.completion_tokens > hostedOutputTokenReserve;
+  usage.completion_tokens > hostedOutputTokenReserve ||
+  (usage.prompt_tokens_details?.cached_tokens ?? 0) > usage.prompt_tokens;
 
 const invalidCompletion = (choice: ProviderResponse["choices"][number]): boolean =>
   choice.finish_reason === "content_filter" ||
@@ -383,14 +390,8 @@ const validateProviderResponse = (
 };
 
 const ProviderErrors = Schema.fromJsonString(
-  Schema.Union([
-    Schema.Struct({ errors: Schema.Array(Schema.Struct({ code: Schema.Finite })) }),
-    Schema.Struct({ internalCode: Schema.Finite }),
-  ])
+  Schema.Struct({ error: Schema.Struct({ code: Schema.NullOr(Schema.String) }) })
 );
-const DAILY_ALLOCATION_EXHAUSTED = 3036;
-// Observed on the production REST boundary for the same daily-allocation refusal.
-const REST_DAILY_ALLOCATION_EXHAUSTED = 4006;
 
 const providerRefusal = (response: Response): Effect.Effect<never, HostedInferenceError> => {
   const fallback = providerUnavailable(
@@ -409,9 +410,7 @@ const providerRefusal = (response: Response): Effect.Effect<never, HostedInferen
   return readBoundedBody(response, () => fallback).pipe(
     Effect.flatMap((body) => Schema.decodeEffect(ProviderErrors)(body)),
     Effect.map((body) =>
-      ("errors" in body ? body.errors.map(({ code }) => code) : [body.internalCode]).some(
-        (code) => code === DAILY_ALLOCATION_EXHAUSTED || code === REST_DAILY_ALLOCATION_EXHAUSTED
-      )
+      body.error.code === "insufficient_quota"
         ? new HostedInferenceError({
             reason: { _tag: "ProviderQuotaExceeded" },
             retryable: false,
@@ -491,7 +490,7 @@ const finishReason = (
 
 const decodeResult = (
   response: ProviderResponse,
-  request: PreparedWorkersAiRequest
+  request: PreparedOpenAiRequest
 ): Effect.Effect<Omit<HostedTextResult, "continuation">, HostedInferenceError> =>
   Effect.gen(function* () {
     const functionCalls = response.choices[0]?.message.tool_calls ?? [];
@@ -514,14 +513,14 @@ const decodeResult = (
       usage: {
         inputTokens: response.usage.prompt_tokens,
         outputTokens: response.usage.completion_tokens,
-        cachedInputTokens: 0,
+        cachedInputTokens: response.usage.prompt_tokens_details?.cached_tokens ?? 0,
       },
     };
   });
 
 const makeStructuredAdapter = (
-  run: WorkersAiRun,
-  model: ApprovedWorkersAiModel
+  run: OpenAiRun,
+  model: ApprovedOpenAiModel
 ): HostedStructuredAdapter => ({
   prepare: (input) =>
     Effect.gen(function* () {
@@ -536,10 +535,10 @@ const makeStructuredAdapter = (
         Option.none()
       );
       const schema = yield* Effect.try({
-        try: () => workersAiProviderSchema(input.outputSchema),
+        try: () => openAiProviderSchema(input.outputSchema),
         catch: () => invalidProviderOutput("Hosted structured schema was invalid"),
       });
-      const request: WorkersAiRequest = {
+      const request: OpenAiRequest = {
         ...makeRequest(messages.input),
         response_format: {
           type: "json_schema",
@@ -573,7 +572,7 @@ const makeStructuredAdapter = (
     }),
 });
 
-const continuationItems = (response: ProviderResponse): ReadonlyArray<WorkersAiInputItem> => {
+const continuationItems = (response: ProviderResponse): ReadonlyArray<OpenAiInputItem> => {
   const message = response.choices[0]?.message;
   if (message === undefined) return [];
   return [
@@ -585,16 +584,16 @@ const continuationItems = (response: ProviderResponse): ReadonlyArray<WorkersAiI
   ];
 };
 
-type ConfiguredWorkersAi = Readonly<{
-  run: WorkersAiRun;
-  model: ApprovedWorkersAiModel;
+type ConfiguredOpenAi = Readonly<{
+  run: OpenAiRun;
+  model: ApprovedOpenAiModel;
 }>;
 
-export const makeWorkersAiInferenceServiceInternal = ({
+export const makeOpenAiInferenceServiceInternal = ({
   run,
   model,
-}: ConfiguredWorkersAi): HostedInferenceService => {
-  const adapter: HostedInferenceAdapter<PreparedWorkersAiRequest, WorkersAiContinuation> = {
+}: ConfiguredOpenAi): HostedInferenceService => {
+  const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation> = {
     countText: (text) => Effect.succeed(tokenUpperBound(text)),
     countTranscript: (entries: ReadonlyArray<TranscriptEntry>) =>
       projectMessages(

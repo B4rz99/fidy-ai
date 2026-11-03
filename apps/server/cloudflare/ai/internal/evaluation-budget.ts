@@ -1,11 +1,11 @@
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import {
   HostedInferenceError,
-  type WorkersAiRequest,
-  type WorkersAiRun,
-  approvedWorkersAiModel,
+  type OpenAiRequest,
+  type OpenAiRun,
+  approvedOpenAiModel,
 } from "../../../src/shell/hosted-inference/contract";
-import type { WorkersAiEnvironment } from "../contract";
+import type { OpenAiEnvironment } from "../contract";
 import { adversarialCorpus, repetitions } from "./adversarial-corpus";
 
 const maximumRequestBytes = 65_536;
@@ -18,7 +18,7 @@ export const evaluationLimits = {
   totalOutputTokens: adversarialCorpus.length * repetitions * maximumOutputTokens,
   elapsedMillis: 1_200_000,
 } as const;
-export type EvaluationEnvironment = WorkersAiEnvironment &
+export type EvaluationEnvironment = OpenAiEnvironment &
   Readonly<{
     EVALUATION_TOKEN: string;
     EVALUATION_COMMIT: string;
@@ -30,7 +30,7 @@ type BudgetSnapshot = Readonly<{
   reservedOutputTokens: number;
   requestEvidence: Readonly<{ sha256: string; bytes: number; maxTokens: number }>;
 }>;
-export type EvaluationBudget = Readonly<{ run: WorkersAiRun; snapshot: () => BudgetSnapshot }>;
+export type EvaluationBudget = Readonly<{ run: OpenAiRun; snapshot: () => BudgetSnapshot }>;
 export const evidenceHash = (text: string): Effect.Effect<string, Cause.UnknownError> =>
   Effect.tryPromise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).pipe(
     Effect.map((bytes) => {
@@ -40,12 +40,12 @@ export const evidenceHash = (text: string): Effect.Effect<string, Cause.UnknownE
       ).join("");
     })
   );
-const withinBudget = (state: BudgetSnapshot, bytes: number, request: WorkersAiRequest): boolean =>
+const withinBudget = (state: BudgetSnapshot, bytes: number, request: OpenAiRequest): boolean =>
   state.reservedCalls < evaluationLimits.providerCalls &&
   bytes <= evaluationLimits.requestBytes &&
   state.inputBytes + bytes <= evaluationLimits.totalRequestBytes &&
-  request.max_tokens === evaluationLimits.outputTokensPerCall &&
-  state.reservedOutputTokens + request.max_tokens <= evaluationLimits.totalOutputTokens;
+  request.max_completion_tokens === evaluationLimits.outputTokensPerCall &&
+  state.reservedOutputTokens + request.max_completion_tokens <= evaluationLimits.totalOutputTokens;
 const refused = (): HostedInferenceError =>
   new HostedInferenceError({
     reason: { _tag: "ResourceLimit" },
@@ -63,7 +63,13 @@ const dryResponse = (): Response =>
     usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
   });
 /** One process lifetime; reserves worst-case output before egress and never refunds failed calls. */
-export const makeEvaluationBudget = (environment: EvaluationEnvironment): EvaluationBudget => {
+export const makeEvaluationBudget = ({
+  environment,
+  execute,
+}: Readonly<{
+  environment: EvaluationEnvironment;
+  execute: OpenAiRun;
+}>): EvaluationBudget => {
   let state: BudgetSnapshot = {
     reservedCalls: 0,
     inputBytes: 0,
@@ -71,7 +77,7 @@ export const makeEvaluationBudget = (environment: EvaluationEnvironment): Evalua
     requestEvidence: { sha256: "", bytes: 0, maxTokens: 0 },
   };
   let deadline: Option.Option<number> = Option.none();
-  const run: WorkersAiRun = (model, request) =>
+  const run: OpenAiRun = (model, request) =>
     Effect.gen(function* () {
       const current = yield* Clock.currentTimeMillis;
       if (Option.isNone(deadline)) {
@@ -84,7 +90,7 @@ export const makeEvaluationBudget = (environment: EvaluationEnvironment): Evalua
       if (
         !withinBudget(state, bytes, request) ||
         current >= Option.getOrElse(deadline, () => current) ||
-        model !== approvedWorkersAiModel
+        model !== approvedOpenAiModel
       ) {
         return yield* refused();
       }
@@ -92,7 +98,7 @@ export const makeEvaluationBudget = (environment: EvaluationEnvironment): Evalua
         ...state,
         reservedCalls: state.reservedCalls + 1,
         inputBytes: state.inputBytes + bytes,
-        reservedOutputTokens: state.reservedOutputTokens + request.max_tokens,
+        reservedOutputTokens: state.reservedOutputTokens + request.max_completion_tokens,
       };
       const sha256 = yield* evidenceHash(encoded);
       state = {
@@ -100,15 +106,13 @@ export const makeEvaluationBudget = (environment: EvaluationEnvironment): Evalua
         requestEvidence: {
           sha256,
           bytes,
-          maxTokens: request.max_tokens,
+          maxTokens: request.max_completion_tokens,
         },
       };
       if (environment.EVALUATION_MODE === "dry-run") {
         return dryResponse();
       }
-      return yield* Effect.tryPromise((signal) =>
-        environment.AI.run(model, request, { returnRawResponse: true, signal })
-      );
+      return yield* execute(model, request);
     });
   return { run, snapshot: (): BudgetSnapshot => state };
 };

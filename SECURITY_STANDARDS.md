@@ -67,7 +67,7 @@ invariants.
 Every crossing is untrusted regardless of its TypeScript type or vendor:
 
 - public HTTP, the SPA, browser-login pairing, and PATPairing flows;
-- Kapso, Resend, Wompi, Workers AI, and other outbound or callback seams;
+- Kapso, Resend, Wompi, OpenAI, Workers AI, and other outbound or callback seams;
 - PAT, hosted-agent, CLI, MCP, and typed-client calls;
 - LLM prompts, tool requests, structured output, and generated presentation content;
 - emails, PDFs, CSV/XLSX files, images, voice transcripts, and screenshots;

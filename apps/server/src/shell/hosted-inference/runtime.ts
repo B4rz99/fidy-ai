@@ -1,24 +1,24 @@
 import { Effect, Option, Schema } from "effect";
 import {
-  ApprovedWorkersAiModel,
+  ApprovedOpenAiModel,
   HostedInferenceError,
   type HostedInferenceService,
-  type WorkersAiConfiguration,
+  type OpenAiConfiguration,
 } from "./contract";
-import { makeWorkersAiInferenceServiceInternal } from "~/shell/hosted-inference/internal/workers-ai";
+import { makeOpenAiInferenceServiceInternal } from "~/shell/hosted-inference/internal/openai";
 
 /**
- * Builds direct Workers AI hosted inference. Configuration is decoded before authority exists;
- * unsupported models and absent bindings fail closed without invoking a provider.
+ * Builds direct OpenAI hosted inference. Configuration is decoded before authority exists;
+ * unsupported models and absent transports fail closed without invoking a provider.
  */
-export const makeWorkersAiHostedInference = (
-  configuration: WorkersAiConfiguration
+export const makeOpenAiHostedInference = (
+  configuration: OpenAiConfiguration
 ): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
   Effect.gen(function* () {
     const configuredModel = yield* Effect.fromOption(configuration.model);
-    const model = yield* Schema.decodeUnknownEffect(ApprovedWorkersAiModel)(configuredModel);
+    const model = yield* Schema.decodeUnknownEffect(ApprovedOpenAiModel)(configuredModel);
     const run = yield* Effect.fromOption(configuration.run);
-    return makeWorkersAiInferenceServiceInternal({ run, model });
+    return makeOpenAiInferenceServiceInternal({ run, model });
   }).pipe(
     Effect.mapError(
       () =>

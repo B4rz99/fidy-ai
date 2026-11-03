@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
 import {
@@ -13,7 +14,7 @@ import {
   proactivityTestUsers,
   withdrawTestProcessingConsent,
 } from "../proactivity.test-fixture";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { WhatsAppTurnAdmission } from "../whatsapp/contract";
 import { makeAgentService } from "./runtime";
 
@@ -28,8 +29,10 @@ it("an authenticated reminder request creates a contextual offer without inferen
         userId: proactivityTestUsers[0],
         environment: {
           DB: db,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("Offer must not infer")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("Offer must not infer")),
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
         },
         scheduleRecovery: () => Promise.resolve(),
       });
@@ -101,11 +104,11 @@ it.each(["budget-threshold", "manual-entry-reminder", "new-recurring-series"] as
           userId: context.userId,
           environment: {
             DB: db,
-            AI: {
+            OPENAI_API_KEY: openAiTestKey({
               run: (): Promise<never> =>
                 Promise.reject(new Error("Consent choice must not invoke inference")),
-            },
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
+            }),
+            HOSTED_AI_MODEL: approvedOpenAiModel,
           },
           scheduleRecovery: (): Promise<void> => Promise.resolve(),
         });

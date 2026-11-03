@@ -1,13 +1,10 @@
 import { Data } from "effect";
-import type { WorkersAiBindingRun } from "../../src/shell/hosted-inference/contract";
 
-/** Core bindings required to construct hosted inference without any external-model route. */
-export type WorkersAiEnvironment = Readonly<{
-  AI: Readonly<{ run: WorkersAiBindingRun }>;
+/** Core configuration required to construct OpenAI hosted inference. */
+export type OpenAiEnvironment = Readonly<{
+  OPENAI_API_KEY: string;
   HOSTED_AI_MODEL: string;
 }>;
 
-/** Workers AI admission retention failed without exposing database or inference evidence. */
-export class WorkersAiAdmissionUnavailable extends Data.TaggedError(
-  "WorkersAiAdmissionUnavailable"
-) {}
+/** OpenAI admission retention failed without exposing database or inference evidence. */
+export class OpenAiAdmissionUnavailable extends Data.TaggedError("OpenAiAdmissionUnavailable") {}

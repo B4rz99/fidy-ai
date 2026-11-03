@@ -1,7 +1,7 @@
 import { coordinatorTestDatabase } from "../d1-test-fixture";
 import { Effect, FileSystem, Option, type Scope } from "effect";
 import { Miniflare } from "miniflare";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 
 const noContentStatus = 204;
 const recoveryDigestBytes = 32;
@@ -53,8 +53,8 @@ const create = (
               worker: "titular-erasure",
               exportName: "UserTransactionCoordinator",
             },
-            AI: { type: "json", value: { run: null } },
-            HOSTED_AI_MODEL: { type: "text", value: approvedWorkersAiModel },
+            OPENAI_API_KEY: { type: "text", value: "" },
+            HOSTED_AI_MODEL: { type: "text", value: approvedOpenAiModel },
           },
           manifest: {
             mainModule: "index.mjs",

@@ -66,7 +66,7 @@ const browserDatabase = Option.match(browserCost, {
 const { makePublicWorker } = await import("./public-worker");
 const { makeWorkerTelemetry } = await import("./runtime/telemetry/operations");
 const { browserOrigins } = await import("./runtime/contract");
-const { approvedWorkersAiModel } = await import("@fidy/server/hosted-inference-contract");
+const { approvedOpenAiModel } = await import("@fidy/server/hosted-inference-contract");
 
 const certificate = Bun.env.PLAYWRIGHT_TLS_CERT;
 const key = Bun.env.PLAYWRIGHT_TLS_KEY;
@@ -578,10 +578,10 @@ const coreEnvironment: Parameters<typeof core.fetch>[1] = {
   DB: browserDatabase,
   ERASURE_REQUIRED: "true",
   ERASURE_BUCKET: erasureRegistry,
-  AI: { run: () => Promise.reject(new Error("unused")) },
+  OPENAI_API_KEY: "",
   CONTRACT_DIGEST: "a".repeat(digestHexLength),
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-  HOSTED_AI_MODEL: approvedWorkersAiModel,
+  HOSTED_AI_MODEL: approvedOpenAiModel,
   BROWSER_ORIGIN: browserOrigin,
   MICROSOFT_CLIENT_ID: "acceptance-microsoft",
   MICROSOFT_CLIENT_SECRET: "synthetic-microsoft-secret",

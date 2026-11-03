@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { RecurringWorkspace } from "../../src/shell/recurring-plans/contract";
@@ -16,7 +17,7 @@ import { RecurringPlanId } from "../../src/core/recurring-plans/contract";
 import { HostedTurnProposal } from "../../src/shell/agent/contract";
 import {
   type HostedInferenceService,
-  approvedWorkersAiModel,
+  approvedOpenAiModel,
 } from "../../src/shell/hosted-inference/contract";
 import { executeConsentWithdrawal } from "../consent/operations";
 import { describeRecurringLifecycle } from "../recurring-plans/operations";
@@ -1135,8 +1136,10 @@ it("recovers an abandoned staged reply by durable alarm without another User req
         {
           DB: db,
           STATEMENT_STAGING_BUCKET: undefined,
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
         }
       );
       yield* Effect.tryPromise(() => coordinator.alarm());
@@ -1474,8 +1477,8 @@ it("serializes concurrent requests at the per-User coordinator and admits two di
       const environment: ConstructorParameters<typeof UserTransactionCoordinator>[1] = {
         DB: db,
         STATEMENT_STAGING_BUCKET: undefined,
-        HOSTED_AI_MODEL: approvedWorkersAiModel,
-        AI: {
+        HOSTED_AI_MODEL: approvedOpenAiModel,
+        OPENAI_API_KEY: openAiTestKey({
           run: () => {
             count++;
             if (count === 1) {
@@ -1484,7 +1487,7 @@ it("serializes concurrent requests at the per-User coordinator and admits two di
             }
             return Promise.resolve(reply("Second"));
           },
-        },
+        }),
       };
       const coordinator = new UserTransactionCoordinator(
         {
@@ -1753,8 +1756,10 @@ it("expires a proposed reply at its original deadline despite repeated authentic
         },
         {
           DB: db,
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
-          AI: { run: (): Promise<Response> => Promise.resolve(reply("Sin acuse")) },
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<Response> => Promise.resolve(reply("Sin acuse")),
+          }),
         }
       );
       const proposed = yield* Effect.tryPromise(() =>
@@ -1880,7 +1885,11 @@ it("refuses another User's complete live proof at the Agent service before model
       const model = vi.fn(() => Promise.resolve(reply("Never disclosed")));
       const service = makeAgentService({
         connectionAdmission: Option.none(),
-        environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
+        environment: {
+          DB: db,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({ run: model }),
+        },
         userId: UserId.make(users[0]),
         scheduleRecovery: () => Promise.resolve(),
       });
@@ -1925,8 +1934,10 @@ it("stops unavailable alarm retries when the hosted owner settles and preserves 
         connectionAdmission: Option.none(),
         environment: {
           DB: db,
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
-          AI: { run: () => Promise.resolve(reply("Propuesta sin entregar")) },
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: () => Promise.resolve(reply("Propuesta sin entregar")),
+          }),
         },
         userId: UserId.make(users[0]),
         scheduleRecovery: () => {
@@ -2067,8 +2078,10 @@ it("does not retry a recovery defect or release queued work before its hosted ow
         connectionAdmission: Option.none(),
         environment: {
           DB: delayedDb,
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
-          AI: { run: () => Promise.resolve(reply("Propuesta sin entregar")) },
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: () => Promise.resolve(reply("Propuesta sin entregar")),
+          }),
         },
         userId: UserId.make(users[0]),
         scheduleRecovery: () => {
@@ -2145,8 +2158,10 @@ it("cannot release queued hosted work before its ordinary predecessor settles", 
         connectionAdmission: Option.none(),
         environment: {
           DB: db,
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
-          AI: { run: () => Promise.reject(new Error("No admitted work")) },
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: () => Promise.reject(new Error("No admitted work")),
+          }),
         },
         userId: UserId.make(users[0]),
         scheduleRecovery: () => Promise.resolve(),
@@ -2514,8 +2529,8 @@ it.each(continuityCorruptions)(
           environment: {
             DB: db,
             KAPSO_API_KEY: "test-kapso-api-key",
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
-            AI: { run: model },
+            HOSTED_AI_MODEL: approvedOpenAiModel,
+            OPENAI_API_KEY: openAiTestKey({ run: model }),
           },
           userId: UserId.make(users[0]),
           scheduleRecovery: () => Promise.resolve(),
@@ -2657,7 +2672,11 @@ it("admits a web-provider onboarding grant through the native Agent service and 
       const model = vi.fn(() => Promise.resolve(reply("Conexión verificada")));
       const service = makeAgentService({
         connectionAdmission: Option.none(),
-        environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
+        environment: {
+          DB: db,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({ run: model }),
+        },
         userId: UserId.make(users[0]),
         scheduleRecovery: () => Promise.resolve(),
       });
@@ -2696,14 +2715,18 @@ it("returns safe quota feedback and retains a terminal failure without an assist
       const model = vi.fn(() =>
         Promise.resolve(
           Response.json(
-            { errors: [{ code: 4006, message: "private provider quota detail" }] },
+            { error: { code: "insufficient_quota", message: "private provider quota detail" } },
             { status: 429 }
           )
         )
       );
       const service = makeAgentService({
         connectionAdmission: Option.none(),
-        environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
+        environment: {
+          DB: db,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({ run: model }),
+        },
         userId: UserId.make(users[0]),
         scheduleRecovery: () => Promise.resolve(),
       });

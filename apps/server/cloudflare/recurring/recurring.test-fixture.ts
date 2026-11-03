@@ -1,6 +1,7 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { Option } from "effect";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 
 const unusedAI = (): Promise<never> =>
   Promise.reject(new Error("Inference is not part of recurring detection"));
@@ -27,7 +28,11 @@ export const makeCoordinators = (
                 setAlarm: (): Promise<void> => Promise.resolve(),
               },
             },
-            { DB: db, AI: { run: unusedAI }, HOSTED_AI_MODEL: approvedWorkersAiModel }
+            {
+              DB: db,
+              OPENAI_API_KEY: openAiTestKey({ run: unusedAI }),
+              HOSTED_AI_MODEL: approvedOpenAiModel,
+            }
           );
           retained.set(name, created);
           return created;

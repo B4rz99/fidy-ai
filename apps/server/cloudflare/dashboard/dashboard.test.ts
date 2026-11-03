@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import {
@@ -23,7 +24,7 @@ import { Transaction } from "../../src/core/transactions/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { resolveDashboardPeriod } from "../../src/core/dashboard/operations";
 import { DashboardView } from "../../src/shell/dashboard/contract";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import publicWorker from "../public-worker";
@@ -173,10 +174,12 @@ const send = (
         fetch: (internal) =>
           coreWorker.fetch(new Request(internal), {
             DB: db,
-            AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+            OPENAI_API_KEY: openAiTestKey({
+              run: (): Promise<never> => Promise.reject(new Error("unused")),
+            }),
             CONTRACT_DIGEST: "a".repeat(64),
             RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
+            HOSTED_AI_MODEL: approvedOpenAiModel,
             BROWSER_ORIGIN: "https://app.fidyapp.com",
             WOMPI_ENVIRONMENT: "",
             WOMPI_PUBLIC_KEY: "",
@@ -202,8 +205,10 @@ const send = (
                       },
                       {
                         DB: db,
-                        AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-                        HOSTED_AI_MODEL: approvedWorkersAiModel,
+                        OPENAI_API_KEY: openAiTestKey({
+                          run: (): Promise<never> => Promise.reject(new Error("unused")),
+                        }),
+                        HOSTED_AI_MODEL: approvedOpenAiModel,
                       }
                     );
                     coordinators.set(name, coordinator);
@@ -601,8 +606,10 @@ it("rejects a substituted query target, mutation id or foreign User admission be
         },
         {
           DB: db,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
         }
       );
       const beforeAudit = yield* Effect.tryPromise(() => count(db, "audit_entries"));

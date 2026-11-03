@@ -1,6 +1,7 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { DateTime, Effect, Option } from "effect";
 import { expect, it } from "vitest";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { encodeJson, now, reply, setup, subject, users } from "./hosted-turn.test-fixture";
 
@@ -24,8 +25,8 @@ const sandboxCoordinator = ({
     },
     {
       DB: db,
-      HOSTED_AI_MODEL: approvedWorkersAiModel,
-      AI: { run: (_model, request) => run(request) },
+      HOSTED_AI_MODEL: approvedOpenAiModel,
+      OPENAI_API_KEY: openAiTestKey({ run: (_model, request) => run(request) }),
       BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(profile),
     }
   );

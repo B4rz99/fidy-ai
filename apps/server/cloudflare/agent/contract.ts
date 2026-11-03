@@ -6,7 +6,7 @@ import {
   HostedTurnRequest,
 } from "../../src/shell/agent/contract";
 import type { ProactivityEnvironment } from "../insights/contract";
-import type { WorkersAiEnvironment } from "../ai/contract";
+import type { OpenAiEnvironment } from "../ai/contract";
 import {
   type ProactiveTranscriptEntry,
   type ToolCallId,
@@ -63,7 +63,7 @@ export type AgentEnvironment = Readonly<{ DB: D1Database }> &
       WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
     }>
   > &
-  WorkersAiEnvironment &
+  OpenAiEnvironment &
   ProactivityEnvironment;
 /** Construct a hosted workflow for one explicit User; scheduleRecovery sets the coordinator's durable alarm. */
 export type AgentServiceInput = Readonly<{

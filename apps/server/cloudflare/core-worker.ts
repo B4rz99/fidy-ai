@@ -7,7 +7,7 @@ import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./maintenance/co
 import { runCoreMaintenance } from "./maintenance/runtime";
 import { makeCoreHttp } from "./core-http/runtime";
 import { makeCoreQueue } from "./queue/runtime";
-import type { WorkersAiEnvironment } from "./ai/contract";
+import type { OpenAiEnvironment } from "./ai/contract";
 import type {
   BrowserPairingEmailEnvironment,
   EmailReplacementEnvironment,
@@ -37,7 +37,7 @@ type CoreEnvironment = ProviderEnvironment &
   WorkerTelemetryEnvironment &
   ProactivityEnvironment &
   Readonly<{ CONTRACT_DIGEST: string; RELEASE_GIT_SHA: string }> & {
-    readonly AI: WorkersAiEnvironment["AI"];
+    readonly OPENAI_API_KEY: OpenAiEnvironment["OPENAI_API_KEY"];
     readonly DB: D1Database;
     readonly USER_TRANSACTION_COORDINATOR: Readonly<{
       getByName: (name: string) => Pick<Fetcher, "fetch">;
@@ -159,7 +159,7 @@ const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput =>
   DB: environment.DB,
   ...proactivityMaintenanceInput(environment),
   USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,
-  AI: environment.AI,
+  OPENAI_API_KEY: environment.OPENAI_API_KEY,
   RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,
   KAPSO_API_KEY: environment.KAPSO_API_KEY,
   KAPSO_WEBHOOK_SECRET: environment.KAPSO_WEBHOOK_SECRET,

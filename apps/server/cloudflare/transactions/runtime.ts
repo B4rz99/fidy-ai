@@ -102,7 +102,7 @@ import {
 } from "effect";
 
 import { optionalHostedInference } from "../ai/runtime";
-import type { WorkersAiEnvironment } from "../ai/contract";
+import type { OpenAiEnvironment } from "../ai/contract";
 import { type TransactionCaller, transactionUnavailable } from "../canonical-work/operations";
 import {
   ForwardedEmailWork,
@@ -165,7 +165,7 @@ type CoordinatorEnvironment = Readonly<{
       WOMPI_ENVIRONMENT: string;
     }>
   > &
-  WorkersAiEnvironment &
+  OpenAiEnvironment &
   ProactivityEnvironment &
   BancolombiaSandboxEnvironment;
 

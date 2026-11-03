@@ -1,3 +1,4 @@
+import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type WorkflowStepConfig } from "cloudflare:workers";
 import { type Cause, Clock, Effect, Exit, Schema } from "effect";
 import { type RefundStartCall, RefundSupportAdmission, RefundWorkFailure } from "./contract";
@@ -261,9 +262,9 @@ it("isolates mismatched coordinator Users and foreign charge identities before a
           DB: db,
           WOMPI_ENVIRONMENT: "sandbox",
           HOSTED_AI_MODEL: "",
-          AI: {
+          OPENAI_API_KEY: openAiTestKey({
             run: (): Promise<never> => Promise.reject(new Error("No inference during corrections")),
-          },
+          }),
         }
       );
       for (const scopedUserId of [userId, otherUserId]) {
@@ -382,32 +383,35 @@ it("settles an authenticated matching Sandbox refund exactly once without mutati
       const db = yield* fixture();
       const accepted = yield* startRefund(call(db));
       let posts = 0;
-      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-        const request = new Request(input, init);
-        posts++;
-        expect(request.url).toBe("https://sandbox.wompi.co/v1/refunds");
-        expect(request.method).toBe("POST");
-        return request.json().then((body: unknown) => {
-          expect(body).toMatchObject({
-            transaction_id: "provider-charge",
-            amount_in_cents: 400000,
-            reference: `fidy-refund-${accepted.id}`,
-          });
-          return Response.json(
-            {
-              data: {
-                id: 1523,
-                v2_refund_id: "v2_refund_abc",
-                status: "APPROVED",
-                transaction_id: "provider-charge",
-                amount_in_cents: 400000,
-                reference: `fidy-refund-${accepted.id}`,
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+          const request = new Request(input, init);
+          posts++;
+          expect(request.url).toBe("https://sandbox.wompi.co/v1/refunds");
+          expect(request.method).toBe("POST");
+          return request.json().then((body: unknown) => {
+            expect(body).toMatchObject({
+              transaction_id: "provider-charge",
+              amount_in_cents: 400000,
+              reference: `fidy-refund-${accepted.id}`,
+            });
+            return Response.json(
+              {
+                data: {
+                  id: 1523,
+                  v2_refund_id: "v2_refund_abc",
+                  status: "APPROVED",
+                  transaction_id: "provider-charge",
+                  amount_in_cents: 400000,
+                  reference: `fidy-refund-${accepted.id}`,
+                },
               },
-            },
-            { status: 201 }
-          );
-        });
-      });
+              { status: 201 }
+            );
+          });
+        })
+      );
       expect(yield* standing(db)).toMatchObject({ data: { accessTier: "pro" } });
       const workflow = {
         environment: {
@@ -459,22 +463,25 @@ it.each([
       const db = yield* fixture();
       const accepted = yield* startRefund(call(db));
       let posts = 0;
-      vi.stubGlobal("fetch", (): Promise<Response> => {
-        posts++;
-        return outcome === "lost-response"
-          ? Promise.reject(new Error("uncertain"))
-          : Promise.resolve(
-              providerReply(accepted.id, outcome.startsWith("wrong-") ? "APPROVED" : outcome, {
-                amount_in_cents: outcome === "wrong-amount" ? 400001 : 400000,
-                transaction_id:
-                  outcome === "wrong-transaction" ? "unrelated-charge" : "provider-charge",
-                reference:
-                  outcome === "wrong-reference"
-                    ? "fidy-refund-10000000-0000-4000-8000-000000000099"
-                    : `fidy-refund-${accepted.id}`,
-              })
-            );
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((): Promise<Response> => {
+          posts++;
+          return outcome === "lost-response"
+            ? Promise.reject(new Error("uncertain"))
+            : Promise.resolve(
+                providerReply(accepted.id, outcome.startsWith("wrong-") ? "APPROVED" : outcome, {
+                  amount_in_cents: outcome === "wrong-amount" ? 400001 : 400000,
+                  transaction_id:
+                    outcome === "wrong-transaction" ? "unrelated-charge" : "provider-charge",
+                  reference:
+                    outcome === "wrong-reference"
+                      ? "fidy-refund-10000000-0000-4000-8000-000000000099"
+                      : `fidy-refund-${accepted.id}`,
+                })
+              );
+        })
+      );
       yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
       yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
       expect(posts).toBe(1);
@@ -515,8 +522,11 @@ it.each(["DECLINED", "CANCELLED"])(
       Effect.gen(function* () {
         const db = yield* fixture();
         const accepted = yield* startRefund(call(db));
-        vi.stubGlobal("fetch", (): Promise<Response> =>
-          Promise.resolve(providerReply(accepted.id, status))
+        vi.stubGlobal(
+          "fetch",
+          withOpenAiFetch((): Promise<Response> =>
+            Promise.resolve(providerReply(accepted.id, status))
+          )
         );
         yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
         expect(
@@ -615,8 +625,11 @@ it("recovers missed publication and duplicate Queue delivery using the same iden
           ],
         },
       };
-      vi.stubGlobal("fetch", (): Promise<Response> =>
-        Promise.resolve(providerReply(accepted.id, "APPROVED"))
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((): Promise<Response> =>
+          Promise.resolve(providerReply(accepted.id, "APPROVED"))
+        )
       );
       yield* receiveRefunds(receive);
       yield* receiveRefunds(receive);
@@ -637,28 +650,33 @@ it("derives the whole card void Money and reconciles a lost response by transact
       expect(accepted.kind).toBe("card-void");
       let posts = 0;
       let gets = 0;
-      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-        const request = new Request(input, init);
-        if (request.method === "POST") {
-          posts++;
-          expect(request.url).toBe("https://sandbox.wompi.co/v1/transactions/provider-charge/void");
-          return Promise.reject(new Error("lost void response"));
-        }
-        gets++;
-        expect(request.url).toBe("https://sandbox.wompi.co/v1/transactions/provider-charge");
-        return Promise.resolve(
-          Response.json({
-            data: {
-              id: "provider-charge",
-              status: "VOIDED",
-              reference: "fidy-test",
-              amount_in_cents: 990000,
-              currency: "COP",
-              payment_source_id: 3891,
-            },
-          })
-        );
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+          const request = new Request(input, init);
+          if (request.method === "POST") {
+            posts++;
+            expect(request.url).toBe(
+              "https://sandbox.wompi.co/v1/transactions/provider-charge/void"
+            );
+            return Promise.reject(new Error("lost void response"));
+          }
+          gets++;
+          expect(request.url).toBe("https://sandbox.wompi.co/v1/transactions/provider-charge");
+          return Promise.resolve(
+            Response.json({
+              data: {
+                id: "provider-charge",
+                status: "VOIDED",
+                reference: "fidy-test",
+                amount_in_cents: 990000,
+                currency: "COP",
+                payment_source_id: 3891,
+              },
+            })
+          );
+        })
+      );
       yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
       expect(yield* standing(db)).toMatchObject({ data: { accessTier: "pro" } });
       const lookups: unknown[] = [];
@@ -712,24 +730,27 @@ it.each([
       });
       let posts = 0;
       let lookups = 0;
-      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-        const request = new Request(input, init);
-        if (request.method === "POST") posts++;
-        else lookups++;
-        return Promise.resolve(
-          Response.json({
-            data: {
-              id: "provider-charge",
-              status: "VOIDED",
-              reference: "fidy-test",
-              amount_in_cents: 990000,
-              currency: "COP",
-              payment_source_id: 3891,
-              ...patch,
-            },
-          })
-        );
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+          const request = new Request(input, init);
+          if (request.method === "POST") posts++;
+          else lookups++;
+          return Promise.resolve(
+            Response.json({
+              data: {
+                id: "provider-charge",
+                status: "VOIDED",
+                reference: "fidy-test",
+                amount_in_cents: 990000,
+                currency: "COP",
+                payment_source_id: 3891,
+                ...patch,
+              },
+            })
+          );
+        })
+      );
       yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
       yield* assertPendingIntegrity(db, accepted.id, 990000);
       yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
@@ -756,10 +777,13 @@ it("keeps the mutation claim and reservation after provider approval but failed 
           .run()
       );
       let posts = 0;
-      vi.stubGlobal("fetch", (): Promise<Response> => {
-        posts++;
-        return Promise.resolve(providerReply(accepted.id, "APPROVED"));
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((): Promise<Response> => {
+          posts++;
+          return Promise.resolve(providerReply(accepted.id, "APPROVED"));
+        })
+      );
       const failed = yield* Effect.exit(
         Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)))
       );
@@ -784,11 +808,14 @@ it("allows only one financial POST when independent Workflow executions race the
       const entered = Promise.withResolvers<void>();
       const reply = Promise.withResolvers<Response>();
       let posts = 0;
-      vi.stubGlobal("fetch", (): Promise<Response> => {
-        posts++;
-        entered.resolve();
-        return reply.promise;
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((): Promise<Response> => {
+          posts++;
+          entered.resolve();
+          return reply.promise;
+        })
+      );
       const winner = runRefundWorkflow(workflowFor(db, accepted.id));
       yield* Effect.tryPromise(() => entered.promise);
       yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
@@ -831,7 +858,7 @@ it.each(["production-environment", "live-private-key", "production-captured-char
         const provider = vi.fn((): Promise<Response> =>
           Promise.reject(new Error("Prohibited financial egress"))
         );
-        vi.stubGlobal("fetch", provider);
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         const workflow = workflowFor(db, accepted.id);
         yield* Effect.tryPromise(() =>
           runRefundWorkflow({
@@ -914,7 +941,7 @@ it.each([
         const provider = vi.fn((): Promise<Response> =>
           Promise.resolve(providerReply(accepted.id, "APPROVED"))
         );
-        vi.stubGlobal("fetch", provider);
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
         expect(provider).not.toHaveBeenCalled();
         expect(
@@ -955,7 +982,7 @@ it.each(["missing-submission-claim", "unpublished-revision"])(
         const provider = vi.fn((): Promise<Response> =>
           Promise.resolve(Response.json({ data: { status: "PENDING" } }))
         );
-        vi.stubGlobal("fetch", provider);
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         if (scenario === "unpublished-revision") {
           yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
           expect(provider).toHaveBeenCalledTimes(1);
@@ -1101,7 +1128,7 @@ it("refuses out-of-bound verification work with a closed failure before handoff 
       const provider = vi.fn((): Promise<Response> =>
         Promise.reject(new Error("No provider request"))
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       assert.deepStrictEqual(
         yield* Effect.exit(
           receiveRefunds({
@@ -1148,13 +1175,16 @@ it.each(["pending", "hourly"])(
           const identity = `50000000-0000-4000-8000-${index.toString().padStart(12, "0")}`;
           const accepted = yield* startRefund(call(db, "1", identity));
           if (limit === "hourly") {
-            vi.stubGlobal("fetch", (): Promise<Response> =>
-              Promise.resolve(
-                providerReply(accepted.id, "DECLINED", {
-                  amount_in_cents: 100,
-                  id: 1000 + index,
-                  v2_refund_id: `declined-${accepted.id}`,
-                })
+            vi.stubGlobal(
+              "fetch",
+              withOpenAiFetch((): Promise<Response> =>
+                Promise.resolve(
+                  providerReply(accepted.id, "DECLINED", {
+                    amount_in_cents: 100,
+                    id: 1000 + index,
+                    v2_refund_id: `declined-${accepted.id}`,
+                  })
+                )
               )
             );
             yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
@@ -1255,8 +1285,11 @@ it("preserves an independently active TrialPeriod after a successful full refund
     Effect.gen(function* () {
       const db = yield* fixture(true);
       const accepted = yield* startRefund(call(db, "9900"));
-      vi.stubGlobal("fetch", (): Promise<Response> =>
-        Promise.resolve(providerReply(accepted.id, "APPROVED", { amount_in_cents: 990000 }))
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((): Promise<Response> =>
+          Promise.resolve(providerReply(accepted.id, "APPROVED", { amount_in_cents: 990000 }))
+        )
       );
       yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
       expect(

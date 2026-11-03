@@ -190,16 +190,15 @@ const compactNode = (
       ];
     })
   );
-  // Gemma's tool template omits unions, constants, and patterns but renders descriptions.
-  // Derive its guidance from the canonical schema; decoding still enforces the original contract.
   const constraints = describe ? constraintDescription(source, definitions) : "";
   if (constraints !== "") {
     schema.description = [schema.description, constraints].filter(Boolean).join("\n");
   }
+  if (Predicate.isObject(schema.properties)) schema.additionalProperties = false;
   return compactHomogeneousArray(schema);
 };
 
-export const workersAiProviderSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
+export const openAiProviderSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
   const document = Schema.toJsonSchemaDocument(Schema.toEncoded(schema), {
     referencePolicy: ({ identifier, occurrences }) => (occurrences > 1 ? identifier : undefined),
   });

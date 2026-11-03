@@ -1,7 +1,7 @@
 import { Data, Effect, Option, Result } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installCurrentTestObjects, isolatedTestDatabases } from "../d1-test-fixture";
-import { sweepExpiredWorkersAiAdmission } from "../ai/runtime";
+import { sweepExpiredOpenAiAdmission } from "../ai/runtime";
 import { sweepExpiredEnrollmentAdmission } from "../subscription/runtime";
 import { sweepExpiredUploadAdmission } from "../ingestion/runtime";
 
@@ -11,7 +11,7 @@ const fromPromise = <Value>(run: () => PromiseLike<Value>): Effect.Effect<Value>
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 type SweepFailure =
-  | Effect.Error<ReturnType<typeof sweepExpiredWorkersAiAdmission>>
+  | Effect.Error<ReturnType<typeof sweepExpiredOpenAiAdmission>>
   | Effect.Error<ReturnType<typeof sweepExpiredEnrollmentAdmission>>
   | Effect.Error<ReturnType<typeof sweepExpiredUploadAdmission>>;
 const owners: ReadonlyArray<
@@ -21,7 +21,7 @@ const owners: ReadonlyArray<
     window: number;
   }>
 > = [
-  { prefix: "workers-ai-", sweep: sweepExpiredWorkersAiAdmission, window: 86_400_000 },
+  { prefix: "openai-", sweep: sweepExpiredOpenAiAdmission, window: 86_400_000 },
   {
     prefix: "card-preparation-attempt-",
     sweep: sweepExpiredEnrollmentAdmission,

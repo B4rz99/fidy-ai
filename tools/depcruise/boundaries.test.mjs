@@ -158,6 +158,10 @@ await test("future portable and native owners share one privacy and direction po
 await test("shared acceptance fixtures remain unavailable to production", () => {
   for (const { source, fixture } of [
     {
+      source: "cloudflare/agent/hosted-turn.test.ts",
+      fixture: "cloudflare/openai.test-fixture.ts",
+    },
+    {
       source: "cloudflare/browser-acceptance-preview.ts",
       fixture: "cloudflare/browser-acceptance-connections.test-fixture.ts",
     },

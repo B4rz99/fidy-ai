@@ -1,7 +1,8 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import {
   HostedInferenceError,
-  type WorkersAiBindingRun,
-  approvedWorkersAiModel,
+  type OpenAiTransportRun,
+  approvedOpenAiModel,
 } from "../../src/shell/hosted-inference/contract";
 import { deepStrictEqual } from "node:assert";
 import { it as effectIt } from "@effect/vitest";
@@ -11,8 +12,8 @@ import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { Cause, Data, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { hostedInitialTextContext, makeAdmittedWorkersAiRun } from "./admitted-run.test-fixture";
-import { makeUserCloudflareHostedInference } from "./runtime";
+import { hostedInitialTextContext, makeAdmittedOpenAiRun } from "./admitted-run.test-fixture";
+import { makeCloudflareHostedInference, makeUserCloudflareHostedInference } from "./runtime";
 
 class TestInvocationFailure extends Data.TaggedError("TestInvocationFailure") {}
 const encodeJson = (value: unknown): string =>
@@ -109,17 +110,18 @@ const seedGrant = (db: D1Database): Promise<unknown> =>
       )
       .bind(grantA, userA, encodeJson(currentDisclosureFor()), now, now),
   ]);
-const invoke = (run: WorkersAiBindingRun): ReturnType<WorkersAiBindingRun> =>
+const invoke = (run: OpenAiTransportRun): ReturnType<OpenAiTransportRun> =>
   run(
-    approvedWorkersAiModel,
+    approvedOpenAiModel,
     {
       messages: [{ role: "user", content: "Hola" }],
-      max_tokens: 128,
+      max_completion_tokens: 128,
       temperature: 0,
       stream: false,
-      chat_template_kwargs: { enable_thinking: false },
+      reasoning_effort: "none",
+      store: false,
     },
-    { returnRawResponse: true, signal: new AbortController().signal }
+    { signal: new AbortController().signal }
   );
 const admissionUnavailable = (): HostedInferenceError =>
   new HostedInferenceError({
@@ -135,8 +137,8 @@ effectIt.effect("samples AI spend admission from the executing owner's Clock", (
     yield* TestClock.setTime(now);
     const inference = yield* makeUserCloudflareHostedInference({
       environment: {
-        AI: { run: () => Promise.resolve(Response.json({})) },
-        HOSTED_AI_MODEL: approvedWorkersAiModel,
+        OPENAI_API_KEY: openAiTestKey({ run: () => Promise.resolve(Response.json({})) }),
+        HOSTED_AI_MODEL: approvedOpenAiModel,
       },
       db,
       userId: userA,
@@ -185,13 +187,13 @@ effectIt.effect(
       });
       const inference = yield* makeUserCloudflareHostedInference({
         environment: {
-          AI: {
+          OPENAI_API_KEY: openAiTestKey({
             run: () => {
               calls += 1;
               return Promise.resolve(Response.json({}));
             },
-          },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
         },
         db: guardedDatabase,
         userId: userA,
@@ -218,13 +220,13 @@ effectIt.effect(
     })
 );
 
-it("does not send another User's content to Workers AI using a different User's Consent", () =>
+it("does not send another User's content to OpenAI using a different User's Consent", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(setup);
       yield* Effect.tryPromise(() => seedGrant(db));
       let providerCalls = 0;
-      const run = makeAdmittedWorkersAiRun({
+      const run = makeAdmittedOpenAiRun({
         db,
         userId: userB,
         nowEpochMs: () => now,
@@ -266,7 +268,7 @@ it("rechecks Consent after spend admission before sending preflight or standalon
                 })
             : Reflect.get(target, key, target),
       });
-      const run = makeAdmittedWorkersAiRun({
+      const run = makeAdmittedOpenAiRun({
         db: changedBeforeEgress,
         userId: userA,
         nowEpochMs: () => now,
@@ -299,7 +301,7 @@ it("keeps an admitted Turn's Consent basis through revocation but refuses its te
       yield* Effect.tryPromise(() => seedSession(db));
       yield* Effect.tryPromise(() => seedPendingTurn(db));
       let providerCalls = 0;
-      const run = makeAdmittedWorkersAiRun({
+      const run = makeAdmittedOpenAiRun({
         db,
         userId: userA,
         nowEpochMs: () => now,
@@ -347,7 +349,7 @@ it("cannot use another User's Pending Turn to authorize model egress", () =>
           .run()
       );
       let providerCalls = 0;
-      const run = makeAdmittedWorkersAiRun({
+      const run = makeAdmittedOpenAiRun({
         db,
         userId: userB,
         nowEpochMs: () => now,
@@ -376,7 +378,7 @@ it("fails closed when live Consent authority is unavailable after spend commits"
       yield* Effect.tryPromise(() => seedGrant(db));
       yield* Effect.tryPromise(() => db.prepare("DROP TABLE consent_history").run());
       let providerCalls = 0;
-      const run = makeAdmittedWorkersAiRun({
+      const run = makeAdmittedOpenAiRun({
         db,
         userId: userA,
         nowEpochMs: () => now,
@@ -404,7 +406,7 @@ it("preserves the provider failure after Consent authorizes the action", () =>
       const db = yield* Effect.tryPromise(setup);
       yield* Effect.tryPromise(() => seedGrant(db));
       const providerFailure = new Error("provider failed after accepting request");
-      const run = makeAdmittedWorkersAiRun({
+      const run = makeAdmittedOpenAiRun({
         db,
         userId: userA,
         nowEpochMs: () => now,
@@ -414,3 +416,28 @@ it("preserves the provider failure after Consent authorizes the action", () =>
       yield* Effect.tryPromise(() => expect(invoke(run)).rejects.toBe(providerFailure));
     })
   ));
+
+effectIt.effect(
+  "refuses absent and malformed OpenAI credentials before granting inference authority",
+  () =>
+    Effect.gen(function* () {
+      for (const key of ["", " ", "synthetic\r\nheader"]) {
+        const result = yield* Effect.exit(
+          makeCloudflareHostedInference({
+            OPENAI_API_KEY: key,
+            HOSTED_AI_MODEL: approvedOpenAiModel,
+          })
+        );
+        deepStrictEqual(
+          result,
+          Exit.fail(
+            new HostedInferenceError({
+              reason: { _tag: "ProviderUnavailable" },
+              retryable: false,
+              retryAfter: Option.none(),
+            })
+          )
+        );
+      }
+    })
+);

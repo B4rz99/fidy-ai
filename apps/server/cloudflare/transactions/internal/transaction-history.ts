@@ -290,6 +290,17 @@ type PresentationSelection = Readonly<{
   authority: Option.Option<AuthorityCondition>;
 }>;
 
+const presentationGuard = (
+  authority: PresentationSelection["authority"]
+): Readonly<{ sql: string; bindings: ReadonlyArray<string | number | Uint8Array> }> =>
+  Option.match(authority, {
+    onNone: () => ({ sql: "", bindings: [] }),
+    onSome: (live) => ({
+      sql: ` AND EXISTS (SELECT 1 FROM ${live.table} WHERE ${live.predicate})`,
+      bindings: live.bindings,
+    }),
+  });
+
 /**
  * One effective presentation by either original id, optionally gated on a live caller authority.
  * A linked member resolves to the effective Transaction and records which original id was requested.
@@ -303,19 +314,13 @@ const presentationStatement = ({
   authority,
 }: PresentationSelection): D1PreparedStatement => {
   const relation = effectiveTransactionRelation(userId);
-  const guard: Readonly<{
-    sql: string;
-    bindings: ReadonlyArray<string | number | Uint8Array>;
-  }> = Option.match(authority, {
-    onNone: () => ({ sql: "", bindings: [] }),
-    onSome: (live) => ({
-      sql: ` AND EXISTS (SELECT 1 FROM ${live.table} WHERE ${live.predicate})`,
-      bindings: live.bindings,
-    }),
-  });
+  const guard = presentationGuard(authority);
   return db
-    .prepare(
-      `WITH ${relation.sql} SELECT effective.id, effective.amount, effective.currency,
+    .prepare(`WITH readiness AS MATERIALIZED (SELECT EXISTS (
+        SELECT 1 FROM transaction_projection_state
+        WHERE user_id = ? AND version = 1 AND readiness = 'ready') AS available),
+      ${relation.sql}, repair_presentation AS (
+      SELECT effective.id, effective.amount, effective.currency,
         effective.direction, effective.counterparty, effective.category_id, effective.notes,
         effective.occurred_at, effective.created_at, requested.revision AS revision,
         requested.id AS requested_id, (linked.id IS NOT NULL) AS linked
@@ -326,9 +331,36 @@ const presentationStatement = ({
         AND decision.second_transaction_id = linked.second_transaction_id
       INNER JOIN effective_transaction effective
         ON effective.id = COALESCE(decision.visible_transaction_id, requested.id)
-      WHERE requested.user_id = ? AND requested.id = ? AND requested.deleted_at_ms IS NULL${guard.sql}`
-    )
-    .bind(...relation.bindings, userId, id, ...guard.bindings);
+      WHERE requested.user_id = ? AND requested.id = ? AND requested.deleted_at_ms IS NULL${guard.sql}
+      LIMIT CASE WHEN (SELECT available FROM readiness) THEN 0 ELSE 1 END)
+      SELECT effective.id, effective.amount, effective.currency, effective.direction,
+        effective.counterparty, effective.category_id, effective.notes,
+        strftime('%Y-%m-%dT%H:%M:%fZ',effective.occurred_at_ms/1000.0,'unixepoch') AS occurred_at,
+        strftime('%Y-%m-%dT%H:%M:%fZ',effective.created_at_ms/1000.0,'unixepoch') AS created_at,
+        requested.revision AS revision, requested.id AS requested_id,
+        (requested.reconciliation_first_id IS NOT NULL) AS linked
+      FROM transactions requested
+      LEFT JOIN transaction_reconciliation_decisions decision
+        ON decision.user_id = requested.user_id
+        AND decision.first_transaction_id = requested.reconciliation_first_id
+        AND decision.second_transaction_id = requested.reconciliation_second_id
+        AND decision.state = 'linked'
+      INNER JOIN transaction_projection_leaf effective
+        ON effective.user_id = requested.user_id
+        AND effective.id = COALESCE(decision.visible_transaction_id, requested.id)
+      WHERE (SELECT available FROM readiness) AND requested.user_id = ?
+        AND requested.id = ? AND requested.deleted_at_ms IS NULL${guard.sql}
+      UNION ALL SELECT * FROM repair_presentation`)
+    .bind(
+      userId,
+      ...relation.bindings,
+      userId,
+      id,
+      ...guard.bindings,
+      userId,
+      id,
+      ...guard.bindings
+    );
 };
 
 const storedFields = (row: typeof Row.Type): typeof Transaction.Encoded => ({
@@ -394,6 +426,33 @@ export const findTransaction = ({
     .bind(userId, id)
     .first()
     .then(decodeTransactionRow);
+
+export const findTransactionPair = ({
+  db,
+  userId,
+  ids,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  ids: readonly [string, string];
+}>): Promise<Option.Option<readonly [StoredTransaction, StoredTransaction]>> =>
+  db
+    .prepare(`SELECT id, amount, currency, direction, counterparty, category_id, notes,
+      strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at,
+      strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at, revision
+      FROM transactions WHERE user_id = ? AND id IN (?, ?) AND deleted_at_ms IS NULL`)
+    .bind(userId, ...ids)
+    .all()
+    .then((rows) => {
+      const decoded = Option.all(rows.results.map(decodeTransactionRow));
+      return Option.flatMap(decoded, (records) => {
+        const first = records.find((record) => record.id === ids[0]);
+        const second = records.find((record) => record.id === ids[1]);
+        return first === undefined || second === undefined
+          ? Option.none()
+          : Option.some([first, second] as const);
+      });
+    });
 
 /** Read one effective presentation by either original id, as an immediate canonical read would. */
 export const findTransactionPresentation = ({

@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "07e546707111eafa2b817856a1a1bcdc0e80b4ace77fa7c1d4160cbeffc8ac9b";
+const expectedEdgePolicyDigest = "14172f2d3b216de2973fd81cf6250c273e8440a5db00a1779b527f28f7ef06c4";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/erasure/runtime.ts", import.meta.url)

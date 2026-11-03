@@ -11,7 +11,9 @@ import {
   coordinatorTestDatabase,
   installTestSchema,
   isolatedTestDatabases,
+  observeRetentionCost,
 } from "../d1-test-fixture";
+import { seedHistory } from "./history-growth.test-fixture";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Config, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
@@ -1662,9 +1664,10 @@ it("links one exact pair into one effective Transaction while retaining both ori
           ])
         )
       );
+      const observed = observeRetentionCost(db);
       const send = (path: string, body?: object): Promise<Response> =>
         sendPublicRequest(
-          db,
+          observed.database,
           new Request(`https://api.fidyapp.com${path}`, {
             method: body === undefined ? "GET" : "POST",
             headers: {
@@ -1683,6 +1686,7 @@ it("links one exact pair into one effective Transaction while retaining both ori
         })
       );
       expect(linked.status).toBe(200);
+      expect(observed.roundTrips()).toBeLessThanOrEqual(11);
       const effectiveTransaction = (yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
         yield* fromTestPromise(() => linked.json())
       ).pipe(Effect.orDie)).data;
@@ -1884,9 +1888,10 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
           })
         )
       );
+      const observed = observeRetentionCost(db);
       const send = (path: string, body: object): Promise<Response> =>
         sendPublicRequest(
-          db,
+          observed.database,
           new Request(`https://api.fidyapp.com${path}`, {
             method: "POST",
             headers: {
@@ -1904,6 +1909,7 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
           secondTransactionId: suppressed,
         });
       expect((yield* fromTestPromise(link)).status).toBe(200);
+      const beforeUnlink = observed.roundTrips();
       const unlinked = yield* fromTestPromise(() =>
         send("/transactions/unlink", {
           firstTransactionId: suppressed,
@@ -1911,6 +1917,7 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
         })
       );
       expect(unlinked.status).toBe(200);
+      expect(observed.roundTrips() - beforeUnlink).toBeLessThanOrEqual(11);
       const restored = (yield* Schema.decodeUnknownEffect(RestoredPair)(
         yield* fromTestPromise(() => unlinked.json())
       ).pipe(Effect.orDie)).data;
@@ -7186,5 +7193,59 @@ it("searches older effective Transactions with combined exact Money filters and 
       ).toEqual([]);
       query.set("amount", "1e3");
       expect((yield* fromTestPromise(() => read(query))).status).toBe(400);
+    })
+  ));
+
+it("reads an addressed linked Transaction without work proportional to retained history", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      yield* seedHistory({
+        db,
+        subject: owner,
+        transactionPrefix: "20000000-0000-4000-8000-",
+        count: 2_000,
+        linked: true,
+        linkedFraction: 1,
+        spacingMinutes: 20,
+      });
+      const read = (database: D1Database): Promise<Response> =>
+        sendPublicRequest(
+          database,
+          new Request("https://api.fidyapp.com/transactions/20000000-0000-4000-8000-000000000002", {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[0] ?? "",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+            },
+          })
+        );
+      const observed = observeRetentionCost(db);
+      const response = yield* fromTestPromise(() => read(observed.database));
+      expect(response.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
+        yield* fromTestPromise(() => response.json())
+      ).pipe(Effect.orDie);
+      expect(body.data.id).toBe("20000000-0000-4000-8000-000000000001");
+      expect(body.data.presentation).toEqual({
+        kind: "suppressed-member",
+        requestedId: "20000000-0000-4000-8000-000000000002",
+      });
+      expect(body.data.revision).toBe(0);
+      expect(observed.cost().rowsRead).toBeLessThan(250);
+      for (const readiness of ["dirty", "clearing", "rebuilding"]) {
+        yield* fromTestPromise(() =>
+          db
+            .prepare("UPDATE transaction_projection_state SET readiness = ? WHERE user_id = ?")
+            .bind(readiness, owner)
+            .run()
+        );
+        const repaired = yield* fromTestPromise(() => read(db));
+        expect(repaired.status).toBe(200);
+        expect(yield* fromTestPromise(() => repaired.json())).toEqual(
+          yield* Schema.encodeEffect(EffectiveTransaction)(body)
+        );
+      }
     })
   ));

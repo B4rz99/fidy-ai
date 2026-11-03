@@ -1,0 +1,71 @@
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_12ede6869163f4::t_7917f1d9baf3cc 1,411-473
+  s_12ede6869163f4::t_e09d0bb646b404 27
+  s_12ede6869163f4::t_e7744d9be10922 405,474-475,577-600
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_12ede6869163f4::t_bfe44167d442b1 262-263,265-266
+  s_12ede6869163f4::t_4371576222136b 1,108,120,127,252-261,267
+  s_12ede6869163f4::t_2ee11e45614ff9 104,264
+  s_12ede6869163f4::t_e09d0bb646b404 88-103,105-106
+  s_12ede6869163f4::t_cea4257e4e4f37 268-270
+apps/server/cloudflare/canonical-admission/contract.ts
+  s_12ede6869163f4::t_fe79a18a3d2303 9
+apps/server/cloudflare/core-http/internal/http.ts
+  s_12ede6869163f4::t_bfe44167d442b1 1489-1494
+  s_12ede6869163f4::t_fe79a18a3d2303 1495-1496
+  s_12ede6869163f4::t_e09d0bb646b404 68,1475-1480,1488
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_12ede6869163f4::t_637a48e6161662 156,431
+  s_12ede6869163f4::t_93b43c07480e06 126-135,166-174,528
+  s_12ede6869163f4::t_bfe44167d442b1 19-23
+apps/server/cloudflare/budgets/operations.ts
+  s_12ede6869163f4::t_bfe44167d442b1 83-84
+  s_12ede6869163f4::t_fe79a18a3d2303 1,82
+  s_12ede6869163f4::t_d300b84cab33fd 85
+apps/server/cloudflare/budgets/internal/budget-audit.ts
+  s_12ede6869163f4::t_23c506f26eaece 29,37-53,56-73
+apps/server/cloudflare/transactions/operations.ts
+  s_12ede6869163f4::t_4371576222136b 29,207
+  s_12ede6869163f4::t_bfe44167d442b1 208-210
+  s_12ede6869163f4::t_ec2cec4bc1c08c 211
+apps/server/cloudflare/budgets/internal/bound-workspace.ts
+  s_12ede6869163f4::t_bfe44167d442b1 6-7,9-11,17-20,22-31,36-44,47-49,51-55,57-58,64
+  s_12ede6869163f4::t_e09d0bb646b404 8,50,56
+  s_12ede6869163f4::t_e09ad6b94ab7cb 59-63
+  s_12ede6869163f4::t_fe79a18a3d2303 1-5,12-16,21,32-35,45-46,65-67
+infra/cloudflare/verify-edge-policy.ts
+  s_12ede6869163f4::t_e09ad6b94ab7cb 7-12
+  s_12ede6869163f4::t_2ed1aafef77a8b 5
+apps/server/cloudflare/budgets/internal/planned-caps.ts
+  s_12ede6869163f4::t_2ee11e45614ff9 21
+  s_12ede6869163f4::t_4371576222136b 1,22,29-30
+  s_12ede6869163f4::t_e09d0bb646b404 8-20,27
+apps/server/cloudflare/budgets/internal/workspace-read.ts
+  s_12ede6869163f4::t_55a285b9dd09e0 21,28,43-44
+  s_12ede6869163f4::t_fe79a18a3d2303 2,16-19,33-42,49-51,55-57,77-79,85-88
+  s_12ede6869163f4::t_bfe44167d442b1 7-10,20,45,47-48,52-53,59-75,81-83
+  s_12ede6869163f4::t_2ee11e45614ff9 54
+  s_12ede6869163f4::t_e09d0bb646b404 26-27,29-32,46,58,76
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_12ede6869163f4::t_bfe44167d442b1 987-990
+BACKEND_PERFORMANCE_PLAN.md
+  s_12ede6869163f4::t_f491b55823f120 100-105
+apps/server/ARCHITECTURE.md
+  s_12ede6869163f4::t_0a6350b4a50530 76-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f7160889dc8d7b6197edb97e46469d282b07c137",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

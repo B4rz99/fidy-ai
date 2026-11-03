@@ -91,6 +91,7 @@
     "ip-address": "10.7.4",
     "js-yaml": "4.3.2",
     "lodash": "4.18.1",
+    "minimatch": "11.0.1",
     "postcss": "8.5.26",
     "postcss-selector-parser": "7.1.6",
     "pretty-format": "npm:@vitest/pretty-format@5.0.3",

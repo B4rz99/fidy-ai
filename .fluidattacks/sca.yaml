@@ -18,7 +18,3 @@ sca:
     - CVE: CVE-2026-93753
       paths:
         - bun.lock
-    - CVE: CVE-2026-118764
-      paths:
-        - bun.lock
-        - tools/mutation/bun.lock

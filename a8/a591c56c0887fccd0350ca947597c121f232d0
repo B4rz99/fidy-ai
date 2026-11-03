@@ -1,0 +1,22 @@
+apps/server/src/core/dashboard/operations.ts
+  s_d9571b3fccd032::t_16d0cf8d2d639e 192,242-264
+  s_d9571b3fccd032::t_7234573bc37f32 265-266
+apps/server/src/core/dashboard/calculation.test.ts
+  s_d9571b3fccd032::t_16d0cf8d2d639e 24,30-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a8a591c56c0887fccd0350ca947597c121f232d0",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

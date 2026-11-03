@@ -143,6 +143,11 @@ it.effect(
       });
       const failures = [
         new HostedInferenceError({
+          reason: { _tag: "ProviderQuotaExceeded" },
+          retryable: false,
+          retryAfter: Option.none(),
+        }),
+        new HostedInferenceError({
           reason: { _tag: "ProviderUnavailable" },
           retryable: true,
           retryAfter: Option.none(),
@@ -182,6 +187,11 @@ it.effect(
         );
       }
       expect(outcomes).toEqual([
+        {
+          outcome: "failed",
+          error: Option.some("model_provider_quota_exceeded"),
+          retryable: false,
+        },
         { outcome: "failed", error: Option.some("model_unavailable"), retryable: true },
         { outcome: "failed", error: Option.some("capacity_exceeded"), retryable: false },
         {

@@ -1042,6 +1042,29 @@ const executeAdmittedTurn = ({
           }
         }
         const timedOut = Option.exists(error, Cause.isTimeoutError);
+        if (
+          isWhatsAppHosted(subject) &&
+          !mutation.attempted &&
+          Option.exists(
+            error,
+            (failure) =>
+              failure instanceof HostedInferenceError &&
+              (failure.reason._tag === "ProviderQuotaExceeded" ||
+                failure.reason._tag === "ProviderUnavailable")
+          )
+        ) {
+          return yield* proposeDelivery({
+            db,
+            userId,
+            turnId,
+            answer: TranscriptText.make(
+              "No pude completar tu solicitud en este momento. Inténtalo más tarde."
+            ),
+            deliver,
+            finish,
+            scheduleRecovery,
+          });
+        }
         yield* finish({
           _tag: "Failed",
           reason: timedOut ? "HostedInferenceTimedOut" : "HostedInferenceFailed",

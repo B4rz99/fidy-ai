@@ -326,13 +326,7 @@ test("opens recurring editors without reading hidden transaction pickers", ({ pa
       yield* Effect.tryPromise(() => waitForTransactionRead(reads));
       const picker = page.locator('[data-recurring-slot="create-source"]');
       yield* Effect.tryPromise(() =>
-        expect(
-          picker
-            .getByRole("button")
-            .filter({ hasText: / · /u })
-            .or(picker.getByText("Sin transacciones en esta página.", { exact: true }))
-            .first()
-        ).toBeVisible()
+        expect(picker.getByRole("region", { name: "Resultados de transacciones" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Cargando transacciones…", { exact: true })).toHaveCount(0)

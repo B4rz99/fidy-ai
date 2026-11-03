@@ -654,7 +654,7 @@ shown in chat history. Delivery acknowledgement remains automatic and separate f
 
 ### Financial workspace components
 
-Use `AmountInput` for decimal drafts. It composes `Input`, refuses letters, places the caret at the end on click, and offers full or content width. Features retain exact validation, Currency precision, and command ownership.
+Use `AmountInput` for decimal drafts. It composes `Input`, refuses letters, places the caret at the end on click, and offers full or content width. Its controlled `onValueChange` preserves Colombian grouping and decimal separators; features retain exact parsing, Currency precision, and command ownership.
 
 Use `SearchableChoiceDropdown` for long single-choice lists. It composes the shadcn Base UI Combobox pattern with the existing outline pill trigger, an accessible search input, keyboard selection, dismissal, and an explicit empty result. Short lists retain `ChoiceDropdown` or summary currency pills. Both the Budget group editor and large summary currency lists share this searchable control.
 
@@ -847,3 +847,19 @@ content. The confirmation label and control dimensions remain stable while separ
 submission or status refresh accurately. Back restores focus to the initiator; completed and uncertain requests move focus
 to their result or recovery message. Keep these states usable in Light and Grafito, at mobile,
 intermediate and desktop widths, and with enlarged text.
+
+### Linking recurring occurrences
+
+The linking workspace uses the shared application shell, flat search/results plane and 384px
+review rail. The full-height divider stays on the outer rail; review content sticks independently
+within the viewport and scrolls when needed, including beside later result rows. On smaller screens, selecting a candidate opens the shared full-screen review sheet.
+Search covers canonical effective Transaction history, with optional local date bounds, direction,
+Currency and exact amount. Search is explicitly applied with Buscar; the result scope and whether
+another bounded page exists remain visible. The applied exact Money stays in the scope label while
+a different amount draft is edited. Amount drafts use the shared control with Colombian separators.
+
+`TransactionCandidate` renders comfortable, keyboard-activatable rows with Counterparty, local date,
+notes, direction and exact Money. Selection highlights a row and opens review without linking.
+The review shows occurrence context, selected facts, partial/complete settlement and any manual
+tracking replacement. Only the explicit Vincular transacción action requests the association.
+The shared component reference includes a selectable candidate in light and Grafito.

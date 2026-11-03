@@ -1,3 +1,4 @@
+import { analyzeAccessibility } from "./accessibility";
 import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { type Cause, DateTime, Effect } from "effect";
 import {
@@ -20,6 +21,8 @@ const rateLimitedStatus = 429;
 const monthsPerYear = 12;
 const desktopLifecycleWidth = 1506;
 const mobileLifecycleWidth = 390;
+const searchPageSize = 20;
+const maximumSearchDraftLength = 80;
 test("recurring plans persist through the real canonical API and share monthly list/calendar items", ({
   page,
   request,
@@ -1106,9 +1109,9 @@ test("an uncertain recurring capture stays locked across panel and month changes
         page.getByText("Vincular transacción existente", { exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: /Pago sin respuesta · COP 90.000/u }).click()
+        page.getByRole("button", { name: /Revisar Pago sin respuesta/u }).click()
       );
-      yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+      yield* confirmExistingLink(page);
       yield* inspectCapturedTransactions(page.request, [
         expect.objectContaining({ money: { amount: "90000", currency: "COP" } }),
       ]);
@@ -1458,4 +1461,294 @@ const repairCapturedReplacement = (page: Page): Effect.Effect<void, Cause.Unknow
         page.getByRole("button", { name: "Vincular transacción creada", exact: true })
       ).toBeEnabled()
     );
+  });
+
+test("finds and reviews an older recurring Transaction across 500 records before explicitly linking", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({
+          page,
+          request,
+          deferFreshEntry: true,
+          identity: "recurringSearch",
+        })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* createPlan({
+        page,
+        name: "Internet del hogar",
+        kind: "expense",
+        currency: "COP",
+        amount: "89900",
+      });
+      yield* Effect.tryPromise(() => recurringItem(page, /Internet del hogar/u).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Vincular transacción existente", exact: true }).click()
+      );
+      yield* inspectSearchRecovery(page);
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Importe exacto", { exact: true }).fill("45.000")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Buscar transacción", { exact: true }).fill("Internet")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Buscar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByRole("button", { name: /Revisar Internet antiguo/u })).toHaveCount(
+          searchPageSize
+        )
+      );
+      yield* inspectAppliedAmountScope(page);
+      yield* inspectLastSearchResult(page);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Ver más transacciones", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(page.getByRole("button", { name: /Revisar Internet antiguo/u })).toHaveCount(
+          4
+        )
+      );
+      yield* reviewOlderTransaction(page);
+      yield* inspectLargeReview(page);
+    })
+  ));
+const inspectLargeReview = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular transacción existente", exact: true }).click()
+    );
+    yield* inspectLongSearchScope(page);
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Buscar transacción", { exact: true }).fill("Importe extenso")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Buscar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: /Revisar Importe extenso/u }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.evaluate(() => {
+        document.documentElement.style.fontSize = "200%";
+      })
+    );
+    const dialog = page.getByRole("dialog");
+    yield* Effect.tryPromise(() => expect(dialog).toContainText("9.007.199.254.740.993,15"));
+    const noOverflow = (): Promise<boolean> =>
+      dialog.evaluate((element) => element.scrollWidth <= element.clientWidth);
+    yield* Effect.tryPromise(() => expect.poll(noOverflow).toBe(true));
+    yield* Effect.tryPromise(() =>
+      page.screenshot({ path: test.info().outputPath("transaction-link-large-mobile.png") })
+    );
+  });
+const inspectLongSearchScope = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Limpiar filtros", exact: true }).click()
+    );
+    const query = "Y".repeat(maximumSearchDraftLength);
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Buscar transacción", { exact: true }).fill(query)
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Buscar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Resultados de transacciones" })).toContainText(query)
+    );
+    for (const size of ["100%", "200%"]) {
+      yield* Effect.tryPromise(() =>
+        page.evaluate((value) => {
+          document.documentElement.style.fontSize = value;
+        }, size)
+      );
+      const noOverflow = (): Promise<boolean> =>
+        page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+      yield* Effect.tryPromise(() => expect.poll(noOverflow).toBe(true));
+    }
+    yield* Effect.tryPromise(() =>
+      page.evaluate(() => {
+        document.documentElement.style.fontSize = "100%";
+      })
+    );
+  });
+const reviewOlderTransaction = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page
+        .getByRole("button", { name: /Revisar Internet antiguo/u })
+        .first()
+        .press("Enter")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Vincular transacción", exact: true })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Transacción vinculada", { exact: true })).toHaveCount(0)
+    );
+    yield* inspectLinkDesign(page);
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular transacción", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(recurringItem(page, /Internet del hogar.*Parcial/u)).toBeVisible()
+    );
+    yield* Effect.tryPromise(() => recurringItem(page, /Internet del hogar/u).click());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("dialog")).toContainText("Transacción vinculada")
+    );
+  });
+
+const confirmExistingLink = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular transacción", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+  });
+
+const inspectSearchRecovery = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const release = Promise.withResolvers<void>();
+    const failedSearch = (route: Route): Promise<void> =>
+      release.promise.then(() =>
+        route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: '{"error":{"code":"unavailable","message":"private-search-diagnostic"},"next":[]}',
+        })
+      );
+    yield* Effect.tryPromise(() => page.route("**/transactions/search?**", failedSearch));
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Buscar transacción", { exact: true }).fill("Sin coincidencias")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Buscar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("status", { name: "Cargando transacciones" })).toBeVisible()
+    );
+    release.resolve();
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Reintentar transacciones" })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Buscar transacción", { exact: true })).toHaveValue(
+        "Sin coincidencias"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("private-search-diagnostic")).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() => page.unroute("**/transactions/search?**", failedSearch));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Reintentar transacciones" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByText("Sin coincidencias. Prueba otra contraparte o amplía las fechas.", {
+          exact: true,
+        })
+      ).toBeVisible()
+    );
+  });
+const inspectLinkDesign = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.setViewportSize({ width: 1440, height: 1000 }));
+    yield* Effect.tryPromise(() => page.evaluate(() => window.scrollTo(0, 0)));
+    yield* Effect.tryPromise(() =>
+      page.screenshot({ path: test.info().outputPath("transaction-link-desktop.png") })
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", {
+          name: "Estado de la transacción vinculada: Parcial",
+          exact: true,
+        })
+      ).toHaveCSS("color", "rgb(255, 246, 239)")
+    );
+    const darkAccessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
+    expect(darkAccessibility.violations).toEqual([]);
+    yield* Effect.tryPromise(() =>
+      page.screenshot({ path: test.info().outputPath("transaction-link-dark.png") })
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Activar tema claro", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", {
+          name: "Estado de la transacción vinculada: Parcial",
+          exact: true,
+        })
+      ).toHaveCSS("color", "rgb(20, 20, 20)")
+    );
+    yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("dialog")).toContainText("Revisar vínculo")
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCSS("height", "844px"));
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCSS("top", "0px"));
+    yield* Effect.tryPromise(() =>
+      page.screenshot({ path: test.info().outputPath("transaction-link-mobile.png") })
+    );
+    const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
+    expect(accessibility.violations).toEqual([]);
+    yield* inspectMobileResults(page);
+  });
+const inspectMobileResults = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar revisión", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+    const overflow = yield* Effect.tryPromise(() =>
+      page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+    );
+    expect(overflow).toBe(false);
+    const candidate = page.getByRole("button", { name: /Revisar Internet antiguo/u }).first();
+    yield* Effect.tryPromise(() => candidate.press("Enter"));
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toBeVisible());
+  });
+
+const inspectLastSearchResult = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const candidate = page
+      .getByRole("button", { name: /Revisar Internet antiguo/u })
+      .nth(searchPageSize - 1);
+    yield* Effect.tryPromise(() => candidate.click());
+    const heading = page.getByRole("heading", { name: "Revisar vínculo", exact: true });
+    const viewportHeight = page.viewportSize()?.height ?? 0;
+    const reviewVisible = (): Promise<boolean> =>
+      heading
+        .boundingBox()
+        .then((box) => box !== null && box.y >= 0 && box.y + box.height <= viewportHeight);
+    yield* Effect.tryPromise(() => expect.poll(reviewVisible).toBe(true));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar revisión", exact: true }).click()
+    );
+  });
+
+const inspectAppliedAmountScope = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const amount = page.getByLabel("Importe exacto", { exact: true });
+    yield* Effect.tryPromise(() => expect(amount).toHaveAttribute("inputmode", "decimal"));
+    yield* Effect.tryPromise(() => amount.fill("90.000,50"));
+    yield* Effect.tryPromise(() => amount.pressSequentially("abc"));
+    yield* Effect.tryPromise(() => expect(amount).toHaveValue("90.000,50"));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Resultados de transacciones" })).toContainText(
+        "Importe exacto: COP 45.000,00"
+      )
+    );
+    yield* Effect.tryPromise(() => amount.fill("45.000"));
   });

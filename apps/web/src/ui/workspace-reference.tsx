@@ -1,3 +1,4 @@
+import { TransactionCandidate } from "@/ui/components/transaction-candidate";
 import { useState } from "react";
 import type { JSX } from "react";
 import { Option } from "effect";
@@ -112,10 +113,29 @@ export const WorkspaceReference = (): JSX.Element => {
         }
       >
         <ChoiceReference />
+        <CandidateReference />
         <p className="mt-4 text-sm text-muted-foreground">
           La búsqueda y las selecciones permanecen en esta referencia.
         </p>
       </WorkspaceColumns>
     </section>
+  );
+};
+
+const CandidateReference = (): JSX.Element => {
+  const [selected, setSelected] = useState(false);
+  return (
+    <div className="mt-6">
+      <TransactionCandidate
+        name="Claro"
+        date="29 oct 2026"
+        notes="Pago de internet hogar"
+        amount="COP 45.000,00"
+        inflow={false}
+        selected={selected}
+        disabled={false}
+        onSelect={() => setSelected(!selected)}
+      />
+    </div>
   );
 };

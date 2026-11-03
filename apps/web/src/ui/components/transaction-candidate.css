@@ -1,0 +1,74 @@
+[data-transaction-candidate="row"] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  width: 100%;
+  padding: 12px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+[data-transaction-candidate="row"]:hover {
+  background: var(--accent);
+}
+[data-transaction-candidate="row"][aria-pressed="true"] {
+  background: var(--success-subtle);
+  box-shadow: inset 3px 0 var(--primary);
+}
+[data-transaction-candidate="row"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+[data-transaction-candidate="row"]:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+[data-transaction-candidate="identity"] {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+[data-transaction-candidate="identity"] strong {
+  font-size: 16px;
+  font-weight: 500;
+}
+[data-transaction-candidate="identity"] > span,
+[data-transaction-candidate="money"] > span {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+[data-transaction-candidate="money"] {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+[data-transaction-candidate="money"] strong {
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+[data-transaction-candidate="money"] > span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+@media (max-width: 480px) {
+  [data-transaction-candidate="row"] {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+  [data-transaction-candidate="money"] {
+    grid-column: 2;
+    min-width: 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  [data-transaction-candidate="money"] strong {
+    font-size: 14px;
+  }
+}

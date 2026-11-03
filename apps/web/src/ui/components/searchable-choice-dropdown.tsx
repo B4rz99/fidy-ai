@@ -41,6 +41,7 @@ export const SearchableChoiceDropdown = ({
       render={
         <Button
           type="button"
+          contentLayout="wrap"
           variant="outline"
           focusAppearance="subtle"
           disabled={disabled}

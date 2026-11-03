@@ -13,6 +13,15 @@ const subscribe = (onChange: () => void): (() => void) => {
   return () => media.removeEventListener("change", onChange);
 };
 
+type Props = Readonly<{
+  children: ReactNode;
+  open: boolean;
+  locked: boolean;
+  onClose: () => void;
+  title: string;
+  description: string;
+}>;
+
 export const WorkspacePanel = ({
   children,
   open,
@@ -20,31 +29,24 @@ export const WorkspacePanel = ({
   onClose,
   title,
   description,
-}: Readonly<{
-  children: ReactNode;
-  open: boolean;
-  locked: boolean;
-  onClose: () => void;
-  title: string;
-  description: string;
-}>): JSX.Element => {
+}: Props): JSX.Element => {
   const viewportDesktop = useSyncExternalStore(subscribe, isDesktop);
   const containerDesktop = useContext(WorkspaceDesktop);
   const desktop = Option.getOrElse(containerDesktop, () => viewportDesktop);
   if (desktop) {
     return (
-      <aside
-        className={
-          Option.isNone(containerDesktop)
-            ? "self-stretch border-l bg-card p-6 xl:sticky xl:top-0 xl:min-h-[calc(100svh-72px)]"
-            : "min-w-0 self-stretch border-l bg-card p-6"
-        }
-      >
+      <DesktopPanel title={title} viewport={Option.isNone(containerDesktop)}>
+        {children}
+      </DesktopPanel>
+    );
+  }
+  if (!open) {
+    return (
+      <aside aria-label={title} className="min-w-0 border-t bg-card p-5">
         {children}
       </aside>
     );
   }
-  if (!open) return <aside className="min-w-0 border-t bg-card p-5">{children}</aside>;
   return (
     <Sheet
       open={open}
@@ -67,3 +69,24 @@ export const WorkspacePanel = ({
     </Sheet>
   );
 };
+
+const DesktopPanel = ({
+  children,
+  title,
+  viewport,
+}: Pick<Props, "children" | "title"> & Readonly<{ viewport: boolean }>): JSX.Element => (
+  <aside
+    aria-label={title}
+    className={
+      viewport
+        ? "self-stretch border-l bg-card xl:min-h-[calc(100svh-72px)]"
+        : "min-w-0 self-stretch border-l bg-card p-6"
+    }
+  >
+    {viewport ? (
+      <div className="sticky top-0 max-h-dvh overflow-y-auto p-6">{children}</div>
+    ) : (
+      children
+    )}
+  </aside>
+);

@@ -18,7 +18,7 @@ import {
   TransactionSearchQuery,
   maximumTransactionPageSize,
 } from "../../../src/core/transactions/contract";
-import { Currency } from "../../../src/core/_shared/money";
+import { Currency, encodeMoneyAmount } from "../../../src/core/_shared/money";
 import {
   effectiveHistoryPage,
   effectiveTransactionRelation,
@@ -74,6 +74,7 @@ const Query = TransactionQueryValues.mapFields((fields) => ({
   counterparty: Schema.OptionFromOptionalKey(Counterparty),
   direction: Schema.OptionFromOptionalKey(fields.direction),
   currency: Schema.OptionFromOptionalKey(fields.currency),
+  amount: Schema.OptionFromOptionalKey(fields.amount),
   cursor: Schema.OptionFromOptionalKey(fields.cursor),
   q: Schema.OptionFromOptionalKey(TransactionSearchQuery.fields.q),
 }));
@@ -85,6 +86,7 @@ const filters = new Set([
   "counterparty",
   "direction",
   "currency",
+  "amount",
   "cursor",
 ]);
 const maxFilters = filters.size;
@@ -143,9 +145,9 @@ const validEncoding = (query: string): boolean => {
 
 const validParameters = (params: URLSearchParams, search: boolean, hasId: boolean): boolean =>
   !(hasId && params.size > 0) &&
-  params.size <= (search ? minimumSearchLength : maxFilters) &&
+  params.size <= (search ? maxFilters + 1 : maxFilters) &&
   new Set(params.keys()).size === params.size &&
-  [...params.keys()].every((key) => (search ? key === "q" || key === "cursor" : filters.has(key)));
+  [...params.keys()].every((key) => filters.has(key) || (search && key === "q"));
 
 const historyOperation = (
   selection: Pick<Selection, "id" | "search">
@@ -228,6 +230,7 @@ const listFilters = ({
     ["counterparty =", query.counterparty],
     ["direction =", query.direction],
     ["currency =", query.currency],
+    ["amount =", Option.map(query.amount, encodeMoneyAmount)],
   ] as const;
   for (const [column, value] of fields) {
     if (Option.isSome(value)) {

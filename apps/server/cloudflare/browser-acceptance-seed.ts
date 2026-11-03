@@ -32,6 +32,7 @@ export const recurringUserId = "24000000-0000-4000-8000-000000000401";
 export const recurringSummaryUserId = "24000000-0000-4000-8000-000000000411";
 export const recurringEditingUserId = "24000000-0000-4000-8000-000000000501";
 export const recurringIsolatedIdentities = [
+  { key: "recurringSearch", userId: "24000000-0000-4000-8000-000000000851" },
   { key: "recurringSplitCapture", userId: "24000000-0000-4000-8000-000000000811" },
   { key: "recurringCapture", userId: "24000000-0000-4000-8000-000000000821" },
   { key: "recurringCaptureUncertain", userId: "24000000-0000-4000-8000-000000000791" },
@@ -146,6 +147,14 @@ await Promise.all(
     })
   )
 );
+await db
+  .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<500)
+  INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,counterparty,notes,occurred_at_ms,created_at_ms)
+  SELECT printf('26000000-0000-4000-8000-%012d',n),'24000000-0000-4000-8000-000000000851',
+  CASE WHEN n=500 THEN '9007199254740993.15' ELSE '45000' END,'COP','outflow','10000000-0000-4000-8000-000000000001',
+  CASE WHEN n<=24 THEN 'Internet antiguo' WHEN n=500 THEN 'Importe extenso XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' ELSE 'Otro registro' END,'Pago del hogar',
+  CASE WHEN n<=24 THEN 1785754800000 ELSE 1788346800000+n*1000 END,1788346800000+n*1000 FROM seq`)
+  .run();
 await seedIdentity({
   userId: recurringUserId,
   bsuid: "CO.Recurring",

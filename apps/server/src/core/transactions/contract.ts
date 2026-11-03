@@ -301,6 +301,8 @@ export const TransactionQueryValues = Schema.Struct({
   counterparty: Counterparty,
   direction: Direction,
   currency: Currency,
+  /** Exact nominal amount; combine with Currency when selecting Money. */
+  amount: Money.fields.amount,
   /** A validated keyset position, never authorization evidence. */
   cursor: Schema.String.check(
     Schema.isPattern(
@@ -314,7 +316,7 @@ const maximumSearchLength = 80;
 /** Bounded literal text search; a cursor is only a position in the caller's own result set. */
 export const TransactionSearchQuery = Schema.Struct({
   q: Schema.String.check(Schema.isMinLength(2), Schema.isMaxLength(maximumSearchLength)),
-  cursor: Schema.optionalKey(TransactionQueryValues.fields.cursor),
+  ...TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey)).fields,
 });
 
 /**

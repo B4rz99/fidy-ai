@@ -73,7 +73,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     })
       .annotate(
         OpenApi.Description,
-        "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, and Currency narrows the history; omit every filter for all visible history. limit optionally bounds each response to 1–100 records (default 100); the keyset continuation remains valid when the limit changes."
+        "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, Currency, and exact nominal amount narrows the history; omit every filter for all visible history. limit optionally bounds each response to 1–100 records (default 100); the keyset continuation remains valid when the limit changes."
       )
       .annotateMerge(read)
   )
@@ -85,7 +85,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     })
       .annotate(
         OpenApi.Description,
-        "Search the caller's FinancialRecord by literal Counterparty or notes text. Supply 2–80 characters; results are bounded and ordered newest first. Follow the returned continuation to browse further matches."
+        "Search the caller's FinancialRecord by literal Counterparty or notes text. Supply 2–80 characters and optionally combine the history date, direction, Currency, exact nominal amount and Category filters. limit bounds each response to 1–100 records (default 100). Results use effective Transactions and are ordered newest first; amounts compare exactly without currency conversion. Follow the returned continuation to browse further matches."
       )
       .annotateMerge(read)
   )

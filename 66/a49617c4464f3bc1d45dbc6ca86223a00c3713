@@ -1,0 +1,55 @@
+apps/web/ARCHITECTURE.md
+  s_d7c154930ac182::t_863a3e95594bc1 628-637
+apps/web/e2e/financial-journeys.spec.ts
+  s_d7c154930ac182::t_863a3e95594bc1 95
+apps/web/e2e/brand-token-contrast.spec.ts
+  s_d7c154930ac182::t_863a3e95594bc1 376
+apps/web/src/ui/components/transactions.css
+  s_d7c154930ac182::t_863a3e95594bc1 86-87
+apps/web/src/ui/transactions-reference.tsx
+  s_d7c154930ac182::t_863a3e95594bc1 1,12-25,28,47-51,72-111
+apps/web/e2e/transaction-money-input.spec.ts
+  s_d7c154930ac182::t_863a3e95594bc1 15-16
+apps/web/e2e/transaction-currency.spec.ts
+  s_d7c154930ac182::t_863a3e95594bc1 1-181
+apps/web/e2e/transactions-approved.spec.ts
+  s_d7c154930ac182::t_863a3e95594bc1 87,159-162,496
+apps/web/e2e/session-binding.spec.ts
+  s_d7c154930ac182::t_863a3e95594bc1 84
+apps/web/e2e/browser-pairing.spec.ts
+  s_d7c154930ac182::t_863a3e95594bc1 459,574
+apps/web/src/features/transactions/workspace.tsx
+  s_d7c154930ac182::t_863a3e95594bc1 1,180,212
+apps/web/src/features/transactions/correction.tsx
+  s_d7c154930ac182::t_863a3e95594bc1 102
+DESIGN.md
+  s_d7c154930ac182::t_863a3e95594bc1 759
+apps/web/e2e/transaction-pagination.spec.ts
+  s_d7c154930ac182::t_863a3e95594bc1 162,167
+apps/web/src/features/transactions/bulk-correction.tsx
+  s_d7c154930ac182::t_863a3e95594bc1 89
+apps/web/src/features/transactions/money-field.tsx
+  s_d7c154930ac182::t_863a3e95594bc1 11,43,53
+apps/web/src/app/recurring-workspace.tsx
+  s_d7c154930ac182::t_863a3e95594bc1 58
+apps/web/src/features/transactions/capture.tsx
+  s_d7c154930ac182::t_863a3e95594bc1 1-2,8,97-98,106-107,110-145,267-268,274,287,290,311-312,314-320,336,343-348,366,379,388,396,404,422-428
+apps/web/e2e/recurring-plans.spec.ts
+  s_d7c154930ac182::t_863a3e95594bc1 1133,1154-1160,1163,1203,1335,1405
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "66a49617c4464f3bc1d45dbc6ca86223a00c3713",
+  "prompts": {},
+  "sessions": {
+    "s_d7c154930ac182": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19edb-ad78-73b3-a8e8-bee2845e8be3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

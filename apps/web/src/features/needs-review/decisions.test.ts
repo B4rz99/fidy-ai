@@ -244,6 +244,21 @@ it.live(
     })
 );
 
+it.live("a failed workspace refresh does not invent an uncertain decision", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    test.failRead(true);
+    test.view().recover();
+    yield* advance(2000);
+    expect(test.view()).toMatchObject({ locked: false, feedback: "", undoCount: 0 });
+    expect(test.sent).toHaveLength(0);
+    test.failRead(false);
+    test.view().recover();
+    yield* advance(0);
+    expect(test.view()).toMatchObject({ locked: false, feedback: "" });
+  })
+);
+
 it.live("keeps a failed bulk decision locked until its explicit workspace reread succeeds", () =>
   Effect.gen(function* () {
     const test = yield* fixture();

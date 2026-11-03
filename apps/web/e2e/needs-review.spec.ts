@@ -1389,6 +1389,130 @@ test("clears bulk selection when filtering and retains paging after no local mat
     })
   ));
 
+const workspaceRefreshRoute =
+  (entries: Fixture[], state: Readonly<{ failed: boolean }>) =>
+  (route: Route): Promise<void> =>
+    state.failed && new URL(route.request().url()).pathname.endsWith("/review-workspace")
+      ? route.abort("internetdisconnected")
+      : lifecycleRoute(entries)(route);
+
+test("recovers an empty inbox refresh without claiming it is current or inventing a change", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const state = { failed: false };
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, workspaceRefreshRoute([], state))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      const caughtUp = page.getByRole("heading", { name: "Todo al día", exact: true });
+      yield* Effect.tryPromise(() => expect(caughtUp).toBeVisible());
+      state.failed = true;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("No pudimos cargar los elementos", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(caughtUp).not.toBeVisible());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("No pudimos confirmar el cambio. Actualiza antes de continuar.", {
+            exact: true,
+          })
+        ).not.toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Restaurar 0 seleccionados", exact: true })
+        ).not.toBeVisible()
+      );
+      state.failed = false;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(caughtUp).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("No pudimos cargar los elementos", { exact: true })).not.toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Actualizar", exact: true })).toHaveCount(1)
+      );
+    })
+  ));
+
+const bulkRecoveryRoute =
+  (entries: Fixture[], state: Readonly<{ failed: boolean }>) =>
+  (route: Route): Promise<void> =>
+    new URL(route.request().url()).pathname.endsWith("/edits")
+      ? route.abort("internetdisconnected")
+      : workspaceRefreshRoute(entries, state)(route);
+
+test("retains stale review data and recovers an uncertain bulk decision through the offered retry", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [{ id, revision: 0, status: "pending", draft: calendarDraft }];
+      const state = { failed: false };
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, bulkRecoveryRoute(entries, state))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      const amount = page.getByLabel("Valor", { exact: true });
+      yield* Effect.tryPromise(() => expect(amount).toBeEnabled());
+      state.failed = true;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar", exact: true }).click()
+      );
+      const stale = page.getByText(
+        "La información anterior puede estar desactualizada. Reintenta para consultar los datos actuales.",
+        { exact: true }
+      );
+      yield* Effect.tryPromise(() => expect(stale).toBeVisible());
+      yield* Effect.tryPromise(() => expect(amount).toBeDisabled());
+      const warning = page.getByText(
+        "No pudimos confirmar el cambio. Actualiza antes de continuar.",
+        { exact: true }
+      );
+      yield* Effect.tryPromise(() => expect(warning).not.toBeVisible());
+      state.failed = false;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(amount).toBeEnabled());
+      yield* Effect.tryPromise(() => expect(stale).not.toBeVisible());
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").click());
+      const skip = page.getByRole("button", { name: "Omitir 1 seleccionado", exact: true });
+      yield* Effect.tryPromise(() => skip.click());
+      yield* Effect.tryPromise(() => expect(warning).toBeVisible());
+      yield* Effect.tryPromise(() => expect(skip).toBeDisabled());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Actualizar", exact: true })).toHaveCount(1)
+      );
+      state.failed = true;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(stale).toBeVisible());
+      yield* Effect.tryPromise(() => expect(warning).toBeVisible());
+      yield* Effect.tryPromise(() => expect(skip).toBeDisabled());
+      state.failed = false;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(stale).not.toBeVisible());
+      yield* Effect.tryPromise(() => expect(warning).not.toBeVisible());
+      yield* Effect.tryPromise(() => expect(skip).toBeEnabled());
+    })
+  ));
+
 const materialRecoveryRoute =
   (state: Readonly<{ failed: boolean }>) =>
   (route: Route): Promise<void> =>

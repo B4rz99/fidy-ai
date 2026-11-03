@@ -1,4 +1,3 @@
-import { RefreshButton } from "@/ui/components/refresh-button";
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
 import type { Workspace } from "./model";
@@ -32,7 +31,6 @@ export const ReviewToolbar = ({
       >
         {pending ? `Omitir ${selectedLabel}` : `Restaurar ${selectedLabel}`}
       </Button>
-      <RefreshButton variant="ghost" onClick={control.recover} label="Actualizar" />
       {control.undoCount > 0 ? (
         <Button variant="ghost" disabled={control.locked} onClick={control.undoSkip}>
           Deshacer omisión

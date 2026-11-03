@@ -249,7 +249,7 @@ test("recovers the Review count after a committed bulk decision loses its reply"
       );
       yield* Effect.tryPromise(() =>
         page
-          .locator('[data-review="bulk"]')
+          .getByRole("navigation", { name: "Vistas de revisión" })
           .getByRole("button", { name: "Actualizar", exact: true })
           .click()
       );

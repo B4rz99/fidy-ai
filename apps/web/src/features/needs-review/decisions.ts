@@ -447,6 +447,7 @@ const recoverItem = (owner: Owner, detail: Detail): void => {
 };
 const recoverWorkspace = (owner: Owner): void => {
   if (!owner.active || owner.phase === "writing" || owner.phase === "recovering") return;
+  const previousPhase = owner.phase;
   owner.phase = "recovering";
   notify(owner);
   const generation = owner.generation;
@@ -460,7 +461,7 @@ const recoverWorkspace = (owner: Owner): void => {
         owner.phase = "idle";
         owner.feedback = "";
         yield* Reactivity.invalidate([reviewCountKey, reviewContextKey]);
-      } else failBulk(owner);
+      } else owner.phase = previousPhase;
       notify(owner);
     })
   );

@@ -36,6 +36,11 @@ type OutboundHttpPolicy = Readonly<{
 }>;
 
 const outboundHttpPolicies: Readonly<Record<OutboundHttpProvider, OutboundHttpPolicy>> = {
+  "cloudflare-d1": {
+    propagateTrace: false,
+    redactedHeaders: ["authorization"],
+    retainedResponseHeaders: [],
+  },
   bancolombia: {
     propagateTrace: false,
     redactedHeaders: ["authorization"],

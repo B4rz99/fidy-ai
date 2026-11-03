@@ -105,3 +105,9 @@ export const permitsFreshBrowserReplacement = (operation: ReplacementOperation):
  */
 export const emailPairingAllowsUser = (input: EmailPairingSubject): OwnedStatement =>
   compatibleSubject(input);
+
+/** Trusted operator selection only; mailbox lookup grants no credential or User authority. */
+export const verifiedEmailUsers = (email: string): OwnedStatement => ({
+  sql: "SELECT user_id AS userId FROM verified_email_credentials WHERE address = ?",
+  params: [email.trim().toLowerCase()],
+});

@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
+import { makeKapsoOutboundHttp, makeOperatorD1Http } from "~/shell/outbound-http/operations";
 import { OutboundHttpLive } from "./runtime";
 import { WhatsAppBusinessPhoneNumberId, WhatsAppMediaId } from "~/shell/channels/whatsapp/contract";
 
@@ -184,5 +184,36 @@ it.effect(
       expect(currentCalls).toBe(1);
       expect(cancelled).toBe(true);
       expect(body.locked).toBe(false);
+    })
+);
+
+it.effect(
+  "operator database overflow releases the native reader even when cancellation never settles",
+  () =>
+    Effect.gen(function* () {
+      let cancelled = false;
+      const raw = new ReadableStream<Uint8Array>({
+        pull: (controller): void => controller.enqueue(new Uint8Array(262145)),
+        cancel: (): Promise<void> => {
+          cancelled = true;
+          return pendingCancellation();
+        },
+      });
+      const native: typeof globalThis.fetch = Object.assign(
+        (): Promise<Response> => Promise.resolve(new Response(raw)),
+        { preconnect: (): void => undefined }
+      );
+      const services = yield* Layer.build(
+        OutboundHttpLive.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, native)))
+      );
+      const http = makeOperatorD1Http({
+        accountId: "a".repeat(32),
+        databaseId: "10000000-0000-4000-8000-000000000001",
+        token: Redacted.make("synthetic"),
+        client: Context.get(services, HttpClient.HttpClient),
+      });
+      expect(Exit.isFailure(yield* Effect.exit(http.execute("{}")))).toBe(true);
+      expect(cancelled).toBe(true);
+      expect(raw.locked).toBe(false);
     })
 );

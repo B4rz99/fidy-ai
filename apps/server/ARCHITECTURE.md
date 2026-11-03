@@ -300,3 +300,11 @@ the User coordinator then settles validated Accounts, Active authority and Audit
 credentials use purpose-bound AES-GCM under a separate Core secret. `connection_accounts` retains
 stable Fidy identities across reauthorization and exposes only the currently active grant's exact
 Account set. The [Connections adapter](cloudflare/connections/) owns credential custody and recovery.
+
+## Manual Pro operations
+
+The shell `pro-grants` owner retains ManualProGrant events and composes current grant standing into
+AccessTier and Subscription status. The native `bun run pro` operator tool uses database-scoped
+Cloudflare admin authority through Outbound HTTP; no Worker, PAT, browser or hosted-agent operation
+can mint that authority. Its grant/revoke statement resolves exactly one existing User atomically.
+See [operator procedure](../../docs/operations/manual-pro-grants.md).

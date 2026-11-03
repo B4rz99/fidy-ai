@@ -81,6 +81,7 @@ export const installCurrentTestObjects = ({
           owned.has(name) ||
           objects.some((prefix) => name.startsWith(prefix)) ||
           owner.startsWith("erasure_") ||
+          owner === "pro_grant_events" ||
           owner === "sql_assertions") &&
         !installed.has(name || `seed:${owner}`)
       );

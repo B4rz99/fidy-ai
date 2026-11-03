@@ -64,7 +64,7 @@ const getSubscriptionStatus = HttpApiEndpoint.get("getSubscriptionStatus", "/sub
 })
   .annotate(
     OpenApi.Description,
-    "Check your current trial and paid Subscription periods, AccessTier, and recent BillingAttempts. Use it to explain current access without treating exhausted allowances as a Paywall."
+    "Check your current Pro access, trial and paid Subscription periods, and recent BillingAttempts. Use it to explain current access without treating exhausted allowances as a Paywall."
   )
   .annotateMerge(
     operationPolicy({

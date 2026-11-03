@@ -1,6 +1,8 @@
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 import { Effect } from "effect";
+import { prepareProGrant } from "../src/shell/pro-grants/operations";
+import { installCurrentTestObjects } from "./d1-test-fixture";
 import { activeProUserCondition } from "../src/shell/access-tier/operations";
 
 const userId = "10000000-0000-4000-8000-000000000001";
@@ -66,6 +68,9 @@ it("derives each decision from one User's original trial and current settled pai
             .bind("20000000-0000-4000-8000-000000000002"),
         ])
       );
+      yield* Effect.tryPromise(() =>
+        installCurrentTestObjects({ db, tables: ["pro_grant_events"] })
+      );
       const tier = (at: number, subject: string = userId): Promise<number> => {
         const pro = activeProUserCondition({ userId: subject, nowEpochMs: at });
         return db
@@ -79,6 +84,36 @@ it("derives each decision from one User's original trial and current settled pai
       expect(yield* Effect.tryPromise(() => tier(200))).toBe(1);
       expect(yield* Effect.tryPromise(() => tier(300))).toBe(0);
       expect(yield* Effect.tryPromise(() => tier(400))).toBe(0);
+      const grant = prepareProGrant({
+        action: "grant",
+        selector: { userId },
+        operator: "beta-operator",
+        now: 400,
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(grant.sql)
+          .bind(...grant.params)
+          .all()
+      );
+      expect(yield* Effect.tryPromise(() => tier(400))).toBe(1);
+      expect(yield* Effect.tryPromise(() => tier(999999999))).toBe(1);
+      expect(
+        yield* Effect.tryPromise(() => tier(400, "20000000-0000-4000-8000-000000000002"))
+      ).toBe(0);
+      const revoke = prepareProGrant({
+        action: "revoke",
+        selector: { userId },
+        operator: "beta-operator",
+        now: 401,
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(revoke.sql)
+          .bind(...revoke.params)
+          .all()
+      );
+      expect(yield* Effect.tryPromise(() => tier(401))).toBe(0);
       const currentPaidAccess = activeProUserCondition({ userId, nowEpochMs: 450 });
       const observePaidAccess = (): Promise<number> =>
         db
@@ -151,6 +186,26 @@ it("derives each decision from one User's original trial and current settled pai
         ])
       );
       expect(yield* Effect.tryPromise(() => tier(450))).toBe(1);
+      for (const standing of [
+        { subject: userId, at: 450 },
+        { subject: "20000000-0000-4000-8000-000000000002", at: 300 },
+      ]) {
+        for (const action of ["grant", "revoke"] as const) {
+          const statement = prepareProGrant({
+            action,
+            selector: { userId: standing.subject },
+            operator: "beta-operator",
+            now: standing.at,
+          });
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(statement.sql)
+              .bind(...statement.params)
+              .all()
+          );
+          expect(yield* Effect.tryPromise(() => tier(standing.at, standing.subject))).toBe(1);
+        }
+      }
     } finally {
       yield* Effect.tryPromise(() => mf.dispose());
     }

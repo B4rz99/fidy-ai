@@ -52,6 +52,7 @@ const offers = (["weekly", "monthly", "yearly"] as const).map((billingPeriod, in
 }));
 const standing = {
   accessTier: "free",
+  hasProGrant: false,
   trialPeriod: makeUser().trialPeriod,
   paidSubscription: null,
   cancellation: null,

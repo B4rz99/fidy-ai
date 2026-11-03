@@ -1,0 +1,23 @@
+apps/server/package.json
+  s_0617e254529852::t_cde66272574ba1 310
+bun.lock
+  s_0617e254529852::t_effb4e6de19d7a 70,161,379
+infra/cloudflare/package.json
+  s_0617e254529852::t_5fc9a2154c6e64 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7d0e66d28a23aeca0b7974253431651051b9394c",
+  "prompts": {},
+  "sessions": {
+    "s_0617e254529852": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19edc-2a40-7ad2-9168-eed303a8e537",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

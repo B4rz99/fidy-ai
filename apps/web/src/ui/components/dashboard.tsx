@@ -182,12 +182,14 @@ export const DashboardCustomizeAction = (props: ComponentProps<typeof Button>): 
   <Button {...props} className="dashboard-personalize" variant="outline" />
 );
 
+const categorySlotWidthRem = 1.75;
+
 const DashboardTooltipPortal = createContext(Option.none<HTMLDivElement>());
 
 export const DashboardChart = ({
   children,
-  dense,
-}: Readonly<{ children: ReactNode; dense: boolean }>): JSX.Element => {
+  categoryCount,
+}: Readonly<{ children: ReactNode; categoryCount: number }>): JSX.Element => {
   const [portal, setPortal] = useState(() => Option.none<HTMLDivElement>());
   const bindPortal = useCallback<RefCallback<HTMLDivElement>>((element) => {
     setPortal(Option.fromNullishOr(element));
@@ -196,7 +198,10 @@ export const DashboardChart = ({
     <DashboardTooltipPortal value={portal}>
       <div className="dashboard-chart-frame">
         <div className="dashboard-chart-scroll">
-          <div className="dashboard-chart" data-dense={dense || undefined}>
+          <div
+            className="dashboard-chart"
+            style={{ minWidth: `${categoryCount * categorySlotWidthRem}rem` }}
+          >
             {children}
           </div>
         </div>

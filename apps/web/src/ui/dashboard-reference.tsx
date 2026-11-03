@@ -49,7 +49,7 @@ const SpendingReference = (): JSX.Element => (
         <DashboardCurrency>COP</DashboardCurrency>
       </span>
       <span className="dashboard-chart-legend">Gastos</span>
-      <DashboardChart dense={false}>
+      <DashboardChart categoryCount={4}>
         <BarChart responsive width="100%" height="100%" accessibilityLayer data={spendingExamples}>
           <CartesianGrid vertical={false} stroke="var(--application-line)" />
           <XAxis

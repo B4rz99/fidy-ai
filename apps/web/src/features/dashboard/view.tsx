@@ -176,7 +176,6 @@ const currencyChartData = (
   }));
 };
 
-const maximumCompactCategories = 8;
 const categoryAxisHeight = 80;
 const calendarAxisHeight = 30;
 
@@ -197,7 +196,7 @@ const CurrencySpendingChart = ({
         <DashboardCurrency>{currency}</DashboardCurrency>
       </span>
       <span className="dashboard-chart-legend">Gastos</span>
-      <DashboardChart dense={category && chartData.length > maximumCompactCategories}>
+      <DashboardChart categoryCount={category ? chartData.length : 0}>
         <BarChart responsive width="100%" height="100%" accessibilityLayer data={chartData}>
           <CartesianGrid vertical={false} stroke="var(--application-line)" />
           <XAxis

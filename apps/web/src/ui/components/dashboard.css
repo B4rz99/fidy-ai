@@ -209,9 +209,6 @@
   z-index: 1;
   pointer-events: none;
 }
-.dashboard-chart[data-dense] {
-  min-width: 28rem;
-}
 .dashboard-chart-footer {
   border-top: 1px solid var(--application-line);
   padding-top: 16px;

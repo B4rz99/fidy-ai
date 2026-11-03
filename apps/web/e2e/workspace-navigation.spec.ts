@@ -17,7 +17,6 @@ const measurementSamples = 5;
 const expiredDisplayMilliseconds = 6_000;
 const freshConsentTimeoutMilliseconds = 500;
 const successfulResponse = 200;
-const uninitializedDashboardResponse = 404;
 const constrainConnection = (
   connection: Readonly<{ saveData: boolean; effectiveType: string }>
 ): void => {
@@ -50,116 +49,12 @@ const workspaces = [
   },
 ] as const;
 
-test("prepares a first mobile Budget after foreground content without navigation intent", ({
-  page,
-  request,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
-      const prepared = page.waitForResponse(
-        (response) =>
-          new URL(response.url()).pathname === "/budget-status" &&
-          response.status() === successfulResponse,
-        { timeout: 15000 }
-      );
-      yield* Effect.tryPromise(() =>
-        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationBudget" })
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() => prepared);
-      expect(new URL(page.url()).pathname).toBe("/app/transactions");
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("link", { name: "Presupuestos", exact: true })).not.toBeVisible()
-      );
-      yield* holdWorkspaceData(page, `${apiOrigin}/budget-status**`);
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Menú de navegación", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() => openWorkspace(page, "Presupuestos"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Mes anterior", exact: true })).toBeVisible({
-          timeout: 100,
-        })
-      );
-    }).pipe(Effect.scoped)
-  ));
-
-test("prepares the Budget destination from Transactions before navigation", ({ page, request }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        page.addInitScript(constrainConnection, { saveData: true, effectiveType: "4g" })
-      );
-      yield* Effect.tryPromise(() =>
-        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationBudget" })
-      );
-      const prepared = page.waitForResponse(
-        (response) =>
-          new URL(response.url()).pathname === "/budget-status" &&
-          response.status() === successfulResponse
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("link", { name: "Presupuestos", exact: true }).hover()
-      );
-      yield* Effect.tryPromise(() => prepared);
-      expect(new URL(page.url()).pathname).toBe("/app/transactions");
-      yield* holdWorkspaceData(page, `${apiOrigin}/budget-status**`);
-      yield* Effect.tryPromise(() => openWorkspace(page, "Presupuestos"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Mes anterior", exact: true })).toBeVisible({
-          timeout: 100,
-        })
-      );
-    }).pipe(Effect.scoped)
-  ));
-
-test("prepares a first Budget from an empty Review without navigation intent", ({
-  page,
-  request,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
-      yield* Effect.tryPromise(() =>
-        signInNavigationThroughCore({
-          page,
-          request,
-          identity: "navigationReviewProfile",
-          deferFreshEntry: true,
-        })
-      );
-      const prepared = page.waitForResponse(
-        (reply) =>
-          new URL(reply.url()).pathname === "/budget-status" &&
-          reply.status() === successfulResponse
-      );
-      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Todo al día", exact: true })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() => prepared);
-      expect(new URL(page.url()).pathname).toBe("/app/needs-review");
-      yield* holdWorkspaceData(page, `${apiOrigin}/budget-status**`);
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Menú de navegación", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() => openWorkspace(page, "Presupuestos"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Mes anterior", exact: true })).toBeVisible({
-          timeout: 100,
-        })
-      );
-    }).pipe(Effect.scoped)
-  ));
-
 for (const connection of [
+  { saveData: false, effectiveType: "4g" },
   { saveData: true, effectiveType: "4g" },
   { saveData: false, effectiveType: "3g" },
 ]) {
-  test(`skips background display reads with ${connection.saveData ? "data saving" : "a slow connection"} while keeping explicit preparation`, ({
+  test(`reads Budget only on navigation with ${connection.saveData ? "data saving" : connection.effectiveType}`, ({
     page,
     request,
   }) =>
@@ -181,15 +76,21 @@ for (const connection of [
         yield* Effect.tryPromise(() => page.waitForLoadState("networkidle"));
         yield* Effect.sleep("1500 millis");
         expect(budgetReads).toHaveLength(0);
-        const prepared = page.waitForResponse(
+        yield* Effect.tryPromise(() =>
+          page.getByRole("link", { name: "Presupuestos", exact: true }).hover()
+        );
+        yield* Effect.sleep("1500 millis");
+        expect(budgetReads).toHaveLength(0);
+        const response = page.waitForResponse(
           (reply) =>
             new URL(reply.url()).pathname === "/budget-status" &&
             reply.status() === successfulResponse
         );
+        yield* Effect.tryPromise(() => openWorkspace(page, "Presupuestos"));
+        yield* Effect.tryPromise(() => response);
         yield* Effect.tryPromise(() =>
-          page.getByRole("link", { name: "Presupuestos", exact: true }).hover()
+          expect(page.getByRole("button", { name: "Mes anterior", exact: true })).toBeVisible()
         );
-        yield* Effect.tryPromise(() => prepared);
         expect(budgetReads).toHaveLength(1);
       })
     ));
@@ -209,7 +110,7 @@ for (const destination of [
     identity: "navigationReviewRecurring",
   },
 ] as const) {
-  test(`prepares the first ${destination.name} after an empty Review while its startup profile refresh is held`, ({
+  test(`reads the first ${destination.name} on visiting from Review while its startup profile refresh is held`, ({
     page,
     request,
   }) =>
@@ -249,8 +150,8 @@ for (const destination of [
         yield* Effect.tryPromise(() =>
           page.getByRole("link", { name: destination.name, exact: true }).hover()
         );
-        yield* Effect.tryPromise(() => prepared);
         yield* Effect.tryPromise(() => openWorkspace(page, destination.name));
+        yield* Effect.tryPromise(() => prepared);
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: destination.ready, exact: true })).toBeVisible({
             timeout: 100,
@@ -315,14 +216,13 @@ test("retains Access listings on return while freshly checking both lists", ({ p
     }).pipe(Effect.scoped)
   ));
 
-test("prepares a first Dashboard read without initializing it until the actual visit", ({
-  page,
-  request,
-}) =>
+test("reads and initializes a first Dashboard only on the actual visit", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const initializations: string[] = [];
+      const reads: string[] = [];
       page.on("request", (entry) => {
+        if (new URL(entry.url()).pathname === "/dashboard/view") reads.push(entry.method());
         if (
           entry.method() === "POST" &&
           new URL(entry.url()).pathname === "/dashboard/initialize"
@@ -330,11 +230,6 @@ test("prepares a first Dashboard read without initializing it until the actual v
           initializations.push(entry.method());
         }
       });
-      const prepared = page.waitForResponse(
-        (response) =>
-          new URL(response.url()).pathname === "/dashboard/view" &&
-          response.status() === uninitializedDashboardResponse
-      );
       yield* Effect.tryPromise(() =>
         signInNavigationPerformanceThroughCore({
           page,
@@ -342,13 +237,16 @@ test("prepares a first Dashboard read without initializing it until the actual v
           identity: "navigationFirstDashboard",
         })
       );
-      yield* Effect.tryPromise(() => prepared);
+      yield* Effect.tryPromise(() => page.waitForLoadState("networkidle"));
+      yield* Effect.sleep("1500 millis");
       expect(initializations).toEqual([]);
+      expect(reads).toEqual([]);
       yield* Effect.tryPromise(() => openWorkspace(page, "Tablero"));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeEnabled()
       );
-      expect(initializations.length).toBeGreaterThan(0);
+      expect(initializations).toHaveLength(1);
+      expect(reads).toHaveLength(2);
     })
   ));
 

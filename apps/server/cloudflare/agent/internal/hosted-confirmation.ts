@@ -1,6 +1,6 @@
 import {
   CanonicalToolEvidence,
-  type TranscriptText,
+  TranscriptText,
   type TranscriptTurnId,
 } from "../../../src/core/agent/contract";
 import { type UserId } from "../../../src/core/identity/contract";
@@ -16,6 +16,16 @@ import { hostedChallengeText } from "./hosted-browser-confirmation";
 const lifetimeMs = 600_000;
 const nonceBytes = 32;
 const commandPrefix = "CONFIRMAR ";
+const modelCommand = new RegExp(`\\b${commandPrefix}[a-f0-9]{${nonceBytes * 2}}\\b`, "iu");
+
+/** Executable confirmation commands are host presentation, never model-generated prose. */
+export const guardModelConfirmationReply = (text: TranscriptText): TranscriptText =>
+  modelCommand.test(text)
+    ? TranscriptText.make(
+        "No preparé una confirmación válida para estos cambios. No uses códigos anteriores; vuelve a solicitar la operación."
+      )
+    : text;
+
 /** Identify only exact confirmation attempts, so malformed commands cannot become model prompts. */
 export const isHostedConfirmationAttempt = (text: TranscriptText): boolean =>
   text.startsWith(commandPrefix);

@@ -149,8 +149,9 @@ User + selected month + time zone
 
 ## Execution status
 
-Budget implementation is in progress on `perf/budget-cold-read`, based on
-`a4705e85dcc5258237c3c515f0eb8c95f782185b`. Its native-D1 regression reduced public-request database
+Budget implementation is in progress on `perf/budget-cold-read`, initially based on
+`a4705e85dcc5258237c3c515f0eb8c95f782185b` and synchronized with trunk
+`604d999a03` before release. Its native-D1 regression reduced public-request database
 trips from eight to five. A concurrent cap mutation test verifies one coherent response and a fresh
 subsequent request. The application-cache inventory/removal and remaining workloads are still open.
 
@@ -182,3 +183,11 @@ Production and full-runtime measurement requirements remain open.
 Request-local joins, authoritative database records/indexes, admission semaphores and unsaved
 form/recovery state are not reusable query-response copies. The inventory remains open until the
 remaining application sources and framework retention defaults have been verified.
+
+The original A/B/B/A Budget cohorts remain retained as diagnostic evidence. Following the upstream
+synchronization, a second full A/B/B/A comparison uses baseline `604d999a03` and runtime candidate
+`2bd4b30052`, with the identical workloads, sample counts, fixed time, ordering and parity rules above.
+Every new sample and target failure is retained separately under `/tmp/fidy-budget-aligned-*`.
+Automatic destination data preparation has been removed locally and verified across connection
+policies; reusable query retention is still open. Recurring ambiguity selection now uses linear
+request-local counting; its complete request and startup measurement requirements remain open.

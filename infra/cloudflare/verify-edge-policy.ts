@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "6fdfa38ea7d24f1c8a1df9106d90aec5a1b745426033780e0a9500cf7fdbf4a4";
+const expectedEdgePolicyDigest = "79e018018097567fa93f51d308d5666adbdd483712f82c65ac62593189f2824b";
 const securityArtifacts = [
   await Bun.file(new URL("../../patches/alchemy@2.0.0-beta.80.patch", import.meta.url)).text(),
   await Bun.file(new URL("./smoke-exchange.ts", import.meta.url)).text(),

@@ -21,11 +21,14 @@ it("resolves Monday weeks and rolling local days in the applied IANA time zone",
   const now = DateTime.makeUnsafe("2026-07-22T12:00:00.000Z");
   const thisWeek = resolveDashboardPeriod({ now, period: "this-week", timeZone: bogota });
   const lastSeven = resolveDashboardPeriod({ now, period: "last-7-days", timeZone: bogota });
+  const newYorkWeek = resolveDashboardPeriod({ now, period: "this-week", timeZone: newYork });
 
   expect(DateTime.formatIso(thisWeek.from)).toBe("2026-07-20T05:00:00.000Z");
   expect(DateTime.formatIso(thisWeek.toExclusive)).toBe("2026-07-27T05:00:00.000Z");
   expect(thisWeek.requested).toBe("this-week");
   expect(thisWeek.timeZone).toBe("America/Bogota");
+  expect(DateTime.formatIso(newYorkWeek.from)).toBe("2026-07-20T04:00:00.000Z");
+  expect(newYorkWeek.timeZone).toBe("America/New_York");
   expect(DateTime.formatIso(lastSeven.from)).toBe("2026-07-16T05:00:00.000Z");
   expect(DateTime.formatIso(lastSeven.toExclusive)).toBe("2026-07-23T05:00:00.000Z");
 });

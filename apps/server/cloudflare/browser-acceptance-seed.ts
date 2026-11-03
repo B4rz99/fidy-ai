@@ -46,6 +46,7 @@ export const recurringIsolatedIdentities = [
   { key: "recurringRecoveryPressure", userId: "24000000-0000-4000-8000-000000000631" },
   { key: "recurringLifecycle", userId: "24000000-0000-4000-8000-000000000581" },
   { key: "recurringTracking", userId: "24000000-0000-4000-8000-000000000561" },
+  { key: "recurringScopeInvalid", userId: "24000000-0000-4000-8000-000000000931" },
   { key: "recurringScopeRestored", userId: "24000000-0000-4000-8000-000000000921" },
   { key: "recurringScopeSchedule", userId: "24000000-0000-4000-8000-000000000911" },
   { key: "recurringScope", userId: "24000000-0000-4000-8000-000000000881" },

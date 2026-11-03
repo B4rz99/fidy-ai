@@ -1,8 +1,9 @@
 import { analyzeAccessibility } from "./accessibility";
 import type { APIRequestContext, Page, Route } from "@playwright/test";
-import { type Cause, DateTime, Effect } from "effect";
+import { type Cause, DateTime, Effect, Schema } from "effect";
 import {
   boundSessionRequests,
+  browserSessionHeaders,
   probeCanonicalRequest,
   signInRecurringThroughCore,
 } from "./real-core-fixture";
@@ -1002,6 +1003,93 @@ test("forward schedule edits explain that an unprotected selected date can stop 
       );
     })
   ));
+
+test("forward edits explain retained tracking after its linked Transaction is corrected", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({
+          page,
+          request,
+          deferFreshEntry: true,
+          identity: "recurringScopeInvalid",
+        })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* createPlan({
+        page,
+        name: "Plan parcial",
+        kind: "expense",
+        currency: "COP",
+        amount: "120000",
+      });
+      yield* captureScopePartial(page);
+      yield* correctScopeTransaction(page.request);
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() => recurringItem(page, /Plan parcial/u).click());
+      yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Importe", { exact: true })).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar plan", exact: true }).click()
+      );
+      const guidance = page.getByRole("region", { name: "Alcance del cambio" });
+      yield* Effect.tryPromise(() =>
+        expect(guidance).toContainText("Esta fecha conserva COP 120.000,00")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(guidance).toContainText("vínculo que necesita revisión")
+      );
+      yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill("110000"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText("2026-10-31 conserva sus ajustes")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Plan parcial/u)).toContainText("120.000,00")
+      );
+      yield* inspectCapturedTransactions(page.request, [
+        expect.objectContaining({ money: { amount: "46000", currency: "COP" } }),
+      ]);
+    })
+  ));
+
+const correctScopeTransaction = (
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const bound = boundSessionRequests(request);
+    const response = yield* probeCanonicalRequest({
+      request,
+      send: () => bound.get(`${apiOrigin}/transactions`),
+    });
+    expect(response.status()).toBe(successStatus);
+    const body = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        data: Schema.Tuple([Schema.Struct({ id: Schema.String, revision: Schema.Finite })]),
+      })
+    )(yield* Effect.tryPromise(() => response.json()));
+    const headers = yield* Effect.tryPromise(() => browserSessionHeaders(request));
+    const corrected = yield* probeCanonicalRequest({
+      request,
+      send: () =>
+        request.put(`${apiOrigin}/transactions/${body.data[0].id}`, {
+          headers,
+          data: {
+            expectedRevision: body.data[0].revision,
+            changes: { money: { amount: "46000", currency: "COP" } },
+          },
+        }),
+    });
+    expect(corrected.status()).toBe(successStatus);
+  });
 
 for (const { adjusted, restored } of [
   { adjusted: false, restored: false },

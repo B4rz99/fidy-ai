@@ -9,7 +9,7 @@ import { DefaultChoiceField, RecurringDateField } from "./fields";
 import { FulfillmentHistory } from "./fulfillment-history";
 import { PaymentCapture } from "./payment-capture";
 import { manualMarks, replacementOptions, settlementOptions } from "./payment-association";
-import { preservesOccurrence } from "./edit-scope";
+import { hasOccurrenceTracking, preservesOccurrence } from "./edit-scope";
 import { EditScope } from "./edit-guidance";
 import { PlanForm } from "./plan-form";
 import { Field } from "./form-fields";
@@ -203,7 +203,7 @@ const OccurrenceEditor = ({
 }: Props & Readonly<{ reviewTracking: () => void }>): JSX.Element => {
   const [scope, setScope] = useState<"once" | "forward">("once");
   const descriptionId = useId();
-  const hasTracking = item.fulfillments.length > 0;
+  const hasTracking = hasOccurrenceTracking({ document, item });
   const preserved = preservesOccurrence({ document, item });
   return (
     <>

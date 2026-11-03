@@ -26,6 +26,13 @@ export const preservedDates = ({
     .sort();
 };
 
+export const hasOccurrenceTracking = ({
+  document,
+  item,
+}: Readonly<{ document: Workspace["document"]; item: Occurrence }>): boolean =>
+  item.fulfillments.length > 0 ||
+  document.fulfillments.some((mark) => mark.planId === item.planId && mark.date === item.date);
+
 export const preservesOccurrence = ({
   document,
   item,
@@ -34,7 +41,7 @@ export const preservesOccurrence = ({
     (entry) => entry.planId === item.planId && entry.date === item.date
   );
   return exception === undefined
-    ? item.fulfillments.length > 0
+    ? hasOccurrenceTracking({ document, item })
     : exception.replacement !== undefined || exception.skipped;
 };
 

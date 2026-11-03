@@ -1,6 +1,11 @@
 import { Button } from "@/ui/components/button";
 import type { JSX } from "react";
-import { preservedDates, preservesOccurrence, restoredDates } from "./edit-scope";
+import {
+  hasOccurrenceTracking,
+  preservedDates,
+  preservesOccurrence,
+  restoredDates,
+} from "./edit-scope";
 import { type Occurrence, type Workspace, money } from "./model";
 
 export const EditScope = ({
@@ -21,7 +26,11 @@ export const EditScope = ({
   return (
     <section aria-label="Alcance del cambio" className="my-4 grid gap-2 text-sm" aria-live="polite">
       {scope === "once" ? (
-        <OnceScope id={id} tracked={item.fulfillments.length > 0} reviewTracking={reviewTracking} />
+        <OnceScope
+          id={id}
+          tracked={hasOccurrenceTracking({ document, item })}
+          reviewTracking={reviewTracking}
+        />
       ) : (
         <div id={id} className="grid gap-2">
           <p>
@@ -29,6 +38,12 @@ export const EditScope = ({
             seguimiento usarán los nuevos datos. Las fechas omitidas seguirán omitidas.
           </p>
           <SelectedScope item={item} document={document} />
+          {item.fulfillments.length === 0 && hasOccurrenceTracking({ document, item }) ? (
+            <p>
+              Hay un vínculo que necesita revisión. Usa Revisar seguimiento en Solo esta vez para
+              revisar el registro y, si corresponde, Desvincular transacción.
+            </p>
+          ) : null}
           {restored.length > 0 ? (
             <p>
               Las fechas que volviste a incluir sin ajustes individuales seguirán el nuevo plan,
@@ -61,12 +76,14 @@ const SelectedScope = ({
   if (item.status === "skipped") {
     return <p>Esta fecha seguirá omitida. Para incluirla, usa Volver a incluir.</p>;
   }
-  if (!preservesOccurrence({ document, item })) return <UnprotectedScope item={item} />;
+  if (!preservesOccurrence({ document, item })) {
+    return <UnprotectedScope item={item} document={document} />;
+  }
   const adjusted = document.exceptions.some(
     (entry) =>
       entry.planId === item.planId && entry.date === item.date && entry.replacement !== undefined
   );
-  const tracked = item.fulfillments.length > 0;
+  const tracked = hasOccurrenceTracking({ document, item });
   const expectation =
     item.plan.money === undefined ? "un importe por confirmar" : money(item.plan.money);
   return (
@@ -79,8 +96,11 @@ const SelectedScope = ({
   );
 };
 
-const UnprotectedScope = ({ item }: Readonly<{ item: Occurrence }>): JSX.Element => {
-  if (item.fulfillments.length > 0) {
+const UnprotectedScope = ({
+  item,
+  document,
+}: Readonly<{ item: Occurrence; document: Workspace["document"] }>): JSX.Element => {
+  if (hasOccurrenceTracking({ document, item })) {
     return (
       <p>
         Esta fecha se volvió a incluir sin un ajuste individual. Su expectativa actual es{" "}

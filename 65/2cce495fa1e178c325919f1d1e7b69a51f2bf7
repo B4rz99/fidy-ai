@@ -1,0 +1,48 @@
+tools/depcruise/boundaries.mjs
+  s_12ede6869163f4::t_968f8387c1f3d5 23,120
+  s_12ede6869163f4::t_afcf7c886ab258 99-100
+apps/server/cloudflare/locality-worker.test-fixture.ts
+  s_12ede6869163f4::t_2cb0795e4ca990 1-7,9-18,24-29,33-55,57-63,65-89
+  s_12ede6869163f4::t_968f8387c1f3d5 8,19-20,23,56,64
+  s_12ede6869163f4::t_75eb711b5ade37 21-22,30-32
+.oxlintrc.json
+  s_12ede6869163f4::t_968f8387c1f3d5 317
+apps/server/cloudflare/locality-probe.test-fixture.ts
+  s_12ede6869163f4::t_6ed8cd1a02f753 55-58
+  s_12ede6869163f4::t_afcf7c886ab258 5-15
+  s_12ede6869163f4::t_968f8387c1f3d5 67,69
+  s_12ede6869163f4::t_841bdcd2c26ab8 1-4,16-38,40-54,59-66,68,70-71
+  s_12ede6869163f4::t_cabc6de0e5cf80 39
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_12ede6869163f4::t_0eba2a9e6eb3e5 55,134,136,597,601-602
+  s_12ede6869163f4::t_f56d5009583153 611,616,623-628,661-662
+  s_12ede6869163f4::t_92d5c46c1d9940 140-146,598-600,603-610,612-615,617-622,629-660
+  s_12ede6869163f4::t_6842458ac103a3 663-664
+apps/server/.dependency-cruiser.mjs
+  s_12ede6869163f4::t_afcf7c886ab258 13
+apps/server/cloudflare/locality-sql.test-fixture.ts
+  s_12ede6869163f4::t_968f8387c1f3d5 1,12,16-76,91,97-100
+  s_12ede6869163f4::t_6b596e44792d35 2-5,7-11,13-15,77-90,92-96,101-108
+  s_12ede6869163f4::t_2cb0795e4ca990 6
+BACKEND_PERFORMANCE_PLAN.md
+  s_12ede6869163f4::t_afcf7c886ab258 208-215
+  s_12ede6869163f4::t_6ed8cd1a02f753 216-220
+  s_12ede6869163f4::t_f56d5009583153 194-201,206-207
+  s_12ede6869163f4::t_ad20e0145e6ce2 102,104,202-205,221-228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "652cce495fa1e178c325919f1d1e7b69a51f2bf7",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

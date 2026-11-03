@@ -1,0 +1,25 @@
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_12ede6869163f4::t_0697045c61a926 66
+apps/web/e2e/http-fixtures.ts
+  s_12ede6869163f4::t_e9f83b3cc41b1f 22-29,32-40
+apps/web/e2e/real-core-fixture.ts
+  s_12ede6869163f4::t_bdee5d81825a8f 434
+apps/web/e2e/session-binding.spec.ts
+  s_12ede6869163f4::t_01876cb338fdf4 8,86-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9fffe0f11302b9dcba88c05d25e9297b00701a6c",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

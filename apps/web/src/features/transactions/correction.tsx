@@ -99,7 +99,7 @@ const DraftInputs = ({
     <MoneyField
       id="correction-amount"
       currency={currency}
-      currencyLabel={currency}
+      label={`Monto · ${currency}`}
       required
       disabled={false}
       value={draft.amount}

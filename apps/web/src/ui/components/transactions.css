@@ -83,7 +83,8 @@
 }
 [data-transaction-slot~="transaction-context-panel"] input,
 [data-transaction-slot~="transaction-context-panel"] textarea,
-[data-transaction-slot~="transaction-context-panel"] [aria-haspopup="menu"] {
+[data-transaction-slot~="transaction-context-panel"] [aria-haspopup="menu"],
+[data-transaction-slot~="transaction-context-panel"] [aria-haspopup="listbox"] {
   background: var(--transaction-soft);
 }
 [data-transaction-slot~="transaction-search-toolbar"] {

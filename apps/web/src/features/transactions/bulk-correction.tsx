@@ -86,7 +86,7 @@ const BulkAmount = ({
       <MoneyField
         id="bulk-amount"
         currency={props.transactions[0].money.currency}
-        currencyLabel={mixedCurrencies ? "Varias monedas" : props.transactions[0].money.currency}
+        label={`Monto · ${mixedCurrencies ? "Varias monedas" : props.transactions[0].money.currency}`}
         value={draft.amount}
         onChange={(amount) => onChange({ ...draft, amount })}
         required={false}

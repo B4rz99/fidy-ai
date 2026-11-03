@@ -1,9 +1,11 @@
+import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
+import { Currency } from "@/transport/client";
 import { MoneyField } from "./money-field";
 import { parseMoneyInput } from "@/transport/money-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import type { Category } from "./presentation";
 import { useAtomSet } from "@effect/atom-react";
-import { Cause, DateTime, Effect, Option, Predicate } from "effect";
+import { Cause, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useRef, useState } from "react";
 import type { FormEvent, JSX } from "react";
@@ -92,6 +94,8 @@ type CaptureInputsProps = Readonly<{
   currency: CaptureCommand["currency"];
   onAmount: (value: string) => void;
   onCounterparty: (value: string) => void;
+  onCurrency: Option.Option<(currency: CaptureCommand["currency"]) => void>;
+  disabled: boolean;
 }>;
 const CaptureInputs = ({
   amount,
@@ -99,17 +103,46 @@ const CaptureInputs = ({
   onAmount,
   onCounterparty,
   currency,
+  onCurrency,
+  disabled,
 }: CaptureInputsProps): JSX.Element => (
   <>
-    <MoneyField
-      id="transaction-amount"
-      currency={currency}
-      currencyLabel={currency}
-      required
-      disabled={false}
-      value={amount}
-      onChange={onAmount}
-    />
+    <div className="flex flex-col gap-2">
+      {Option.match(onCurrency, {
+        onNone: () => <p>Moneda · {currency}</p>,
+        onSome: (change) => (
+          <>
+            <Label htmlFor="transaction-currency">Moneda</Label>
+            <SearchableChoiceDropdown
+              id="transaction-currency"
+              label="Moneda"
+              value={currency}
+              options={Currency.literals.map((value) => ({ value, label: value }))}
+              disabled={disabled}
+              width="full"
+              onChange={(value) => {
+                const selected = Schema.decodeUnknownOption(Currency)(value);
+                if (Option.isSome(selected)) change(selected.value);
+              }}
+            />
+          </>
+        ),
+      })}
+    </div>
+    <div className="flex flex-col gap-2">
+      <MoneyField
+        id="transaction-amount"
+        currency={currency}
+        label="Monto"
+        required
+        disabled={false}
+        value={amount}
+        onChange={onAmount}
+      />
+      <p className="text-sm text-muted-foreground">
+        El monto se registra en la moneda elegida, sin conversión.
+      </p>
+    </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="transaction-counterparty">Contraparte (opcional)</Label>
       <Input
@@ -231,13 +264,14 @@ type CaptureProps = Readonly<{
   timeZone: string;
   onCheckHistory: () => void;
   status: CaptureStatus;
-  currency: CaptureCommand["currency"];
-  initial: Partial<Omit<CaptureDraft, "direction">>;
+  currency: Option.Option<CaptureCommand["currency"]>;
+  initial: Partial<Omit<CaptureDraft, "direction" | "currency">>;
   direction: Option.Option<CaptureDraft["direction"]>;
   disabled: boolean;
   onStatus: (status: CaptureStatus) => void;
 }>;
 type CaptureDraft = Readonly<{
+  currency: CaptureCommand["currency"];
   amount: string;
   counterparty: string;
   notes: string;
@@ -250,8 +284,10 @@ const CaptureForm = ({
   draft,
   onDraft,
   onSubmit,
+  currency,
 }: Readonly<{
   props: CaptureProps;
+  currency: CaptureCommand["currency"];
   draft: CaptureDraft;
   onDraft: (draft: CaptureDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -272,8 +308,16 @@ const CaptureForm = ({
         )}
         <CaptureInputs
           amount={draft.amount}
-          currency={props.currency}
+          disabled={locked}
+          currency={currency}
           counterparty={draft.counterparty}
+          onCurrency={
+            Option.isSome(props.currency)
+              ? Option.none()
+              : Option.some((currency: CaptureCommand["currency"]) =>
+                  onDraft({ ...draft, currency })
+                )
+          }
           onAmount={(amount) => onDraft({ ...draft, amount })}
           onCounterparty={(counterparty) => onDraft({ ...draft, counterparty })}
         />
@@ -289,14 +333,19 @@ const CaptureForm = ({
         />
       </fieldset>
       <CaptureFeedback status={props.status} onCheckHistory={props.onCheckHistory} />
-      <CaptureActions props={props} amount={draft.amount} />
+      <CaptureActions props={props} amount={draft.amount} currency={currency} />
     </form>
   );
 };
 const CaptureActions = ({
   props,
   amount,
-}: Readonly<{ props: CaptureProps; amount: string }>): JSX.Element => (
+  currency,
+}: Readonly<{
+  props: CaptureProps;
+  amount: string;
+  currency: CaptureCommand["currency"];
+}>): JSX.Element => (
   <div data-transaction-slot="transaction-form-actions">
     {Option.isNone(props.onCancel) ? null : (
       <Button
@@ -314,7 +363,7 @@ const CaptureActions = ({
         props.disabled ||
         props.status === "saving" ||
         props.status === "uncertain" ||
-        Option.isNone(parseMoneyInput({ text: amount, currency: props.currency }))
+        Option.isNone(parseMoneyInput({ text: amount, currency }))
       }
     >
       {props.status === "saving" ? "Guardando…" : "Registrar"}
@@ -327,6 +376,7 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
   const submit = useAtomSet(capture);
   const admission = useRef(false);
   const [draft, setDraft] = useState<CaptureDraft>(() => ({
+    currency: "COP",
     amount: "",
     counterparty: "",
     notes: "",
@@ -335,6 +385,7 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
     occurredOn: currentLocalDay(props.timeZone),
     ...props.initial,
   }));
+  const currency = Option.getOrElse(props.currency, () => draft.currency);
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     if (
@@ -342,7 +393,7 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
       props.disabled ||
       props.status === "saving" ||
       props.status === "uncertain" ||
-      Option.isNone(parseMoneyInput({ text: draft.amount, currency: props.currency }))
+      Option.isNone(parseMoneyInput({ text: draft.amount, currency }))
     ) {
       return;
     }
@@ -350,7 +401,7 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
     props.onStatus("saving");
     submit({
       ...draft,
-      currency: props.currency,
+      currency,
       categoryId: Option.fromNullishOr(
         props.categories.find((category) => category.id === draft.categoryId)
       ).pipe(Option.map((category) => category.id)),
@@ -368,6 +419,12 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
     });
   };
   return props.renderForm(
-    <CaptureForm props={props} draft={draft} onDraft={setDraft} onSubmit={onSubmit} />
+    <CaptureForm
+      props={props}
+      draft={draft}
+      currency={currency}
+      onDraft={setDraft}
+      onSubmit={onSubmit}
+    />
   );
 };

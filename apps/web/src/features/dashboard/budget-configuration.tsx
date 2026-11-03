@@ -8,11 +8,7 @@ import { Settings01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
-import {
-  revalidateWorkspaceQuery,
-  workspaceCategoriesQuery,
-  workspaceQueryRetention,
-} from "@/transport/workspace-query";
+import { activeWorkspaceQuery, workspaceCategoriesQuery } from "@/transport/workspace-query";
 import { Button } from "@/ui/components/button";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { DashboardBudgetDialog } from "@/ui/components/dashboard-budget-dialog";
@@ -150,11 +146,11 @@ const BudgetConfigurationContent = ({
   const [budgetsQuery] = useState(() =>
     apiClient
       .query("budgets", "getBudgetStatus", {
-        ...workspaceQueryRetention,
+        timeToLive: 0,
         reactivityKeys: ["budgets"],
         query: { timeZone },
       })
-      .pipe(revalidateWorkspaceQuery)
+      .pipe(activeWorkspaceQuery)
   );
   const categoriesQuery = workspaceCategoriesQuery(apiClient).view;
   const budgetsResult = useAtomValue(budgetsQuery);

@@ -12,7 +12,7 @@ const performancePartitions: Readonly<Record<string, RegExp>> = {
   "1/2":
     /returns from .+ with its review form and original already available|returns to Transacciones from cached data while refreshing/u,
   "2/2":
-    /returns to (Presupuestos|Recurrentes|Tablero) from cached data while refreshing|switches between visited review tabs/u,
+    /returns to (Presupuestos|Recurrentes) from cached data while refreshing|switches between visited review tabs/u,
 };
 const performanceSelection =
   performancePartitions[process.env.BROWSER_TEST_SHARD ?? ""] ?? performanceCases;

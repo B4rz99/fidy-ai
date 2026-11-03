@@ -2,7 +2,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
-import type { AsyncResult, AtomRegistry } from "effect/reactivity";
+import type { AsyncResult } from "effect/reactivity";
 import { type JSX, type ReactNode, Suspense, useState } from "react";
 import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
 
@@ -15,8 +15,6 @@ import { type DashboardEditorError, useDashboardEditing } from "./editing";
 import type { DashboardView } from "./presentation";
 import { type DashboardLoadPhase, dashboardQuery } from "./query";
 import { DashboardBudgetConfiguration } from "./budget-configuration";
-import { prepareQuery } from "@/transport/query-preparation";
-import type { AnyRouter } from "@tanstack/react-router";
 
 const DashboardRoutePresentation = lazyRouteComponent(
   () => import("./view"),
@@ -48,23 +46,6 @@ export const DashboardFeature = ({
     </Suspense>
   );
 };
-
-DashboardFeature.preloadData = ({
-  apiClient,
-  registry,
-  router,
-  signal,
-}: Readonly<{
-  apiClient: FidyClient;
-  registry: AtomRegistry.AtomRegistry;
-  router: AnyRouter;
-  signal: AbortSignal;
-}>): Promise<void> =>
-  prepareQuery({
-    registry,
-    query: dashboardQuery({ apiClient, router }).result,
-    options: { mode: "display", signal: Option.some(signal) },
-  });
 
 const unavailableCatalogError: DashboardEditorError = {
   title: "No pudimos cargar el catálogo",

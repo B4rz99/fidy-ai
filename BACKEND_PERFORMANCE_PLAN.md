@@ -149,11 +149,17 @@ User + selected month + time zone
 
 ## Execution status
 
-Budget implementation is in progress on `perf/budget-cold-read`, initially based on
-`a4705e85dcc5258237c3c515f0eb8c95f782185b` and synchronized with trunk
-`604d999a03` before release. Its native-D1 regression reduced public-request database
-trips from eight to five. A concurrent cap mutation test verifies one coherent response and a fresh
-subsequent request. The application-cache inventory/removal and remaining workloads are still open.
+Budget snapshot assembly, code-only navigation preparation and linear Recurring match selection
+shipped in [PR #1827](https://github.com/B4rz99/fidy-ai/pull/1827). The native-D1 Budget regression
+reduced public-request database trips from eight to five. A concurrent cap mutation test verifies
+one coherent response and a fresh subsequent request. Measurements and release evidence belong
+to that PR. The complete backend latency target and application-cache removal remain open.
+
+Actual Recurring return visits must refresh canonical state even when they occur within five
+seconds or the browser clock is fixed or moves backwards. This removes a freshness exemption.
+Dashboard view, catalog and Budget configuration responses now have mounted-consumer lifetimes, with no idle response retention; its
+unused data-preparation publication is removed. Remaining hidden query displays and shared
+metadata retention are still open. Preserve the separate draft and uncertain-write owners when replacing those displays.
 
 Budget comparison protocol: empty (no caps or movements), typical (one current cap and one exact
 80.01 outflow), boundary (128 caps and 5,002 movements). Each cohort performs 21 sequential public
@@ -170,15 +176,15 @@ Production and full-runtime measurement requirements remain open.
 
 ### Application response retention inventory (removal in progress)
 
-| Owner                                                          | Retained contents / lifetime                                           | Consumers                                                             | Required replacement                                                                 |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `transport/workspace-query.ts`                                 | API results, five-minute idle TTL and five-second SWR freshness        | Profile, taxonomy, Budget, Recurring, Transactions, Dashboard, Access | Visit-owned reads with no inactive result retention; preserve mounted editing owners |
-| `app/destination-preload.tsx`, `app/navigation-preparation.ts` | Speculatively populated query results, authentication lifetime         | Idle queue and pointer/focus/touch navigation                         | Code-only preparation; destination visit owns data reads                             |
-| `app/recurring-workspace.tsx`, `app/review-workspace.tsx`      | Hidden visited DOM/query subscriptions until authentication retirement | Recurring/Review return navigation                                    | Separate unsaved draft/recovery owners from disposable query displays                |
-| `features/dashboard/query.ts`                                  | Dashboard response and load phase, five-minute idle TTL                | Dashboard and intent reads                                            | Mounted read, initialization on actual visit only                                    |
-| `transport/workspace-query.ts` bootstrap metadata              | Initial identity/taxonomy observation, 400 ms idle handoff             | Initial route and metadata query                                      | Bounded initial handoff; never reusable navigation data                              |
-| `cloudflare/mcp/runtime.ts`                                    | Scope-keyed generated tool catalog, process lifetime                   | MCP tool listing                                                      | Generate from installed declarations without a reusable projection map               |
-| `transport/money.ts`, `needs-review/model.ts`                  | Intl formatter instances, process lifetime                             | Financial/date presentation                                           | Inventory separately from API data; no User facts are stored                         |
+| Owner                                                          | Retained contents / lifetime                                           | Consumers                                                  | Required replacement                                                                 |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `transport/workspace-query.ts`                                 | API results, five-minute idle TTL and five-second SWR freshness        | Profile, taxonomy, Budget, Recurring, Transactions, Access | Visit-owned reads with no inactive result retention; preserve mounted editing owners |
+| `app/destination-preload.tsx`, `app/navigation-preparation.ts` | Speculatively populated query results, authentication lifetime         | Idle queue and pointer/focus/touch navigation              | Code-only preparation; destination visit owns data reads                             |
+| `app/recurring-workspace.tsx`, `app/review-workspace.tsx`      | Hidden visited DOM/query subscriptions until authentication retirement | Recurring/Review return navigation                         | Separate unsaved draft/recovery owners from disposable query displays                |
+| `features/dashboard/query.ts`                                  | Dashboard response: no idle retention (active consumers only)          | Dashboard visits                                           | Mounted read, initialization on actual visit only                                    |
+| `transport/workspace-query.ts` bootstrap metadata              | Initial identity/taxonomy observation, 400 ms idle handoff             | Initial route and metadata query                           | Bounded initial handoff; never reusable navigation data                              |
+| `cloudflare/mcp/runtime.ts`                                    | Scope-keyed generated tool catalog, process lifetime                   | MCP tool listing                                           | Generate from installed declarations without a reusable projection map               |
+| `transport/money.ts`, `needs-review/model.ts`                  | Intl formatter instances, process lifetime                             | Financial/date presentation                                | Inventory separately from API data; no User facts are stored                         |
 
 Request-local joins, authoritative database records/indexes, admission semaphores and unsaved
 form/recovery state are not reusable query-response copies. The inventory remains open until the

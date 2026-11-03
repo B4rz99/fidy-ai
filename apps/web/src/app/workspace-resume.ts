@@ -1,12 +1,9 @@
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { DateTime } from "effect";
 import { Reactivity } from "effect/reactivity";
 import { type RefCallback, useCallback, useRef, useState } from "react";
 
-const recentResumeMilliseconds = 5000;
-
-/** Revalidate retained display data on return without repeating a recent refresh. */
+/** Every actual return observes canonical state independently of the browser clock. */
 export const useWorkspaceResume = ({
   active,
   key,
@@ -16,23 +13,19 @@ export const useWorkspaceResume = ({
     apiClient.runtime.fn<void>()(() => Reactivity.invalidate([key]))
   );
   const refresh = useAtomSet(operation);
-  const visibility = useRef({ active, visited: false, refreshedAt: 0 });
+  const visibility = useRef({ active, visited: false });
   return useCallback(
     (node) => {
       if (node === null) return;
       const previous = visibility.current;
-      if (!previous.visited) previous.refreshedAt = DateTime.nowUnsafe().epochMilliseconds;
       const returning = active && previous.visited && !previous.active;
-      const expired =
-        DateTime.nowUnsafe().epochMilliseconds - previous.refreshedAt >= recentResumeMilliseconds;
       visibility.current = { ...previous, active, visited: true };
-      if (returning && (key === "ingestion-review" || expired)) {
-        visibility.current.refreshedAt = DateTime.nowUnsafe().epochMilliseconds;
+      if (returning) {
         queueMicrotask(() => {
           if (node.isConnected && node.hidden === false) refresh();
         });
       }
     },
-    [active, key, refresh]
+    [active, refresh]
   );
 };

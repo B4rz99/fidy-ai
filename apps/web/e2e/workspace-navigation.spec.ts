@@ -161,6 +161,81 @@ for (const destination of [
     ));
 }
 
+test("rereads Recurring on every actual return with a fixed browser clock", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationRecurring" })
+      );
+      yield* Effect.tryPromise(() => openWorkspace(page, "Recurrentes"));
+      const create = page.getByRole("button", { name: "Nuevo recurrente", exact: true });
+      yield* Effect.tryPromise(() => expect(create).toBeEnabled());
+      const current = yield* Clock.currentTimeMillis;
+      yield* Effect.tryPromise(() => page.clock.setFixedTime(current));
+      for (let visit = 0; visit < 2; visit++) {
+        yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
+        const observation = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === "/recurring-plans" &&
+            response.request().method() === "GET" &&
+            response.status() === successfulResponse
+        );
+        yield* Effect.tryPromise(() => openWorkspace(page, "Recurrentes"));
+        yield* Effect.tryPromise(() => observation);
+        yield* Effect.tryPromise(() => expect(create).toBeEnabled());
+      }
+    })
+  ));
+
+for (const poorConnection of [false, true]) {
+  test(`rereads Dashboard without its previous response on ${poorConnection ? "a poor" : "a normal"} connection`, ({
+    page,
+    request,
+    context,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          signInNavigationPerformanceThroughCore({ page, request, identity: "navigationDashboard" })
+        );
+        yield* Effect.tryPromise(() => openWorkspace(page, "Tablero"));
+        const personalize = page.getByRole("button", { name: "Personalizar", exact: true });
+        yield* Effect.tryPromise(() => expect(personalize).toBeEnabled());
+        yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
+        if (poorConnection) {
+          const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
+          yield* Effect.tryPromise(() => cdp.send("Network.enable"));
+          yield* Effect.tryPromise(() =>
+            cdp.send("Network.emulateNetworkConditions", {
+              offline: false,
+              latency: 400,
+              downloadThroughput: 51_200,
+              uploadThroughput: 25_600,
+            })
+          );
+        }
+        const release = yield* holdWorkspaceData(page, `${apiOrigin}/dashboard/view`);
+        const fresh = Promise.all([
+          page.waitForRequest(`${apiOrigin}/dashboard/view`),
+          page.waitForRequest(`${apiOrigin}/dashboard/catalog`),
+        ]).then(
+          () => true,
+          () => false
+        );
+        yield* Effect.tryPromise(() => openWorkspace(page, "Tablero"));
+        yield* Effect.tryPromise(() => expect(personalize).toHaveCount(0));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("status", { name: "Cargando tablero", exact: true })).toBeVisible({
+            timeout: 100,
+          })
+        );
+        expect(yield* Effect.tryPromise(() => fresh)).toBe(true);
+        yield* Effect.tryPromise(() => release());
+        yield* Effect.tryPromise(() => expect(personalize).toBeEnabled());
+      }).pipe(Effect.scoped)
+    ));
+}
+
 test("reveals cached Budgets while its expired profile refresh is pending", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -285,7 +360,7 @@ test("keeps closed mobile navigation artwork out of startup and loads it when op
     })
   ));
 
-for (const workspace of workspaces) {
+for (const workspace of workspaces.filter((entry) => entry.name !== "Tablero")) {
   test(`returns to ${workspace.name} from cached data while refreshing`, ({ page, request }) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -346,7 +421,9 @@ for (const workspace of workspaces) {
     ));
 }
 
-for (const workspace of workspaces.filter((workspace) => workspace.name !== "Transacciones")) {
+for (const workspace of workspaces.filter(
+  (workspace) => workspace.name !== "Transacciones" && workspace.name !== "Tablero"
+)) {
   test(`returns to ${workspace.name} on a poor connection without waiting for refreshed data`, ({
     page,
     request,
@@ -439,7 +516,7 @@ const observeSwitch = (ready: string): void => {
 const holdWorkspaceData = (
   page: Page,
   path: string
-): Effect.Effect<void, Cause.UnknownError, Scope.Scope> =>
+): Effect.Effect<() => Promise<void>, Cause.UnknownError, Scope.Scope> =>
   Effect.gen(function* () {
     const release = Promise.withResolvers<void>();
     const pending: Array<Promise<void>> = [];
@@ -454,6 +531,7 @@ const holdWorkspaceData = (
     };
     yield* Effect.addFinalizer(() => Effect.tryPromise(cleanup).pipe(Effect.orDie));
     yield* Effect.tryPromise(() => page.route(path, hold));
+    return cleanup;
   });
 
 test("dismisses a recurring editor when leaving its retained workspace", ({ page, request }) =>

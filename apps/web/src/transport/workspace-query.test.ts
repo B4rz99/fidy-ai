@@ -5,6 +5,7 @@ import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
 import { makeFidyClient } from "./client";
 import {
+  activeWorkspaceQuery,
   revalidateWorkspaceQuery,
   workspaceCategoriesQuery,
   workspaceMetadataInitialValue,
@@ -188,4 +189,85 @@ it.live("keeps mounted taxonomy atoms stable through collection and an equivalen
       registry.dispose();
     }
   })
+);
+
+it.live(
+  "releases inactive workspace responses and rereads on remount even with registry retention",
+  () =>
+    Effect.gen(function* () {
+      let value = "first observation";
+      let reads = 0;
+      const source = Atom.make(
+        Effect.sync(() => {
+          reads += 1;
+          return value;
+        })
+      ).pipe(Atom.setIdleTTL(0));
+      const registry = AtomRegistry.make({ defaultIdleTTL: 60_000 });
+      const query = activeWorkspaceQuery(source);
+      const detach = registry.mount(query);
+      const peer = activeWorkspaceQuery(source);
+      const detachPeer = registry.mount(peer);
+      try {
+        expect(yield* AtomRegistry.getResult(registry, query)).toBe("first observation");
+        value = "changed canonical state";
+        expect(yield* AtomRegistry.getResult(registry, peer)).toBe("first observation");
+        expect(reads).toBe(1);
+        detach();
+        detachPeer();
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(registry.getNodes().has(source)).toBe(false))
+        );
+        const remount = registry.mount(query);
+        try {
+          expect(yield* AtomRegistry.getResult(registry, query)).toBe("changed canonical state");
+          expect(reads).toBe(2);
+        } finally {
+          remount();
+        }
+      } finally {
+        detach();
+        detachPeer();
+        registry.dispose();
+      }
+    })
+);
+
+it.live(
+  "joins an active read on focus and refreshes a completed read without a freshness clock",
+  () =>
+    Effect.gen(function* () {
+      let reads = 0;
+      const release = yield* Deferred.make<void>();
+      const signal = Atom.make(0);
+      const focus = vi
+        .spyOn(Atom.windowFocusSignal, "read")
+        .mockImplementation((get) => get(signal));
+      const source = Atom.make(
+        Effect.gen(function* () {
+          reads += 1;
+          const observation = reads;
+          yield* Deferred.await(release);
+          return observation;
+        })
+      ).pipe(Atom.setIdleTTL(0));
+      const query = activeWorkspaceQuery(source);
+      const registry = AtomRegistry.make();
+      const detach = registry.mount(query);
+      try {
+        expect(reads).toBe(1);
+        registry.set(signal, 1);
+        yield* Effect.sleep("20 millis");
+        expect(reads).toBe(1);
+        yield* Deferred.succeed(release, undefined);
+        expect(yield* AtomRegistry.getResult(registry, query)).toBe(1);
+        registry.set(signal, 2);
+        expect(yield* AtomRegistry.getResult(registry, query, { suspendOnWaiting: true })).toBe(2);
+        expect(reads).toBe(2);
+      } finally {
+        detach();
+        registry.dispose();
+        focus.mockRestore();
+      }
+    })
 );

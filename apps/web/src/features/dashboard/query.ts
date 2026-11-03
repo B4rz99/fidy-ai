@@ -1,4 +1,4 @@
-import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
+import { activeWorkspaceQuery } from "@/transport/workspace-query";
 import { Data, Effect, Schema } from "effect";
 import type { AnyRouter } from "@tanstack/react-router";
 import { HttpClientError } from "effect/http";
@@ -56,23 +56,23 @@ const dashboardVisit = (router: AnyRouter): (() => boolean) => {
 class DashboardQueryKey extends Data.Class<
   Readonly<{ apiClient: FidyClient; isVisiting: () => boolean }>
 > {}
-const retainedDashboardQuery = Atom.family(
+const dashboardReads = Atom.family(
   ({ apiClient, isVisiting }: DashboardQueryKey): DashboardLoad["result"] => {
     const phase = dashboardPhase(apiClient);
     const result = apiClient.runtime
       .atom((get) => loadDashboard(apiClient, (value) => get.set(phase, value), isVisiting))
       .pipe(
-        Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
+        Atom.setIdleTTL(0),
         apiClient.runtime.factory.withReactivity(["dashboard"]),
-        Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
+        Atom.setIdleTTL(0)
       );
     return result;
   }
 );
 
 export const dashboardQuery = (input: DashboardQueryContext): DashboardLoad => {
-  const query = retainedDashboardQuery(
+  const query = dashboardReads(
     new DashboardQueryKey({ apiClient: input.apiClient, isVisiting: dashboardVisit(input.router) })
   );
-  return { phase: dashboardPhase(input.apiClient), result: revalidateWorkspaceQuery(query) };
+  return { phase: dashboardPhase(input.apiClient), result: activeWorkspaceQuery(query) };
 };

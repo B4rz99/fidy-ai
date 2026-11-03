@@ -28,6 +28,21 @@ export const revalidateWorkspaceQuery = <A, E>(
       focusSignal: Atom.windowFocusSignal,
     })
   );
+/** Observe a visit-owned source without idle retention; focus refreshes the current read. */
+export const activeWorkspaceQuery = <A, E>(
+  query: Atom.Atom<AsyncResult.AsyncResult<A, E>>
+): Atom.Atom<AsyncResult.AsyncResult<A, E>> =>
+  Atom.readable(
+    (get) => {
+      get.once(Atom.windowFocusSignal);
+      get.subscribe(Atom.windowFocusSignal, () => {
+        if (!get.once(query).waiting) get.refresh(query);
+      });
+      get.subscribe(query, (value) => get.setSelf(value));
+      return get.once(query);
+    },
+    (refresh) => refresh(query)
+  ).pipe(Atom.setIdleTTL(0));
 type MetadataValue = Option.Option<
   AsyncResult.AsyncResult<CanonicalSuccess<"identity.getCurrentUser">, ProfileError>
 >;
@@ -126,7 +141,5 @@ export const workspaceCategoriesQuery = (
 }> => ({ source: workspaceCategoriesSource(client), view: workspaceCategoriesView(client) });
 export const workspaceDashboardCatalogQuery: (client: FidyClient) => CatalogQuery = Atom.family(
   (client: FidyClient) =>
-    client
-      .query("dashboard", "listDashboardCatalog", workspaceQueryRetention)
-      .pipe(revalidateWorkspaceQuery)
+    client.query("dashboard", "listDashboardCatalog", { timeToLive: 0 }).pipe(activeWorkspaceQuery)
 );

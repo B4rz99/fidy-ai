@@ -537,13 +537,20 @@ require a canonical reread. Original text is escaped, media locators are not ren
 URLs, and neither originals nor drafts enter browser storage. Navigation owns pending-count
 polling within the authentication registry lifetime.
 
-Main workspace display queries retain their last result for five minutes of inactivity in the
-current authentication registry. Returning to Budgets, Recurring, Transactions or Dashboard
-renders that result immediately. Reads younger than five seconds remain fresh on mount and
-window focus; older reads revalidate, and explicit invalidation always refreshes. Retained
-Recurring workspace returns coalesce refreshes inside the same five-second window using wall
-time, including calendar changes. Review always revalidates on return to observe remote drafts. Review categories share
-the normal category snapshot; an unvisited history panel starts only when selected. The actual
+Budget, Recurring and Transaction display queries retain their last result for five minutes of
+inactivity in the current authentication registry. Returning to these views renders that result
+immediately. Reads younger than five seconds remain fresh on mount and window focus; older reads
+revalidate, and explicit invalidation always refreshes. Every actual return to the retained
+Recurring workspace triggers a canonical refresh, including rapid returns with a fixed or
+backwards-moving browser clock. Review always revalidates on return to observe remote drafts.
+
+Dashboard view, catalog and Budget configuration responses have no idle retention: mounted consumers share their current read,
+release it on disposal and start a fresh read on return or reopening. Focus always refreshes an active Dashboard
+read. Its mounted phase owner distinguishes reading, initialization and the read after
+initialization.
+The query exposes no data-preparation publication for navigation intent.
+
+Review categories share the normal category snapshot; an unvisited history panel starts only when selected. The actual
 Review loader retains already-supplied startup metadata in its canonical owner, including an empty
 inbox, without starting a profile HTTP read. Budget navigation uses a retained profile
 for display preparation while its refresh remains pending. Recurring
@@ -553,9 +560,9 @@ revision guards for every write; refresh failures still gate editing. Authentica
 two in-flight request permits within their session signal, including across feature clients. Queue
 time counts against the original request deadline and session retirement cancels queued work.
 Dashboard initialization remains exclusive to a declared uninitialized response during an
-actual visit. The retained Dashboard query checks the live router location before initialization,
-so Budget deletion, recovery and navigation intent can read its projection without creating a
-Dashboard off-route. Consent and session binding retain their fresh access checks. Access listings
+actual visit. The Dashboard query checks the live router location before initialization,
+so recovery or a late response cannot initialize a Dashboard after navigation away. Consent and
+session binding retain their fresh access checks. Access listings
 retain their previous display for five minutes while rechecking both lists on every mount and
 focus; pending or failed refreshes disable decisions. Manual PAT bearer disclosure and account
 proofs still dispose with their mounted owners.

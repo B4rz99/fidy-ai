@@ -8,5 +8,3 @@ export const DashboardPage = (): JSX.Element => (
     <DestinationPreload />
   </DashboardFeature>
 );
-
-DashboardPage.preloadData = DashboardFeature.preloadData;

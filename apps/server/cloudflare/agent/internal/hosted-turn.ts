@@ -1050,7 +1050,8 @@ const executeAdmittedTurn = ({
             (failure) =>
               failure instanceof HostedInferenceError &&
               (failure.reason._tag === "ProviderQuotaExceeded" ||
-                failure.reason._tag === "ProviderUnavailable")
+                failure.reason._tag === "ProviderUnavailable" ||
+                failure.reason._tag === "InvalidOutput")
           )
         ) {
           return yield* proposeDelivery({

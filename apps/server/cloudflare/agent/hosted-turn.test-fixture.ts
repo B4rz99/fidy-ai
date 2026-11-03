@@ -128,19 +128,6 @@ export const waitForToolResult = ({
     { timeout: 5_000 }
   );
 
-export const waitForFailedVoice = ({
-  db,
-  text,
-}: Readonly<{ db: D1Database; text: string }>): Promise<void> =>
-  vi.waitFor(() =>
-    retained({ db, user: users[0] }).then(({ results }) => {
-      expect(results).toMatchObject([
-        { kind: "user", status: "failed", text },
-        { kind: "failed", status: "failed", text: null },
-      ]);
-    })
-  );
-
 export const waitForInterrupted = ({
   db,
   turnId,

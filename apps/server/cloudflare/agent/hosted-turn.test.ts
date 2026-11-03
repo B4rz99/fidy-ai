@@ -71,7 +71,6 @@ import {
   setup,
   subject,
   users,
-  waitForFailedVoice,
 } from "./hosted-turn.test-fixture";
 import { browserHostedDelivery, completeWhatsAppTurnWithAdmission } from "./internal/hosted-turn";
 import {
@@ -1352,7 +1351,7 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
     })
   ));
 
-it("retains a failed WhatsApp Turn without sending invalid model output", () =>
+it("stages one fixed failure reply after invalid output and waits for verified WhatsApp delivery", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
@@ -1364,7 +1363,11 @@ it("retains a failed WhatsApp Turn without sending invalid model output", () =>
           .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
           .run()
       );
-      const provider = vi.fn(() => Promise.resolve(Response.json({ messages: [] })));
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.safe-failure" }] })
+        )
+      );
       vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const coordinator = coordinatorFor({
         options: { index: 0, sandboxPhoneNumberId: "" },
@@ -1388,14 +1391,19 @@ it("retains a failed WhatsApp Turn without sending invalid model output", () =>
           })
         )
       );
-      expect(failed.status).toBe(503);
-      expect(provider).not.toHaveBeenCalled();
+      expect(failed.status).toBe(202);
+      expect(provider).toHaveBeenCalledTimes(1);
       expect(
         (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
-      ).toMatchObject([
-        { status: "failed", kind: "user", text: "Hola" },
-        { status: "failed", kind: "failed", text: null, marker: "HostedInferenceFailed" },
-      ]);
+      ).toMatchObject([{ status: "pending", kind: "user", text: "Hola" }]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT text FROM whatsapp_deliveries WHERE user_id=? AND kind='hosted'")
+            .bind(users[0])
+            .first<string>("text")
+        )
+      ).toBe("No pude completar tu solicitud en este momento. Inténtalo más tarde.");
       expect(
         (yield* Effect.tryPromise(() =>
           db
@@ -1404,7 +1412,7 @@ it("retains a failed WhatsApp Turn without sending invalid model output", () =>
             )
             .all()
         )).results
-      ).toHaveLength(0);
+      ).toHaveLength(1);
     })
   ));
 
@@ -1641,14 +1649,35 @@ it("does not let signed voice text change the User or bypass canonical input val
         202
       );
       expect(modelCalls).toBe(0);
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch(() =>
+          Promise.resolve(
+            Response.json({
+              messaging_product: "whatsapp",
+              messages: [{ id: "wamid.safe-voice-failure" }],
+            })
+          )
+        )
+      );
       const coordinator = coordinatorFor({
         options: { index: 0, sandboxPhoneNumberId: "" },
         db,
         run: model,
       });
-      expect((yield* Effect.tryPromise(() => coordinator.fetch(request()))).status).toBe(503);
+      expect((yield* Effect.tryPromise(() => coordinator.fetch(request()))).status).toBe(202);
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(modelCalls).toBe(2)));
-      yield* Effect.tryPromise(() => waitForFailedVoice({ db, text }));
+      expect(
+        (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+      ).toMatchObject([{ kind: "user", status: "pending", text }]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT text FROM whatsapp_deliveries WHERE user_id=? AND kind='hosted'")
+            .bind(users[0])
+            .first<string>("text")
+        )
+      ).toBe("No pude completar tu solicitud en este momento. Inténtalo más tarde.");
       expect(
         (yield* Effect.tryPromise(() => retained({ db, user: users[1] }))).results
       ).toHaveLength(0);

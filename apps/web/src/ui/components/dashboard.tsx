@@ -1,7 +1,16 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { ComponentProps, JSX, ReactNode } from "react";
+import {
+  type ComponentProps,
+  type JSX,
+  type ReactNode,
+  type RefCallback,
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+} from "react";
 import { Option, Schema } from "effect";
 import type { XAxisTickContentProps } from "recharts";
 import { Button } from "./button";
@@ -10,6 +19,7 @@ import { CategoryVisual } from "./category-visual";
 import { DirectionIndicator } from "./icon-indicator";
 import { Progress } from "./progress";
 import "./dashboard.css";
+import { dashboardCategoryVisual } from "./dashboard-category";
 
 export const DashboardCard = ({
   title,
@@ -172,54 +182,82 @@ export const DashboardCustomizeAction = (props: ComponentProps<typeof Button>): 
   <Button {...props} className="dashboard-personalize" variant="outline" />
 );
 
-export const DashboardChart = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
-  <div className="dashboard-chart">{children}</div>
-);
+const DashboardTooltipPortal = createContext(Option.none<HTMLDivElement>());
+
+export const DashboardChart = ({
+  children,
+  dense,
+}: Readonly<{ children: ReactNode; dense: boolean }>): JSX.Element => {
+  const [portal, setPortal] = useState(Option.none<HTMLDivElement>());
+  const bindPortal = useCallback<RefCallback<HTMLDivElement>>((element) => {
+    setPortal(Option.fromNullishOr(element));
+  }, []);
+  return (
+    <DashboardTooltipPortal value={portal}>
+      <div className="dashboard-chart-frame">
+        <div className="dashboard-chart-scroll">
+          <div className="dashboard-chart" data-dense={dense || undefined}>
+            {children}
+          </div>
+        </div>
+        <div className="dashboard-chart-tooltip" ref={bindPortal} />
+      </div>
+    </DashboardTooltipPortal>
+  );
+};
 
 export const DashboardAxisTick = ({
   x,
   y,
   payload,
-}: Partial<Pick<XAxisTickContentProps, "x" | "y" | "payload">>): JSX.Element => {
-  const label = Option.getOrElse(
-    Schema.decodeUnknownOption(Schema.String)(payload?.value),
-    () => ""
-  );
-  const abbreviated = abbreviateCategory(label);
+  category,
+  labels,
+}: Partial<Pick<XAxisTickContentProps, "x" | "y" | "payload">> &
+  Readonly<{
+    category: boolean;
+    labels: ReadonlyArray<Readonly<{ key: string; label: string }>>;
+  }>): JSX.Element => {
+  const key = Option.getOrElse(Schema.decodeUnknownOption(Schema.String)(payload?.value), () => "");
+  const label = labels.find((row) => row.key === key)?.label ?? key;
   return (
     <g transform={`translate(${x ?? 0},${y ?? 0})`}>
       <title>{label}</title>
-      <text textAnchor="middle" fill="var(--fidy-text-muted)" fontSize={11} dy={12}>
-        <tspan className="dashboard-axis-full">{label}</tspan>
-        <tspan className="dashboard-axis-short">{abbreviated}</tspan>
-      </text>
+      {category ? (
+        <svg
+          className="dashboard-category-emoji"
+          aria-label={label}
+          x="-0.75em"
+          width="1.5em"
+          height="1.5em"
+        >
+          <text textAnchor="middle" x="50%" y="1em">
+            {dashboardCategoryVisual(key).emoji}
+          </text>
+        </svg>
+      ) : (
+        <text textAnchor="middle" fill="var(--fidy-text-muted)" fontSize={11} dy={12}>
+          {label}
+        </text>
+      )}
     </g>
   );
 };
-export const DashboardTooltip = (props: ComponentProps<typeof ChartTooltip>): JSX.Element => (
-  <ChartTooltip
-    {...props}
-    contentStyle={{
-      background: "var(--fidy-background-surface)",
-      borderColor: "var(--application-line)",
-      borderRadius: 12,
-    }}
-    itemStyle={{ color: "var(--fidy-text-primary)" }}
-    labelStyle={{ color: "var(--fidy-text-primary)" }}
-  />
-);
-
-const abbreviateCategory = (label: string): string => {
-  switch (label) {
-    case "Restaurantes":
-      return "Rest.";
-    case "Alimentación":
-      return "Alim.";
-    case "Servicios":
-      return "Serv.";
-    case "Transporte":
-      return "Transp.";
-    default:
-      return label;
-  }
+export const DashboardTooltip = (props: ComponentProps<typeof ChartTooltip>): JSX.Element => {
+  const portal = useContext(DashboardTooltipPortal);
+  return (
+    <ChartTooltip
+      {...props}
+      portal={Option.getOrUndefined(portal)}
+      wrapperStyle={{ width: "max-content", maxWidth: "100%" }}
+      contentStyle={{
+        background: "var(--fidy-background-surface)",
+        borderColor: "var(--application-line)",
+        borderRadius: 12,
+        whiteSpace: "normal",
+        overflowWrap: "anywhere",
+      }}
+      itemStyle={{ color: "var(--fidy-text-primary)" }}
+      labelStyle={{ color: "var(--fidy-text-primary)" }}
+    />
+  );
 };

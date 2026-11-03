@@ -1,3 +1,4 @@
+import { dashboardCategoryVisual } from "@/ui/components/dashboard-category";
 import { formatMoneyWithCode } from "@/transport/money";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DashboardEditorError } from "./editing";
@@ -130,8 +131,19 @@ const bucketLabel = (key: SpendingResult["buckets"][number]["key"]): string => {
   }
 };
 
+const presentBucket = (
+  key: SpendingResult["buckets"][number]["key"]
+): Readonly<{ key: string; label: string; fill: string }> => {
+  const label = bucketLabel(key);
+  return key.kind === "category"
+    ? { key: key.category.id, label, fill: dashboardCategoryVisual(key.category.id).fill }
+    : { key: label, label, fill: "var(--dashboard-chart-fill)" };
+};
+
 type CurrencyChartDatum = Readonly<{
+  key: string;
   label: string;
+  fill: string;
   outflowExact: string;
   outflow: number;
 }>;
@@ -151,7 +163,7 @@ const currencyChartData = (
     }
     return [
       {
-        label: bucketLabel(bucket.key),
+        ...presentBucket(bucket.key),
         outflowExact: group === undefined ? "0" : moneyDecimalText(group.outflow),
         outflowAmount: group?.outflow.amount ?? zero,
       },
@@ -164,6 +176,10 @@ const currencyChartData = (
   }));
 };
 
+const maximumCompactCategories = 8;
+const categoryAxisHeight = 80;
+const calendarAxisHeight = 30;
+
 const CurrencySpendingChart = ({
   data,
   currency,
@@ -174,24 +190,27 @@ const CurrencySpendingChart = ({
   locale: DashboardLocale;
 }>): JSX.Element => {
   const chartData = currencyChartData(data, currency);
+  const category = data.buckets.some((bucket) => bucket.key.kind === "category");
   return (
     <section className="dashboard-chart-series" key={currency} aria-label={`Serie ${currency}`}>
       <span className="dashboard-chart-currency">
         <DashboardCurrency>{currency}</DashboardCurrency>
       </span>
       <span className="dashboard-chart-legend">Gastos</span>
-      <DashboardChart>
+      <DashboardChart dense={category && chartData.length > maximumCompactCategories}>
         <BarChart responsive width="100%" height="100%" accessibilityLayer data={chartData}>
           <CartesianGrid vertical={false} stroke="var(--application-line)" />
           <XAxis
-            dataKey="label"
+            dataKey="key"
             interval={0}
             axisLine={false}
             tickLine={false}
             tickMargin={16}
-            tick={<DashboardAxisTick />}
+            height={category ? categoryAxisHeight : calendarAxisHeight}
+            tick={<DashboardAxisTick category={category} labels={chartData} />}
           />
           <DashboardTooltip
+            labelFormatter={(key) => chartData.find((row) => row.key === key)?.label ?? ""}
             formatter={(_value: unknown, _name: unknown, item) => {
               const amount = exactChartAmount({
                 payload: item.payload,
@@ -853,14 +872,14 @@ const CatalogDragSources = ({
 }: Readonly<{ catalog: ReadonlyArray<DashboardCatalogEntry>; disabled: boolean }>): JSX.Element => (
   <ul
     aria-label="Widgets disponibles para arrastrar"
-    className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+    className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"
   >
     {catalog.map((entry) => (
       <li
-        className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3"
+        className="flex min-w-0 items-center justify-between gap-3 rounded-lg border bg-card p-3"
         key={entry.id}
       >
-        <span>
+        <span className="min-w-0 wrap-anywhere">
           <span className="block text-sm font-medium">{entry.name}</span>
           <span className="block text-xs text-muted-foreground">{entry.description}</span>
         </span>
@@ -875,7 +894,7 @@ const CatalogDragSources = ({
 );
 
 const DashboardCatalogTray = ({ editor }: Readonly<{ editor: DashboardEditor }>): JSX.Element => (
-  <section className="grid gap-3 rounded-xl border bg-background p-4">
+  <section className="grid min-w-0 grid-cols-1 gap-3 rounded-xl border bg-background p-4">
     <h2 className="font-medium">Widgets disponibles</h2>
     <CatalogDragSources catalog={editor.catalog} disabled={editor.disabled} />
   </section>

@@ -1,12 +1,80 @@
+import { dashboardCategoryVisual } from "@/ui/components/dashboard-category";
 import "@/ui/components/application.css";
 import { Option } from "effect";
 import type { JSX } from "react";
+// react-doctor-disable-next-line prefer-dynamic-import
+import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import {
+  DashboardAxisTick,
   DashboardBudget,
   DashboardCard,
+  DashboardChart,
+  DashboardCurrency,
   DashboardFigures,
   DashboardRecentList,
+  DashboardTooltip,
 } from "@/ui/components/dashboard";
+
+const spendingExamples = [
+  {
+    key: "10000000-0000-4000-8000-000000000001",
+    label: "Restaurantes",
+    outflow: 45000,
+    amount: "$ 45.000,00",
+  },
+  {
+    key: "10000000-0000-4000-8000-000000000003",
+    label: "Mercado",
+    outflow: 90000,
+    amount: "$ 90.000,00",
+  },
+  {
+    key: "10000000-0000-4000-8000-000000000004",
+    label: "Transporte",
+    outflow: 10000,
+    amount: "$ 10.000,00",
+  },
+  {
+    key: "10000000-0000-4000-8000-000000000016",
+    label: "Otros gastos con nombre largo",
+    outflow: 1,
+    amount: "$ 1,00",
+  },
+].map((row) => ({ ...row, fill: dashboardCategoryVisual(row.key).fill }));
+
+const SpendingReference = (): JSX.Element => (
+  <DashboardCard title={<h2>Gastos por categoría</h2>} editing={false} kind="spending-chart">
+    <section className="dashboard-chart-series" aria-label="Serie COP de ejemplo">
+      <span className="dashboard-chart-currency">
+        <DashboardCurrency>COP</DashboardCurrency>
+      </span>
+      <span className="dashboard-chart-legend">Gastos</span>
+      <DashboardChart dense={false}>
+        <BarChart responsive width="100%" height="100%" accessibilityLayer data={spendingExamples}>
+          <CartesianGrid vertical={false} stroke="var(--application-line)" />
+          <XAxis
+            dataKey="key"
+            interval={0}
+            axisLine={false}
+            tickLine={false}
+            tickMargin={16}
+            height={80}
+            tick={<DashboardAxisTick category labels={spendingExamples} />}
+          />
+          <DashboardTooltip
+            labelFormatter={(key) => spendingExamples.find((row) => row.key === key)?.label ?? ""}
+            formatter={(value) => [
+              spendingExamples.find((row) => row.outflow === value)?.amount ?? "No disponible",
+              "Gastos",
+            ]}
+          />
+          <Bar dataKey="outflow" radius={4} maxBarSize={52} />
+        </BarChart>
+      </DashboardChart>
+      <div className="dashboard-chart-footer">noviembre de 2026 · COP · Datos de ejemplo</div>
+    </section>
+  </DashboardCard>
+);
 
 export const DashboardReference = (): JSX.Element => (
   <section
@@ -15,6 +83,7 @@ export const DashboardReference = (): JSX.Element => (
     className="application-shell grid gap-6"
   >
     <h2>Componentes del tablero</h2>
+    <SpendingReference />
     <DashboardCard title={<h2>Salidas del mes</h2>} editing={false} kind="custom-metric">
       <DashboardFigures currency="COP" inflow="$ 3.800.000,00" outflow="$ 1.845.000,00" />
     </DashboardCard>

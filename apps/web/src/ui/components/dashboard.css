@@ -40,7 +40,7 @@
   flex: 1;
 }
 .dashboard-card[data-editing] {
-  padding-top: 70px;
+  padding-top: max(70px, 4rem);
   border-style: dashed;
 }
 .dashboard-card-header {
@@ -95,7 +95,7 @@
 .dashboard-card[data-editing] .dashboard-figures:only-of-type > .dashboard-currency,
 .dashboard-card[data-editing] .dashboard-budget > .dashboard-currency,
 .dashboard-card[data-editing] .dashboard-chart-series:only-child .dashboard-chart-currency {
-  top: 70px;
+  top: max(70px, 4rem);
 }
 .dashboard-figure-values {
   display: grid;
@@ -195,6 +195,22 @@
   height: 342px;
   min-height: 342px;
   width: 100%;
+}
+.dashboard-chart-scroll {
+  overflow-x: auto;
+}
+.dashboard-chart-frame {
+  position: relative;
+  min-width: 0;
+}
+.dashboard-chart-tooltip {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  pointer-events: none;
+}
+.dashboard-chart[data-dense] {
+  min-width: 28rem;
 }
 .dashboard-chart-footer {
   border-top: 1px solid var(--application-line);
@@ -413,16 +429,9 @@
   margin-top: 28px;
 }
 
-.dashboard-axis-short {
-  display: none;
-}
-@media (max-width: 600px) {
-  .dashboard-axis-full {
-    display: none;
-  }
-  .dashboard-axis-short {
-    display: inline;
-  }
+.dashboard-category-emoji {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 1rem;
 }
 
 .dashboard-card:is([data-widget-type="spending-chart"], [data-widget-type="transaction-list"]):has(

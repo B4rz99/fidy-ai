@@ -28,6 +28,7 @@ const Terms = Schema.Struct({
   paymentMethods: Price.fields.paymentMethods,
 });
 const StandingRow = Schema.Struct({
+  has_pro_grant: Schema.Literals([0, 1]),
   started_at_ms: Schema.Finite,
   trial_ends_at_ms: Schema.Finite,
   price_id: Schema.NullOr(Schema.String),
@@ -162,6 +163,13 @@ const projectCancellation = (row: typeof StandingRow.Type): unknown =>
         sourceCancellation: row.source_cancellation,
       };
 
+const hasPeriodAccess = (row: typeof StandingRow.Type, now: number): boolean =>
+  (row.started_at_ms <= now && row.trial_ends_at_ms > now) ||
+  (row.starts_at_ms !== null &&
+    row.starts_at_ms <= now &&
+    row.access_ends_at_ms !== null &&
+    row.access_ends_at_ms > now);
+
 /** Build a closed User-specific standing projection from decoded authoritative rows. */
 export const projectSubscriptionStatus = ({
   standingRow,
@@ -188,14 +196,8 @@ export const projectSubscriptionStatus = ({
         };
   const recentAttempts = attemptRows.map(projectAttempt);
   const data = decode(Schema.toCodecJson(SubscriptionStatus), {
-    accessTier:
-      (row.started_at_ms <= now && row.trial_ends_at_ms > now) ||
-      (row.starts_at_ms !== null &&
-        row.starts_at_ms <= now &&
-        row.access_ends_at_ms !== null &&
-        row.access_ends_at_ms > now)
-        ? "pro"
-        : "free",
+    hasProGrant: row.has_pro_grant === 1,
+    accessTier: row.has_pro_grant === 1 || hasPeriodAccess(row, now) ? "pro" : "free",
     trialPeriod: { startedAt: instant(row.started_at_ms), endsAt: instant(row.trial_ends_at_ms) },
     paidSubscription,
     cancellation: projectCancellation(row),

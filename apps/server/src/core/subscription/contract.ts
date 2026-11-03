@@ -189,6 +189,7 @@ const maximumRecentBillingAttempts = 10;
 /** Standing at one decision instant, including expired evidence without hiding existing data. */
 export const SubscriptionStatus = Schema.Struct({
   accessTier: AccessTier,
+  hasProGrant: Schema.Boolean,
   trialPeriod: TrialPeriod,
   paidSubscription: Schema.OptionFromNullOr(PaidSubscription),
   cancellation: Schema.OptionFromNullOr(SubscriptionCancellation),

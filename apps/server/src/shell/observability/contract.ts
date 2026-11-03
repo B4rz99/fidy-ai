@@ -123,6 +123,7 @@ export const TelemetryRegistry = {
     "bancolombia",
     "github",
     "cloudflare-access",
+    "cloudflare-d1",
     "google",
     "microsoft",
     "cloudflare-workers",

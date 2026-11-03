@@ -737,9 +737,14 @@ type SubscriptionStandingPresentation = Readonly<{
   refresh: () => void;
   management: JSX.Element;
 }>;
-const hasPaidAccess = (state: StandingViewState): boolean =>
+const hasNonTrialPro = (state: StandingViewState): boolean =>
   state._tag === "Ready" &&
   state.standing.accessTier === "pro" &&
+  (state.standing.hasProGrant || Option.isSome(state.standing.paidSubscription));
+
+const showBillingManagement = (state: StandingViewState): boolean =>
+  state._tag !== "Ready" ||
+  !state.standing.hasProGrant ||
   Option.isSome(state.standing.paidSubscription);
 
 type ReadyOffersProps = Readonly<{
@@ -876,7 +881,7 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
   const selection = useSubscriptionSelection(props);
   const lifetimeRef = useEnrollmentLifetime(selection);
   const { standing } = props;
-  const paid = hasPaidAccess(standing.state);
+  const paid = hasNonTrialPro(standing.state);
   return (
     <div
       ref={lifetimeRef}
@@ -891,7 +896,7 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
         ) : (
           <>
             <SubscriptionStandingView state={standing.state} onRetry={standing.refresh} />
-            {standing.management}
+            {showBillingManagement(standing.state) && standing.management}
             {!paid && (
               <OfferOverview
                 selection={selection}
@@ -905,6 +910,7 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
         offer={selection.selectedOffer}
         checkout={selection.checkout}
         paid={paid}
+        granted={standing.state._tag === "Ready" && standing.state.standing.hasProGrant}
       />
     </div>
   );
@@ -1005,14 +1011,15 @@ const StandingWithoutOffers = ({
   standing: SubscriptionStandingPresentation;
   children: JSX.Element;
 }>): JSX.Element => (
-  <div className="subscription-columns" data-paid={hasPaidAccess(standing.state)}>
+  <div className="subscription-columns" data-paid={hasNonTrialPro(standing.state)}>
     <div className="subscription-main">
       <SubscriptionStandingView state={standing.state} onRetry={standing.refresh} />
-      {standing.management}
+      {showBillingManagement(standing.state) && standing.management}
       <div className="subscription-offers-feedback">{children}</div>
     </div>
     <SubscriptionSummary
-      paid={hasPaidAccess(standing.state)}
+      paid={hasNonTrialPro(standing.state)}
+      granted={standing.state._tag === "Ready" && standing.state.standing.hasProGrant}
       offer={Option.none()}
       checkout={false}
     />

@@ -71,6 +71,7 @@ const billingAttempt = (status: BillingAttempt["status"]): BillingAttempt => {
 };
 const freeStanding = {
   accessTier: "free",
+  hasProGrant: false,
   trialPeriod: makeUser().trialPeriod,
   paidSubscription: null,
   cancellation: null,

@@ -1,3 +1,4 @@
+import { activeProGrantSelection } from "~/shell/pro-grants/operations";
 import { renewalGraceMs } from "~/core/subscription/contract";
 import { UserId } from "~/core/identity/contract";
 import { Option, Schema } from "effect";
@@ -42,8 +43,9 @@ export const subscriptionStandingQuery = ({
   const subject = Schema.decodeOption(UserId)(userId);
   if (Option.isNone(subject)) return { sql: "SELECT NULL WHERE 0", params: [] };
   const trial = userTrialPeriodQuery(subject.value);
+  const grant = activeProGrantSelection({ sql: "SELECT ?", params: [userId] });
   return {
-    sql: `SELECT t.startedAtMs AS started_at_ms, t.endsAtMs AS trial_ends_at_ms,
+    sql: `SELECT ${grant.sql} AS has_pro_grant, t.startedAtMs AS started_at_ms, t.endsAtMs AS trial_ends_at_ms,
       s.price_id, a.amount, a.currency, a.billing_period, a.service_market, a.tax_treatment,
       a.paid_starts_at_ms AS starts_at_ms,
       MIN(a.paid_ends_at_ms,COALESCE((SELECT MIN(adjustment.access_ends_at_ms) FROM refund_attempts adjustment
@@ -56,7 +58,7 @@ export const subscriptionStandingQuery = ({
       LEFT JOIN payment_source_context AS source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       LEFT JOIN subscription_cancellation_context AS c ON c.user_id=s.user_id AND c.subscription_id=a.subscription_id
       WHERE TRUE${guard(authority)} LIMIT 1`,
-    params: [...trial.params, userId, ...bindings(authority)],
+    params: [...grant.params, ...trial.params, userId, ...bindings(authority)],
   };
 };
 

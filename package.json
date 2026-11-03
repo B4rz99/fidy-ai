@@ -25,6 +25,7 @@
     "dev:cloudflare": "bun run --cwd infra/cloudflare dev",
     "build": "bun run --cwd apps/docs build && bun run --cwd apps/site build && bun run --cwd apps/web build && bun run --cwd apps/cli build",
     "cli": "bun apps/cli/src/main.ts",
+    "pro": "bun scripts/pro/main.ts",
     "titular:requests": "bun scripts/titular-requests/main.ts",
     "agent:repl": "bun run --cwd apps/server agent:repl",
     "shadcn": "bun run --cwd apps/web shadcn",

@@ -442,9 +442,16 @@ _Avoid_: Advice (unqualified), recommendation.
 
 **AccessTier**:
 The User's current capability tier: `free` or `pro`. It is derived at the decision instant from an
-active TrialPeriod, active paid Subscription, or its three-day renewal grace; it is never
+active TrialPeriod, active paid Subscription, its three-day renewal grace, or a ManualProGrant; it is never
 persisted as a separate owner fact.
 _Avoid_: PaidTier, effective access, access basis, trial tier.
+
+**ManualProGrant**:
+An operator's revocable grant of Pro to an existing User, lasting until explicitly revoked.
+Grant and revocation retain ordered operator evidence; removing the grant preserves any active
+TrialPeriod or paid Subscription. It neither creates a Subscription nor changes billing.
+Users see the ordinary Pro tier.
+_Avoid_: Tier override, fake Subscription, extended trial.
 
 **TrialPeriod**:
 The immutable half-open UTC interval during which a newly onboarded User receives Pro access without

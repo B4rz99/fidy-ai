@@ -107,3 +107,9 @@ export const activeTrialPeriodForUserSelection = ({
     AND trial_started_at_ms <= ? AND trial_ends_at_ms > ?)`,
   params: [...users.params, nowEpochMs, nowEpochMs],
 });
+
+/** Select an existing stable User for trusted operator work; this is not authentication. */
+export const existingUserSelection = (userId: string): OwnedStatement => ({
+  sql: "SELECT id AS userId FROM users WHERE id = ?",
+  params: [userId],
+});

@@ -151,14 +151,31 @@ const SelectedOffer = ({
   </div>
 );
 
+const ActiveAccessSummary = ({ granted }: Readonly<{ granted: boolean }>): JSX.Element => (
+  <>
+    <HugeiconsIcon icon={InformationCircleIcon} size={32} strokeWidth={1.5} aria-hidden="true" />
+    <h2>Sobre tu acceso</h2>
+    {granted ? (
+      <p>Tu acceso Pro está activo.</p>
+    ) : (
+      <>
+        <p>El período pagado y los intentos de cobro se muestran por separado.</p>
+        <p>Un intento pendiente no significa que el pago esté aprobado.</p>
+      </>
+    )}
+  </>
+);
+
 export const SubscriptionSummary = ({
   offer,
   checkout,
   paid,
+  granted,
 }: Readonly<{
   offer: Option.Option<SubscriptionOfferPresentation>;
   checkout: boolean;
   paid: boolean;
+  granted: boolean;
 }>): JSX.Element => (
   <aside
     className="subscription-summary"
@@ -166,17 +183,7 @@ export const SubscriptionSummary = ({
     data-checkout={checkout}
   >
     {paid ? (
-      <>
-        <HugeiconsIcon
-          icon={InformationCircleIcon}
-          size={32}
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
-        <h2>Sobre tu acceso</h2>
-        <p>El período pagado y los intentos de cobro se muestran por separado.</p>
-        <p>Un intento pendiente no significa que el pago esté aprobado.</p>
-      </>
+      <ActiveAccessSummary granted={granted} />
     ) : (
       <>
         <h2>Tu elección</h2>
@@ -317,6 +324,7 @@ const StandingAccessPeriod = ({
   standing,
 }: Readonly<{ standing: SubscriptionStatus }>): JSX.Element => {
   const { accessTier, trialPeriod, paidSubscription } = standing;
+  if (standing.hasProGrant && Option.isNone(paidSubscription)) return <></>;
   return Option.match(paidSubscription, {
     onNone: () =>
       accessTier === "pro" ? (

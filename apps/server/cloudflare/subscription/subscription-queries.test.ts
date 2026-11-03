@@ -1,3 +1,5 @@
+import { executeProCommand } from "../../src/shell/pro-grants/operations";
+import { ProGrantFailure } from "../../src/shell/pro-grants/contract";
 import { expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -379,5 +381,48 @@ effectIt.effect(
       expect(result.data).toHaveLength(3);
       expect(result.data[0].billingPeriod).toBe("weekly");
       expect(result.data[0].money.currency).toBe("COP");
+    })
+);
+
+effectIt.effect(
+  "reports manual Pro through protected status and preserves normal eligibility after revocation",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => fixture());
+      const change = (action: "grant" | "revoke"): ReturnType<typeof executeProCommand> =>
+        executeProCommand({
+          command: { action, selector: { userId: userA } },
+          operator: "operator",
+          query: (statement) =>
+            Effect.tryPromise({
+              try: () =>
+                db
+                  .prepare(statement.sql)
+                  .bind(...statement.params)
+                  .all()
+                  .then((result) => result.results),
+              catch: () => new ProGrantFailure({ reason: "unavailable", candidates: [] }),
+            }),
+        });
+      const status = Effect.gen(function* () {
+        const response = yield* executeProtectedSubscriptionQuery({
+          db,
+          subject: { id: sessionA, userId: userA, digest: token },
+          operation: "subscription.getSubscriptionStatus",
+        });
+        expect(response.status).toBe(200);
+        return yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(SubscriptionStatus) })
+        )(yield* fromTestPromise(() => response.json()));
+      });
+      yield* change("grant");
+      const granted = yield* status;
+      expect(granted.data.accessTier).toBe("pro");
+      expect(granted.data.hasProGrant).toBe(true);
+      expect(Option.isNone(granted.data.paidSubscription)).toBe(true);
+      yield* change("revoke");
+      const revoked = yield* status;
+      expect(revoked.data.accessTier).toBe("free");
+      expect(revoked.data.hasProGrant).toBe(false);
     })
 );

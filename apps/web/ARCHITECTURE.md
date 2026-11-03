@@ -502,8 +502,10 @@ The creation draft retains the selected Transaction identity locally. After ackn
 the sheet reads the unfiltered first month through the existing canonical query and presents actual
 fulfillment, any known existing association, and the separate remaining expectation. Verification
 failure offers an explicit read retry without resubmitting creation. A pending first occurrence
-can be corrected with a forward edit from its original date. Matching and totals remain server-owned;
-the existing canonical transport observes these bounded reads and edits.
+can be corrected with a forward edit from its original date. Matching and totals remain server-owned.
+Twice-monthly schedules without an occurrence in the starting month read the following month once.
+Background verification retains correction drafts while gating edits. The existing canonical
+transport observes these bounded reads and edits.
 
 Recurring manual marks disclose that they change tracking only. Transaction capture reuses the
 Transactions-owned form and canonical mutation, preserving the plan's Currency and direction.

@@ -12,6 +12,7 @@ import {
   type Save,
   type Workspace,
   money,
+  shiftMonth,
   statuses,
 } from "./model";
 import { PlanForm } from "./plan-form";
@@ -24,35 +25,93 @@ type Props = Readonly<{
   save: Save;
   close: () => void;
 }>;
-export const CreationResult = (props: Props): JSX.Element => {
+export const CreationResult = (props: Props): JSX.Element => (
+  <CreationMonth {...props} month={props.receipt.date.slice(0, "2026-10".length)} />
+);
+type MonthProps = Props & Readonly<{ month: string }>;
+const CreationMonth = (props: MonthProps): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
-  const [resource] = useState(() =>
-    recurringWorkspaceQuery({
-      apiClient,
-      query: { month: props.receipt.date.slice(0, "2026-10".length), view: "compact" },
-    })
-  );
+  const resource = recurringWorkspaceQuery({
+    apiClient,
+    query: { month: props.month, view: "compact" },
+  });
   const state = useAtomValue(resource.view).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(resource.source);
-  if (
-    state._tag !== "Ready" ||
-    state.waiting ||
-    Option.isSome(state.refreshFailure) ||
-    state.value.data.document.revision < props.minimumRevision
-  ) {
+  if (state._tag !== "Ready") {
+    return <VerificationPending waiting={state.waiting} refresh={refresh} focus />;
+  }
+  const fresh =
+    !state.waiting &&
+    Option.isNone(state.refreshFailure) &&
+    state.value.data.document.revision >= props.minimumRevision;
+  return (
+    <ObservedCreation
+      {...props}
+      view={state.value.data}
+      fresh={fresh}
+      waiting={state.waiting}
+      refresh={refresh}
+    />
+  );
+};
+type ObservedProps = MonthProps &
+  Readonly<{ view: Workspace; fresh: boolean; waiting: boolean; refresh: () => void }>;
+const ObservedCreation = (props: ObservedProps): JSX.Element => {
+  const { view, fresh, receipt, waiting, refresh } = props;
+  const item = view.occurrences.find(
+    (entry) => entry.planId === receipt.planId && entry.date >= receipt.date
+  );
+  if (item === undefined) {
+    return <MissingCreation {...props} />;
+  }
+  return (
+    <div className="grid min-w-0 gap-4 [overflow-wrap:anywhere]">
+      {!fresh ? <VerificationPending waiting={waiting} refresh={refresh} focus={false} /> : null}
+      <VerifiedCreation {...props} item={item} disabled={props.disabled || !fresh} />
+    </div>
+  );
+};
+const MissingCreation = (props: ObservedProps): JSX.Element => {
+  const { view, fresh, receipt, month, waiting, refresh } = props;
+  const plan = view.document.plans
+    .find((entry) => entry.id === receipt.planId)
+    ?.revisions.at(-1)?.plan;
+  if (month === receipt.date.slice(0, "2026-10".length) && plan?.frequency === "twice-monthly") {
     return (
-      <div className="grid gap-3">
-        <p>
-          El recurrente se guardó. Falta verificar si la transacción completa la primera ocurrencia.
-        </p>
-        <Button variant="outline" disabled={state.waiting} onClick={refresh}>
-          Verificar vínculo
-        </Button>
-      </div>
+      <CreationMonth
+        {...props}
+        disabled={props.disabled || !fresh}
+        month={shiftMonth({ month, step: 1 })}
+      />
     );
   }
-  return <VerifiedCreation {...props} view={state.value.data} />;
+  if (!fresh) {
+    return <VerificationPending waiting={waiting} refresh={refresh} focus />;
+  }
+  return (
+    <div className="grid gap-3">
+      <p tabIndex={-1} ref={focusResult}>
+        El recurrente se guardó, pero no pudimos verificar su primera ocurrencia en este periodo.
+        Revisa el plan en Todos los recurrentes para comprobar el vínculo y las fechas esperadas.
+      </p>
+      <Button onClick={props.close}>Listo</Button>
+    </div>
+  );
 };
+const VerificationPending = ({
+  waiting,
+  refresh,
+  focus,
+}: Readonly<{ waiting: boolean; refresh: () => void; focus: boolean }>): JSX.Element => (
+  <div className="grid gap-3" aria-live="polite">
+    <p tabIndex={-1} ref={focus ? focusResult : undefined}>
+      El recurrente se guardó. Falta verificar si la transacción completa la primera ocurrencia.
+    </p>
+    <Button variant="outline" disabled={waiting} onClick={refresh}>
+      Verificar vínculo
+    </Button>
+  </div>
+);
 
 const VerifiedCreation = ({
   receipt,
@@ -61,21 +120,11 @@ const VerifiedCreation = ({
   disabled,
   save,
   close,
-}: Props & Readonly<{ view: Workspace }>): JSX.Element => {
-  const item = view.occurrences.find(
-    (entry) => entry.planId === receipt.planId && entry.date === receipt.date
-  );
-  if (item === undefined) {
-    return (
-      <p>
-        El recurrente se guardó. Su primera fecha ya no aparece en este mes; revisa el plan en Todos
-        los recurrentes.
-      </p>
-    );
-  }
+  item,
+}: Props & Readonly<{ view: Workspace; item: Occurrence }>): JSX.Element => {
   const linked = item.fulfillments.some((mark) => mark.transactionId === receipt.transactionId);
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4 [overflow-wrap:anywhere]">
       <h3 className="font-medium" tabIndex={-1} ref={focusResult}>
         {item.plan.name} · {item.expectedDate}
       </h3>
@@ -88,7 +137,7 @@ const VerifiedCreation = ({
   );
 };
 
-const focusResult: RefCallback<HTMLHeadingElement> = (element): void => {
+const focusResult: RefCallback<HTMLElement> = (element): void => {
   element?.focus();
   element?.closest('[role="dialog"]')?.scrollIntoView({ block: "start" });
 };
@@ -98,7 +147,7 @@ const sourceOutcome = (item: Occurrence, linked: boolean): string => {
     return "La transacción solo se usó para copiar los datos; no está vinculada a la primera ocurrencia.";
   }
   return item.status === "completed"
-    ? "La transacción seleccionada completa la primera ocurrencia. No se espera otro pago o ingreso para esta fecha."
+    ? "La transacción seleccionada completa la primera ocurrencia. En este plan no se espera otro pago o ingreso para esta fecha."
     : "La transacción seleccionada está vinculada a la primera ocurrencia.";
 };
 const CreationSummary = ({
@@ -113,9 +162,9 @@ const CreationSummary = ({
   view: Workspace;
 }>): JSX.Element => (
   <output className="grid gap-3 text-sm">
-    <p>{sourceOutcome(item, linked)}</p>
+    <span>{sourceOutcome(item, linked)}</span>
     {!linked ? <SourceAssociation receipt={receipt} view={view} /> : null}
-    <p>Primera ocurrencia: {statuses[item.status]}.</p>
+    <span>Primera ocurrencia: {statuses[item.status]}.</span>
     {item.status !== "completed" && item.status !== "skipped" ? (
       <PendingExpectation item={item} />
     ) : null}
@@ -139,6 +188,7 @@ const CreationCorrection = ({
       </Button>
       {editing ? (
         <PlanForm
+          key={JSON.stringify(item.plan)}
           initial={{ ...item.plan, firstDate: item.expectedDate }}
           categories={categories}
           disabled={disabled}
@@ -156,7 +206,7 @@ const SourceAssociation = ({
   view,
 }: Readonly<{ receipt: CreationReceipt; view: Workspace }>): JSX.Element => {
   const marks = [
-    ...view.document.fulfillments,
+    ...view.document.fulfillments.filter((mark) => !view.invalidFulfillmentIds.includes(mark.id)),
     ...view.matches.map(({ item, fact }) => ({
       planId: item.planId,
       date: item.date,
@@ -166,8 +216,7 @@ const SourceAssociation = ({
   const association = marks.find(
     (mark) =>
       mark.transactionId === receipt.transactionId &&
-      mark.planId !== receipt.planId &&
-      !view.invalidFulfillmentIds.includes("id" in mark ? mark.id : "")
+      (mark.planId !== receipt.planId || mark.date !== receipt.date)
   );
   const name =
     association === undefined
@@ -176,24 +225,24 @@ const SourceAssociation = ({
           .name;
   if (association !== undefined && name !== undefined) {
     return (
-      <p>
+      <span>
         La transacción ya está vinculada a {name} · {association.date}. No se usa para completar dos
         ocurrencias.
-      </p>
+      </span>
     );
   }
   return (
-    <p>
+    <span>
       {view.matchesComplete
         ? "No se encontró una coincidencia automática única para esta transacción con los datos guardados. Puedes revisar y vincular una transacción desde el detalle de la ocurrencia."
         : "La búsqueda de coincidencias está incompleta. Todavía no podemos confirmar el vínculo; revisa las transacciones de esta ocurrencia."}
-    </p>
+    </span>
   );
 };
 const PendingExpectation = ({ item }: Readonly<{ item: Occurrence }>): JSX.Element => (
-  <p>
+  <span>
     {item.remaining === undefined
       ? "Este plan conserva una expectativa separada con importe por confirmar."
       : `En este plan siguen previstos ${money(item.remaining)} adicionales para ${item.expectedDate}. Se incluyen en el pronóstico de ese mes.`}
-  </p>
+  </span>
 );

@@ -1,6 +1,6 @@
 import { useRouterState } from "@tanstack/react-router";
 import { Array, Option } from "effect";
-import { type JSX, type ReactNode, useState } from "react";
+import { type Dispatch, type JSX, type ReactNode, type SetStateAction, useState } from "react";
 import { Button } from "@/ui/components/button";
 import {
   RecurringColumns,
@@ -76,7 +76,7 @@ type SheetProps = EditorProps &
   Pick<Props, "notice"> &
   Readonly<{
     panel: Option.Option<Panel>;
-    setPanel: (panel: Option.Option<Panel>) => void;
+    setPanel: Dispatch<SetStateAction<Option.Option<Panel>>>;
     link: () => void;
   }>;
 const Editor = ({
@@ -419,7 +419,7 @@ type WorkspaceBodyProps = Readonly<{
   calendar: boolean;
   setCalendar: (value: boolean) => void;
   filtersOpen: boolean;
-  setPanel: (panel: Option.Option<Panel>) => void;
+  setPanel: Dispatch<SetStateAction<Option.Option<Panel>>>;
   open: (item: Occurrence) => void;
 }>;
 const WorkspaceBody = ({
@@ -530,7 +530,11 @@ const EditorSheet = ({
           key={JSON.stringify(panel.value)}
           panel={panel.value}
           link={link}
-          created={(receipt) => setPanel(Option.some({ kind: "created", ...receipt }))}
+          created={(receipt) =>
+            setPanel((current) =>
+              current === panel ? Option.some({ kind: "created", ...receipt }) : current
+            )
+          }
           close={() => setPanel(Option.none())}
           view={view}
           categories={categories}

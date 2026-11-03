@@ -12,7 +12,7 @@ import {
 } from "./source-context";
 import { reviewAmount, reviewTitle } from "./presentation";
 import { ReviewToolbar } from "./toolbar";
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import { Navigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
 import { type JSX, type ReactNode, type RefCallback, useState } from "react";
@@ -157,7 +157,8 @@ const ReviewResources = ({
   const decisions = useReviewDecisions({ client: apiClient, query: queries.source });
   const [lifetime] = useState(() => decisionLifetime(decisions));
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
-  const refresh = useAtomRefresh(query);
+  const refresh = decisions.recover;
+  const waitingFreshness = state.waiting ? "refreshing" : "current";
   return (
     <div ref={lifetime} hidden={!active} data-review="panel">
       {state._tag !== "Ready" ? (
@@ -178,7 +179,7 @@ const ReviewResources = ({
               <ReviewReadFailure refresh={refresh} waiting={state.waiting} />
             ) : null
           }
-          disabled={state.waiting || Option.isSome(state.refreshFailure)}
+          freshness={Option.isSome(state.refreshFailure) ? "stale" : waitingFreshness}
           page={page}
           move={move}
           filter={filter}
@@ -239,7 +240,7 @@ const ReviewReadFailure = ({
   <div className="p-5">
     <CanonicalQueryRetry
       title="No pudimos cargar los elementos"
-      description="Actualiza para volver a consultar tus datos."
+      description="La información anterior puede estar desactualizada. Reintenta para consultar los datos actuales."
       retryLabel="Reintentar"
       retryingLabel="Reintentando…"
       waiting={waiting}
@@ -251,7 +252,7 @@ type ReadyInboxProps = Readonly<{
   filter: Filter;
   select: (status: Filter, offset: number) => void;
   view: Workspace;
-  disabled: boolean;
+  freshness: "current" | "refreshing" | "stale";
   notice: ReactNode;
   page: number;
   move: (offset: number) => void;
@@ -273,7 +274,7 @@ const ReadyInboxView = ({
   workspaceQuery,
   decisions,
   notice,
-  disabled,
+  freshness,
   view,
   page,
   move,
@@ -285,7 +286,7 @@ const ReadyInboxView = ({
   const context = useReviewPageContext({ filter, page, items: view.items });
   const visible = filterReviewPage({ view, source, search, page, contexts: context.contexts });
   const inbox = useInboxControl({ view, visibleItems: visible.items, decisions });
-  const control = { ...inbox, locked: inbox.locked || disabled };
+  const control = { ...inbox, locked: inbox.locked || freshness !== "current" };
   const checked = control.checked.filter((id) => visible.items.some((entry) => entry.id === id));
   return (
     <>
@@ -314,6 +315,7 @@ const ReadyInboxView = ({
         contexts={context.contexts}
         contextLoading={context.loading}
         workspaceQuery={workspaceQuery}
+        freshness={freshness}
         caughtUp={
           filter === "pending" && source === "all" && search === "" && view.pendingCount === 0
         }
@@ -328,49 +330,57 @@ const ReadyInboxView = ({
 };
 const EmptyInbox = ({
   caughtUp,
+  freshness,
 }: Readonly<{
   caughtUp: boolean;
-}>): JSX.Element => (
-  <ReviewFullState
-    state="empty"
-    title={caughtUp ? "Todo al día" : "Sin elementos en esta vista"}
-    description={
-      caughtUp
-        ? "Cuando haya material por completar, aparecerá aquí."
-        : "Prueba con otros filtros para encontrar elementos en esta página."
-    }
-  >
-    {null}
-  </ReviewFullState>
-);
-const InboxWorkspace = ({
-  unfilteredItems,
-  contexts,
-  contextLoading,
-  workspaceQuery,
-  caughtUp,
-  view,
-  control,
-  page,
-  move,
-  pageLength,
-}: Readonly<{
+  freshness: ReadyInboxProps["freshness"];
+}>): JSX.Element =>
+  freshness === "stale" ? (
+    <></>
+  ) : (
+    <ReviewFullState
+      state={freshness === "refreshing" ? "loading" : "empty"}
+      title={caughtUp ? "Todo al día" : "Sin elementos en esta vista"}
+      description={
+        caughtUp
+          ? "Cuando haya material por completar, aparecerá aquí."
+          : "Prueba con otros filtros para encontrar elementos en esta página."
+      }
+    >
+      {null}
+    </ReviewFullState>
+  );
+type InboxWorkspaceProps = Readonly<{
   unfilteredItems: ReadonlyArray<Workspace["items"][number]>;
   contexts: PageContexts;
   contextLoading: boolean;
   caughtUp: boolean;
+  freshness: ReadyInboxProps["freshness"];
   workspaceQuery: ReviewWorkspaceQuery;
   view: Workspace;
   control: InboxControl;
   page: number;
   move: (offset: number) => void;
   pageLength: number;
-}>): JSX.Element => {
+}>;
+const InboxWorkspace = ({
+  unfilteredItems,
+  contexts,
+  contextLoading,
+  workspaceQuery,
+  caughtUp,
+  freshness,
+  view,
+  control,
+  page,
+  move,
+  pageLength,
+}: InboxWorkspaceProps): JSX.Element => {
   const item = view.items.find(({ id }) => Option.contains(control.selected, id)) ?? view.items[0];
   if (item === undefined) {
     return (
       <>
-        <EmptyInbox caughtUp={caughtUp} />
+        <EmptyInbox caughtUp={caughtUp} freshness={freshness} />
         {view.total > 0 ? (
           <ReviewPagination page={page} pageLength={pageLength} total={view.total} move={move} />
         ) : null}

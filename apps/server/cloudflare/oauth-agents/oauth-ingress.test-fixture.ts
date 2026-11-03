@@ -34,6 +34,7 @@ type QueryGate = Readonly<{
   scheduled: string[];
 }>;
 
+const budgetGateSql = "__fidyBudgetGateSql";
 const pauseBudgetRead = (
   statement: D1PreparedStatement,
   sql: string,
@@ -41,6 +42,7 @@ const pauseBudgetRead = (
 ): D1PreparedStatement =>
   new Proxy(statement, {
     get: (target, key): unknown => {
+      if (key === budgetGateSql) return sql;
       if (key === "bind") {
         return (...values: unknown[]): D1PreparedStatement =>
           pauseBudgetRead(target.bind(...values), sql, gate);
@@ -169,6 +171,28 @@ export const setup = Effect.fnUntraced(function* () {
   const mutationCommit = makeMutationCommitGate(db);
   const queryDb = new Proxy(mutationCommit.db, {
     get: (target, key): unknown => {
+      if (key === "batch") {
+        return <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> => {
+          const gate = queryGate;
+          if (Option.isNone(gate)) return target.batch<Row>(statements);
+          const sql = statements.map((statement) => {
+            const value: unknown = Reflect.get(statement, budgetGateSql);
+            return typeof value === "string" ? value : "";
+          });
+          if (
+            gate.value.scheduled.length === 0 &&
+            sql.some((text) => /FROM budgets(?: b)? WHERE/u.test(text))
+          ) {
+            gate.value.scheduled.push("held");
+            gate.value.waiting.resolve();
+            return gate.value.release.promise
+              .then(() => target.batch<Row>(statements))
+              .finally(gate.value.settled.resolve);
+          }
+          if (gate.value.scheduled.length > 0) gate.value.scheduled.push(...sql);
+          return target.batch<Row>(statements);
+        };
+      }
       if (key === "prepare") {
         return (sql: string): D1PreparedStatement =>
           Option.match(queryGate, {

@@ -304,52 +304,51 @@ const CaptureForm = ({
   onDraft: (draft: CaptureDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   revealErrors: boolean;
-}>): JSX.Element => {
-  return (
-    <form
-      noValidate
-      onSubmit={onSubmit}
-      aria-label="Registrar transacción"
-      className="flex flex-col gap-5"
-    >
-      <fieldset disabled={captureLocked(props)} className="flex min-w-0 flex-col gap-4">
-        <legend className="sr-only">Datos de la transacción</legend>
-        {Option.isNone(props.direction) ? (
-          <TransactionTypeToggle
-            value={draft.direction}
-            onChange={(direction) => onDraft({ ...draft, direction })}
-          />
-        ) : (
-          <p>{draft.direction === "inflow" ? "Ingreso" : "Gasto"}</p>
+}>): JSX.Element => (
+  <form
+    noValidate
+    onSubmit={onSubmit}
+    aria-label="Registrar transacción"
+    className="flex flex-col gap-5"
+  >
+    <fieldset disabled={captureLocked(props)} className="flex min-w-0 flex-col gap-4">
+      <legend className="sr-only">Datos de la transacción</legend>
+      {Option.isNone(props.direction) ? (
+        <TransactionTypeToggle
+          value={draft.direction}
+          onChange={(direction) => onDraft({ ...draft, direction })}
+        />
+      ) : (
+        <p>{draft.direction === "inflow" ? "Ingreso" : "Gasto"}</p>
+      )}
+      <CaptureInputs
+        revealErrors={revealErrors}
+        amount={draft.amount}
+        disabled={captureLocked(props)}
+        currency={currency}
+        counterparty={draft.counterparty}
+        onCurrency={captureCurrencyChange(props.currency, (currency) =>
+          onDraft({ ...draft, currency })
         )}
-        <CaptureInputs
-          revealErrors={revealErrors}
-          amount={draft.amount}
-          disabled={captureLocked(props)}
-          currency={currency}
-          counterparty={draft.counterparty}
-          onCurrency={captureCurrencyChange(props.currency, (currency) =>
-            onDraft({ ...draft, currency })
-          )}
-          onAmount={(amount) => onDraft({ ...draft, amount })}
-          onCounterparty={(counterparty) => onDraft({ ...draft, counterparty })}
-        />
-        <CaptureClassification
-          categories={props.categories}
-          occurredOn={draft.occurredOn}
-          timeZone={props.timeZone}
-          onOccurredOn={(occurredOn) => onDraft({ ...draft, occurredOn })}
-          categoryId={draft.categoryId}
-          setCategoryId={(categoryId) => onDraft({ ...draft, categoryId })}
-          notes={draft.notes}
-          setNotes={(notes) => onDraft({ ...draft, notes })}
-        />
-      </fieldset>
-      <CaptureFeedback status={props.status} onCheckHistory={props.onCheckHistory} />
-      <CaptureActions props={props} />
-    </form>
-  );
-};
+        onAmount={(amount) => onDraft({ ...draft, amount })}
+        onCounterparty={(counterparty) => onDraft({ ...draft, counterparty })}
+      />
+      <CaptureClassification
+        categories={props.categories}
+        occurredOn={draft.occurredOn}
+        timeZone={props.timeZone}
+        onOccurredOn={(occurredOn) => onDraft({ ...draft, occurredOn })}
+        categoryId={draft.categoryId}
+        setCategoryId={(categoryId) => onDraft({ ...draft, categoryId })}
+        notes={draft.notes}
+        setNotes={(notes) => onDraft({ ...draft, notes })}
+      />
+    </fieldset>
+    <CaptureFeedback status={props.status} onCheckHistory={props.onCheckHistory} />
+    <CaptureActions props={props} />
+  </form>
+);
+
 const CaptureActions = ({ props }: Readonly<{ props: CaptureProps }>): JSX.Element => (
   <div data-transaction-slot="transaction-form-actions">
     {Option.isNone(props.onCancel) ? null : (

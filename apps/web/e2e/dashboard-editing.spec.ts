@@ -155,8 +155,6 @@ test("validates and cancels Dashboard title drafts without saving", ({ page }) =
       expect(edits).toEqual([]);
     })
   ));
-const expectOneEdit = (edits: Array<unknown>): Promise<void> =>
-  expect.poll(() => edits.length).toBe(1);
 const startSwapDrag = Effect.fnUntraced(function* (page: Page) {
   const handle = yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Arrastrar Gastos visibles", exact: true }).boundingBox()
@@ -336,43 +334,6 @@ test("Dashboard successful drop stays pending until the canonical reread", ({ pa
       );
     })
   ));
-test("native Dashboard supports keyboard resize and cancellation without another write", ({
-  page,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const edits: Array<unknown> = [];
-      yield* install(page, edits);
-      const refresh = Promise.withResolvers<void>();
-      yield* Effect.tryPromise(() =>
-        page.route(
-          `${apiOrigin}/dashboard/view`,
-          delayedView({ gate: refresh.promise, value: view })
-        )
-      );
-      const separator = page.getByRole("separator", {
-        name: "Redimensionar límite después de Gastos visibles",
-        exact: true,
-      });
-      yield* Effect.tryPromise(() => separator.press("ArrowRight"));
-      yield* Effect.tryPromise(() => expectOneEdit(edits));
-      expect(edits[0]).toMatchObject({
-        op: "resize-region",
-        widgetIds: [firstId],
-        size: { kind: "weight", weight: 1.1 },
-      });
-      const handle = page.getByRole("button", { name: "Arrastrar Gastos visibles", exact: true });
-      yield* Effect.tryPromise(() => expect(handle).toBeDisabled());
-      refresh.resolve();
-      yield* Effect.tryPromise(() => expect(handle).toBeEnabled());
-      yield* Effect.tryPromise(() => handle.press("Space"));
-      yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
-      yield* Effect.tryPromise(() => handle.press("Escape"));
-      yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "false"));
-      expect(edits).toHaveLength(1);
-    })
-  ));
-
 test("Dashboard abandons pending placement when the successful save cannot be reread", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {

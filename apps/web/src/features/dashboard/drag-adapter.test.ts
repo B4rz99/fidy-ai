@@ -34,7 +34,7 @@ describe("Dashboard drag accessibility and collision ordering", () => {
     expect(dashboardCollisionPriority(3)).toBeGreaterThan(dashboardCollisionPriority(2));
   });
 
-  it("announces keyboard drag lifecycle in localized semantic terms", () => {
+  it("announces drag lifecycle in localized semantic terms", () => {
     expect(dashboardAnnouncementText.started(announcementSource)).toEqual(
       Option.some("Moviendo Gastos.")
     );

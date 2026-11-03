@@ -9,7 +9,6 @@ import {
   type FormEvent,
   Fragment,
   type JSX,
-  type KeyboardEvent,
   type PointerEvent,
   type RefCallback,
   useMemo,
@@ -610,7 +609,6 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
 const minimumRegionPixels = 32;
 const maximumMinimumShare = 0.49;
 const resizeWeightPrecision = 1000;
-const keyboardResizeSteps = 20;
 
 const clampResizeWeight = (weight: number): number =>
   Math.round(
@@ -676,7 +674,6 @@ const previewResizeWeight = (
 };
 
 type ResizeBoundaryHandlers = Readonly<{
-  onKeyDown: (event: KeyboardEvent<HTMLHRElement>) => void;
   onLostPointerCapture: (event: ResizeBoundaryEvent) => void;
   onPointerCancel: (event: ResizeBoundaryEvent) => void;
   onPointerDown: (event: ResizeBoundaryEvent) => void;
@@ -711,7 +708,6 @@ const useResizeBoundary = (props: ResizeBoundaryProps): ResizeBoundaryHandlers =
   const pointerId = useRef(noPointer);
   const weight = resizeWeightAt(props, props.childIndex);
   const adjacentWeight = resizeWeightAt(props, props.childIndex + 1);
-  const pairWeight = weight + adjacentWeight;
   const onPointerDown = (event: ResizeBoundaryEvent): void => {
     pointerId.current = Option.some(event.pointerId);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -743,21 +739,7 @@ const useResizeBoundary = (props: ResizeBoundaryProps): ResizeBoundaryHandlers =
       props.onResize(nextWeight.value.weight);
     }
   };
-  const onKeyDown = (event: KeyboardEvent<HTMLHRElement>): void => {
-    const decrementKey = props.axis === "row" ? "ArrowLeft" : "ArrowUp";
-    const incrementKey = props.axis === "row" ? "ArrowRight" : "ArrowDown";
-    if (event.key !== decrementKey && event.key !== incrementKey) return;
-    event.preventDefault();
-    const keyboardStep = pairWeight / keyboardResizeSteps;
-    props.onResize(
-      clampResizePairWeight(
-        weight + (event.key === incrementKey ? keyboardStep : -keyboardStep),
-        pairWeight
-      )
-    );
-  };
   return {
-    onKeyDown,
     onLostPointerCapture,
     onPointerCancel,
     onPointerDown,
@@ -773,7 +755,6 @@ const DashboardResizeBoundary = (props: ResizeBoundaryProps): JSX.Element => {
   const interactionProps = disabled
     ? {}
     : {
-        onKeyDown: handlers.onKeyDown,
         onLostPointerCapture: handlers.onLostPointerCapture,
         onPointerCancel: handlers.onPointerCancel,
         onPointerDown: handlers.onPointerDown,
@@ -794,7 +775,6 @@ const DashboardResizeBoundary = (props: ResizeBoundaryProps): JSX.Element => {
           ? "pointer-events-none h-4 w-full flex-none touch-none border-0 bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring md:pointer-events-auto md:h-auto md:w-4 md:cursor-col-resize"
           : "h-4 w-full flex-none cursor-row-resize touch-none border-0 bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring"
       }
-      tabIndex={disabled ? -1 : 0}
     />
   );
 };

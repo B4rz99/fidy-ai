@@ -1,0 +1,21 @@
+tools/mutation/package.json
+  s_d9571b3fccd032::t_da6d746e6b4a28 8,26
+tools/mutation/bun.lock
+  s_d9571b3fccd032::t_b1f84d81c2324a 9,33,407
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ee0eef1f9820fc721641663e499df7b062b8b0e",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

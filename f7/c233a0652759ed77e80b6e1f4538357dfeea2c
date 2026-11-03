@@ -1,0 +1,19 @@
+apps/server/src/core/dashboard/operations.ts
+  s_d9571b3fccd032::t_1805c568903600 183-191,199,206-207,213-214,220-221,227-228,234-235,241-242
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f7c233a0652759ed77e80b6e1f4538357dfeea2c",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -55,6 +55,7 @@ const VisitedRecurringWorkspace = (): JSX.Element => {
 const RecurringTransactionCapture = (props: CaptureEditorProps): JSX.Element => (
   <TransactionCaptureFeature
     {...props}
+    currency={Option.some(props.currency)}
     direction={Option.some(props.direction)}
     onCancel={Option.none()}
     renderForm={(form) => form}

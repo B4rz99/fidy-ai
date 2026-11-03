@@ -159,12 +159,12 @@ test("pauses automatic continuation while a capture draft is open", ({ page }) =
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       yield* wait(() => page.goto("/app/transactions"));
       yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
-      yield* wait(() => page.getByLabel("Monto · COP", { exact: true }).fill("123"));
+      yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("123"));
       yield* wait(() =>
         expect(page.getByRole("button", { name: "Mes anterior", exact: true })).toBeDisabled()
       );
       yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
-      yield* wait(() => expect(page.getByLabel("Monto · COP", { exact: true })).toHaveValue("123"));
+      yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("123"));
       expect(fixture.requests).toHaveLength(1);
       yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
       yield* wait(() =>

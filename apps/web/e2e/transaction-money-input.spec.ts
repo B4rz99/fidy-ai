@@ -12,7 +12,8 @@ const cases = [
   { input: "12,50", draft: "12,5" },
 ];
 const counterparty = (index: number): string => `Formato COP QA ${index}`;
-const amountField = (page: Page): Locator => page.getByLabel("Monto · COP", { exact: true });
+const amountField = (page: Page): Locator =>
+  page.getByRole("textbox", { name: /^Monto(?: · COP)?$/u });
 const save = (page: Page): Locator => page.getByRole("button", { name: "Guardar", exact: true });
 const rejectInvalidAmounts = Effect.fn(function* (page: Page, submit: Locator) {
   for (const value of ["12.50", "12,500.50", "12,501"]) {

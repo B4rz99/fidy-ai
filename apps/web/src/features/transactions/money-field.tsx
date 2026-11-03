@@ -8,7 +8,7 @@ import type { Transaction } from "./presentation";
 type MoneyFieldProps = Readonly<{
   id: string;
   currency: Transaction["money"]["currency"];
-  currencyLabel: string;
+  label: string;
   value: string;
   onChange: (value: string) => void;
   required: boolean;
@@ -40,7 +40,7 @@ const MoneyFeedback = ({
 export const MoneyField = ({
   id,
   currency,
-  currencyLabel,
+  label,
   value,
   onChange,
   required,
@@ -50,7 +50,7 @@ export const MoneyField = ({
   const invalid = !disabled && value !== "" && Option.isNone(money);
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>Monto · {currencyLabel}</Label>
+      <Label htmlFor={id}>{label}</Label>
       <AmountInput
         width="full"
         id={id}

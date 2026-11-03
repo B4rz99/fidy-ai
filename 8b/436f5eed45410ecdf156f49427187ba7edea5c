@@ -1,0 +1,21 @@
+apps/web/e2e/recurring-suggestions.spec.ts
+  s_6a285e77f26d90::t_664996a6b8f95e 1-214
+apps/web/src/features/recurring/management.tsx
+  s_6a285e77f26d90::t_58047bff63e435 152-154,271-273,283-285,288-290,292-294,406-408,413-415,420-449,451-509
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b436f5eed45410ecdf156f49427187ba7edea5c",
+  "prompts": {},
+  "sessions": {
+    "s_6a285e77f26d90": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19edb-f237-7502-b136-8304f6647312",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

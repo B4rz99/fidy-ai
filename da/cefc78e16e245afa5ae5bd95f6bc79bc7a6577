@@ -1,0 +1,48 @@
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_f38b95a31ee952::t_e0b27949625d87 3,1922-1938,1941-1955,1957-1971,1973-1976,1984-2019,2021-2025
+  s_b5e9998aef4caf::t_ed43f75dc6027f 1877,1879,1888,1890-1899
+  s_f38b95a31ee952::t_613e3671ca6029 1920-1921,1939-1940,1956,2043-2058,2062-2099,2102-2125,2128-2131
+  s_f38b95a31ee952::t_43ef844f9ee89c 1972,1977-1983,2020
+  s_f38b95a31ee952::t_e86ca79dea7eb6 2026-2042,2059-2061,2100-2101,2126-2127
+  s_f38b95a31ee952::t_5dbbee0b206efb 1874-1876,1878,1880-1887,1889,1900-1919
+apps/server/ARCHITECTURE.md
+  s_f38b95a31ee952::t_5171afaa40735f 180
+  s_f38b95a31ee952::t_6101da128df41e 181-182
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_f38b95a31ee952::t_6dce503baacd5d 133-147,166,177-178
+  s_f38b95a31ee952::t_b6967e63449a75 148-165,167-176
+apps/server/cloudflare/dashboard/internal/dashboard-view.ts
+  s_f38b95a31ee952::t_c41a24beeababb 29-33,52-75,79,86,100,161-169,173-176,178
+docs/adr/0030-dashboard-exact-write-maintained-projection.md
+  s_f38b95a31ee952::t_5dbbee0b206efb 13-16,21-30
+  s_f38b95a31ee952::t_6101da128df41e 17-20
+apps/server/cloudflare/transactions/internal/dashboard-read.ts
+  s_f38b95a31ee952::t_5dbbee0b206efb 202,216-217
+  s_f38b95a31ee952::t_dfe53a102ef10f 83-93,101-115,117-118,120-133,212-213
+  s_f38b95a31ee952::t_6101da128df41e 60-82,116,119,201
+  s_f38b95a31ee952::t_8b3a04979eff55 16,94-100,209-210
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dacefc78e16e245afa5ae5bd95f6bc79bc7a6577",
+  "prompts": {},
+  "sessions": {
+    "s_b5e9998aef4caf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a354-83d9-7840-982f-4c41cde02e46",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f38b95a31ee952": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a354-b0aa-7972-80cf-ea7d3179408f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

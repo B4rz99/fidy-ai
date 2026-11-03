@@ -73,16 +73,20 @@ const ObservedCreation = (props: ObservedProps): JSX.Element => {
 };
 const MissingCreation = (props: ObservedProps): JSX.Element => {
   const { view, fresh, receipt, month, waiting, refresh } = props;
-  const plan = view.document.plans
-    .find((entry) => entry.id === receipt.planId)
-    ?.revisions.at(-1)?.plan;
-  if (month === receipt.date.slice(0, "2026-10".length) && plan?.frequency === "twice-monthly") {
+  const twiceMonthly = view.document.plans.some(
+    (plan) =>
+      plan.id === receipt.planId && plan.revisions.at(-1)?.plan.frequency === "twice-monthly"
+  );
+  if (month === receipt.date.slice(0, "2026-10".length) && twiceMonthly) {
     return (
-      <CreationMonth
-        {...props}
-        disabled={props.disabled || !fresh}
-        month={shiftMonth({ month, step: 1 })}
-      />
+      <div className="grid gap-4">
+        {!fresh ? <VerificationPending waiting={waiting} refresh={refresh} focus={false} /> : null}
+        <CreationMonth
+          {...props}
+          disabled={props.disabled || !fresh}
+          month={shiftMonth({ month, step: 1 })}
+        />
+      </div>
     );
   }
   if (!fresh) {

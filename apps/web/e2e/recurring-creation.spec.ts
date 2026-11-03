@@ -10,6 +10,7 @@ import { playwright } from "./playwright-runtime";
 
 const { test } = playwright;
 const expect = playwright.expect.configure({ timeout: 20000 });
+const successStatus = 200;
 const createdStatus = 201;
 const unavailableStatus = 503;
 const maximumNameLength = 120;
@@ -214,6 +215,7 @@ test("reviews the first generated occurrence when twice-monthly days start next 
         ).toBeEnabled()
       );
       yield* Effect.tryPromise(() => inspectDraftRefresh(page));
+      yield* Effect.tryPromise(() => inspectParentRecovery(page));
     })
   ));
 
@@ -422,6 +424,42 @@ const inspectDraftRefresh = (page: Page): Promise<void> =>
         expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled()
       );
       yield* Effect.tryPromise(() => delayed.finish());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeEnabled()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Nombre", { exact: true })).toHaveValue("Mi corrección pendiente")
+      );
+    })
+  );
+
+const inspectParentRecovery = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const firstMonth = /\/recurring-plans\?month=2026-10(?:&|$)/u;
+      const nextMonth = /\/recurring-plans\?month=2026-11(?:&|$)/u;
+      yield* Effect.tryPromise(() => page.route(firstMonth, unavailableRead));
+      const failed = page.waitForResponse(
+        (response) => firstMonth.test(response.url()) && response.status() === unavailableStatus
+      );
+      const verified = page.waitForResponse(
+        (response) => nextMonth.test(response.url()) && response.status() === successStatus
+      );
+      yield* Effect.tryPromise(() => page.clock.fastForward(focusDelayMilliseconds));
+      yield* Effect.tryPromise(() => page.evaluate(focusWorkspace));
+      yield* Effect.tryPromise(() => Promise.all([failed, verified]));
+      yield* Effect.tryPromise(() => page.evaluate(settleDisplay));
+      const result = page.getByRole("dialog", { name: "Recurrente guardado", exact: true });
+      yield* Effect.tryPromise(() =>
+        expect(result).toContainText("Falta verificar si la transacción completa")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Nombre", { exact: true })).toHaveValue("Mi corrección pendiente")
+      );
+      yield* Effect.tryPromise(() => page.unroute(firstMonth, unavailableRead));
+      yield* Effect.tryPromise(() =>
+        result.getByRole("button", { name: "Verificar vínculo", exact: true }).click()
+      );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeEnabled()
       );

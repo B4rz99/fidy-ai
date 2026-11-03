@@ -65,6 +65,8 @@ const selectedOccurrence = (
     [...view.occurrences, ...view.previous],
     (item) => item.planId === panel.planId && item.date === panel.date
   );
+const linkSelection = (panel: Option.Option<Panel>): Option.Option<Panel> =>
+  Option.map(panel, (value) => (value.kind === "occurrence" ? { ...value, kind: "link" } : value));
 type EditorProps = Pick<Props, "view" | "categories" | "disabled" | "save" | "statusFor">;
 type SheetProps = EditorProps &
   Pick<Props, "notice"> &
@@ -279,12 +281,7 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
   const editing = { ...props, save };
   const open = (item: Occurrence): void =>
     setPanel(Option.some({ kind: "occurrence", planId: item.planId, date: item.date }));
-  const link = (): void =>
-    setPanel(
-      Option.flatMap(panel, (value) =>
-        value.kind === "occurrence" ? Option.some({ ...value, kind: "link" }) : Option.some(value)
-      )
-    );
+  const link = (): void => setPanel(linkSelection(panel));
   const create = (): void =>
     setPanel(
       Option.some({
@@ -296,7 +293,7 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
   if (Option.isSome(panel) && panel.value.kind === "link") {
     const selection = panel.value;
     const close = (): void => setPanel(Option.some({ ...selection, kind: "occurrence" }));
-    return <LinkWorkspace {...props} selection={selection} close={close} />;
+    return <LinkWorkspace {...editing} selection={selection} close={close} />;
   }
   return (
     <RecurringSurface>

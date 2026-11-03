@@ -45,6 +45,8 @@ type Panel =
   | Readonly<{ kind: "occurrence" | "link"; planId: Occurrence["planId"]; date: string }>
   | Readonly<{ kind: "plan"; planId: Occurrence["planId"] }>;
 type Props = Readonly<{
+  calendar: boolean;
+  setCalendar: (value: boolean) => void;
   notice: ReactNode;
   view: Workspace;
   categories: ReadonlyArray<Category>;
@@ -273,9 +275,8 @@ const PreviousItems = ({
   </details>
 );
 export const RecurringWorkspace = (props: Props): JSX.Element => {
-  const { view, disabled, filters, timeZone } = props;
+  const { view, disabled, filters, timeZone, calendar, setCalendar } = props;
   const [tab, setTab] = useState("monthly");
-  const [calendar, setCalendar] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
   const [panel, setPanel] = useState<Option.Option<Panel>>(() => Option.none());
   const save: Save = (edit) =>
@@ -502,32 +503,14 @@ const MonthItems = ({
 }>): JSX.Element => {
   if (view.occurrences.length === 0) {
     return (
-      <div data-recurring-slot="empty" className="min-w-0 [overflow-wrap:anywhere]">
-        <h2 className="font-medium">
-          {Object.keys(filters).length > 0
-            ? "Sin resultados para estos filtros"
-            : "Sin recurrentes para este mes"}
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {Object.keys(filters).length > 0
-            ? "Prueba otros filtros o límpialos para ver los recurrentes del mes."
-            : "Crea un recurrente, revisa los patrones detectados o consulta otro mes."}
-        </p>
-        {Object.keys(filters).length > 0 ? (
-          <Button
-            contentLayout="wrap"
-            focusAppearance="subtle"
-            variant="outline"
-            onClick={() => applyFilters({})}
-          >
-            Limpiar filtros
-          </Button>
-        ) : null}
-      </div>
+      <>
+        {calendar ? <MonthCalendar key={view.month} view={view} open={open} /> : null}
+        <EmptyMonth filters={filters} applyFilters={applyFilters} />
+      </>
     );
   }
   return calendar ? (
-    <MonthCalendar view={view} open={open} />
+    <MonthCalendar key={view.month} view={view} open={open} />
   ) : (
     <OccurrenceList
       save={save}
@@ -636,4 +619,32 @@ const InvalidFulfillments = ({
       </div>
     ))}
   </>
+);
+
+const EmptyMonth = ({
+  filters,
+  applyFilters,
+}: Readonly<{ filters: Filters; applyFilters: (filters: Filters) => void }>): JSX.Element => (
+  <div data-recurring-slot="empty" className="min-w-0 [overflow-wrap:anywhere]">
+    <h2 className="font-medium">
+      {Object.keys(filters).length > 0
+        ? "Sin resultados para estos filtros"
+        : "Sin recurrentes para este mes"}
+    </h2>
+    <p className="mt-2 text-sm text-muted-foreground">
+      {Object.keys(filters).length > 0
+        ? "Prueba otros filtros o límpialos para ver los recurrentes del mes."
+        : "Crea un recurrente, revisa los patrones detectados o consulta otro mes."}
+    </p>
+    {Object.keys(filters).length > 0 ? (
+      <Button
+        contentLayout="wrap"
+        focusAppearance="subtle"
+        variant="outline"
+        onClick={() => applyFilters({})}
+      >
+        Limpiar filtros
+      </Button>
+    ) : null}
+  </div>
 );

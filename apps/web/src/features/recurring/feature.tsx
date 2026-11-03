@@ -41,6 +41,7 @@ type Props = Readonly<{
 }>;
 const Resources = (props: Props): JSX.Element => {
   const router = useRouter();
+  const [calendar, setCalendar] = useState(false);
   const apiClient = router.options.context.apiClient;
   const planning = useRecurringPlanning({
     apiClient,
@@ -80,6 +81,8 @@ const Resources = (props: Props): JSX.Element => {
     <Suspense fallback={<RecurringSkeleton />}>
       <PreviewWorkspace
         key={`${props.month}:${JSON.stringify(props.filters)}:${Option.getOrElse(props.previous, () => "")}`}
+        calendar={calendar}
+        setCalendar={setCalendar}
         notice={notice}
         view={view}
         categories={categoryState.value.data}

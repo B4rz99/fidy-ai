@@ -124,7 +124,7 @@ test("explains invalid registration amounts and preserves the other fields", ({ 
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "+ Registrar", exact: true }).click()
       );
-      const amount = page.getByLabel("Monto · COP");
+      const amount = page.getByLabel("Monto", { exact: true });
       const counterparty = page.getByLabel("Contraparte (opcional)");
       yield* Effect.tryPromise(() => counterparty.fill("Café de prueba"));
       yield* Effect.tryPromise(() => amount.focus());
@@ -179,7 +179,7 @@ test("a refused registration offers retry while retaining a valid amount", ({ pa
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "+ Registrar", exact: true }).click()
       );
-      const amount = page.getByLabel("Monto · COP");
+      const amount = page.getByLabel("Monto", { exact: true });
       yield* Effect.tryPromise(() => amount.fill("25.000"));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Registrar", exact: true }).click()

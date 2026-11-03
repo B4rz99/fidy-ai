@@ -286,6 +286,10 @@ type CaptureDraft = Readonly<{
   occurredOn: string;
   direction: "inflow" | "outflow";
 }>;
+const captureCurrencyChange = (
+  fixed: CaptureProps["currency"],
+  change: (currency: CaptureCommand["currency"]) => void
+): CaptureInputsProps["onCurrency"] => (Option.isSome(fixed) ? Option.none() : Option.some(change));
 const CaptureForm = ({
   props,
   draft,
@@ -301,7 +305,6 @@ const CaptureForm = ({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   revealErrors: boolean;
 }>): JSX.Element => {
-  const locked = captureLocked(props);
   return (
     <form
       noValidate
@@ -309,7 +312,7 @@ const CaptureForm = ({
       aria-label="Registrar transacción"
       className="flex flex-col gap-5"
     >
-      <fieldset disabled={locked} className="flex min-w-0 flex-col gap-4">
+      <fieldset disabled={captureLocked(props)} className="flex min-w-0 flex-col gap-4">
         <legend className="sr-only">Datos de la transacción</legend>
         {Option.isNone(props.direction) ? (
           <TransactionTypeToggle
@@ -322,16 +325,12 @@ const CaptureForm = ({
         <CaptureInputs
           revealErrors={revealErrors}
           amount={draft.amount}
-          disabled={locked}
+          disabled={captureLocked(props)}
           currency={currency}
           counterparty={draft.counterparty}
-          onCurrency={
-            Option.isSome(props.currency)
-              ? Option.none()
-              : Option.some((currency: CaptureCommand["currency"]) =>
-                  onDraft({ ...draft, currency })
-                )
-          }
+          onCurrency={captureCurrencyChange(props.currency, (currency) =>
+            onDraft({ ...draft, currency })
+          )}
           onAmount={(amount) => onDraft({ ...draft, amount })}
           onCounterparty={(counterparty) => onDraft({ ...draft, counterparty })}
         />

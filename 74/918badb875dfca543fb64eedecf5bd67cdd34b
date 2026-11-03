@@ -1,0 +1,47 @@
+apps/web/src/features/recurring/controller.ts
+  s_a61e47ac31e249::t_6d34fdf66a17cb 48-50,53,227
+  s_a61e47ac31e249::t_5dc15e43e36352 12,22,41-47,51-52,54,60,153,220-226,228-235,253,263,268,284,294-296
+apps/web/src/features/recurring/edit-scope.ts
+  s_a61e47ac31e249::t_6d34fdf66a17cb 3-34
+  s_a61e47ac31e249::t_c392f28cbae943 1-2,35-41
+apps/web/src/features/recurring/details.tsx
+  s_a61e47ac31e249::t_6d34fdf66a17cb 235
+  s_a61e47ac31e249::t_224452c57decd7 4,12-13,20,28,233,236,245,255,259,262
+apps/web/src/features/recurring/edit-guidance.tsx
+  s_a61e47ac31e249::t_6d34fdf66a17cb 16-58
+  s_a61e47ac31e249::t_cf2c9e5a5c219f 1-15,59-76
+apps/web/e2e/real-core-fixture.ts
+  s_b26c86cfdf2ace::t_df878fe14fef97 106-108
+apps/web/e2e/recurring-plans.spec.ts
+  s_b26c86cfdf2ace::t_eb71c6c14b035a 896-1100,1114-1120
+apps/web/src/features/recurring/feature.tsx
+  s_a61e47ac31e249::t_3a637a5cb9b313 75,172,179,183-189
+apps/web/src/features/recurring/workspace.tsx
+  s_a61e47ac31e249::t_e76196b26fbac1 113
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_b26c86cfdf2ace::t_ea071646df222e 49-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74918badb875dfca543fb64eedecf5bd67cdd34b",
+  "prompts": {},
+  "sessions": {
+    "s_a61e47ac31e249": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19f3f-c72b-77e2-8d9e-0652d7a85983",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b26c86cfdf2ace": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19f3f-f807-7212-9983-1cc83e398d8c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

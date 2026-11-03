@@ -25,6 +25,7 @@ const desktopLifecycleWidth = 1506;
 const mobileLifecycleWidth = 390;
 const searchPageSize = 20;
 const maximumSearchDraftLength = 80;
+const expiredWorkspaceMilliseconds = 6000;
 test("recurring plans persist through the real canonical API and share monthly list/calendar items", ({
   page,
   request,
@@ -2346,4 +2347,210 @@ const unlinkTrackedTransaction = (page: Page): Effect.Effect<void, Cause.Unknown
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Confirmar desvinculación", exact: true }).click()
     );
+  });
+
+test("empty plan status filters explain absence and restore all recurring plans", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({
+          page,
+          request,
+          deferFreshEntry: true,
+          identity: "recurringManagement",
+        })
+      );
+      yield* Effect.tryPromise(() => page.emulateMedia({ reducedMotion: "reduce" }));
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* inspectFirstPlanCreation(page);
+      yield* createPlan({
+        page,
+        name: "Plan de prueba de filtros",
+        kind: "expense",
+        currency: "COP",
+        amount: "100",
+      });
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Todos los recurrentes", exact: true }).click()
+      );
+      for (const status of ["Pausados", "Dejados de seguir"]) {
+        yield* Effect.tryPromise(() => chooseOption(page, "Estado del plan", status));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("status")).toContainText(
+            status === "Pausados"
+              ? "No tienes recurrentes pausados"
+              : "No tienes recurrentes dejados de seguir"
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Ver todos los recurrentes", exact: true }).click()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("button", { name: "Editar Plan de prueba de filtros", exact: true })
+          ).toBeVisible()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("button", { name: "Estado del plan: Todos", exact: true })
+          ).toBeVisible()
+        );
+      }
+      yield* inspectCombinedPlanFilters(page);
+      yield* inspectEmptyActivePlans(page);
+      yield* inspectEmptyPlanRefresh(page);
+    })
+  ));
+
+const inspectFirstPlanCreation = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Todos los recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("status")).toContainText("Aún no tienes recurrentes")
+    );
+    yield* Effect.tryPromise(() =>
+      page.screenshot({
+        path: "/tmp/fidy-1669-desktop.png",
+        fullPage: true,
+        animations: "disabled",
+      })
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Crear recurrente", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("dialog", { name: "Nuevo recurrente", exact: true })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Mensual", exact: true }).click()
+    );
+  });
+
+const inspectCombinedPlanFilters = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Filtros", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page
+        .getByRole("textbox", { name: "Buscar recurrentes", exact: true })
+        .fill("Sin coincidencias")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Aplicar filtros", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("heading", { name: "Todos los recurrentes", exact: true })
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() => chooseOption(page, "Estado del plan", "Pausados"));
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("status")).toContainText("Sin resultados para estos filtros")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("status")).toContainText("Estado del plan: Pausados")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Ver todos los recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", { name: "Editar Plan de prueba de filtros", exact: true })
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", { name: "Estado del plan: Todos", exact: true })
+      ).toBeVisible()
+    );
+  });
+
+const inspectEmptyActivePlans = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Editar Plan de prueba de filtros", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Pausar plan", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Reanudar plan", exact: true })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.setViewportSize({ width: mobileLifecycleWidth, height: 844 })
+    );
+    yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: "dark" }));
+    yield* Effect.tryPromise(() => chooseOption(page, "Estado del plan", "Activos"));
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("status", { name: "Resultados de recurrentes", exact: true })
+      ).toContainText("No tienes recurrentes activos")
+    );
+    yield* Effect.tryPromise(() =>
+      page.screenshot({
+        path: "/tmp/fidy-1669-mobile-dark.png",
+        fullPage: true,
+        animations: "disabled",
+      })
+    );
+    const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
+    expect(accessibility.violations).toEqual([]);
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Ver todos los recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", { name: "Editar Plan de prueba de filtros", exact: true })
+      ).toContainText("Pausado")
+    );
+    yield* Effect.tryPromise(() => chooseOption(page, "Estado del plan", "Activos"));
+  });
+
+const inspectEmptyPlanRefresh = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const held = Promise.withResolvers<void>();
+    const route = `${apiOrigin}/recurring-plans?*`;
+    const failRead = (incoming: Route): Promise<void> =>
+      held.promise.then(() =>
+        incoming.fulfill({
+          status: 503,
+          contentType: "application/json",
+          headers: { "retry-after": "3600" },
+          body: '{"error":{"code":"unavailable","message":"Unavailable"},"next":[]}',
+        })
+      );
+    yield* Effect.tryPromise(() => page.route(route, failRead));
+    yield* Effect.tryPromise(() => page.clock.fastForward(expiredWorkspaceMilliseconds));
+    yield* Effect.tryPromise(() =>
+      page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")))
+    );
+    const results = page.getByRole("status", { name: "Resultados de recurrentes", exact: true });
+    yield* Effect.tryPromise(() => expect(results).toContainText("Actualizando recurrentes…"));
+    yield* Effect.tryPromise(() =>
+      expect(results).not.toContainText("No tienes recurrentes activos")
+    );
+    held.resolve();
+    yield* Effect.tryPromise(() =>
+      expect(results).toContainText("No pudimos comprobar si hay recurrentes para estos filtros")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(results).not.toContainText("No tienes recurrentes activos")
+    );
+    yield* Effect.tryPromise(() => page.unroute(route, failRead));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Actualizar recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect(results).toContainText("No tienes recurrentes activos"));
   });

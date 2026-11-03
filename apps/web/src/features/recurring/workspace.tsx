@@ -32,6 +32,7 @@ import {
   type PlanInput,
   type Save,
   type Workspace,
+  type WorkspaceReadState,
   planFromTransaction,
   type planStatus,
 } from "./model";
@@ -48,6 +49,9 @@ type Props = Readonly<{
   calendar: boolean;
   setCalendar: (value: boolean) => void;
   notice: ReactNode;
+  tab: string;
+  setTab: (tab: string) => void;
+  readState: WorkspaceReadState;
   view: Workspace;
   categories: ReadonlyArray<Category>;
   save: Save;
@@ -276,8 +280,7 @@ const PreviousItems = ({
   </details>
 );
 export const RecurringWorkspace = (props: Props): JSX.Element => {
-  const { view, disabled, filters, timeZone, calendar, setCalendar } = props;
-  const [tab, setTab] = useState("monthly");
+  const { view, disabled, filters, timeZone, calendar, setCalendar, tab, setTab } = props;
   const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
   const [panel, setPanel] = useState<Option.Option<Panel>>(() => Option.none());
   const save: Save = (edit) =>
@@ -321,6 +324,7 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
       >
         <WorkspaceBody
           props={editing}
+          create={create}
           tab={tab}
           calendar={calendar}
           setCalendar={setCalendar}
@@ -363,23 +367,26 @@ const LinkWorkspace = ({
   );
 };
 
-const WorkspaceBody = ({
-  props,
-  tab,
-  calendar,
-  setCalendar,
-  filtersOpen,
-  setPanel,
-  open,
-}: Readonly<{
+type WorkspaceBodyProps = Readonly<{
   props: Props;
+  create: () => void;
   tab: string;
   calendar: boolean;
   setCalendar: (value: boolean) => void;
   filtersOpen: boolean;
   setPanel: (panel: Option.Option<Panel>) => void;
   open: (item: Occurrence) => void;
-}>): JSX.Element => {
+}>;
+const WorkspaceBody = ({
+  props,
+  create,
+  tab,
+  calendar,
+  setCalendar,
+  filtersOpen,
+  setPanel,
+  open,
+}: WorkspaceBodyProps): JSX.Element => {
   const { view, disabled, save, filters, timeZone } = props;
   return (
     <main data-recurring-slot="content">
@@ -412,6 +419,9 @@ const WorkspaceBody = ({
       ) : (
         <PlanManagement
           view={view}
+          readState={props.readState}
+          create={create}
+          applyFilters={props.applyFilters}
           filters={filters}
           open={(plan) => setPanel(Option.some({ kind: "plan", planId: plan.id }))}
           disabled={disabled}

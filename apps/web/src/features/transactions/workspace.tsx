@@ -35,6 +35,7 @@ import {
 } from "./presentation";
 
 type WorkspaceProps = Readonly<{
+  locate: Option.Option<string>;
   apiClient: FidyClient;
   categories: ReadonlyArray<Category>;
   currentUser: Pick<CurrentUser, "locale" | "timeZone">;
@@ -632,6 +633,7 @@ const WorkspaceContent = ({
           canEdit={props.editable}
           onEdit={() => onPanel(selectionPanel(panel))}
           selection={bulkSelection(panel, onPanel, props.transactions)}
+          locate={props.locate}
           rows={rows}
           locale={props.currentUser.locale}
           selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}

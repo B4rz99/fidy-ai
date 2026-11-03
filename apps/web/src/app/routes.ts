@@ -256,7 +256,11 @@ const transactionsRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/app/transactions",
   validateSearch: (search) => Schema.decodeSync(TransactionSearch)(search),
-  loaderDeps: ({ search }) => ({ month: search.month, date: search.date }),
+  loaderDeps: ({ search }) => ({
+    month: search.month,
+    date: search.date,
+    transaction: search.transaction,
+  }),
   // Authorization entry checks must run even when the browser clock moves backwards.
   shouldReload: true,
   // A speculative loader must never donate a code-only result to an actual Consent entry.

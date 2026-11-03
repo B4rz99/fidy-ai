@@ -1,3 +1,4 @@
+import { TransactionId } from "@/transport/client";
 import { DateTime, Option, Schema } from "effect";
 import { type CurrentMonthPeriod, deriveCurrentMonthPeriod } from "./presentation";
 
@@ -18,6 +19,7 @@ const TransactionDay = Schema.String.check(
   )
 );
 export const TransactionSearch = Schema.Struct({
+  transaction: Schema.optionalKey(TransactionId),
   month: Schema.optionalKey(TransactionMonth),
   date: Schema.optionalKey(TransactionDay),
 }).check(

@@ -86,6 +86,13 @@ continuation and editing lifetimes; clearing a day retains the month. Visible sc
 summary counts identify the period and loaded coverage. Dashboard recent entries link to their
 Transaction's local day in this route. Read-only privacy history retains its independent unbounded
 query and local day filter.
+Review history links to Transactions with a validated Transaction identity. After fresh entry
+Consent, its canonical lookup resolves the current effective identity and occurrence month in the
+User's time zone. The ordinary month list remains unselected with its summary; a commit ref scrolls
+the retained row into view without moving keyboard focus. Location reads at most twenty pages
+automatically, stops on the effective identity, and leaves further continuation or retry explicit.
+Lookup failure and complete-list absence remain distinct from a located record. Original evidence
+expiry does not prevent opening a retained Transaction or extend the evidence deadline.
 
 ## 2. Behavioral ownership
 

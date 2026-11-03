@@ -290,6 +290,12 @@ weights for financial figures or deliberate emphasis within product illustration
 | Secondary text and controls | 14px         | 14px       | 14px        |
 | Demo labels                 | 12px         | 12px       | 12px        |
 
+In the application at widths up to 900px, editable text—including search, amount,
+counterparty and notes—uses at least 1rem (16 CSS pixels at the default root size).
+This takes precedence over compact control typography. Preserve text enlargement,
+user-controlled browser zoom, input modes and accessible labels; controls must grow
+with their text. Labels and buttons retain their existing type hierarchy.
+
 Use this small hierarchy consistently across sections. Eyebrows are not part of the
 default section pattern: lead with the actual heading. Compact text inside scaled
 product illustrations is a special case, not a size to reuse for functional controls.
@@ -682,7 +688,11 @@ The pattern composes the actual Input, Currency selector, category choices, cale
 time controls. `CalendarField appearance="review"` changes only the compact Spanish date
 label; the default calendar appearance and timezone behavior remain shared. Narrow screens
 stack the source and form and give category its full row. `/ui-reference.html` includes the
-review owners in both themes. Manual reprocessing has no UI or callable review endpoint;
+review owners in both themes. Created history entries offer “Ver transacción”, navigating to its
+current month in Transacciones and scrolling to its ordinary list row. Preserve the unselected list
+and normal summary; opening details or correction requires a separate User action. The action remains
+available after original evidence expires, while missing or inaccessible Transactions receive an
+explicit unavailable state without claiming the record still exists. Manual reprocessing has no UI or callable review endpoint;
 read recovery for original material and uncertain command results remains available.
 
 ### Approved browser access composition

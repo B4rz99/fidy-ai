@@ -292,6 +292,12 @@
   border-radius: 10px;
   font-size: 13px;
 }
+@media (max-width: 900px) {
+  :is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"]) [data-slot="input"],
+  :is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"]) textarea {
+    font-size: 1rem;
+  }
+}
 :is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"]) [data-slot="label"] {
   font-size: 12px;
   font-weight: 400;

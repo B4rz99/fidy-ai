@@ -93,6 +93,11 @@ test("recurring editor stays below the global header and closes without saving i
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Nombre", { exact: true })).toHaveValue("Borrador adaptable")
       );
+      for (const label of ["Nombre", "Contraparte (opcional)"]) {
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel(label, { exact: true })).toHaveCSS("font-size", "16px")
+        );
+      }
       const panel = page.getByRole("dialog", { name: "Nuevo recurrente" });
       yield* Effect.tryPromise(() => expect(panel).toHaveCSS("width", `${mobileWidth}px`));
       yield* Effect.tryPromise(() =>

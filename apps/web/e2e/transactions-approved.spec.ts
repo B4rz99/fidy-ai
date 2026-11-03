@@ -480,12 +480,33 @@ test("mobile keeps income and expense figures side by side and returns keyboard 
   page,
 }) => Effect.runPromise(responsiveJourney(page)));
 
+const enlargeCaptureText = (): void => {
+  document.documentElement.style.fontSize = "32px";
+};
+const captureOverflows = (): boolean => document.documentElement.scrollWidth > window.innerWidth;
 const captureLayoutJourney = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* wait(() => page.setViewportSize({ width: 390, height: 844 }));
     yield* installWorkspace(page);
     yield* openCapture(page);
     const notes = page.getByLabel("Notas (opcional)", { exact: true });
+    const amount = page.getByLabel("Monto · COP", { exact: true });
+    const fields = [amount, page.getByLabel("Contraparte (opcional)", { exact: true }), notes];
+    yield* wait(() => expect(amount).toHaveAttribute("inputmode", "decimal"));
+    for (const field of fields) {
+      yield* wait(() => expect(field).toHaveCSS("font-size", "16px"));
+    }
+    yield* wait(() => page.evaluate(enlargeCaptureText));
+    for (const field of fields) {
+      yield* wait(() => expect(field).toHaveCSS("font-size", "32px"));
+    }
+    expect(yield* wait(() => page.evaluate(captureOverflows))).toBe(false);
+    yield* wait(() =>
+      page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click()
+    );
+    for (const field of fields) {
+      yield* wait(() => expect(field).toHaveCSS("font-size", "32px"));
+    }
     yield* wait(() => notes.fill("Primera línea\nSegunda línea\nTercera línea\nCuarta línea"));
     yield* wait(() => notes.focus());
     yield* wait(() => notes.scrollIntoViewIfNeeded());

@@ -94,7 +94,12 @@ const fixture = Effect.fnUntraced(function* () {
   const categories = client
     .query("categories", "listCategories", workspaceQueryRetention)
     .pipe(revalidateWorkspaceQuery);
-  const history = transactionHistory({ apiClient: client, firstPage, period });
+  const history = transactionHistory({
+    apiClient: client,
+    firstPage,
+    period,
+    locate: Option.none(),
+  });
   const atom = makeTransactionCorrections({
     client,
     firstPage,
@@ -295,7 +300,12 @@ it.live("reading and disposing history does not initialize the correction transp
       ...workspaceQueryRetention,
     });
     const categories = client.query("categories", "listCategories", workspaceQueryRetention);
-    const history = transactionHistory({ apiClient: client, firstPage, period });
+    const history = transactionHistory({
+      apiClient: client,
+      firstPage,
+      period,
+      locate: Option.none(),
+    });
     const corrections = makeTransactionCorrections({
       client,
       firstPage,

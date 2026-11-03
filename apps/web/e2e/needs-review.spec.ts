@@ -149,6 +149,76 @@ const reviewRoute = (route: Route): Promise<void> => {
   });
 };
 
+const doubleInputText = (): void => {
+  document.documentElement.style.fontSize = "32px";
+};
+const resetInputText = (): void => {
+  document.documentElement.style.fontSize = "";
+};
+const mobileInputViewports = [
+  { width: 320, height: 844 },
+  { width: 390, height: 844 },
+  { width: 900, height: 844 },
+];
+const expectReviewReflow = (page: Page): Promise<void> =>
+  expect.poll(() => page.evaluate(hasHorizontalOverflow)).toBe(false);
+
+test("mobile review keeps editable financial text legible and enlarges it with text sizing", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
+      );
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      const amount = page.getByLabel("Valor", { exact: true });
+      const fields = [
+        amount,
+        page.getByLabel("Contraparte (opcional)", { exact: true }),
+        page.getByRole("textbox", { name: "Buscar pendientes en esta página", exact: true }),
+      ];
+      yield* Effect.tryPromise(() => expect(amount).toBeVisible());
+      for (const viewport of mobileInputViewports) {
+        yield* Effect.tryPromise(() => page.setViewportSize(viewport));
+        for (const field of fields) {
+          yield* Effect.tryPromise(() => expect(field).toHaveCSS("font-size", "16px"));
+        }
+        expect(yield* Effect.tryPromise(() => page.evaluate(hasHorizontalOverflow))).toBe(false);
+      }
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+      for (const field of fields) {
+        yield* Effect.tryPromise(() => field.focus());
+        yield* Effect.tryPromise(() => expect(field).toBeFocused());
+      }
+      yield* Effect.tryPromise(() => expect(amount).toHaveAttribute("inputmode", "decimal"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("combobox", { name: "Moneda", exact: true }).click()
+      );
+      const currencySearch = page.getByRole("combobox", { name: "Buscar: Moneda", exact: true });
+      yield* Effect.tryPromise(() => expect(currencySearch).toHaveCSS("font-size", "16px"));
+      yield* Effect.tryPromise(() => currencySearch.press("Escape"));
+      yield* Effect.tryPromise(() => expect(currencySearch).toBeHidden());
+      yield* Effect.tryPromise(() => page.evaluate(doubleInputText));
+      for (const field of fields) {
+        yield* Effect.tryPromise(() => expect(field).toHaveCSS("font-size", "32px"));
+      }
+      yield* Effect.tryPromise(() => expectReviewReflow(page));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click()
+      );
+      for (const field of fields) {
+        yield* Effect.tryPromise(() => expect(field).toHaveCSS("font-size", "32px"));
+      }
+      yield* Effect.tryPromise(() => page.evaluate(resetInputText));
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 1440, height: 900 }));
+      yield* Effect.tryPromise(() => expect(amount).toHaveCSS("font-size", "12px"));
+    })
+  ));
+
 test("does not open an unvisited editor when its inbox finishes after leaving Review", ({
   page,
   request,
@@ -398,7 +468,10 @@ test("confirms creation with a toast and continues reviewing without leaving the
         expect(page.getByRole("heading", { name: "Transacción creada", exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("link", { name: "Ver transacción" })).toHaveCount(0)
+        expect(page.getByRole("link", { name: "Ver transacción", exact: true })).toHaveAttribute(
+          "href",
+          "/app/transactions?transaction=24000000-0000-4000-8000-000000001352"
+        )
       );
       yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/ }).click());
       yield* Effect.tryPromise(() =>

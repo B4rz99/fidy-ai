@@ -423,6 +423,11 @@ export const signInRecurringThroughCore = (
     }>
 ): Promise<void> => signInWithIdentity({ ...input, clockMode: "controlled" });
 
+/** Calendar journeys retain native Date subclass construction across browser time zones. */
+export const signInRecurringNativeClockThroughCore = (
+  input: Omit<SignInFixture, "deferFreshEntry"> & Readonly<{ identity: RecurringIdentity }>
+): Promise<void> => signInWithIdentity({ ...input, clockMode: "native-performance" });
+
 type NavigationFixture = SignInFixture &
   Readonly<{
     identity:

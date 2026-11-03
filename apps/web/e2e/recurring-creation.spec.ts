@@ -4,6 +4,7 @@ import { apiOrigin } from "./http-fixtures";
 import {
   boundSessionRequests,
   probeCanonicalRequest,
+  signInRecurringNativeClockThroughCore,
   signInRecurringThroughCore,
 } from "./real-core-fixture";
 import { playwright } from "./playwright-runtime";
@@ -17,6 +18,7 @@ const maximumNameLength = 120;
 const futurePlanName = "X".repeat(maximumNameLength);
 const focusDelayMilliseconds = 6000;
 const mobileViewport = { width: 390, height: 844 };
+test.use({ timezoneId: "UTC" });
 test("explains source fulfillment and lets a separate pending plan start next month", ({
   page,
   request,
@@ -79,11 +81,10 @@ test("verifies edited source values in their first month after a failed read", (
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({
+        signInRecurringNativeClockThroughCore({
           page,
           request,
           identity: "recurringCreationReview",
-          deferFreshEntry: true,
         })
       );
       yield* Effect.tryPromise(() => page.setViewportSize(mobileViewport));
@@ -125,6 +126,9 @@ const chooseNovember = (page: Page): Promise<void> =>
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Ir al mes siguiente", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.locator('[data-day="2026-11-15"] button')).toHaveText("15")
       );
       yield* Effect.tryPromise(() => page.locator('[data-day="2026-11-15"] button').click());
     })

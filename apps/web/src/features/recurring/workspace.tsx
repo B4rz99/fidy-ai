@@ -397,7 +397,6 @@ const LinkWorkspace = ({
     <TransactionLink
       key={`${item.value.planId}:${item.value.date}`}
       item={item.value}
-        document={view.document}
       disabled={props.disabled}
       save={props.save}
       notice={props.notice}

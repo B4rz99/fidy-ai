@@ -169,7 +169,7 @@ export { PATActivity } from "~/shell/tokens/contract";
 
 export type { AuthenticationProvider } from "~/shell/web-authentication/contract";
 
-export { ProviderHandoffSearch } from "~/shell/web-authentication/contract";
+export { fidyWhatsAppUrl, ProviderHandoffSearch } from "~/shell/web-authentication/contract";
 
 export { BudgetMonth } from "~/core/budgets/contract";
 export { Currency, currencyMetadata } from "~/core/_shared/money";

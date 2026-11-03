@@ -5,7 +5,12 @@ import { Cause, Clock, type Context, Effect, Option, Redacted } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import { useSession } from "@/session/session-context";
-import type { AuthenticationProvider, WebAuthClient, WebAuthSuccess } from "@/transport/client";
+import {
+  type AuthenticationProvider,
+  type WebAuthClient,
+  type WebAuthSuccess,
+  fidyWhatsAppUrl,
+} from "@/transport/client";
 
 type Client = Context.Service.Shape<WebAuthClient>;
 type Pairing = WebAuthSuccess<"browserLogin", "startPairing">;
@@ -466,7 +471,7 @@ const useProviderCommands = (controller: ProviderController): ProviderCommands =
   return { runStart, runAcknowledgement, runApproval, clear, mounted };
 };
 const openWhatsAppConfirmation = (text: string): void => {
-  const destination = new URL("https://wa.me/12056871742");
+  const destination = new URL(fidyWhatsAppUrl);
   destination.searchParams.set("text", text);
   window.open(destination.href, "_blank", "noopener,noreferrer");
 };

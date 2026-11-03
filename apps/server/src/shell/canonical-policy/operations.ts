@@ -56,9 +56,7 @@ const decideVerifiedWhatsAppHosted = (caller: OperationAccessCaller): OperationA
   return decideHostedAuthority(caller.authorityRoot);
 };
 
-const decideFreshWebOrVerifiedWhatsApp = (
-  caller: OperationAccessCaller
-): OperationAccessDecision =>
+const decideFreshWebOrVerifiedWhatsApp = (caller: OperationAccessCaller): OperationAccessDecision =>
   caller._tag === "WebSession"
     ? decideFreshWebSession(caller)
     : decideVerifiedWhatsAppHosted(caller);

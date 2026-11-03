@@ -7,6 +7,7 @@ import { Effect, Option, Schema } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { BudgetRoute, RecurringRoute } from "./destination-components";
 import { prepareQuery } from "@/transport/query-preparation";
+import { retainPreparedWorkspaceMetadata } from "@/transport/workspace-query";
 import {
   consumeInitialTransactionConsent,
   transactionEntryConsent,
@@ -164,6 +165,12 @@ const needsReviewRoute = createRoute({
     handler: ({ context, deps, preload, abortController }) =>
       Effect.runPromise(
         Effect.gen(function* () {
+          if (!preload) {
+            retainPreparedWorkspaceMetadata({
+              client: context.apiClient,
+              registry: context.registry,
+            });
+          }
           const preparation = preload
             ? Promise.resolve()
             : ReviewWorkspace.preloadData({

@@ -1,5 +1,5 @@
 import { ResourceLimited } from "@fidy/server/client";
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { Effect, Schema } from "effect";
 import { apiOrigin } from "./http-fixtures";
 import {
@@ -13,6 +13,18 @@ const { expect, test } = playwright;
 const unauthorizedStatus = 401;
 const okStatus = 200;
 const Binding = Schema.Struct({ binding: Schema.String });
+
+const refusePaymentAvailability = (route: Route): Promise<void> =>
+  route.fulfill({
+    status: unauthorizedStatus,
+    contentType: "application/json",
+    body: JSON.stringify({
+      error: {
+        code: "card_enrollment_invalid",
+        message: "La inscripción ya no es válida. Revisa la oferta e intenta de nuevo.",
+      },
+    }),
+  });
 
 const disableBroadcastChannel = (): void => {
   Object.defineProperty(window, "BroadcastChannel", { value: undefined });
@@ -63,6 +75,44 @@ const expectSessionUnchanged = Effect.fn(function* (other: Page, binding: string
     "Old session private draft"
   );
 });
+
+test("retains ordinary navigation when payment availability refuses a live session", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/web/subscription/payment-enrollments/availability`,
+          refusePaymentAvailability
+        )
+      );
+      const refused = page.waitForResponse(
+        (reply) =>
+          new URL(reply.url()).pathname === "/web/subscription/payment-enrollments/availability" &&
+          reply.status() === unauthorizedStatus
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Suscripción", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => refused);
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("No pudimos consultar los métodos de pago. Intenta de nuevo.", {
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Transacciones", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+      );
+    })
+  ));
 
 test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =>
   Effect.runPromise(

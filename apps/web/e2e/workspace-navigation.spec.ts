@@ -71,6 +71,68 @@ test("prepares the Budget destination from Transactions before navigation", ({ p
     }).pipe(Effect.scoped)
   ));
 
+for (const destination of [
+  {
+    name: "Presupuestos",
+    ready: "Mes anterior",
+    path: "/budget-status",
+    identity: "navigationReviewProfile",
+  },
+  {
+    name: "Recurrentes",
+    ready: "Nuevo recurrente",
+    path: "/recurring-plans",
+    identity: "navigationReviewRecurring",
+  },
+] as const) {
+  test(`prepares the first ${destination.name} after an empty Review while its startup profile refresh is held`, ({
+    page,
+    request,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          signInNavigationPerformanceThroughCore({
+            page,
+            request,
+            identity: destination.identity,
+          })
+        );
+        const profileReads: string[] = [];
+        page.on("request", (entry) => {
+          if (new URL(entry.url()).pathname === "/user") profileReads.push(entry.method());
+        });
+        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("heading", { name: "Todo al día", exact: true })).toBeVisible()
+        );
+        // Include the registry's one-second timeout buckets when retiring the 400 ms hint.
+        yield* Effect.sleep("2100 millis");
+        expect(profileReads).toHaveLength(0);
+        const current = yield* Clock.currentTimeMillis;
+        yield* Effect.tryPromise(() =>
+          page.clock.setFixedTime(current + expiredDisplayMilliseconds)
+        );
+        yield* holdWorkspaceData(page, `${apiOrigin}/user`);
+        const prepared = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === destination.path &&
+            response.status() === successfulResponse
+        );
+        yield* Effect.tryPromise(() =>
+          page.getByRole("link", { name: destination.name, exact: true }).hover()
+        );
+        yield* Effect.tryPromise(() => prepared);
+        yield* Effect.tryPromise(() => openWorkspace(page, destination.name));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: destination.ready, exact: true })).toBeVisible({
+            timeout: 100,
+          })
+        );
+      }).pipe(Effect.scoped)
+    ));
+}
+
 test("reveals cached Budgets while its expired profile refresh is pending", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {

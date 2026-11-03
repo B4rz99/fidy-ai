@@ -85,6 +85,7 @@ const Editor = ({
   link,
 }: EditorProps & Readonly<{ panel: Panel; link: () => void }>): JSX.Element => {
   if (panel.kind === "occurrence") {
+    const invalidIds = new Set(view.invalidFulfillmentIds);
     const item = selectedOccurrence(view, panel);
     const plan = view.document.plans.find((entry) => entry.id === panel.planId);
     const lifecycle =
@@ -113,9 +114,7 @@ const Editor = ({
           transactions={view.linkedTransactions}
           invalidMarks={view.document.fulfillments.filter(
             (mark) =>
-              mark.planId === panel.planId &&
-              mark.date === panel.date &&
-              view.invalidFulfillmentIds.includes(mark.id)
+              mark.planId === panel.planId && mark.date === panel.date && invalidIds.has(mark.id)
           )}
           categories={categories}
           disabled={disabled}

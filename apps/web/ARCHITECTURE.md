@@ -565,12 +565,18 @@ including Transactions with observed Granted Consent;
 independent controls such as OAuth do not start product reads on hover. Automatic Budget and Recurring
 loader preloads are disabled so a code-only speculative match cannot satisfy the actual visit.
 The owned product intent retains data preparation and the active product route's AbortSignal,
-including after deferred code import. Idle code warming starts after the foreground Transaction,
-Dashboard, Budget or Recurring display is available, includes settings and Subscription code, and
-yields between destinations. Composition supplies its code loaders through a context so features
-do not import application orchestration. Reported data-saving and slow network connections skip
-broad idle warming; explicit destination intent remains available. Idle warming never starts
-product reads.
+including after deferred code import. Idle preparation starts after the foreground Transaction,
+Dashboard, Budget, Recurring or Review display is available. Review waits for its source context
+when it has items. The queue prepares Budget, Recurring and Dashboard display data at most once
+per authentication lifetime, skipping the current destination, and warms the remaining destination
+code, including settings and Subscription. Display preparation waits for one second without pointer
+or keyboard activity and for all bound logical requests to settle, including queued transfers and
+retry pacing. It starts one destination preparation at a time, pauses in hidden documents, and
+route disposal stops unstarted work. Code warming yields independently between imports.
+Composition supplies these preparations through a context
+so features do not import application orchestration. Reported data-saving and slow network connections
+skip broad idle preparation; explicit destination intent remains available. Preparation reuses the
+existing query owners and starts no writes or off-route Dashboard initialization.
 Needs Review and Recurring route loaders preload the same presentation component used by their
 retained workspace, so resolving destination code does not introduce another lazy suspension. Retained panels activate
 only for successful route matches after destination code and mandatory access checks complete.

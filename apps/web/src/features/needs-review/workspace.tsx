@@ -70,10 +70,12 @@ export const NeedsReviewFeature = ({
   filter,
   page,
   active,
+  children,
 }: Readonly<{
   filter: Filter;
   page: number;
   active: boolean;
+  children: ReactNode;
 }>): JSX.Element => {
   const router = useRouter();
   const select = (status: Filter, offset: number): void => {
@@ -89,13 +91,17 @@ export const NeedsReviewFeature = ({
         filter="pending"
         page={filter === "pending" ? page : 0}
         select={select}
-      />
+      >
+        {children}
+      </ReviewPanel>
       <ReviewPanel
         active={active && filter !== "pending"}
         filter={filter === "pending" ? "history" : filter}
         page={filter === "pending" ? 0 : page}
         select={select}
-      />
+      >
+        {children}
+      </ReviewPanel>
     </ReviewWorkspaceLayout>
   );
 };
@@ -104,11 +110,13 @@ const ReviewPanel = ({
   filter,
   page,
   select,
+  children,
 }: Readonly<{
   active: boolean;
   filter: Filter;
   page: number;
   select: (status: Filter, offset: number) => void;
+  children: ReactNode;
 }>): JSX.Element => {
   const [visited, setVisited] = useState(active);
   if (active && !visited) setVisited(true);
@@ -121,7 +129,9 @@ const ReviewPanel = ({
       select={select}
       page={page}
       move={(offset) => select(filter, offset)}
-    />
+    >
+      {children}
+    </ReviewResources>
   );
 };
 const useReviewDecisions = ({
@@ -139,12 +149,14 @@ const ReviewResources = ({
   page,
   move,
   select,
+  children,
 }: Readonly<{
   active: boolean;
   filter: Filter;
   page: number;
   move: (offset: number) => void;
   select: (status: Filter, offset: number) => void;
+  children: ReactNode;
 }>): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
   const [queries] = useState(() =>
@@ -158,7 +170,6 @@ const ReviewResources = ({
   const decisions = useReviewDecisions({ client: apiClient, query: queries.source });
   const [lifetime] = useState(() => decisionLifetime(decisions));
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
-  const refresh = decisions.recover;
   const waitingFreshness = state.waiting ? "refreshing" : "current";
   return (
     <div ref={lifetime} hidden={!active} data-review="panel">
@@ -166,7 +177,7 @@ const ReviewResources = ({
         <ReviewUnavailable
           filter={filter}
           select={select}
-          refresh={refresh}
+          refresh={decisions.recover}
           loading={state._tag !== "Failure"}
         />
       ) : (
@@ -177,7 +188,7 @@ const ReviewResources = ({
           view={state.value.data}
           notice={
             Option.isSome(state.refreshFailure) ? (
-              <ReviewReadFailure refresh={refresh} waiting={state.waiting} />
+              <ReviewReadFailure refresh={decisions.recover} waiting={state.waiting} />
             ) : null
           }
           freshness={Option.isSome(state.refreshFailure) ? "stale" : waitingFreshness}
@@ -185,7 +196,9 @@ const ReviewResources = ({
           move={move}
           filter={filter}
           select={select}
-        />
+        >
+          {active ? children : null}
+        </ReadyInbox>
       )}
     </div>
   );
@@ -250,6 +263,7 @@ const ReviewReadFailure = ({
   </div>
 );
 type ReadyInboxProps = Readonly<{
+  children: ReactNode;
   filter: Filter;
   select: (status: Filter, offset: number) => void;
   view: Workspace;
@@ -272,6 +286,7 @@ const ReadyInbox = ({
   return displayed ? <ReadyInboxView {...props} /> : <></>;
 };
 const ReadyInboxView = ({
+  children,
   workspaceQuery,
   decisions,
   notice,
@@ -291,6 +306,7 @@ const ReadyInboxView = ({
   const checked = control.checked.filter((id) => visible.items.some((entry) => entry.id === id));
   return (
     <>
+      {view.items.length === 0 || !context.loading ? children : null}
       {notice}
       <ReviewNavigation
         contextFeedback={<SourceContextFeedback context={context} />}

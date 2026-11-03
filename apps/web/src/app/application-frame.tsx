@@ -1,13 +1,13 @@
 import { useNavigationPreparation } from "./navigation-preparation";
-import { Outlet, useRouterState } from "@tanstack/react-router";
-import { type JSX, Suspense, lazy } from "react";
+import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
+import { type JSX, Suspense, lazy, useMemo, useState } from "react";
 import { AccessRefused, ApplicationShell } from "@/features/signed-in/feature";
 import { useSession } from "@/session/session-context";
 import { HostedAgentProvider } from "@/features/agent/feature";
 import { OAuthAgent } from "./oauth-agent";
 import { RetainedRecurringWorkspace } from "./recurring-workspace";
 import { RetainedReviewWorkspace } from "./review-workspace";
-import { DestinationCodeContext } from "./destination-code-context";
+import { DestinationPreloadContext } from "./destination-preload-context";
 import { destinationCodePreloads } from "./destination-components";
 
 const ReviewPendingCount = lazy(() =>
@@ -17,11 +17,37 @@ const ReviewPendingCount = lazy(() =>
 );
 
 /** One application shell survives navigation across independently authorized product routes. */
-export const ApplicationFrame = (): JSX.Element => (
-  <DestinationCodeContext value={destinationCodePreloads}>
-    <ApplicationContent />
-  </DestinationCodeContext>
-);
+export const ApplicationFrame = (): JSX.Element => {
+  const prepareNavigation = useNavigationPreparation();
+  const router = useRouter();
+  const [attempted] = useState(() => new Set<string>());
+  const destinations = useMemo(
+    () => ({
+      code: destinationCodePreloads,
+      idle: router.options.context.browserRequestsIdle,
+      display: destinationCodePreloads
+        .filter((destination) =>
+          ["/app/budgets", "/app/recurring", "/app/dashboard"].includes(destination.path)
+        )
+        .map((destination) => ({
+          path: destination.path,
+          prepare: (): Promise<void> => {
+            if (attempted.has(destination.path)) return Promise.resolve();
+            attempted.add(destination.path);
+            return destination.path === router.state.location.pathname
+              ? Promise.resolve()
+              : prepareNavigation(destination.path);
+          },
+        })),
+    }),
+    [attempted, prepareNavigation, router]
+  );
+  return (
+    <DestinationPreloadContext value={destinations}>
+      <ApplicationContent />
+    </DestinationPreloadContext>
+  );
+};
 
 const ApplicationContent = (): JSX.Element => {
   const { authentication } = useSession();

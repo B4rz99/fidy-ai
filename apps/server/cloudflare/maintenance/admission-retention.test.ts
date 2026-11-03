@@ -22,6 +22,7 @@ const owners: ReadonlyArray<
   }>
 > = [
   { prefix: "openai-", sweep: sweepExpiredOpenAiAdmission, window: 86_400_000 },
+  { prefix: "workers-ai-", sweep: sweepExpiredOpenAiAdmission, window: 86_400_000 },
   {
     prefix: "card-preparation-attempt-",
     sweep: sweepExpiredEnrollmentAdmission,

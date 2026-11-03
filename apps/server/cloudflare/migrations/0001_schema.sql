@@ -2323,7 +2323,7 @@ CREATE INDEX resource_admission_active_scope
 
 CREATE INDEX resource_admission_ai_retention
   ON resource_admission_grants (admitted_at_epoch_ms, id)
-  WHERE id GLOB 'openai-*';
+  WHERE id GLOB 'workers-ai-*';
 --> statement-breakpoint
 
 CREATE INDEX resource_admission_enrollment_retention

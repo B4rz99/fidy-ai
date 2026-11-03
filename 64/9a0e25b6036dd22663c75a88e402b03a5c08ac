@@ -1,0 +1,19 @@
+apps/web/src/ui/components/dashboard.tsx
+  s_d7c154930ac182::t_097904ea503c59 191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "649a0e25b6036dd22663c75a88e402b03a5c08ac",
+  "prompts": {},
+  "sessions": {
+    "s_d7c154930ac182": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19edb-ad78-73b3-a8e8-bee2845e8be3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

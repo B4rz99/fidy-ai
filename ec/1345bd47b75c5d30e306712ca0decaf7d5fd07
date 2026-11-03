@@ -1,0 +1,37 @@
+apps/server/cloudflare/core-http/internal/http.ts
+  s_f38b95a31ee952::t_077f84231f9876 58,384-385,401-409,412-414,417-425
+  s_f38b95a31ee952::t_d00a67ff4df481 415-416
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_f38b95a31ee952::t_077f84231f9876 1872-1874
+  s_f38b95a31ee952::t_633043eb47a0ba 395,406,1870-1871,1875-1878
+apps/server/cloudflare/dashboard/operations.ts
+  s_f38b95a31ee952::t_077f84231f9876 1,321-324,330-339,341-342
+  s_f38b95a31ee952::t_558a2a6e9bb4f3 308,343
+apps/server/ARCHITECTURE.md
+  s_f38b95a31ee952::t_1a341263b9ebeb 276-282
+apps/server/cloudflare/transactions/runtime.ts
+  s_f38b95a31ee952::t_077f84231f9876 21,639-659,661,695,839,841,862-863,910,914
+  s_f38b95a31ee952::t_a22210bea76185 660,662-694,696-697,908-909,911-913
+infra/cloudflare/verify-edge-policy.ts
+  s_f38b95a31ee952::t_2ffeab75aab3d4 5,78-79
+  s_f38b95a31ee952::t_e9146c11ed6403 80
+apps/server/cloudflare/dashboard/internal/dashboard-timing.ts
+  s_f38b95a31ee952::t_10d6fcd2a15e2d 17-18,25,27
+  s_f38b95a31ee952::t_077f84231f9876 1-16,19-24,26,28-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ec1345bd47b75c5d30e306712ca0decaf7d5fd07",
+  "prompts": {},
+  "sessions": {
+    "s_f38b95a31ee952": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a354-b0aa-7972-80cf-ea7d3179408f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

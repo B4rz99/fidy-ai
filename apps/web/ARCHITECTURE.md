@@ -474,6 +474,15 @@ query identities without resetting pending or uncertain writes. Accepted edits i
 workspace queries; an uncertain write remains blocked until an explicit workspace and taxonomy
 reread succeeds. Failed recovery preserves the write lock. The browser does not
 generate schedules, match Transactions, sum Money or change the meaning of historical detection.
+Pause/resume confirmation comes only from a successful canonical mutation and remains with the
+mounted planning owner. The selected detail survives lifecycle writes, reading plan state from
+the current document separately from the occurrence's historical plan input and fulfillment status.
+Other confirmed edits close the editor once its read reaches the acknowledged document revision. Occurrence detail keeps its identity through document
+refreshes so a pending Transaction capture stays open; plan drafts reset only when their canonical plan input changes.
+Unknown outcomes still require the same explicit reread before another write.
+The confirmation retains the affected plan identity and confirmed document revision. Until a
+workspace reread reaches that revision, the lifecycle display uses the confirmed action's state;
+a failed refresh cannot restore an obsolete lifecycle badge or action. Recovery still gates writes.
 
 Recurring manual marks disclose that they change tracking only. Transaction capture reuses the
 Transactions-owned form and canonical mutation, preserving the plan's Currency and direction.

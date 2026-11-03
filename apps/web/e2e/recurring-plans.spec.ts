@@ -18,6 +18,8 @@ const expectPayment = expect.configure({ timeout: paymentAssertionMilliseconds }
 test.describe.configure({ mode: "parallel", timeout: paymentJourneyMilliseconds });
 const rateLimitedStatus = 429;
 const monthsPerYear = 12;
+const desktopLifecycleWidth = 1506;
+const mobileLifecycleWidth = 390;
 test("recurring plans persist through the real canonical API and share monthly list/calendar items", ({
   page,
   request,
@@ -159,17 +161,18 @@ const inspectPlanSelection = (page: Page): Effect.Effect<void, Cause.UnknownErro
     );
   });
 
-const createPlan = ({
-  page,
-  name,
-  kind,
-  currency,
-  amount,
-}: PlanDraft): Effect.Effect<void, Cause.UnknownError> =>
+const createPlan = (
+  { page, name, kind, currency, amount }: PlanDraft,
+  schedule: Readonly<{ frequency: string; firstDate: string }> = {
+    frequency: "Cada mes",
+    firstDate: "2026-10-31",
+  }
+): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByRole("button", { name: "Nuevo recurrente" }).click());
     yield* Effect.tryPromise(() => page.getByLabel("Nombre", { exact: true }).fill(name));
-    yield* Effect.tryPromise(() => chooseDate(page, "Primera fecha", "2026-10-31"));
+    yield* Effect.tryPromise(() => chooseDate(page, "Primera fecha", schedule.firstDate));
+    yield* Effect.tryPromise(() => chooseOption(page, "Frecuencia", schedule.frequency));
     yield* Effect.tryPromise(() =>
       chooseOption(
         page,
@@ -555,11 +558,30 @@ test("pause, resume and stop survive reload", ({ page, request }) =>
         currency: "COP",
         amount: "100",
       });
-      yield* changeOccurrence(page, "Pausar");
+      yield* Effect.tryPromise(() => recurringItem(page, /Ciclo de seguimiento/u).click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Estado del plan", exact: true })).toContainText(
+          "Activo"
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Reanudar plan", exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Pausar plan", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText("Ciclo de seguimiento está pausado")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cerrar", exact: true }).click()
+      );
       yield* Effect.tryPromise(() =>
         expect(recurringItem(page, /Ciclo de seguimiento/u)).toHaveCount(0)
       );
       yield* verifyPlanLifecycle(page);
+      yield* inspectPartialLifecycle(page);
+      yield* inspectAnnualLifecycle(page);
     })
   ));
 
@@ -568,6 +590,48 @@ const changeOccurrence = (page: Page, action: string): Effect.Effect<void, Cause
     yield* Effect.tryPromise(() => recurringItem(page, /Ciclo de seguimiento/u).click());
     yield* Effect.tryPromise(() => page.getByRole("button", { name: action, exact: true }).click());
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+  });
+
+const inspectManagedLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Editar Ciclo de seguimiento", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Estado del plan", exact: true })).toContainText(
+        "Activo"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Pausar plan", exact: true })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Reanudar plan", exact: true })).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Nombre", { exact: true }).fill("Borrador sin guardar")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Pausar plan", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Reanudar plan", exact: true })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Nombre", { exact: true })).toHaveValue("Borrador sin guardar")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Reanudar plan", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Pausar plan", exact: true })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Nombre", { exact: true })).toHaveValue("Borrador sin guardar")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
   });
 
 const verifyPlanLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
@@ -582,12 +646,10 @@ const verifyPlanLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownError
       page.getByRole("button", { name: "Reanudar", exact: true }).click()
     );
     yield* Effect.tryPromise(() =>
-      expect(recurringItem(page, /Ciclo de seguimiento/u)).toBeVisible()
-    );
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Todos los recurrentes", exact: true }).click()
+      expect(page.getByRole("status")).toContainText("Ciclo de seguimiento está activo")
     );
     yield* Effect.tryPromise(() => expect(plan).toContainText("Activo"));
+    yield* inspectManagedLifecycle(page);
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Mensual", exact: true }).click()
     );
@@ -611,6 +673,168 @@ const verifyPlanLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownError
       expect(
         page.getByRole("button", { name: "Editar Ciclo de seguimiento", exact: true })
       ).toContainText("Dejado de seguir")
+    );
+  });
+
+const inspectPartialLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const today = currentRecurringDate();
+    yield* Effect.tryPromise(() =>
+      page.goto(`/app/recurring?month=${today.slice(0, "2026-01".length)}`)
+    );
+    yield* Effect.tryPromise(() => page.setViewportSize({ width: 1506, height: 900 }));
+    yield* createPlan(
+      {
+        page,
+        name: "Internet QA",
+        kind: "expense",
+        currency: "COP",
+        amount: "90000",
+      },
+      { frequency: "Cada mes", firstDate: today }
+    );
+    yield* Effect.tryPromise(() => recurringItem(page, /Internet QA/u).click());
+    yield* Effect.tryPromise(() => page.getByLabel("Importe real", { exact: true }).fill("30000"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
+    );
+    for (const width of [desktopLifecycleWidth, mobileLifecycleWidth]) {
+      yield* inspectPartialLayout(page, width);
+    }
+  });
+
+const inspectPartialLayout = (page: Page, width: number): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.setViewportSize({ width, height: 900 }));
+    yield* Effect.tryPromise(() => recurringItem(page, /Internet QA.*Parcial/u).click());
+    yield* Effect.tryPromise(() =>
+      page.route(`${apiOrigin}/recurring-plans?*`, rejectLifecycleReread)
+    );
+    yield* inspectLifecycleTransition({
+      page,
+      action: "Pausar plan",
+      state: "Pausado",
+      confirmation: "Internet QA está pausado",
+    });
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("alert")).toContainText("Actualiza los recurrentes")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Reanudar plan", exact: true })).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      page.unroute(`${apiOrigin}/recurring-plans?*`, rejectLifecycleReread)
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Actualizar recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Reanudar plan", exact: true })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(recurringItem(page, /Internet QA.*Parcial/u)).toBeVisible()
+    );
+    yield* Effect.tryPromise(() => page.reload());
+    yield* Effect.tryPromise(() => recurringItem(page, /Internet QA.*Parcial/u).click());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Estado del plan", exact: true })).toContainText(
+        "Pausado"
+      )
+    );
+    yield* inspectLifecycleTransition({
+      page,
+      action: "Reanudar plan",
+      state: "Activo",
+      confirmation: "Internet QA está activo",
+    });
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => page.reload());
+  });
+
+const rejectLifecycleReread = (route: Route): Promise<void> =>
+  route.fulfill({
+    status: rateLimitedStatus,
+    contentType: "application/json",
+    headers: { "retry-after": "3600" },
+    body: '{"_tag":"ResourceLimited","error":{"code":"rate_limited","message":"Try again later.","retryAfterSeconds":3600},"next":[]}',
+  });
+
+const inspectAnnualLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.setViewportSize({ width: desktopLifecycleWidth, height: 900 })
+    );
+    yield* createPlan(
+      {
+        page,
+        name: "Plan anual QA",
+        kind: "expense",
+        currency: "COP",
+        amount: "100",
+      },
+      { frequency: "Cada año", firstDate: currentRecurringDate() }
+    );
+    yield* Effect.tryPromise(() => recurringItem(page, /Plan anual QA/u).click());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Estado del plan", exact: true })).toContainText(
+        "Activo"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Pausar plan", exact: true })).toBeEnabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Reanudar plan", exact: true })).toHaveCount(0)
+    );
+  });
+
+const currentRecurringDate = (): string =>
+  DateTime.formatIsoDate(
+    DateTime.makeZonedUnsafe(DateTime.nowUnsafe(), { timeZone: "America/Bogota" })
+  );
+
+const inspectLifecycleTransition = ({
+  page,
+  action,
+  state,
+  confirmation,
+}: Readonly<{ page: Page; action: string; state: string; confirmation: string }>): Effect.Effect<
+  void,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: action, exact: true }).click());
+    yield* Effect.tryPromise(() => expect(page.getByRole("status")).toContainText(confirmation));
+    const detail = page.getByRole("dialog");
+    yield* Effect.tryPromise(() => expect(detail).toContainText("Parcial"));
+    yield* Effect.tryPromise(() => expect(detail).toContainText("30.000,00"));
+    yield* Effect.tryPromise(() =>
+      expect(detail).toContainText("Los registros existentes se conservan")
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Estado del plan", exact: true })).toContainText(
+        state
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: action, exact: true })).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() =>
+      detail
+        .evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return (
+            bounds.left >= 0 &&
+            bounds.right <= window.innerWidth &&
+            element.scrollWidth <= element.clientWidth
+          );
+        })
+        .then((fits) => expect(fits).toBe(true))
     );
   });
 

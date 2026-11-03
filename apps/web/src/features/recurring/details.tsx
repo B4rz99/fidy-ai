@@ -98,25 +98,6 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
     >
       {item.status === "skipped" ? "Volver a incluir" : "Omitir esta vez"}
     </Button>
-    <div className="flex flex-wrap justify-center gap-2">
-      {(
-        [
-          ["pause", "Pausar"],
-          ["resume", "Reanudar"],
-        ] as const
-      ).map(([action, label]) => (
-        <Button
-          contentLayout="wrap"
-          focusAppearance="subtle"
-          key={action}
-          variant={action === "pause" ? "destructive" : "outline"}
-          disabled={disabled}
-          onClick={() => save({ kind: "lifecycle", planId: item.planId, date: today, action })}
-        >
-          {label}
-        </Button>
-      ))}
-    </div>
     <Disclosure title="Dejar de seguir">
       <p className="my-3 text-sm text-muted-foreground">
         Deja de generar expectativas futuras y conserva el historial. No cancela el servicio ni

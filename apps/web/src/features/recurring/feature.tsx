@@ -13,8 +13,14 @@ import { CaptureEditorContext, type CaptureEditorProps } from "./capture-context
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { RecurringQueryFailure } from "./query-failure";
 import { Button } from "@/ui/components/button";
+import { Alert, AlertDescription } from "@/ui/components/alert";
 import { RecurringWorkspace } from "./workspace";
-import { type SaveState, recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
+import {
+  type LifecycleConfirmation,
+  type SaveState,
+  recurringWorkspaceQuery,
+  useRecurringPlanning,
+} from "./controller";
 import { type Filters, type PlanInput, shiftMonth } from "./model";
 
 export type { CaptureEditorProps } from "./capture-context";
@@ -65,6 +71,7 @@ const Resources = (props: Props): JSX.Element => {
     <SaveNotice
       stale={planning.stale}
       saveState={planning.saveState}
+      confirmation={planning.confirmation}
       waiting={waiting}
       retry={retry}
     />
@@ -72,11 +79,12 @@ const Resources = (props: Props): JSX.Element => {
   return (
     <Suspense fallback={<RecurringSkeleton />}>
       <PreviewWorkspace
-        key={`${props.month}:${JSON.stringify(props.filters)}:${Option.getOrElse(props.previous, () => "")}:${view.document.revision}`}
+        key={`${props.month}:${JSON.stringify(props.filters)}:${Option.getOrElse(props.previous, () => "")}`}
         notice={notice}
         view={view}
         categories={categoryState.value.data}
         save={planning.save}
+        statusFor={planning.statusFor}
         disabled={planning.disabled}
         filters={props.filters}
         applyFilters={props.applyFilters}
@@ -138,28 +146,52 @@ export const RecurringFeature = ({
     </CaptureEditorContext>
   );
 };
+const lifecycleMessages = {
+  pause:
+    "está pausado. No aparecerán nuevas fechas de este plan mientras esté pausado. Los registros existentes se conservan.",
+  resume:
+    "está activo. Fidy volverá a mostrar las próximas fechas de este plan. Los registros existentes se conservan.",
+  stop: "dejó de seguirse. No aparecerán nuevas fechas de este plan. Los registros existentes se conservan.",
+};
+const failureMessage = (state: SaveState): string => {
+  if (state === "uncertain") {
+    return "No pudimos confirmar si se guardó. Actualiza y revisa el resultado antes de volver a guardar.";
+  }
+  if (state === "rejected") {
+    return "No se guardó el cambio. Actualiza los recurrentes y revisa los datos antes de intentarlo de nuevo.";
+  }
+  return "Actualiza los recurrentes y revisa los datos antes de guardar.";
+};
 const SaveNotice = ({
   stale,
   saveState,
   waiting,
   retry,
+  confirmation,
 }: Readonly<{
   stale: boolean;
   saveState: SaveState;
   waiting: boolean;
   retry: () => void;
+  confirmation: Option.Option<LifecycleConfirmation>;
 }>): JSX.Element => (
   <>
+    {saveState === "saving" ? <output>Guardando cambio…</output> : null}
+    {Option.isSome(confirmation) ? (
+      <output>
+        <Alert variant="success" role="presentation">
+          <AlertDescription>
+            {confirmation.value.name} {lifecycleMessages[confirmation.value.action]}
+          </AlertDescription>
+        </Alert>
+      </output>
+    ) : null}
     {stale ||
     saveState === "uncertain" ||
     saveState === "rejected" ||
     saveState === "refreshing" ? (
       <div role="alert" className="flex flex-wrap items-center gap-3 border-b p-4">
-        <p>
-          {saveState === "uncertain"
-            ? "No pudimos confirmar si se guardó. Actualiza y revisa el resultado antes de volver a guardar."
-            : "Actualiza los recurrentes y revisa los datos antes de guardar."}
-        </p>
+        <p>{failureMessage(saveState)}</p>
         <RefreshButton
           focusAppearance="subtle"
           variant="outline"

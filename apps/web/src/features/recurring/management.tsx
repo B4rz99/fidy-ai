@@ -7,17 +7,19 @@ import type { CanonicalSuccess } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  ArrowDown01Icon,
-  Cancel01Icon,
-  PauseCircleIcon,
-  Tick02Icon,
-} from "@hugeicons/core-free-icons";
-import { Badge } from "@/ui/components/badge";
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { RecurringPlanBadge } from "@/ui/components/recurring";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { RecurringIdentity } from "./visuals";
 import { ChoiceField } from "./fields";
-import { type Filters, type Plan, type PlanInput, type Save, type Workspace } from "./model";
+import {
+  type Filters,
+  type Plan,
+  type PlanInput,
+  type Save,
+  type Workspace,
+  type planStatus,
+} from "./model";
 
 type Series = CanonicalSuccess<"recurring.listRecurringSeries">["data"]["series"][number];
 const proposal = (series: Series, today: string, timeZone: PlanInput["timeZone"]): PlanInput => ({
@@ -162,12 +164,14 @@ export const PlanManagement = ({
   disabled,
   save,
   filters,
+  statusFor,
 }: Readonly<{
   filters: Filters;
   view: Workspace;
   open: (plan: Workspace["document"]["plans"][number]) => void;
   disabled: boolean;
   save: Save;
+  statusFor: typeof planStatus;
 }>): JSX.Element => {
   const [status, setStatus] = useState("all");
   return (
@@ -192,11 +196,12 @@ export const PlanManagement = ({
         />
       </div>
       {view.document.plans.flatMap((plan) =>
-        (status === "all" || planStatus(plan) === status) && matchesPlanFilters(plan, filters)
+        (status === "all" || statusFor(plan) === status) && matchesPlanFilters(plan, filters)
           ? [
               <PlanRow
                 key={plan.id}
                 plan={plan}
+                status={statusFor(plan)}
                 open={open}
                 disabled={disabled}
                 save={save}
@@ -329,10 +334,6 @@ const RestoreSuggestions = ({
   </>
 );
 
-const planStatus = (plan: Plan): "stopped" | "paused" | "active" => {
-  if (plan.stoppedOn !== undefined) return "stopped";
-  return plan.pauses.some((pause) => pause.through === undefined) ? "paused" : "active";
-};
 const matchesPlanFilters = (plan: Plan, filters: Filters): boolean => {
   const input = plan.revisions.at(-1)?.plan;
   if (input === undefined) return false;
@@ -345,24 +346,22 @@ const matchesPlanFilters = (plan: Plan, filters: Filters): boolean => {
     return true;
   });
 };
-const planStatusLabels = { active: "Activo", paused: "Pausado", stopped: "Dejado de seguir" };
-const statusVariants = { active: "success", paused: "warning", stopped: "destructive" } as const;
-const statusIcons = { active: Tick02Icon, paused: PauseCircleIcon, stopped: Cancel01Icon } as const;
 const PlanRow = ({
   plan,
   open,
   save,
   disabled,
   today,
+  status,
 }: Readonly<{
   plan: Plan;
   open: (plan: Plan) => void;
   save: Save;
   disabled: boolean;
   today: string;
+  status: ReturnType<typeof planStatus>;
 }>): JSX.Element => {
   const input = plan.revisions.at(-1)?.plan;
-  const status = planStatus(plan);
   if (input === undefined) return <></>;
   return (
     <div className="@container flex min-w-0 items-center gap-2 border-b pr-4 transition-colors last:border-b-0 hover:bg-muted/50">
@@ -374,10 +373,7 @@ const PlanRow = ({
       >
         <RecurringIdentity plan={input} />
         <span className="flex shrink-0 items-center gap-4">
-          <Badge variant={statusVariants[status]}>
-            <HugeiconsIcon icon={statusIcons[status]} aria-hidden="true" />
-            {planStatusLabels[status]}
-          </Badge>
+          <RecurringPlanBadge status={status} />
         </span>
       </button>
       {status === "paused" ? (

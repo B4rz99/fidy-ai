@@ -10,12 +10,39 @@ import {
 } from "react";
 import { Option } from "effect";
 import { Button } from "./button";
+import { Badge } from "./badge";
 import "./recurring.css";
 
 // Base UI exposes an extensionless ESM entrypoint.
 const { Dialog } = await import("@base-ui/react/dialog");
 
 const desktopQuery = "(min-width: 1280px)";
+type PlanStatus = "active" | "paused" | "stopped";
+const planLabels = { active: "Activo", paused: "Pausado", stopped: "Dejado de seguir" };
+const planVariants = { active: "success", paused: "warning", stopped: "destructive" } as const;
+const planDescriptions = {
+  paused:
+    "No aparecerán nuevas fechas de este plan mientras esté pausado. Los registros existentes se conservan.",
+  stopped: "Este plan dejó de generar nuevas fechas. Los registros existentes se conservan.",
+  active:
+    "Fidy seguirá mostrando las próximas fechas de este plan. Los registros existentes se conservan.",
+};
+export const RecurringPlanBadge = ({ status }: Readonly<{ status: PlanStatus }>): JSX.Element => (
+  <Badge variant={planVariants[status]}>{planLabels[status]}</Badge>
+);
+export const RecurringPlanStatus = ({
+  status,
+  action,
+}: Readonly<{ status: PlanStatus; action: ReactNode }>): JSX.Element => (
+  <section data-recurring-slot="plan-status" aria-label="Estado del plan">
+    <div data-recurring-slot="plan-status-actions">
+      <span>Estado del plan</span>
+      <RecurringPlanBadge status={status} />
+      {action}
+    </div>
+    <p>{planDescriptions[status]}</p>
+  </section>
+);
 const isDesktop = (): boolean => window.matchMedia(desktopQuery).matches;
 const subscribe = (notify: () => void): (() => void) => {
   const media = window.matchMedia(desktopQuery);

@@ -1,6 +1,6 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Cause, type Context, Data, Effect, Exit, Option, Predicate } from "effect";
-import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
+import { Cause, type Context, Data, Effect, Exit, Option, Predicate, Stream } from "effect";
+import { AsyncResult, Atom, Reactivity } from "effect/reactivity";
 import { useRef, useState } from "react";
 import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -9,21 +9,62 @@ import {
   workspaceCategoriesQuery,
   workspaceQueryRetention,
 } from "@/transport/workspace-query";
-import type { Save } from "./model";
+import { type Edit, type Plan, type Save, type Workspace, planStatus } from "./model";
 
 type Query = CanonicalInput<"recurringPlans.getRecurringWorkspace">["query"];
 export type SaveState = "idle" | "saving" | "rejected" | "uncertain" | "refreshing";
-type WriteOutcome = "saved" | "rejected" | "uncertain";
+type WriteOutcome =
+  | Readonly<{
+      state: "saved";
+      revision: Workspace["document"]["revision"];
+      confirmation: Option.Option<LifecycleConfirmation>;
+    }>
+  | Readonly<{ state: "rejected" | "uncertain" }>;
+export type LifecycleConfirmation = Readonly<{
+  name: string;
+  planId: Plan["id"];
+  revision: Workspace["document"]["revision"];
+  action: Extract<Edit, { kind: "lifecycle" }>["action"];
+}>;
+type ConfirmedLifecycle = Option.Option<LifecycleConfirmation>;
+const lifecycleConfirmation = (
+  document: Workspace["document"],
+  edit: Edit
+): Option.Option<LifecycleConfirmation> => {
+  if (edit.kind !== "lifecycle") return Option.none();
+  const name = document.plans.find((plan) => plan.id === edit.planId)?.revisions.at(-1)?.plan.name;
+  return name === undefined
+    ? Option.none()
+    : Option.some({ name, action: edit.action, planId: edit.planId, revision: document.revision });
+};
 type PlanningState = Readonly<{
   state: CanonicalQueryState<CanonicalSuccess<"recurringPlans.getRecurringWorkspace">, unknown>;
   categoryState: CanonicalQueryState<CanonicalSuccess<"categories.listCategories">, unknown>;
   saveState: SaveState;
+  confirmation: Option.Option<LifecycleConfirmation>;
+  statusFor: typeof planStatus;
   stale: boolean;
   waiting: boolean;
   disabled: boolean;
   save: Save;
   retry: () => void;
 }>;
+const lifecycleStates = { pause: "paused", resume: "active", stop: "stopped" } as const;
+const confirmedPlanStatus =
+  (
+    state: PlanningState["state"],
+    receipt: Option.Option<LifecycleConfirmation>
+  ): typeof planStatus =>
+  (plan) => {
+    if (Option.isNone(receipt) || state._tag !== "Ready") return planStatus(plan);
+    if (
+      receipt.value.planId !== plan.id ||
+      receipt.value.revision <= state.value.data.document.revision
+    ) {
+      return planStatus(plan);
+    }
+    return lifecycleStates[receipt.value.action];
+  };
 type Client = Context.Service.Shape<FidyClient>;
 type WorkspaceError = Effect.Error<ReturnType<Client["recurringPlans"]["getRecurringWorkspace"]>>;
 type QueryResource<A, E> = Readonly<{
@@ -36,7 +77,9 @@ type Queries = Readonly<{
   ) => QueryResource<CanonicalSuccess<"recurringPlans.getRecurringWorkspace">, WorkspaceError>;
   categories: ReturnType<typeof workspaceCategoriesQuery>;
 }>;
+type CompletionInput = Readonly<{ query: Query; revision: Workspace["document"]["revision"] }>;
 type Commands = Readonly<{
+  completion: Atom.AtomResultFn<CompletionInput, boolean, never>;
   queries: Queries;
   write: Atom.AtomResultFn<
     CanonicalInput<"recurringPlans.applyRecurringEdit">,
@@ -64,27 +107,46 @@ const makeQueries = (apiClient: FidyClient): Queries => ({
   },
   categories: workspaceCategoriesQuery(apiClient),
 });
+const completionCommand = (apiClient: FidyClient, queries: Queries): Commands["completion"] =>
+  apiClient.runtime.fn<CompletionInput>()(({ query, revision }, get) =>
+    get.stream(queries.workspace(query).source).pipe(
+      Stream.filter(
+        (result) => AsyncResult.isSuccess(result) && result.value.data.document.revision >= revision
+      ),
+      Stream.take(1),
+      Stream.runDrain,
+      Effect.as(true),
+      Effect.catchCause(() => Effect.succeed(false))
+    )
+  );
 const makeCommands = (apiClient: FidyClient): Commands => {
   const queries = makeQueries(apiClient);
   return {
     queries,
+    completion: completionCommand(apiClient, queries),
     write: apiClient.runtime.fn<CanonicalInput<"recurringPlans.applyRecurringEdit">>()(
       (input) =>
         Effect.gen(function* () {
           const client = yield* apiClient;
-          yield* client.recurringPlans.applyRecurringEdit(input);
+          const result = yield* client.recurringPlans.applyRecurringEdit(input);
           yield* Reactivity.invalidate([recurringWorkspaceKey]);
-          return "saved" as const;
+          return {
+            state: "saved",
+            revision: result.data.revision,
+            confirmation: lifecycleConfirmation(result.data, input.payload.edit),
+          } as const;
         }).pipe(
           Effect.catch((failure) =>
             Effect.succeed(
               Predicate.isTagged(failure, "ValidationFailed")
-                ? ("rejected" as const)
-                : ("uncertain" as const)
+                ? ({ state: "rejected" } as const)
+                : ({ state: "uncertain" } as const)
             )
           ),
           Effect.catchCause((cause) =>
-            Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.succeed("uncertain" as const)
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.interrupt
+              : Effect.succeed({ state: "uncertain" } as const)
           )
         ),
       { concurrent: false }
@@ -122,20 +184,32 @@ const writesDisabled = ({
   stale ||
   saveState === "saving" ||
   saveState === "uncertain";
-/** Retains write uncertainty across month and filter changes until an explicit reread succeeds. */
-export const useRecurringPlanning = ({
-  apiClient,
-  query,
-  profileStale,
-  profileWaiting,
-  refreshProfile,
-}: Readonly<{
+const queryStale = (state: CanonicalQueryState<unknown, unknown>): boolean =>
+  state._tag === "Ready" && Option.isSome(state.refreshFailure);
+/** Editor completion waits for the acknowledged document, preventing stale drafts on reopen. */
+const useSaveCompletion = (
+  command: Commands["completion"],
+  query: Query
+): ((revision: CompletionInput["revision"], onSaved: () => void) => void) => {
+  const complete = useAtomSet(command, { mode: "promiseExit" });
+  return (revision, onSaved) => {
+    complete({ query, revision })
+      .then((exit) => {
+        if (Exit.isSuccess(exit) && exit.value) onSaved();
+      })
+      .catch(() => undefined);
+  };
+};
+type PlanningOptions = Readonly<{
   apiClient: FidyClient;
   query: Query;
   profileStale: boolean;
   profileWaiting: boolean;
   refreshProfile: () => void;
-}>): PlanningState => {
+}>;
+/** Retains write uncertainty across month and filter changes until an explicit reread succeeds. */
+export const useRecurringPlanning = (options: PlanningOptions): PlanningState => {
+  const { apiClient, query, profileStale, profileWaiting, refreshProfile } = options;
   const [commands] = useState(() => makeCommands(apiClient));
   const state = useAtomValue(commands.queries.workspace(query).view).pipe(presentCanonicalQuery);
   const categoryState = useAtomValue(commands.queries.categories.view).pipe(presentCanonicalQuery);
@@ -143,26 +217,29 @@ export const useRecurringPlanning = ({
   const reread = useAtomSet(commands.refresh, { mode: "promiseExit" });
   const admission = useRef(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const stale =
-    profileStale ||
-    (state._tag === "Ready" && Option.isSome(state.refreshFailure)) ||
-    (categoryState._tag === "Ready" && Option.isSome(categoryState.refreshFailure));
+  const [confirmation, setConfirmation] = useState<ConfirmedLifecycle>(Option.none);
+  const stale = profileStale || queryStale(state) || queryStale(categoryState);
   const waiting =
     profileWaiting || state.waiting || categoryState.waiting || saveState === "refreshing";
+  const complete = useSaveCompletion(commands.completion, query);
   const disabled = writesDisabled({ state, categoryState, waiting, stale, saveState });
-  const complete = (outcome: WriteOutcome): void => {
-    admission.current = false;
-    setSaveState(outcome === "saved" ? "idle" : outcome);
-  };
-  const save: Save = (edit) => {
+  const save: Save = (edit, onSaved = () => undefined) => {
     if (disabled || admission.current || state._tag !== "Ready") return;
     admission.current = true;
     setSaveState("saving");
+    setConfirmation(Option.none());
+    const finish = (outcome: WriteOutcome): void => {
+      admission.current = false;
+      setSaveState(outcome.state === "saved" ? "idle" : outcome.state);
+      if (outcome.state !== "saved") return;
+      setConfirmation(outcome.confirmation);
+      complete(outcome.revision, onSaved);
+    };
     submit({
       payload: { expectedRevision: state.value.data.document.revision, edit, view: "compact" },
     })
-      .then((exit) => complete(Exit.isSuccess(exit) ? exit.value : "uncertain"))
-      .catch(() => complete("uncertain"));
+      .then((exit) => finish(Exit.isSuccess(exit) ? exit.value : { state: "uncertain" }))
+      .catch(() => finish({ state: "uncertain" }));
   };
   const retry = (): void => {
     if (admission.current) return;
@@ -178,7 +255,18 @@ export const useRecurringPlanning = ({
       .then((exit) => finish(Exit.isSuccess(exit) && exit.value))
       .catch(() => finish(false));
   };
-  return { state, categoryState, saveState, stale, waiting, disabled, save, retry };
+  return {
+    state,
+    categoryState,
+    saveState,
+    confirmation,
+    statusFor: confirmedPlanStatus(state, confirmation),
+    stale,
+    waiting,
+    disabled,
+    save,
+    retry,
+  };
 };
 export const recurringWorkspaceQuery = ({
   apiClient,

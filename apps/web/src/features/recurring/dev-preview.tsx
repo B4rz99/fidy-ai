@@ -8,7 +8,7 @@ import {
   fixtureCategories,
   fixtureWorkspace,
 } from "./dev-fixtures";
-import type { Filters } from "./model";
+import { type Filters, planStatus } from "./model";
 
 const datasets: ReadonlyArray<Readonly<{ value: Dataset; label: string }>> = [
   { value: "demo", label: "Demo data" },
@@ -39,6 +39,7 @@ const FixtureWorkspace = ({
     <RecurringWorkspace
       {...props}
       view={view}
+      statusFor={planStatus}
       categories={categories}
       filters={filters}
       applyFilters={setFilters}

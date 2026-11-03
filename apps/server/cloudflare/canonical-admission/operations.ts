@@ -1,11 +1,14 @@
 import {
   type CanonicalRequestTimings,
+  type CanonicalSnapshotTimings,
   appendCanonicalTimings,
+  appendSnapshotTimings,
   measureCanonicalPhase,
+  reportedSqlDuration,
 } from "./internal/response-timing";
 import { OAuthNativeReview } from "../oauth-confirmation/contract";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
-import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
+import { Clock, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
 import { canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
 import { UserActionRequired } from "../../src/shell/public-http/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
@@ -978,65 +981,97 @@ const snapshotUserSelection = (lookup: BoundWebSessionLookup): OwnedStatement =>
   params: lookup.statement.params,
 });
 
+type BrowserSnapshotRequest = Readonly<{
+  db: D1Database;
+  request: Request;
+  current: number;
+  operation:
+    | "categories.listCategories"
+    | "transactions.listTransactions"
+    | "budgets.getBudgetStatus";
+  read: CanonicalBrowserRead;
+}>;
+
+type PreparedSnapshotRead = Readonly<{
+  owner: ReturnType<CanonicalBrowserRead>;
+  protectionCount: number;
+  statements: Array<D1PreparedStatement>;
+}>;
+
+const prepareSnapshotRead = (
+  input: BrowserSnapshotRequest,
+  lookup: BoundWebSessionLookup
+): PreparedSnapshotRead => {
+  const owner = input.read({
+    db: input.db,
+    current: input.current,
+    authority: boundCanonicalWebSessionAuthority(lookup),
+    reservation: lookup.statement,
+  });
+  const protection = prepareBoundBrowserSnapshot({ ...input, lookup });
+  return {
+    owner,
+    protectionCount: protection.length,
+    statements: [
+      ...protection,
+      ...owner.statements,
+      quotaStatusForUserSelection({ ...input, users: snapshotUserSelection(lookup) }),
+    ],
+  };
+};
+
 /** Commit an approved unmetered browser read, pressure, Audit and standing under one fresh native fence. */
 export const protectCanonicalBrowserSnapshot = (
-  input: Readonly<{
-    db: D1Database;
-    request: Request;
-    current: number;
-    operation:
-      | "categories.listCategories"
-      | "transactions.listTransactions"
-      | "budgets.getBudgetStatus";
-    read: CanonicalBrowserRead;
-  }>
+  input: BrowserSnapshotRequest
 ): Effect.Effect<Response> =>
-  Effect.uninterruptible(
-    Effect.gen(function* () {
-      const prepared = yield* Effect.tryPromise({
-        try: () => prepareBoundCanonicalWebSession(input),
-        catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
-      });
-      if (Option.isNone(prepared)) return noAuthority();
-      const lookup = prepared.value;
-      const owner = input.read({
-        db: input.db,
-        current: input.current,
-        authority: boundCanonicalWebSessionAuthority(lookup),
-        reservation: lookup.statement,
-      });
-      const protection = prepareBoundBrowserSnapshot({ ...input, lookup });
-      const statements = [
-        ...protection,
-        ...owner.statements,
-        quotaStatusForUserSelection({
-          ...input,
-          users: snapshotUserSelection(lookup),
-        }),
-      ];
-      const committed = yield* Effect.tryPromise({
-        try: () => input.db.batch(statements),
-        catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
-      }).pipe(
-        Effect.map((rows) => ({ _tag: "Committed", rows }) as const),
-        Effect.catch((error) => Effect.succeed({ _tag: "Refused", error } as const))
-      );
-      if (committed._tag === "Refused") {
-        return yield* refuseBrowserSnapshot({
-          db: input.db,
-          lookup,
-          cause: committed.error.cause,
+  Effect.suspend(() => {
+    const timings: CanonicalSnapshotTimings = {
+      storage: 0,
+      presentation: 0,
+      sql: Option.none(),
+    };
+    return Effect.uninterruptible(
+      Effect.gen(function* () {
+        const prepared = yield* Effect.tryPromise({
+          try: () => prepareBoundCanonicalWebSession(input),
+          catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
         });
-      }
-      return yield* presentBrowserSnapshot({
-        rows: committed.rows,
-        lookup,
-        protectionCount: protection.length,
-        owner,
-        current: input.current,
-      });
-    }).pipe(Effect.orElseSucceed(unavailable))
-  );
+        if (Option.isNone(prepared)) return noAuthority();
+        const lookup = prepared.value;
+        const snapshot = prepareSnapshotRead(input, lookup);
+        const [storageDuration, committed] = yield* Effect.tryPromise({
+          try: () => input.db.batch(snapshot.statements),
+          catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
+        }).pipe(
+          Effect.map((rows) => ({ _tag: "Committed", rows }) as const),
+          Effect.catch((error) => Effect.succeed({ _tag: "Refused", error } as const)),
+          Effect.timed
+        );
+        timings.storage = Duration.toMillis(storageDuration);
+        if (committed._tag === "Refused") {
+          return yield* refuseBrowserSnapshot({
+            db: input.db,
+            lookup,
+            cause: committed.error.cause,
+          });
+        }
+        timings.sql = reportedSqlDuration(committed.rows.map((row) => row.meta));
+        const [presentationDuration, response] = yield* presentBrowserSnapshot({
+          rows: committed.rows,
+          lookup,
+          protectionCount: snapshot.protectionCount,
+          owner: snapshot.owner,
+          current: input.current,
+        }).pipe(Effect.timed);
+        timings.presentation = Duration.toMillis(presentationDuration);
+        return response;
+      }).pipe(
+        Effect.orElseSucceed(unavailable),
+        Effect.timed,
+        Effect.map(([duration, response]) => appendSnapshotTimings({ response, duration, timings }))
+      )
+    );
+  });
 
 /** Meter canonical work inside an already pressure-protected MCP invocation under the User coordinator. */
 export const admitCanonicalOperation = <E, R>(

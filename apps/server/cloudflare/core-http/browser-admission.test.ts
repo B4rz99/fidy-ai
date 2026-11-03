@@ -318,6 +318,8 @@ it.each(atomicListings)(
         );
         const response = yield* Effect.tryPromise(() => fixture.request());
         expect(response.status).toBe(200);
+        expect(response.headers.get("server-timing")).toMatch(/canonical-storage;dur=[0-9.]+/u);
+        expect(response.headers.get("server-timing")).toMatch(/canonical-present;dur=[0-9.]+/u);
         const limit = response.headers.get(canonicalAllowanceHeaders.limit);
         expect(limit).toMatch(/^[1-9][0-9]*$/u);
         expect(response.headers.get(canonicalAllowanceHeaders.remaining)).toBe(limit);

@@ -1,0 +1,28 @@
+apps/web/e2e/session-binding.spec.ts
+  s_12ede6869163f4::t_4c119ceb04cc95 2,17-28,79-82,87-89,92-95,97-99,101-113
+  s_12ede6869163f4::t_2d40e8a59b3080 83-86,90-91,96,100,114-116
+apps/web/ARCHITECTURE.md
+  s_12ede6869163f4::t_5836e4b5c7a383 233-238
+apps/web/src/session/browser-session-boundary.tsx
+  s_12ede6869163f4::t_43fb0d0a4d7736 69,75,135
+apps/web/src/transport/session-binding.ts
+  s_12ede6869163f4::t_43fb0d0a4d7736 23,159
+apps/web/src/transport/session-binding.test.ts
+  s_12ede6869163f4::t_2bf2135e7f2312 46,109,129-131,137,157,165,193,210,220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ac49c53a5ebf8cdffaab3a1380c317326e2c8d18",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

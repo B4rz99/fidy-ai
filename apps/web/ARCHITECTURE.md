@@ -212,6 +212,14 @@ The mounted edit module owns serialized submission, pending placement projection
 reread recovery. Uncertain or missing-Widget outcomes discard unsent edits and block new edits
 until an explicit successful canonical refresh. Route departure discards unsent edits; an
 already-sent mutation may have committed. Presentation owns local drafts and drag mechanics.
+Budget Widget configuration keeps only the selected Widget identity and local choice in React;
+the live Dashboard supplies the current Widget configuration. The dialog loads current-month
+Budget statuses and the shared Category catalog through authentication-scoped query atoms only
+when opened. It submits the existing `update-widget` edit through the serialized edit owner,
+retaining the Widget identity, title and placement. Refreshing or failed choices cannot be saved.
+Missing targets retain their Category/Currency and offer explicit selection or Budget creation.
+Canonical query/mutation transport retains Work observation and auditing; this presentation flow
+adds no external workflow or financial-content telemetry.
 See [ADR 0032](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-queries.md).
 
 ## 3. Browser authentication

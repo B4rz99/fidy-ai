@@ -13,6 +13,7 @@ import { workspaceDashboardCatalogQuery } from "@/transport/workspace-query";
 import { type DashboardEditorError, useDashboardEditing } from "./editing";
 import type { DashboardView } from "./presentation";
 import { type DashboardLoadPhase, dashboardQuery } from "./query";
+import { DashboardBudgetConfiguration } from "./budget-configuration";
 
 const DashboardRoutePresentation = lazyRouteComponent(
   () => import("./view"),
@@ -92,6 +93,11 @@ const DashboardQueryNotice = <E,>({
   </>
 );
 
+const catalogUnavailable = (
+  state: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>, unknown>
+): boolean =>
+  state._tag === "Failure" || (state._tag === "Ready" && Option.isSome(state.refreshFailure));
+
 const CatalogQueryNotice = <E,>({
   onRefresh,
   state,
@@ -99,8 +105,7 @@ const CatalogQueryNotice = <E,>({
   onRefresh: () => void;
   state: CanonicalQueryState<Readonly<{ data: ReadonlyArray<unknown> }>, E>;
 }>): JSX.Element => {
-  const failed =
-    state._tag === "Failure" || (state._tag === "Ready" && Option.isSome(state.refreshFailure));
+  const failed = catalogUnavailable(state);
   return (
     <>
       {state._tag === "Initial" ? <DashboardCatalogSkeleton /> : null}
@@ -167,8 +172,11 @@ export const DashboardRouteContent = ({
   const catalogResult = useAtomValue(catalogAtom);
   const refreshCatalog = useAtomRefresh(catalogAtom);
   const dashboardState = presentCanonicalQuery(result);
-  const { lifecycleRef, editError, onGesture, submitting, disabled, pendingPlacement } =
-    useDashboardEditing({ apiClient, onRefresh, dashboard: dashboardState });
+  const { lifecycleRef, editError, ...editing } = useDashboardEditing({
+    apiClient,
+    onRefresh,
+    dashboard: dashboardState,
+  });
   if (dashboardState._tag !== "Ready") {
     return (
       <div className="contents" ref={lifecycleRef}>
@@ -179,32 +187,33 @@ export const DashboardRouteContent = ({
   }
 
   const catalogState = presentCanonicalQuery(catalogResult);
-  const catalog = catalogState._tag === "Ready" ? catalogState.value : { data: [] };
+  const catalogFailed = catalogUnavailable(catalogState);
   const dashboardFailed = Option.isSome(dashboardState.refreshFailure);
-  const catalogFailed =
-    catalogState._tag === "Failure" ||
-    (catalogState._tag === "Ready" && Option.isSome(catalogState.refreshFailure));
   const error = resolveEditorError(editError, catalogFailed, dashboardFailed);
 
   return (
-    <div className="contents" ref={lifecycleRef}>
-      <DashboardQueryNotices
-        catalog={catalogState}
-        dashboard={dashboardState}
-        onRefresh={onRefresh}
-        refreshCatalog={refreshCatalog}
-      />
-      <DashboardViewComponent
-        editor={Option.some({
-          catalog: catalog.data,
-          error,
-          onGesture,
-          submitting,
-          disabled,
-          pendingPlacement,
-        })}
-        view={dashboardState.value.data}
-      />
-    </div>
+    <DashboardBudgetConfiguration
+      apiClient={apiClient}
+      disabled={editing.disabled || dashboardState.waiting || dashboardFailed}
+      view={dashboardState.value.data}
+      onGesture={editing.onGesture}
+    >
+      <div className="contents" ref={lifecycleRef}>
+        <DashboardQueryNotices
+          catalog={catalogState}
+          dashboard={dashboardState}
+          onRefresh={onRefresh}
+          refreshCatalog={refreshCatalog}
+        />
+        <DashboardViewComponent
+          editor={Option.some({
+            catalog: catalogState._tag === "Ready" ? catalogState.value.data : [],
+            error,
+            ...editing,
+          })}
+          view={dashboardState.value.data}
+        />
+      </div>
+    </DashboardBudgetConfiguration>
   );
 };

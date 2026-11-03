@@ -1,4 +1,7 @@
 import { dashboardCategoryVisual } from "@/ui/components/dashboard-category";
+import { Link } from "@tanstack/react-router";
+import { ConfigureBudgetButton } from "./budget-configuration";
+import type { BudgetWidget } from "./editor-model";
 import { formatMoneyWithCode } from "@/transport/money";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DashboardEditorError } from "./editing";
@@ -275,16 +278,24 @@ const budgetStatusText = (data: AvailableBudgetResult, locale: DashboardLocale):
 const BudgetBar = ({
   data,
   locale,
-}: Readonly<{ data: BudgetResult; locale: DashboardLocale }>): JSX.Element => {
+  widget,
+}: Readonly<{
+  data: BudgetResult;
+  locale: DashboardLocale;
+  widget: BudgetWidget;
+}>): JSX.Element => {
   if (data.availability === "missing-budget") {
     return (
-      <Empty className="border">
+      <Empty>
         <EmptyHeader>
-          <EmptyTitle>No hay presupuesto configurado</EmptyTitle>
+          <EmptyTitle>No hay presupuesto para este mes</EmptyTitle>
           <EmptyDescription>
-            {data.category.label} · {data.currency}
+            {data.category.label} · {data.currency}. Elige otro presupuesto o créalo en
+            Presupuestos.
           </EmptyDescription>
         </EmptyHeader>
+        <ConfigureBudgetButton widget={widget} compact={false} />
+        <Link to="/app/budgets">Ir a Presupuestos</Link>
       </Empty>
     );
   }
@@ -392,7 +403,12 @@ const RenderWidget = ({
   if ("buckets" in result) {
     content = <SpendingChart data={result} locale={context.locale} />;
   } else if ("availability" in result) {
-    content = <BudgetBar data={result} locale={context.locale} />;
+    content =
+      widget.type === "budget-bar" ? (
+        <BudgetBar data={result} locale={context.locale} widget={widget} />
+      ) : (
+        <></>
+      );
   } else if ("transactions" in result) {
     content = <TransactionList data={result} locale={context.locale} timeZone={context.timeZone} />;
   } else {
@@ -437,14 +453,15 @@ const WidgetActions = ({
   editor,
   label,
   onRename,
-  widgetId,
+  widget,
 }: Readonly<{
   editor: DashboardEditor;
   label: string;
   onRename: () => void;
-  widgetId: DashboardWidget["id"];
+  widget: DashboardWidget;
 }>): JSX.Element => (
   <div className="absolute top-3 right-3 z-40 flex">
+    {widget.type === "budget-bar" ? <ConfigureBudgetButton widget={widget} compact /> : null}
     <Button
       aria-label={`Renombrar ${label}`}
       disabled={editor.disabled}
@@ -458,7 +475,7 @@ const WidgetActions = ({
     <Button
       aria-label={`Eliminar ${label}`}
       disabled={editor.disabled}
-      onClick={() => editor.onGesture({ kind: "remove-widget", widgetId })}
+      onClick={() => editor.onGesture({ kind: "remove-widget", widgetId: widget.id })}
       size="icon"
       type="button"
       variant="destructive"
@@ -592,7 +609,7 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
         editor={editor}
         label={label}
         onRename={() => setRenaming(true)}
-        widgetId={widget.id}
+        widget={widget}
       />
       <div className="relative flex min-h-72 flex-1 flex-col">
         <WidgetDropTargets

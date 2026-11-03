@@ -1,6 +1,6 @@
-import { Result } from "effect";
+import { Result, Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { WidgetId } from "@/transport/client";
+import { DashboardEdit, WidgetId } from "@/transport/client";
 import type { CanonicalInput } from "@/transport/client";
 import {
   type DashboardCatalogEntry,
@@ -79,6 +79,41 @@ describe("Dashboard gesture compilation", () => {
       op: "resize-region",
       widgetIds: [firstId, secondId],
       size: { kind: "weight", weight: 1.375 },
+    });
+  });
+
+  it("configures a Budget Category and Currency while preserving Widget identity and title", () => {
+    const widget = Schema.decodeSync(DashboardEdit)({
+      op: "update-widget",
+      widget: {
+        id: firstId,
+        type: "budget-bar",
+        title: "Mi presupuesto",
+        categoryId: "10000000-0000-4000-8000-000000000001",
+        currency: "COP",
+      },
+    });
+    if (widget.op !== "update-widget" || widget.widget.type !== "budget-bar") {
+      throw new Error("Expected a Budget Widget");
+    }
+    expect(
+      compile({
+        kind: "configure-budget",
+        widget: widget.widget,
+        target: {
+          categoryId: widget.widget.categoryId,
+          currency: "USD",
+        },
+      })
+    ).toEqual({
+      op: "update-widget",
+      widget: {
+        id: firstId,
+        type: "budget-bar",
+        title: "Mi presupuesto",
+        categoryId: "10000000-0000-4000-8000-000000000001",
+        currency: "USD",
+      },
     });
   });
 });

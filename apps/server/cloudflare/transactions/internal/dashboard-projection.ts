@@ -220,6 +220,33 @@ export const decodeAggregateSnapshot = ({
   return Option.some({ revision: revision.value.revision, values });
 };
 
+/** Prepare one complete same-User interval for composition in the caller's native snapshot. */
+export const prepareTransactionAggregate = (
+  input: Readonly<{ db: D1Database; userId: string }> & AggregateRange
+): Option.Option<
+  Readonly<{
+    statements: ReadonlyArray<D1PreparedStatement>;
+    decode: (
+      rows: ReadonlyArray<D1Result>
+    ) => Option.Option<ReadonlyArray<EffectiveTransactionAggregate>>;
+  }>
+> =>
+  Option.map(projectionRange(input), (range) => ({
+    statements: [
+      prepareConsentAction({
+        db: input.db,
+        subject: { _tag: "User", userId: UserId.make(input.userId) },
+        requirement: "unrevoked",
+        statement: revisionSelection(UserId.make(input.userId)),
+      }),
+      ...projectionQueries({ db: input.db, userId: input.userId, range }),
+    ],
+    decode: (rows) =>
+      Option.flatMap(decodeAggregateSnapshot({ rows, count: 1 }), (snapshot) =>
+        Option.fromUndefinedOr(snapshot.values[0])
+      ),
+  }));
+
 /** Read ordered exact intervals in small native snapshots; a changed revision refuses the whole read. */
 export const findDashboardAggregateRanges = ({
   db,

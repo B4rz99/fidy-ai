@@ -26,6 +26,7 @@ import {
 import {
   findDashboardAggregate as ownerFindDashboardAggregate,
   findDashboardAggregateRanges as ownerFindDashboardAggregateRanges,
+  prepareTransactionAggregate as ownerPrepareTransactionAggregate,
   periodAggregateGuard,
   readPeriodAggregates,
 } from "./internal/dashboard-projection";
@@ -197,6 +198,10 @@ export const prepareNotificationEmailCapture: typeof ownerPrepareNotificationEma
 /** Read ready, decoded effective Transaction lists atomically with a caller-owned context snapshot. */
 export const readDashboardTransactions: typeof ownerReadDashboardTransactions = (input) =>
   ownerReadDashboardTransactions(input);
+
+/** Compose one exact interval with peer reads while retaining Transaction-owned SQL and decoding. */
+export const prepareTransactionAggregate: typeof ownerPrepareTransactionAggregate = (input) =>
+  ownerPrepareTransactionAggregate(input);
 
 /** Read exact Currency-preserving contributions over a bounded half-open UTC interval. */
 export const findDashboardAggregate: typeof ownerFindDashboardAggregate = (input) =>

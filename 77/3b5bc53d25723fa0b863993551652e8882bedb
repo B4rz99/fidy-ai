@@ -1,0 +1,41 @@
+apps/web/src/app/navigation-preparation.ts
+  s_12ede6869163f4::t_8f2d7b522b26ff 4-8
+apps/web/ARCHITECTURE.md
+  s_12ede6869163f4::t_b465dec95df791 562-570,578-579,587-588
+apps/web/src/app/application-frame.tsx
+  s_12ede6869163f4::t_8f2d7b522b26ff 2-3,20-21
+  s_12ede6869163f4::t_b71a75f5d2bcf1 22-24
+apps/web/src/app/destination-preload.tsx
+  s_12ede6869163f4::t_8f2d7b522b26ff 43,60
+apps/web/src/app/destination-preload-context.ts
+  s_12ede6869163f4::t_8f2d7b522b26ff 4-5
+BACKEND_PERFORMANCE_PLAN.md
+  s_12ede6869163f4::t_b465dec95df791 169-172,174-184
+  s_12ede6869163f4::t_fe50b5e2b590f9 173
+apps/web/src/transport/session-binding.ts
+  s_12ede6869163f4::t_ae9c33b237c625 191
+  s_12ede6869163f4::t_573ed92e7119ef 187-189
+  s_12ede6869163f4::t_c1ef6213386789 186,190
+apps/web/e2e/workspace-navigation.spec.ts
+  s_12ede6869163f4::t_8f2d7b522b26ff 57,79-81,84,92,113,154,219,240-241
+  s_12ede6869163f4::t_6bb525a63607ed 223,225,243,248-249
+  s_12ede6869163f4::t_8886583c48cc7e 53,82-83,89-90
+apps/web/src/transport/session-binding.test.ts
+  s_12ede6869163f4::t_9d43a0d9e46a33 22,65-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "773b5bc53d25723fa0b863993551652e8882bedb",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

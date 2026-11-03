@@ -1,4 +1,4 @@
-import { Duration, Effect, Option } from "effect";
+import { Duration, Effect, Option, Schema } from "effect";
 
 export type CanonicalRequestTimings = Record<"admission" | "owner" | "standing", number>;
 
@@ -39,6 +39,60 @@ export const appendCanonicalTimings = ({
     "canonical-owner": timings.owner,
     "canonical-standing": timings.standing,
     "canonical-other": Math.max(0, total - timings.admission - timings.owner - timings.standing),
+  };
+  const headers = new Headers(response.headers);
+  headers.append(
+    "server-timing",
+    Object.entries(phases)
+      .map(([name, elapsed]) => `${name};dur=${elapsed.toFixed(3)}`)
+      .join(", ")
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
+export type CanonicalSnapshotTimings = {
+  storage: number;
+  presentation: number;
+  sql: Option.Option<number>;
+};
+
+const decodeStatementTimings = Schema.decodeUnknownOption(
+  Schema.Array(
+    Schema.Struct({
+      timings: Schema.Struct({
+        sql_duration_ms: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+      }),
+    })
+  ).check(Schema.isMinLength(1))
+);
+
+/** Native statement execution, excluding transport; unavailable metadata is not a zero sample. */
+export const reportedSqlDuration = (metadata: ReadonlyArray<unknown>): Option.Option<number> =>
+  Option.map(decodeStatementTimings(metadata), (rows) =>
+    rows.reduce((total, row) => total + row.timings.sql_duration_ms, 0)
+  );
+
+/** Snapshot protection only; outer ingress is excluded. SQL covers returned statements, not assertions privately owned by a storage wrapper. */
+export const appendSnapshotTimings = ({
+  response,
+  duration,
+  timings,
+}: Readonly<{
+  response: Response;
+  duration: Duration.Duration;
+  timings: CanonicalSnapshotTimings;
+}>): Response => {
+  const total = Duration.toMillis(duration);
+  const phases = {
+    "canonical-total": total,
+    "canonical-storage": timings.storage,
+    "canonical-present": timings.presentation,
+    "canonical-other": Math.max(0, total - timings.storage - timings.presentation),
+    ...(Option.isSome(timings.sql) ? { "canonical-sql": timings.sql.value } : {}),
   };
   const headers = new Headers(response.headers);
   headers.append(

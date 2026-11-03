@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "d9582ba2747a0d3a451bd44dfe4de8bd29301e5f067b8d94bf81dff303ee2d49";
+const expectedEdgePolicyDigest = "01c31e4adc287d1b18d8438a8231a05f45e91fcd8ea7144a4a964dd3e5f409e5";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/internal/workspace-encoding.ts", import.meta.url)

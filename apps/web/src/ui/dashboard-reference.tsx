@@ -1,7 +1,11 @@
 import { dashboardCategoryVisual } from "@/ui/components/dashboard-category";
 import "@/ui/components/application.css";
 import { Option } from "effect";
-import type { JSX } from "react";
+import { type JSX, useId, useState } from "react";
+import { Button } from "@/ui/components/button";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
+import { DashboardBudgetDialog } from "@/ui/components/dashboard-budget-dialog";
+import { Label } from "@/ui/components/label";
 // react-doctor-disable-next-line prefer-dynamic-import
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import {
@@ -99,6 +103,7 @@ export const DashboardReference = (): JSX.Element => (
         over={false}
       />
     </DashboardCard>
+    <BudgetConfigurationReference />
     <DashboardCard title={<h2>Transacciones recientes</h2>} editing={false} kind="transaction-list">
       <DashboardRecentList
         groups={[
@@ -121,3 +126,56 @@ export const DashboardReference = (): JSX.Element => (
     </DashboardCard>
   </section>
 );
+
+const BudgetConfigurationReference = (): JSX.Element => {
+  const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState("usd");
+  const [saved, setSaved] = useState("Restaurantes · COP");
+  const id = useId();
+  const options = [
+    { value: "usd", label: "Restaurantes · USD" },
+    { value: "cop", label: "Mercado · COP" },
+  ];
+  return (
+    <div className="grid justify-items-start gap-3">
+      <p>Configuración de ejemplo: {saved}</p>
+      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+        Configurar presupuesto
+      </Button>
+      <DashboardBudgetDialog open={open} onClose={() => setOpen(false)}>
+        <form
+          className="grid gap-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setSaved(options.find(({ value }) => value === target)?.label ?? saved);
+            setOpen(false);
+          }}
+        >
+          <div className="grid gap-3">
+            <Label htmlFor={id}>Presupuesto</Label>
+            <ChoiceDropdown
+              id={id}
+              label="Presupuesto"
+              value={target}
+              options={options}
+              disabled={false}
+              width="full"
+              leading={null}
+              onChange={setTarget}
+              triggerLabel={Option.none()}
+            />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Verás el presupuesto y los gastos del mes actual en su moneda original.
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit">Guardar cambios</Button>
+          </div>
+        </form>
+      </DashboardBudgetDialog>
+    </div>
+  );
+};

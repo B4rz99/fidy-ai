@@ -599,6 +599,20 @@ from the desktop ledger uses an inline menu and saves that correction directly,
 without opening the panel. Income/expense icons precede compact amounts below the
 481px ledger threshold. Category triggers highlight on hover and while open.
 
+### Dashboard Budget configuration
+
+Budget Widgets retain the Dashboard's approved card geometry. Personalizar exposes an accessible
+configuration action alongside rename and remove; a missing monthly Budget also offers a direct
+choice action and navigation to Presupuestos. The configuration dialog uses the shared modal focus
+and dismissal behavior, labeled single-choice menu, outline cancellation and green save action.
+It lists existing current-month Category/Currency pairs, keeps financial values in their original
+Currency, and preserves the Widget's custom title and position. The category label and explicit
+Currency remain visible independently of that title. A missing target never silently switches to
+another Budget. The dialog fits phone viewports and scrolls within the available height.
+
+The interactive `/ui-reference.html#dashboard` example uses synthetic local selection only and
+renders the same dialog and choice primitives in Light and Grafito.
+
 ### Compact management tables
 
 Active-token management uses the shared `Table` with one row per token: name and safe short code,

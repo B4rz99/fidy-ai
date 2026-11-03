@@ -63,8 +63,8 @@ const monthlySpending = DashboardCatalogEntry.make({
 const restaurantBudgetCop = (categoryId: CategoryId): DashboardCatalogEntry =>
   DashboardCatalogEntry.make({
     id: "restaurant-budget-cop",
-    name: "Presupuesto de restaurantes",
-    description: "Sigue el presupuesto mensual de restaurantes expresado en COP.",
+    name: "Presupuesto por categoría",
+    description: "Se inicia en Restaurantes · COP. Usa Configurar presupuesto para elegir otro.",
     widget: {
       type: "budget-bar",
       title: "Presupuesto de restaurantes",

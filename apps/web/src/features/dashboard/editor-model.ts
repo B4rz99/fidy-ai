@@ -9,6 +9,8 @@ type AddWidgetEdit = Extract<CanonicalDashboardEdit, { readonly op: "add-widget"
 type ResizeRegionEdit = Extract<CanonicalDashboardEdit, { readonly op: "resize-region" }>;
 type Placement = AddWidgetEdit["at"];
 type DashboardWidget = AddWidgetEdit["widget"];
+export type BudgetWidget = Extract<DashboardWidget, { readonly type: "budget-bar" }>;
+export type BudgetTarget = Pick<BudgetWidget, "categoryId" | "currency">;
 type WidgetId = DashboardWidget["id"];
 
 const uuidOctets = 16;
@@ -58,6 +60,7 @@ export type DashboardGesture =
     }>
   | Readonly<{ kind: "remove-widget"; widgetId: WidgetId }>
   | Readonly<{ kind: "retitle-dashboard"; title: string }>
+  | Readonly<{ kind: "configure-budget"; widget: BudgetWidget; target: BudgetTarget }>
   | Readonly<{ kind: "retitle-widget"; title: string; widget: DashboardWidget }>;
 
 const placementFor = (target: Readonly<DashboardDropTarget>): Placement => {
@@ -76,7 +79,9 @@ const placementFor = (target: Readonly<DashboardDropTarget>): Placement => {
   }
 };
 
-const editFor = (gesture: Readonly<DashboardGesture>): unknown => {
+const editFor = (
+  gesture: Readonly<Exclude<DashboardGesture, { kind: "configure-budget" }>>
+): unknown => {
   switch (gesture.kind) {
     case "move-widget":
       return { op: "move-widget", widgetId: gesture.widgetId, at: placementFor(gesture.target) };
@@ -111,4 +116,15 @@ const editFor = (gesture: Readonly<DashboardGesture>): unknown => {
 export const compileDashboardGesture = (
   gesture: Readonly<DashboardGesture>
 ): Result.Result<CanonicalDashboardEdit, Schema.SchemaError> =>
-  Schema.decodeUnknownResult(DashboardEdit)(editFor(gesture));
+  Schema.decodeUnknownResult(DashboardEdit)(
+    gesture.kind === "configure-budget"
+      ? {
+          op: "update-widget",
+          widget: {
+            ...gesture.widget,
+            categoryId: gesture.target.categoryId,
+            currency: gesture.target.currency,
+          },
+        }
+      : editFor(gesture)
+  );

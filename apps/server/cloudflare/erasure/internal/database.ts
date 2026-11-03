@@ -2,6 +2,7 @@ import { Effect, Option } from "effect";
 import { expectedGeneration, generationAssertion } from "./generation";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 import type { ErasureRecoveryConfiguration } from "../contract";
+import type { RecoveryMeasurement } from "./measurement";
 
 type Queries = Pick<D1DatabaseSession, "prepare" | "batch">;
 type Batch = <Row>(statements: D1PreparedStatement[]) => Promise<D1Result<Row>[]>;
@@ -12,18 +13,26 @@ const executeBatch =
       configuration: ErasureRecoveryConfiguration;
       source: Queries;
       originals: WeakMap<D1PreparedStatement, D1PreparedStatement>;
+      measurement: Option.Option<RecoveryMeasurement>;
     }>
   ): Batch =>
   <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
-    Effect.runPromise(expectedGeneration(input.configuration))
-      .then((expected) =>
+    (Option.isSome(input.measurement)
+      ? input.measurement.value.generation(() =>
+          Effect.runPromise(expectedGeneration(input.configuration))
+        )
+      : Effect.runPromise(expectedGeneration(input.configuration))
+    )
+      .then((expected) => {
         // Preserve native D1 refusals for the operation owner; the generation assertion remains
         // first in the same atomic unit, including when that unit is refused by an Audit trigger.
-        input.source.batch<Row>([
-          generationAssertion({ db: input.configuration.db, generation: expected.generation }),
-          ...statements.map((statement) => input.originals.get(statement) ?? statement),
-        ])
-      )
+        const run = (): Promise<D1Result<Row>[]> =>
+          input.source.batch<Row>([
+            generationAssertion({ db: input.configuration.db, generation: expected.generation }),
+            ...statements.map((statement) => input.originals.get(statement) ?? statement),
+          ]);
+        return Option.isSome(input.measurement) ? input.measurement.value.database(run) : run();
+      })
       .then((rows) => rows.slice(1));
 
 const firstRow = (result: D1Result, column: Option.Option<string>): unknown => {
@@ -73,10 +82,11 @@ const guardedStatement = (
 };
 const guardQueries = <Source extends Queries>(
   configuration: ErasureRecoveryConfiguration,
-  source: Source
+  source: Source,
+  measurement: Option.Option<RecoveryMeasurement>
 ): Source => {
   const originals = new WeakMap<D1PreparedStatement, D1PreparedStatement>();
-  const batch = executeBatch({ configuration, source, originals });
+  const batch = executeBatch({ configuration, source, originals, measurement });
   return new Proxy(source, {
     get: (target, property): unknown => {
       if (property === "prepare") {
@@ -90,14 +100,18 @@ const guardQueries = <Source extends Queries>(
 };
 
 /** Every supported unit rechecks the external recovery generation in its native transaction. exec, dump and raw tuple access are unavailable; native row queries and Sessions remain guarded. */
-export const guardedDatabase = (configuration: ErasureRecoveryConfiguration): D1Database => {
-  const database = guardQueries(configuration, configuration.db);
+export const guardedDatabase = (
+  configuration: ErasureRecoveryConfiguration &
+    Readonly<{ measurement: Option.Option<RecoveryMeasurement> }>
+): D1Database => {
+  const { measurement } = configuration;
+  const database = guardQueries(configuration, configuration.db, measurement);
   return new Proxy(database, {
     get: (target, property): unknown => {
       if (property === "exec" || property === "dump") return unsupported;
       if (property === "withSession") {
         return (bookmark?: D1SessionBookmark): D1DatabaseSession =>
-          guardQueries(configuration, configuration.db.withSession(bookmark));
+          guardQueries(configuration, configuration.db.withSession(bookmark), measurement);
       }
       return Reflect.get(target, property, target);
     },

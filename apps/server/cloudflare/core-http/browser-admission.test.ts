@@ -133,7 +133,7 @@ const browserFixture = (
             },
           }
         ),
-        environment
+        { ...environment, DB: db, ERASURE_REQUIRED: "true", ERASURE_BUCKET: observedBucket }
       );
     return {
       db,
@@ -319,6 +319,9 @@ it.each(atomicListings)(
         const response = yield* Effect.tryPromise(() => fixture.request());
         expect(response.status).toBe(200);
         expect(response.headers.get("server-timing")).toMatch(/canonical-storage;dur=[0-9.]+/u);
+        expect(response.headers.get("server-timing")).toMatch(/recovery-r2;dur=[0-9.]+/u);
+        expect(response.headers.get("server-timing")).toMatch(/recovery-d1;dur=[0-9.]+/u);
+        expect(response.headers.get("fidy-recovery-batches")).toBe("1");
         expect(response.headers.get("server-timing")).toMatch(/canonical-present;dur=[0-9.]+/u);
         const limit = response.headers.get(canonicalAllowanceHeaders.limit);
         expect(limit).toMatch(/^[1-9][0-9]*$/u);

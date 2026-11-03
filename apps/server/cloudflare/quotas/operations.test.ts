@@ -1,7 +1,13 @@
 import { Data, DateTime, Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installCurrentTestObjects, isolatedTestDatabases } from "../d1-test-fixture";
-import { prepareConsumption, quotaFailure, readQuotaStatus } from "./operations";
+import {
+  decodeQuotaStatus,
+  prepareConsumption,
+  quotaFailure,
+  quotaStatusStatement,
+  readQuotaStatus,
+} from "./operations";
 
 const pool = isolatedTestDatabases();
 afterAll(() => pool.dispose());
@@ -142,5 +148,107 @@ it("keeps exact replay uncharged and rolls consumption back with a failed public
       expect(
         Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
       ).toMatchObject({ consumed: 1 });
+    })
+  ));
+
+it("reads current allowance standing without scanning earlier months or another User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* database;
+      const period = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-07-01T05:00:00Z"));
+      const earlier = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-06-01T05:00:00Z"));
+      yield* io(() =>
+        db
+          .prepare(`WITH allowances(kind) AS (
+          VALUES ('forwarded_email'),('media_submission'),('hosted_history_turn'),('canonical_call')
+        ), subjects(id, charged) AS (VALUES (?,0),(?,1)), units(n) AS (VALUES (0),(1))
+        INSERT INTO commercial_allowance_consumptions(user_id,allowance,identity,period_start_ms,accepted_at_ms,units)
+        SELECT id,kind,'current-' || n,?,?,CASE WHEN charged=0 THEN n ELSE 1 END
+        FROM allowances CROSS JOIN subjects CROSS JOIN units`)
+          .bind(userId, otherUser, period, current)
+          .run()
+      );
+      const before = yield* io(() => quotaStatusStatement({ db, userId, current }).all());
+      expect(before.results).toEqual([
+        {
+          pro: 0,
+          forwarded_email: 1,
+          media_submission: 1,
+          hosted_history_turn: 1,
+          canonical_call: 1,
+        },
+      ]);
+      yield* io(() =>
+        db
+          .prepare(`WITH RECURSIVE entries(n) AS (
+          SELECT 1 UNION ALL SELECT n+1 FROM entries WHERE n < 120
+        ), allowances(kind) AS (
+          VALUES ('forwarded_email'),('media_submission'),('hosted_history_turn'),('canonical_call')
+        ), subjects(id) AS (VALUES (?),(?))
+        INSERT INTO commercial_allowance_consumptions(user_id,allowance,identity,period_start_ms,accepted_at_ms,units)
+        SELECT id,kind,'earlier-' || n,?,?,CASE WHEN n<=2 THEN 1 ELSE 0 END FROM entries CROSS JOIN allowances CROSS JOIN subjects`)
+          .bind(userId, otherUser, earlier, earlier)
+          .run()
+      );
+      const after = yield* io(() => quotaStatusStatement({ db, userId, current }).all());
+      expect(after.results).toEqual(before.results);
+      expect(after.meta.rows_written).toBe(0);
+      expect(
+        Option.getOrThrow(decodeQuotaStatus({ row: after.results[0], current }))
+      ).toMatchObject({
+        accessTier: "free",
+        forwardedEmails: { consumed: 1, remaining: 29 },
+        mediaSubmissions: { consumed: 1, remaining: 1 },
+        hostedHistoryTurns: { consumed: 1, remaining: 1 },
+        canonicalCalls: { consumed: 1, remaining: 49 },
+      });
+      const previousMonth = yield* io(() =>
+        quotaStatusStatement({ db, userId, current: period - 1 }).first()
+      );
+      expect(previousMonth).toEqual({
+        pro: 0,
+        forwarded_email: 2,
+        media_submission: 2,
+        hosted_history_turn: 2,
+        canonical_call: 2,
+      });
+      const emptyMonth = yield* io(() =>
+        quotaStatusStatement({
+          db,
+          userId,
+          current: DateTime.toEpochMillis(DateTime.makeUnsafe("2026-08-01T05:00:00Z")),
+        }).first()
+      );
+      expect(emptyMonth).toEqual({
+        pro: 0,
+        forwarded_email: 0,
+        media_submission: 0,
+        hosted_history_turn: 0,
+        canonical_call: 0,
+      });
+      const trialStarts = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-07-29T05:00:00Z"));
+      const trialEnds = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-08-05T05:00:00Z"));
+      yield* io(() =>
+        db
+          .prepare("UPDATE users SET trial_started_at_ms = ?, trial_ends_at_ms = ? WHERE id = ?")
+          .bind(trialStarts, trialEnds, userId)
+          .run()
+      );
+      expect(
+        yield* io(() =>
+          quotaStatusStatement({
+            db,
+            userId,
+            current: DateTime.toEpochMillis(DateTime.makeUnsafe("2026-08-01T05:00:00Z")),
+          }).first()
+        )
+      ).toEqual({
+        ...emptyMonth,
+        pro: 1,
+      });
+      expect(
+        yield* io(() => quotaStatusStatement({ db, userId, current: trialEnds }).first())
+      ).toEqual(emptyMonth);
+      expect(after.meta.rows_read).toBeLessThanOrEqual(before.meta.rows_read + 16);
     })
   ));

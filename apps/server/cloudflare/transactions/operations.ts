@@ -26,6 +26,7 @@ import {
 import {
   findDashboardAggregate as ownerFindDashboardAggregate,
   findDashboardAggregateRanges as ownerFindDashboardAggregateRanges,
+  prepareBoundTransactionAggregate as ownerPrepareBoundTransactionAggregate,
   prepareTransactionAggregate as ownerPrepareTransactionAggregate,
   periodAggregateGuard,
   readPeriodAggregates,
@@ -202,6 +203,11 @@ export const readDashboardTransactions: typeof ownerReadDashboardTransactions = 
 /** Compose one exact interval with peer reads while retaining Transaction-owned SQL and decoding. */
 export const prepareTransactionAggregate: typeof ownerPrepareTransactionAggregate = (input) =>
   ownerPrepareTransactionAggregate(input);
+
+/** Compose exact aggregates under an admission-owned live same-User selection. */
+export const prepareBoundTransactionAggregate: typeof ownerPrepareBoundTransactionAggregate = (
+  input
+) => ownerPrepareBoundTransactionAggregate(input);
 
 /** Read exact Currency-preserving contributions over a bounded half-open UTC interval. */
 export const findDashboardAggregate: typeof ownerFindDashboardAggregate = (input) =>

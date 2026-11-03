@@ -89,7 +89,7 @@ export const advanceBudgetLatch = ({
 /** Compares exact same-Currency spending with a cap and returns its closed monthly status. */
 export const calculateBudgetStatus: (
   input: BudgetStatusInput
-) => Effect.Effect<BudgetStatus, CurrencyMismatch> = Effect.fn("calculateBudgetStatus")(function* (
+) => Effect.Effect<BudgetStatus, CurrencyMismatch> = Effect.fnUntraced(function* (
   input: BudgetStatusInput
 ) {
   const { budget, period, spent } = input;

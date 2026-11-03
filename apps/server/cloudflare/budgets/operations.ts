@@ -1,3 +1,4 @@
+import { prepareBoundBudgetWorkspace as prepareBrowserWorkspace } from "./internal/bound-workspace";
 import { findDashboardAggregate } from "../transactions/operations";
 import {
   acceptsGroupCapPrecision,
@@ -77,6 +78,10 @@ import {
 } from "./internal/budget-proactivity";
 import { readCrossings } from "./internal/budget-crossings";
 import { readConsentStatus } from "../consent/operations";
+
+/** Compose the browser Budget workspace in admission's single protected native snapshot. */
+export const prepareBoundBudgetWorkspace: typeof prepareBrowserWorkspace = (request) =>
+  prepareBrowserWorkspace(request);
 
 const HTTP_NOT_FOUND = 404;
 

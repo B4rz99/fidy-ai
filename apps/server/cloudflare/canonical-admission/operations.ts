@@ -984,7 +984,10 @@ export const protectCanonicalBrowserSnapshot = (
     db: D1Database;
     request: Request;
     current: number;
-    operation: "categories.listCategories" | "transactions.listTransactions";
+    operation:
+      | "categories.listCategories"
+      | "transactions.listTransactions"
+      | "budgets.getBudgetStatus";
     read: CanonicalBrowserRead;
   }>
 ): Effect.Effect<Response> =>

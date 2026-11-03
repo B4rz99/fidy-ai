@@ -2,8 +2,23 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "68d4f2721b99147bb8b3227fb19456b61c71f9bee3bee4389135067b6a502b27";
+const expectedEdgePolicyDigest = "d9582ba2747a0d3a451bd44dfe4de8bd29301e5f067b8d94bf81dff303ee2d49";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/workspace-encoding.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/budget-row.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/core/budgets/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/budget-audit.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/bound-workspace.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/internal/planned-caps.ts", import.meta.url)
   ).text(),

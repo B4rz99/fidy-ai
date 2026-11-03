@@ -1,3 +1,8 @@
+import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
+import { IanaTimeZone } from "../../src/core/_shared/context";
+import { UserId } from "../../src/core/identity/contract";
+import { readBudgetCrossings } from "../budgets/operations";
+import { Budget, BudgetStatusReport } from "../../src/core/budgets/contract";
 import { openAiTestKey } from "../openai.test-fixture";
 import {
   type AtomicBatchCall,
@@ -2657,6 +2662,217 @@ it("links and unlinks under the caller's live credential scope and records only 
         )).status
       ).toBe(401);
     })
+  ));
+
+const sendBudgetCorrectionRequest = (
+  database: D1Database,
+  path: string,
+  ...args: [method?: string, body?: object]
+): Promise<Response> => {
+  const [method = "GET", body] = args;
+  return sendPublicRequest(
+    database,
+    new Request(`https://api.fidyapp.com${path}`, {
+      method,
+      headers: {
+        origin: "https://app.fidyapp.com",
+        "Fidy-Session-Binding": sessions[0] ?? "invalid",
+        cookie: `__Host-fidy_session=${bearer(0)}`,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+  );
+};
+
+it("keeps descriptive corrections bounded without reconciling unchanged Budget spending", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      expect(
+        (yield* fromTestPromise(() =>
+          sendBudgetCorrectionRequest(db, "/budgets", "POST", {
+            categoryId: category,
+            cap: { amount: "100", currency: "COP" },
+          })
+        )).status
+      ).toBe(201);
+      const capturedAt = yield* DateTime.now;
+      const createdResponse = yield* fromTestPromise(() =>
+        sendBudgetCorrectionRequest(
+          db,
+          "/transactions",
+          "POST",
+          input({
+            money: { amount: "9007199254740993.15", currency: "COP" },
+            occurredAt: DateTime.formatIso(capturedAt),
+          })
+        )
+      );
+      expect(createdResponse.status).toBe(201);
+      const created = (yield* Schema.decodeUnknownEffect(Created)(
+        yield* fromTestPromise(() => createdResponse.json())
+      )).data;
+      for (const [revision, changes] of [
+        [0, { notes: "a clearer note" }],
+        [1, { counterparty: "An identified Counterparty" }],
+      ] as const) {
+        const observed = observeRetentionCost(db);
+        const correctedResponse = yield* fromTestPromise(() =>
+          sendBudgetCorrectionRequest(observed.database, `/transactions/${created.id}`, "PUT", {
+            expectedRevision: revision,
+            changes,
+          })
+        );
+        expect(correctedResponse.status).toBe(200);
+        const corrected = (yield* Schema.decodeUnknownEffect(Created)(
+          yield* fromTestPromise(() => correctedResponse.json())
+        )).data;
+        expect(corrected.revision).toBe(revision + 1);
+        expect(corrected.money).toEqual(created.money);
+        expect(observed.roundTrips()).toBeLessThanOrEqual(16);
+        expect(observed.cost().rowsWritten).toBeLessThanOrEqual(50);
+        const readResponse = yield* fromTestPromise(() =>
+          sendBudgetCorrectionRequest(db, `/transactions/${created.id}`)
+        );
+        expect(readResponse.status).toBe(200);
+        const readBack = yield* Schema.decodeUnknownEffect(Created)(
+          yield* fromTestPromise(() => readResponse.json())
+        );
+        expect(readBack.data).toEqual(corrected);
+      }
+      const financialResponse = yield* fromTestPromise(() =>
+        sendBudgetCorrectionRequest(db, `/transactions/${created.id}`, "PUT", {
+          expectedRevision: 2,
+          changes: { money: { amount: "90", currency: "COP" } },
+        })
+      );
+      expect(financialResponse.status).toBe(200);
+      const statusResponse = yield* fromTestPromise(() =>
+        sendBudgetCorrectionRequest(db, "/budget-status?timeZone=America%2FBogota")
+      );
+      expect(statusResponse.status).toBe(200);
+      const report = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.toCodecJson(BudgetStatusReport),
+          next: Schema.Array(Schema.Unknown),
+        })
+      )(yield* fromTestPromise(() => statusResponse.json()));
+      expect(report.data.statuses).toHaveLength(1);
+      const status = report.data.statuses[0];
+      expect(status === undefined ? undefined : encodeMoneyAmount(status.spent.amount)).toBe("90");
+    }).pipe(Effect.orDie)
+  ));
+
+it("reconciles Budget spending when a linked descriptive correction changes selected movement facts", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const visible = "30000000-0000-4000-8000-000000000901";
+      const suppressed = "30000000-0000-4000-8000-000000000902";
+      const capturedAt = yield* DateTime.now;
+      yield* fromTestPromise(() =>
+        grantHostedConsent({
+          db,
+          user: owner,
+          grant: "30000000-0000-4000-8000-000000000904",
+          time: DateTime.toEpochMillis(capturedAt),
+        })
+      );
+      yield* fromTestPromise(() =>
+        Promise.all(
+          [visible, suppressed].map((id) =>
+            seedRetainedTransaction({
+              db,
+              userId: owner,
+              id,
+              categoryId: category,
+              amount: "10",
+              currency: "USD",
+              occurredAt: DateTime.formatIso(capturedAt),
+              createdAt: DateTime.formatIso(capturedAt),
+            })
+          )
+        ).then(() =>
+          seedManualAttestation({
+            db,
+            userId: owner,
+            transactionId: visible,
+            id: "30000000-0000-4000-8000-000000000903",
+          })
+        )
+      );
+      expect(
+        (yield* fromTestPromise(() =>
+          sendBudgetCorrectionRequest(db, "/transactions/link", "POST", {
+            firstTransactionId: visible,
+            secondTransactionId: suppressed,
+          })
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* fromTestPromise(() =>
+          sendBudgetCorrectionRequest(db, `/transactions/${visible}`, "PUT", {
+            expectedRevision: 0,
+            changes: { money: { amount: "90", currency: "USD" } },
+          })
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* fromTestPromise(() =>
+          sendBudgetCorrectionRequest(db, `/transactions/${suppressed}`, "PUT", {
+            expectedRevision: 0,
+            changes: { money: { amount: "20", currency: "USD" } },
+          })
+        )).status
+      ).toBe(200);
+      const budgetResponse = yield* fromTestPromise(() =>
+        sendBudgetCorrectionRequest(db, "/budgets", "POST", {
+          categoryId: category,
+          cap: { amount: "100", currency: "USD" },
+        })
+      );
+      expect(budgetResponse.status).toBe(201);
+      const budget = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(Budget) })
+      )(yield* fromTestPromise(() => budgetResponse.json()));
+      const status = (): Effect.Effect<string> =>
+        Effect.gen(function* () {
+          const response = yield* fromTestPromise(() =>
+            sendBudgetCorrectionRequest(db, "/budget-status?timeZone=America%2FBogota")
+          );
+          expect(response.status).toBe(200);
+          const report = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({
+              data: Schema.toCodecJson(BudgetStatusReport),
+              next: Schema.Array(Schema.Unknown),
+            })
+          )(yield* fromTestPromise(() => response.json()));
+          const first = report.data.statuses[0];
+          return first === undefined ? "missing" : encodeMoneyAmount(first.spent.amount);
+        }).pipe(Effect.orDie);
+      expect(yield* status()).toBe("20");
+      expect(
+        (yield* fromTestPromise(() =>
+          sendBudgetCorrectionRequest(db, `/transactions/${visible}`, "PUT", {
+            expectedRevision: 1,
+            changes: { notes: "select this retained movement" },
+          })
+        )).status
+      ).toBe(200);
+      expect(yield* status()).toBe("90");
+      const crossings = yield* readBudgetCrossings({
+        db,
+        userId: UserId.make(owner),
+        budgetId: budget.data.id,
+        period: deriveCurrentBudgetMonth({
+          now: capturedAt,
+          timeZone: IanaTimeZone.make("America/Bogota"),
+        }),
+      });
+      expect(crossings.map((crossing) => crossing.threshold)).toEqual([80]);
+    }).pipe(Effect.orDie)
   ));
 
 it("corrects selected facts once, retains decisions and evidence, and rejects stale or foreign corrections", () =>

@@ -65,10 +65,11 @@ export const TransactionSearchForm = ({ draft, setDraft, timeZone, apply }: Prop
       <DateAmountFields {...{ draft, change, id, timeZone }} />
       {invalid ? <SearchValidation /> : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant="outline">
+        <Button contentLayout="wrap" type="submit" variant="outline">
           Buscar
         </Button>
         <Button
+          contentLayout="wrap"
           type="button"
           variant="ghost"
           onClick={() => {

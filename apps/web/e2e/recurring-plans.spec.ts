@@ -1549,6 +1549,9 @@ const inspectLargeReview = (page: Page): Effect.Effect<void, Cause.UnknownError>
   });
 const inspectLongSearchScope = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Limpiar filtros", exact: true }).click()
+    );
     const query = "Y".repeat(maximumSearchDraftLength);
     yield* Effect.tryPromise(() =>
       page.getByLabel("Buscar transacción", { exact: true }).fill(query)

@@ -158,7 +158,7 @@ const SearchResults = (props: ResultsProps): JSX.Element => {
     return (
       <div className="grid gap-3 py-6">
         <p>No pudimos cargar las transacciones. Tus filtros se conservaron.</p>
-        <Button variant="outline" onClick={refresh}>
+        <Button contentLayout="wrap" variant="outline" onClick={refresh}>
           Reintentar transacciones
         </Button>
       </div>
@@ -214,13 +214,18 @@ const PageNavigation = ({
   return (
     <div className="flex flex-wrap items-center gap-3 py-4">
       {Option.isSome(previous) ? (
-        <Button variant="outline" disabled={blocked} onClick={previous.value}>
+        <Button contentLayout="wrap" variant="outline" disabled={blocked} onClick={previous.value}>
           Página anterior
         </Button>
       ) : null}
       {Option.isSome(more) ? (
         <>
-          <Button variant="outline" disabled={blocked} onClick={() => next(more.value)}>
+          <Button
+            contentLayout="wrap"
+            variant="outline"
+            disabled={blocked}
+            onClick={() => next(more.value)}
+          >
             Ver más transacciones
           </Button>
           <span className="text-xs text-muted-foreground">
@@ -249,6 +254,7 @@ export const TransactionPicker = ({
         {view.results}
         {Option.isSome(view.selected) ? (
           <Button
+            contentLayout="wrap"
             disabled={view.blocked}
             onClick={() => {
               if (Option.isSome(view.selected)) choose(view.selected.value);

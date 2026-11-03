@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../../openai.test-fixture";
 import assert from "node:assert/strict";
 import { AuditUnavailable } from "../../../src/shell/audit/contract";
 import { afterAll, expect, it } from "vitest";
@@ -11,7 +12,7 @@ import {
   observeRetentionCost,
 } from "../../d1-test-fixture";
 import { fixtureWorker as coreWorker } from "../../core-worker.test-fixture";
-import { approvedWorkersAiModel } from "../../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../../src/shell/hosted-inference/contract";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -453,7 +454,9 @@ it("runs scheduled Audit retention independently of a failed earlier maintenance
             {
               DB: db,
               ASYNC_HEALTH_ENABLED: "enabled",
-              AI: { run: () => Promise.reject(new Error("unused model")) },
+              OPENAI_API_KEY: openAiTestKey({
+                run: () => Promise.reject(new Error("unused model")),
+              }),
               USER_TRANSACTION_COORDINATOR: {
                 getByName: (): Pick<Fetcher, "fetch"> => ({
                   fetch: () => Promise.reject(new Error("unused coordinator")),
@@ -461,7 +464,7 @@ it("runs scheduled Audit retention independently of a failed earlier maintenance
               },
               CONTRACT_DIGEST: "a".repeat(64),
               RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-              HOSTED_AI_MODEL: approvedWorkersAiModel,
+              HOSTED_AI_MODEL: approvedOpenAiModel,
               BROWSER_ORIGIN: "https://app.fidyapp.com",
               WOMPI_ENVIRONMENT: "",
               WOMPI_PUBLIC_KEY: "",

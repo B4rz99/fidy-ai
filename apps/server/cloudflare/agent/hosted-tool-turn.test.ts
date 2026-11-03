@@ -1,9 +1,10 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import {
   CanonicalToolOutcome,
   TranscriptText,
   TranscriptTurnId,
 } from "../../src/core/agent/contract";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { makeAgentRetention } from "./runtime";
 
 import { Clock, Effect, Schema } from "effect";
@@ -709,8 +710,10 @@ it.each(["memory.forget", "operations.executeAtomicBatch"] as const)(
           },
           {
             DB: db,
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
-            AI: { run: (): Promise<Response> => Promise.resolve(reply("No ejecutado")) },
+            HOSTED_AI_MODEL: approvedOpenAiModel,
+            OPENAI_API_KEY: openAiTestKey({
+              run: (): Promise<Response> => Promise.resolve(reply("No ejecutado")),
+            }),
           }
         );
         expect(
@@ -903,8 +906,8 @@ it.each([
           },
           {
             DB: delayedDb,
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
-            AI: {
+            HOSTED_AI_MODEL: approvedOpenAiModel,
+            OPENAI_API_KEY: openAiTestKey({
               run: (): Promise<Response> =>
                 Promise.resolve(
                   Response.json({
@@ -930,7 +933,7 @@ it.each([
                     usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
                   })
                 ),
-            },
+            }),
           }
         );
         const credential = yield* Effect.tryPromise(() => subject(0));
@@ -1360,13 +1363,13 @@ it("refuses a cross-User hosted tool request before sending context or writing t
         },
         {
           DB: db,
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
-          AI: {
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({
             run: (): Promise<Response> => {
               sends++;
               return Promise.resolve(reply("Should not be sent"));
             },
-          },
+          }),
         }
       );
       const stolen = yield* Effect.tryPromise(() => subject(0));
@@ -1421,8 +1424,8 @@ it("ends a multi-round Turn at its shared deadline without buying another model 
           },
           {
             DB: db,
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
-            AI: {
+            HOSTED_AI_MODEL: approvedOpenAiModel,
+            OPENAI_API_KEY: openAiTestKey({
               run: (): Promise<Response> => {
                 calls++;
                 elapsed = 121_000;
@@ -1451,7 +1454,7 @@ it("ends a multi-round Turn at its shared deadline without buying another model 
                   })
                 );
               },
-            },
+            }),
           }
         );
         const credential = yield* Effect.tryPromise(() => subject(0));

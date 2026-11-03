@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../../apps/server/cloudflare/openai.test-fixture";
 import { browserSessionBindingPath, telemetryTraceHeader } from "@fidy/server/browser-transport";
 import { receiveSmoke } from "../../apps/server/cloudflare/runtime/release-smoke/operations";
 import {
@@ -10,7 +11,7 @@ import {
   providerPaths,
 } from "../../apps/server/src/shell/provider-authentication/contract";
 import { it } from "@effect/vitest";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-contract";
+import { approvedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import {
   type TelemetryService,
   TelemetryTraceId,
@@ -110,14 +111,14 @@ const failingDatabase: D1Database = {
 };
 
 const unusedAiBinding = {
-  run: (): Promise<never> => Promise.reject(new Error("Unused Workers AI binding")),
+  run: (): Promise<never> => Promise.reject(new Error("Unused OpenAI binding")),
 };
 
 const coreEnvironment: Parameters<typeof coreWorker.fetch>[1] = {
-  AI: unusedAiBinding,
+  OPENAI_API_KEY: openAiTestKey(unusedAiBinding),
   CONTRACT_DIGEST: contractDigest,
   DB: failingDatabase,
-  HOSTED_AI_MODEL: approvedWorkersAiModel,
+  HOSTED_AI_MODEL: approvedOpenAiModel,
   BROWSER_ORIGIN: "https://app.fidyapp.com",
   WOMPI_ENVIRONMENT: "",
   WOMPI_PUBLIC_KEY: "",

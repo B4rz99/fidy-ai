@@ -1,6 +1,7 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import {
   type HostedInferenceService,
-  approvedWorkersAiModel,
+  approvedOpenAiModel,
 } from "../../src/shell/hosted-inference/contract";
 import { type UploadRefusalCase } from "./statement-upload.test-fixture";
 import { type Cause, Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
@@ -268,8 +269,8 @@ export const inference = (
 ): Promise<HostedInferenceService> =>
   Effect.runPromise(
     makeCloudflareHostedInference({
-      AI: { run: (_model, request) => run(request) },
-      HOSTED_AI_MODEL: approvedWorkersAiModel,
+      OPENAI_API_KEY: openAiTestKey({ run: (_model, request) => run(request) }),
+      HOSTED_AI_MODEL: approvedOpenAiModel,
     })
   );
 
@@ -315,8 +316,8 @@ export const coordinatorFor = ({
       DB: db,
       KAPSO_API_KEY: "test-kapso-api-key",
       WHATSAPP_SANDBOX_PHONE_NUMBER_ID: options.sandboxPhoneNumberId,
-      HOSTED_AI_MODEL: approvedWorkersAiModel,
-      AI: { run: (_model, request) => run(request) },
+      HOSTED_AI_MODEL: approvedOpenAiModel,
+      OPENAI_API_KEY: openAiTestKey({ run: (_model, request) => run(request) }),
     }
   );
 
@@ -540,8 +541,10 @@ export const finishStatementExtraction = ({
         {
           DB: db,
           STATEMENT_STAGING_BUCKET: bucket,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
         }
       );
       yield* Effect.tryPromise(() =>

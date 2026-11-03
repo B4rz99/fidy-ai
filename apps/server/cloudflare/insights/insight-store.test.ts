@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import assert from "node:assert/strict";
 import { InsightUnavailable } from "./contract";
@@ -16,7 +17,7 @@ import {
   listPendingInsights,
   prepareInsightTransition,
 } from "./operations";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
@@ -143,10 +144,12 @@ const send = (
         fetch: (request) =>
           coreWorker.fetch(new Request(request), {
             DB: db,
-            AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+            OPENAI_API_KEY: openAiTestKey({
+              run: (): Promise<never> => Promise.reject(new Error("unused")),
+            }),
             CONTRACT_DIGEST: "a".repeat(64),
             RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
+            HOSTED_AI_MODEL: approvedOpenAiModel,
             BROWSER_ORIGIN: "https://app.fidyapp.com",
             WOMPI_ENVIRONMENT: "",
             WOMPI_PUBLIC_KEY: "",
@@ -175,8 +178,10 @@ const send = (
                       },
                       {
                         DB: db,
-                        AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-                        HOSTED_AI_MODEL: approvedWorkersAiModel,
+                        OPENAI_API_KEY: openAiTestKey({
+                          run: (): Promise<never> => Promise.reject(new Error("unused")),
+                        }),
+                        HOSTED_AI_MODEL: approvedOpenAiModel,
                       }
                     );
                     coordinators.set(name, coordinator);

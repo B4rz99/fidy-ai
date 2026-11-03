@@ -86,7 +86,10 @@ settlement guarantee.
 
 Native fetch follows redirects by default, before Effect can inspect the response. Provide
 `FetchHttpClient.RequestInit` with `redirect: "manual"` when the adapter handles redirects, or
-`redirect: "error"` when any redirect must fail. `followRedirects(client, 0)` alone does not prevent
+`redirect: "error"` when the runtime supports it and any redirect must fail.
+Cloudflare Workers supports only `follow` and `manual`: `error` throws before sending a request.
+Use `manual` and reject redirect statuses at the provider boundary on Workers. Verify against
+[the Workers Request API](https://developers.cloudflare.com/workers/runtime-apis/request/). `followRedirects(client, 0)` alone does not prevent
 native fetch from following. Browser manual redirects can produce an opaque redirect response;
 reject it rather than assuming the destination/status is inspectable.
 

@@ -2,7 +2,7 @@ import { Config, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 import { coordinatorTestDatabase, observeRetentionCost } from "../d1-test-fixture";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { readRecurringDigestSource } from "./operations";
 import { seedDetectionHistory, userId } from "./detection-comparison.test-fixture";
 
@@ -52,8 +52,8 @@ const createRuntime = Effect.fn(function* (source: "detection" | "digest") {
                 },
                 env: {
                   DB: { type: "d1", id: "recurring-cost" },
-                  AI: { type: "json", value: { run: null } },
-                  HOSTED_AI_MODEL: { type: "text", value: approvedWorkersAiModel },
+                  OPENAI_API_KEY: { type: "text", value: "" },
+                  HOSTED_AI_MODEL: { type: "text", value: approvedOpenAiModel },
                   USER_TRANSACTION_COORDINATOR: {
                     type: "durable-object",
                     worker: "recurring-cost",

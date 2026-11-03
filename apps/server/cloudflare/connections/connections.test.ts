@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import assert from "node:assert/strict";
 import { sweepAttempts as sweepConnectionAttempts } from "./internal/retention";
 import { sweepGrants as sweepConnectionGrants } from "./internal/cleanup";
@@ -18,7 +19,7 @@ import {
 } from "effect";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { makeCoreWorker } from "../core-worker";
 import {
@@ -173,10 +174,12 @@ const send = (
         coreWorker.fetch(new Request(internal), {
           DB: db,
           BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(sandboxProfile),
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
           CONTRACT_DIGEST: "a".repeat(64),
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
           BROWSER_ORIGIN: "https://app.fidyapp.com",
           WOMPI_ENVIRONMENT: "",
           WOMPI_PUBLIC_KEY: "",
@@ -201,8 +204,10 @@ const send = (
                       DB: db,
                       BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: Option.getOrUndefined(sandboxProfile),
                       BANCOLOMBIA_SANDBOX_GRANT_KEY: "A".repeat(43),
-                      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-                      HOSTED_AI_MODEL: approvedWorkersAiModel,
+                      OPENAI_API_KEY: openAiTestKey({
+                        run: (): Promise<never> => Promise.reject(new Error("unused")),
+                      }),
+                      HOSTED_AI_MODEL: approvedOpenAiModel,
                     },
                     { institutions, bank: bankPreparation, activation: bankActivation }
                   );
@@ -1725,11 +1730,13 @@ it("scheduled retention clears abandoned proof after Consent withdrawal while re
             },
             {
               DB: db,
-              AI: { run: () => Promise.reject(new Error("unused inference")) },
+              OPENAI_API_KEY: openAiTestKey({
+                run: () => Promise.reject(new Error("unused inference")),
+              }),
               USER_TRANSACTION_COORDINATOR: {
                 getByName: () => ({ fetch: () => Promise.reject(new Error("unused coordinator")) }),
               },
-              HOSTED_AI_MODEL: approvedWorkersAiModel,
+              HOSTED_AI_MODEL: approvedOpenAiModel,
               BROWSER_ORIGIN: "https://app.fidyapp.com",
               CLOUDFLARE_ACCESS_AUDIENCE: "",
               CLOUDFLARE_ACCESS_ISSUER: "",

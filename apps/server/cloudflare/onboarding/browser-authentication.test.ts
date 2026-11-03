@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
 import { fixtureNativeHttpClient } from "../core-worker.test-fixture";
 import { HttpClient } from "effect/http";
@@ -33,7 +34,7 @@ import {
   retainedRecoveryPairingsQuery,
 } from "../recovery/operations";
 import publicWorker from "../public-worker";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 
 const encodeJson = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
@@ -144,10 +145,10 @@ const setup = (
                     ? { BROWSER_PAIRING_EMAIL_QUEUE: publication.value.queue }
                     : {}),
                   DB: database(db),
-                  AI: { run: () => Promise.reject(new Error("unused")) },
+                  OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("unused")) }),
                   CONTRACT_DIGEST: "a".repeat(64),
                   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-                  HOSTED_AI_MODEL: approvedWorkersAiModel,
+                  HOSTED_AI_MODEL: approvedOpenAiModel,
                   BROWSER_ORIGIN: "https://app.fidyapp.com",
                   WOMPI_ENVIRONMENT: "",
                   WOMPI_PUBLIC_KEY: "",

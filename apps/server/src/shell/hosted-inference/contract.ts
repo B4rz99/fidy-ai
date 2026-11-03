@@ -147,7 +147,7 @@ const hostedInferenceErrorMessages: Readonly<Record<HostedInferenceFailureReason
     ActiveRequestCapacityExceeded: "The active User request exceeds its token capacity",
     InvalidOutput: "The hosted provider returned invalid output",
     ProviderUnavailable: "The hosted provider is unavailable",
-    ProviderQuotaExceeded: "The hosted provider daily allocation is exhausted",
+    ProviderQuotaExceeded: "The hosted provider allocation is exhausted",
     ResourceLimit: "Hosted inference resource admission was refused",
     AdmissionUnavailable: "Hosted inference admission authority is unavailable",
     StructuredOutputExceeded: "The hosted structured response exceeded its bound",
@@ -248,61 +248,62 @@ export type HostedInferenceStubBehavior = Readonly<{
   ) => Effect.Effect<Output, HostedInferenceError>;
 }>;
 
-const approvedWorkersAiModelId = "@cf/google/gemma-4-26b-a4b-it" as const;
+const approvedOpenAiModelId = "gpt-6-luna" as const;
 
-/** The Workers AI model whose exact revision has passed Fidy's conformance suite. */
-export const ApprovedWorkersAiModel = Schema.Literal(approvedWorkersAiModelId).pipe(
-  Schema.brand("ApprovedWorkersAiModel")
+/** The sole OpenAI model allowed by Fidy's hosted inference policy. */
+export const ApprovedOpenAiModel = Schema.Literal(approvedOpenAiModelId).pipe(
+  Schema.brand("ApprovedOpenAiModel")
 );
-export type ApprovedWorkersAiModel = typeof ApprovedWorkersAiModel.Type;
+export type ApprovedOpenAiModel = typeof ApprovedOpenAiModel.Type;
 
 /** Production model selection; changing this value requires passing conformance again. */
-export const approvedWorkersAiModel = ApprovedWorkersAiModel.make(approvedWorkersAiModelId);
+export const approvedOpenAiModel = ApprovedOpenAiModel.make(approvedOpenAiModelId);
 
 const ChatContent = Schema.NullOr(Schema.String);
 
-/** One Gemma Chat Completions function call, preserving its provider id for tool continuation. */
-type WorkersAiFunctionCall = Readonly<{
+/** One OpenAI Chat Completions function call, preserving its provider id for tool continuation. */
+type OpenAiFunctionCall = Readonly<{
   id: string;
   type: "function";
   function: Readonly<{ name: string; arguments: string }>;
 }>;
 
-/** Provider message accepted by the direct binding; callers must use projected content only. */
-type WorkersAiInputItem =
+/** Provider message accepted by OpenAI; callers must use projected content only. */
+type OpenAiInputItem =
   | Readonly<{ role: "system" | "user"; content: string }>
   | (Readonly<{
       role: "assistant";
       content: typeof ChatContent.Type;
     }> &
-      Partial<Readonly<{ tool_calls: ReadonlyArray<WorkersAiFunctionCall> }>>)
+      Partial<Readonly<{ tool_calls: ReadonlyArray<OpenAiFunctionCall> }>>)
   | Readonly<{ role: "tool"; tool_call_id: string; content: string }>;
 
-/** Strict function tool definition derived from one canonical operation schema. */
-type WorkersAiTool = Readonly<{
+/** Function tool definition preserving canonical optional arguments; host decoding is authoritative. */
+type OpenAiTool = Readonly<{
   type: "function";
   function: Readonly<{
     name: string;
     description: string;
     parameters: JsonSchema.JsonSchema;
-    strict: true;
+    strict: false;
   }>;
 }>;
 
-type WorkersAiRequestBase = Readonly<{
-  messages: ReadonlyArray<WorkersAiInputItem>;
-  max_tokens: number;
+type OpenAiRequestBase = Readonly<{
+  messages: ReadonlyArray<OpenAiInputItem>;
+  max_completion_tokens: number;
   temperature: 0;
   stream: false;
-  chat_template_kwargs: Readonly<{ enable_thinking: false }>;
+  reasoning_effort: "none";
+  store: false;
 }>;
 
-/** Closed direct-binding request: canonical tools, structured output, or text only, never mixed. */
-export type WorkersAiRequest = WorkersAiRequestBase &
+/** Closed OpenAI request: canonical tools, structured output, or text only, never mixed. */
+export type OpenAiRequest = OpenAiRequestBase &
   (
     | (Readonly<{
         tool_choice: "auto";
-        tools: ReadonlyArray<WorkersAiTool>;
+        tools: ReadonlyArray<OpenAiTool>;
       }> &
         Partial<Readonly<{ response_format: never }>>)
     | (Readonly<{
@@ -319,23 +320,23 @@ export type WorkersAiRequest = WorkersAiRequestBase &
     | Partial<Readonly<{ tool_choice: never; tools: never; response_format: never }>>
   );
 
-/** The only Cloudflare capability the portable hosted-inference adapter accepts. */
-export type WorkersAiBindingRun = (
-  model: ApprovedWorkersAiModel,
-  request: WorkersAiRequest,
-  options: Readonly<{ returnRawResponse: true; signal: AbortSignal }>
+/** External transport seam for bounded, cancellable OpenAI inference requests. */
+export type OpenAiTransportRun = (
+  model: ApprovedOpenAiModel,
+  request: OpenAiRequest,
+  options: Readonly<{ signal: AbortSignal }>
 ) => Promise<Response>;
 
 /** Provider execution composed in the calling Effect owner, including admission and Consent. */
-export type WorkersAiRun = (
-  model: ApprovedWorkersAiModel,
-  request: WorkersAiRequest
+export type OpenAiRun = (
+  model: ApprovedOpenAiModel,
+  request: OpenAiRequest
 ) => Effect.Effect<Response, HostedInferenceError | Cause.UnknownError>;
 
 /** Optional native configuration decoded before hosted inference authority is constructed. */
-export type WorkersAiConfiguration = Readonly<{
+export type OpenAiConfiguration = Readonly<{
   model: Option.Option<string>;
-  run: Option.Option<WorkersAiRun>;
+  run: Option.Option<OpenAiRun>;
 }>;
 
 /** Closed live approval checks, identifying a failing capability without exposing model content. */

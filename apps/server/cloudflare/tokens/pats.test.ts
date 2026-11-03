@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { makeAudit } from "../../src/shell/audit/runtime";
@@ -8,7 +9,7 @@ import {
   executeHostedStatementQuery,
 } from "../canonical-operations/operations";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
@@ -290,8 +291,10 @@ const setup = (
                 },
                 {
                   DB: db,
-                  AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-                  HOSTED_AI_MODEL: approvedWorkersAiModel,
+                  OPENAI_API_KEY: openAiTestKey({
+                    run: (): Promise<never> => Promise.reject(new Error("unused")),
+                  }),
+                  HOSTED_AI_MODEL: approvedOpenAiModel,
                 }
               );
               coordinators.set(name, coordinator);
@@ -307,12 +310,12 @@ const setup = (
             };
           },
         },
-        AI: {
+        OPENAI_API_KEY: openAiTestKey({
           run: (): Promise<never> => Promise.reject(new Error("unused")),
-        },
+        }),
         CONTRACT_DIGEST: "a".repeat(64),
         RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-        HOSTED_AI_MODEL: approvedWorkersAiModel,
+        HOSTED_AI_MODEL: approvedOpenAiModel,
         BROWSER_ORIGIN: "https://app.fidyapp.com",
         WOMPI_ENVIRONMENT: "",
         WOMPI_PUBLIC_KEY: "",

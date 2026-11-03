@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { Clock, Data, Effect } from "effect";
 import { afterAll, expect, it } from "vitest";
 import coreWorker, { UserTransactionCoordinator } from "../core-worker";
@@ -11,7 +12,7 @@ const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const environment = (DB: D1Database): Parameters<typeof coreWorker.scheduled>[1] => ({
   DB,
-  AI: { run: () => Promise.reject(new Error("Unused test binding")) },
+  OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("Unused test binding")) }),
   CONTRACT_DIGEST: "a".repeat(64),
   RELEASE_GIT_SHA: "a".repeat(40),
   HOSTED_AI_MODEL: "test",

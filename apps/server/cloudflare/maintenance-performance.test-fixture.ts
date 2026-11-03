@@ -1,3 +1,4 @@
+import { openAiTestKey } from "./openai.test-fixture";
 import { withErasureRecovery } from "./erasure/runtime";
 import { Option } from "effect";
 import type { CoreMaintenanceInput } from "./maintenance/contract";
@@ -22,7 +23,9 @@ export const maintenancePerformanceEnvironment = ({
       fetch: () => Promise.resolve(new Response(null, { status: 204 })),
     }),
   },
-  AI: { run: () => Promise.reject(new Error("Idle maintenance must not infer")) },
+  OPENAI_API_KEY: openAiTestKey({
+    run: () => Promise.reject(new Error("Idle maintenance must not infer")),
+  }),
   WEEKLY_DELIVERY_QUEUE: queue,
   WEEKLY_DELIVERY_WORKFLOW: workflow,
   WEEKLY_SUMMARY_ENABLED: "disabled",

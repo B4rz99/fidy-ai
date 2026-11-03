@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 allow_quota_deferral=false
 if [[ "$#" == 1 && "$1" == --allow-quota-deferral ]]; then
   allow_quota_deferral=true
 elif [[ "$#" != 0 ]]; then
-  echo "Usage: check-workers-ai-conformance.sh [--allow-quota-deferral]" >&2
+  echo "Usage: check-openai-conformance.sh [--allow-quota-deferral]" >&2
   exit 1
 fi
 
-port="${WORKERS_AI_CONFORMANCE_PORT:-8799}"
+port="${OPENAI_CONFORMANCE_PORT:-8799}"
 model="${HOSTED_AI_MODEL:?HOSTED_AI_MODEL must select the approval candidate}"
+: "${OPENAI_API_KEY:?OPENAI_API_KEY must be configured}"
 
 readonly readiness_connect_seconds=2 readiness_total_seconds=10
 readonly conformance_connect_seconds=5
-conformance_total_seconds="${WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS:-180}"
+conformance_total_seconds="${OPENAI_CONFORMANCE_TIMEOUT_SECONDS:-180}"
 if [[ ! "$conformance_total_seconds" =~ ^[1-9][0-9]{0,2}$ ]] ||
   (( conformance_total_seconds > 180 )); then
-  echo "Workers AI conformance timeout must be an integer from 1 to 180 seconds." >&2
+  echo "OpenAI conformance timeout must be an integer from 1 to 180 seconds." >&2
   exit 1
 fi
 readonly conformance_total_seconds
@@ -32,11 +34,10 @@ worker_pid=""
 
 cat >"$config_file" <<EOF
 {
-  "name": "fidy-workers-ai-conformance",
-  "main": "$(pwd)/../../apps/server/cloudflare/ai/workers-ai-conformance-worker.ts",
+  "name": "fidy-openai-conformance",
+  "main": "$(pwd)/../../apps/server/cloudflare/ai/openai-conformance-worker.ts",
   "compatibility_date": "2026-09-22",
-  "compatibility_flags": ["nodejs_compat"],
-  "ai": { "binding": "AI", "remote": true }
+  "compatibility_flags": ["nodejs_compat"]
 }
 EOF
 
@@ -54,11 +55,16 @@ cleanup() {
   rm -f "$log_file" "$response_file"
 }
 trap cleanup EXIT
+python3 - "$config_dir/.dev.vars" <<'PYKEY'
+import json, os, sys
+with open(sys.argv[1], "w") as output:
+    output.write("OPENAI_API_KEY=" + json.dumps(os.environ["OPENAI_API_KEY"]) + "\n")
+PYKEY
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 python3 "$root/scripts/cli-release/command.py" --timeout 300 -- wrangler dev \
   --config "$config_file" \
-  --port "$port" \
+  --ip 127.0.0.1 --port "$port" \
   --var "HOSTED_AI_MODEL:$model" \
   >"$log_file" 2>&1 &
 worker_pid="$!"
@@ -72,21 +78,19 @@ for _attempt in $(seq 1 60); do
   else
     curl_status=$?
     if [[ "$curl_status" == 28 ]]; then
-      echo "Workers AI conformance readiness request timed out." >&2
+      echo "OpenAI conformance readiness request timed out." >&2
       exit 1
     fi
   fi
   if ! kill -0 "$worker_pid" 2>/dev/null; then
-    echo "Workers AI conformance Worker failed to start." >&2
-    cat "$log_file" >&2
+    echo "OpenAI conformance Worker failed to start." >&2
     exit 1
   fi
   sleep 1
 done
 
 if [[ "$ready" != true ]]; then
-  echo "Workers AI conformance Worker did not become ready." >&2
-  cat "$log_file" >&2
+  echo "OpenAI conformance Worker did not become ready." >&2
   exit 1
 fi
 
@@ -98,27 +102,27 @@ if ! status=$(curl --silent \
   --write-out '%{http_code}' \
   --output "$response_file" \
   "http://127.0.0.1:${port}/conformance"); then
-  echo "Workers AI conformance request failed." >&2
+  echo "OpenAI conformance request failed." >&2
   exit 1
 fi
 
 if [[ "$allow_quota_deferral" == true && "$status" == 503 ]] && jq --slurp --exit-status '
-  length == 1 and (.[0] | .modelApprovalRevision == "workers-ai-gemma-4-2026-09-22"
+  length == 1 and (.[0] | .modelApprovalRevision == "openai-gpt-6-luna-v1"
     and .outcome == "non_conforming"
     and .category == "ProviderQuotaExceeded"
     and (.check | IN("canonical_query", "canonical_mutation", "canonical_mutation_money", "canonical_mutation_time", "canonical_correction", "canonical_deletion", "canonical_date_only", "canonical_recurring_lifecycle", "canonical_recurring_read", "invalid_output_recovery", "structured_es_co")))
 ' "$response_file" >/dev/null 2>&1; then
   check=$(jq --raw-output '.check' "$response_file")
-  echo "::warning::Workers AI live conformance deferred: check=$check category=ProviderQuotaExceeded. Model behavior remains unverified; deterministic checks passed." >&2
+  echo "::warning::OpenAI live conformance deferred: check=$check category=ProviderQuotaExceeded. Model behavior remains unverified; deterministic checks passed." >&2
   exit 0
 fi
 
 if [[ "$status" != 200 ]] || ! jq --exit-status \
-  '. == {modelApprovalRevision: "workers-ai-gemma-4-2026-09-22", outcome: "conforming"}' \
+  '. == {modelApprovalRevision: "openai-gpt-6-luna-v1", outcome: "conforming"}' \
   "$response_file" >/dev/null; then
   diagnostic=$(jq --slurp --raw-output '
     if length != 1 then "check=internal category=UnexpectedFailure"
-    else .[0] | if .modelApprovalRevision == "workers-ai-gemma-4-2026-09-22"
+    else .[0] | if .modelApprovalRevision == "openai-gpt-6-luna-v1"
       and .outcome == "non_conforming"
       and (.check | IN("configuration", "canonical_query", "canonical_mutation", "canonical_mutation_money", "canonical_mutation_time", "canonical_correction", "canonical_deletion", "canonical_date_only", "canonical_recurring_lifecycle", "canonical_recurring_read", "invalid_output_recovery", "structured_es_co", "internal"))
       and (.category | IN("InvalidAuthority", "CapacityExceeded", "ActiveRequestCapacityExceeded", "InvalidOutput", "ProviderUnavailable", "ProviderQuotaExceeded", "StructuredOutputExceeded", "StructuredOutputTimedOut", "UnexpectedFailure"))
@@ -126,8 +130,8 @@ if [[ "$status" != 200 ]] || ! jq --exit-status \
     else "check=internal category=UnexpectedFailure"
     end end
   ' "$response_file" 2>/dev/null || printf 'check=internal category=UnexpectedFailure')
-  echo "Workers AI conformance failed: $diagnostic" >&2
+  echo "OpenAI conformance failed: $diagnostic" >&2
   exit 1
 fi
 
-echo "Workers AI model conformance passed."
+echo "OpenAI model conformance passed."

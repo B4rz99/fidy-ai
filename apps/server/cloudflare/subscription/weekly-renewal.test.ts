@@ -1,3 +1,4 @@
+import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { type OAuthConfirmationWork } from "../oauth-confirmation/contract";
 import { type Cause, Clock, DateTime, Effect, Fiber, Option, Schema } from "effect";
@@ -14,7 +15,7 @@ import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { consentHistoryTestSchema, installCurrentTestObjects } from "../d1-test-fixture";
 import coreWorker, { UserTransactionCoordinator } from "../core-worker";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -271,22 +272,25 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
       );
       if (row === null) throw new Error("Missing renewal fixture");
       let posts = 0;
-      vi.stubGlobal("fetch", (_input: RequestInfo | URL, init?: RequestInit) => {
-        if (init?.method === "POST") posts++;
-        return Promise.resolve(
-          Response.json({
-            data: {
-              id: "renewal-transaction",
-              reference: row.wompi_reference,
-              status: "APPROVED",
-              amount_in_cents: 990000,
-              currency: "COP",
-              payment_source_id: 3891,
-              finalized_at: "2026-10-13T15:04:00Z",
-            },
-          })
-        );
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((_input: RequestInfo | URL, init?: RequestInit) => {
+          if (init?.method === "POST") posts++;
+          return Promise.resolve(
+            Response.json({
+              data: {
+                id: "renewal-transaction",
+                reference: row.wompi_reference,
+                status: "APPROVED",
+                amount_in_cents: 990000,
+                currency: "COP",
+                payment_source_id: 3891,
+                finalized_at: "2026-10-13T15:04:00Z",
+              },
+            })
+          );
+        })
+      );
       const run = (): Promise<void> =>
         runBillingCollectionWorkflow({
           environment: {
@@ -525,14 +529,17 @@ it("offers Price-change notices immediately and sends the retained billing email
       });
       expect(work).toEqual({ version: 1, kind: "price-notice", userId, priceId: newPrice.id });
       let sends = 0;
-      vi.stubGlobal("fetch", (url: RequestInfo | URL, init?: RequestInit) => {
-        sends++;
-        return new Request(url, init).json().then((body: unknown) => {
-          expect(body).toMatchObject({ to: ["payer@example.com"] });
-          expect(body).toHaveProperty("text", expect.stringContaining("10900"));
-          return Response.json({ id: "resend-price-notice" });
-        });
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((url: RequestInfo | URL, init?: RequestInit) => {
+          sends++;
+          return new Request(url, init).json().then((body: unknown) => {
+            expect(body).toMatchObject({ to: ["payer@example.com"] });
+            expect(body).toHaveProperty("text", expect.stringContaining("10900"));
+            return Response.json({ id: "resend-price-notice" });
+          });
+        })
+      );
       const run = (): Promise<void> =>
         runBillingCollectionWorkflow({
           environment: {
@@ -587,7 +594,7 @@ it.each(renewalCalendars)(
         const fetch = vi.fn(() =>
           Promise.reject(new Error("Revoked renewal must not reach Wompi"))
         );
-        vi.stubGlobal("fetch", fetch);
+        vi.stubGlobal("fetch", withOpenAiFetch(fetch));
         yield* fromPromise(() =>
           runBillingCollectionWorkflow({
             environment: {
@@ -791,14 +798,17 @@ it("uses the current payer and retries a definitively rejected notice", () =>
         });
       yield* receiveNotice();
       let sends = 0;
-      vi.stubGlobal("fetch", (url: RequestInfo | URL, init?: RequestInit) =>
-        new Request(url, init).json().then((body: unknown) => {
-          expect(body).toMatchObject({ to: ["payer@example.com"] });
-          sends++;
-          return sends === 1
-            ? Response.json({ message: "rate limited" }, { status: 429 })
-            : Response.json({ id: "accepted" });
-        })
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((url: RequestInfo | URL, init?: RequestInit) =>
+          new Request(url, init).json().then((body: unknown) => {
+            expect(body).toMatchObject({ to: ["payer@example.com"] });
+            sends++;
+            return sends === 1
+              ? Response.json({ message: "rate limited" }, { status: 429 })
+              : Response.json({ id: "accepted" });
+          })
+        )
       );
       expect((yield* Effect.exit(fromPromise(() => runNotice(db))))._tag).toBe("Failure");
       expect(
@@ -843,7 +853,7 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
         ])
       );
       const fetch = vi.fn(() => Promise.reject(new Error("forbidden notice")));
-      vi.stubGlobal("fetch", fetch);
+      vi.stubGlobal("fetch", withOpenAiFetch(fetch));
       const create = vi.fn(() => Promise.resolve({}));
       const foreignWork = { ...noticeWork, userId: foreignUserId };
       yield* receiveBillingCollection({
@@ -1029,28 +1039,31 @@ it.each(
                     : null,
               },
             });
-          vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
-            const request = new Request(input, init);
-            if (request.method === "POST") {
-              posts++;
-              expect(new URL(request.url).pathname).toBe("/v1/transactions");
-              return request.json().then((body: unknown) => {
-                const integritySignature: unknown = expect.any(String);
-                expect(body).toEqual({
-                  amount_in_cents: calendar.cents,
-                  currency: "COP",
-                  customer_email: "payer@example.com",
-                  payment_source_id: 3891,
-                  reference: row.wompi_reference,
-                  signature: integritySignature,
-                  ...(calendar.method === "card" ? { payment_method: { installments: 1 } } : {}),
+          vi.stubGlobal(
+            "fetch",
+            withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+              const request = new Request(input, init);
+              if (request.method === "POST") {
+                posts++;
+                expect(new URL(request.url).pathname).toBe("/v1/transactions");
+                return request.json().then((body: unknown) => {
+                  const integritySignature: unknown = expect.any(String);
+                  expect(body).toEqual({
+                    amount_in_cents: calendar.cents,
+                    currency: "COP",
+                    customer_email: "payer@example.com",
+                    payment_source_id: 3891,
+                    reference: row.wompi_reference,
+                    signature: integritySignature,
+                    ...(calendar.method === "card" ? { payment_method: { installments: 1 } } : {}),
+                  });
+                  return providerResponse("APPROVED");
                 });
-                return providerResponse("APPROVED");
-              });
-            }
-            expect(new URL(request.url).pathname).toBe(`/v1/transactions/calendar-${row.id}`);
-            return Promise.resolve(providerResponse(status));
-          });
+              }
+              expect(new URL(request.url).pathname).toBe(`/v1/transactions/calendar-${row.id}`);
+              return Promise.resolve(providerResponse(status));
+            })
+          );
           const run = (lookup = false): Promise<void> =>
             runBillingCollectionWorkflow({
               environment: {
@@ -1191,15 +1204,18 @@ it.each(["card", "nequi", "daviplata"] as const)(
             .first<{ id: string; wompi_reference: string }>()
         );
         if (row === null) throw new Error("Missing declined renewal fixture");
-        vi.stubGlobal("fetch", () =>
-          Promise.resolve(
-            Response.json({
-              data: {
-                ...recordedTransactions.DECLINED.data,
-                id: `declined-${row.id}`,
-                reference: row.wompi_reference,
-              },
-            })
+        vi.stubGlobal(
+          "fetch",
+          withOpenAiFetch(() =>
+            Promise.resolve(
+              Response.json({
+                data: {
+                  ...recordedTransactions.DECLINED.data,
+                  id: `declined-${row.id}`,
+                  reference: row.wompi_reference,
+                },
+              })
+            )
           )
         );
         const environment: BillingRuntime = {
@@ -1418,8 +1434,8 @@ it("routes HTTP cancellation through the User coordinator and preserves paid acc
       );
       const environment: Parameters<typeof coreWorker.fetch>[1] = {
         DB: db,
-        AI: { run: () => Promise.reject(new Error("unused")) },
-        HOSTED_AI_MODEL: approvedWorkersAiModel,
+        OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("unused")) }),
+        HOSTED_AI_MODEL: approvedOpenAiModel,
         CONTRACT_DIGEST: "a".repeat(64),
         RELEASE_GIT_SHA: "a".repeat(40),
         BROWSER_ORIGIN: "https://app.fidyapp.com",
@@ -1550,16 +1566,21 @@ it.each(["card", "nequi", "daviplata"] as const)(
         const db = yield* cancellationFixture(method);
         yield* cancel(db, dueAt - 1000);
         let puts = 0;
-        vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
-          const request = new Request(input, init);
-          if (request.method === "PUT") puts++;
-          expect(new URL(request.url).pathname).toBe(
-            request.method === "PUT" ? "/v1/payment_sources/3891/void" : "/v1/payment_sources/3891"
-          );
-          return Promise.resolve(
-            Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" } })
-          );
-        });
+        vi.stubGlobal(
+          "fetch",
+          withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+            const request = new Request(input, init);
+            if (request.method === "PUT") puts++;
+            expect(new URL(request.url).pathname).toBe(
+              request.method === "PUT"
+                ? "/v1/payment_sources/3891/void"
+                : "/v1/payment_sources/3891"
+            );
+            return Promise.resolve(
+              Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" } })
+            );
+          })
+        );
         const run = (): Promise<void> =>
           runBillingCollectionWorkflow({
             environment: {
@@ -1618,20 +1639,23 @@ it("recovers one cancellation execution after an engine interruption and preserv
       let gets = 0;
       const activities: string[] = [];
       const waits: number[] = [];
-      vi.stubGlobal("fetch", (url: RequestInfo | URL, init?: RequestInit) => {
-        const request = new Request(url, init);
-        expect(new URL(request.url).pathname).toBe(
-          request.method === "PUT" ? "/v1/payment_sources/3891/void" : "/v1/payment_sources/3891"
-        );
-        if (request.method === "PUT") {
-          puts++;
-          return Promise.reject(new Error("lost void response"));
-        }
-        gets++;
-        return Promise.resolve(
-          Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } })
-        );
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((url: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(url, init);
+          expect(new URL(request.url).pathname).toBe(
+            request.method === "PUT" ? "/v1/payment_sources/3891/void" : "/v1/payment_sources/3891"
+          );
+          if (request.method === "PUT") {
+            puts++;
+            return Promise.reject(new Error("lost void response"));
+          }
+          gets++;
+          return Promise.resolve(
+            Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } })
+          );
+        })
+      );
       const run = (): Promise<void> =>
         runBillingCollectionWorkflow({
           environment: {
@@ -1726,19 +1750,22 @@ const runObservedRenewal = ({
   Effect.gen(function* () {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
-    vi.stubGlobal("fetch", () =>
-      Promise.resolve(
-        Response.json({
-          data: {
-            ...recordedTransactions[status].data,
-            id: `dunning-${id}`,
-            reference: `fidy-${id}`,
-            amount_in_cents: amountInCents,
-            payment_source_id: 3891,
-            finalized_at:
-              status === "APPROVED" ? DateTime.formatIso(DateTime.makeUnsafe(now)) : null,
-          },
-        })
+    vi.stubGlobal(
+      "fetch",
+      withOpenAiFetch(() =>
+        Promise.resolve(
+          Response.json({
+            data: {
+              ...recordedTransactions[status].data,
+              id: `dunning-${id}`,
+              reference: `fidy-${id}`,
+              amount_in_cents: amountInCents,
+              payment_source_id: 3891,
+              finalized_at:
+                status === "APPROVED" ? DateTime.formatIso(DateTime.makeUnsafe(now)) : null,
+            },
+          })
+        )
       )
     );
     const environment: BillingRuntime = {
@@ -1989,7 +2016,7 @@ it("fences an already queued renewal at cancellation without submitting its char
       const provider = vi.fn(() =>
         Promise.reject(new Error("Cancelled collection must not reach Wompi"))
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       yield* fromPromise(() =>
         runBillingCollectionWorkflow({
           environment: {
@@ -2015,16 +2042,19 @@ it("reconciles an ambiguous DaviPlata void without repeating PUT or trusting for
       yield* cancel(db, dueAt - 1000);
       let puts = 0;
       let foundId = 3892;
-      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
-        const request = new Request(input, init);
-        if (request.method === "PUT") {
-          puts++;
-          return Promise.reject(new Error("Ambiguous provider delivery"));
-        }
-        return Promise.resolve(
-          Response.json({ data: { id: foundId, type: "DAVIPLATA", status: "VOIDED" } })
-        );
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          if (request.method === "PUT") {
+            puts++;
+            return Promise.reject(new Error("Ambiguous provider delivery"));
+          }
+          return Promise.resolve(
+            Response.json({ data: { id: foundId, type: "DAVIPLATA", status: "VOIDED" } })
+          );
+        })
+      );
       const run = (subject = userId): Promise<void> =>
         runBillingCollectionWorkflow({
           environment: {
@@ -2073,7 +2103,7 @@ it("does not submit a queued retry after its grace boundary", () =>
       const queued = yield* latestRenewal(db);
       vi.setSystemTime(boundary + 259200000);
       const provider = vi.fn(() => Promise.reject(new Error("Grace has expired")));
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       yield* fromPromise(() =>
         runBillingCollectionWorkflow({
           environment: {
@@ -2340,7 +2370,7 @@ it(
         const fetch = vi.fn((_input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
           Effect.runPromiseWith(services)(Effect.never, { signal: init?.signal ?? undefined })
         );
-        vi.stubGlobal("fetch", fetch);
+        vi.stubGlobal("fetch", withOpenAiFetch(fetch));
         expect((yield* Effect.exit(fromPromise(() => runNotice(db))))._tag).toBe("Failure");
         const before = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ send_started_at_ms: Schema.Int, provider_accepted_at_ms: Schema.Null })

@@ -4,8 +4,8 @@ import {
   type HostedInferenceError,
   type HostedInferenceService,
   type HostedTextResult,
-  type WorkersAiConfiguration,
-  approvedWorkersAiModel,
+  type OpenAiConfiguration,
+  approvedOpenAiModel,
 } from "../../../src/shell/hosted-inference/contract";
 import { adversarialCorpus, corpusRevision, repetitions } from "./adversarial-corpus";
 import {
@@ -13,14 +13,13 @@ import {
   type EvaluationEnvironment,
   evaluationLimits,
   evidenceHash,
-  makeEvaluationBudget,
 } from "./evaluation-budget";
 
 const Configuration = Schema.Struct({
   EVALUATION_TOKEN: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
   EVALUATION_COMMIT: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
   EVALUATION_MODE: Schema.Literals(["dry-run", "live"]),
-  HOSTED_AI_MODEL: Schema.Literal(approvedWorkersAiModel),
+  HOSTED_AI_MODEL: Schema.Literal(approvedOpenAiModel),
 });
 const statuses = { ok: 200, unavailable: 503, unauthorized: 401, conflict: 409 } as const;
 const response = (value: unknown, status: number = statuses.ok): Response =>
@@ -48,9 +47,10 @@ type Metadata = Readonly<{
   limits: typeof evaluationLimits;
   providerSettings: Readonly<{
     temperature: number;
-    max_tokens: number;
+    max_completion_tokens: number;
     stream: false;
-    enable_thinking: false;
+    reasoning_effort: "none";
+    store: false;
   }>;
   containment: string;
   semanticGrade: string;
@@ -59,16 +59,17 @@ const metadataFor = (environment: EvaluationEnvironment, instanceId: string): Me
   instanceId,
   commit: environment.EVALUATION_COMMIT,
   mode: environment.EVALUATION_MODE,
-  model: approvedWorkersAiModel,
-  modelApprovalRevision: "workers-ai-gemma-4-2026-09-22",
+  model: approvedOpenAiModel,
+  modelApprovalRevision: "openai-gpt-6-luna-v1",
   corpusRevision,
   repetitions,
   limits: evaluationLimits,
   providerSettings: {
     temperature: 0,
-    max_tokens: evaluationLimits.outputTokensPerCall,
+    max_completion_tokens: evaluationLimits.outputTokensPerCall,
     stream: false,
-    enable_thinking: false,
+    reasoning_effort: "none",
+    store: false,
   },
   containment: "not_exercised_no_tool_executor",
   semanticGrade: "manual_review_required",
@@ -109,7 +110,7 @@ const visibleResult = ({
 });
 
 type MakeInference = (
-  configuration: WorkersAiConfiguration
+  configuration: OpenAiConfiguration
 ) => Effect.Effect<HostedInferenceService, HostedInferenceError>;
 
 type CaseInput = Readonly<{
@@ -162,6 +163,7 @@ const caseResponse = (
 /** Private local fixture: no owner bindings or tool executor. Prose always requires human grading. */
 type RunState = {
   makeInference: MakeInference;
+  makeBudget: (environment: EvaluationEnvironment) => EvaluationBudget;
   nextIndex: number;
   busy: boolean;
   stopped: boolean;
@@ -185,7 +187,7 @@ const fetchEvaluation = (
     return Promise.resolve(response({ outcome: "configuration_changed" }, statuses.conflict));
   }
   state.identity = Option.some(identity);
-  const budget = Option.getOrElse(state.session, () => makeEvaluationBudget(environment));
+  const budget = Option.getOrElse(state.session, () => state.makeBudget(environment));
   state.session = Option.some(budget);
   const instanceId = Option.getOrElse(state.instanceId, newId);
   state.instanceId = Option.some(instanceId);
@@ -269,13 +271,18 @@ const fetchWithoutBody = (
     );
 };
 
-export const makeEvaluationHandler = (
-  makeInference: MakeInference
-): {
+export const makeEvaluationHandler = ({
+  makeInference,
+  makeBudget,
+}: Readonly<{
+  makeInference: MakeInference;
+  makeBudget: (environment: EvaluationEnvironment) => EvaluationBudget;
+}>): {
   fetch: (request: Request, environment: EvaluationEnvironment) => Promise<Response>;
 } => {
   const state: RunState = {
     makeInference,
+    makeBudget,
     nextIndex: 0,
     busy: false,
     stopped: false,

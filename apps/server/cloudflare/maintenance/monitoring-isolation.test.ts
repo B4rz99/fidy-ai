@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { type ProactivityDeliveryWork } from "../insights/contract";
 import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./contract";
 import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
@@ -19,7 +20,7 @@ const environment = (
 ): CoreMaintenanceInput => ({
   DB: db,
   USER_TRANSACTION_COORDINATOR: { getByName: unavailable },
-  AI: { run: unavailable },
+  OPENAI_API_KEY: openAiTestKey({ run: unavailable }),
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
   KAPSO_API_KEY: "configured",
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
@@ -60,9 +61,9 @@ it("a stalled canary offer cannot skip later Core retention", () =>
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) VALUES ('workers-ai-expired','test','operation','test','rolling_window',1,1,1,2,NULL)"
+            "INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) VALUES ('openai-expired','test','operation','test','rolling_window',1,1,1,2,NULL)"
           ),
-          db.prepare("INSERT INTO resource_admission_grants VALUES ('workers-ai-expired',1,1)"),
+          db.prepare("INSERT INTO resource_admission_grants VALUES ('openai-expired',1,1)"),
         ])
       );
       const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
@@ -127,7 +128,7 @@ const idleWorkflow: Workflow = {
 };
 const scheduledEnvironment = (db: D1Database): Parameters<typeof coreWorker.scheduled>[1] => ({
   DB: db,
-  AI: { run: unavailable },
+  OPENAI_API_KEY: openAiTestKey({ run: unavailable }),
   BROWSER_ORIGIN: "https://example.test",
   CLOUDFLARE_ACCESS_AUDIENCE: "",
   CLOUDFLARE_ACCESS_ISSUER: "",

@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { type Cause, Clock, Deferred, Effect, Fiber, Schema } from "effect";
 import { afterAll, expect, it } from "@effect/vitest";
 import { User } from "../../src/core/identity/contract";
@@ -30,7 +31,9 @@ const telemetry = makeTelemetryService(DisabledTelemetryResource.adapter);
 const core = makeFixtureWorker(telemetry);
 const environment = (db: D1Database): Parameters<typeof core.fetch>[1] => ({
   DB: db,
-  AI: { run: (): Promise<never> => Promise.reject(new Error("Unused model")) },
+  OPENAI_API_KEY: openAiTestKey({
+    run: (): Promise<never> => Promise.reject(new Error("Unused model")),
+  }),
   HOSTED_AI_MODEL: "unused-bound-user-test",
   RELEASE_GIT_SHA: "0".repeat(40),
   CONTRACT_DIGEST: "0".repeat(64),

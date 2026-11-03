@@ -16,7 +16,7 @@ import { sweepCommercialAllowances } from "../quotas/runtime";
 import type { ForwardedEmailEnvironment } from "../ingestion/contract";
 import { makePlatformMaintenance } from "../runtime/runtime";
 import { makeAgentRetention } from "../agent/runtime";
-import { sweepExpiredWorkersAiAdmission } from "../ai/runtime";
+import { sweepExpiredOpenAiAdmission } from "../ai/runtime";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
 import {
   dispatchBrowserPairingEmail,
@@ -213,8 +213,8 @@ const admissionActivities = (
     sweepExpiredUploadAdmission({ db: environment.DB, now: nowEpochMs })
   ),
   activity(
-    "agent.workersAiAdmissionSweep",
-    sweepExpiredWorkersAiAdmission({ db: environment.DB, now: nowEpochMs })
+    "agent.openAiAdmissionSweep",
+    sweepExpiredOpenAiAdmission({ db: environment.DB, now: nowEpochMs })
   ),
   activity(
     "billing.cardPreparationAdmissionSweep",

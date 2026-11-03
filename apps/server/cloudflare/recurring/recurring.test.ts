@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -22,15 +23,15 @@ import { CanonicalOperationId } from "../../src/core/canonical-operations/contra
 import { executeCanonicalQuery } from "../canonical-operations/operations";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 
 const contractDigestLength = 64;
 const unusedAI = (): Promise<never> =>
   Promise.reject(new Error("Inference is not part of recurring detection"));
 const coreEnvironment = (db: D1Database): Parameters<typeof coreWorker.fetch>[1] => ({
   DB: db,
-  AI: { run: unusedAI },
-  HOSTED_AI_MODEL: approvedWorkersAiModel,
+  OPENAI_API_KEY: openAiTestKey({ run: unusedAI }),
+  HOSTED_AI_MODEL: approvedOpenAiModel,
   CONTRACT_DIGEST: "a".repeat(contractDigestLength),
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
   BROWSER_ORIGIN: "https://app.fidyapp.com",

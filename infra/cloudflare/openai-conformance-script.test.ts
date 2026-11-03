@@ -9,7 +9,7 @@ class FixtureFailure extends Data.TaggedError("FixtureFailure")<{ cause: unknown
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A, FixtureFailure> =>
   Effect.tryPromise({ try: run, catch: (cause) => new FixtureFailure({ cause }) });
 const conforming = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))({
-  modelApprovalRevision: "workers-ai-gemma-4-2026-09-22",
+  modelApprovalRevision: "openai-gpt-6-luna-v1",
   outcome: "conforming",
 });
 
@@ -25,7 +25,7 @@ const strictReport = {
   category: "InvalidOutput",
   allowQuotaDeferral: false,
   deferred: false,
-  revision: "workers-ai-gemma-4-2026-09-22",
+  revision: "openai-gpt-6-luna-v1",
   prerequisiteFailure: false,
   trailingJson: "",
 };
@@ -41,20 +41,20 @@ type ScriptResult = {
 };
 const failureDiagnostic = (check: string, report: Report): string => {
   if (report.revision !== strictReport.revision || report.trailingJson !== "") {
-    return "Workers AI conformance failed: check=internal category=UnexpectedFailure\n";
+    return "OpenAI conformance failed: check=internal category=UnexpectedFailure\n";
   }
-  return `Workers AI conformance failed: check=${check} category=${report.category}\n`;
+  return `OpenAI conformance failed: check=${check} category=${report.category}\n`;
 };
 const assertDiagnostic = (scenario: Scenario, result: ScriptResult, check?: string): void => {
   const { report, diagnostic, output } = result;
   if (scenario === "readiness-headers") expect(diagnostic).toContain("readiness request timed out");
   if (scenario === "post-headers" || scenario === "post-body") {
-    expect(diagnostic).toBe("Workers AI conformance request failed.\n");
+    expect(diagnostic).toBe("OpenAI conformance request failed.\n");
   }
   if (check !== undefined) {
     expect(diagnostic).toBe(
       report.deferred
-        ? `::warning::Workers AI live conformance deferred: check=${check} category=ProviderQuotaExceeded. Model behavior remains unverified; deterministic checks passed.\n`
+        ? `::warning::OpenAI live conformance deferred: check=${check} category=ProviderQuotaExceeded. Model behavior remains unverified; deterministic checks passed.\n`
         : failureDiagnostic(check, report)
     );
     expect(output + diagnostic).not.toContain("fixture-private-content");
@@ -80,7 +80,7 @@ const assertOutcome = Effect.fn(function* (
   expect(result.result).toBe(passed || report.deferred ? 0 : 1);
   expect(result.gets).toBe(1);
   expect(result.posts).toBe(scenario === "readiness-headers" ? 0 : 1);
-  expect(result.output.includes("Workers AI model conformance passed.")).toBe(passed);
+  expect(result.output.includes("OpenAI model conformance passed.")).toBe(passed);
   assertDiagnostic(scenario, result, check);
   expect(yield* fs.exists(`${directory}/worker.settled`)).toBe(true);
 });
@@ -98,7 +98,7 @@ const exercise = Effect.fn(function* (
   yield* fs.makeDirectory(`${directory}/bin`);
   yield* fs.makeDirectory(`${directory}/tmp`);
   const source = yield* fs.readFileString(
-    new URL("./scripts/check-workers-ai-conformance.sh", import.meta.url).pathname
+    new URL("./scripts/check-openai-conformance.sh", import.meta.url).pathname
   );
   yield* fs.makeDirectory(`${directory}/infra/cloudflare/scripts`, { recursive: true });
   yield* fs.makeDirectory(`${directory}/scripts/cli-release`, { recursive: true });
@@ -196,8 +196,9 @@ const exercise = Effect.fn(function* (
             PATH: `${directory}/bin:${path}`,
             TMPDIR: `${directory}/tmp`,
             HOSTED_AI_MODEL: "fixture-model",
-            WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: "1",
-            WORKERS_AI_CONFORMANCE_PORT: String(server.port),
+            OPENAI_API_KEY: "synthetic-fixture-key",
+            OPENAI_CONFORMANCE_TIMEOUT_SECONDS: "1",
+            OPENAI_CONFORMANCE_PORT: String(server.port),
           },
           stdout: "pipe",
           stderr: "pipe",
@@ -331,12 +332,13 @@ describe.concurrent("native conformance lifecycle", () => {
         for (const timeout of ["0", "181", "9999", "1.5", "-1", "invalid"]) {
           const child = yield* ChildProcess.make(
             "bash",
-            [new URL("./scripts/check-workers-ai-conformance.sh", import.meta.url).pathname],
+            [new URL("./scripts/check-openai-conformance.sh", import.meta.url).pathname],
             {
               env: {
                 ...Bun.env,
                 HOSTED_AI_MODEL: "fixture-model",
-                WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: timeout,
+                OPENAI_API_KEY: "synthetic-fixture-key",
+                OPENAI_CONFORMANCE_TIMEOUT_SECONDS: timeout,
               },
               stdin: "ignore",
               stdout: "pipe",
@@ -353,7 +355,7 @@ describe.concurrent("native conformance lifecycle", () => {
           );
           expect(result.status, timeout).toBe(1);
           expect(result.stderr).toBe(
-            "Workers AI conformance timeout must be an integer from 1 to 180 seconds.\n"
+            "OpenAI conformance timeout must be an integer from 1 to 180 seconds.\n"
           );
           expect(result.stdout).toBe("");
         }

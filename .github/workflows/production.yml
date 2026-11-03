@@ -96,9 +96,9 @@ jobs:
       - name: Install the locked workspace
         run: bash scripts/install-workspace.sh --ignore-scripts
 
-      - name: Select the server-approved Workers AI model
+      - name: Select the server-approved OpenAI model
         run: |
-          model=$(bun infra/cloudflare/scripts/print-approved-workers-ai-model.ts)
+          model=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)
           echo "HOSTED_AI_MODEL=$model" >> "$GITHUB_ENV"
 
       - name: Capture the immutable contract digest
@@ -125,6 +125,7 @@ jobs:
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
           KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
           WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}
@@ -172,6 +173,7 @@ jobs:
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
           KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
           WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}
@@ -243,6 +245,7 @@ jobs:
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
           KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
           WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}
@@ -399,6 +402,7 @@ jobs:
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
           KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
           WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}

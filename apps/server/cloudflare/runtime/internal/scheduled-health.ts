@@ -45,6 +45,7 @@ const providerConfigured = (environment: PlatformMaintenanceInput): boolean =>
     environment.KAPSO_WEBHOOK_SECRET,
     Option.getOrElse(environment.RESEND_API_KEY, () => ""),
     environment.HOSTED_AI_MODEL,
+    environment.OPENAI_API_KEY,
     environment.WOMPI_ENVIRONMENT,
     environment.WOMPI_PUBLIC_KEY,
     environment.WOMPI_PRIVATE_KEY,
@@ -55,7 +56,6 @@ const providerConfigured = (environment: PlatformMaintenanceInput): boolean =>
 const requiredBindings = (environment: PlatformMaintenanceInput): ReadonlyArray<boolean> =>
   [
     Option.fromUndefinedOr(environment.DB),
-    Option.fromUndefinedOr(environment.AI),
     Option.fromUndefinedOr(environment.USER_TRANSACTION_COORDINATOR),
     environment.ASYNC_DEAD_LETTERS,
     environment.OPERATIONAL_CANARY_QUEUE,

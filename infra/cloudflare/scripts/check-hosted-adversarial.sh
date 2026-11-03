@@ -17,8 +17,11 @@ if [[ "$mode" == --live && -n "$(git status --porcelain)" ]]; then
   echo 'Live evaluation requires a clean committed source tree for reproducible provenance.' >&2
   exit 1
 fi
+if [[ "$mode" == --live ]]; then
+  : "${OPENAI_API_KEY:?OPENAI_API_KEY must be configured}"
+fi
 port=8798
-model="$(bun infra/cloudflare/scripts/print-approved-workers-ai-model.ts)"
+model="$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)"
 commit="$(git rev-parse HEAD)"
 proof="$(mktemp -d "$root/.hosted-evaluation.XXXXXXXX")"
 config="$proof/wrangler.jsonc"
@@ -37,9 +40,16 @@ token="$(openssl rand -hex 32)"
 printf 'EVALUATION_TOKEN="%s"\n' "$token" > "$proof/.dev.vars"
 printf 'header = "Authorization: Bearer %s"\n' "$token" > "$proof/curl.conf"
 unset token
-jq -n --arg main "$root/apps/server/cloudflare/ai/workers-ai-evaluation-worker.ts" \
+if [[ "$mode" == --live ]]; then
+  python3 - "$proof/.dev.vars" <<'PYKEY'
+import json, os, sys
+with open(sys.argv[1], "a") as output:
+    output.write("OPENAI_API_KEY=" + json.dumps(os.environ["OPENAI_API_KEY"]) + "\n")
+PYKEY
+fi
+jq -n --arg main "$root/apps/server/cloudflare/ai/openai-evaluation-worker.ts" \
   --arg model "$model" --arg commit "$commit" --arg mode "${mode#--}" \
-  '{name:"fidy-hosted-adversarial-local",main:$main,compatibility_date:"2026-09-22",compatibility_flags:["nodejs_compat"],vars:{HOSTED_AI_MODEL:$model,EVALUATION_COMMIT:$commit,EVALUATION_MODE:$mode},observability:{enabled:false}} + (if $mode == "live" then {ai:{binding:"AI",remote:true}} else {} end)' > "$config"
+  '{name:"fidy-hosted-adversarial-local",main:$main,compatibility_date:"2026-09-22",compatibility_flags:["nodejs_compat"],vars:{HOSTED_AI_MODEL:$model,EVALUATION_COMMIT:$commit,EVALUATION_MODE:$mode},observability:{enabled:false}}' > "$config"
 git ls-files --cached --others --exclude-standard -z apps/server/src/shell/hosted-inference apps/server/cloudflare/ai apps/server/src/shell/canonical-operations apps/server/src/shell/api.ts apps/server/src/core/agent bun.lock infra/cloudflare/scripts/check-hosted-adversarial.sh \
   | xargs -0 shasum -a 256 > "$proof/source-sha256.txt"
 python3 "$root/scripts/cli-release/command.py" --timeout 1320 -- bunx --no-install wrangler dev --config "$config" --ip 127.0.0.1 --port "$port" \

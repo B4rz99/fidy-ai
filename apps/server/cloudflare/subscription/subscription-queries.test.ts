@@ -1,10 +1,11 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { executeProCommand } from "../../src/shell/pro-grants/operations";
 import { ProGrantFailure } from "../../src/shell/pro-grants/contract";
 import { expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SubscriptionOffers, SubscriptionStatus } from "../../src/core/subscription/contract";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery } from "./operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
@@ -299,9 +300,9 @@ effectIt.effect(
           .run()
       );
       const environment: Parameters<typeof coreWorker.fetch>[1] = {
-        AI: { run: () => Promise.reject(new Error("unused")) },
+        OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("unused")) }),
         DB: db,
-        HOSTED_AI_MODEL: approvedWorkersAiModel,
+        HOSTED_AI_MODEL: approvedOpenAiModel,
         CONTRACT_DIGEST: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
         BROWSER_ORIGIN: "https://app.fidyapp.com",
         WOMPI_ENVIRONMENT: "sandbox",

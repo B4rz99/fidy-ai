@@ -335,7 +335,7 @@ describe("Cloudflare resource admission", () => {
           charge("source:all:v1", "source:7a9f"),
           charge("operation:all:v1", "operation:statement-ingestion"),
           charge("outstanding:all:v1", "user:f1d1a001:statement-ingestion"),
-          charge("spend:all:v1", "spend:workers-ai:user:f1d1a001", 10),
+          charge("spend:all:v1", "spend:openai:user:f1d1a001", 10),
         ] as const;
         yield* admit(authority, { id: "all-dimensions-first", charges });
 
@@ -639,7 +639,7 @@ describe("Cloudflare resource admission", () => {
               leaseMs: ResourceAdmissionDurationMs.make(60_000),
               limit: ResourceAdmissionLimit.make(1),
             },
-            rollingPolicy("workers-ai:spend:v1", "spend", 1),
+            rollingPolicy("openai:spend:v1", "spend", 1),
           ],
 
           { read: () => now }
@@ -648,7 +648,7 @@ describe("Cloudflare resource admission", () => {
           id: "release-first",
           charges: [
             charge("model-work:outstanding:v1", "user:f1d1a002:model-work"),
-            charge("workers-ai:spend:v1", "spend:workers-ai:user:f1d1a002"),
+            charge("openai:spend:v1", "spend:openai:user:f1d1a002"),
           ],
         });
 
@@ -709,7 +709,7 @@ describe("Cloudflare resource admission", () => {
         const spendAgain = yield* Effect.result(
           admit(authority, {
             id: "release-spend-not-refunded",
-            charges: [charge("workers-ai:spend:v1", "spend:workers-ai:user:f1d1a002")],
+            charges: [charge("openai:spend:v1", "spend:openai:user:f1d1a002")],
           })
         );
 

@@ -1,3 +1,4 @@
+import { openAiTestKey } from "./openai.test-fixture";
 import {
   type WorkflowStep,
   type WorkflowStepConfig,
@@ -53,7 +54,9 @@ export const makeProactivityCoordinator = ({
     },
     {
       ...environment,
-      AI: { run: () => Promise.reject(new Error("Inference unavailable")) },
+      OPENAI_API_KEY: openAiTestKey({
+        run: () => Promise.reject(new Error("Inference unavailable")),
+      }),
       HOSTED_AI_MODEL: "unavailable-model",
     }
   );

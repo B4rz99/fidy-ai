@@ -1,10 +1,10 @@
 import { Brand, Cause, Clock, DateTime, Effect } from "effect";
 import type {
   HostedInitialTextContext,
-  WorkersAiBindingRun,
+  OpenAiTransportRun,
 } from "../../src/shell/hosted-inference/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
-import { makeAdmittedWorkersAiRun as makeRun } from "./internal/admitted-run";
+import { makeAdmittedOpenAiRun as makeRun } from "./internal/admitted-run";
 
 const initialContext = Brand.nominal<HostedInitialTextContext>();
 export const hostedInitialTextContext = (text: string): HostedInitialTextContext =>
@@ -27,23 +27,22 @@ export const hostedInitialTextContext = (text: string): HostedInitialTextContext
     activeRequest: { _tag: "Present", text },
   });
 
-export const makeAdmittedWorkersAiRun =
+export const makeAdmittedOpenAiRun =
   ({
     run,
     nowEpochMs,
     ...admission
   }: Omit<Parameters<typeof makeRun>[0], "run"> &
     Readonly<{
-      run: WorkersAiBindingRun;
+      run: OpenAiTransportRun;
       nowEpochMs: () => number;
-    }>): WorkersAiBindingRun =>
+    }>): OpenAiTransportRun =>
   (model, request, options) =>
     Effect.runPromise(
       Clock.clockWith((clock) =>
         makeRun({
           ...admission,
-          run: (model, request) =>
-            Effect.tryPromise((signal) => run(model, request, { returnRawResponse: true, signal })),
+          run: (model, request) => Effect.tryPromise((signal) => run(model, request, { signal })),
         })(model, request).pipe(
           Effect.provideService(Clock.Clock, {
             currentTimeMillis: Effect.sync(nowEpochMs),

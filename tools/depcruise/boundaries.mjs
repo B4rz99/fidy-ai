@@ -17,8 +17,8 @@ const compositionRoots = new Set([
   "cloudflare/public-worker.ts",
   "cloudflare/operational-canary-workflow.ts",
   "cloudflare/ingestion/email-worker.ts",
-  "cloudflare/ai/workers-ai-conformance-worker.ts",
-  "cloudflare/ai/workers-ai-evaluation-worker.ts",
+  "cloudflare/ai/openai-conformance-worker.ts",
+  "cloudflare/ai/openai-evaluation-worker.ts",
   "cloudflare/coordinator-test-harness.ts",
   "cloudflare/browser-acceptance-core-module.ts",
   "cloudflare/browser-acceptance-clock.test-fixture.ts",
@@ -95,6 +95,7 @@ const testRunner = new Set([
   "cloudflare/test-shards.test.ts",
 ]);
 const sharedTestSupport = new Set([
+  "cloudflare/openai.test-fixture.ts",
   // Downstream journeys publish real statements through the ingestion owner protocol.
   "cloudflare/ingestion/statement-publication.test-fixture.ts",
   // Subscription and Audit proofs seed the same completed Sandbox charge and paid access.

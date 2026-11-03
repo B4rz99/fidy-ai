@@ -14,6 +14,15 @@ export type Filters = Omit<
 >;
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
 export type Save = (edit: Edit, onSaved?: () => void) => void;
+export type CreationReceipt = Readonly<{ planId: Plan["id"]; date: string; transactionId: string }>;
+export type CreationResultProps = Readonly<{
+  receipt: CreationReceipt;
+  minimumRevision: Workspace["document"]["revision"];
+  categories: ReadonlyArray<Category>;
+  disabled: boolean;
+  save: Save;
+  close: () => void;
+}>;
 export const planStatus = (plan: Plan): "stopped" | "paused" | "active" => {
   if (plan.stoppedOn !== undefined) return "stopped";
   return plan.pauses.some((pause) => pause.through === undefined) ? "paused" : "active";

@@ -5,14 +5,15 @@ import { RecurringPlanId } from "@/transport/client";
 import { DeferredDisclosure } from "@/ui/components/disclosure";
 import { PlanForm } from "./plan-form";
 import { TransactionPicker } from "./transactions";
-import { type Category, type PlanInput, type Save, planFromTransaction } from "./model";
+import {
+  type Category,
+  type CreationReceipt,
+  type PlanInput,
+  type Save,
+  planFromTransaction,
+} from "./model";
 
-export type CreationReceipt = Readonly<{
-  planId: RecurringPlanId;
-  date: string;
-  transactionId: string;
-}>;
-export type CreationDraft = Readonly<{
+type CreationDraft = Readonly<{
   initial: Partial<PlanInput> & Pick<PlanInput, "timeZone">;
   seriesId: Option.Option<string>;
 }>;

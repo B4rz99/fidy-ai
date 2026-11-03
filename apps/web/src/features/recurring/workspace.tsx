@@ -18,12 +18,13 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { MonthCalendar } from "./month";
 import { OccurrenceList } from "./occurrence-list";
 import { TransactionLink } from "./transaction-link";
-import { CreatePlan, type CreationReceipt } from "./create-plan";
+import { CreatePlan } from "./create-plan";
 import { CreationResult } from "./creation-result";
 import { PlanForm } from "./plan-form";
 import { PlanManagement, Suggestions } from "./management";
 import {
   type Category,
+  type CreationReceipt,
   type Filters,
   type Occurrence,
   type Plan,
@@ -116,6 +117,7 @@ const Editor = ({
     return (
       <CreationResult
         receipt={panel}
+        month={Option.none()}
         minimumRevision={view.document.revision}
         categories={categories}
         disabled={disabled}

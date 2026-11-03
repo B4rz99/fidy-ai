@@ -1514,8 +1514,37 @@ test("finds and reviews an older recurring Transaction across 500 records before
         )
       );
       yield* reviewOlderTransaction(page);
+      yield* inspectLargeReview(page);
     })
   ));
+const inspectLargeReview = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular transacción existente", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Buscar transacción", { exact: true }).fill("Importe extenso")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Buscar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: /Revisar Importe extenso/u }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.evaluate(() => {
+        document.documentElement.style.fontSize = "200%";
+      })
+    );
+    const dialog = page.getByRole("dialog");
+    yield* Effect.tryPromise(() => expect(dialog).toContainText("9.007.199.254.740.993,15"));
+    const noOverflow = (): Promise<boolean> =>
+      dialog.evaluate((element) => element.scrollWidth <= element.clientWidth);
+    yield* Effect.tryPromise(() => expect.poll(noOverflow).toBe(true));
+    yield* Effect.tryPromise(() =>
+      page.screenshot({ path: test.info().outputPath("transaction-link-large-mobile.png") })
+    );
+  });
 const reviewOlderTransaction = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() =>

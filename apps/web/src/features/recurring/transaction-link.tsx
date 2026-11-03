@@ -86,7 +86,7 @@ const LinkReview = ({
   clear,
   notice,
 }: ReviewProps): JSX.Element => (
-  <div className="grid gap-5">
+  <div className="grid min-w-0 gap-5 [overflow-wrap:anywhere]">
     <div className="flex items-center justify-between gap-3">
       <h2 className="text-lg font-semibold">Revisar vínculo</h2>
       {Option.isSome(selected) ? (
@@ -117,7 +117,7 @@ const LinkReview = ({
   </div>
 );
 const OccurrenceSummary = ({ item }: Pick<Props, "item">): JSX.Element => (
-  <div className="grid gap-2 border-b pb-6">
+  <div className="grid min-w-0 gap-2 border-b pb-6">
     <p className="text-xs text-muted-foreground">
       Ocurrencia de{" "}
       {DateTime.format(DateTime.makeUnsafe(`${item.date}T12:00:00Z`), {

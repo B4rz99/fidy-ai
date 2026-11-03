@@ -107,6 +107,7 @@ const LinkAction = ({
         </p>
       ) : null}
       <Button
+        contentLayout="wrap"
         disabled={disabled || blocked || !compatible}
         onClick={() => save(associateTransaction({ item, transaction, ...association }))}
       >
@@ -119,12 +120,12 @@ const CandidateDetails = ({
   transaction,
   timeZone,
 }: Readonly<{ transaction: Transaction; timeZone: string }>): JSX.Element => (
-  <div className="border-b pb-5">
+  <div className="min-w-0 border-b pb-5 [overflow-wrap:anywhere]">
     <p className="text-xs text-muted-foreground">Transacción seleccionada</p>
     <h3 className="mt-3 font-semibold">
       {Option.getOrElse(transaction.counterparty, () => "Contraparte no identificada")}
     </h3>
-    <p className="my-3 text-2xl font-semibold tabular-nums">
+    <p className="my-3 min-w-0 text-2xl font-semibold tabular-nums">
       {transaction.direction === "inflow" ? "+" : "−"}
       {money(transaction.money)}
     </p>

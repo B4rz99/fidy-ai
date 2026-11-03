@@ -1,0 +1,32 @@
+.patterns/dnd-kit.md
+  s_91998bb4981fd3::t_91b01fba1fb814 115,145,178,189
+  s_91998bb4981fd3::t_fd738c0b578f30 184-185
+apps/web/src/features/dashboard/drag-adapter.tsx
+  s_91998bb4981fd3::t_91b01fba1fb814 33,71
+apps/web/src/features/dashboard/FEATURE.md
+  s_91998bb4981fd3::t_d5506b8805dafe 62
+  s_91998bb4981fd3::t_91b01fba1fb814 83
+  s_91998bb4981fd3::t_509299fe5d6270 50,113,120
+DESIGN.md
+  s_91998bb4981fd3::t_e14b319097264b 769
+apps/web/e2e/dashboard-core.spec.ts
+  s_91998bb4981fd3::t_d5506b8805dafe 188
+apps/web/src/features/dashboard/drag-adapter.test.ts
+  s_91998bb4981fd3::t_91b01fba1fb814 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "18ed5b432f77edc676f6734ffea71c283670e3b8",
+  "prompts": {},
+  "sessions": {
+    "s_91998bb4981fd3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19edb-cdfc-7620-8287-c820e952e160",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

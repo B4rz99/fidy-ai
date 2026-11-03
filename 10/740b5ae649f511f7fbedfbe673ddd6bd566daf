@@ -1,0 +1,55 @@
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_12ede6869163f4::t_d5d217b5cc7642 58,339-376,380,386,389-391,394,400-411,414-415,417-431,442-473
+  s_12ede6869163f4::t_e53d471687fd47 564-566
+  s_12ede6869163f4::t_db73bd9893a8ba 52,377-379,381-385,387-388,395-397,399,474-475
+  s_12ede6869163f4::t_26f42eb751b8dd 477,481-538,540,544-563,567-586
+  s_12ede6869163f4::t_03dc80da841d70 432-441
+  s_12ede6869163f4::t_2d09d22202d03b 398
+  s_12ede6869163f4::t_28ad027f0749b8 5,392-393,412-413,416,476,478-480,539,541-543
+apps/server/cloudflare/budgets/internal/workspace-read.ts
+  s_12ede6869163f4::t_2d09d22202d03b 12,19-22,31-39,41-51,57-59,61-65,67
+  s_12ede6869163f4::t_35888dd5617235 1-10,14-18,23-27,29-30,52-56,60,66,68
+  s_12ede6869163f4::t_0dff3e641b7efa 11,13,28,40
+apps/server/cloudflare/budgets/internal/planned-caps.ts
+  s_12ede6869163f4::t_2773aa87a08946 1-48
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_12ede6869163f4::t_0dff3e641b7efa 223-239
+  s_12ede6869163f4::t_636f45031b5cfc 240-249
+apps/server/cloudflare/transactions/operations.ts
+  s_12ede6869163f4::t_0dff3e641b7efa 29,202-204
+  s_12ede6869163f4::t_28ce5dfa19c52b 205
+BACKEND_PERFORMANCE_PLAN.md
+  s_12ede6869163f4::t_70f800457ee59a 152-168
+  s_12ede6869163f4::t_a19b63010ae60a 1-79,81,84,87,89,91,93,95,97,99-151
+  s_12ede6869163f4::t_cbcaa272fabb87 80,82-83,85-86,88,90,92,94,96,98
+apps/server/cloudflare/budgets/internal/monthly-cash-flow.ts
+  s_12ede6869163f4::t_e4d02b47bbb0e6 2,9,19-20,22-27,29-39,41-42,46-49,55
+  s_12ede6869163f4::t_2d09d22202d03b 28,50-54,56-62
+apps/server/cloudflare/budgets/operations.ts
+  s_12ede6869163f4::t_2773aa87a08946 24,43-44,629-630
+  s_12ede6869163f4::t_2d09d22202d03b 42,584-591,623
+infra/cloudflare/verify-edge-policy.ts
+  s_12ede6869163f4::t_e53d471687fd47 7-24
+  s_12ede6869163f4::t_bf454004990856 5
+apps/server/ARCHITECTURE.md
+  s_12ede6869163f4::t_79ed7cf1504da6 75-78
+apps/server/cloudflare/budgets/internal/budget-report.ts
+  s_12ede6869163f4::t_2d09d22202d03b 31-33,45-46
+  s_12ede6869163f4::t_35888dd5617235 1-30,34-44,47-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "10740b5ae649f511f7fbedfbe673ddd6bd566daf",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

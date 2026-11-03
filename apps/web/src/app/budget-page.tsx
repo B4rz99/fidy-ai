@@ -1,9 +1,9 @@
 import type { JSX } from "react";
 import { BudgetsFeature } from "@/features/budgets/feature";
-import { DestinationCodePreload } from "./destination-code-preload";
+import { DestinationPreload } from "./destination-preload";
 
 export const BudgetPage = (): JSX.Element => (
   <BudgetsFeature>
-    <DestinationCodePreload />
+    <DestinationPreload />
   </BudgetsFeature>
 );

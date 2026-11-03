@@ -9,12 +9,72 @@ import {
 } from "effect/http";
 import { expect, it } from "@effect/vitest";
 import { vi } from "vitest";
+import { TestClock } from "effect/testing";
 import {
   bindBrowserSession,
+  browserRequestsIdle,
   coordinateBrowserRequests,
   loadBrowserSessionBinding,
 } from "./session-binding";
 import { browserHttpClientLayer } from "./browser-http-policy";
+
+for (const interrupted of [false, true]) {
+  it.effect(
+    `keeps speculative work out of retry pacing and releases activity after ${interrupted ? "cancellation" : "completion"}`,
+    () => {
+      const lifetime = new AbortController();
+      return Effect.gen(function* () {
+        let attempts = 0;
+        const started = yield* Deferred.make<void>();
+        const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
+          attempts += 1;
+          yield* Deferred.succeed(started, undefined);
+          return HttpClientResponse.fromWeb(
+            request,
+            attempts === 1
+              ? Response.json(
+                  { error: { code: "rate_limited", message: "Retry later." }, next: [] },
+                  { status: 429, headers: { "retry-after": "1" } }
+                )
+              : Response.json({})
+          );
+        });
+        const transport = HttpClient.makeWith<
+          HttpClientError.HttpClientError,
+          never,
+          HttpClientError.HttpClientError,
+          never
+        >(Effect.flatMap(respond), Effect.succeed);
+        const services = yield* Layer.build(
+          bindBrowserSession({
+            transport: Layer.succeed(HttpClient.HttpClient, transport).pipe(
+              browserHttpClientLayer("canonical", "https://api.test.fidyapp.com")
+            ),
+            lifetime: { binding: "session-a", signal: lifetime.signal, recheck: vi.fn() },
+          })
+        );
+        expect(browserRequestsIdle(lifetime.signal)).toBe(true);
+        const work = yield* Effect.forkChild(
+          Context.get(services, HttpClient.HttpClient).get(
+            "https://api.test.fidyapp.com/categories"
+          )
+        );
+        yield* Deferred.await(started);
+        yield* TestClock.adjust("1 millis");
+        expect(browserRequestsIdle(lifetime.signal)).toBe(false);
+        expect(attempts).toBe(1);
+        if (interrupted) {
+          yield* Fiber.interrupt(work);
+        } else {
+          yield* TestClock.adjust("1 second");
+          expect((yield* Fiber.join(work)).status).toBe(200);
+          expect(attempts).toBe(2);
+        }
+        expect(browserRequestsIdle(lifetime.signal)).toBe(true);
+      }).pipe(Effect.scoped);
+    }
+  );
+}
 
 for (const aborted of [false, true]) {
   it.effect(

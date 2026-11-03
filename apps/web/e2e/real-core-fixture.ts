@@ -431,6 +431,7 @@ export const signInRecurringNativeClockThroughCore = (
 type NavigationFixture = SignInFixture &
   Readonly<{
     identity:
+      | "navigationPayment"
       | "navigationOAuthLoading"
       | "navigationOAuthUnavailable"
       | "navigationOAuthSignedOut"

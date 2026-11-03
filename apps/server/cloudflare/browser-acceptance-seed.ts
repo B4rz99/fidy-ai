@@ -63,6 +63,7 @@ export const recurringIsolatedIdentities = [
   { key: "recurringPagination", userId: "24000000-0000-4000-8000-000000000551" },
 ] as const;
 export const navigationIdentities = [
+  { key: "navigationPayment", userId: "24000000-0000-4000-8000-000000001991" },
   { key: "navigationOAuthLoading", userId: "24000000-0000-4000-8000-000000000751" },
   { key: "navigationOAuthUnavailable", userId: "24000000-0000-4000-8000-000000000761" },
   { key: "navigationOAuthSignedOut", userId: "24000000-0000-4000-8000-000000000771" },

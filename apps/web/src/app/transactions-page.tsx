@@ -1,7 +1,7 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
 import { transactionEntryConsent } from "@/session/transaction-entry";
-import { DestinationCodePreload } from "./destination-code-preload";
+import { DestinationPreload } from "./destination-preload";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -38,7 +38,7 @@ export const TransactionsPage = (): JSX.Element => {
       return (
         <SignedInContent>
           <TransactionListFeature>
-            <DestinationCodePreload />
+            <DestinationPreload />
           </TransactionListFeature>
           <HostedAgentFeature />
         </SignedInContent>

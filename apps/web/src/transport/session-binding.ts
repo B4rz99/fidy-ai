@@ -25,6 +25,33 @@ export type BrowserSessionLifetime = Readonly<{
 
 const concurrentRequests = 2;
 const requestPermits = new WeakMap<AbortSignal, Semaphore.Semaphore>();
+const requestActivity = new WeakMap<AbortSignal, { pending: number }>();
+const activityFor = (signal: AbortSignal): { pending: number } => {
+  const existing = requestActivity.get(signal);
+  if (existing !== undefined) return existing;
+  const activity = { pending: 0 };
+  requestActivity.set(signal, activity);
+  return activity;
+};
+/** Logical requests include queued transfers and retry pacing, not only occupied network permits. */
+export const browserRequestsIdle = (signal: AbortSignal): boolean =>
+  activityFor(signal).pending === 0;
+const trackRequestActivity = <A, E, R>(
+  signal: AbortSignal,
+  work: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> => {
+  const activity = activityFor(signal);
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      activity.pending += 1;
+    }),
+    () => work,
+    () =>
+      Effect.sync(() => {
+        activity.pending -= 1;
+      })
+  );
+};
 const permitsFor = (signal: AbortSignal): Semaphore.Semaphore => {
   const existing = requestPermits.get(signal);
   if (existing !== undefined) return existing;
@@ -183,12 +210,15 @@ export const bindBrowserSession = ({
             if (lifetime.signal.aborted) {
               return Effect.fail(closedFailure());
             }
-            return client
-              .postprocess(request)
-              .pipe(
-                Effect.raceFirst(lifetimeEnded(lifetime.signal)),
-                Effect.flatMap(acceptResponse(lifetime))
-              );
+            return trackRequestActivity(
+              lifetime.signal,
+              client
+                .postprocess(request)
+                .pipe(
+                  Effect.raceFirst(lifetimeEnded(lifetime.signal)),
+                  Effect.flatMap(acceptResponse(lifetime))
+                )
+            );
           }),
         (request) =>
           client.preprocess(

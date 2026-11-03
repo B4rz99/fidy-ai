@@ -32,7 +32,7 @@ const modelFailureCodes: Readonly<
   ActiveRequestCapacityExceeded: "capacity_exceeded",
   InvalidOutput: "model_response_rejected",
   ProviderUnavailable: "model_unavailable",
-  ProviderQuotaExceeded: "capacity_exceeded",
+  ProviderQuotaExceeded: "model_provider_quota_exceeded",
   ResourceLimit: "capacity_exceeded",
   AdmissionUnavailable: "model_unavailable",
   StructuredOutputExceeded: "model_response_rejected",

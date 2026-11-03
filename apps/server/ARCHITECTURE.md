@@ -217,6 +217,11 @@ copied or invented command cannot be presented as approval for a new operation.
 WhatsApp may repair one invalid model output after successful queries, retaining their tool results
 and remaining call budget. Repair is unavailable once a mutation has started; it cannot replay
 owner effects or replace host confirmation.
+When inference is refused by provider quota or availability before any mutation attempt, WhatsApp
+stages one fixed failure reply through its ordinary delivery evidence. It makes no result or commit
+claim and waits for verified delivery before completing the Turn. Provider failures remain separately
+classified in metadata-only telemetry; failure after a mutation attempt retains its existing recovery
+path without substituting a generic reply for an uncertain outcome.
 
 See [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md).
 

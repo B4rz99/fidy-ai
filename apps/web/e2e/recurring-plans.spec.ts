@@ -17,6 +17,7 @@ const paymentJourneyMilliseconds = 60000;
 const paymentAssertionMilliseconds = 20000;
 const expectPayment = expect.configure({ timeout: paymentAssertionMilliseconds });
 test.describe.configure({ mode: "parallel", timeout: paymentJourneyMilliseconds });
+test.use({ timezoneId: "America/Bogota" });
 const rateLimitedStatus = 429;
 const monthsPerYear = 12;
 const desktopLifecycleWidth = 1506;
@@ -894,6 +895,296 @@ test("one-occurrence edits stay local and forward edits preserve earlier monthly
     })
   ));
 
+test("forward edits explain a preserved occurrence before saving and confirm the applied scope", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringScope",
+        })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* createPlan({
+        page,
+        name: "Plan protegido",
+        kind: "expense",
+        currency: "COP",
+        amount: "120000",
+      });
+      yield* editExpectedPlan(page, {
+        current: "Plan protegido",
+        name: "Plan protegido",
+        amount: "90000",
+        scope: "Solo esta vez",
+      });
+      yield* prepareFutureOverride(page);
+      yield* Effect.tryPromise(() => recurringItem(page, /Plan protegido/u).click());
+      yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar plan", exact: true }).click()
+      );
+      const guidance = page.getByRole("region", { name: "Alcance del cambio", exact: true });
+      yield* Effect.tryPromise(() => expect(guidance).toContainText("Esta fecha conserva"));
+      yield* Effect.tryPromise(() => expect(guidance).toContainText("90.000,00"));
+      yield* Effect.tryPromise(() => expect(guidance).toContainText("ajuste individual"));
+      yield* Effect.tryPromise(() =>
+        expect(guidance).toContainText("aunque no aparezcan en esta lista")
+      );
+      yield* Effect.tryPromise(() => expect(guidance).toContainText("2026-11-30"));
+      yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill("110000"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText("2026-10-31 conserva sus ajustes")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Plan protegido/u)).toContainText("90.000,00")
+      );
+      yield* inspectScopeFuture(page);
+      yield* expectNoTransactions(page.request);
+    })
+  ));
+
+test("forward schedule edits explain that an unprotected selected date can stop being generated", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({
+          page,
+          request,
+          deferFreshEntry: true,
+          identity: "recurringScopeSchedule",
+        })
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* createPlan({
+        page,
+        name: "Plan reprogramado",
+        kind: "expense",
+        currency: "COP",
+        amount: "120000",
+      });
+      yield* Effect.tryPromise(() => recurringItem(page, /Plan reprogramado/u).click());
+      yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Esta y próximas", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => chooseDate(page, "Primera fecha", "2026-11-15"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Alcance del cambio" })).toContainText(
+          "puede dejar de generarse"
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText("siguen el calendario guardado")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Plan reprogramado/u)).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-11"));
+      yield* Effect.tryPromise(() =>
+        expect(recurringItem(page, /Plan reprogramado/u)).toContainText("15")
+      );
+    })
+  ));
+
+for (const { adjusted, restored } of [
+  { adjusted: false, restored: false },
+  { adjusted: true, restored: false },
+  { adjusted: false, restored: true },
+]) {
+  const originalAmount = adjusted ? "90.000,00" : "120.000,00";
+  test(`forward edits explain partial tracking with individual adjustment: ${adjusted}, restored: ${restored}`, ({
+    page,
+    request,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* prepareScopePartial(page, request, { adjusted, restored });
+        yield* Effect.tryPromise(() => recurringItem(page, /Plan parcial/u).click());
+        yield* Effect.tryPromise(() =>
+          page.getByText("Editar recurrente", { exact: true }).click()
+        );
+        const guidance = page.getByRole("region", { name: "Alcance del cambio", exact: true });
+        yield* Effect.tryPromise(() =>
+          expect(guidance).toContainText("no elimina transacciones ni revierte pagos reales")
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel("Importe", { exact: true })).toBeDisabled()
+        );
+        yield* Effect.tryPromise(() =>
+          page
+            .getByRole("button", {
+              name: restored ? "Esta y próximas" : "Actualizar plan",
+              exact: true,
+            })
+            .click()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(guidance).toContainText(
+            restored ? "se volvió a incluir" : "seguimiento registrado"
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          expect(guidance).toContainText(adjusted ? "90.000,00" : "120.000,00")
+        );
+        if (adjusted) yield* inspectScopeLayout(page);
+        yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill("110000"));
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Guardar", exact: true }).click()
+        );
+        yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("status")).toContainText(
+            restored ? "se volvieron a incluir" : "2026-10-31 conserva sus ajustes"
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          expect(recurringItem(page, /Plan parcial/u)).toContainText(
+            restored ? "110.000,00" : originalAmount
+          )
+        );
+        yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-11"));
+        yield* Effect.tryPromise(() =>
+          expect(recurringItem(page, /Plan parcial/u)).toContainText("110.000,00")
+        );
+        yield* inspectCapturedTransactions(page.request, [
+          expect.objectContaining({ money: { amount: "45000", currency: "COP" } }),
+        ]);
+      })
+    ));
+}
+
+const inspectScopeLayout = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("region", { name: "Alcance del cambio" }).scrollIntoViewIfNeeded()
+    );
+    yield* Effect.tryPromise(() =>
+      page.screenshot({ path: test.info().outputPath("edit-scope-desktop.png") })
+    );
+    yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("region", { name: "Alcance del cambio" }).scrollIntoViewIfNeeded()
+    );
+    yield* Effect.tryPromise(() =>
+      page.screenshot({ path: test.info().outputPath("edit-scope-mobile.png") })
+    );
+    const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
+    expect(accessibility.violations).toEqual([]);
+  });
+
+const prepareScopePartial = (
+  page: Page,
+  request: APIRequestContext,
+  { adjusted, restored }: Readonly<{ adjusted: boolean; restored: boolean }>
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const identity = adjusted ? "recurringScopeAdjusted" : "recurringScopePartial";
+    yield* Effect.tryPromise(() =>
+      signInRecurringThroughCore({
+        page,
+        request,
+        deferFreshEntry: true,
+        identity: restored ? "recurringScopeRestored" : identity,
+      })
+    );
+    yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+    yield* createPlan({
+      page,
+      name: "Plan parcial",
+      kind: "expense",
+      currency: "COP",
+      amount: "120000",
+    });
+    if (adjusted) {
+      yield* editExpectedPlan(page, {
+        current: "Plan parcial",
+        name: "Plan parcial",
+        amount: "90000",
+        scope: "Solo esta vez",
+      });
+    }
+    if (restored) yield* restoreScopeOccurrence(page);
+    yield* captureScopePartial(page);
+  });
+
+const restoreScopeOccurrence = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => recurringItem(page, /Plan parcial/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Omitir esta vez", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+    yield* Effect.tryPromise(() => recurringItem(page, /Plan parcial/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Volver a incluir", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
+  });
+
+const prepareFutureOverride = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-11"));
+    yield* editExpectedPlan(page, {
+      current: "Plan protegido",
+      name: "Plan protegido",
+      amount: "100000",
+      scope: "Solo esta vez",
+    });
+    yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+  });
+
+const inspectScopeFuture = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-11"));
+    yield* Effect.tryPromise(() =>
+      expect(recurringItem(page, /Plan protegido/u)).toContainText("100.000,00")
+    );
+    yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-12"));
+    yield* Effect.tryPromise(() =>
+      expect(recurringItem(page, /Plan protegido/u)).toContainText("110.000,00")
+    );
+  });
+
+const captureScopePartial = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => recurringItem(page, /Plan parcial/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => chooseOption(page, "Categoría", "Restaurantes"));
+    yield* captureSplitPayment(page, "45000", false);
+  });
+
+const expectNoTransactions = (
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    const history = yield* probeCanonicalRequest({
+      request,
+      send: () => boundSessionRequests(request).get(`${apiOrigin}/transactions`),
+    });
+    expect(history.status()).toBe(successStatus);
+    const body: unknown = yield* Effect.tryPromise(() => history.json());
+    expect(body).toMatchObject({ data: [] });
+  });
+
 const editExpectedPlan = (
   page: Page,
   {
@@ -907,6 +1198,13 @@ const editExpectedPlan = (
     yield* Effect.tryPromise(() => recurringItem(page, new RegExp(current, "u")).click());
     yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
     yield* Effect.tryPromise(() => page.getByRole("button", { name: scope, exact: true }).click());
+    if (scope === "Esta y próximas") {
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("region", { name: "Alcance del cambio" })).toContainText(
+          "Esta fecha no tiene ajustes ni seguimiento protegidos"
+        )
+      );
+    }
     yield* Effect.tryPromise(() => page.getByLabel("Nombre", { exact: true }).fill(name));
     yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill(amount));
     yield* Effect.tryPromise(() =>
@@ -1363,7 +1661,7 @@ const editTrackedPlan = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
     yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Esta y próximas", exact: true }).click()
+      page.getByRole("button", { name: "Actualizar plan", exact: true }).click()
     );
     yield* Effect.tryPromise(() => page.getByLabel("Nombre", { exact: true }).fill("Pago futuro"));
     yield* Effect.tryPromise(() => chooseOption(page, "Tipo de importe", "Fijo"));
@@ -1412,7 +1710,7 @@ const inspectBlockedOccurrence = (page: Page): Effect.Effect<void, Cause.Unknown
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
     const once = page.getByRole("button", { name: "Solo esta vez", exact: true });
-    const forward = page.getByRole("button", { name: "Esta y próximas", exact: true });
+    const forward = page.getByRole("button", { name: "Actualizar plan", exact: true });
     yield* Effect.tryPromise(() => expect(once).toHaveAttribute("aria-pressed", "true"));
     yield* Effect.tryPromise(() =>
       expect(once).toHaveAccessibleDescription(/Esta fecha ya tiene seguimiento registrado/u)
@@ -1431,7 +1729,7 @@ const inspectBlockedOccurrence = (page: Page): Effect.Effect<void, Cause.Unknown
     );
     yield* Effect.tryPromise(() => forward.click());
     yield* Effect.tryPromise(() =>
-      expect(forward).toHaveAccessibleDescription(/Las fechas con seguimiento conservan sus datos/u)
+      expect(forward).toHaveAccessibleDescription(/Esta fecha conserva/u)
     );
     yield* Effect.tryPromise(() =>
       expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeEnabled()

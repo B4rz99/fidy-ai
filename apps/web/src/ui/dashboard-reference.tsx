@@ -127,15 +127,16 @@ export const DashboardReference = (): JSX.Element => (
   </section>
 );
 
+const budgetOptions = [
+  { value: "usd", label: "Restaurantes · USD" },
+  { value: "cop", label: "Mercado · COP" },
+];
+
 const BudgetConfigurationReference = (): JSX.Element => {
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState("usd");
   const [saved, setSaved] = useState("Restaurantes · COP");
   const id = useId();
-  const options = [
-    { value: "usd", label: "Restaurantes · USD" },
-    { value: "cop", label: "Mercado · COP" },
-  ];
   return (
     <div className="grid justify-items-start gap-3">
       <p>Configuración de ejemplo: {saved}</p>
@@ -147,7 +148,7 @@ const BudgetConfigurationReference = (): JSX.Element => {
           className="grid gap-6"
           onSubmit={(event) => {
             event.preventDefault();
-            setSaved(options.find(({ value }) => value === target)?.label ?? saved);
+            setSaved(budgetOptions.find(({ value }) => value === target)?.label ?? saved);
             setOpen(false);
           }}
         >
@@ -157,7 +158,7 @@ const BudgetConfigurationReference = (): JSX.Element => {
               id={id}
               label="Presupuesto"
               value={target}
-              options={options}
+              options={budgetOptions}
               disabled={false}
               width="full"
               leading={null}

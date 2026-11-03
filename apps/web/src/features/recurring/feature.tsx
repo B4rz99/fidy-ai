@@ -75,16 +75,7 @@ const Resources = (props: Props): JSX.Element => {
         key={`${props.month}:${JSON.stringify(props.filters)}:${Option.getOrElse(props.previous, () => "")}`}
         calendar={calendar}
         setCalendar={setCalendar}
-        notice={
-          <SaveNotice
-            stale={planning.stale}
-            saveState={planning.saveState}
-            confirmation={planning.confirmation}
-            editConfirmation={planning.editConfirmation}
-            waiting={waiting}
-            retry={retry}
-          />
-        }
+        notice={<SaveNotice {...planning} />}
         tab={tab}
         setTab={setTab}
         readState={waiting ? "refreshing" : readState}

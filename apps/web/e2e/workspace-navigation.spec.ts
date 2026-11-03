@@ -307,6 +307,7 @@ const recordSamples = (
   development: number
 ): Promise<void> => {
   const median = samples.toSorted((left, right) => left - right)[Math.floor(samples.length / 2)];
+  if (median === undefined) throw new Error("A navigation benchmark needs at least one sample");
   return test
     .info()
     .attach("workspace-switch-duration", {

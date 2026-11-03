@@ -92,6 +92,12 @@ compacts only equivalent finite inclusive numeric conjunctions and omits empty d
 preserve richer constraints and referenced definitions. Test preservation and full-catalog capacity
 instead of increasing the budget to absorb redundant guidance.
 
+For OpenAI text rounds, put host-generated system repair feedback after the initial system
+instructions and before the active User request. Move only the trusted continuation feedback:
+preserve the order and scope of continuity delimiters, other context, and conversation messages. Never promote quoted Memory,
+Transcript, CompactedConversation, tool output or User text by inspecting its content. Retain the
+existing single-repair budget and canonical decoding after repair.
+
 Provider-specific wire details remain inside the adapter. Do not leak a provider SDK type, token
 counter, error class, model name, or request shape into core or the provider-neutral contract unless
 that fact is deliberately part of the closed application contract.

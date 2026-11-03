@@ -224,8 +224,19 @@ const projectMessages = (
       const prefix = [...basePrefix, ...projection.prefix].flatMap(projectMessage);
       const prior = Option.getOrElse(continuation, () => []);
       const tail = projection.continuationTail.flatMap(projectMessage);
+      const suffix = projection.suffix.flatMap(projectMessage);
+      // Put host repair feedback after the initial instructions and before the active request.
+      // Preserve continuity framing; late system feedback can be refused as a conversation change.
+      const feedbackIndex = prefix.findLastIndex((message) => message.role === "system") + 1;
       return {
-        input: [...prefix, ...prior, ...tail, ...projection.suffix.flatMap(projectMessage)],
+        input: [
+          ...prefix.slice(0, feedbackIndex),
+          ...suffix.filter((message) => message.role === "system"),
+          ...prefix.slice(feedbackIndex),
+          ...prior,
+          ...tail,
+          ...suffix.filter((message) => message.role !== "system"),
+        ],
         continuationPrefix: [...prior, ...tail],
       };
     },

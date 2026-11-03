@@ -104,8 +104,10 @@ it.effect("preserves hostile Memory as quoted data and identifies supplied evide
       ...initialContext("Resume las fuentes suministradas sin usar herramientas."),
       sections: [
         ...initialContext().sections,
+        { _tag: "ContinuityBoundary", boundary: "open" },
         { _tag: "Memory", text: hostile },
         { _tag: "CompactedConversation", text: "El Usuario mencionó un Budget." },
+        { _tag: "ContinuityBoundary", boundary: "close" },
       ],
     });
     const prepared = yield* inference.prepareText({
@@ -120,6 +122,23 @@ it.effect("preserves hostile Memory as quoted data and identifies supplied evide
         typeof message.content === "string" && message.content.startsWith('{"source":"memory"')
     );
     expect(memory?.role).toBe("user");
+    const memoryIndex = messages.findIndex((message) => message === memory);
+    expect(
+      messages.findIndex(
+        (message) =>
+          message.role === "system" &&
+          typeof message.content === "string" &&
+          message.content.startsWith("[UNTRUSTED_CONTINUITY]")
+      )
+    ).toBeLessThan(memoryIndex);
+    expect(
+      messages.findIndex(
+        (message) =>
+          message.role === "system" &&
+          typeof message.content === "string" &&
+          message.content.startsWith("[/UNTRUSTED_CONTINUITY]")
+      )
+    ).toBeGreaterThan(memoryIndex);
     expect(
       typeof memory?.content === "string"
         ? yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(memory.content)
@@ -694,7 +713,81 @@ it.effect("preserves provider continuation across repeated bounded rounds", () =
         }),
       ])
     );
+    const correction = binding.calls[1]?.request.messages ?? [];
+    const feedbackIndex = correction.findIndex(
+      (message) =>
+        message.role === "system" && message.content === "Answer with the corrected shape."
+    );
+    const userIndex = correction.findIndex((message) => message.role === "user");
+    expect(feedbackIndex).toBeGreaterThanOrEqual(0);
+    expect(feedbackIndex).toBe(userIndex - 1);
+    expect(correction.slice(userIndex).map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
   })
+);
+
+it.effect(
+  "repairs malformed tool arguments once using the original request and canonical decoder",
+  () =>
+    Effect.gen(function* () {
+      const binding = captureRun(() =>
+        Promise.resolve(
+          completed({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "call-repair",
+                      type: "function",
+                      function: {
+                        name: "transactions__listTransactions",
+                        arguments: binding.calls.length === 1 ? "{" : '{"query":{}}',
+                      },
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
+              },
+            ],
+          })
+        )
+      );
+      const inference = yield* makeConfiguredInference(binding.run);
+      const prepared = yield* inference.prepareText({
+        context: initialContext("Lista mis transacciones sin filtros."),
+        availableOperations: [CanonicalOperationId.make("transactions.listTransactions")],
+        toolChoice: "auto",
+        maximumToolCalls: HostedToolCallMaximum.make(1),
+      });
+      assertHostedFailure(
+        yield* Effect.exit(prepared.execute),
+        hostedFailure({ _tag: "InvalidOutput", description: "Hosted tool arguments were invalid" })
+      );
+      const repaired = yield* prepared.repairInvalidOutput;
+      const result = yield* repaired.execute;
+      expect(result.toolCalls).toEqual([
+        {
+          id: "call-repair",
+          operation: "transactions.listTransactions",
+          params: { query: {} },
+        },
+      ]);
+      const messages = binding.calls[1]?.request.messages ?? [];
+      expect(messages.find((message) => message.role === "user")?.content).toContain(
+        "Lista mis transacciones sin filtros."
+      );
+      expect(messages.some((message) => message.role === "assistant")).toBe(false);
+      assertHostedFailure(
+        yield* Effect.exit(prepared.repairInvalidOutput),
+        hostedFailure({ _tag: "InvalidAuthority" })
+      );
+      expect(binding.calls).toHaveLength(2);
+    })
 );
 
 it.effect("continues a canonical operation with the matching tool result in OpenAI messages", () =>

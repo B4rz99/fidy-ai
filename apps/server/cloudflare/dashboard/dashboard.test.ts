@@ -1,5 +1,6 @@
 import { openAiTestKey } from "../openai.test-fixture";
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import {
   installTestSchema,
@@ -1867,6 +1868,264 @@ it("keeps the complete browser Dashboard journey within five fresh recovery-fenc
       expect(observed.roundTrips()).toBe(5);
       expect(generationReads).toBe(5);
       expect(observed.cost().rowsWritten).toBeLessThanOrEqual(19);
+    })
+  ));
+
+it("reads a complete thirty-day chart within six fresh recovery-fenced native units", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.setSystemTime(DateTime.makeUnsafe("2026-11-03T12:00:00Z").epochMilliseconds);
+      const raw = yield* setup();
+      const document = yield* Schema.decodeEffect(DashboardDocument)({
+        title: "Treinta días",
+        layout: {
+          kind: "leaf",
+          widget: {
+            id: "30000000-0000-4000-8000-000000000099",
+            type: "spending-chart",
+            groupBy: "day",
+            period: "last-30-days",
+          },
+        },
+      });
+      const encoded = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.toCodecJson(DashboardDocument))
+      )(document);
+      yield* Effect.tryPromise(() =>
+        raw
+          .prepare(
+            "INSERT INTO user_documents (kind,user_id,document_json,revision) VALUES ('dashboard',?,?,1)"
+          )
+          .bind(users[0], encoded)
+          .run()
+      );
+      const observed = observeRetentionCost(raw);
+      const { bucket } = yield* Effect.tryPromise(() => recoveryStorage.acquire());
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
+      const db = withErasureRecovery({
+        DB: observed.database,
+        ERASURE_REQUIRED: "true",
+        ERASURE_BUCKET: bucket,
+      }).DB;
+      const reply = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+      expect(reply.status).toBe(200);
+      const { data: view } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+      )(yield* Effect.tryPromise(() => reply.json()));
+      if (view.layout.kind !== "leaf" || !("buckets" in view.layout.widget.result)) {
+        throw new Error("Expected day chart");
+      }
+      expect(view.layout.widget.result.buckets).toEqual([]);
+      expect(observed.roundTrips()).toBeLessThanOrEqual(6);
+    })
+  ));
+
+it(
+  "bounds retained rows for a complete chart with dense Currency groups and long exact Money",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.setSystemTime(DateTime.makeUnsafe("2026-11-03T12:00:00Z").epochMilliseconds);
+        const raw = yield* setup();
+        const document = yield* Schema.decodeEffect(DashboardDocument)({
+          title: "Dinero exacto",
+          layout: {
+            kind: "leaf",
+            widget: {
+              id: "30000000-0000-4000-8000-000000000099",
+              type: "spending-chart",
+              groupBy: "day",
+              period: "last-30-days",
+            },
+          },
+        });
+        const encoded = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.toCodecJson(DashboardDocument))
+        )(document);
+        yield* Effect.tryPromise(() =>
+          raw
+            .prepare(
+              "INSERT INTO user_documents (kind,user_id,document_json,revision) VALUES ('dashboard',?,?,1)"
+            )
+            .bind(users[0], encoded)
+            .run()
+        );
+        yield* Effect.tryPromise(() =>
+          raw
+            .prepare(`INSERT INTO transactions
+      (id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
+      WITH RECURSIVE sequence(number) AS (SELECT 0 UNION ALL SELECT number+1 FROM sequence WHERE number<719)
+      SELECT printf('77700000-0000-4000-8000-%012d',number),?, ?,
+        CASE number%3 WHEN 0 THEN 'COP' WHEN 1 THEN 'USD' ELSE 'KWD' END,
+        CASE number%2 WHEN 0 THEN 'inflow' ELSE 'outflow' END,
+        printf('10000000-0000-4000-8000-%012d',1+number%16),
+        ?+(number/48)*86400000,? FROM sequence`)
+            .bind(
+              users[0],
+              `${"1".repeat(64)}.01`,
+              DateTime.makeUnsafe("2026-10-10T12:00:00Z").epochMilliseconds,
+              DateTime.makeUnsafe("2026-10-10T12:00:00Z").epochMilliseconds
+            )
+            .run()
+        );
+        let largestRead = 0;
+        let planningRowsRead = 0;
+        const db: D1Database = {
+          prepare: (sql) => raw.prepare(sql),
+          batch: <Row = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+            raw.batch<Row>(statements).then((rows) => {
+              if (
+                rows.some((row) =>
+                  Schema.is(Schema.Struct({ row_count: Schema.Int }))(row.results[0])
+                )
+              ) {
+                planningRowsRead += rows.reduce((count, row) => count + row.meta.rows_read, 0);
+              }
+              largestRead = Math.max(
+                largestRead,
+                rows.reduce((count, row) => count + row.results.length, 0)
+              );
+              return rows;
+            }),
+          exec: (sql) => raw.exec(sql),
+          withSession: (constraint) => raw.withSession(constraint),
+          dump: () => raw.dump(),
+        };
+        const reply = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+        expect(reply.status).toBe(200);
+        const { data: view } = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+        )(yield* Effect.tryPromise(() => reply.json()));
+        if (view.layout.kind !== "leaf" || !("buckets" in view.layout.widget.result)) {
+          throw new Error("Expected day chart");
+        }
+        const buckets = view.layout.widget.result.buckets;
+        expect(buckets).toHaveLength(15);
+        for (const bucket of buckets) {
+          expect(
+            bucket.moneyGroups.map((group) => ({
+              currency: group.currency,
+              inflow: encodeMoneyAmount(group.inflow.amount),
+              outflow: encodeMoneyAmount(group.outflow.amount),
+            }))
+          ).toEqual(
+            ["COP", "KWD", "USD"].map((currency) => ({
+              currency,
+              inflow: `${"8".repeat(64)}.08`,
+              outflow: `${"8".repeat(64)}.08`,
+            }))
+          );
+        }
+        expect(largestRead).toBeLessThanOrEqual(16_387);
+        expect(planningRowsRead).toBeLessThanOrEqual(100_000);
+      })
+    ),
+  60_000
+);
+
+const assertListSelection = (
+  node: DashboardView["layout"],
+  index: number,
+  firstId: string
+): void => {
+  if (node.kind !== "leaf" || !("transactions" in node.widget.result)) {
+    throw new Error("Expected Transaction list");
+  }
+  let pageSize = 50;
+  if (index === 21 || index === 22) pageSize = 0;
+  else if (index === 23) pageSize = 2;
+  expect(node.widget.result.transactions).toHaveLength(pageSize);
+  expect(node.widget.result.transactions.slice(0, 1).map(({ id }) => id)).toEqual(
+    pageSize === 0 ? [] : [firstId]
+  );
+};
+
+it("shares identical list selections within one fresh Dashboard request", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const raw = yield* setup();
+      const document = yield* Schema.decodeUnknownEffect(DashboardDocument)({
+        title: "Listas",
+        layout: {
+          kind: "split",
+          axis: "column",
+          children: Array.from({ length: 24 }, (_, index) => ({
+            weight: 1,
+            node: {
+              kind: "leaf",
+              widget: {
+                id: `33300000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+                type: "transaction-list",
+                limit: index === 23 ? 2 : 50,
+                ...(index === 21 ? { categories: ["10000000-0000-4000-8000-000000000002"] } : {}),
+                ...(index === 22 ? { search: "missing" } : {}),
+              },
+            },
+          })),
+        },
+      });
+      const encoded = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.toCodecJson(DashboardDocument))
+      )(document);
+      yield* Effect.tryPromise(() =>
+        raw
+          .prepare(
+            "INSERT INTO user_documents (kind,user_id,document_json,revision) VALUES ('dashboard',?,?,1)"
+          )
+          .bind(users[0], encoded)
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        raw
+          .prepare(`INSERT INTO transactions
+      (id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
+      WITH RECURSIVE sequence(number) AS (SELECT 0 UNION ALL SELECT number+1 FROM sequence WHERE number<249)
+      SELECT printf('77700000-0000-4000-8000-%012d',number),?, '0.01','COP','outflow',?, ?,? FROM sequence`)
+          .bind(
+            users[0],
+            "10000000-0000-4000-8000-000000000001",
+            DateTime.makeUnsafe("2026-11-01T12:00:00Z").epochMilliseconds,
+            DateTime.makeUnsafe("2026-11-01T12:00:00Z").epochMilliseconds
+          )
+          .run()
+      );
+      const observed = observeRetentionCost(raw);
+      const reply = yield* Effect.tryPromise(() => send(observed.database, 0, "/dashboard/view"));
+      expect(reply.status).toBe(200);
+      const { data: view } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+      )(yield* Effect.tryPromise(() => reply.json()));
+      if (view.layout.kind !== "split") throw new Error("Expected list layout");
+      expect(view.layout.children).toHaveLength(24);
+      for (const [index, { node }] of view.layout.children.entries()) {
+        assertListSelection(node, index, "77700000-0000-4000-8000-000000000249");
+      }
+      expect(observed.cost().rowsRead).toBeLessThanOrEqual(1024);
+      const captured = yield* Effect.tryPromise(() =>
+        send(raw, 0, {
+          path: "/transactions",
+          method: "POST",
+          body: {
+            money: { amount: "1", currency: "COP" },
+            direction: "outflow",
+            categoryId: "10000000-0000-4000-8000-000000000001",
+            occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+          },
+        })
+      );
+      expect(captured.status).toBe(201);
+      const { data: transaction } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
+      )(yield* Effect.tryPromise(() => captured.json()));
+      const fresh = yield* Effect.tryPromise(() => send(raw, 0, "/dashboard/view"));
+      expect(fresh.status).toBe(200);
+      const { data: next } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+      )(yield* Effect.tryPromise(() => fresh.json()));
+      if (next.layout.kind !== "split") throw new Error("Expected list layout");
+      for (const [index, { node }] of next.layout.children.entries()) {
+        assertListSelection(node, index, transaction.id);
+      }
     })
   ));
 

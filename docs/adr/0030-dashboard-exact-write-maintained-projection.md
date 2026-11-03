@@ -10,6 +10,24 @@ D1 triggers maintain one leaf per effective Transaction from the Transaction own
 
 Buckets use UTC, not a stored User-local calendar. On **every read**, Core resolves periods and day/month boundaries from the User's current IANA time zone to half-open UTC instants, including DST changes; the adapter composes full UTC-day buckets and at most two sets of minute fringes. Thus a time-zone change immediately changes the selected interval without invalidating contributions or requiring a backfill. The longest accepted period is at most 32 days; that bounds each view query independently of the User's lifetime history. List Widgets read the same effective leaves through User/recent and User/Category/recent indexes. A filtered list takes at most 50 indexed candidates per requested Category before merging; a search scans only that User's recent-index leaves, applying the exact accent-aware literal substring predicate before its limit of at most 50. This deliberately bounds work by the requesting User's history: common recent matches stop early, while rare or absent terms may visit the whole User-owned history. The previous global FTS candidate scan amplified other Users' matching notes; rowid-constrained FTS probes also amplified global posting-list CPU even when reported row reads stayed low. This predictable-cost tradeoff can make selective queries slower. The existing FTS5 trigram index, padded short-substring maintenance and migrations remain unchanged for a reversible query-only rollout, but this search no longer uses that index. Lists never supply financial totals. Retained FTS still adds write/storage cost, and D1 exports containing virtual tables require extra operational care; it is not the financial source of truth.
 
+Dashboard selects the unique intervals required by its current layout before reading financial facts.
+Its published Transaction snapshot reader accepts at most 128 intervals and 24 list pages. Selections
+of up to four intervals retain the small native snapshot path. Wider selections first count the
+retained bucket and digit rows in their bounded windows, establishing a projection revision. Those
+counts conservatively bound the rows returned after grouping. A native snapshot expands beyond four intervals only
+while its combined estimate is at most 16,384 rows; larger working sets retain the existing
+four-interval ceiling. Thus financial reads still need at most 32 native batches, preserving the
+Free invocation query budget and availability for individually large intervals. Bounded
+list pages and peer facts accompany the first financial snapshot. Each interval retains separate
+count/maximum and positional-digit statements; one batch is one protected trip, not one statement.
+Every snapshot checks current Consent, readiness, captured calendar interpretation and the same
+projection revision; disagreement with the plan or a later snapshot withholds the complete result.
+The encompassing coordinated query retains final live caller and required Audit accounting before
+disclosure. The general multi-period aggregate reader keeps its four-interval chunk protocol.
+Identical list selections (limit, Category sequence and search text) share one selected page within
+the request. Dashboard restores every Widget identity and position from that page; distinct
+selections remain separate. These working structures and decoded facts do not survive the request.
+
 ## Recovery and availability
 
 Migration 0020 backfills the effective relation before marking pre-existing Users ready; new Users start with an empty ready projection. Views require the exact supported version and a ready marker. Reconciliation decisions transiently mark a User `linking` and return to ready only after both members have been maintained (or both removed); direct incomplete changes cannot masquerade as a complete view.

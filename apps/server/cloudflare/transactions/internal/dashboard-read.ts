@@ -13,6 +13,7 @@ import {
   maximumAggregateRanges,
   projectionQueries,
   projectionRange,
+  projectionSizeQuery,
   revisionSelection,
 } from "./dashboard-projection";
 import { UserId } from "../../../src/core/identity/contract";
@@ -55,6 +56,80 @@ const prepareRanges = <A>(
   }
   return Option.all(input.ranges.map(projectionRange));
 };
+
+const combinedRowLimit = 16_384;
+const ProjectionSize = Schema.Struct({
+  row_count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+type RangePlan = Readonly<{
+  revision: Option.Option<number>;
+  groups: ReadonlyArray<ReadonlyArray<PreparedRange>>;
+}>;
+
+const groupRanges = (
+  ranges: ReadonlyArray<PreparedRange>,
+  sizes: ReadonlyArray<typeof ProjectionSize.Type>
+): ReadonlyArray<ReadonlyArray<PreparedRange>> => {
+  const groups: Array<ReadonlyArray<PreparedRange>> = [];
+  let selected: Array<PreparedRange> = [];
+  let rowCount = 0;
+  for (const [index, range] of ranges.entries()) {
+    const size = sizes[index];
+    if (size === undefined) return [];
+    if (
+      selected.length >= aggregateRangesPerBatch &&
+      rowCount + size.row_count > combinedRowLimit
+    ) {
+      groups.push(selected);
+      selected = [];
+      rowCount = 0;
+    }
+    selected.push(range);
+    rowCount += size.row_count;
+  }
+  if (selected.length > 0) groups.push(selected);
+  return groups;
+};
+
+const findRangePlan = <A>(
+  input: DashboardTransactionRead<A>
+): Effect.Effect<Option.Option<RangePlan>, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const prepared = prepareRanges(input);
+    if (Option.isNone(prepared)) return Option.none();
+    const ranges = prepared.value;
+    if (ranges.length <= aggregateRangesPerBatch) {
+      return Option.some({ revision: Option.none(), groups: [ranges] });
+    }
+    const { db, userId } = input;
+    const rows = yield* Effect.tryPromise(() =>
+      db.batch([
+        prepareConsentAction({
+          db,
+          subject: { _tag: "User", userId: UserId.make(userId) },
+          requirement: "unrevoked",
+          statement: revisionSelection(UserId.make(userId)),
+        }),
+        ...ranges.map((range) => projectionSizeQuery({ db, userId, range })),
+      ])
+    );
+    if (
+      rows.length !== 1 + ranges.length ||
+      rows.slice(1).some((row) => row.results.length !== 1)
+    ) {
+      return Option.none();
+    }
+    const state = decodeAggregateSnapshot({ rows: rows.slice(0, 1), count: 0 });
+    const sizes = Schema.decodeUnknownOption(Schema.Array(ProjectionSize))(
+      rows.slice(1).map((row) => row.results[0])
+    );
+    return Option.isNone(state) || Option.isNone(sizes)
+      ? Option.none()
+      : Option.some({
+          revision: Option.some(state.value.revision),
+          groups: groupRanges(ranges, sizes.value),
+        });
+  });
 
 const readChunk = <A>({
   input,
@@ -123,27 +198,23 @@ const decodeFirstChunk = <A>({
 
 /**
  * Read lists, exact ranges and owner facts under current Consent and one fact revision.
- * Each bounded chunk repeats the owner proof; any unavailable chunk withholds the whole read.
+ * Wider groups stay within a raw-row budget; larger working sets keep four-range chunks.
+ * Each group repeats the owner proof; a changed revision withholds the whole read.
  * The caller retains the same User's coordinator turn and supplies no reusable authority.
  */
 export const readDashboardTransactions = <A>(
   input: DashboardTransactionRead<A>
 ): Effect.Effect<Option.Option<DashboardTransactionSnapshot<A>>> =>
   Effect.gen(function* () {
-    const prepared = prepareRanges(input);
-    if (Option.isNone(prepared)) return Option.none();
+    const plan = yield* findRangePlan(input);
+    if (Option.isNone(plan)) return Option.none();
     let result = Option.none<DashboardTransactionSnapshot<A>>();
-    let revision = Option.none<number>();
-    // Empty range selections still read readiness, caller facts and bounded lists once.
-    for (
-      let offset = 0;
-      offset < Math.max(1, prepared.value.length);
-      offset += aggregateRangesPerBatch
-    ) {
+    let revision = plan.value.revision;
+    for (const [index, ranges] of plan.value.groups.entries()) {
       const chunk = yield* readChunk({
         input,
-        ranges: prepared.value.slice(offset, offset + aggregateRangesPerBatch),
-        first: offset === 0,
+        ranges,
+        first: index === 0,
       });
       if (
         Option.isNone(chunk) ||

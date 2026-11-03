@@ -49,7 +49,12 @@ test("incomplete pattern analysis explains automatic detection and an explicit s
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({ page, request, deferFreshEntry: true, identity: "recurring" })
+        signInRecurringThroughCore({
+          page,
+          request,
+          deferFreshEntry: true,
+          identity: "recurringSuggestionsPending",
+        })
       );
       let complete = false;
       const handler = (route: Route): Promise<void> =>
@@ -171,7 +176,7 @@ test("updating patterns stay visible and unavailable for decisions until a succe
           page,
           request,
           deferFreshEntry: true,
-          identity: "recurringSummary",
+          identity: "recurringSuggestionsUpdating",
         })
       );
       let outcome: Outcome = "updating";

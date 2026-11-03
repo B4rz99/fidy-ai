@@ -383,16 +383,22 @@ export const recurringMatchCandidates = ({
   );
   return pairs;
 };
+/** Count both sides once; ambiguity refuses the same pairs regardless of candidate ordering. */
 export const uniqueRecurringMatches = (
   pairs: ReadonlyArray<RecurringMatch>
-): ReadonlyArray<RecurringMatch> =>
-  pairs.filter(
-    (pair) =>
-      pairs.filter((entry) => entry.fact.id === pair.fact.id).length === 1 &&
-      pairs.filter(
-        (entry) => entry.item.planId === pair.item.planId && entry.item.date === pair.item.date
-      ).length === 1
+): ReadonlyArray<RecurringMatch> => {
+  const facts = new Map<string, number>();
+  const occurrences = new Map<string, number>();
+  const occurrenceKey = (item: RecurringOccurrence): string => `${item.planId}:${item.date}`;
+  for (const { item, fact } of pairs) {
+    facts.set(fact.id, (facts.get(fact.id) ?? 0) + 1);
+    const key = occurrenceKey(item);
+    occurrences.set(key, (occurrences.get(key) ?? 0) + 1);
+  }
+  return pairs.filter(
+    ({ item, fact }) => facts.get(fact.id) === 1 && occurrences.get(occurrenceKey(item)) === 1
   );
+};
 /** Deterministic effective-fact associations. Recalculation follows corrections without a query-side write. */
 export const proposeRecurringMatches = (
   input: Parameters<typeof recurringMatchCandidates>[0]

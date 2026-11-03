@@ -20,6 +20,7 @@ import {
   proposeRecurringMatches,
   readRecurringOccurrence,
   summarizeRecurring,
+  uniqueRecurringMatches,
   validAssociation,
   validRecurringFulfillment,
 } from "./operations";
@@ -1272,3 +1273,43 @@ it("does not automatically associate estimated Money even when the current estim
     })
   ).toBe(false);
 });
+
+it.each([false, true])(
+  "bounds ambiguity selection work for a large match set, ambiguous: %s",
+  (ambiguous) => {
+    const document = command(emptyRecurringDocument(), {
+      kind: "create",
+      id: planId,
+      plan: fixedPlan,
+    });
+    const item = projectRecurringMonth({
+      document,
+      month: "2026-01",
+      now: DateTime.makeUnsafe("2026-01-01T12:00:00Z"),
+    })[0];
+    assert(item !== undefined);
+    const count = 1000;
+    let identityReads = 0;
+    const pairs = Array.from({ length: count }, (_, index) => ({
+      item: {
+        ...item,
+        planId: RecurringPlanId.make(
+          `20000000-0000-4000-8000-${String(Math.floor(index / 31)).padStart(12, "0")}`
+        ),
+        date: `2026-01-${String((index % 31) + 1).padStart(2, "0")}`,
+      },
+      fact: {
+        ...associatedFact,
+        get id(): string {
+          identityReads += 1;
+          return ambiguous
+            ? associatedFact.id
+            : `81000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+        },
+      },
+    }));
+    const selected = uniqueRecurringMatches(pairs);
+    expect(selected).toEqual(ambiguous ? [] : pairs);
+    expect(identityReads).toBeLessThanOrEqual(count * 32);
+  }
+);

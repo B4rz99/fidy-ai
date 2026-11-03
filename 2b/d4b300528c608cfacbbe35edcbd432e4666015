@@ -1,0 +1,23 @@
+apps/server/src/core/recurring-plans/operations.test.ts
+  s_12ede6869163f4::t_95b3a1f2d67e92 1277-1289,1291-1299,1301-1315
+  s_12ede6869163f4::t_d4b3141b630f51 23,1276,1300
+  s_12ede6869163f4::t_5ce96270cdde23 1290
+apps/server/src/core/recurring-plans/operations.ts
+  s_12ede6869163f4::t_95b3a1f2d67e92 386,389-399,401
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2bd4b300528c608cfacbbe35edcbd432e4666015",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

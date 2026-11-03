@@ -25,20 +25,23 @@ export const ApplicationFrame = (): JSX.Element => {
     () => ({
       code: destinationCodePreloads,
       idle: router.options.context.browserRequestsIdle,
-      display: destinationCodePreloads
-        .filter((destination) =>
-          ["/app/budgets", "/app/recurring", "/app/dashboard"].includes(destination.path)
-        )
-        .map((destination) => ({
-          path: destination.path,
-          prepare: (): Promise<void> => {
-            if (attempted.has(destination.path)) return Promise.resolve();
-            attempted.add(destination.path);
-            return destination.path === router.state.location.pathname
-              ? Promise.resolve()
-              : prepareNavigation(destination.path);
+      display: destinationCodePreloads.flatMap((destination) => {
+        if (!["/app/budgets", "/app/recurring", "/app/dashboard"].includes(destination.path)) {
+          return [];
+        }
+        return [
+          {
+            path: destination.path,
+            prepare: (): Promise<void> => {
+              if (attempted.has(destination.path)) return Promise.resolve();
+              attempted.add(destination.path);
+              return destination.path === router.state.location.pathname
+                ? Promise.resolve()
+                : prepareNavigation(destination.path);
+            },
           },
-        })),
+        ];
+      }),
     }),
     [attempted, prepareNavigation, router]
   );

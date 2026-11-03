@@ -31,6 +31,7 @@ import { ReconciliationDecisionRow } from "./reconciliation-state";
 import {
   type StoredTransaction,
   findTransaction,
+  findTransactionPair,
   findTransactionPresentation,
 } from "./transaction-history";
 /** The one message both the individual caller and a batch child report for an observed revision. */
@@ -200,20 +201,12 @@ export const findTransactionValue = ({
         transaction,
       }));
     }
-    const records: Array<StoredTransaction> = [];
-    for (const id of [
-      outcome.readback.pair.firstTransactionId,
-      outcome.readback.pair.secondTransactionId,
-    ]) {
-      const found = yield* Effect.tryPromise(() => findTransaction({ db, userId, id })).pipe(
-        Effect.orElseSucceed(() => Option.none<StoredTransaction>())
-      );
-      if (Option.isNone(found)) return Option.none<CommittedMutationValue>();
-      records.push(found.value);
-    }
-    const first = records[0];
-    const second = records[1];
-    if (first === undefined || second === undefined) return Option.none<CommittedMutationValue>();
+    const pair = outcome.readback.pair;
+    const records = yield* Effect.tryPromise(() =>
+      findTransactionPair({ db, userId, ids: [pair.firstTransactionId, pair.secondTransactionId] })
+    ).pipe(Effect.orElseSucceed(() => Option.none()));
+    if (Option.isNone(records)) return Option.none<CommittedMutationValue>();
+    const [first, second] = records.value;
     return Option.some({
       _tag: "RestoredPair" as const,
       pair: {

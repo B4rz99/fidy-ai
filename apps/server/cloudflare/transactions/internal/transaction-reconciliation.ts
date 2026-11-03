@@ -31,7 +31,6 @@ import {
   isHostedCaller,
   isOAuthCaller,
   isPATCaller,
-  liveTransactionAuthority,
   maximumTransactionInputBytes,
   missingTransactionMessage,
   pairPolicyMessage,
@@ -98,65 +97,60 @@ const candidateFromRow = (row: MemberRow): Option.Option<Candidate> =>
     })
   );
 
-const findCandidate = ({
-  db,
-  userId,
-  id,
-}: Readonly<{ db: D1Database; userId: string; id: string }>): Effect.Effect<
-  Option.Option<Candidate>,
-  TransactionBoundaryFailure
-> =>
-  Effect.tryPromise({
-    try: () =>
-      db
-        .prepare(
-          `${candidateQuery} WHERE retained.user_id = ? AND retained.id = ? AND retained.deleted_at_ms IS NULL`
-        )
-        .bind(userId, id)
-        .first(),
-    catch: boundaryFailure,
-  }).pipe(
-    Effect.flatMap((row) =>
-      Option.match(Schema.decodeUnknownOption(MemberRow)(row), {
-        onNone: () => Effect.succeed(Option.none<Candidate>()),
-        onSome: (decoded) => Effect.succeed(candidateFromRow(decoded)),
-      })
-    )
-  );
-
-const findPair = (
-  work: Pick<PairWork, "db" | "subject" | "pair">
-): Effect.Effect<Option.Option<readonly [Candidate, Candidate]>, TransactionBoundaryFailure> =>
+type PairSnapshot = Readonly<{
+  authority: Option.Option<TransactionAuthority>;
+  candidates: Option.Option<readonly [Candidate, Candidate]>;
+  decision: Option.Option<typeof ReconciliationDecisionRow.Type>;
+}>;
+const pairSnapshot = (work: PairWork): Effect.Effect<PairSnapshot, TransactionBoundaryFailure> =>
   Effect.gen(function* () {
-    const rows = yield* Effect.forEach(
-      [work.pair.firstTransactionId, work.pair.secondTransactionId],
-      (id) => findCandidate({ db: work.db, userId: work.subject.userId, id })
-    );
-    const [first, second] = rows;
-    if (first === undefined || second === undefined) return Option.none();
-    return Option.isNone(first) || Option.isNone(second)
-      ? Option.none()
-      : Option.some([first.value, second.value] as const);
+    const authority = callerAuthority({ subject: work.subject, current: work.current });
+    const guard = `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`;
+    const [live, retained, decision] = yield* Effect.tryPromise({
+      try: () =>
+        work.db.batch([
+          work.db.prepare(`SELECT 1 AS authorized WHERE ${guard}`).bind(...authority.bindings),
+          work.db
+            .prepare(`${candidateQuery}
+          WHERE retained.user_id = ? AND retained.id IN (?, ?)
+            AND retained.deleted_at_ms IS NULL AND ${guard}`)
+            .bind(
+              work.subject.userId,
+              work.pair.firstTransactionId,
+              work.pair.secondTransactionId,
+              ...authority.bindings
+            ),
+          work.db
+            .prepare(`SELECT state FROM transaction_reconciliation_decisions
+          WHERE user_id = ? AND first_transaction_id = ? AND second_transaction_id = ?
+            AND ${guard}`)
+            .bind(
+              work.subject.userId,
+              work.pair.firstTransactionId,
+              work.pair.secondTransactionId,
+              ...authority.bindings
+            ),
+        ]),
+      catch: boundaryFailure,
+    });
+    const rows = Schema.decodeUnknownOption(Schema.Array(MemberRow))(retained?.results);
+    const candidates = Option.flatMap(rows, (members) => {
+      const first = members.find((member) => member.id === work.pair.firstTransactionId);
+      const second = members.find((member) => member.id === work.pair.secondTransactionId);
+      if (first === undefined || second === undefined) return Option.none();
+      return Option.all([candidateFromRow(first), candidateFromRow(second)] as const);
+    });
+    return {
+      authority: Option.map(
+        Schema.decodeUnknownOption(Schema.Struct({ authorized: Schema.Literal(1) }))(
+          live?.results[0]
+        ),
+        () => authority
+      ),
+      candidates,
+      decision: Schema.decodeUnknownOption(ReconciliationDecisionRow)(decision?.results[0]),
+    };
   });
-
-const liveAuthority = (
-  work: Pick<PairWork, "db" | "subject" | "current">
-): Effect.Effect<Option.Option<TransactionAuthority>, TransactionBoundaryFailure> =>
-  Effect.tryPromise({
-    try: () =>
-      liveTransactionAuthority({
-        db: work.db,
-        subject: work.subject,
-        current: work.current,
-      }),
-    catch: boundaryFailure,
-  }).pipe(
-    Effect.map((live) =>
-      live
-        ? Option.some(callerAuthority({ subject: work.subject, current: work.current }))
-        : Option.none()
-    )
-  );
 
 /**
  * One successful link or unlink AuditLogEntry under the caller's own credential, guarded by the
@@ -311,9 +305,8 @@ export const prepareLink = (work: PairWork): Effect.Effect<CanonicalMutationPrep
     if (work.pair.firstTransactionId === work.pair.secondTransactionId) {
       return refuse({ outcome: "validation_failed", message: samePairMessage });
     }
-    const authority = yield* liveAuthority(work);
+    const { authority, candidates } = yield* pairSnapshot(work);
     if (Option.isNone(authority)) return credentialRefusedPreparation();
-    const candidates = yield* findPair(work);
     if (Option.isNone(candidates)) {
       return refuse({ outcome: "not_found", message: missingTransactionMessage });
     }
@@ -410,22 +403,11 @@ export const prepareUnlink = (work: PairWork): Effect.Effect<CanonicalMutationPr
       return refuse({ outcome: "validation_failed", message: samePairMessage });
     }
     const pair = ordered.value;
-    const authority = yield* liveAuthority(work);
+    const { authority, candidates, decision: state } = yield* pairSnapshot({ ...work, pair });
     if (Option.isNone(authority)) return credentialRefusedPreparation();
-    const candidates = yield* findPair({ ...work, pair });
     if (Option.isNone(candidates)) {
       return refuse({ outcome: "not_found", message: missingTransactionMessage });
     }
-    const decision = yield* Effect.tryPromise({
-      try: () =>
-        work.db
-          .prepare(`SELECT state FROM transaction_reconciliation_decisions
-            WHERE user_id = ? AND first_transaction_id = ? AND second_transaction_id = ?`)
-          .bind(work.subject.userId, pair.firstTransactionId, pair.secondTransactionId)
-          .first(),
-      catch: boundaryFailure,
-    });
-    const state = Schema.decodeUnknownOption(ReconciliationDecisionRow)(decision);
     if (Option.isNone(state) || state.value.state !== "linked") {
       return refuse({ outcome: "validation_failed", message: unlinkedPairMessage });
     }

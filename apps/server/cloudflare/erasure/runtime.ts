@@ -11,13 +11,15 @@ import { RequestBodyPolicy } from "../http/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { ErasureBrowserAdmission } from "./contract";
 import { guardedDatabase } from "./internal/database";
+import { type RecoveryMeasurement, makeRecoveryMeasurement } from "./internal/measurement";
+
+type RecoveryEnvironment = Readonly<{ DB: D1Database }> &
+  Partial<Readonly<{ ERASURE_REQUIRED: string; ERASURE_BUCKET: R2Bucket }>>;
 
 /** Native entrypoints supply the required private registry binding in the deployed topology. Missing required configuration fails closed when a data unit executes. */
-export const withErasureRecovery = <
-  Environment extends Readonly<{ DB: D1Database }> &
-    Partial<Readonly<{ ERASURE_REQUIRED: string; ERASURE_BUCKET: R2Bucket }>>,
->(
-  environment: Environment
+const wrapRecovery = <Environment extends RecoveryEnvironment>(
+  environment: Environment,
+  measurement: Option.Option<RecoveryMeasurement>
 ): Environment =>
   environment.ERASURE_REQUIRED === "true" || environment.ERASURE_BUCKET !== undefined
     ? {
@@ -25,9 +27,25 @@ export const withErasureRecovery = <
         DB: guardedDatabase({
           db: environment.DB,
           bucket: Option.fromUndefinedOr(environment.ERASURE_BUCKET),
+          measurement,
         }),
       }
     : environment;
+
+export const withErasureRecovery = <Environment extends RecoveryEnvironment>(
+  environment: Environment
+): Environment => wrapRecovery(environment, Option.none());
+
+/** Measure the foreground request's existing recovery units without retaining their data or changing their execution. */
+export const measureErasureRecovery = <Environment extends RecoveryEnvironment>(
+  environment: Environment
+): Readonly<{ environment: Environment; respond: (response: Response) => Response }> => {
+  const measurement = makeRecoveryMeasurement();
+  return {
+    environment: wrapRecovery(environment, Option.some(measurement)),
+    respond: measurement.respond,
+  };
+};
 
 const admissionLifetimeMs = 5000;
 const forbiddenStatus = 403;

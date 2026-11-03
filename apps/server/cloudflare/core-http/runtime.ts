@@ -7,7 +7,7 @@ import {
   ConnectionInstitutions,
   type registeredConnectionInstitutionIds,
 } from "../../src/shell/connections/contract";
-import { withErasureRecovery } from "../erasure/runtime";
+import { measureErasureRecovery, withErasureRecovery } from "../erasure/runtime";
 import type { CoreRejectionBoundary } from "../runtime/operational-health/contract";
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
@@ -46,6 +46,7 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         },
       });
       if (Option.isSome(isolated)) return isolated.value;
+      const recovery = measureErasureRecovery(environment);
       const clients = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
       );
@@ -55,7 +56,7 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         environment:
           new URL(request.url).pathname === "/internal/titular-erasure"
             ? environment
-            : withErasureRecovery(environment),
+            : recovery.environment,
         telemetry,
         publish: acceptedWorkPublisher({
           environment: withErasureRecovery(environment),
@@ -69,7 +70,7 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         boundary: rejectionBoundary(request),
         now: yield* Clock.currentTimeMillis,
       });
-      return response;
+      return recovery.respond(response);
     }).pipe(
       Effect.provideService(ConnectionInstitutions, institutions),
       Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(environment)),

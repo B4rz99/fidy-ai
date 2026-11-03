@@ -15,10 +15,12 @@ apps/web/src/features/recurring/controller.ts
 apps/web/src/features/recurring/edit-guidance.tsx
   s_a61e47ac31e249::t_cf2c9e5a5c219f 2-10,12-16,18,68-103
   s_a61e47ac31e249::t_6d34fdf66a17cb 19-28,30-67
+  s_a61e47ac31e249::t_47e707a3b28a81 1,11,17,29,104
 apps/web/e2e/recurring-plans.spec.ts
   s_a61e47ac31e249::t_b0083fe88cdbad 1016,1093
   s_a61e47ac31e249::t_645dde1087cd17 1009,1057,1096,1102
   s_b26c86cfdf2ace::t_eb71c6c14b035a 896-1008,1010-1015,1017-1022,1024-1056,1058-1092,1094-1095,1097-1101,1103-1185,1199-1205
+  s_a61e47ac31e249::t_47e707a3b28a81 1023
 apps/web/src/features/recurring/feature.tsx
   s_a61e47ac31e249::t_3a637a5cb9b313 75,172,179,183-189
 apps/server/cloudflare/browser-acceptance-seed.ts
@@ -28,6 +30,7 @@ apps/server/cloudflare/browser-acceptance-seed.ts
 apps/web/src/features/recurring/details.tsx
   s_a61e47ac31e249::t_224452c57decd7 12-13,20,28,275
   s_a61e47ac31e249::t_6d34fdf66a17cb 252
+  s_a61e47ac31e249::t_47e707a3b28a81 243,262,272
 ---
 {
   "schema_version": "authorship/3.0.0",

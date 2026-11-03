@@ -705,6 +705,7 @@ const inspectPartialLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownE
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
     );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
     for (const width of [desktopLifecycleWidth, mobileLifecycleWidth]) {
       yield* inspectPartialLayout(page, width);
     }

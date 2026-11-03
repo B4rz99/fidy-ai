@@ -1,7 +1,4 @@
-import { Currency } from "@/transport/client";
-import { Option, Schema } from "effect";
-import { SearchableChoiceDropdown } from "./components/searchable-choice-dropdown";
-import { moneyInputHint, parseMoneyInput } from "@/transport/money-input";
+import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { type JSX, useState } from "react";
 import { AmountInput } from "@/ui/components/amount-input";
 import { Label } from "@/ui/components/label";
@@ -12,9 +9,23 @@ import {
   TransactionTypeToggle,
 } from "@/ui/components/transactions";
 
+const currencyExamples = [
+  {
+    value: "COP",
+    label: "COP",
+    hint: "Usa punto para miles y coma para decimales. Máximo 2 decimales.",
+  },
+  {
+    value: "USD",
+    label: "USD",
+    hint: "Usa punto para miles y coma para decimales. Máximo 2 decimales.",
+  },
+  { value: "JPY", label: "JPY", hint: "Usa punto para miles. JPY no admite decimales." },
+];
+
 export const TransactionsReference = (): JSX.Element => {
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState<Currency>("COP");
+  const [currency, setCurrency] = useState("COP");
   const [type, onType] = useState<"inflow" | "outflow">("outflow");
   return (
     <section aria-label="Composición aprobada de transacciones">
@@ -47,9 +58,7 @@ export const TransactionsReference = (): JSX.Element => {
             />
             <div data-transaction-slot="transaction-form-actions">
               <Button variant="outline">Cancelar</Button>
-              <Button disabled={Option.isNone(parseMoneyInput({ text: amount, currency }))}>
-                Registrar
-              </Button>
+              <Button>Registrar</Button>
             </div>
           </form>
           <Button variant="outline" data-transaction-slot="transaction-danger">
@@ -69,8 +78,8 @@ const ReferenceMoneyFields = ({
 }: Readonly<{
   amount: string;
   setAmount: (value: string) => void;
-  currency: Currency;
-  setCurrency: (value: Currency) => void;
+  currency: string;
+  setCurrency: (value: string) => void;
 }>): JSX.Element => (
   <>
     <Label htmlFor="reference-transaction-currency">Moneda</Label>
@@ -78,13 +87,10 @@ const ReferenceMoneyFields = ({
       id="reference-transaction-currency"
       label="Moneda"
       value={currency}
-      options={Currency.literals.map((value) => ({ value, label: value }))}
+      options={currencyExamples}
       disabled={false}
       width="full"
-      onChange={(value) => {
-        const selected = Schema.decodeUnknownOption(Currency)(value);
-        if (Option.isSome(selected)) setCurrency(selected.value);
-      }}
+      onChange={setCurrency}
     />
     <Label htmlFor="reference-transaction-amount">Monto</Label>
     <AmountInput
@@ -94,10 +100,9 @@ const ReferenceMoneyFields = ({
       width="full"
       placeholder="0,00"
       aria-describedby="reference-transaction-amount-help"
-      aria-invalid={amount !== "" && Option.isNone(parseMoneyInput({ text: amount, currency }))}
     />
     <p id="reference-transaction-amount-help" className="text-sm text-muted-foreground">
-      {moneyInputHint(currency)}
+      {currencyExamples.find((example) => example.value === currency)?.hint}
     </p>
     <p className="text-sm text-muted-foreground">
       El monto se registra en la moneda elegida, sin conversión.

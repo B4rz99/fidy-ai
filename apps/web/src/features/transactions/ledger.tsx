@@ -14,7 +14,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/ui/components/dropdown-menu";
-import { Fragment, useCallback, useDeferredValue, useMemo, useState } from "react";
+import { Fragment, useCallback, useDeferredValue, useMemo, useRef, useState } from "react";
 import type { JSX, RefCallback } from "react";
 import { BigDecimal, Option } from "effect";
 import { Checkbox } from "@/ui/components/checkbox";
@@ -45,6 +45,7 @@ const columns: Array<ColumnDef<TransactionListRow>> = [
   { accessorKey: "moneyText", header: "Monto", enableSorting: false },
 ];
 type LedgerProps = Readonly<{
+  locate: Option.Option<string>;
   emptyTitle: string;
   continuation: HistoryState["continuation"];
   readOnly: boolean;
@@ -142,6 +143,55 @@ const TransactionClassification = ({
     </TableCell>
   </>
 );
+const useTransactionReveal = (
+  locate: Option.Option<string>,
+  id: string
+): RefCallback<HTMLTableRowElement> => {
+  const revealed = useRef(false);
+  return useCallback<RefCallback<HTMLTableRowElement>>(
+    (node): void => {
+      if (node === null || revealed.current || !Option.contains(locate, id)) return;
+      node.scrollIntoView({ block: "center", behavior: "instant" });
+      revealed.current = true;
+    },
+    [locate, id]
+  );
+};
+const TransactionAmount = ({
+  row,
+  disabled,
+  selection,
+  onSelect,
+}: Readonly<{ row: TransactionListRow }> &
+  Pick<LedgerProps, "disabled" | "selection" | "onSelect">): JSX.Element => (
+  <TableCell className="text-right font-medium tabular-nums">
+    <button
+      type="button"
+      disabled={
+        disabled ||
+        (selection.active &&
+          selection.ids.length >= selection.limit &&
+          !selection.ids.includes(row.id))
+      }
+      onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
+      aria-label={`Ver monto de ${row.counterpartyLabel}`}
+      title={row.transactionTypeLabel}
+      className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+    >
+      <span className="transaction-amount-direction inline-flex shrink-0 @min-[481px]/ledger:hidden">
+        <DirectionIndicator inflow={row.direction === "inflow"} />
+      </span>
+      <span className="min-w-0 break-words">{row.moneyText}</span>
+      <HugeiconsIcon
+        icon={ArrowRight01Icon}
+        size={16}
+        strokeWidth={1.5}
+        aria-hidden="true"
+        className="shrink-0 text-muted-foreground"
+      />
+    </button>
+  </TableCell>
+);
 const TransactionRow = ({
   row,
   selected,
@@ -150,57 +200,36 @@ const TransactionRow = ({
   selection,
   renderCategory,
   canEdit,
-}: Readonly<{ row: TransactionListRow }> & Omit<LedgerProps, "rows">): JSX.Element => (
-  <TableRow
-    className="[clip-path:inset(0_round_var(--radius-md))]"
-    data-state={
-      Option.contains(selected, row.id) || selection.ids.includes(row.id) ? "selected" : "idle"
-    }
-  >
-    <TransactionIdentity
-      row={row}
-      selected={selected}
-      onSelect={onSelect}
-      disabled={disabled}
-      selection={selection}
-    />
-    <TransactionClassification
-      row={row}
-      onSelect={onSelect}
-      disabled={disabled}
-      selection={selection}
-      renderCategory={renderCategory}
-      canEdit={canEdit}
-    />
-    <TableCell className="text-right font-medium tabular-nums">
-      <button
-        type="button"
-        disabled={
-          disabled ||
-          (selection.active &&
-            selection.ids.length >= selection.limit &&
-            !selection.ids.includes(row.id))
-        }
-        onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-        aria-label={`Ver monto de ${row.counterpartyLabel}`}
-        title={row.transactionTypeLabel}
-        className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      >
-        <span className="transaction-amount-direction inline-flex shrink-0 @min-[481px]/ledger:hidden">
-          <DirectionIndicator inflow={row.direction === "inflow"} />
-        </span>
-        <span className="min-w-0 break-words">{row.moneyText}</span>
-        <HugeiconsIcon
-          icon={ArrowRight01Icon}
-          size={16}
-          strokeWidth={1.5}
-          aria-hidden="true"
-          className="shrink-0 text-muted-foreground"
-        />
-      </button>
-    </TableCell>
-  </TableRow>
-);
+  locate,
+}: Readonly<{ row: TransactionListRow }> & Omit<LedgerProps, "rows">): JSX.Element => {
+  const reveal = useTransactionReveal(locate, row.id);
+  return (
+    <TableRow
+      ref={reveal}
+      className="[clip-path:inset(0_round_var(--radius-md))]"
+      data-state={
+        Option.contains(selected, row.id) || selection.ids.includes(row.id) ? "selected" : "idle"
+      }
+    >
+      <TransactionIdentity
+        row={row}
+        selected={selected}
+        onSelect={onSelect}
+        disabled={disabled}
+        selection={selection}
+      />
+      <TransactionClassification
+        row={row}
+        onSelect={onSelect}
+        disabled={disabled}
+        selection={selection}
+        renderCategory={renderCategory}
+        canEdit={canEdit}
+      />
+      <TransactionAmount row={row} disabled={disabled} selection={selection} onSelect={onSelect} />
+    </TableRow>
+  );
+};
 const LedgerHeader = ({
   table,
 }: Readonly<{

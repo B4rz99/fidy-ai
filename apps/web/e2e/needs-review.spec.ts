@@ -447,7 +447,10 @@ test("confirms creation with a toast and continues reviewing without leaving the
         expect(page.getByRole("heading", { name: "Transacción creada", exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("link", { name: "Ver transacción" })).toHaveCount(0)
+        expect(page.getByRole("link", { name: "Ver transacción", exact: true })).toHaveAttribute(
+          "href",
+          "/app/transactions?transaction=24000000-0000-4000-8000-000000001352"
+        )
       );
       yield* Effect.tryPromise(() => page.getByRole("button", { name: /Pendientes/ }).click());
       yield* Effect.tryPromise(() =>

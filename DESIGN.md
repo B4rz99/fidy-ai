@@ -678,7 +678,11 @@ The pattern composes the actual Input, Currency selector, category choices, cale
 time controls. `CalendarField appearance="review"` changes only the compact Spanish date
 label; the default calendar appearance and timezone behavior remain shared. Narrow screens
 stack the source and form and give category its full row. `/ui-reference.html` includes the
-review owners in both themes. Manual reprocessing has no UI or callable review endpoint;
+review owners in both themes. Created history entries offer “Ver transacción”, navigating to its
+current month in Transacciones and scrolling to its ordinary list row. Preserve the unselected list
+and normal summary; opening details or correction requires a separate User action. The action remains
+available after original evidence expires, while missing or inaccessible Transactions receive an
+explicit unavailable state without claiming the record still exists. Manual reprocessing has no UI or callable review endpoint;
 read recovery for original material and uncertain command results remains available.
 
 ### Approved browser access composition

@@ -6,7 +6,7 @@ import { ReviewDraftFooter, ReviewNotice } from "@/ui/components/review-workspac
 import { useReviewExpired } from "./expiry";
 import type { ReviewDecisions, ReviewEditorState, ReviewWorkspaceQuery } from "./decisions";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { useRouter } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -60,9 +60,10 @@ const ExpiredReviewItem = ({
       <h2>{item.status === "created" ? "Transacción creada" : "Este elemento venció"}</h2>
       <p>
         {item.status === "created"
-          ? "La transacción sigue guardada. El material original venció."
+          ? "Creaste una transacción. El material original venció."
           : "El original venció. Envía el material de nuevo para revisarlo."}
       </p>
+      <CreatedTransactionLink item={item} />
     </div>
   </section>
 );
@@ -276,9 +277,21 @@ const HistoryDetail = ({
       />
       <h2 className="text-xl font-medium">{historyTitles[detail.item.status]}</h2>
       <p className="mt-3 text-sm text-muted-foreground">{historyDescription(detail.item)}</p>
+      <CreatedTransactionLink item={detail.item} />
     </div>
   </div>
 );
+const CreatedTransactionLink = ({ item }: Readonly<{ item: Item }>): JSX.Element =>
+  item.status === "created" ? (
+    <Button
+      className="mt-5"
+      render={<Link to="/app/transactions" search={{ transaction: item.transactionId }} />}
+    >
+      Ver transacción
+    </Button>
+  ) : (
+    <></>
+  );
 const sourceIcons = { statement: File01Icon, media: Image01Icon, email: Mail01Icon };
 const ReviewItemHeading = ({
   item,
@@ -303,7 +316,7 @@ const ReviewItemHeading = ({
 const historyDescription = (item: Item): string => {
   if (item.status === "expired") return "Envía el material de nuevo para revisarlo.";
   if (item.status === "created") {
-    return "La transacción ya está guardada.";
+    return "Creaste una transacción a partir de este elemento.";
   }
   return "Selecciona este elemento y pulsa Restaurar para volver a editarlo. Su vencimiento original se conserva.";
 };

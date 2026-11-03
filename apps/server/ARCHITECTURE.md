@@ -211,6 +211,9 @@ are omitted when reconstructing the canonical HTTP query. A capture receipt is r
 canonical result, including its Transaction identifier and date in the User's configured time zone.
 For recognized Spanish capture phrases and compact entries, a Turn without a committed result
 receives an unconfirmed-registration reply instead of the model's proposed confirmation. Turn context supplies both the UTC start and the User-local date.
+Executable WhatsApp confirmation commands are rendered only from the host-issued challenge. Model
+prose containing a native confirmation command receives an unconfirmed-preparation reply, so a
+copied or invented command cannot be presented as approval for a new operation.
 
 See [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md).
 

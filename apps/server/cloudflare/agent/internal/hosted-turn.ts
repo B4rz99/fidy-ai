@@ -93,6 +93,7 @@ import {
   type ConfirmationRow,
   consumeHostedConfirmation,
   findHostedConfirmation,
+  guardModelConfirmationReply,
   isHostedConfirmationAttempt,
   issueHostedConfirmation,
 } from "./hosted-confirmation";
@@ -1230,7 +1231,7 @@ const executeAdmittedTurn = ({
         }
         const answer = isWhatsAppHosted(subject)
           ? Option.orElse(captureWithoutCommit({ request: requestText }), () =>
-              approvedAnswer(generated.value)
+              Option.map(approvedAnswer(generated.value), guardModelConfirmationReply)
             )
           : approvedAnswer(generated.value);
         if (Option.isNone(answer)) {

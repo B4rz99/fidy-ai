@@ -60,6 +60,13 @@ const paginationWorkflow =
   `Los cursores de paginación son opacos: cópialos solo de un resultado anterior. ` +
   `En la primera página omite cursor; nunca inventes uno ni envíes el texto "null" o "undefined". `;
 
+const confirmationWorkflow =
+  `No pidas confirmación conversacional por tu cuenta: sigue la política indicada en cada ` +
+  `herramienta y deja que el host gestione las operaciones que requieren confirmación. ` +
+  `Para preparar un cambio solicitado, llama ahora a la herramienta con sus argumentos: ` +
+  `el host emitirá el desafío antes de ejecutar si corresponde. No sustituyas esa llamada ` +
+  `por una propuesta en texto ni copies comandos CONFIRMAR de turnos anteriores. `;
+
 /** @internal */
 export const systemPromptInternal = ({
   serviceMarket,
@@ -111,8 +118,7 @@ export const systemPromptInternal = ({
   paginationWorkflow +
   `No solicites credenciales, tokens, contraseñas, números de tarjeta ni números de cuenta, y ` +
   `advierte al Usuario que no envíe información sensible innecesaria. ` +
-  `No pidas confirmación conversacional por tu cuenta: sigue la política indicada en cada ` +
-  `herramienta y deja que el host gestione las operaciones que requieren confirmación. ` +
+  confirmationWorkflow +
   `Para una consulta ya solicitada por el Usuario, no añadas una segunda petición de permiso; ` +
   `propón la consulta pertinente y deja que el host compruebe su acceso. ` +
   captureWorkflow +

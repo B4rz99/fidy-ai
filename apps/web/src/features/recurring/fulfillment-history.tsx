@@ -7,17 +7,19 @@ type Mark = Occurrence["fulfillments"][number];
 type Transaction = Workspace["linkedTransactions"][number];
 type Props = Readonly<{
   item: Occurrence;
-  heading: Ref<HTMLHeadingElement>;
   transactions: Workspace["linkedTransactions"];
   invalidMarks: ReadonlyArray<Mark>;
   categories: ReadonlyArray<Category>;
   save: Save;
   disabled: boolean;
 }>;
-export const FulfillmentHistory = (props: Props): JSX.Element => (
+export const FulfillmentHistory = ({
+  heading,
+  ...props
+}: Props & Readonly<{ heading: Ref<HTMLHeadingElement> }>): JSX.Element => (
   <section className="grid gap-3" aria-label="Seguimiento de la ocurrencia">
     {props.item.fulfillments.length + props.invalidMarks.length > 0 ? (
-      <h3 ref={props.heading} tabIndex={-1} className="font-medium">
+      <h3 ref={heading} tabIndex={-1} className="font-medium">
         Seguimiento de esta fecha
       </h3>
     ) : null}

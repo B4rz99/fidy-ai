@@ -1376,15 +1376,11 @@ const editTrackedPlan = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
 const correctTrackedOccurrence = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Revertir", exact: true }).first().click()
-    );
+    yield* unlinkTrackedTransaction(page);
     yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
     yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
     yield* inspectBlockedOccurrence(page);
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Revertir", exact: true }).click()
-    );
+    yield* unlinkTrackedTransaction(page);
     yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
     yield* Effect.tryPromise(() => recurringItem(page, /Pago por partes/u).click());
     yield* Effect.tryPromise(() => page.getByText("Editar recurrente", { exact: true }).click());
@@ -1954,3 +1950,13 @@ const inspectAndRemoveLinkedPayment = (
   });
 const panelFits = (page: Page): Promise<boolean> =>
   page.getByRole("dialog").evaluate((element) => element.scrollWidth <= element.clientWidth);
+
+const unlinkTrackedTransaction = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Desvincular transacción", exact: true }).first().click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Confirmar desvinculación", exact: true }).click()
+    );
+  });

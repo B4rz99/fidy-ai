@@ -1130,7 +1130,7 @@ const checkMobileCaptureText = (page: Page): Effect.Effect<void, Cause.UnknownEr
     yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
     const capture = page.getByRole("form", { name: "Registrar transacción" });
     const fields = [
-      capture.getByLabel("Monto · USD", { exact: true }),
+      capture.getByLabel("Monto", { exact: true }),
       capture.getByLabel("Contraparte (opcional)", { exact: true }),
       capture.getByLabel("Notas (opcional)", { exact: true }),
     ];
@@ -1151,9 +1151,16 @@ test("capturing recurring income preserves its Currency and direction", ({ page,
   Effect.runPromise(
     Effect.gen(function* () {
       yield* prepareIncomeCapture(page, request);
+      const capture = page.getByRole("form", { name: "Registrar transacción" });
+      yield* Effect.tryPromise(() =>
+        expectPayment(capture.getByText("Moneda · USD", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expectPayment(capture.getByRole("combobox", { name: "Moneda", exact: true })).toHaveCount(0)
+      );
       yield* checkMobileCaptureText(page);
       yield* Effect.tryPromise(() =>
-        expectPayment(page.getByLabel("Monto · USD", { exact: true })).toHaveValue("20,5")
+        expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("20,5")
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Registrar", exact: true }).click()
@@ -1193,7 +1200,7 @@ const captureMarkedPayment = (page: Page): Effect.Effect<void, Cause.UnknownErro
       page.getByText("Crear y vincular transacción", { exact: true }).click()
     );
     yield* Effect.tryPromise(() =>
-      expectPayment(page.getByLabel("Monto · COP", { exact: true })).toHaveValue("90000")
+      expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("90000")
     );
     yield* Effect.tryPromise(() => chooseOption(page, "Categoría", "Restaurantes"));
     yield* Effect.tryPromise(() =>
@@ -1325,7 +1332,7 @@ test("recurring capture refuses incompatible manual marks and completes unknown 
         page.getByRole("button", { name: "Registrar otro pago o ingreso", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        expectPayment(page.getByLabel("Monto · COP", { exact: true })).toHaveValue("")
+        expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("")
       );
       yield* captureSplitPayment(page, "60", true);
       yield* Effect.tryPromise(() =>
@@ -1395,7 +1402,7 @@ const captureSplitPayment = (
   complete: boolean
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() => page.getByLabel("Monto · COP", { exact: true }).fill(amount));
+    yield* Effect.tryPromise(() => page.getByLabel("Monto", { exact: true }).fill(amount));
     yield* Effect.tryPromise(() =>
       chooseOption(
         page,

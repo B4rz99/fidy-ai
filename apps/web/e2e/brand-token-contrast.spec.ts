@@ -373,7 +373,7 @@ const checkTransactionForm = Effect.fnUntraced(function* (page: Page, theme: The
   yield* Effect.tryPromise((signal) =>
     page.getByRole("button", { name: "+ Registrar", exact: true }).click({ signal })
   );
-  const amount = page.getByLabel("Monto · COP", { exact: true });
+  const amount = page.getByLabel("Monto", { exact: true });
   const notes = page.getByLabel("Notas (opcional)", { exact: true });
   const category = page.getByRole("button", {
     name: "Categoría: Asignar automáticamente",

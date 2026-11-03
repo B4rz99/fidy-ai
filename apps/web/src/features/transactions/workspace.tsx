@@ -1,3 +1,4 @@
+import { formatMoneyWithCode } from "@/transport/money";
 import { TransactionPeriodControls } from "./period-controls";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
@@ -176,7 +177,7 @@ const CapturePanel = ({
     panel: Extract<TransactionPanel, { _tag: "Capture" }>;
   }>): JSX.Element => (
   <TransactionCapture
-    currency="COP"
+    currency={Option.none()}
     initial={{}}
     direction={Option.none()}
     disabled={false}
@@ -208,7 +209,7 @@ const CapturePanel = ({
     onCheckHistory={props.onRefresh}
     onCreated={(transaction) => {
       toast.success("Transacción registrada", {
-        description: `${Option.getOrElse(transaction.counterparty, () => "Contraparte no identificada")} · ${formatOccurrence({ locale: props.currentUser.locale, timeZone: props.currentUser.timeZone, occurredAt: transaction.occurredAt })}`,
+        description: `${formatMoneyWithCode({ money: transaction.money, locale: props.currentUser.locale })} · ${Option.getOrElse(transaction.counterparty, () => "Contraparte no identificada")} · ${formatOccurrence({ locale: props.currentUser.locale, timeZone: props.currentUser.timeZone, occurredAt: transaction.occurredAt })}`,
       });
       onPanel({ _tag: "Summary" });
       props.onRefresh();

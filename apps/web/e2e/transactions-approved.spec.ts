@@ -84,7 +84,7 @@ const openCapture = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* wait(() => page.goto("/app/transactions"));
     yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
-    yield* wait(() => page.getByLabel("Monto · COP", { exact: true }).fill("12345,67"));
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("12345,67"));
   });
 const captureCategoryNotes = (page: Page): Journey =>
   Effect.gen(function* () {
@@ -156,7 +156,10 @@ const uncertainCaptureJourney = (page: Page): Journey =>
     yield* wait(() =>
       expect(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
     );
-    yield* wait(() => expect(page.getByLabel("Monto · COP", { exact: true })).toBeDisabled());
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toBeDisabled());
+    yield* wait(() =>
+      expect(page.getByRole("combobox", { name: "Moneda", exact: true })).toBeDisabled()
+    );
     expect(requests).toHaveLength(1);
     yield* wait(() =>
       page.getByRole("button", { name: "Actualizar historial", exact: true }).click()
@@ -490,7 +493,7 @@ const captureLayoutJourney = (page: Page): Journey =>
     yield* installWorkspace(page);
     yield* openCapture(page);
     const notes = page.getByLabel("Notas (opcional)", { exact: true });
-    const amount = page.getByLabel("Monto · COP", { exact: true });
+    const amount = page.getByLabel("Monto", { exact: true });
     const fields = [amount, page.getByLabel("Contraparte (opcional)", { exact: true }), notes];
     yield* wait(() => expect(amount).toHaveAttribute("inputmode", "decimal"));
     for (const field of fields) {

@@ -625,3 +625,13 @@ remain valid. Malformed grouping, foreign separator conventions, nonpositive val
 Currency precision are rejected before submission. Existing Money opens as a plain decimal-comma
 draft; the shared input policy decodes through the canonical Transaction Money codec without
 floating-point conversion. Saving remains the form's existing single action.
+
+Manual Transaction registration selects from the canonical Currency catalog, defaulting to COP.
+The selected Currency stays in the local capture draft; changing it preserves the amount text and
+other fields and revalidates the canonical Money precision without rounding or conversion. Recurring
+capture supplies a fixed Currency through application composition, so a plan cannot create a
+Transaction in a different denomination. The same resolved Currency drives the input guidance,
+submission admission and canonical mutation. Confirmed registration feedback formats the server's
+returned Money with its explicit Currency code; existing history and summaries retain their
+per-Currency projections. The existing canonical transport owns request observations; this form
+change adds no external workflow or financial-content telemetry.

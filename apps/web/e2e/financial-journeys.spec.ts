@@ -92,7 +92,7 @@ test("captures a Transaction by canonical mutation and displays the confirmed re
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "+ Registrar", exact: true }).click()
       );
-      yield* Effect.tryPromise(() => page.getByLabel("Monto · COP").fill("12500"));
+      yield* Effect.tryPromise(() => page.getByLabel("Monto").fill("12500"));
       yield* Effect.tryPromise(() => page.getByLabel("Contraparte (opcional)").fill("La Cocina"));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Registrar", exact: true }).click()

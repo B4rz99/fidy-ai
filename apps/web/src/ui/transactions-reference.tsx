@@ -1,3 +1,4 @@
+import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { type JSX, useState } from "react";
 import { AmountInput } from "@/ui/components/amount-input";
 import { Label } from "@/ui/components/label";
@@ -8,8 +9,23 @@ import {
   TransactionTypeToggle,
 } from "@/ui/components/transactions";
 
+const currencyExamples = [
+  {
+    value: "COP",
+    label: "COP",
+    hint: "Usa punto para miles y coma para decimales. Máximo 2 decimales.",
+  },
+  {
+    value: "USD",
+    label: "USD",
+    hint: "Usa punto para miles y coma para decimales. Máximo 2 decimales.",
+  },
+  { value: "JPY", label: "JPY", hint: "Usa punto para miles. JPY no admite decimales." },
+];
+
 export const TransactionsReference = (): JSX.Element => {
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState("COP");
   const [type, onType] = useState<"inflow" | "outflow">("outflow");
   return (
     <section aria-label="Composición aprobada de transacciones">
@@ -28,13 +44,11 @@ export const TransactionsReference = (): JSX.Element => {
           <h2>Registrar transacción</h2>
           <form className="mt-5 flex flex-col gap-4" onSubmit={(event) => event.preventDefault()}>
             <TransactionTypeToggle value={type} onChange={onType} />
-            <Label htmlFor="reference-transaction-amount">Monto · COP</Label>
-            <AmountInput
-              id="reference-transaction-amount"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              width="full"
-              placeholder="0,00"
+            <ReferenceMoneyFields
+              amount={amount}
+              setAmount={setAmount}
+              currency={currency}
+              setCurrency={setCurrency}
             />
             <Label htmlFor="reference-transaction-notes">Notas (opcional)</Label>
             <textarea
@@ -55,3 +69,43 @@ export const TransactionsReference = (): JSX.Element => {
     </section>
   );
 };
+
+const ReferenceMoneyFields = ({
+  amount,
+  setAmount,
+  currency,
+  setCurrency,
+}: Readonly<{
+  amount: string;
+  setAmount: (value: string) => void;
+  currency: string;
+  setCurrency: (value: string) => void;
+}>): JSX.Element => (
+  <>
+    <Label htmlFor="reference-transaction-currency">Moneda</Label>
+    <SearchableChoiceDropdown
+      id="reference-transaction-currency"
+      label="Moneda"
+      value={currency}
+      options={currencyExamples}
+      disabled={false}
+      width="full"
+      onChange={setCurrency}
+    />
+    <Label htmlFor="reference-transaction-amount">Monto</Label>
+    <AmountInput
+      id="reference-transaction-amount"
+      value={amount}
+      onChange={(event) => setAmount(event.target.value)}
+      width="full"
+      placeholder="0,00"
+      aria-describedby="reference-transaction-amount-help"
+    />
+    <p id="reference-transaction-amount-help" className="text-sm text-muted-foreground">
+      {currencyExamples.find((example) => example.value === currency)?.hint}
+    </p>
+    <p className="text-sm text-muted-foreground">
+      El monto se registra en la moneda elegida, sin conversión.
+    </p>
+  </>
+);

@@ -766,7 +766,7 @@ The separately approved Dashboard reference is Library `libfile_3810ef5dde248191
 
 Dashboard cards retain canonical Widget configuration and layout. The spending chart remains vertical Recharts bars with exact-money tooltips and separate Currency series. Metrics keep Ingresos and Gastos per Currency, without conversion or net. Budget cards retain spent/cap progress and available/reached/exceeded states. Recent Transactions keep the configured ten latest records, their original order, local-date groups and ledger category/direction visuals; partial groups do not claim daily totals. Mixed currencies use the existing unambiguous Money formatter.
 
-`ui/components/application.tsx`, `application.css`, `dashboard.tsx` and `dashboard.css` own the approved shell and card treatments. `/ui-reference.html#dashboard` renders their synthetic examples. The existing Dashboard editing owner, directional drag targets, keyboard/touch behavior, resize, per-gesture persistence and explicit reread recovery remain authoritative. The static prototype's move-to-end and range demos are not application behavior. Existing saved layouts remain unchanged.
+`ui/components/application.tsx`, `application.css`, `dashboard.tsx` and `dashboard.css` own the approved shell and card treatments. `/ui-reference.html#dashboard` renders their synthetic examples. The existing Dashboard editing owner, directional drag targets, touch behavior, resize, per-gesture persistence and explicit reread recovery remain authoritative. The static prototype's move-to-end and range demos are not application behavior. Existing saved layouts remain unchanged.
 
 ### Recurrentes: continuous workspace and contextual plane
 

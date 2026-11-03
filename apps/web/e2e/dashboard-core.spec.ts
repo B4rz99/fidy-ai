@@ -185,55 +185,11 @@ const widgetGeometry = (
   });
 };
 
-test("Dashboard keyboard resize survives a real Core reload", ({ page, request }) =>
+test("Dashboard catalog drag adds a persistent Widget", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* openDashboard({ page, request });
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
-      const boundary = page.getByRole("separator").first();
-      yield* Effect.tryPromise(() => boundary.press("ArrowRight"));
-      yield* Effect.tryPromise(() => expect(boundary).toHaveAttribute("aria-valuenow", "1.1"));
-      yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
-      yield* Effect.tryPromise(() => expect(boundary).toHaveAttribute("aria-valuenow", "1.1"));
-    })
-  ));
-
-test("Dashboard keyboard cancellation preserves the document and catalog drag adds a persistent Widget", ({
-  page,
-  request,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* openDashboard({ page, request });
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
-      const edits: Array<string> = [];
-      page.on("request", (call) => {
-        if (new URL(call.url()).pathname === "/dashboard/edits") edits.push(call.method());
-      });
-      const handle = page.getByRole("button", {
-        name: "Arrastrar Gastos por categoría",
-        exact: true,
-      });
-      yield* Effect.tryPromise(() => handle.press("Space"));
-      yield* Effect.tryPromise(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
-      yield* Effect.tryPromise(() => handle.press("ArrowRight"));
-      yield* Effect.tryPromise(() => handle.press("Escape"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Vista previa de la distribución", { exact: true })).toHaveCount(0)
-      );
-      yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
-      expect(edits).toEqual([]);
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { level: 2 })).toHaveText([
-          "Widgets disponibles",
-          "Gastos por categoría",
-          "Presupuesto de restaurantes",
-          "Transacciones recientes",
-          "Salidas del mes",
-        ])
-      );
       const catalogHandle = page
         .getByRole("list", { name: "Widgets disponibles para arrastrar" })
         .getByRole("button", { name: "Arrastrar Transacciones recientes", exact: true });

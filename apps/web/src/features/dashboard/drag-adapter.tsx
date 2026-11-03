@@ -30,8 +30,7 @@ const { decodeSource: decodeDashboardDragSource, decodeTarget: decodeDashboardDr
 
 const dashboardAccessibility = Accessibility.configure({
   screenReaderInstructions: {
-    draggable:
-      "Para mover, presiona Espacio o Enter. Usa las flechas y confirma con Espacio o Enter. Cancela con Escape.",
+    draggable: "",
   },
   announcements: dashboardAnnouncements,
 });
@@ -69,10 +68,7 @@ export const DashboardDragProvider = ({
         if (Option.isSome(gesture)) onGesture(gesture.value);
       }}
       plugins={(defaults) => [...defaults, dashboardAccessibility]}
-      sensors={(defaults) => [
-        ...defaults.filter((sensor) => sensor !== PointerSensor),
-        deliberatePointer,
-      ]}
+      sensors={[deliberatePointer]}
     >
       {children}
     </DragDropProvider>

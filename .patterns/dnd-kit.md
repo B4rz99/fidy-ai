@@ -112,22 +112,7 @@ small handle only, not the canvas or Widget body, so touch dragging is reliable 
 ordinary page scrolling. This follows the upstream Pointer Events guidance
 (`apps/docs/docs/legacy/api-documentation/draggable.mdx:157-175`).
 
-## Keyboard and screen-reader behavior
-
-Do not replace the default sensors without retaining KeyboardSensor. Its default bindings start on
-Space or Enter, cancel on Escape, finish on Space, Enter, or Tab, and move with arrow keys; it only
-activates when the event target is the source handle or element
-(`packages/dom/src/core/sensors/keyboard/KeyboardSensor.ts:37-72`,
-`packages/dom/src/core/sensors/keyboard/KeyboardSensor.ts:92-133`). Movement is spatial: 10 px per
-arrow press and five times that with Shift (`packages/dom/src/core/sensors/keyboard/KeyboardSensor.ts:230-273`).
-Therefore edge targets must be visibly sized and reachable by spatial movement; keyboard drag does
-not understand the Dashboard's structural grammar by itself.
-
-Key matching uses `KeyboardEvent.key`, respects keyboard layouts, and supports a Space alias
-(`apps/docs/docs/extend/sensors/keyboard-sensor.mdx:74-80`). Use a visible focus ring on every drag
-handle and test Space, Enter, arrows, Escape, and drop against the actual recursive target geometry.
-Give KeyboardSensor one semantic destination per Dashboard outcome. Keep resize separators and direct
-Widget actions focusable; catalog additions remain keyboard drags rather than a parallel form flow.
+## Screen-reader behavior
 
 The default Accessibility plugin adds focusability and ARIA state to each activator, associates
 screen-reader instructions, and maintains a polite live region
@@ -157,7 +142,7 @@ type, then score; the first candidate becomes the operation target
 Consequences for a recursive Dashboard:
 
 - Render five non-overlapping targets that partition each Widget body: four directional edges plus a
-  center swap target. The full body should resolve to one semantic outcome for pointer and keyboard.
+  center swap target. The full body should resolve to one semantic outcome for pointer.
 - Keep targets transparent and non-intercepting so normal Widget controls remain usable; show only
   the selected target as feedback through `isDropTarget`.
 - When a descendant edge overlaps an ancestor edge, assign a greater numeric
@@ -190,20 +175,17 @@ leave the last successful Dashboard view rendered.
 - Five non-overlapping Widget targets covering the full Widget body, plus lower-priority dashboard
   top/bottom targets.
 - Descendant priority beats ancestor priority in overlapping recursive regions.
-- Default PointerSensor and KeyboardSensor retained.
+- PointerSensor retained.
 - Localized Accessibility plugin configuration and a direct `@dnd-kit/dom` dependency if imported.
 - One overlay per provider; target feedback derives from `isDropTarget`.
 - `onDragEnd` emits at most one `DashboardGesture`; no local Dashboard reducer and no API call in
   the adapter.
 - Unit-test event translation, cancellation, malformed data, nested target priority, and accessibility
-  configuration without geometry. Browser-smoke-test a real pointer edit plus the deterministic
-  keyboard controls. When changing sensor or target geometry, add focused browser coverage for the
-  affected touch sizing, keyboard reachability, precedence, cancellation, or focus behavior.
+  configuration without geometry. Browser-smoke-test a real pointer edit. When changing sensor or target geometry, add focused
+  browser coverage for the affected touch sizing, precedence, cancellation, or focus behavior.
 
 ## Known limits to test rather than assume
 
-Spatial keyboard movement advances by pixels rather than logical edge order. Deep or very small
-recursive regions may therefore require several arrow presses or Shift+Arrow; retain generous,
-semantic target geometry. Pointer target selection is geometry-dependent at overlapping corners;
+Pointer target selection is geometry-dependent at overlapping corners;
 verify the actual styled target dimensions in browser tests. These are integration questions, not
 reasons to let dnd kit own Dashboard layout semantics.

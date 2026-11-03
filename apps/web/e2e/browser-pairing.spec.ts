@@ -204,6 +204,12 @@ const expectVerifierIsBrowserEphemeral = (page: Page): Promise<void> =>
           new RegExp(`${pairingId}|${privateVerifier}`, "u")
         )
       );
+      yield* wait(
+        expect(page.getByRole("link", { name: "Abrir WhatsApp" })).toHaveAttribute(
+          "href",
+          /^https:\/\/wa\.me\/12056871742\?text=/u
+        )
+      );
     })
   );
 test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and logs out", ({

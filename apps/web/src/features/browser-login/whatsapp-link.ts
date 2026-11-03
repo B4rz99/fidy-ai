@@ -1,8 +1,9 @@
-const currentFidyWhatsAppNumber = "+56920403095" as const;
+import { fidyWhatsAppUrl } from "@/transport/client";
 
-/** Builds the public-code-only mobile action for Fidy's current deployed WhatsApp sandbox. */
+/** Uses the same Fidy destination as signup, with only the public pairing code. */
 export const browserLoginPairingWhatsAppUrl = (publicCode: string): string => {
-  const digits = currentFidyWhatsAppNumber.replaceAll(/[^0-9]/gu, "");
   const message = `Aprueba el código de inicio de sesión ${publicCode}`;
-  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  const destination = new URL(fidyWhatsAppUrl);
+  destination.searchParams.set("text", message);
+  return destination.href;
 };

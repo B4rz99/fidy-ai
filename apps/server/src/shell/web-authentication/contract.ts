@@ -12,7 +12,7 @@ import { IdentityGroup } from "~/shell/identity/contract";
 import { RecoveryGroup } from "~/shell/recovery/contract";
 import { ConnectionBrowserApi } from "~/shell/connections/contract";
 
-export { ProviderHandoffSearch } from "~/shell/provider-authentication/contract";
+export { fidyWhatsAppUrl, ProviderHandoffSearch } from "~/shell/provider-authentication/contract";
 
 export type { AuthenticationProvider } from "~/shell/provider-authentication/contract";
 

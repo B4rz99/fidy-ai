@@ -41,6 +41,7 @@ export type {
   SubmitPaymentEnrollmentPayload,
 } from "@fidy/server/client";
 export {
+  fidyWhatsAppUrl,
   TransactionId,
   ReviewCommand,
   ReviewDraft,

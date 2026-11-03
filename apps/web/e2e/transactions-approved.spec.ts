@@ -151,7 +151,9 @@ const uncertainCaptureJourney = (page: Page): Journey =>
     yield* openCapture(page);
     yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
     yield* wait(() =>
-      expect(page.getByRole("alert")).toContainText("No pudimos confirmar el registro")
+      expect(page.getByRole("alert")).toContainText(
+        "No pudimos confirmar si la transacción se guardó"
+      )
     );
     yield* wait(() =>
       expect(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()

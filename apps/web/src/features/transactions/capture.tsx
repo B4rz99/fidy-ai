@@ -96,6 +96,7 @@ type CaptureInputsProps = Readonly<{
   onCounterparty: (value: string) => void;
   onCurrency: Option.Option<(currency: CaptureCommand["currency"]) => void>;
   disabled: boolean;
+  revealErrors: boolean;
 }>;
 const CaptureInputs = ({
   amount,
@@ -105,6 +106,7 @@ const CaptureInputs = ({
   currency,
   onCurrency,
   disabled,
+  revealErrors,
 }: CaptureInputsProps): JSX.Element => (
   <>
     <div className="flex flex-col gap-2">
@@ -131,6 +133,7 @@ const CaptureInputs = ({
     </div>
     <div className="flex flex-col gap-2">
       <MoneyField
+        revealErrors={revealErrors}
         id="transaction-amount"
         currency={currency}
         label="Monto"
@@ -170,8 +173,8 @@ const CaptureFeedback = ({
     {status === "uncertain" ? (
       <div>
         <p role="alert">
-          No pudimos confirmar el registro de la transacción. Revisa el historial antes de registrar
-          otro movimiento.
+          No pudimos confirmar si la transacción se guardó. Actualiza el historial antes de volver a
+          registrarla.
         </p>
         <RefreshButton
           type="button"
@@ -182,7 +185,9 @@ const CaptureFeedback = ({
       </div>
     ) : null}
     {status === "failed" ? (
-      <p role="alert">No se pudo guardar la transacción. Intenta de nuevo.</p>
+      <p role="alert">
+        No pudimos guardar la transacción. Tus datos siguen en el formulario. Intenta de nuevo.
+      </p>
     ) : null}
   </>
 );
@@ -270,6 +275,8 @@ type CaptureProps = Readonly<{
   disabled: boolean;
   onStatus: (status: CaptureStatus) => void;
 }>;
+const captureLocked = (props: CaptureProps): boolean =>
+  props.disabled || props.status === "saving" || props.status === "uncertain";
 type CaptureDraft = Readonly<{
   currency: CaptureCommand["currency"];
   amount: string;
@@ -285,17 +292,23 @@ const CaptureForm = ({
   onDraft,
   onSubmit,
   currency,
+  revealErrors,
 }: Readonly<{
   props: CaptureProps;
   currency: CaptureCommand["currency"];
   draft: CaptureDraft;
   onDraft: (draft: CaptureDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  revealErrors: boolean;
 }>): JSX.Element => {
-  const locked =
-    props.disabled === true || props.status === "saving" || props.status === "uncertain";
+  const locked = captureLocked(props);
   return (
-    <form onSubmit={onSubmit} aria-label="Registrar transacción" className="flex flex-col gap-5">
+    <form
+      noValidate
+      onSubmit={onSubmit}
+      aria-label="Registrar transacción"
+      className="flex flex-col gap-5"
+    >
       <fieldset disabled={locked} className="flex min-w-0 flex-col gap-4">
         <legend className="sr-only">Datos de la transacción</legend>
         {Option.isNone(props.direction) ? (
@@ -307,6 +320,7 @@ const CaptureForm = ({
           <p>{draft.direction === "inflow" ? "Ingreso" : "Gasto"}</p>
         )}
         <CaptureInputs
+          revealErrors={revealErrors}
           amount={draft.amount}
           disabled={locked}
           currency={currency}
@@ -333,19 +347,11 @@ const CaptureForm = ({
         />
       </fieldset>
       <CaptureFeedback status={props.status} onCheckHistory={props.onCheckHistory} />
-      <CaptureActions props={props} amount={draft.amount} currency={currency} />
+      <CaptureActions props={props} />
     </form>
   );
 };
-const CaptureActions = ({
-  props,
-  amount,
-  currency,
-}: Readonly<{
-  props: CaptureProps;
-  amount: string;
-  currency: CaptureCommand["currency"];
-}>): JSX.Element => (
+const CaptureActions = ({ props }: Readonly<{ props: CaptureProps }>): JSX.Element => (
   <div data-transaction-slot="transaction-form-actions">
     {Option.isNone(props.onCancel) ? null : (
       <Button
@@ -357,15 +363,7 @@ const CaptureActions = ({
         Cancelar
       </Button>
     )}
-    <Button
-      type="submit"
-      disabled={
-        props.disabled ||
-        props.status === "saving" ||
-        props.status === "uncertain" ||
-        Option.isNone(parseMoneyInput({ text: amount, currency }))
-      }
-    >
+    <Button type="submit" disabled={captureLocked(props)}>
       {props.status === "saving" ? "Guardando…" : "Registrar"}
     </Button>
   </div>
@@ -375,6 +373,7 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
   const [capture] = useState(() => makeCapture(props.apiClient));
   const submit = useAtomSet(capture);
   const admission = useRef(false);
+  const [attempted, setAttempted] = useState(false);
   const [draft, setDraft] = useState<CaptureDraft>(() => ({
     currency: "COP",
     amount: "",
@@ -388,13 +387,13 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
   const currency = Option.getOrElse(props.currency, () => draft.currency);
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (
-      admission.current ||
-      props.disabled ||
-      props.status === "saving" ||
-      props.status === "uncertain" ||
-      Option.isNone(parseMoneyInput({ text: draft.amount, currency }))
-    ) {
+    setAttempted(true);
+    if (Option.isNone(parseMoneyInput({ text: draft.amount, currency }))) {
+      event.currentTarget.querySelector<HTMLInputElement>("#transaction-amount")?.focus();
+      return;
+    }
+    if (!event.currentTarget.reportValidity()) return;
+    if (admission.current || captureLocked(props)) {
       return;
     }
     admission.current = true;
@@ -408,6 +407,7 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
       timeZone: props.timeZone,
       onSaved: (transaction) => {
         props.onStatus("saved");
+        setAttempted(false);
         setDraft({ ...draft, amount: "", counterparty: "", notes: "", categoryId: "" });
         props.onCreated(transaction);
       },
@@ -420,6 +420,7 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
   };
   return props.renderForm(
     <CaptureForm
+      revealErrors={attempted}
       props={props}
       draft={draft}
       currency={currency}

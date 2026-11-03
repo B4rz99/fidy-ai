@@ -635,3 +635,11 @@ submission admission and canonical mutation. Confirmed registration feedback for
 returned Money with its explicit Currency code; existing history and summaries retain their
 per-Currency projections. The existing canonical transport owns request observations; this form
 change adds no external workflow or financial-content telemetry.
+
+Manual Transaction registration and Needs Review completion explain invalid amounts beside the field
+in Spanish after blur or an attempted registration. The associated live description and invalid state
+update while correcting the draft; registration focuses an invalid amount without sending a mutation.
+Review suggestions convert canonical decimal points to decimal commas when opened, while saved
+editing drafts retain their entered text. Review confirmation uses the same positive Money and
+Currency precision policy as registration. Input validation retains other fields and remains separate
+from service refusal and uncertain-write recovery.

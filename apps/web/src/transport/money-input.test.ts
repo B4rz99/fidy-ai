@@ -1,6 +1,6 @@
 import { BigDecimal, Option } from "effect";
 import { expect, it } from "vitest";
-import { formatMoneyInput, moneyInputHint, parseMoneyInput } from "./money-input";
+import { formatMoneyInput, moneyInputError, moneyInputHint, parseMoneyInput } from "./money-input";
 
 it("interprets Colombian thousands grouping as whole pesos", () => {
   const money = Option.getOrThrow(parseMoneyInput({ text: "12.500", currency: "COP" }));
@@ -64,4 +64,16 @@ it("explains separators and fractional precision for the selected Currency", () 
   );
   expect(moneyInputHint("JPY")).toBe("Usa punto para miles. JPY no admite decimales.");
   expect(moneyInputHint("KWD")).toContain("Máximo 3 decimales");
+});
+
+it.each([
+  ["", "COP", "Ingresa un monto mayor que cero."],
+  ["0", "COP", "El monto debe ser mayor que cero."],
+  ["-12", "COP", "El monto debe ser mayor que cero."],
+  ["12.50", "COP", "Usa punto para miles y coma para decimales. Por ejemplo: 12.500,50."],
+  ["12,501", "COP", "Para COP, ingresa máximo 2 decimales."],
+  ["12,0", "JPY", "JPY no admite decimales. Ingresa un monto entero."],
+  ["12.500,50", "COP", undefined],
+] as const)("explains how to correct %s in %s", (text, currency, message) => {
+  expect(Option.getOrUndefined(moneyInputError({ text, currency }))).toBe(message);
 });

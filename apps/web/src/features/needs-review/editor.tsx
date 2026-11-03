@@ -212,6 +212,7 @@ const ReadyEditor = ({
             recover={recover}
           />
           <ReviewFields
+            key={detail.item.id}
             draft={editor.draft}
             change={change}
             locked={locked}
@@ -335,7 +336,7 @@ const ReviewEditorNotice = ({
     return (
       <ReviewNotice text={feedbackCopy[feedback]} error>
         <Button variant="outline" onClick={recover}>
-          Actualizar elemento
+          Actualizar revisión
         </Button>
       </ReviewNotice>
     );

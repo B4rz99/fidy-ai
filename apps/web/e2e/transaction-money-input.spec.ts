@@ -15,13 +15,27 @@ const counterparty = (index: number): string => `Formato COP QA ${index}`;
 const amountField = (page: Page): Locator =>
   page.getByRole("textbox", { name: /^Monto(?: · COP)?$/u });
 const save = (page: Page): Locator => page.getByRole("button", { name: "Guardar", exact: true });
-const rejectInvalidAmounts = Effect.fn(function* (page: Page, submit: Locator) {
+const rejectInvalidAmounts = Effect.fn(function* (
+  page: Page,
+  submit: Locator,
+  registration: boolean = false
+) {
   for (const value of ["12.50", "12,500.50", "12,501"]) {
     yield* wait(() => amountField(page).fill(value));
     yield* wait(() => expect(amountField(page)).toHaveValue(value));
+    yield* wait(() => amountField(page).press("Tab"));
     yield* wait(() => expect(amountField(page)).toHaveAttribute("aria-invalid", "true"));
-    yield* wait(() => expect(page.getByRole("alert")).toContainText("Usa punto para miles"));
-    yield* wait(() => expect(submit).toBeDisabled());
+    yield* wait(() =>
+      expect(amountField(page)).toHaveAccessibleDescription(
+        value === "12,501"
+          ? "Para COP, ingresa máximo 2 decimales."
+          : "Usa punto para miles y coma para decimales. Por ejemplo: 12.500,50."
+      )
+    );
+    if (registration) {
+      yield* wait(() => submit.click());
+      yield* wait(() => expect(amountField(page)).toBeFocused());
+    } else yield* wait(() => expect(submit).toBeDisabled());
     yield* wait(() => amountField(page).press("Enter"));
   }
 });
@@ -29,7 +43,7 @@ const registerAmounts = Effect.fn(function* (page: Page) {
   for (const [index, example] of cases.entries()) {
     yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
     const submit = page.getByRole("button", { name: "Registrar", exact: true });
-    if (index === 0) yield* rejectInvalidAmounts(page, submit);
+    if (index === 0) yield* rejectInvalidAmounts(page, submit, true);
     yield* wait(() => amountField(page).fill(example.input));
     yield* wait(() => page.getByLabel("Contraparte (opcional)").fill(counterparty(index)));
     yield* wait(() => expect(amountField(page)).toHaveValue(example.input));

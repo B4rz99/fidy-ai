@@ -434,3 +434,46 @@ it.live("rechecks every selected item's expiry after waiting for other draft sav
     expect(test.view().locked).toBe(true);
   })
 );
+
+it.live("opens canonical review suggestions as localized drafts without changing their Money", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const detail = {
+      ...test.detail,
+      suggestions: Option.some({
+        ...emptyDraft(),
+        amount: "12.5",
+        currency: Option.some("COP" as const),
+      }),
+    };
+    expect(test.view().editor(detail).draft.amount).toBe("12,5");
+  })
+);
+
+it.live("confirms localized review Money exactly and blocks invalid amounts", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const draft = {
+      ...emptyDraft(),
+      amount: "12.500,50",
+      currency: Option.some("COP" as const),
+      direction: Option.some("outflow" as const),
+      occurredAt: "2026-10-15T12:00:00Z",
+    };
+    for (const amount of ["", "0", "-12", "12.50", "12,501"]) {
+      test.view().change(test.detail, { ...draft, amount });
+      expect(test.view().editor(test.detail).canCreate).toBe(false);
+    }
+    test.view().change(test.detail, draft);
+    expect(test.view().editor(test.detail).canCreate).toBe(true);
+    test.view().decide(test.detail, "Create");
+    yield* advance(0);
+    const command = test.sent.find((sent) => sent._tag === "Create");
+    const encoded =
+      command === undefined ? undefined : yield* Schema.encodeEffect(ReviewCommand)(command);
+    expect(encoded).toMatchObject({
+      _tag: "Create",
+      extraction: { money: { amount: "12500.5", currency: "COP" } },
+    });
+  })
+);

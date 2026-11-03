@@ -1,0 +1,25 @@
+apps/server/src/shell/canonical-policy/operations.ts
+  s_d9571b3fccd032::t_1eff502924c710 59
+apps/server/src/shell/dashboard/internal/presentation.ts
+  s_d9571b3fccd032::t_1eff502924c710 164
+bun.lock
+  s_d9571b3fccd032::t_e84a3998cae259 20-21,765,767,769,771,773,775,777,779,781,783,785,787,789,791,793,795,797,799,801,815,817,819,821,823,825,827,829,831,833,835,837,839,841,843,845,847,849,851,1879,1881
+package.json
+  s_d9571b3fccd032::t_9afd195dbb656f 76-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7b2aa98cf4f184dc1d8f9b57cd894a64d56eef1a",
+  "prompts": {},
+  "sessions": {
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -213,10 +213,43 @@
 [data-recurring-slot="workspace"] [data-recurring-slot="calendar"] {
   border-top: 1px solid var(--recurring-line);
 }
-[data-recurring-slot="workspace"] [data-recurring-slot="calendar"] section button {
+[data-recurring-slot="workspace"]
+  [data-recurring-slot="calendar"]
+  section
+  button:not([data-recurring-slot="calendar-day-trigger"]) {
   background: transparent;
   border-radius: 0;
   border-left: 3px solid var(--fidy-lime);
+}
+[data-recurring-slot="workspace"]
+  [data-recurring-slot="calendar"]
+  [data-recurring-slot="calendar-day-trigger"] {
+  width: 100%;
+  min-width: 0;
+  min-height: 64px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-radius: 0;
+}
+[data-recurring-slot="calendar-day-trigger"][aria-current="date"] > span:first-child {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+[data-recurring-slot="calendar-day-trigger"]:focus-visible {
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+}
+[data-recurring-slot="calendar-outside-day"] {
+  min-height: 64px;
+  padding: 8px 0;
+  text-align: center;
+  color: var(--fidy-text-muted);
+}
+[data-recurring-slot="calendar-day-count"] {
+  font-size: 11px;
+  line-height: 1;
 }
 [data-recurring-slot="workspace"] [data-recurring-slot="plan-management"] > div:first-child {
   padding: 0 0 18px;

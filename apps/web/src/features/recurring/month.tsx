@@ -65,21 +65,44 @@ const DayItems = ({ date, items, open, agenda }: DayProps): JSX.Element => (
 const CalendarDay = (props: DayProps & Readonly<{ month: string }>): JSX.Element => (
   <section
     aria-label={props.date}
+    data-recurring-slot="calendar-day"
     className={cn(
-      "flex min-h-32 min-w-0 flex-col gap-2 border-r border-b p-2",
+      "flex min-w-0 flex-col border-r border-b @min-5xl:min-h-32 @min-5xl:gap-2 @min-5xl:p-2",
       !props.date.startsWith(props.month) && "bg-muted/20"
     )}
   >
+    {props.date.startsWith(props.month) ? (
+      <Button
+        data-recurring-slot="calendar-day-trigger"
+        variant="ghost"
+        aria-label={`${Number(props.date.slice(-dayDigits))} · ${props.items.length === 1 ? "1 recurrente" : `${props.items.length} recurrentes`} · ${dayLabel(props.date)}`}
+        aria-haspopup="dialog"
+        aria-current={props.date === props.today ? "date" : undefined}
+        onClick={() => props.agenda(props.date)}
+        className="@min-5xl:hidden"
+      >
+        <span>{Number(props.date.slice(-dayDigits))}</span>{" "}
+        {props.items.length > 0 ? (
+          <span data-recurring-slot="calendar-day-count">{props.items.length}</span>
+        ) : null}
+      </Button>
+    ) : (
+      <span data-recurring-slot="calendar-outside-day" className="@min-5xl:hidden">
+        {Number(props.date.slice(-dayDigits))}
+      </span>
+    )}
     <span
       className={cn(
-        "flex size-6 items-center justify-center self-end rounded-full text-xs",
+        "hidden size-6 items-center justify-center self-end rounded-full text-xs @min-5xl:flex",
         props.date === props.today && "bg-primary text-primary-foreground"
       )}
       aria-current={props.date === props.today ? "date" : undefined}
     >
       {Number(props.date.slice(-dayDigits))}
     </span>
-    <DayItems {...props} />
+    <div className="hidden @min-5xl:block">
+      <DayItems {...props} />
+    </div>
   </section>
 );
 const DayAgenda = ({ date, items, open }: Omit<DayProps, "today" | "agenda">): JSX.Element => {
@@ -90,6 +113,7 @@ const DayAgenda = ({ date, items, open }: Omit<DayProps, "today" | "agenda">): J
         <SheetTitle>Recurrentes del {date}</SheetTitle>
       </SheetHeader>
       <div className="grid min-w-0 gap-2 px-4">
+        {items.length === 0 ? <p>Sin recurrentes para este día.</p> : null}
         {page.items.map((item) => (
           <CalendarItem key={`${item.planId}:${item.date}`} item={item} open={open} />
         ))}
@@ -107,9 +131,9 @@ const CalendarGrid = ({
   const offset = (DateTime.toPartsUtc(first).weekDay + weekLength - 1) % weekLength;
   const start = DateTime.subtract(first, { days: offset });
   return (
-    <div className="hidden grid-cols-7 @min-5xl:grid">
+    <div className="grid grid-cols-7">
       {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((day) => (
-        <div key={day} className="border-b p-3 text-center text-xs text-muted-foreground">
+        <div key={day} className="border-b py-3 text-center text-xs text-muted-foreground">
           {day}
         </div>
       ))}
@@ -150,28 +174,16 @@ export const MonthCalendar = ({ view, open }: CalendarProps): JSX.Element => {
     setSelected(Option.none());
     open(item);
   };
-  const dates = [...new Set(view.occurrences.map((item) => item.expectedDate))].sort();
   return (
     <div
       data-recurring-slot="calendar"
       className="@container min-w-0"
       aria-label="Calendario de recurrentes"
     >
+      <p className="py-3 text-xs text-muted-foreground @min-5xl:hidden">
+        Recurrentes por día. Selecciona una fecha para verlos.
+      </p>
       <CalendarGrid view={view} open={open} agenda={agenda} />
-      <div className="divide-y @min-5xl:hidden">
-        {dates.map((date) => (
-          <section key={date} aria-label={date} className="grid min-w-0 gap-3 p-3">
-            <h3 className="text-sm font-medium">{dayLabel(date)}</h3>
-            <DayItems
-              date={date}
-              items={view.occurrences.filter((item) => item.expectedDate === date)}
-              today={view.today}
-              open={open}
-              agenda={agenda}
-            />
-          </section>
-        ))}
-      </div>
       <Sheet
         open={active && Option.isSome(selected)}
         onOpenChangeComplete={changeAgenda}

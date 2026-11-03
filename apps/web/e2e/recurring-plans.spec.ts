@@ -40,6 +40,7 @@ test("recurring plans persist through the real canonical API and share monthly l
         currency: "COP",
         amount: "1000000",
       });
+      yield* Effect.tryPromise(() => page.setViewportSize({ width: 1920, height: 1080 }));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Calendario", exact: true }).click()
       );

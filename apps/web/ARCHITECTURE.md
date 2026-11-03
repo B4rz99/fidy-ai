@@ -468,7 +468,12 @@ no Correction authority.
 `features/recurring` mounts at `/app/recurring`, using authentication-scoped canonical query atoms
 for the selected month, previous unresolved month, taxonomy and detected historical suggestions.
 Monthly list, calendar and summaries consume one server projection. Editors and transaction
-selection live in responsive sheets; drafts stay local. The mounted RecurringPlan editing module
+selection live in responsive sheets; drafts stay local. The calendar retains the full Monday-first
+month grid, including empty dates, at every container width and when no occurrences match.
+Wide containers preview occurrences directly; compact days show occurrence counts and open the
+same paginated day agenda, with Money, status and occurrence detail access. Month changes reset
+the selected day through presentation identity. Calendar layout never generates occurrences.
+The mounted RecurringPlan editing module
 owns revision selection, synchronous write admission, query freshness and explicit reread recovery. Month and filter changes replace presentation and
 query identities without resetting pending or uncertain writes. Accepted edits invalidate active
 workspace queries; an uncertain write remains blocked until an explicit workspace and taxonomy

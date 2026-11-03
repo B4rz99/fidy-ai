@@ -1,0 +1,32 @@
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_f38b95a31ee952::t_5dbbee0b206efb 1873-1875,1877,1879-1886,1888,1899-1921
+  s_b5e9998aef4caf::t_ed43f75dc6027f 1876,1878,1887,1889-1898
+docs/adr/0030-dashboard-exact-write-maintained-projection.md
+  s_f38b95a31ee952::t_5dbbee0b206efb 13-21
+apps/server/cloudflare/transactions/internal/dashboard-read.ts
+  s_f38b95a31ee952::t_5dbbee0b206efb 38,58,64,67,78,82,97,99-100,104,108,117,123,132-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cc237d0abd1848906d8edb795077796d59c08b13",
+  "prompts": {},
+  "sessions": {
+    "s_b5e9998aef4caf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a354-83d9-7840-982f-4c41cde02e46",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f38b95a31ee952": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a354-b0aa-7972-80cf-ea7d3179408f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

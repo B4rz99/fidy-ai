@@ -1,0 +1,240 @@
+apps/web/e2e/workspace-navigation.spec.ts
+  s_1584bd997d13bb::t_f56b3e2a0b01b0 16,53-54
+  s_1584bd997d13bb::t_17eaf213187210 95-124
+  s_1584bd997d13bb::t_7a3e0fd56705aa 126-132,138-140,145,147-164
+  s_1584bd997d13bb::t_96087424afbfa0 133-135,137
+  s_1584bd997d13bb::t_4373e7e33bb55f 141-144,146
+  s_1584bd997d13bb::t_6032d3aeaf60a0 262,299-300
+  s_1584bd997d13bb::t_c2c46982a15f36 263-298
+  s_1584bd997d13bb::t_3b4c3385cba8f6 463
+  s_1584bd997d13bb::t_9b5fca5cb3c1a4 17,125
+  s_1584bd997d13bb::t_fde8f1229a9417 12,314-315
+  s_1584bd997d13bb::t_42eb186b33b1b1 56-58,64-66,78-80,87-89
+  s_1584bd997d13bb::t_72be71357ff689 45-52,55,59-63,67-77,81-86,90-93
+  s_1584bd997d13bb::t_ce119775ade412 94,165
+  s_1584bd997d13bb::t_a0d4df34eca9fe 136
+apps/web/src/features/subscription/consent-boundary.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,39
+apps/web/src/features/budgets/spending.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1,10,108
+apps/web/src/app/destination-components.ts
+  s_1584bd997d13bb::t_ce5b75c2acab12 1,33-35
+  s_1584bd997d13bb::t_e9518814285245 12,45-47
+  s_1584bd997d13bb::t_f56b3e2a0b01b0 13,16,29,39-44
+  s_1584bd997d13bb::t_42eb186b33b1b1 6,14-15,17-28,30-32,36-38,48-49
+apps/web/src/features/subscription/workspace.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,310
+apps/web/src/features/transactions/privacy-view.tsx
+  s_1584bd997d13bb::t_f56b3e2a0b01b0 14-18,42,63
+  s_1584bd997d13bb::t_50377ae5205b82 1,3
+  s_1584bd997d13bb::t_18c030cdb7215e 5,12
+  s_d9571b3fccd032::t_c4cc8f3227354f 13
+apps/web/src/app/routes.ts
+  s_1584bd997d13bb::t_ce5b75c2acab12 202-204
+  s_1584bd997d13bb::t_224ae4bb2cd400 17
+  s_1584bd997d13bb::t_18c030cdb7215e 1-3,5,284-286
+  s_1584bd997d13bb::t_3ed60477aeb904 4
+apps/web/src/features/pats/creation.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2
+  s_1584bd997d13bb::t_9e31cc2085a4e4 60
+apps/web/src/features/recurring/feature.tsx
+  s_1584bd997d13bb::t_eb88063fa43d53 12,95,102
+  s_1584bd997d13bb::t_f56b3e2a0b01b0 33,106
+  s_1584bd997d13bb::t_faed0ccd5f1597 84
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,67,75,128
+  s_1584bd997d13bb::t_42eb186b33b1b1 148-150
+apps/web/src/features/oauth-connections/management-feature.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2
+  s_1584bd997d13bb::t_4373e7e33bb55f 149-167,173
+  s_1584bd997d13bb::t_e86620a7eaadbb 25
+  s_1584bd997d13bb::t_44492dad6f1de0 63
+apps/web/src/features/recurring/transactions.tsx
+  s_1584bd997d13bb::t_aada545746ed38 10,105-112
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,174
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_1584bd997d13bb::t_57fa268c776847 80
+  s_1584bd997d13bb::t_e031262a368788 81
+apps/web/src/features/budgets/feature.tsx
+  s_1584bd997d13bb::t_eb88063fa43d53 2
+  s_1584bd997d13bb::t_f56b3e2a0b01b0 6
+  s_1584bd997d13bb::t_42eb186b33b1b1 7-8
+apps/web/src/app/router-context.ts
+  s_1584bd997d13bb::t_09e5ffb6e0685b 1-11
+apps/web/src/features/transactions/query.ts
+  s_1584bd997d13bb::t_ce5b75c2acab12 22-24,38
+apps/web/src/features/subscription/cancellation.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1,8,216
+apps/web/src/app/application-frame.tsx
+  s_1584bd997d13bb::t_09e5ffb6e0685b 10-11,20,24-26
+  s_1584bd997d13bb::t_224ae4bb2cd400 21-23,60-62
+apps/web/src/features/pats/cli-feature.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,85
+apps/web/src/features/budgets/queries.ts
+  s_1584bd997d13bb::t_96087424afbfa0 47,51
+apps/web/src/features/needs-review/editor.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,134,159
+apps/web/src/app/recurring-workspace.tsx
+  s_1584bd997d13bb::t_42eb186b33b1b1 51-53
+  s_1584bd997d13bb::t_eb88063fa43d53 11
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,47
+apps/web/src/transport/workspace-query.ts
+  s_1584bd997d13bb::t_e9518814285245 18
+  s_1584bd997d13bb::t_42eb186b33b1b1 60-63
+apps/web/src/features/needs-review/original.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1,3,64
+apps/web/src/features/provider-authentication/feature.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2
+  s_1584bd997d13bb::t_ac2dd8f545a85c 37
+apps/web/src/features/oauth-connections/feature.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2
+  s_1584bd997d13bb::t_1d084bf9657719 87
+apps/web/src/features/recurring/management.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2
+  s_1584bd997d13bb::t_89a19d7367db64 151
+apps/web/e2e/performance.assessment.ts
+  s_1584bd997d13bb::t_32897b189de5a1 10-12,267-269,509-511
+  s_1584bd997d13bb::t_c2c46982a15f36 13-18
+  s_1584bd997d13bb::t_30f67defda12e8 121-122,134
+  s_1584bd997d13bb::t_e20aa52de4f3b8 279-280,454-456
+  s_1584bd997d13bb::t_cc243667c9cd78 133
+  s_1584bd997d13bb::t_247ddaffcc304d 281-283
+  s_1584bd997d13bb::t_a2ef2da1ecc5ee 266,278,453,508,556,593,649
+apps/web/e2e/transaction-pagination.spec.ts
+  s_1584bd997d13bb::t_96087424afbfa0 198,201-202,285
+apps/web/src/features/recurring-digest/status.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,63
+apps/web/src/features/dashboard/budget-configuration.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1,21,181
+apps/web/src/ui/components/review-workspace.tsx
+  s_1584bd997d13bb::t_7e7e621b3afd8a 1,45
+apps/web/src/app/destination-code-context.ts
+  s_1584bd997d13bb::t_09e5ffb6e0685b 1-2
+  s_1584bd997d13bb::t_224ae4bb2cd400 3-5
+apps/web/src/features/transactions/capture-feature.tsx
+  s_1584bd997d13bb::t_ce5b75c2acab12 1-10
+apps/web/src/features/transactions/destination.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1,10,26
+apps/web/src/app/navigation-preparation.ts
+  s_1584bd997d13bb::t_20f190316cd810 82
+  s_1584bd997d13bb::t_75f1a6326b286a 4-5
+  s_1584bd997d13bb::t_42eb186b33b1b1 69-72
+  s_1584bd997d13bb::t_224ae4bb2cd400 2,10,13-14,17,57,59,81
+  s_1584bd997d13bb::t_e9518814285245 9,64,73
+  s_1584bd997d13bb::t_f56b3e2a0b01b0 12,16,18-56,58,60-63,76-80,83,85-86,88
+  s_1584bd997d13bb::t_e0198455d0e985 15,87
+apps/web/src/app/budget-page.tsx
+  s_1584bd997d13bb::t_eb88063fa43d53 1-5,9
+  s_1584bd997d13bb::t_42eb186b33b1b1 6-8
+apps/web/src/app/dashboard-page.tsx
+  s_1584bd997d13bb::t_e9518814285245 4,7-9,11-12
+apps/web/src/features/transactions/feature.tsx
+  s_1584bd997d13bb::t_ce5b75c2acab12 1-2,4-5,9-11,13-14,17,19-20,22-35
+  s_1584bd997d13bb::t_18c030cdb7215e 36
+  s_1584bd997d13bb::t_50377ae5205b82 3
+  s_1584bd997d13bb::t_62ccba4498b427 6,18
+apps/web/src/features/pats/feature.tsx
+  s_1584bd997d13bb::t_4373e7e33bb55f 108-123,130
+  s_1584bd997d13bb::t_e86620a7eaadbb 4-5
+apps/web/src/features/privacy/feature.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,106
+apps/web/src/features/budgets/screen.tsx
+  s_1584bd997d13bb::t_f56b3e2a0b01b0 44,72,88
+  s_1584bd997d13bb::t_42eb186b33b1b1 40-43,45,82-84,105-107
+  s_1584bd997d13bb::t_eb88063fa43d53 7,39,62,71
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,54,60,95
+.oxlintrc.json
+  s_1584bd997d13bb::t_62ccba4498b427 191
+apps/web/src/features/transactions/workspace-component.ts
+  s_1584bd997d13bb::t_ce5b75c2acab12 1-6
+apps/web/e2e/real-core-fixture.ts
+  s_1584bd997d13bb::t_3364c6e10a7dbd 448-449
+  s_1584bd997d13bb::t_96087424afbfa0 447
+apps/web/src/ui/reference.tsx
+  s_1584bd997d13bb::t_7a3e0fd56705aa 256
+DESIGN.md
+  s_1584bd997d13bb::t_a0ac48418ab968 379-382,871
+  s_1584bd997d13bb::t_7a3e0fd56705aa 549
+apps/web/src/features/connections/result.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,44
+apps/web/src/features/transactions/list-feature.tsx
+  s_1584bd997d13bb::t_ce5b75c2acab12 1-596
+apps/web/src/ui/components/recurring-report.css
+  s_1584bd997d13bb::t_7a3e0fd56705aa 181,231
+apps/web/src/features/dashboard/feature.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,8,40,133
+  s_1584bd997d13bb::t_e9518814285245 6,18-19,32
+  s_1584bd997d13bb::t_42eb186b33b1b1 52-67
+  s_1584bd997d13bb::t_eb88063fa43d53 47
+  s_1584bd997d13bb::t_f56b3e2a0b01b0 5,33
+  s_1584bd997d13bb::t_fb99164de24ff4 68
+apps/web/src/app/transactions-page.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,50
+apps/web/src/features/needs-review/workspace.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,221
+apps/web/src/app/destination-code-preload.tsx
+  s_1584bd997d13bb::t_09e5ffb6e0685b 1-2,18
+  s_1584bd997d13bb::t_eb88063fa43d53 3-5
+  s_1584bd997d13bb::t_224ae4bb2cd400 19-31,33-57
+apps/web/src/features/privacy/renewal.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2
+  s_1584bd997d13bb::t_22debc6e0588e2 133
+apps/web/src/ui/components/pending-read.tsx
+  s_1584bd997d13bb::t_a0ac48418ab968 1-3,7
+  s_1584bd997d13bb::t_42eb186b33b1b1 4-6
+apps/web/src/features/subscription/feature.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1,9,659,968
+  s_1584bd997d13bb::t_d0c33760ec605d 807
+apps/web/ARCHITECTURE.md
+  s_1584bd997d13bb::t_62ccba4498b427 55-60
+  s_1584bd997d13bb::t_9b5fca5cb3c1a4 534,554,571,573,584-585
+  s_1584bd997d13bb::t_48b202e6c3deb5 540-543,549-553,555-556,560-565
+apps/web/src/features/pats/management-view.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2
+  s_1584bd997d13bb::t_5b4f460aa38295 397,399
+apps/web/src/app/review-workspace.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,42
+apps/web/src/features/connections/feature.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2,242
+  s_1584bd997d13bb::t_6ecb668acf6ae2 179
+apps/web/src/app/application.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1-2
+  s_1584bd997d13bb::t_42eb186b33b1b1 39,58
+apps/web/src/features/dashboard/view.tsx
+  s_1584bd997d13bb::t_50377ae5205b82 1,44,1151
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_1584bd997d13bb::t_0d9ab4d09d956d 458,487-488
+apps/web/e2e/needs-review.spec.ts
+  s_1584bd997d13bb::t_d4825a0e640177 1621,1755,1774-1777
+apps/web/e2e/oauth-visual.spec.ts
+  s_1584bd997d13bb::t_90c439b62e203b 272,276-278,283,285
+apps/web/e2e/recurring-report.spec.ts
+  s_1584bd997d13bb::t_1e67cb04801081 107,125
+apps/web/e2e/subscription-cancellation-design.spec.ts
+  s_1584bd997d13bb::t_73d8ab2499f142 181,210-211
+apps/web/e2e/subscription-visual.spec.ts
+  s_1584bd997d13bb::t_186cd489c5af3d 927,941-943,955-957
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31e3f95ff983b47eb1d84319d9e420ccf6f9a58f",
+  "prompts": {},
+  "sessions": {
+    "s_1584bd997d13bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19f9b-a0ae-7f81-b1d6-4d34cc8a5c82",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_d9571b3fccd032": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a18086-9d23-7b10-85e5-e6b60567915b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

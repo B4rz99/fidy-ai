@@ -1,0 +1,250 @@
+apps/server/cloudflare/runtime/application-observation/operations.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 110
+apps/server/cloudflare/ai/runtime.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-3,5-7,9,11-12,14-15,17-18,20-40,43-59,61-70,73,80-81,83-85,90,92,102,115,124,133,135-136
+apps/server/src/shell/outbound-http/internal/transport.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 27,36-40
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,5,168-171,179-181,184
+infra/cloudflare/package.json
+  s_12ede6869163f4::t_e2ff7ba7a325df 7,13
+apps/server/cloudflare/ai/internal/admitted-run.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 3,6,27,36,38,45,51
+apps/server/cloudflare/openai.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-99
+apps/server/cloudflare/runtime/telemetry/operations.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 346,362,365,369,396,404-405
+apps/server/src/shell/outbound-http/internal/openai-http.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-36
+apps/server/cloudflare/agent/hosted-tool-turn.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,7,713-716,909-910,936,1366-1367,1372,1427-1428,1457
+apps/server/cloudflare/ai/openai-conformance-worker.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-113
+apps/server/ARCHITECTURE.md
+  s_12ede6869163f4::t_e2ff7ba7a325df 154-156
+apps/server/cloudflare/runtime/contract.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 3,16
+apps/server/cloudflare/test-shards.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 100,150
+apps/server/cloudflare/agent/whatsapp-provider-failure.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 10-11,16-19,69,105-107
+infra/cloudflare/scripts/check-production-runtime-config.sh
+  s_12ede6869163f4::t_e2ff7ba7a325df 11
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,26,102-103,152-153,742-744,747,781,808,821,956,1032-1034,1164,1174,1332,1344,1451,1463,3880,3883
+apps/server/src/shell/hosted-inference/operations.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 24
+apps/server/src/core/_shared/time.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 3
+apps/server/cloudflare/web-authentication/bound-user.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,34-36
+.github/workflows/production.yml
+  s_12ede6869163f4::t_e2ff7ba7a325df 99,101,128,176,248,405
+apps/server/src/shell/outbound-http/openai.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-68
+apps/server/cloudflare/ai/internal/evaluation-budget.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 4-6,8,21,33,43,47-48,66-72,80,93,101,109,115
+apps/server/cloudflare/ai/openai-conformance-worker.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-53
+apps/server/src/shell/hosted-inference/contract.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 150,251,253-255,257,260,264-265,271-272,278,281-282,288,292-294,297-298,301-302,306,323-327,331-333,337,339
+infra/cloudflare/workers.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,14,114,118,121
+apps/server/cloudflare/oauth-agents/oauth-native-residency.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,213,216
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,7,69,72
+apps/server/cloudflare/ai/internal/admission-policy.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 14-15,21,25,32,39,46,59,64-65,69,75,80-81,85
+apps/server/cloudflare/recurring/recurring.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,4,31-35
+apps/server/cloudflare/maintenance/runtime.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 19,216-217
+apps/server/cloudflare/memory/memory.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,6,124,127,154-157
+apps/server/cloudflare/tokens/pats.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,12,294-297,313,315,318
+apps/server/cloudflare/transactions/performance.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 71,76,136
+apps/server/cloudflare/subscription/refunds.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,265,267,386-408,410-414,466-484,525-529,628-632,653-679,733-753,780-786,811-818,861,944,985,1131,1178-1187,1288-1292
+infra/cloudflare/verify-edge-policy.ts
+  s_12ede6869163f4::t_339720330bf44a 5
+infra/cloudflare/scripts/check-openai-conformance.sh
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-137
+apps/server/cloudflare/ai/retention.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 6-7,19-20
+apps/server/src/shell/hosted-inference/openai.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-1297
+apps/server/cloudflare/subscription/billing-collection.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,9,83,85,135-138,168-183,486-503,606-621,623,672,752,814,880,1130-1143,1145,1186-1199,1201,1297-1311,1313
+apps/server/cloudflare/connections/connections.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,22,177-179,182,207-210,1733-1735,1739
+apps/server/cloudflare/runtime/runtime.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,23
+apps/server/src/shell/hosted-inference/internal/openai.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-661
+apps/server/cloudflare/subscription/weekly-renewal.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,18,275-293,532-542,597,801-811,856,1042-1060,1062-1066,1207-1218,1437-1438,1569-1583,1642-1658,1753-1768,2019,2045-2057,2106,2373
+apps/server/src/shell/outbound-http/operations.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,22,183-190
+apps/server/cloudflare/maintenance-performance.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,26-28
+apps/server/cloudflare/maintenance/core-schedule.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,15
+apps/server/src/shell/outbound-http/contract.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 170-174
+apps/server/cloudflare/ai/internal/adversarial-evaluation.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 7-8,22,50,52-53,62-63,69,71-72,113,166,190,274-280,285
+apps/server/cloudflare/onboarding/browser-authentication.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,37,148,151
+apps/server/cloudflare/agent/proactivity-choice.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,17,32-35,107,110-111
+apps/server/cloudflare/migrations/0008_hosted_inference_retention.sql
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-3
+apps/server/cloudflare/maintenance/monitoring-isolation.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,23,64,66,131
+apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,13,223-224,226
+apps/server/cloudflare/runtime/telemetry.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 139-140,282,286,313,315,342
+apps/server/package.json
+  s_12ede6869163f4::t_e2ff7ba7a325df 286
+.patterns/INDEX.md
+  s_12ede6869163f4::t_e2ff7ba7a325df 23
+SECURITY_STANDARDS.md
+  s_12ede6869163f4::t_e2ff7ba7a325df 70
+apps/server/cloudflare/resource-admission/resource-admission.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 338,642,651,712
+tools/depcruise/boundaries.mjs
+  s_12ede6869163f4::t_e2ff7ba7a325df 20-21,98
+apps/server/cloudflare/agent/hosted-turn.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,4,272-273,319-320,544-547
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 69,157,161-163,204-205,584,587
+apps/server/cloudflare/maintenance/cadence.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 19,21,24,28,54,60
+infra/cloudflare/alchemy.run.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 14,77-78,399-401
+apps/server/cloudflare/runtime/internal/scheduled-health.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 48
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,57-59
+apps/server/cloudflare/ai/admitted-run.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 4,7,30,37,39,45
+apps/server/cloudflare/recurring/workflow-cost.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 5,55-56
+apps/server/src/shell/memory/memory-policy.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 5,7,27-29
+.patterns/http-client.md
+  s_12ede6869163f4::t_e2ff7ba7a325df 89-92
+apps/server/cloudflare/maintenance/contract.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 40
+apps/server/cloudflare/maintenance/admission-retention.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 4,14,24-25
+apps/server/cloudflare/subscription/subscription-queries.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,8,303,305
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,67,166-168,171,194-197,725,1756,2016
+infra/cloudflare/scripts/check-hosted-adversarial.sh
+  s_12ede6869163f4::t_e2ff7ba7a325df 20-22,24,43-50,52
+infra/cloudflare/vitest.config.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 8
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,339,856,934,1279
+.env.example
+  s_12ede6869163f4::t_e2ff7ba7a325df 6-8
+ARCHITECTURE.md
+  s_12ede6869163f4::t_e2ff7ba7a325df 39-40
+.oxlintrc.json
+  s_12ede6869163f4::t_e2ff7ba7a325df 318-319
+apps/server/cloudflare/core-worker.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 10,40,162
+apps/server/cloudflare/ai/internal/admission-retention.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 2-3,6,9,17,21,27,32,34
+apps/server/cloudflare/ai/adversarial-evaluation.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,3,6-8,10-11,21,24-25,30-35,37,40-41,64,68,75,93,99,103-105,108-110,121,127,129
+apps/server/cloudflare/consent/browser.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,6,126-128,131,154-157
+apps/server/cloudflare/subscription/refund-support.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,9,30-40,91-92,332-347
+apps/server/src/shell/hosted-inference/internal/provider-schema.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 197,201
+infra/cloudflare/scripts/print-approved-openai-model.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-3
+apps/server/cloudflare/insights/insight-store.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,20,147-149,152,181-184
+docs/operations/production-releases.md
+  s_12ede6869163f4::t_e2ff7ba7a325df 85-87,542-550
+apps/server/src/shell/hosted-inference/runtime.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 3,6,8,11-12,14-15,19,21
+apps/server/cloudflare/recurring/recurring.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,26,33-34
+infra/cloudflare/openai-conformance-script.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-365
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,23,343,349,371-374,1354-1357,1430-1433,1808-1811,2744-2747,2984-2987,3054-3057
+apps/server/cloudflare/ai/admission.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 2,6-7,43,55,58-59,63,72,95,108,111,114-115,117,137,146,149,152-153,155,161,165,167
+tools/depcruise/boundaries.test.mjs
+  s_12ede6869163f4::t_e2ff7ba7a325df 161-163
+  s_12ede6869163f4::t_800403a227ad11 160
+apps/server/cloudflare/transactions/runtime.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 105,168
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,27,177-179,182,208-211,609-612
+apps/server/cloudflare/erasure/native.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 4,56-57
+.patterns/ai.md
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,6-7,40,68,70,72,75-86,95-100,110-111
+CODING_STANDARDS.md
+  s_12ede6869163f4::t_e2ff7ba7a325df 168-172
+apps/server/src/shell/observability/contract.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 87,131,163
+apps/server/cloudflare/audit/internal/audit.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,15,457-459,467
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,4,468-471
+apps/server/cloudflare/agent/hosted-continuity.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,20,1139-1142,1480-1481,1490,1759-1762,1888-1892,1937-1940,2081-2084,2161-2164,2532-2533,2675-2679,2718,2725-2729
+apps/server/cloudflare/maintenance/performance.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 70,86,92,179
+apps/server/cloudflare/agent/contract.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 9,66
+apps/server/cloudflare/ai/contract.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 3-5,9-10
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,9,169-171,175,287,382-383,396,408-416,503,511,598,683,688,753,870,1082,1126,1279,1284,1342-1345
+apps/server/cloudflare/proactivity.test-fixture.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,24,58,63-64
+apps/server/cloudflare/maintenance/internal/cadence.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 27
+apps/server/cloudflare/ai/openai-evaluation-worker.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-17
+apps/server/cloudflare/ai/openai.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-443
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,571,610,619,673,795,864,924,975,1125,1368,1431
+infra/cloudflare/scripts/check-production-runtime-config.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 28
+apps/server/cloudflare/agent/connection-admission.test.ts
+  s_12ede6869163f4::t_e2ff7ba7a325df 1,4,28-29
+docs/adr/0038-openai-hosted-inference.md
+  s_12ede6869163f4::t_e2ff7ba7a325df 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7f4d514eceb32e4dc6e0fe6456152e0860e44361",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

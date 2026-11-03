@@ -22,6 +22,7 @@ const monthsPerYear = 12;
 const desktopLifecycleWidth = 1506;
 const mobileLifecycleWidth = 390;
 const searchPageSize = 20;
+const maximumSearchDraftLength = 80;
 test("recurring plans persist through the real canonical API and share monthly list/calendar items", ({
   page,
   request,
@@ -1522,6 +1523,7 @@ const inspectLargeReview = (page: Page): Effect.Effect<void, Cause.UnknownError>
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Vincular transacción existente", exact: true }).click()
     );
+    yield* inspectLongSearchScope(page);
     yield* Effect.tryPromise(() =>
       page.getByLabel("Buscar transacción", { exact: true }).fill("Importe extenso")
     );
@@ -1543,6 +1545,34 @@ const inspectLargeReview = (page: Page): Effect.Effect<void, Cause.UnknownError>
     yield* Effect.tryPromise(() => expect.poll(noOverflow).toBe(true));
     yield* Effect.tryPromise(() =>
       page.screenshot({ path: test.info().outputPath("transaction-link-large-mobile.png") })
+    );
+  });
+const inspectLongSearchScope = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const query = "Y".repeat(maximumSearchDraftLength);
+    yield* Effect.tryPromise(() =>
+      page.getByLabel("Buscar transacción", { exact: true }).fill(query)
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Buscar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("region", { name: "Resultados de transacciones" })).toContainText(query)
+    );
+    for (const size of ["100%", "200%"]) {
+      yield* Effect.tryPromise(() =>
+        page.evaluate((value) => {
+          document.documentElement.style.fontSize = value;
+        }, size)
+      );
+      const noOverflow = (): Promise<boolean> =>
+        page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+      yield* Effect.tryPromise(() => expect.poll(noOverflow).toBe(true));
+    }
+    yield* Effect.tryPromise(() =>
+      page.evaluate(() => {
+        document.documentElement.style.fontSize = "100%";
+      })
     );
   });
 const reviewOlderTransaction = (page: Page): Effect.Effect<void, Cause.UnknownError> =>

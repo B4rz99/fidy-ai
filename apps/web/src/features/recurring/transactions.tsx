@@ -166,9 +166,12 @@ const SearchResults = (props: ResultsProps): JSX.Element => {
   }
   if (state._tag !== "Ready") return <SelectionListSkeleton label="Cargando transacciones" />;
   return (
-    <section aria-label="Resultados de transacciones" className="mt-6 grid gap-3">
+    <section
+      aria-label="Resultados de transacciones"
+      className="mt-6 grid min-w-0 gap-3 [overflow-wrap:anywhere]"
+    >
       <h2 className="text-lg font-semibold">Transacciones</h2>
-      <p aria-live="polite" className="text-xs text-muted-foreground">
+      <p aria-live="polite" className="min-w-0 text-xs text-muted-foreground">
         {state.value.data.length} en esta página ·{" "}
         {transactionScope({ query: props.query, timeZone: props.timeZone })} · Más recientes primero
       </p>

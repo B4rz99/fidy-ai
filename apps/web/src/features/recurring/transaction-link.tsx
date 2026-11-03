@@ -31,12 +31,12 @@ export const TransactionLink = ({ item, disabled, save, close, notice }: Props):
     direction: item.plan.kind === "income" ? "inflow" : "outflow",
   };
   return (
-    <main aria-label="Vincular transacción" className="min-w-0">
+    <main aria-label="Vincular transacción" className="min-w-0 [overflow-wrap:anywhere]">
       <WorkspaceHeader
         title="Vincular transacción"
         context={<p className="text-sm text-muted-foreground">Recurrentes / {item.plan.name}</p>}
       >
-        <Button variant="outline" disabled={disabled} onClick={close}>
+        <Button contentLayout="wrap" variant="outline" disabled={disabled} onClick={close}>
           Volver a la ocurrencia
         </Button>
       </WorkspaceHeader>

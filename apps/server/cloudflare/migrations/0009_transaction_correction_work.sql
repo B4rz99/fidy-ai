@@ -2,7 +2,6 @@ DROP TRIGGER budget_correction_work;
 --> statement-breakpoint
 
 CREATE TRIGGER budget_correction_work AFTER UPDATE ON transactions
--- Linked correction recency can change selected movement facts even for a descriptive correction.
 WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.category_id IS NOT OLD.category_id OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms OR (NEW.reconciliation_first_id IS NOT NULL AND (NEW.counterparty IS NOT OLD.counterparty OR NEW.notes IS NOT OLD.notes OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions))) AND EXISTS (SELECT 1 FROM budgets WHERE user_id = NEW.user_id)
 BEGIN INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(NEW.user_id,NEW.occurred_at_ms)
   ON CONFLICT(user_id,occurred_at_ms) DO UPDATE SET version = version + 1;

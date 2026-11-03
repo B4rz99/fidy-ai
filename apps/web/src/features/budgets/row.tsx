@@ -2,7 +2,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { CreditCardIcon, PencilIcon } from "@hugeicons/core-free-icons";
 import { BigDecimal } from "effect";
 import { type JSX, useState } from "react";
-import { formatMoney } from "@/transport/money";
+import { formatMoneyWithCode } from "@/transport/money";
 import { Button } from "@/ui/components/button";
 import { BudgetSpending } from "./spending";
 import { AmountInput } from "@/ui/components/amount-input";
@@ -68,7 +68,7 @@ export const BudgetRow = ({
             spent: status.spent.amount,
           })}
           over={status.type === "over"}
-          label={`Gasto de ${category.label}: ${formatMoney({ locale: user.locale, money: status.spent })}`}
+          label={`Gasto de ${category.label}: ${formatMoneyWithCode({ locale: user.locale, money: status.spent })}`}
         />
       </div>
     </div>
@@ -118,14 +118,20 @@ const BudgetAmount = ({
     }}
   >
     <span className="budget-value-label">Presupuesto</span>
-    <AmountInput
-      aria-label={`Presupuesto de ${category.label} (${status.budget.cap.currency})`}
-      width="content"
-      value={amount}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      onBlur={onSubmit}
-    />
+    <span className="inline-flex max-w-full items-center justify-end gap-2">
+      <span id={`budget-currency-${status.budget.id}`} className="text-sm">
+        {status.budget.cap.currency}
+      </span>
+      <AmountInput
+        aria-label={`Presupuesto de ${category.label} (${status.budget.cap.currency})`}
+        aria-describedby={`budget-currency-${status.budget.id}`}
+        width="content"
+        value={amount}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onSubmit}
+      />
+    </span>
   </form>
 );
 
@@ -133,7 +139,7 @@ const RowBalance = ({ status, user }: Pick<RowProps, "status" | "user">): JSX.El
   <div className="budget-value text-right">
     <span className="budget-value-label">{status.type === "over" ? "Excedido" : "Disponible"}</span>
     <BudgetBalance over={status.type === "over"}>
-      {formatMoney({
+      {formatMoneyWithCode({
         locale: user.locale,
         money: {
           currency: status.budget.cap.currency,

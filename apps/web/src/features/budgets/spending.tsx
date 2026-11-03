@@ -4,7 +4,7 @@ import { DateTime, Option, Schema } from "effect";
 import { type JSX, useMemo, useState } from "react";
 import { type CanonicalSuccess, TransactionQueryValues } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { formatMoney } from "@/transport/money";
+import { formatMoneyWithCode } from "@/transport/money";
 import { Button } from "@/ui/components/button";
 import { SelectionListSkeleton } from "@/ui/components/loading-skeletons";
 import {
@@ -38,7 +38,7 @@ const continuation = (page: Page): Option.Option<string> => {
 /** Opening a spending amount mounts a bounded, read-only canonical history query. */
 export const BudgetSpending = (props: Props): JSX.Element => {
   const [open, setOpen] = useState(false);
-  const amount = formatMoney({ locale: props.user.locale, money: props.spent });
+  const amount = formatMoneyWithCode({ locale: props.user.locale, money: props.spent });
   const month = useMemo(
     () =>
       new Intl.DateTimeFormat(props.user.locale, {
@@ -143,7 +143,7 @@ const SpendingResults = ({
           {Option.getOrElse(transaction.counterparty, () => "Contraparte no identificada")}
         </span>
         <span className="tabular-nums">
-          {formatMoney({ locale: user.locale, money: transaction.money })}
+          {formatMoneyWithCode({ locale: user.locale, money: transaction.money })}
         </span>
         <span className="text-muted-foreground">
           {DateTime.formatIsoDate(

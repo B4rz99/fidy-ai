@@ -166,3 +166,19 @@ production ingress timing. The opt-in benchmark enforces the unchanged 6.94 ms m
 failures remain evidence. Raw logs live under `/tmp/fidy-budget-*`, outside tracked documentation.
 The earlier exploratory candidate run is retained separately and is not part of this comparison.
 Production and full-runtime measurement requirements remain open.
+
+### Application response retention inventory (removal in progress)
+
+| Owner                                                          | Retained contents / lifetime                                           | Consumers                                                             | Required replacement                                                                 |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `transport/workspace-query.ts`                                 | API results, five-minute idle TTL and five-second SWR freshness        | Profile, taxonomy, Budget, Recurring, Transactions, Dashboard, Access | Visit-owned reads with no inactive result retention; preserve mounted editing owners |
+| `app/destination-preload.tsx`, `app/navigation-preparation.ts` | Speculatively populated query results, authentication lifetime         | Idle queue and pointer/focus/touch navigation                         | Code-only preparation; destination visit owns data reads                             |
+| `app/recurring-workspace.tsx`, `app/review-workspace.tsx`      | Hidden visited DOM/query subscriptions until authentication retirement | Recurring/Review return navigation                                    | Separate unsaved draft/recovery owners from disposable query displays                |
+| `features/dashboard/query.ts`                                  | Dashboard response and load phase, five-minute idle TTL                | Dashboard and intent reads                                            | Mounted read, initialization on actual visit only                                    |
+| `transport/workspace-query.ts` bootstrap metadata              | Initial identity/taxonomy observation, 400 ms idle handoff             | Initial route and metadata query                                      | Bounded initial handoff; never reusable navigation data                              |
+| `cloudflare/mcp/runtime.ts`                                    | Scope-keyed generated tool catalog, process lifetime                   | MCP tool listing                                                      | Generate from installed declarations without a reusable projection map               |
+| `transport/money.ts`, `needs-review/model.ts`                  | Intl formatter instances, process lifetime                             | Financial/date presentation                                           | Inventory separately from API data; no User facts are stored                         |
+
+Request-local joins, authoritative database records/indexes, admission semaphores and unsaved
+form/recovery state are not reusable query-response copies. The inventory remains open until the
+remaining application sources and framework retention defaults have been verified.

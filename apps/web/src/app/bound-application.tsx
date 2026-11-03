@@ -2,7 +2,6 @@ import type {
   BrowserSessionLifetime,
   BrowserSessionObservation,
 } from "@/transport/session-binding";
-import { browserRequestsIdle } from "@/transport/session-binding";
 import { initialApplicationValues } from "./initial-values";
 import { RegistryContext, RegistryProvider } from "@effect/atom-react";
 import { RouterProvider } from "@tanstack/react-router";
@@ -50,7 +49,6 @@ const AuthenticationRouter = ({
       ...clients,
       registry,
       sessionBinding: session.binding,
-      browserRequestsIdle: () => browserRequestsIdle(session.signal),
       history: Option.none(),
     })
   );

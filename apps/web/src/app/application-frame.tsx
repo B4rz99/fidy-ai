@@ -1,6 +1,6 @@
 import { useNavigationPreparation } from "./navigation-preparation";
-import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
-import { type JSX, Suspense, lazy, useMemo, useState } from "react";
+import { Outlet, useRouterState } from "@tanstack/react-router";
+import { type JSX, Suspense, lazy } from "react";
 import { AccessRefused, ApplicationShell } from "@/features/signed-in/feature";
 import { useSession } from "@/session/session-context";
 import { HostedAgentProvider } from "@/features/agent/feature";
@@ -17,40 +17,11 @@ const ReviewPendingCount = lazy(() =>
 );
 
 /** One application shell survives navigation across independently authorized product routes. */
-export const ApplicationFrame = (): JSX.Element => {
-  const prepareNavigation = useNavigationPreparation();
-  const router = useRouter();
-  const [attempted] = useState(() => new Set<string>());
-  const destinations = useMemo(
-    () => ({
-      code: destinationCodePreloads,
-      idle: router.options.context.browserRequestsIdle,
-      display: destinationCodePreloads.flatMap((destination) => {
-        if (!["/app/budgets", "/app/recurring", "/app/dashboard"].includes(destination.path)) {
-          return [];
-        }
-        return [
-          {
-            path: destination.path,
-            prepare: (): Promise<void> => {
-              if (attempted.has(destination.path)) return Promise.resolve();
-              attempted.add(destination.path);
-              return destination.path === router.state.location.pathname
-                ? Promise.resolve()
-                : prepareNavigation(destination.path);
-            },
-          },
-        ];
-      }),
-    }),
-    [attempted, prepareNavigation, router]
-  );
-  return (
-    <DestinationPreloadContext value={destinations}>
-      <ApplicationContent />
-    </DestinationPreloadContext>
-  );
-};
+export const ApplicationFrame = (): JSX.Element => (
+  <DestinationPreloadContext value={{ code: destinationCodePreloads }}>
+    <ApplicationContent />
+  </DestinationPreloadContext>
+);
 
 const ApplicationContent = (): JSX.Element => {
   const { authentication } = useSession();

@@ -1,0 +1,30 @@
+apps/server/cloudflare/migrations/0009_transaction_correction_work.sql
+  s_b5e9998aef4caf::t_a0f633372e2c68 43-94
+  s_b5e9998aef4caf::t_e78389b59399a6 1-42
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_b5e9998aef4caf::t_1c69944252ceb0 3,2864
+  s_b5e9998aef4caf::t_678cdd7f79a7b9 2734
+  s_b5e9998aef4caf::t_ff0ba13fab89f7 2700,2774
+  s_b5e9998aef4caf::t_497e291d24d67f 2776-2783,2830,2832-2834,2836-2839,2865-2872
+  s_b5e9998aef4caf::t_7bb335675df6f7 2667-2687,2694,2702,2722,2745,2752,2808,2816,2824,2831,2843,2858
+  s_b5e9998aef4caf::t_c06492de6fc110 2707
+  s_b5e9998aef4caf::t_6b5f3568ba5913 1-2,4-5,2692-2693,2695-2699,2701,2703-2706,2708-2711,2721,2723-2726,2737,2741,2744,2746-2749,2751,2753,2755-2760,2775,2784-2807,2809-2815,2817-2823,2825-2829,2835,2840-2842,2844-2857,2859-2863,2873-2874
+  s_b5e9998aef4caf::t_f4df9708a8346d 2688-2691,2712-2720,2727-2733,2743,2750,2754,2761-2764,2768-2770,2875
+  s_b5e9998aef4caf::t_c37174dc06dee6 2735-2736,2738-2740,2742,2765-2767,2771-2773,2876-2877
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6a9383399c0f7a76e8efb08a1d14df38db944e2a",
+  "prompts": {},
+  "sessions": {
+    "s_b5e9998aef4caf": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a354-83d9-7840-982f-4c41cde02e46",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

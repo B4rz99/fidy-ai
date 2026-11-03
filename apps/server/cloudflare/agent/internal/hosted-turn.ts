@@ -1007,7 +1007,8 @@ const executeAdmittedTurn = ({
         )
       );
     const seenCalls = new Set<string>();
-    const mutation = { started: false };
+    const mutation = { started: false, attempted: false };
+    let invalidOutputRepaired = false;
     const handleModelFailure = ({
       active,
       cause,
@@ -1022,14 +1023,16 @@ const executeAdmittedTurn = ({
       Effect.gen(function* () {
         const error = Cause.findErrorOption(cause);
         if (
-          iteration === 1 &&
-          usedCalls === 0 &&
+          !invalidOutputRepaired &&
+          !mutation.attempted &&
+          (isWhatsAppHosted(subject) || (iteration === 1 && usedCalls === 0)) &&
           Option.exists(
             error,
             (failure) =>
               failure instanceof HostedInferenceError && failure.reason._tag === "InvalidOutput"
           )
         ) {
+          invalidOutputRepaired = true;
           const repaired = yield* exitOnAbort(active.repairInvalidOutput, signal);
           if (signal.aborted || (Exit.isFailure(repaired) && Cause.hasInterrupts(repaired.cause))) {
             return (yield* finish({ _tag: "Interrupted" })) ? interrupted() : unavailable();
@@ -1483,7 +1486,7 @@ const executeHostedTool = ({
   call: HostedTextResult["toolCalls"][number];
   iteration: number;
   signal: AbortSignal;
-  mutation: { started: boolean };
+  mutation: { started: boolean; attempted: boolean };
   deadlineMs: number;
 }>): Effect.Effect<Option.Option<HostedToolAction>, HostedWorkFailure> => {
   const isExpired = Clock.currentTimeMillis.pipe(
@@ -1560,7 +1563,10 @@ const executeHostedTool = ({
     }
     let executed: Option.Option<Response>;
     if (operation.policy.kind === "mutation") {
-      if (Option.isSome(executeMutation)) mutation.started = true;
+      if (Option.isSome(executeMutation)) {
+        mutation.started = true;
+        mutation.attempted = true;
+      }
       executed = Option.isSome(executeMutation)
         ? Option.some(
             yield* executeMutation.value(operation.id, evidence.value, {

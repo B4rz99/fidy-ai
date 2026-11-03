@@ -214,6 +214,9 @@ receives an unconfirmed-registration reply instead of the model's proposed confi
 Executable WhatsApp confirmation commands are rendered only from the host-issued challenge. Model
 prose containing a native confirmation command receives an unconfirmed-preparation reply, so a
 copied or invented command cannot be presented as approval for a new operation.
+WhatsApp may repair one invalid model output after successful queries, retaining their tool results
+and remaining call budget. Repair is unavailable once a mutation has started; it cannot replay
+owner effects or replace host confirmation.
 
 See [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md).
 

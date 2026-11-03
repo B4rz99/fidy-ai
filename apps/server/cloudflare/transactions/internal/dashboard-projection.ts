@@ -130,6 +130,52 @@ export const projectionQueries = (
   ];
 };
 
+/** Count retained rows before aggregation so Dashboard can bound simultaneous raw results. */
+export const projectionSizeQuery = ({
+  db,
+  userId,
+  range,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  range: Readonly<{
+    firstDay: number;
+    lastDay: number;
+    firstMinute: number;
+    lastMinute: number;
+  }>;
+}>): D1PreparedStatement => {
+  // Disjoint day and edge-minute spans preserve the selected relation while giving
+  // SQLite a contiguous (User, size, bucket) index range for each count.
+  const spans = [
+    { size: 86400, from: range.firstDay, toExclusive: range.lastDay },
+    {
+      size: 60,
+      from: range.firstMinute,
+      toExclusive: Math.min(range.lastMinute, range.firstDay * minutesPerDay),
+    },
+    {
+      size: 60,
+      from: Math.max(
+        range.firstMinute,
+        range.firstDay * minutesPerDay,
+        range.lastDay * minutesPerDay
+      ),
+      toExclusive: range.lastMinute,
+    },
+  ];
+  const counts = ["transaction_projection_bucket", "transaction_projection_digit"].flatMap(
+    (table) =>
+      spans.map(
+        ({ size }) =>
+          `(SELECT COUNT(*) FROM ${table}
+          WHERE user_id = ? AND size_seconds = ${size} AND bucket >= ? AND bucket < ?)`
+      )
+  );
+  const params = spans.flatMap(({ from, toExclusive }) => [userId, from, toExclusive]);
+  return db.prepare(`SELECT ${counts.join(" + ")} AS row_count`).bind(...params, ...params);
+};
+
 const decodeSums = (rows: ReadonlyArray<unknown>): Option.Option<Map<string, bigint>> => {
   const digits = Option.all(rows.map((row) => Schema.decodeUnknownOption(DigitRow)(row)));
   if (Option.isNone(digits)) return Option.none();

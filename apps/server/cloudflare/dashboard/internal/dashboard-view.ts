@@ -26,6 +26,11 @@ type RangePlan = Readonly<{
   plans: ReadonlyArray<Readonly<{ id: string; ranges: ReadonlyArray<DashboardProjectionRange> }>>;
   unique: ReadonlyMap<string, Readonly<{ from: number; toExclusive: number }>>;
 }>;
+type ListQueries = Parameters<typeof readDashboardTransactions>[0]["lists"];
+type ListPlan = Readonly<{
+  queries: ListQueries;
+  widgets: ReadonlyArray<Readonly<{ id: string; query: number }>>;
+}>;
 type FinancialSnapshot = DashboardTransactionSnapshot<ReadonlyArray<Budget>>;
 const monthLabelLength = 7;
 const sameContext = Schema.toEquivalence(UserContext);
@@ -44,18 +49,41 @@ const planRanges = (widgets: LayoutWidgets, now: DateTime.Utc, context: UserCont
   return { plans, unique };
 };
 
-const readFinancialSnapshot = ({
+const planLists = (widgets: LayoutWidgets): ListPlan => {
+  const queries: Array<ListQueries[number]> = [];
+  const selected: Array<Readonly<{ id: string; query: number }>> = [];
+  const positions = new Map<string, number>();
+  for (const widget of widgets) {
+    if (widget.type !== "transaction-list") continue;
+    const categories = widget.categories ?? [];
+    const key = `${widget.limit}:${categories.join(",")}:${widget.search ?? ""}`;
+    let query = positions.get(key);
+    if (query === undefined) {
+      query = queries.length;
+      positions.set(key, query);
+      queries.push({
+        categories,
+        search: Option.fromUndefinedOr(widget.search),
+        limit: widget.limit,
+      });
+    }
+    selected.push({ id: widget.id, query });
+  }
+  return { queries, widgets: selected };
+};
+
+const findFinancialSnapshot = ({
   db,
   userId,
   initial,
-  widgets,
+  lists,
   plan,
   now,
 }: Readonly<{
   db: D1Database;
   userId: string;
   initial: DashboardReadContext;
-  widgets: LayoutWidgets;
+  lists: ListQueries;
   plan: RangePlan;
   now: DateTime.Utc;
 }>): Effect.Effect<Option.Option<FinancialSnapshot>> => {
@@ -69,13 +97,7 @@ const readFinancialSnapshot = ({
     db,
     userId,
     categories,
-    lists: widgets
-      .filter((widget) => widget.type === "transaction-list")
-      .map((widget) => ({
-        categories: widget.categories ?? [],
-        search: Option.fromUndefinedOr(widget.search),
-        limit: widget.limit,
-      })),
+    lists,
     ranges: [...plan.unique.values()],
     snapshot: {
       statements: [
@@ -136,18 +158,24 @@ export const loadDashboardFacts = ({
   Effect.gen(function* () {
     const widgets = collectLayoutWidgets(document.layout);
     const plan = planRanges(widgets, now, initial.context);
-    const selected = yield* readFinancialSnapshot({ db, userId, initial, widgets, plan, now });
+    const lists = planLists(widgets);
+    const selected = yield* findFinancialSnapshot({
+      db,
+      userId,
+      initial,
+      lists: lists.queries,
+      plan,
+      now,
+    });
     if (Option.isNone(selected)) return Option.none();
     const groups = restoreGroups(plan, selected.value);
     const listFacts = Option.all(
-      widgets
-        .filter((widget) => widget.type === "transaction-list")
-        .map((widget, index) =>
-          Option.map(
-            Option.fromUndefinedOr(selected.value.lists[index]),
-            (rows) => [widget.id, rows] as const
-          )
+      lists.widgets.map((widget) =>
+        Option.map(
+          Option.fromUndefinedOr(selected.value.lists[widget.query]),
+          (rows) => [widget.id, rows] as const
         )
+      )
     );
     if (Option.isNone(groups) || Option.isNone(listFacts)) return Option.none();
     return Option.some({

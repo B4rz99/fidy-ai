@@ -183,7 +183,7 @@ it("loads all daily chart intervals in bounded native batches without rereading 
       expect(
         [...result.groups.values()].flatMap((ranges) => ranges.map((range) => range.contributions))
       ).toEqual(Array.from({ length: 33 }, () => []));
-      expect(cost.roundTrips()).toBe(9);
+      expect(cost.roundTrips()).toBeLessThanOrEqual(3);
     })
   ));
 

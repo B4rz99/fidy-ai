@@ -110,7 +110,7 @@ it("repairs invalid mutation arguments after a successful query without repeatin
     })
   ));
 
-it("stops after one failed repair of invalid arguments following a query", () =>
+it("reports failure after one invalid-output repair without replaying a successful query", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
@@ -123,8 +123,28 @@ it("stops after one failed repair of invalid arguments following a query", () =>
           Promise.resolve(++rounds === 1 ? categoryQueryReply() : invalidBatchReply()),
       });
       expect(rounds).toBe(3);
-      expect(result.response.status).toBe(503);
-      expect(result.sent).toEqual([]);
+      expect(result.response.status).toBe(202);
+      expect(result.sent).toEqual([
+        "No pude completar tu solicitud en este momento. Inténtalo más tarde.",
+      ]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM transcript_entries WHERE turn_id=? AND kind='tool_call'"
+            )
+            .bind(result.turnId)
+            .first<number>("count")
+        )
+      ).toBe(1);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT count(*) AS count FROM hosted_mutation_commits WHERE turn_id=?")
+            .bind(result.turnId)
+            .first<number>("count")
+        )
+      ).toBe(0);
     })
   ));
 

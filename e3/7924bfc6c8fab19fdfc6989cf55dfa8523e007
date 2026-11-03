@@ -1,0 +1,85 @@
+apps/web/src/app/destination-preload.tsx
+  s_12ede6869163f4::t_d47d04497d1441 30,35
+  s_12ede6869163f4::t_0f997fb7a9e3e8 6
+  s_12ede6869163f4::t_3a118cc7c53c30 2-5,7,9-16,95-110,113,116-121
+  s_12ede6869163f4::t_f4ae8914a0d4b5 8,94
+  s_12ede6869163f4::t_c1b2bbae68ea6b 1,17-29,31-34,36-93,111-112,114-115
+apps/web/src/app/routes.ts
+  s_12ede6869163f4::t_9a72cd85af7032 411
+apps/web/src/app/destination-preload-context.ts
+  s_12ede6869163f4::t_9a72cd85af7032 3-9
+  s_12ede6869163f4::t_3a118cc7c53c30 1-2
+apps/web/src/transport/session-binding.ts
+  s_12ede6869163f4::t_7d4f60e57421c2 46,53
+  s_12ede6869163f4::t_9a72cd85af7032 28-36,49
+  s_12ede6869163f4::t_573ed92e7119ef 37-38
+  s_12ede6869163f4::t_ae9c33b237c625 39-45
+  s_12ede6869163f4::t_e7acec73fd4860 47-48,50-52,54,213-221
+apps/web/e2e/workspace-navigation.spec.ts
+  s_12ede6869163f4::t_3a118cc7c53c30 64
+  s_12ede6869163f4::t_8e4c7bd510b6a0 53-56,61-63,66-71,74-76,82-86
+  s_12ede6869163f4::t_1709f56c533000 78-80
+  s_12ede6869163f4::t_d10c9a4a42c4bd 21-23,123-125,139,143-145,149,155-157,162-165,172,175-180,184-191
+  s_12ede6869163f4::t_66d5e5c24a23d0 93,119-122,126-138,140-142,146-148,150-154,218-220
+  s_12ede6869163f4::t_463727cc475788 24-25,158-161,166-170,174,181,183,192-196
+  s_12ede6869163f4::t_30e6bad29400fb 57-60,65,72-73,77,81,87-89
+  s_12ede6869163f4::t_f413847c087f1a 94-95,171,173,182
+  s_12ede6869163f4::t_fbf2d37c958a93 339-343
+  s_12ede6869163f4::t_7ba9b69316d09d 197
+apps/web/src/app/application-frame.tsx
+  s_12ede6869163f4::t_f4ae8914a0d4b5 2-3,22-24,43,49
+  s_12ede6869163f4::t_0f997fb7a9e3e8 25-26,42
+  s_12ede6869163f4::t_9a72cd85af7032 27
+  s_12ede6869163f4::t_1709f56c533000 20
+  s_12ede6869163f4::t_f413847c087f1a 44-48,50
+  s_12ede6869163f4::t_3b50f315c9cb15 28
+  s_12ede6869163f4::t_3a118cc7c53c30 10
+  s_12ede6869163f4::t_3c4a55ac0e18e2 29-41
+  s_12ede6869163f4::t_c63e12b6e5c6cc 21
+apps/web/src/app/dashboard-page.tsx
+  s_12ede6869163f4::t_3a118cc7c53c30 4,8
+apps/web/src/app/transactions-page.tsx
+  s_12ede6869163f4::t_3a118cc7c53c30 4,41
+apps/web/src/app/recurring-workspace.tsx
+  s_12ede6869163f4::t_3a118cc7c53c30 11,52
+apps/web/src/app/review-workspace.tsx
+  s_12ede6869163f4::t_445c6f3e85ac06 8,48-50
+apps/web/src/app/router-context.ts
+  s_12ede6869163f4::t_9a72cd85af7032 8
+apps/web/src/app/budget-page.tsx
+  s_12ede6869163f4::t_3a118cc7c53c30 3,7
+apps/web/src/features/needs-review/workspace.tsx
+  s_12ede6869163f4::t_f413847c087f1a 94-96,102-104,132-134,199-201
+  s_12ede6869163f4::t_445c6f3e85ac06 73,78,113,119,152,159,266,289,309
+  s_12ede6869163f4::t_4d51e58bb65260 180,191
+apps/web/ARCHITECTURE.md
+  s_12ede6869163f4::t_575f0aba346db8 572-576
+  s_12ede6869163f4::t_66d5e5c24a23d0 568-571,577-579
+apps/web/src/app/bound-application.tsx
+  s_12ede6869163f4::t_9a72cd85af7032 5,53
+apps/web/src/transport/session-binding.test.ts
+  s_12ede6869163f4::t_faf2cef47972cc 29-41,47
+  s_12ede6869163f4::t_573ed92e7119ef 22-28,42-46,48-76
+  s_12ede6869163f4::t_8cafa245f62c60 12,15,21,77
+  s_12ede6869163f4::t_204f1bdcddf13e 78
+apps/web/package.json
+  s_12ede6869163f4::t_e2d583cd383747 59
+bun.lock
+  s_12ede6869163f4::t_d0e66eefef22a3 145,677-679,1143,1255,1585,1941
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e37924bfc6c8fab19fdfc6989cf55dfa8523e007",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

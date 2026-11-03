@@ -1,3 +1,4 @@
+import { withOpenAiFetch } from "../openai.test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
@@ -335,7 +336,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
           Response.json({ messaging_product: "whatsapp", messages: [{ id: "reminder-provider" }] })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const coordinator = makeProactivityCoordinator({
         environment: configuration(db),
         userId: proactivityTestUsers[0],
@@ -852,7 +853,7 @@ it.each(refusalCases)(
             Response.json({ messaging_product: "whatsapp", messages: [{ id: "must-not-send" }] })
           )
         );
-        vi.stubGlobal("fetch", provider);
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         const environment = { ...configuration(db), ...scenario.environment };
         const work = {
           kind: "proactivity-delivery",
@@ -930,7 +931,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
             })
           )
         );
-        vi.stubGlobal("fetch", provider);
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         yield* executeProactivityWork({
           environment,
           userId,
@@ -1275,7 +1276,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
           Response.json({ messaging_product: "whatsapp", messages: [{ id: `crash-${++sent}` }] })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const send = (id: string, now: DateTime.Utc): ReturnType<typeof executeProactivityWork> =>
         executeProactivityWork({
           environment,

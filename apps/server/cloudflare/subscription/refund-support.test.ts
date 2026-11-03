@@ -1,3 +1,4 @@
+import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type Cause, Clock, Effect, Exit, Schema } from "effect";
 import { RefundSupportAdmission, type RefundSupportEnvironment } from "./contract";
 import { afterEach, expect, it, vi } from "vitest";
@@ -5,7 +6,7 @@ import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { seedRefundCharge } from "./refund-charge.test-fixture";
 import { startRefund } from "./operations";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { handleRefundSupport } from "./runtime";
@@ -26,14 +27,17 @@ const setup = Effect.fnUntraced(function* () {
   const admissions: unknown[] = [];
   const services = yield* Effect.context<never>();
   const signingKeys = { keys: [{ ...jwk, kid: "billing-test", alg: "RS256", use: "sig" }] };
-  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const request = new Request(input, init);
-    expect(request.url).toBe(`${issuer}/cdn-cgi/access/certs`);
-    expect(request.headers.has("cf-access-jwt-assertion")).toBe(false);
-    expect(request.headers.has("authorization")).toBe(false);
-    expect(request.headers.has("traceparent")).toBe(false);
-    return Promise.resolve(Response.json(signingKeys));
-  });
+  vi.stubGlobal(
+    "fetch",
+    withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const request = new Request(input, init);
+      expect(request.url).toBe(`${issuer}/cdn-cgi/access/certs`);
+      expect(request.headers.has("cf-access-jwt-assertion")).toBe(false);
+      expect(request.headers.has("authorization")).toBe(false);
+      expect(request.headers.has("traceparent")).toBe(false);
+      return Promise.resolve(Response.json(signingKeys));
+    })
+  );
   const environment = {
     DB: made.db,
     WOMPI_ENVIRONMENT: "sandbox",
@@ -84,8 +88,8 @@ const publicSupport = (
       fetch: (forwarded, init) =>
         coreWorker.fetch(new Request(forwarded, init), {
           ...environment,
-          AI: { run: () => Promise.reject(new Error("unused")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("unused")) }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
           CONTRACT_DIGEST: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
           BROWSER_ORIGIN: "https://app.fidyapp.com",
@@ -325,19 +329,22 @@ it("aborts the owned signing-key lookup when its request is cancelled without ca
       const firstReply = Promise.withResolvers<Response>();
       const secondReply = Promise.withResolvers<Response>();
       let lookups = 0;
-      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-        const incoming = new Request(input, init);
-        lookups++;
-        const reply = lookups === 1 ? firstReply : secondReply;
-        incoming.signal.addEventListener(
-          "abort",
-          () => reply.reject(new DOMException("Cancelled lookup", "AbortError")),
-          { once: true }
-        );
-        if (lookups === 1) firstEntered.resolve(incoming.signal);
-        else secondEntered.resolve(incoming.signal);
-        return reply.promise;
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+          const incoming = new Request(input, init);
+          lookups++;
+          const reply = lookups === 1 ? firstReply : secondReply;
+          incoming.signal.addEventListener(
+            "abort",
+            () => reply.reject(new DOMException("Cancelled lookup", "AbortError")),
+            { once: true }
+          );
+          if (lookups === 1) firstEntered.resolve(incoming.signal);
+          else secondEntered.resolve(incoming.signal);
+          return reply.promise;
+        })
+      );
       const first = runExit(
         Effect.tryPromise(() =>
           handleRefundSupport({

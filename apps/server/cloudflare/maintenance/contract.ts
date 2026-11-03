@@ -37,7 +37,7 @@ export type ScheduledOperation =
   | "insights.weekly.dispatch"
   | "ingestion.uploadAdmissionSweep"
   | "ingestion.mediaRetention"
-  | "agent.workersAiAdmissionSweep"
+  | "agent.openAiAdmissionSweep"
   | "ingestion.reviewDraftExpiry"
   | "ingestion.reviewEvidenceExpiry"
   | "ingestion.submissionRetention"

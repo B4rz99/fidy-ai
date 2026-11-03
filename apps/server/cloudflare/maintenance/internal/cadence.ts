@@ -24,7 +24,7 @@ const cadenceMinutes: Partial<Record<ScheduledOperation, number>> = {
   "ingestion.stagingSweep": 60,
   "ingestion.mediaRetention": 60,
   "ingestion.uploadAdmissionSweep": 60,
-  "agent.workersAiAdmissionSweep": 60,
+  "agent.openAiAdmissionSweep": 60,
   "billing.cardPreparationAdmissionSweep": 60,
   "provider.authenticationRetention": 60,
   "canonical.admissionRetention": 60,

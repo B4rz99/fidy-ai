@@ -1,3 +1,4 @@
+import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import {
   disposeLegacyConsent,
   receiveLegacyConsent,
@@ -5,7 +6,7 @@ import {
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { DisclosureSnapshot, maxWhatsAppWebhookBytes } from "../../src/shell/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
@@ -165,11 +166,13 @@ const setup = (
                 CORE: {
                   fetch: (request) =>
                     coreWorker.fetch(new Request(request), {
-                      AI: { run: () => Promise.reject(new Error("unused")) },
+                      OPENAI_API_KEY: openAiTestKey({
+                        run: () => Promise.reject(new Error("unused")),
+                      }),
                       CONTRACT_DIGEST:
                         "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
                       DB: db,
-                      HOSTED_AI_MODEL: approvedWorkersAiModel,
+                      HOSTED_AI_MODEL: approvedOpenAiModel,
                       BROWSER_ORIGIN: "https://app.fidyapp.com",
                       WOMPI_ENVIRONMENT: "",
                       WOMPI_PUBLIC_KEY: "",
@@ -281,7 +284,7 @@ it("refuses image work while extraction is unavailable without treating its capt
         setup(Option.some(coordinator))
       );
       yield* Effect.tryPromise(() => seedVoiceUser(db, "10000000-0000-4000-8000-000000000071"));
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       for (const caller of [bsuid, "CO.99999999999999999999"]) {
         const payload = encodeJson({
           message: {
@@ -376,8 +379,8 @@ it.each([
           {
             DB: db,
             KAPSO_API_KEY: "fake-provider-key",
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
-            AI: {
+            HOSTED_AI_MODEL: approvedOpenAiModel,
+            OPENAI_API_KEY: openAiTestKey({
               run: (): Promise<Response> =>
                 Promise.resolve(
                   Response.json({
@@ -390,7 +393,7 @@ it.each([
                     usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
                   })
                 ),
-            },
+            }),
           }
         );
         const { send } = yield* Effect.tryPromise(() =>
@@ -402,12 +405,15 @@ it.each([
             Option.some(db)
           )
         );
-        vi.stubGlobal("fetch", () =>
-          Promise.resolve(
-            Response.json({
-              messaging_product: "whatsapp",
-              messages: [{ id: "wamid.output" }],
-            })
+        vi.stubGlobal(
+          "fetch",
+          withOpenAiFetch(() =>
+            Promise.resolve(
+              Response.json({
+                messaging_product: "whatsapp",
+                messages: [{ id: "wamid.output" }],
+              })
+            )
           )
         );
         const payload = voice ? voiceInbound(messageId, { text }) : inbound(messageId, text);
@@ -494,7 +500,7 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
       const { db, send, sweep } = yield* Effect.tryPromise(() => setup(Option.some(calls)));
       const userId = "10000000-0000-4000-8000-000000000071";
       yield* Effect.tryPromise(() => seedVoiceUser(db, userId));
-      const provider = vi.fn((_url: string, _init: RequestInit) =>
+      const provider = vi.fn((_url: string | URL | Request, _init?: RequestInit) =>
         Promise.resolve(
           Response.json({
             messaging_product: "whatsapp",
@@ -502,7 +508,7 @@ it("answers unusable authenticated voice once without admitting a Turn or inferr
           })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const missing = voiceInbound("wamid.voice-missing");
       expect((yield* Effect.tryPromise(() => send(missing, "invalid"))).status).toBe(401);
       expect(provider).not.toHaveBeenCalled();
@@ -589,7 +595,7 @@ it("reports a failed voice reply truthfully without retrying its uncertain provi
       const userId = "10000000-0000-4000-8000-000000000071";
       yield* Effect.tryPromise(() => seedVoiceUser(db, userId));
       const provider = vi.fn(() => Promise.reject(new Error("provider may have accepted")));
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const payload = voiceInbound("wamid.ambiguous-voice");
       expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(503);
       expect((yield* Effect.tryPromise(() => send(payload))).status).toBe(503);
@@ -674,12 +680,12 @@ const startDisclosure = (
 ): Promise<string> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const provider = vi.fn((_url: string, _init: RequestInit) =>
+      const provider = vi.fn((_url: string | URL | Request, _init?: RequestInit) =>
         Promise.resolve(
           Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.disclosure-1" }] })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       expect((yield* Effect.tryPromise(() => send(inbound("wamid.first", firstText)))).status).toBe(
         200
       );
@@ -744,7 +750,7 @@ it("refuses forged and altered webhook bytes without any persistent or provider 
           Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.unused" }] })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const valid = inbound("wamid.first", "Acepto");
       const signed = yield* Effect.tryPromise(() => signWebhook(secret, valid));
       expect(
@@ -861,7 +867,7 @@ it("rejects an oversized streamed webhook before admission or provider work", ()
     Effect.gen(function* () {
       const { db, send, forbiddenEffects } = yield* Effect.tryPromise(() => setup());
       const provider = vi.fn(() => Promise.reject(new Error("provider must not be called")));
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       expect(
         (yield* Effect.tryPromise(() => send("x".repeat(maxWhatsAppWebhookBytes + 1)))).status
       ).toBe(413);
@@ -1073,7 +1079,7 @@ it("sweeps expired evidence while idle and rejects its original signed webhook a
           Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.disclosure-1" }] })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       expect((yield* Effect.tryPromise(() => send(original))).status).toBe(200);
       expect(provider).toHaveBeenCalledTimes(1);
       vi.useFakeTimers({ toFake: ["Date"] });
@@ -1117,7 +1123,7 @@ it("cannot re-send disclosure with a future-dated signed event when its exchange
           Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.disclosure-1" }] })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       expect((yield* Effect.tryPromise(() => send(original))).status).toBe(200);
       expect(provider).toHaveBeenCalledTimes(1);
       const created = yield* Effect.tryPromise(() =>
@@ -1270,12 +1276,12 @@ it("recovers a committed pre-send disclosure once without resending a started at
       const { db } = yield* Effect.tryPromise(() => setup());
       const token = "14390000-0000-4000-8000-000000000001";
       const current = yield* Clock.currentTimeMillis;
-      const provider = vi.fn((_url: string, _init: RequestInit) =>
+      const provider = vi.fn((_url: string | URL | Request, _init?: RequestInit) =>
         Promise.resolve(
           Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.recovered" }] })
         )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       yield* Effect.tryPromise(() =>
         db
           .prepare(
@@ -1333,8 +1339,10 @@ it.each([200, 403])(
       Effect.gen(function* () {
         const { db, send } = yield* Effect.tryPromise(() => setup());
         const pendingResponse = Promise.withResolvers<Response>();
-        const provider = vi.fn((_url: string, _init: RequestInit) => pendingResponse.promise);
-        vi.stubGlobal("fetch", provider);
+        const provider = vi.fn(
+          (_url: string | URL | Request, _init?: RequestInit) => pendingResponse.promise
+        );
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         const sending = send(inbound("wamid.first", "Hola"));
         yield* Effect.tryPromise(() => vi.waitFor(() => expect(provider).toHaveBeenCalledTimes(1)));
         const payload = yield* Schema.decodeUnknownEffect(ProviderSend)(

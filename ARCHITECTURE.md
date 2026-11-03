@@ -36,8 +36,8 @@ flowchart LR
 ```
 
 D1 retains application state; Durable Objects coordinate per-User work; Queues redeliver bounded
-identities; Workflows execute durable steps; R2 retains private bytes; Workers AI supplies
-Fidy-controlled inference. An independent private erasure registry protects deletion across D1
+identities; Workflows execute durable steps; R2 retains private bytes; OpenAI supplies
+Fidy-controlled hosted inference. An independent private erasure registry protects deletion across D1
 restoration. Local development uses the same Worker entrypoints and binding graph.
 See [ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md).
 

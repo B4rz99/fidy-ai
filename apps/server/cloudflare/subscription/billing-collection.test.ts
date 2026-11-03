@@ -1,3 +1,4 @@
+import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type WorkflowStepConfig } from "cloudflare:workers";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
@@ -5,7 +6,7 @@ import {
   makePaymentEnrollmentD1,
   queuedBillingExecution,
 } from "./payment-enrollment-d1.test-fixture";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import {
   dispatchBillingCollection,
   receiveBillingCollection,
@@ -79,9 +80,9 @@ const publicBillingCallback = (db: D1Database, request: Request): Promise<Respon
     CORE: {
       fetch: (forwarded) =>
         coreWorker.fetch(new Request(forwarded), {
-          AI: { run: () => Promise.reject(new Error("unused")) },
+          OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("unused")) }),
           DB: db,
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
           CONTRACT_DIGEST: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
           BROWSER_ORIGIN: "https://app.fidyapp.com",
           WOMPI_ENVIRONMENT: "sandbox",
@@ -131,7 +132,10 @@ const verifyProviderTransaction = (
   lookupId: string = transactionId
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.tryPromise(() => {
-    vi.stubGlobal("fetch", () => Promise.resolve(Response.json({ data: read() })));
+    vi.stubGlobal(
+      "fetch",
+      withOpenAiFetch(() => Promise.resolve(Response.json({ data: read() })))
+    );
     return runBillingCollectionWorkflow({
       environment: billingRuntime(db),
       payload: { version: 1, kind: "lookup", transactionId: lookupId },
@@ -161,19 +165,22 @@ it("collects a Nequi source without card installment fields and settles the comm
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => fixture("nequi"));
       let posts = 0;
-      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
-        const result = Response.json({ data: transaction("APPROVED") });
-        if (init?.method === "POST") {
-          posts++;
-          return new Request(input, init).json().then((body: unknown) => {
-            expect(body).toHaveProperty("payment_source_id", 3891);
-            expect(body).not.toHaveProperty("payment_method");
-            expect(body).not.toHaveProperty("phone_number");
-            return result;
-          });
-        }
-        return Promise.resolve(result);
-      });
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const result = Response.json({ data: transaction("APPROVED") });
+          if (init?.method === "POST") {
+            posts++;
+            return new Request(input, init).json().then((body: unknown) => {
+              expect(body).toHaveProperty("payment_source_id", 3891);
+              expect(body).not.toHaveProperty("payment_method");
+              expect(body).not.toHaveProperty("phone_number");
+              return result;
+            });
+          }
+          return Promise.resolve(result);
+        })
+      );
       const run = (): Promise<void> =>
         runBillingCollectionWorkflow({
           environment: billingRuntime(db),
@@ -476,22 +483,24 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
       const db = yield* Effect.tryPromise(() => fixture());
       const environment = billingRuntime(db);
       const eventSecret = environment.WOMPI_EVENT_SECRET;
-      const provider = vi.fn((_request: URL, init?: RequestInit): Promise<Response> => {
-        if (init?.method === "POST") return Promise.reject(new Error("lost response"));
-        return Promise.resolve(
-          Response.json({
-            data: {
-              id: transactionId,
-              reference,
-              status: "APPROVED",
-              amount_in_cents: 990000,
-              currency: "COP",
-              finalized_at: "2026-09-08T12:00:00Z",
-            },
-          })
-        );
-      });
-      vi.stubGlobal("fetch", provider);
+      const provider = vi.fn(
+        (_request: string | URL | Request, init?: RequestInit): Promise<Response> => {
+          if (init?.method === "POST") return Promise.reject(new Error("lost response"));
+          return Promise.resolve(
+            Response.json({
+              data: {
+                id: transactionId,
+                reference,
+                status: "APPROVED",
+                amount_in_cents: 990000,
+                currency: "COP",
+                finalized_at: "2026-09-08T12:00:00Z",
+              },
+            })
+          );
+        }
+      );
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const run = (): Promise<void> =>
         runBillingCollectionWorkflow({
           environment,
@@ -594,23 +603,24 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => fixture());
       const environment = billingRuntime(db);
-      const provider = vi.fn((_url: URL, init?: RequestInit): Promise<Response> =>
-        init?.method === "POST"
-          ? Promise.reject(new Error("lost response"))
-          : Promise.resolve(
-              Response.json({
-                data: {
-                  id: transactionId,
-                  reference,
-                  status: "APPROVED",
-                  amount_in_cents: 990000,
-                  currency: "COP",
-                  finalized_at: "2026-09-08T12:00:00Z",
-                },
-              })
-            )
+      const provider = vi.fn(
+        (_url: string | URL | Request, init?: RequestInit): Promise<Response> =>
+          init?.method === "POST"
+            ? Promise.reject(new Error("lost response"))
+            : Promise.resolve(
+                Response.json({
+                  data: {
+                    id: transactionId,
+                    reference,
+                    status: "APPROVED",
+                    amount_in_cents: 990000,
+                    currency: "COP",
+                    finalized_at: "2026-09-08T12:00:00Z",
+                  },
+                })
+              )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const activity = (
         _name: string,
         _options: WorkflowStepConfig,
@@ -659,7 +669,7 @@ it("rejects forged callback evidence across Public and Core ingress without writ
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => fixture());
       const provider = vi.fn(() => Promise.reject(new Error("forbidden provider call")));
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const request = new Request("https://api.fidyapp.com/providers/wompi/billing-events", {
         method: "POST",
         headers: { "content-type": "application/json", "x-event-checksum": "forged" },
@@ -739,7 +749,7 @@ it("runs the bounded provider checks in one execution with durable cooldowns", (
       const provider = vi.fn(() =>
         Promise.resolve(Response.json({ data: transaction("PENDING") }))
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const waits: number[] = [];
       const activities: string[] = [];
       const workflow = {
@@ -801,7 +811,7 @@ it("stops an old signed generation from spending a newer hint's budget and settl
       const provider = vi.fn(() =>
         Promise.resolve(Response.json({ data: transaction(approved ? "APPROVED" : "PENDING") }))
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       let newerHint = Option.none<Promise<Response>>();
       const ids: string[] = [];
       const workflow = {
@@ -867,7 +877,7 @@ it("keeps queued and waiting work uncharged and restarts a failed execution with
       const provider = vi.fn(() =>
         Promise.resolve(Response.json({ data: transaction(failStep ? "PENDING" : "APPROVED") }))
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const run = (): Promise<void> =>
         runBillingCollectionWorkflow({
           environment: billingRuntime(db),
@@ -1117,21 +1127,22 @@ it("bounds unrelated signed callback lookups and ignores identical event replay"
           })
         );
       expect((yield* Effect.tryPromise(send)).status).toBe(200);
-      const provider = vi.fn((_url: URL, _init?: RequestInit): Promise<Response> =>
-        Promise.resolve(
-          Response.json({
-            data: {
-              id: unrelatedId,
-              reference: "fidy-40000000-0000-4000-8000-000000000099",
-              status,
-              amount_in_cents: amount,
-              currency: "COP",
-              finalized_at: "2026-09-08T12:00:00Z",
-            },
-          })
-        )
+      const provider = vi.fn(
+        (_url: string | URL | Request, _init?: RequestInit): Promise<Response> =>
+          Promise.resolve(
+            Response.json({
+              data: {
+                id: unrelatedId,
+                reference: "fidy-40000000-0000-4000-8000-000000000099",
+                status,
+                amount_in_cents: amount,
+                currency: "COP",
+                finalized_at: "2026-09-08T12:00:00Z",
+              },
+            })
+          )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const environment = billingRuntime(db);
       const create = vi.fn((options: { id: string; params: unknown }): Promise<unknown> =>
         runBillingCollectionWorkflow({
@@ -1172,21 +1183,22 @@ it("accepts same-second signed approval after a verified negative without replay
       const timestamp = 1530291411;
       const environment = billingRuntime(db);
       let observed: "APPROVED" | "DECLINED" = "DECLINED";
-      const provider = vi.fn((_url: URL, _init?: RequestInit): Promise<Response> =>
-        Promise.resolve(
-          Response.json({
-            data: {
-              id: transactionId,
-              reference,
-              status: observed,
-              amount_in_cents: 990000,
-              currency: "COP",
-              finalized_at: "2026-09-08T12:00:00Z",
-            },
-          })
-        )
+      const provider = vi.fn(
+        (_url: string | URL | Request, _init?: RequestInit): Promise<Response> =>
+          Promise.resolve(
+            Response.json({
+              data: {
+                id: transactionId,
+                reference,
+                status: observed,
+                amount_in_cents: 990000,
+                currency: "COP",
+                finalized_at: "2026-09-08T12:00:00Z",
+              },
+            })
+          )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const started = new Set<string>();
       const workflow = {
         create: vi.fn((options: { id: string; params: unknown }): Promise<unknown> => {
@@ -1282,22 +1294,23 @@ it("rejects a signed callback with another User's source even when its reference
           sendSignedEvent(db, { transactionId, status: "APPROVED", timestamp: 1530291411 })
         )).status
       ).toBe(200);
-      const provider = vi.fn((_url: URL, _init?: RequestInit): Promise<Response> =>
-        Promise.resolve(
-          Response.json({
-            data: {
-              id: transactionId,
-              reference,
-              status: "APPROVED",
-              payment_source_id: 3892,
-              amount_in_cents: 990000,
-              currency: "COP",
-              finalized_at: "2026-09-08T12:00:00Z",
-            },
-          })
-        )
+      const provider = vi.fn(
+        (_url: string | URL | Request, _init?: RequestInit): Promise<Response> =>
+          Promise.resolve(
+            Response.json({
+              data: {
+                id: transactionId,
+                reference,
+                status: "APPROVED",
+                payment_source_id: 3892,
+                amount_in_cents: 990000,
+                currency: "COP",
+                finalized_at: "2026-09-08T12:00:00Z",
+              },
+            })
+          )
       );
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const environment = billingRuntime(db);
       const workflow = {
         create: vi.fn((options: { id: string; params: unknown }): Promise<unknown> =>

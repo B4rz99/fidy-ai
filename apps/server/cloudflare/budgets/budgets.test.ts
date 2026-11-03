@@ -1,3 +1,4 @@
+import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type ConsentUnavailable } from "../consent/contract";
 import { type InsightUnavailable, type ProactivityDeliveryWork } from "../insights/contract";
 import { type WorkflowStep } from "cloudflare:workers";
@@ -63,7 +64,7 @@ import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
 import { Transaction } from "../../src/core/transactions/contract";
 import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { AtomicBatchRejected } from "../../src/shell/operations/contract";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
@@ -162,10 +163,12 @@ const send = (db: D1Database, request: Request): Promise<Response> => {
       fetch: (internal) =>
         coreWorker.fetch(new Request(internal), {
           DB: db,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
           CONTRACT_DIGEST: "a".repeat(64),
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
           BROWSER_ORIGIN: "https://app.fidyapp.com",
           WOMPI_ENVIRONMENT: "",
           WOMPI_PUBLIC_KEY: "",
@@ -188,8 +191,10 @@ const send = (db: D1Database, request: Request): Promise<Response> => {
                     },
                     {
                       DB: db,
-                      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-                      HOSTED_AI_MODEL: approvedWorkersAiModel,
+                      OPENAI_API_KEY: openAiTestKey({
+                        run: (): Promise<never> => Promise.reject(new Error("unused")),
+                      }),
+                      HOSTED_AI_MODEL: approvedOpenAiModel,
                     }
                   );
                   coordinators.set(name, coordinator);
@@ -717,7 +722,7 @@ it.each([
             })
           )
         );
-        vi.stubGlobal("fetch", provider);
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         yield* executeProactivityWork({
           environment,
           userId,
@@ -1748,7 +1753,7 @@ it("installed category generation atomically materializes two Budget events and 
             Response.json({ messaging_product: "whatsapp", messages: [{ id: "budget-provider" }] })
           )
         );
-        vi.stubGlobal("fetch", provider);
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
         const environment = {
           DB: db,
           PROACTIVITY_ENABLED: "enabled",
@@ -2008,7 +2013,7 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
       const provider = vi
         .fn<typeof globalThis.fetch>()
         .mockRejectedValue(new Error("Forbidden provider IO"));
-      vi.stubGlobal("fetch", provider);
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const unexpected = (): Promise<never> =>
         Promise.reject(new Error("Unexpected infrastructure authority"));
       const instance: WorkflowInstance = {

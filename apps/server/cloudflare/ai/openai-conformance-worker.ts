@@ -1,7 +1,7 @@
 import { verifyHostedInferenceConformanceChecks } from "../../src/shell/hosted-inference/operations";
 import { Cause, Effect, Exit, Option } from "effect";
 import { makeCloudflareHostedInference } from "./runtime";
-import type { WorkersAiEnvironment } from "./contract";
+import type { OpenAiEnvironment } from "./contract";
 
 const jsonHeaders = {
   "cache-control": "no-store",
@@ -9,7 +9,7 @@ const jsonHeaders = {
 } as const;
 
 const handler = {
-  fetch: (request: Request, environment: WorkersAiEnvironment): Promise<Response> => {
+  fetch: (request: Request, environment: OpenAiEnvironment): Promise<Response> => {
     if (request.method !== "POST" || new URL(request.url).pathname !== "/conformance") {
       return Promise.resolve(
         Response.json({ outcome: "not_found" }, { headers: jsonHeaders, status: 404 })
@@ -25,7 +25,7 @@ const handler = {
       Effect.map((exit) => {
         if (Exit.isSuccess(exit)) {
           return Response.json(
-            { modelApprovalRevision: "workers-ai-gemma-4-2026-09-22", outcome: "conforming" },
+            { modelApprovalRevision: "openai-gpt-6-luna-v1", outcome: "conforming" },
             { headers: jsonHeaders, status: 200 }
           );
         }
@@ -38,7 +38,7 @@ const handler = {
               }));
         return Response.json(
           {
-            modelApprovalRevision: "workers-ai-gemma-4-2026-09-22",
+            modelApprovalRevision: "openai-gpt-6-luna-v1",
             outcome: "non_conforming",
             ...failure,
           },
@@ -48,6 +48,6 @@ const handler = {
       Effect.runPromise
     );
   },
-} satisfies ExportedHandler<WorkersAiEnvironment>;
+} satisfies ExportedHandler<OpenAiEnvironment>;
 
 export default handler;

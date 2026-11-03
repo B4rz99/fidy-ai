@@ -167,3 +167,8 @@ export type BancolombiaSandboxHttpService = Readonly<{
 export type OperatorD1HttpService = Readonly<{
   execute: (body: string) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
+
+/** Fixed OpenAI inference destination and credential; returns only byte-bounded response evidence. */
+export type OpenAiHttpService = Readonly<{
+  execute: (body: string) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
+}>;

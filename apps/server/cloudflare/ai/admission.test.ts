@@ -1,10 +1,10 @@
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { Data, Effect, Exit, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { makeAdmittedWorkersAiRun } from "./admitted-run.test-fixture";
-import { sweepExpiredWorkersAiAdmission } from "./runtime";
+import { makeAdmittedOpenAiRun } from "./admitted-run.test-fixture";
+import { sweepExpiredOpenAiAdmission } from "./runtime";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -40,7 +40,7 @@ it("reserves a conservative cross-Turn AI cost before provider work and never re
       const database = yield* fromTestPromise(prepareDatabase);
       let calls = 0;
       yield* fromTestPromise(() => seedModelConsent(database));
-      const run = makeAdmittedWorkersAiRun({
+      const run = makeAdmittedOpenAiRun({
         db: database,
         userId: modelUserId,
         admittedTurnId: Option.none,
@@ -52,15 +52,15 @@ it("reserves a conservative cross-Turn AI cost before provider work and never re
       });
       const request = {
         messages: [{ role: "user" as const, content: "Hola" }],
-        max_tokens: 16_000,
+        max_completion_tokens: 16_000,
         temperature: 0 as const,
         stream: false as const,
-        chat_template_kwargs: { enable_thinking: false as const },
+        reasoning_effort: "none" as const,
+        store: false as const,
       };
       const result = yield* Effect.exit(
         Effect.tryPromise(() =>
-          run(approvedWorkersAiModel, request, {
-            returnRawResponse: true,
+          run(approvedOpenAiModel, request, {
             signal: new AbortController().signal,
           })
         )
@@ -69,7 +69,7 @@ it("reserves a conservative cross-Turn AI cost before provider work and never re
       const charges = yield* fromTestPromise(() =>
         database
           .prepare(
-            "SELECT units FROM resource_admission_events WHERE policy_key = 'workers-ai.spend.user.v1'"
+            "SELECT units FROM resource_admission_events WHERE policy_key = 'openai.spend.user.v1'"
           )
           .all<{ readonly units: number }>()
       );
@@ -92,7 +92,7 @@ it("fails closed when AI spend authority cannot commit, without invoking the pro
             : Reflect.get(target, key, target),
       });
       yield* fromTestPromise(() => seedModelConsent(database));
-      const run = makeAdmittedWorkersAiRun({
+      const run = makeAdmittedOpenAiRun({
         db: unavailableDb,
         userId: modelUserId,
         admittedTurnId: Option.none,
@@ -105,15 +105,16 @@ it("fails closed when AI spend authority cannot commit, without invoking the pro
       const failure = yield* Effect.exit(
         Effect.tryPromise(() =>
           run(
-            approvedWorkersAiModel,
+            approvedOpenAiModel,
             {
               messages: [{ role: "user", content: "Hola" }],
-              max_tokens: 16_000,
+              max_completion_tokens: 16_000,
               temperature: 0,
               stream: false,
-              chat_template_kwargs: { enable_thinking: false },
+              reasoning_effort: "none",
+              store: false,
             },
-            { returnRawResponse: true, signal: new AbortController().signal }
+            { signal: new AbortController().signal }
           )
         )
       );
@@ -133,7 +134,7 @@ it("retains spend until its window expires and sweeps only expired grants", () =
     Effect.gen(function* () {
       const database = yield* fromTestPromise(prepareDatabase);
       yield* fromTestPromise(() => seedModelConsent(database));
-      const run = makeAdmittedWorkersAiRun({
+      const run = makeAdmittedOpenAiRun({
         db: database,
         userId: modelUserId,
         admittedTurnId: Option.none,
@@ -142,27 +143,28 @@ it("retains spend until its window expires and sweeps only expired grants", () =
       });
       yield* fromTestPromise(() =>
         run(
-          approvedWorkersAiModel,
+          approvedOpenAiModel,
           {
             messages: [{ role: "user", content: "Hola" }],
-            max_tokens: 16_000,
+            max_completion_tokens: 16_000,
             temperature: 0,
             stream: false,
-            chat_template_kwargs: { enable_thinking: false },
+            reasoning_effort: "none",
+            store: false,
           },
-          { returnRawResponse: true, signal: new AbortController().signal }
+          { signal: new AbortController().signal }
         )
       );
       const count = (): Promise<number> =>
         database
           .prepare(
-            "SELECT count(*) AS total FROM resource_admission_grants WHERE id LIKE 'workers-ai-%'"
+            "SELECT count(*) AS total FROM resource_admission_grants WHERE id LIKE 'openai-%'"
           )
           .first<{ readonly total: number }>()
           .then((row) => row?.total ?? 0);
-      yield* sweepExpiredWorkersAiAdmission({ db: database, now: 100_000_000 + 86_399_999 });
+      yield* sweepExpiredOpenAiAdmission({ db: database, now: 100_000_000 + 86_399_999 });
       expect(yield* fromTestPromise(count)).toBe(2);
-      yield* sweepExpiredWorkersAiAdmission({ db: database, now: 100_000_000 + 86_400_000 });
+      yield* sweepExpiredOpenAiAdmission({ db: database, now: 100_000_000 + 86_400_000 });
       expect(yield* fromTestPromise(count)).toBe(0);
     })
   ));

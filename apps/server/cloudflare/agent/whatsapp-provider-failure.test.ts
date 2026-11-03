@@ -7,17 +7,16 @@ import {
   toolReply,
 } from "./whatsapp-capabilities.test-fixture";
 
-const refusal = (code: number, status = 429): Response =>
-  Response.json({ errors: [{ code, message: "private provider detail" }] }, { status });
+const refusal = (code: string, status = 429): Response =>
+  Response.json({ error: { code, message: "private provider detail" } }, { status });
 
 const failureReply = "No pude completar tu solicitud en este momento. Inténtalo más tarde.";
 
 it.each([
-  [3036, 429],
-  [4006, 429],
-  [3040, 429],
-  [0, 503],
-])("sends one safe WhatsApp reply for provider refusal %i/%i", (code, status) =>
+  ["insufficient_quota", 429],
+  ["rate_limit_exceeded", 429],
+  ["server_error", 503],
+])("sends one safe WhatsApp reply for provider refusal %s/%i", (code, status) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
@@ -67,7 +66,7 @@ it("reports provider failure after a successful query without repeating the quer
           Promise.resolve(
             ++rounds === 1
               ? toolReply({ operation: "categories.listCategories", input: {} })
-              : refusal(4006)
+              : refusal("insufficient_quota")
           ),
       });
       expect(result.sent).toEqual([failureReply]);
@@ -103,7 +102,9 @@ it("keeps a mutation attempt out of the provider-failure reply path", () =>
         messageId: "wamid.qa-provider-refusal-after-mutation",
         generate: () =>
           Promise.resolve(
-            ++rounds === 1 ? toolReply({ operation: "budgets.createBudget", input }) : refusal(4006)
+            ++rounds === 1
+              ? toolReply({ operation: "budgets.createBudget", input })
+              : refusal("insufficient_quota")
           ),
       });
       expect(result.sent).toEqual([]);

@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { categoryIds } from "../../src/core/categories/contract";
 import { Clock, Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { afterAll, expect } from "vitest";
@@ -9,7 +10,7 @@ import { OAuthMcpAdmission } from "../mcp/contract";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import publicWorker from "../public-worker";
 import coreWorker from "../core-worker";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 
 const databases = isolatedTestDatabases();
 const fixtureSessionBindings = new Map<string, string>();
@@ -219,10 +220,10 @@ export const setup = Effect.fnUntraced(function* () {
     RELEASE_GIT_SHA: "a".repeat(40),
     CONTRACT_DIGEST: "a".repeat(64),
     BROWSER_ORIGIN: "https://app.fidyapp.com",
-    HOSTED_AI_MODEL: String(approvedWorkersAiModel),
-    AI: {
+    HOSTED_AI_MODEL: String(approvedOpenAiModel),
+    OPENAI_API_KEY: openAiTestKey({
       run: (): Promise<never> => Promise.reject(new Error("Bootstrap must not purchase inference")),
-    },
+    }),
     USER_TRANSACTION_COORDINATOR: {
       getByName: (name: string): Pick<Fetcher, "fetch"> => ({
         fetch: (incoming): Promise<Response> => {

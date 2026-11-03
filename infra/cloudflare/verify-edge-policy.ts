@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "fe01b1570852b90a8e501d6798018e3ea935dcd1ed14cb3069cebacaf5e1b4d2";
+const expectedEdgePolicyDigest = "68d4f2721b99147bb8b3227fb19456b61c71f9bee3bee4389135067b6a502b27";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/internal/planned-caps.ts", import.meta.url)

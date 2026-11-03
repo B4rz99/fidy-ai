@@ -1,6 +1,6 @@
 import { DateTime, Schema, SchemaTransformation } from "effect";
 
-// Require complete offset-bearing RFC 3339 input. Workers AI structured-output
+// Require complete offset-bearing RFC 3339 input. OpenAI structured-output
 // validators require this JSON Schema pattern to avoid lookaround.
 const rfc3339 =
   /^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$/u;

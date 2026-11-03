@@ -1,8 +1,9 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import { type ConsentUnavailable } from "./contract";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import publicWorker from "../public-worker";
@@ -122,10 +123,12 @@ const send = (
       fetch: (internal) =>
         coreWorker.fetch(new Request(internal), {
           DB: db,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
           CONTRACT_DIGEST: "a".repeat(64),
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
           BROWSER_ORIGIN: "https://app.fidyapp.com",
           WOMPI_ENVIRONMENT: "",
           WOMPI_PUBLIC_KEY: "",
@@ -148,8 +151,10 @@ const send = (
                     },
                     {
                       DB: db,
-                      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-                      HOSTED_AI_MODEL: approvedWorkersAiModel,
+                      OPENAI_API_KEY: openAiTestKey({
+                        run: (): Promise<never> => Promise.reject(new Error("unused")),
+                      }),
+                      HOSTED_AI_MODEL: approvedOpenAiModel,
                     }
                   );
                   coordinators.set(name, coordinator);

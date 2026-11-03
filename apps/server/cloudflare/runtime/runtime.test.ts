@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { type PlatformMaintenanceInput, PlatformMaintenanceUnavailable } from "./contract";
 import { deepStrictEqual } from "node:assert";
 import { it } from "@effect/vitest";
@@ -19,7 +20,7 @@ const input = (
 ): PlatformMaintenanceInput => ({
   DB: db,
   USER_TRANSACTION_COORDINATOR: { getByName: unavailable },
-  AI: { run: unavailable },
+  OPENAI_API_KEY: openAiTestKey({ run: unavailable }),
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
   KAPSO_API_KEY: "configured",
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",

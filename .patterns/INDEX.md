@@ -20,7 +20,7 @@ digests and verification dates. A matching version alone does not prove byte-ide
 | SQL, D1 batches, and atomic mutation units                         | [sql.md](sql.md)                           |
 | Native Cloudflare Workflows and Effect step boundaries             | [workflows.md](workflows.md)               |
 | Crypto, encoding, redacted secrets                                 | [crypto-encoding.md](crypto-encoding.md)   |
-| AI model, tools, toolkit, Workers AI boundary                      | [ai.md](ai.md)                             |
+| AI model, tools, toolkit, OpenAI boundary                          | [ai.md](ai.md)                             |
 | MCP transport, protocol negotiation, canonical tools, confirmation | [mcp.md](mcp.md)                           |
 | CLI child processes, bounded output, scoped termination            | [processes.md](processes.md)               |
 | Layers, services, config, Workers runtime assembly                 | [layers-runtime.md](layers-runtime.md)     |

@@ -24,10 +24,7 @@ import { collectBoundedBytes } from "./bounded-bytes";
 import { OutboundHttpFailure, type OutboundHttpResponse } from "~/shell/outbound-http/contract";
 
 /** External provider selected by one closed transport policy. */
-type OutboundHttpProvider = Exclude<
-  TelemetryCode<"provider">,
-  "cloudflare-workers" | "cloudflare-workers-ai"
->;
+type OutboundHttpProvider = Exclude<TelemetryCode<"provider">, "cloudflare-workers">;
 
 type OutboundHttpPolicy = Readonly<{
   propagateTrace: boolean;
@@ -36,6 +33,11 @@ type OutboundHttpPolicy = Readonly<{
 }>;
 
 const outboundHttpPolicies: Readonly<Record<OutboundHttpProvider, OutboundHttpPolicy>> = {
+  openai: {
+    propagateTrace: false,
+    redactedHeaders: ["authorization"],
+    retainedResponseHeaders: ["content-type"],
+  },
   "cloudflare-d1": {
     propagateTrace: false,
     redactedHeaders: ["authorization"],

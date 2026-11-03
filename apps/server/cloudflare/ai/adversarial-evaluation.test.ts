@@ -1,11 +1,14 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import {
-  type WorkersAiRequest,
-  approvedWorkersAiModel,
+  type OpenAiRequest,
+  type OpenAiTransportRun,
+  approvedOpenAiModel,
 } from "../../src/shell/hosted-inference/contract";
-import { makeHostedEvaluationHandler } from "./workers-ai-evaluation-worker";
+import { makeOpenAiRun } from "./runtime";
+import { makeHostedEvaluationHandler } from "./openai-evaluation-worker";
 import {
   type EvaluationBudget,
   type EvaluationEnvironment,
@@ -15,21 +18,27 @@ import {
 
 const token = "a".repeat(64);
 const environment = (
-  run: EvaluationEnvironment["AI"]["run"],
+  run: OpenAiTransportRun,
   mode: "live" | "dry-run" = "live"
 ): EvaluationEnvironment => ({
-  AI: { run },
-  HOSTED_AI_MODEL: approvedWorkersAiModel,
+  OPENAI_API_KEY: openAiTestKey({ run }),
+  HOSTED_AI_MODEL: approvedOpenAiModel,
   EVALUATION_TOKEN: token,
   EVALUATION_COMMIT: "b".repeat(40),
   EVALUATION_MODE: mode,
 });
-const request: WorkersAiRequest = {
+const budgetFor = (environment: EvaluationEnvironment): EvaluationBudget =>
+  makeEvaluationBudget({
+    environment,
+    execute: makeOpenAiRun(Redacted.make(environment.OPENAI_API_KEY)),
+  });
+const request: OpenAiRequest = {
   messages: [{ role: "user", content: "synthetic" }],
-  max_tokens: 16_000,
+  max_completion_tokens: 16_000,
   temperature: 0,
   stream: false,
-  chat_template_kwargs: { enable_thinking: false },
+  reasoning_effort: "none",
+  store: false,
 };
 const accepted = (): Response =>
   Response.json({
@@ -52,18 +61,18 @@ it.effect(
       const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
       let actual = 0;
       const late: Array<Promise<Exit.Exit<unknown, unknown>>> = [];
-      const budget: EvaluationBudget = makeEvaluationBudget(
+      const budget: EvaluationBudget = budgetFor(
         environment(() => {
           actual++;
           if (actual === 1) {
-            late.push(runExit(budget.run(approvedWorkersAiModel, request)));
+            late.push(runExit(budget.run(approvedOpenAiModel, request)));
           }
           return Promise.resolve(accepted());
         })
       );
       const results = yield* Effect.forEach(
         Array.from({ length: evaluationLimits.providerCalls + 1 }),
-        () => Effect.exit(budget.run(approvedWorkersAiModel, request)),
+        () => Effect.exit(budget.run(approvedOpenAiModel, request)),
         { concurrency: "unbounded" }
       );
       const lateResults = yield* Effect.tryPromise(() => Promise.all(late));
@@ -81,22 +90,24 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let actual = 0;
-      const budget = makeEvaluationBudget(
+      const budget = budgetFor(
         environment(() => {
           actual++;
           return Promise.resolve(accepted());
         })
       );
-      const oversized: WorkersAiRequest = {
+      const oversized: OpenAiRequest = {
         ...request,
         messages: [{ role: "user", content: "x".repeat(evaluationLimits.requestBytes) }],
       };
-      expect(
-        Exit.isFailure(yield* Effect.exit(budget.run(approvedWorkersAiModel, oversized)))
-      ).toBe(true);
+      expect(Exit.isFailure(yield* Effect.exit(budget.run(approvedOpenAiModel, oversized)))).toBe(
+        true
+      );
       expect(
         Exit.isFailure(
-          yield* Effect.exit(budget.run(approvedWorkersAiModel, { ...request, max_tokens: 16_001 }))
+          yield* Effect.exit(
+            budget.run(approvedOpenAiModel, { ...request, max_completion_tokens: 16_001 })
+          )
         )
       ).toBe(true);
       expect(actual).toBe(0);
@@ -107,17 +118,15 @@ it.effect(
 it.effect("refuses another dispatch at the original elapsed budget without renewing it", () =>
   Effect.gen(function* () {
     let actual = 0;
-    const budget = makeEvaluationBudget(
+    const budget = budgetFor(
       environment(() => {
         actual++;
         return Promise.resolve(accepted());
       })
     );
-    yield* budget.run(approvedWorkersAiModel, request);
+    yield* budget.run(approvedOpenAiModel, request);
     yield* TestClock.adjust(evaluationLimits.elapsedMillis);
-    expect(Exit.isFailure(yield* Effect.exit(budget.run(approvedWorkersAiModel, request)))).toBe(
-      true
-    );
+    expect(Exit.isFailure(yield* Effect.exit(budget.run(approvedOpenAiModel, request)))).toBe(true);
     expect(actual).toBe(1);
   })
 );

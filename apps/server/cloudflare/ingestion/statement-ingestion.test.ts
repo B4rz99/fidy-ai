@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { type OAuthReviewBinding } from "../oauth-confirmation/contract";
 import {
   type CanonicalMutationPreparation,
@@ -19,7 +20,7 @@ import {
   StatementStagingId,
   StatementSubmissionId,
 } from "../../src/shell/ingestion/contract";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { StatementWork } from "./contract";
 import { DurableTraceContext } from "../../src/shell/observability/contract";
 import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
@@ -339,13 +340,13 @@ afterEach(() =>
 );
 
 const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[1] => ({
-  AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+  OPENAI_API_KEY: openAiTestKey({ run: (): Promise<never> => Promise.reject(new Error("unused")) }),
   BROWSER_ORIGIN: browserOrigin,
   CLOUDFLARE_ACCESS_AUDIENCE: "",
   CLOUDFLARE_ACCESS_ISSUER: "",
   CONTRACT_DIGEST: "a".repeat(64),
   DB: runtime.db,
-  HOSTED_AI_MODEL: approvedWorkersAiModel,
+  HOSTED_AI_MODEL: approvedOpenAiModel,
   KAPSO_API_KEY: "",
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
   KAPSO_WEBHOOK_SECRET: "",
@@ -367,8 +368,10 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
           {
             DB: runtime.db,
             STATEMENT_STAGING_BUCKET: runtime.bucket,
-            AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
+            OPENAI_API_KEY: openAiTestKey({
+              run: (): Promise<never> => Promise.reject(new Error("unused")),
+            }),
+            HOSTED_AI_MODEL: approvedOpenAiModel,
           }
         ).fetch(new Request(command)),
     }),
@@ -1348,8 +1351,10 @@ it("a User coordinator alarm dispatches only its own published statements", () =
         },
         {
           DB: runtime.db,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
           STATEMENT_EXTRACTION_QUEUE: {
             send: (body: unknown): Promise<void> => {
               queued.push(body);
@@ -1422,8 +1427,10 @@ it("finishes a durably queued statement after withdrawal without reopening ordin
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
         }
       );
       const work = (): Request =>
@@ -1798,8 +1805,10 @@ const clarifyStatement = (
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
         }
       );
       const extracted = yield* fromTestPromise(() =>
@@ -2732,8 +2741,10 @@ it("shows committed review rows only to their User through the canonical read", 
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
         }
       );
       const work = yield* fromTestPromise(() =>
@@ -2970,8 +2981,10 @@ it("marks an accepted unsupported XLSX payload terminal without inventing Transa
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
         }
       );
       const response = yield* fromTestPromise(() =>
@@ -3038,8 +3051,10 @@ it("settles an errored Workflow when its final failure-report activity also exha
         {
           DB: runtime.db,
           STATEMENT_STAGING_BUCKET: runtime.bucket,
-          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          }),
+          HOSTED_AI_MODEL: approvedOpenAiModel,
         }
       );
       yield* reconcileStatementExtraction({

@@ -343,7 +343,7 @@ type ResponseObservation = WorkerTraceContinuation &
     environment: unknown;
     telemetry: TelemetryService;
     operation: WorkDescriptor["operation"];
-    provider: ProviderName | "cloudflare-workers-ai" | "cloudflare-workers";
+    provider: ProviderName | "openai" | "cloudflare-workers";
   }>;
 
 const observeResponsePromise = (
@@ -359,14 +359,14 @@ const observeResponsePromise = (
         : {
             release: workerDescriptor(workerRelease(observation.environment), observation.operation)
               .release,
-            component: observation.provider === "cloudflare-workers-ai" ? "agent" : "api",
+            component: observation.provider === "openai" ? "agent" : "api",
             operation: observation.operation,
             trigger: "api",
-            ...(observation.provider === "cloudflare-workers-ai"
+            ...(observation.provider === "openai"
               ? {
                   spanOperation: "agent.model" as const,
                   workKind: "model_call" as const,
-                  metadata: { _tag: "Model" as const, model: "workers_ai" as const },
+                  metadata: { _tag: "Model" as const, model: "openai" as const },
                 }
               : {
                   spanOperation: "http.client" as const,
@@ -393,7 +393,7 @@ const observeWorkerResponseWork = (
 ): Promise<Response> =>
   observeResponsePromise(work, { ...observation, provider: "cloudflare-workers" });
 
-/** Observes a direct Workers AI invocation without reading inference request or response content. */
+/** Observes a direct OpenAI invocation without reading inference request or response content. */
 const observeModelRunWork = (
   work: () => Promise<Response>,
   observation: WorkerTraceContinuation &
@@ -401,8 +401,8 @@ const observeModelRunWork = (
 ): Promise<Response> =>
   observeResponsePromise(work, {
     ...observation,
-    operation: "model.workersAi",
-    provider: "cloudflare-workers-ai",
+    operation: "model.openAi",
+    provider: "openai",
   });
 
 /** Supplies only closed provider response metadata beneath Outbound HTTP's request policy. */

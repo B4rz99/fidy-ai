@@ -1,3 +1,4 @@
+import { openAiTestKey } from "./openai.test-fixture";
 import { type RecurringUnavailable } from "./recurring/contract";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { type ConsentUnavailable } from "./consent/contract";
@@ -20,7 +21,7 @@ import {
 import { findReminderSchedule, recordProactivityDecision } from "./insights/operations";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 import { makeAgentService } from "./agent/runtime";
-import { approvedWorkersAiModel } from "../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../src/shell/hosted-inference/contract";
 import { newId } from "./secret-material/operations";
 import { HostedAgentSessionConsentBasis, TranscriptTurnId } from "../src/core/agent/contract";
 import { mintHostedStatementCaller } from "./agent/operations";
@@ -54,13 +55,13 @@ export const observeTestHostedContext = (
       environment: {
         DB: db,
         KAPSO_API_KEY: "test-only",
-        AI: {
+        OPENAI_API_KEY: openAiTestKey({
           run: (_model, request) => {
             prompts.push(request);
             return Promise.reject(new Error("Test model failure after genuine context admission"));
           },
-        },
-        HOSTED_AI_MODEL: approvedWorkersAiModel,
+        }),
+        HOSTED_AI_MODEL: approvedOpenAiModel,
       },
       scheduleRecovery: () => Promise.resolve(),
     });

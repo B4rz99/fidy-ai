@@ -136,8 +136,8 @@ it.effect("reports model response status without exporting its prompt or respons
     expect(actual).toBe(response);
     expect(records).toMatchObject([
       {
-        operation: "model.workersAi",
-        provider: "cloudflare-workers-ai",
+        operation: "model.openAi",
+        provider: "openai",
         release: "unknown",
         statusClass: "2xx",
         outcome: "succeeded",
@@ -279,11 +279,11 @@ it.effect("retains bounded breadcrumbs and model usage while excluding raw failu
     yield* telemetry.rootSpan(
       {
         component: "agent",
-        operation: "model.workersAi",
+        operation: "model.openAi",
         workKind: "model_call",
         trigger: "api",
         spanOperation: "agent.model",
-        metadata: { _tag: "Model", model: "workers_ai" },
+        metadata: { _tag: "Model", model: "openai" },
       },
       Effect.gen(function* () {
         for (let attempt = 1; attempt <= 40; attempt++) {
@@ -310,9 +310,9 @@ it.effect("retains bounded breadcrumbs and model usage while excluding raw failu
         yield* telemetry.captureFailure({
           _tag: "ExhaustedOperationalFailure",
           component: "agent",
-          operation: "model.workersAi",
+          operation: "model.openAi",
           error: "model_response_rejected",
-          provider: Option.some("cloudflare-workers-ai"),
+          provider: Option.some("openai"),
           retryable: false,
           cause: {
             prompt: "prompt-canary",
@@ -339,7 +339,7 @@ it.effect("retains bounded breadcrumbs and model usage while excluding raw failu
         traceId: span.traceId,
         spanId: span.spanId,
         message:
-          "fidy.failure component=agent operation=model.workersAi error=model_response_rejected classification=ExhaustedOperationalFailure",
+          "fidy.failure component=agent operation=model.openAi error=model_response_rejected classification=ExhaustedOperationalFailure",
       })
     );
     expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(captured)).not.toMatch(

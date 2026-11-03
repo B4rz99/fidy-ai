@@ -151,8 +151,9 @@ live session lookup. Core does not repeat that discovery before dispatch. Protec
 coordinated decisions still recheck credential authority in their existing atomic units; no
 session or Consent result is cached across requests.
 
-Provider adapters use published bounded transport contracts. Hosted inference uses Workers AI
-behind its own provider-neutral interface. Security policy owns validation, authenticity, Secret
+Provider adapters use published bounded transport contracts. Hosted inference uses OpenAI `gpt-6-luna`
+behind its own provider-neutral interface, through bounded Outbound HTTP. Workers AI document
+conversion remains a separate capability. Security policy owns validation, authenticity, Secret
 handling and metadata-only telemetry requirements.
 
 ## 5. State and atomicity

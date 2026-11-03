@@ -1,3 +1,4 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import {
   type Cause,
   Clock,
@@ -209,10 +210,10 @@ describe("native2025 residency integration", () => {
       const coordinators = new Map<string, UserTransactionCoordinator>();
       const environment = {
         DB: db,
-        AI: {
+        OPENAI_API_KEY: openAiTestKey({
           run: (): Promise<never> =>
             Promise.reject(new Error("Native residency must not invoke hosted inference.")),
-        },
+        }),
         RELEASE_GIT_SHA: "a".repeat(40),
         CONTRACT_DIGEST: "a".repeat(64),
         BROWSER_ORIGIN: "https://app.fidyapp.com",

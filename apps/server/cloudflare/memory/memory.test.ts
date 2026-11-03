@@ -1,8 +1,9 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { ErrorCode } from "../../src/shell/public-http/contract";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { Memory, MemoryId, maximumAggregateMemoryTokens } from "../../src/core/memory/contract";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
@@ -120,10 +121,10 @@ const setup = (): Promise<D1Database> =>
 const coordinators = new Map<string, UserTransactionCoordinator>();
 const coordinationEnvironment = (db: D1Database): Parameters<typeof coreWorker.fetch>[1] => ({
   DB: db,
-  AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+  OPENAI_API_KEY: openAiTestKey({ run: (): Promise<never> => Promise.reject(new Error("unused")) }),
   CONTRACT_DIGEST: "a".repeat(64),
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-  HOSTED_AI_MODEL: approvedWorkersAiModel,
+  HOSTED_AI_MODEL: approvedOpenAiModel,
   BROWSER_ORIGIN: "https://app.fidyapp.com",
   WOMPI_ENVIRONMENT: "",
   WOMPI_PUBLIC_KEY: "",
@@ -150,8 +151,10 @@ const coordinationEnvironment = (db: D1Database): Parameters<typeof coreWorker.f
           },
           {
             DB: db,
-            AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
+            OPENAI_API_KEY: openAiTestKey({
+              run: (): Promise<never> => Promise.reject(new Error("unused")),
+            }),
+            HOSTED_AI_MODEL: approvedOpenAiModel,
           }
         );
         coordinators.set(name, coordinator);

@@ -66,7 +66,7 @@ const browserDatabase = Option.match(browserCost, {
 const { makePublicWorker } = await import("./public-worker");
 const { makeWorkerTelemetry } = await import("./runtime/telemetry/operations");
 const { browserOrigins } = await import("./runtime/contract");
-const { approvedWorkersAiModel } = await import("@fidy/server/hosted-inference-contract");
+const { approvedOpenAiModel } = await import("@fidy/server/hosted-inference-contract");
 
 const certificate = Bun.env.PLAYWRIGHT_TLS_CERT;
 const key = Bun.env.PLAYWRIGHT_TLS_KEY;
@@ -154,10 +154,13 @@ const microsoftFixtureToken = (request: Request): Promise<Response> =>
       .sign(privateKey)
       .then((id_token) => Response.json({ id_token }));
   });
-const oidcFixtureResponse = ({
+const providerFixtureResponse = ({
   url,
   args,
 }: Readonly<{ url: string; args: Array<unknown> }>): Option.Option<Promise<Response>> => {
+  if (url === "https://api.openai.com/v1/chat/completions") {
+    return Option.some(Promise.resolve(new Response(null, { status: 503 })));
+  }
   if (url === "https://login.microsoftonline.com/common/discovery/v2.0/keys") {
     return Option.some(
       Promise.resolve(
@@ -198,8 +201,8 @@ globalThis.fetch = new Proxy(globalThis.fetch, {
         ? captureWhatsApp(outbound)
         : Promise.resolve(new Response(null, { status: 400 }));
     }
-    const oidc = oidcFixtureResponse({ url, args });
-    if (Option.isSome(oidc)) return oidc.value;
+    const provider = providerFixtureResponse({ url, args });
+    if (Option.isSome(provider)) return provider.value;
     if (url === `${accessIssuer}/cdn-cgi/access/certs`) {
       return Promise.resolve(Response.json({ keys: [jwk] }));
     }
@@ -578,10 +581,10 @@ const coreEnvironment: Parameters<typeof core.fetch>[1] = {
   DB: browserDatabase,
   ERASURE_REQUIRED: "true",
   ERASURE_BUCKET: erasureRegistry,
-  AI: { run: () => Promise.reject(new Error("unused")) },
+  OPENAI_API_KEY: "synthetic-browser-openai",
   CONTRACT_DIGEST: "a".repeat(digestHexLength),
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-  HOSTED_AI_MODEL: approvedWorkersAiModel,
+  HOSTED_AI_MODEL: approvedOpenAiModel,
   BROWSER_ORIGIN: browserOrigin,
   MICROSOFT_CLIENT_ID: "acceptance-microsoft",
   MICROSOFT_CLIENT_SECRET: "synthetic-microsoft-secret",

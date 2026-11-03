@@ -315,8 +315,8 @@
         "apps/server/cloudflare/resource-admission/resource-admission-worker.fixture.ts",
         "apps/server/cloudflare/coordinator-test-harness.ts",
         "apps/server/cloudflare/queue/recovery-worker.fixture.ts",
-        "apps/server/cloudflare/ai/workers-ai-conformance-worker.ts",
-        "apps/server/cloudflare/ai/workers-ai-evaluation-worker.ts",
+        "apps/server/cloudflare/ai/openai-conformance-worker.ts",
+        "apps/server/cloudflare/ai/openai-evaluation-worker.ts",
         "infra/cloudflare/vitest.config.ts",
         "apps/server/cloudflare/vitest.config.ts"
       ],

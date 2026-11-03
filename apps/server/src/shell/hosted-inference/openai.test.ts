@@ -12,14 +12,14 @@ import {
   type HostedInferenceService,
   type HostedInitialTextContext,
   HostedToolCallMaximum,
-  type WorkersAiBindingRun,
-  type WorkersAiRequest,
-  type WorkersAiRun,
-  approvedWorkersAiModel,
+  type OpenAiRequest,
+  type OpenAiRun,
+  type OpenAiTransportRun,
+  approvedOpenAiModel,
 } from "./contract";
 import { hostedInitialTextContext } from "./context.test-fixture";
-import { makeWorkersAiHostedInference } from "./runtime";
-import { workersAiProviderSchema } from "~/shell/hosted-inference/internal/provider-schema";
+import { makeOpenAiHostedInference } from "./runtime";
+import { openAiProviderSchema } from "~/shell/hosted-inference/internal/provider-schema";
 
 const hostedFailure = (
   reason: HostedInferenceFailureReason,
@@ -49,22 +49,22 @@ const completed = (overrides: Partial<ProviderResponseFixture> = {}): Response =
   });
 
 const captureRun = (
-  reply: (request: WorkersAiRequest, signal: AbortSignal) => Promise<Response>
+  reply: (request: OpenAiRequest, signal: AbortSignal) => Promise<Response>
 ): Readonly<{
   calls: Array<
     Readonly<{
       model: string;
-      request: WorkersAiRequest;
-      options: Readonly<{ returnRawResponse: true; signal: AbortSignal }>;
+      request: OpenAiRequest;
+      options: Readonly<{ signal: AbortSignal }>;
     }>
   >;
-  run: WorkersAiBindingRun;
+  run: OpenAiTransportRun;
 }> => {
   const calls: Array<
     Readonly<{
       model: string;
-      request: WorkersAiRequest;
-      options: Readonly<{ returnRawResponse: true; signal: AbortSignal }>;
+      request: OpenAiRequest;
+      options: Readonly<{ signal: AbortSignal }>;
     }>
   > = [];
   return {
@@ -77,18 +77,18 @@ const captureRun = (
 };
 
 const makeConfiguredInference = (
-  run: WorkersAiBindingRun
+  run: OpenAiTransportRun
 ): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
-  makeWorkersAiHostedInference({
-    model: Option.some(approvedWorkersAiModel),
+  makeOpenAiHostedInference({
+    model: Option.some(approvedOpenAiModel),
     run: Option.some(fromBinding(run)),
   });
 
 const fromBinding =
-  (run: WorkersAiBindingRun): WorkersAiRun =>
+  (run: OpenAiTransportRun): OpenAiRun =>
   (model, request) =>
     Effect.tryPromise({
-      try: (signal) => run(model, request, { returnRawResponse: true, signal }),
+      try: (signal) => run(model, request, { signal }),
       catch: (failure) =>
         failure instanceof HostedInferenceError
           ? failure
@@ -104,8 +104,10 @@ it.effect("preserves hostile Memory as quoted data and identifies supplied evide
       ...initialContext("Resume las fuentes suministradas sin usar herramientas."),
       sections: [
         ...initialContext().sections,
+        { _tag: "ContinuityBoundary", boundary: "open" },
         { _tag: "Memory", text: hostile },
         { _tag: "CompactedConversation", text: "El Usuario mencionó un Budget." },
+        { _tag: "ContinuityBoundary", boundary: "close" },
       ],
     });
     const prepared = yield* inference.prepareText({
@@ -120,6 +122,23 @@ it.effect("preserves hostile Memory as quoted data and identifies supplied evide
         typeof message.content === "string" && message.content.startsWith('{"source":"memory"')
     );
     expect(memory?.role).toBe("user");
+    const memoryIndex = messages.findIndex((message) => message === memory);
+    expect(
+      messages.findIndex(
+        (message) =>
+          message.role === "system" &&
+          typeof message.content === "string" &&
+          message.content.startsWith("[UNTRUSTED_CONTINUITY]")
+      )
+    ).toBeLessThan(memoryIndex);
+    expect(
+      messages.findIndex(
+        (message) =>
+          message.role === "system" &&
+          typeof message.content === "string" &&
+          message.content.startsWith("[/UNTRUSTED_CONTINUITY]")
+      )
+    ).toBeGreaterThan(memoryIndex);
     expect(
       typeof memory?.content === "string"
         ? yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(memory.content)
@@ -141,14 +160,12 @@ it.effect("preserves hostile Memory as quoted data and identifies supplied evide
 );
 
 it.effect(
-  "distinguishes daily provider quota from temporary capacity without exposing provider text",
+  "distinguishes exhausted provider credits from temporary capacity without exposing provider text",
   () =>
     Effect.gen(function* () {
       for (const body of [
-        { errors: [{ code: 3036, message: "private provider detail" }] },
-        { errors: [{ code: 4006, message: "private provider detail" }] },
-        { internalCode: 3036, description: "private binding detail" },
-        { errors: [{ code: 3040, message: "private capacity detail" }] },
+        { error: { code: "insufficient_quota", message: "private provider detail" } },
+        { error: { code: "rate_limit_exceeded", message: "private capacity detail" } },
       ]) {
         const binding = captureRun(() => Promise.resolve(response(body, 429)));
         const inference = yield* makeConfiguredInference(binding.run);
@@ -163,16 +180,18 @@ it.effect(
           hostedFailure(
             {
               _tag:
-                body.errors?.[0]?.code === 3040 ? "ProviderUnavailable" : "ProviderQuotaExceeded",
+                body.error.code === "rate_limit_exceeded"
+                  ? "ProviderUnavailable"
+                  : "ProviderQuotaExceeded",
             },
-            body.errors?.[0]?.code === 3040
+            body.error.code === "rate_limit_exceeded"
           )
         );
       }
     })
 );
 
-it.effect("fails closed when the configured Workers AI model is absent or unsupported", () =>
+it.effect("fails closed when the configured OpenAI model is absent or unsupported", () =>
   Effect.gen(function* () {
     const run = fromBinding(captureRun(() => Promise.resolve(completed())).run);
 
@@ -182,17 +201,17 @@ it.effect("fails closed when the configured Workers AI model is absent or unsupp
         model: Option.some("@cf/meta/llama-3.3-70b-instruct-fp8-fast"),
         run: Option.some(run),
       },
-      { model: Option.some<string>(approvedWorkersAiModel), run: Option.none() },
+      { model: Option.some<string>(approvedOpenAiModel), run: Option.none() },
     ];
     for (const configuration of configurations) {
-      const exit = yield* Effect.exit(makeWorkersAiHostedInference(configuration));
+      const exit = yield* Effect.exit(makeOpenAiHostedInference(configuration));
       assertHostedFailure(exit, hostedFailure({ _tag: "ProviderUnavailable" }));
     }
   })
 );
 
 it.effect(
-  "selects a canonical operation from Gemma chat completions without granting extra tools",
+  "selects a canonical operation using non-stored GPT-6 Luna completions without granting extra tools",
   () =>
     Effect.gen(function* () {
       const binding = captureRun(() =>
@@ -236,15 +255,15 @@ it.effect(
       ]);
       expect(binding.calls).toHaveLength(1);
       const call = binding.calls[0];
-      expect(call?.model).toBe(approvedWorkersAiModel);
-      expect(call?.options.returnRawResponse).toBe(true);
+      expect(call?.model).toBe("gpt-6-luna");
       expect(call?.request).toMatchObject({
-        max_tokens: 16_000,
-        chat_template_kwargs: { enable_thinking: false },
+        max_completion_tokens: 16_000,
+        reasoning_effort: "none",
+        store: false,
         tool_choice: "auto",
       });
       expect(call?.request).not.toHaveProperty("gateway");
-      expect(call?.request).not.toHaveProperty("store");
+      expect(call?.request).not.toHaveProperty("chat_template_kwargs");
       expect(call?.request).toMatchObject({
         tools: [{ type: "function", function: { name: "transactions__listTransactions" } }],
       });
@@ -305,7 +324,7 @@ it.effect("fits every canonical tool in one request with self-contained schemas"
 );
 
 it("publishes recurring calendar-day constraints without accepting timestamps", () => {
-  expect(workersAiProviderSchema(RecurringDate)).toMatchObject({
+  expect(openAiProviderSchema(RecurringDate)).toMatchObject({
     type: "string",
     pattern: "^20\\d{2}-\\d{2}-\\d{2}$",
   });
@@ -315,21 +334,21 @@ it("publishes recurring calendar-day constraints without accepting timestamps", 
 });
 
 it("publishes recurring month constraints for provider queries", () => {
-  expect(workersAiProviderSchema(RecurringMonth)).toMatchObject({
+  expect(openAiProviderSchema(RecurringMonth)).toMatchObject({
     type: "string",
     pattern: "^20\\d{2}-(0[1-9]|1[0-2])$",
   });
 });
 
 it("compacts integer conjunctions without losing the narrower range or safe-integer limits", () => {
-  const schema = workersAiProviderSchema(
+  const schema = openAiProviderSchema(
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 31 }))
   );
   expect(schema).toMatchObject({ type: "integer", minimum: 1, maximum: 31 });
   expect(schema).not.toHaveProperty("allOf");
   expect(schema).not.toHaveProperty("description");
   expect(schema).not.toHaveProperty("$defs");
-  expect(workersAiProviderSchema(Schema.Int)).toMatchObject({
+  expect(openAiProviderSchema(Schema.Int)).toMatchObject({
     type: "integer",
     minimum: -9_007_199_254_740_991,
     maximum: 9_007_199_254_740_991,
@@ -344,14 +363,14 @@ it.each([
   { name: "booleans", allOf: [{ minimum: 1 }, false] },
   { name: "mixed types", allOf: [{ minimum: 1 }, { type: "string", pattern: "^x$" }] },
 ])("preserves provider conjunctions containing $name", ({ allOf }) => {
-  const schema = workersAiProviderSchema(
+  const schema = openAiProviderSchema(
     Schema.Finite.check(Schema.makeFilter(() => undefined, { toJsonSchema: () => ({ allOf }) }))
   );
   expect(schema.allOf).toEqual(allOf);
 });
 
 it("preserves numeric constraints when the root type is nonnumeric", () => {
-  const schema = workersAiProviderSchema(
+  const schema = openAiProviderSchema(
     Schema.String.check(
       Schema.makeFilter(() => undefined, { toJsonSchema: () => ({ allOf: [{ minimum: 1 }] }) })
     )
@@ -361,7 +380,7 @@ it("preserves numeric constraints when the root type is nonnumeric", () => {
 });
 
 it("keeps union discriminants and calendar constraints visible to the tool template", () => {
-  const schema = workersAiProviderSchema(
+  const schema = openAiProviderSchema(
     Schema.Struct({
       edit: Schema.Union([
         Schema.Struct({ kind: Schema.Literal("lifecycle"), date: RecurringDate }),
@@ -393,7 +412,7 @@ it("shares repeated shapes while keeping their discriminants visible at each too
     Schema.Struct({ kind: Schema.Literal("schedule"), date: RecurringDate }),
     Schema.Struct({ kind: Schema.Literal("rename"), name: Schema.String }),
   ]).annotate({ identifier: "RepeatedEdit" });
-  const schema = workersAiProviderSchema(Schema.Struct({ first: edit, second: edit }));
+  const schema = openAiProviderSchema(Schema.Struct({ first: edit, second: edit }));
   expect(schema).toMatchObject({
     properties: {
       first: {
@@ -415,7 +434,7 @@ it("compacts numeric bound intersections without weakening the provider contract
     Schema.isGreaterThanOrEqualTo(0),
     Schema.isLessThanOrEqualTo(20)
   );
-  const schema = workersAiProviderSchema(bounded);
+  const schema = openAiProviderSchema(bounded);
   expect(schema).toMatchObject({ type: "integer", minimum: 0, maximum: 20 });
   expect(schema).not.toHaveProperty("allOf");
   expect(schema).not.toHaveProperty("$defs");
@@ -431,7 +450,7 @@ it("preserves the strongest exclusive numeric bounds", () => {
     Schema.isGreaterThan(1),
     Schema.isLessThan(20)
   );
-  expect(workersAiProviderSchema(bounded)).toMatchObject({
+  expect(openAiProviderSchema(bounded)).toMatchObject({
     type: "integer",
     exclusiveMinimum: 1,
     exclusiveMaximum: 20,
@@ -442,7 +461,7 @@ it("preserves the strongest exclusive numeric bounds", () => {
 });
 
 it("preserves nonempty homogeneous array bounds in provider schemas", () => {
-  const schema = workersAiProviderSchema(
+  const schema = openAiProviderSchema(
     Schema.NonEmptyArray(Schema.String).check(Schema.isMaxLength(12))
   );
   expect(schema).toMatchObject({
@@ -455,7 +474,7 @@ it("preserves nonempty homogeneous array bounds in provider schemas", () => {
 });
 
 it("preserves heterogeneous tuple positions in provider schemas", () => {
-  const schema = workersAiProviderSchema(Schema.Tuple([Schema.String, Schema.Boolean]));
+  const schema = openAiProviderSchema(Schema.Tuple([Schema.String, Schema.Boolean]));
   expect(schema).toMatchObject({
     type: "array",
     minItems: 2,
@@ -466,7 +485,7 @@ it("preserves heterogeneous tuple positions in provider schemas", () => {
 
 it("preserves schema-shaped annotation data verbatim", () => {
   const example = { type: "array", prefixItems: [{ type: "string" }], items: { type: "string" } };
-  const schema = workersAiProviderSchema(
+  const schema = openAiProviderSchema(
     Schema.Struct({
       type: Schema.String,
       prefixItems: Schema.Array(Schema.Struct({ type: Schema.String })),
@@ -694,10 +713,84 @@ it.effect("preserves provider continuation across repeated bounded rounds", () =
         }),
       ])
     );
+    const correction = binding.calls[1]?.request.messages ?? [];
+    const feedbackIndex = correction.findIndex(
+      (message) =>
+        message.role === "system" && message.content === "Answer with the corrected shape."
+    );
+    const userIndex = correction.findIndex((message) => message.role === "user");
+    expect(feedbackIndex).toBeGreaterThanOrEqual(0);
+    expect(feedbackIndex).toBe(userIndex - 1);
+    expect(correction.slice(userIndex).map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
   })
 );
 
-it.effect("continues a canonical operation with the matching tool result in Gemma messages", () =>
+it.effect(
+  "repairs malformed tool arguments once using the original request and canonical decoder",
+  () =>
+    Effect.gen(function* () {
+      const binding = captureRun(() =>
+        Promise.resolve(
+          completed({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "call-repair",
+                      type: "function",
+                      function: {
+                        name: "transactions__listTransactions",
+                        arguments: binding.calls.length === 1 ? "{" : '{"query":{}}',
+                      },
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
+              },
+            ],
+          })
+        )
+      );
+      const inference = yield* makeConfiguredInference(binding.run);
+      const prepared = yield* inference.prepareText({
+        context: initialContext("Lista mis transacciones sin filtros."),
+        availableOperations: [CanonicalOperationId.make("transactions.listTransactions")],
+        toolChoice: "auto",
+        maximumToolCalls: HostedToolCallMaximum.make(1),
+      });
+      assertHostedFailure(
+        yield* Effect.exit(prepared.execute),
+        hostedFailure({ _tag: "InvalidOutput", description: "Hosted tool arguments were invalid" })
+      );
+      const repaired = yield* prepared.repairInvalidOutput;
+      const result = yield* repaired.execute;
+      expect(result.toolCalls).toEqual([
+        {
+          id: "call-repair",
+          operation: "transactions.listTransactions",
+          params: { query: {} },
+        },
+      ]);
+      const messages = binding.calls[1]?.request.messages ?? [];
+      expect(messages.find((message) => message.role === "user")?.content).toContain(
+        "Lista mis transacciones sin filtros."
+      );
+      expect(messages.some((message) => message.role === "assistant")).toBe(false);
+      assertHostedFailure(
+        yield* Effect.exit(prepared.repairInvalidOutput),
+        hostedFailure({ _tag: "InvalidAuthority" })
+      );
+      expect(binding.calls).toHaveLength(2);
+    })
+);
+
+it.effect("continues a canonical operation with the matching tool result in OpenAI messages", () =>
   Effect.gen(function* () {
     const binding = captureRun(() =>
       Promise.resolve(
@@ -755,7 +848,7 @@ it.effect("continues a canonical operation with the matching tool result in Gemm
   })
 );
 
-it.effect("rejects oversized context before invoking Workers AI", () =>
+it.effect("rejects oversized context before invoking OpenAI", () =>
   Effect.gen(function* () {
     const binding = captureRun(() => Promise.resolve(completed()));
     const inference = yield* makeConfiguredInference(binding.run);
@@ -1051,7 +1144,7 @@ it.effect("retains recursive definitions in a prepared structured request", () =
     expect(schema.$defs[name]).toMatchObject({
       type: "object",
       required: ["children"],
-      additionalProperties: true,
+      additionalProperties: false,
       properties: { children: { type: "array", items: { $ref: schema.$ref } } },
     });
   })
@@ -1117,7 +1210,7 @@ it.effect("rejects malformed structured output without exposing it", () =>
   })
 );
 
-it.effect("aborts the Workers AI call when execution is interrupted", () =>
+it.effect("aborts the OpenAI call when execution is interrupted", () =>
   Effect.gen(function* () {
     let observed = Option.none<AbortSignal>();
     const pending = Promise.withResolvers<Response>();
@@ -1172,5 +1265,33 @@ it.effect("decodes heavily fragmented model output with empty chunks", () =>
     const result = yield* prepared.execute;
     expect(result).toBeDefined();
     expect(providerResponse.body?.locked).toBe(false);
+  })
+);
+
+it.effect("reports OpenAI cached input tokens separately from total input usage", () =>
+  Effect.gen(function* () {
+    const binding = captureRun(() =>
+      Promise.resolve(
+        completed({
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 2,
+            total_tokens: 14,
+            prompt_tokens_details: { cached_tokens: 10 },
+          },
+        })
+      )
+    );
+    const inference = yield* makeConfiguredInference(binding.run);
+    const prepared = yield* inference.prepareText({
+      context: initialContext(),
+      availableOperations: [],
+      toolChoice: "none",
+    });
+    expect((yield* prepared.execute).usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 2,
+      cachedInputTokens: 10,
+    });
   })
 );

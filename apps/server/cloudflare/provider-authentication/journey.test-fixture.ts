@@ -1,9 +1,10 @@
+import { openAiTestKey } from "../openai.test-fixture";
 import { type SignJWT } from "jose";
 import { Effect, Option, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import publicWorker from "../public-worker";
 import coreWorker from "../core-worker";
-import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 
 const databases = isolatedTestDatabases();
 const Json = Schema.fromJsonString(Schema.Unknown);
@@ -65,10 +66,10 @@ const sendThroughWorkers =
           fetch: (request): Promise<Response> =>
             coreWorker.fetch(new Request(request), {
               DB: db,
-              AI: { run: () => Promise.reject(new Error("unused")) },
+              OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("unused")) }),
               CONTRACT_DIGEST: "a".repeat(contractDigestLength),
               RELEASE_GIT_SHA: "a".repeat(gitRevisionLength),
-              HOSTED_AI_MODEL: approvedWorkersAiModel,
+              HOSTED_AI_MODEL: approvedOpenAiModel,
               BROWSER_ORIGIN: "https://app.fidyapp.com",
               MICROSOFT_CLIENT_ID: "test-client",
               MICROSOFT_CLIENT_SECRET: "test-secret",

@@ -82,9 +82,9 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
    Cloudflare state checks. Both static artifacts identify the final release revision and retain
    hashed assets, headers, and secret-free validation. Ordinary Worker and hosted-inference tests
    run in the PR gate, without consuming live inference quota.
-   Live model verification is an explicit operator action: run `test:workers-ai-conformance` from
-   `infra/cloudflare` with the approved `HOSTED_AI_MODEL` and Cloudflare credentials. It consumes
-   the account's Workers AI allowance and remains strict by default. Deterministic tests do not
+   Live model verification is an explicit operator action: run `test:openai-conformance` from
+   `infra/cloudflare` with the approved `HOSTED_AI_MODEL` and `OPENAI_API_KEY`. It consumes
+   the OpenAI account's credits and remains strict by default. Deterministic tests do not
    establish live model conformance; provider quota never substitutes for launch approval.
 5. In the Cloudflare lane, idempotently bootstrap the persistent Cloudflare state authority with
    `alchemy provider cloudflare bootstrap`, then reject topology drift. Keep those operations ordered.
@@ -539,3 +539,12 @@ also contained authenticated application activity and operational alerts, includ
 `dead_letters` alert first observed October 10. It is evidence of reduced background overhead, not a
 controlled measurement of the healthy-idle budget. Headline and chart totals differ slightly, so
 retain rounded totals rather than subtracting their independently aggregated values.
+
+Hosted inference requires the `OPENAI_API_KEY` GitHub Actions secret, bound only to the private
+Core Worker by Alchemy. Local development reads it from the untracked environment; leaving it empty
+disables hosted inference without installing another model provider. The selected model is
+`gpt-6-luna`. Requests disable response storage and keep conversation state in Fidy. Prefer an
+OpenAI project with approved Zero Data Retention; standard abuse-monitoring retention is accepted
+when ZDR is unavailable. `store: false` does not establish ZDR. See
+[ADR 0038](../adr/0038-openai-hosted-inference.md) and
+[OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).

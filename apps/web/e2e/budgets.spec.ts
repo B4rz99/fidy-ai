@@ -1009,14 +1009,19 @@ const checkBackgroundDashboard = Effect.fn(function* (page: Page) {
       page.getByText("Presupuesto eliminado de todos los meses.", { exact: true })
     ).toBeVisible()
   );
-  yield* Effect.tryPromise(() => expect.poll(() => observation.reads).toBeGreaterThanOrEqual(2));
+  expect(observation.reads).toBe(1);
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Actualizar", exact: true }).click()
   );
-  yield* Effect.tryPromise(() => expect.poll(() => observation.reads).toBeGreaterThanOrEqual(3));
+  yield* Effect.tryPromise(() => page.waitForLoadState("networkidle"));
+  expect(observation.reads).toBe(1);
   expect(observation.initializationPaths).toEqual([]);
+  yield* Effect.tryPromise(() => page.getByRole("link", { name: "Tablero", exact: true }).click());
+  yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
+  expect(observation.reads).toBe(2);
+  expect(observation.initializationPaths).toEqual(["/app/dashboard"]);
 });
-test("Budget removal and recovery never initialize a retained failed Dashboard outside its visit", ({
+test("Budget removal and recovery leave Dashboard disposed until its next actual visit", ({
   page,
 }) => Effect.runPromise(checkBackgroundDashboard(page)));
 

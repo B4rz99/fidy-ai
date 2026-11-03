@@ -82,10 +82,7 @@ const returnToHandoffAfterCollection = (page: Page, reads: ReadonlyArray<string>
       );
     })
   );
-test("reuses the latched session and recent profile and categories across workspaces", ({
-  page,
-  request,
-}) =>
+test("keeps the entry handoff and rereads Recurring on an actual return", ({ page, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
@@ -120,13 +117,15 @@ test("reuses the latched session and recent profile and categories across worksp
           expect(page.getByRole("button", { name: workspace.ready, exact: true })).toBeEnabled()
         );
       }
-      yield* Effect.tryPromise(() => returnToHandoffAfterCollection(page, reads));
       expect(reads.filter((path) => path === "/user")).toHaveLength(0);
+      expect(reads.filter((path) => path === "/recurring-plans")).toHaveLength(1);
+      yield* Effect.tryPromise(() => returnToHandoffAfterCollection(page, reads));
+      expect(reads.filter((path) => path === "/user")).toHaveLength(1);
       expect(reads.filter((path) => path === "/categories")).toHaveLength(0);
       expect(reads.filter((path) => path === "/budgets")).toHaveLength(0);
       expect(reads.filter((path) => path === "/budget-status")).toHaveLength(1);
       expect(seriesReads).toBe(0);
-      expect(reads.filter((path) => path === "/recurring-plans")).toHaveLength(1);
+      expect(reads.filter((path) => path === "/recurring-plans")).toHaveLength(2);
       expect(
         reads.filter((path) => /^\/ingestion\/review-workspace\/[^/]+$/u.test(path))
       ).toHaveLength(0);

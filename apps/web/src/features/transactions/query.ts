@@ -19,7 +19,9 @@ class Period extends Data.Class<
 type InitialPage = Atom.Writable<Option.Option<Result>, Option.Option<Result>>;
 // Each weak family returns its mounted Atom, never an unretained container or another family.
 const initialPages = Atom.family((_period: Period): InitialPage =>
-  Atom.make<Option.Option<Result>>(Option.none()).pipe(Atom.setIdleTTL("1 minute"))
+  Atom.make<Option.Option<Result>>(Option.none()).pipe(
+    Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
+  )
 );
 const makeSource = (period: Period): Atom.Atom<Result> => {
   const initial = initialPages(period);
@@ -33,7 +35,7 @@ const makeSource = (period: Period): Atom.Atom<Result> => {
       refresh(remote);
       refresh(initial);
     }
-  ).pipe(Atom.setIdleTTL("1 minute"));
+  ).pipe(Atom.setIdleTTL(workspaceQueryRetention.timeToLive));
 };
 // Retain the canonical owner in the registry. SWR intentionally removes its own idle TTL,
 // so its collectible view must not be the weak family's only reference to that owner.

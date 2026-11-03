@@ -1,5 +1,4 @@
 import { captureInThemes } from "./themed-capture";
-import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin, installUser, response } from "./http-fixtures";
@@ -105,13 +104,7 @@ const retryJourney = Effect.fnUntraced(function* (page: Page) {
       "true"
     )
   );
-  const frameParts = [
-    "recurring-report-columns",
-    "recurring-report-main",
-    "recurring-report-context",
-    "recurring-report-labels",
-  ].map((name) => ({ name, selector: `.${name}` }));
-  const loadingFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
+
   initial.resolve();
   yield* Effect.tryPromise(() => expect(page.getByText("Informe no disponible")).toBeVisible());
   yield* Effect.tryPromise(() =>
@@ -129,8 +122,7 @@ const retryJourney = Effect.fnUntraced(function* (page: Page) {
       page.getByRole("list", { name: "Todos los patrones confirmados" }).getByRole("listitem")
     ).toHaveCount(reportItemCount)
   );
-  const loadedFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
-  expectSameLoadingFrame(loadingFrame, loadedFrame);
+
   expect(calls).toBe(2);
 });
 

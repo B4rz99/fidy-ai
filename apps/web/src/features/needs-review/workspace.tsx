@@ -1,4 +1,5 @@
-import { ReviewInboxSkeleton } from "@/ui/components/review-inbox-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import type { FidyClient } from "@/transport/client";
 import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } from "./decisions";
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
@@ -217,7 +218,7 @@ const ReviewUnavailable = ({
         setSearch={setSearch}
       />
       {loading ? (
-        <ReviewInboxSkeleton />
+        <PendingRead label="Cargando elementos" />
       ) : (
         <ReviewFullState
           state="error"

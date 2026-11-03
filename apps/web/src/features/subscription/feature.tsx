@@ -1,3 +1,4 @@
+import { PendingRead } from "@/ui/components/pending-read";
 import { SubscriptionCancellationManagement } from "./cancellation";
 import { makeCancellationCommand, subscriptionStatusQuery } from "./cancellation-command";
 import { SubscriptionIntroduction } from "@/ui/components/subscription-introduction";
@@ -5,11 +6,7 @@ import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-
 import { Input } from "@/ui/components/input";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import {
-  OffersSkeleton,
-  PaymentFormSkeleton,
-  PaymentMethodsSkeleton,
-} from "@/ui/components/subscription-loading";
+
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Array as EffectArray, Option, Redacted } from "effect";
@@ -641,7 +638,6 @@ const renderPaymentEnrollment = (
 
 const EnrollmentContent = ({
   offer,
-  method,
   gateway,
   onDaviplataSubmitted,
   enrollment,
@@ -660,7 +656,7 @@ const EnrollmentContent = ({
 }> &
   DaviplataFormActions): JSX.Element =>
   Option.match(enrollment, {
-    onNone: () => (busy ? <PaymentFormSkeleton method={method} /> : <></>),
+    onNone: () => (busy ? <PendingRead label="Cargando formulario" /> : <></>),
     onSome: (current) =>
       renderPaymentEnrollment({
         current,
@@ -808,7 +804,7 @@ const OfferOverview = ({
     {selection.enabledMethods.length === 0 && (
       <div>
         {selection.methodsWaiting ? (
-          <PaymentMethodsSkeleton />
+          <PendingRead label="Consultando métodos de pago" />
         ) : (
           <p aria-live="polite" className="subscription-muted">
             {methodAvailabilityMessage(selection)}
@@ -969,7 +965,7 @@ const SubscriptionOffersContent = ({
   switch (state._tag) {
     case "Initial":
     case "Loading":
-      return <OffersSkeleton />;
+      return <PendingRead label="Cargando ofertas" />;
     case "Ready":
       return <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />;
     case "Refreshing":

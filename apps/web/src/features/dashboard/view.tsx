@@ -1,3 +1,4 @@
+import { PendingRead } from "@/ui/components/pending-read";
 import { dashboardCategoryVisual } from "@/ui/components/dashboard-category";
 import { Link } from "@tanstack/react-router";
 import { ConfigureBudgetButton } from "./budget-configuration";
@@ -40,7 +41,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/component
 import { Input } from "@/ui/components/input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
-import { LoadingDashboard } from "./loading";
+
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
   exactChartAmount,
@@ -1147,7 +1148,7 @@ export const DashboardRouteContent = ({
   const state = presentCanonicalQuery(result);
   switch (state._tag) {
     case "Initial":
-      return <LoadingDashboard />;
+      return <PendingRead label="Cargando tablero" />;
     case "Failure":
       return (
         <DashboardError

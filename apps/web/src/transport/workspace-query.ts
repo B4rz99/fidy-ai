@@ -15,7 +15,7 @@ type CatalogQuery = Atom.Atom<
   AsyncResult.AsyncResult<CanonicalSuccess<"dashboard.listDashboardCatalog">, CatalogError>
 >;
 /** Retain display data only within the current authentication registry. */
-export const workspaceQueryRetention = { timeToLive: "1 minute" } as const;
+export const workspaceQueryRetention = { timeToLive: "5 minutes" } as const;
 /** Reuse a recent display snapshot; expired results reread before editing resumes. */
 export const revalidateWorkspaceQuery = <A, E>(
   query: Atom.Atom<AsyncResult.AsyncResult<A, E>>
@@ -57,7 +57,10 @@ const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
       refresh(remote);
       refresh(initialMetadata(client));
     }
-  ).pipe(client.runtime.factory.withReactivity(["recurring-resume"]), Atom.setIdleTTL("1 minute"));
+  ).pipe(
+    client.runtime.factory.withReactivity(["recurring-resume"]),
+    Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
+  );
 });
 /** The initial observation belongs to the canonical metadata owner; refresh retires it. */
 export const workspaceMetadataInitialValue = ({

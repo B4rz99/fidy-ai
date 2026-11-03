@@ -1,4 +1,3 @@
-import { TransactionRowsSkeleton } from "@/ui/components/transaction-loading";
 import { useCallback, useState, useSyncExternalStore } from "react";
 import type { JSX, RefCallback } from "react";
 import { CheckmarkCircle02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
@@ -254,7 +253,7 @@ const TransactionReference = (): JSX.Element => (
 const EmptyReference = (): JSX.Element => (
   <Card>
     <CardHeader>
-      <CardTitle>Vacío y carga son estados distintos</CardTitle>
+      <CardTitle>Estado vacío</CardTitle>
     </CardHeader>
     <CardContent className="flex flex-col gap-6">
       <Empty className="border">
@@ -265,7 +264,6 @@ const EmptyReference = (): JSX.Element => (
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
-      <TransactionRowsSkeleton />
     </CardContent>
   </Card>
 );

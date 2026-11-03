@@ -1,4 +1,5 @@
-import { ReportSkeleton } from "@/ui/components/report-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import type { JSX, ReactNode } from "react";
 import { Alert02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -59,4 +60,4 @@ export const ReportRefreshFailure = ({ onRetry, waiting }: RetryProps): JSX.Elem
   </div>
 );
 
-export const ReportLoading = (): JSX.Element => <ReportSkeleton />;
+export const ReportLoading = (): JSX.Element => <PendingRead label="Cargando informe" />;

@@ -1,16 +1,21 @@
+import { PendingRead } from "@/ui/components/pending-read";
 import { TransactionPrivacyNotice } from "@/ui/components/transaction-privacy-notice";
-import { TransactionsSkeleton } from "@/ui/components/transaction-loading";
+
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Link, lazyRouteComponent, useRouter } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
 import { type JSX, Suspense, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { privacyTransactionHistory } from "./privacy-history";
 
-const TransactionWorkspace = lazyRouteComponent(
-  () => import("./workspace"),
-  "TransactionWorkspace"
+import { TransactionWorkspace } from "./workspace-component";
+
+const PrivacyPending = (): JSX.Element => (
+  <>
+    <ReadOnlyNotice />
+    <PendingRead label="Cargando transacciones" />
+  </>
 );
 
 const ReadOnlyNotice = (): JSX.Element => (
@@ -34,7 +39,7 @@ export const PrivacyTransactions = (): JSX.Element => {
   const dispatch = useAtomSet(historyResource.action);
   const state = history.query;
   if (state._tag === "Initial") {
-    return <TransactionsSkeleton readOnly={true} notice={<ReadOnlyNotice />} />;
+    return <PrivacyPending />;
   }
   if (state._tag === "Failure" || Option.isSome(state.refreshFailure)) {
     return (
@@ -55,7 +60,7 @@ export const PrivacyTransactions = (): JSX.Element => {
     );
   }
   return (
-    <Suspense fallback={<TransactionsSkeleton readOnly={true} notice={<ReadOnlyNotice />} />}>
+    <Suspense fallback={<PrivacyPending />}>
       <TransactionWorkspace
         key={history.generation}
         readOnly

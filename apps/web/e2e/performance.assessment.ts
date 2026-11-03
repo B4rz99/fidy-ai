@@ -7,6 +7,15 @@ import { browserAcceptanceTopology } from "../../server/cloudflare/browser-accep
 
 const { test, expect } = playwright;
 const dataset = Effect.runSync(Config.String("FIDY_ASSESSMENT").pipe(Config.withDefault("small")));
+const networkProfile = Schema.decodeUnknownSync(Schema.Literals(["normal", "poor"]))(
+  Effect.runSync(Config.String("FIDY_ASSESSMENT_NETWORK").pipe(Config.withDefault("normal")))
+);
+const poorConnection = {
+  offline: false,
+  latency: 400,
+  downloadThroughput: 51_200,
+  uploadThroughput: 25_600,
+};
 const { api: apiOrigin } = browserAcceptanceTopology();
 test.beforeAll(prepareAssessmentFixture);
 const actionTimeout = 10_000;
@@ -109,6 +118,8 @@ const observeRequests = (
   });
   return { requests, pending };
 };
+const hasVisibleLoading = (elements: Element[]): boolean =>
+  elements.some((element) => element.closest(".sr-only") === null);
 const waitForReady = Effect.fn(function* (page: Page, ready: () => Promise<unknown>) {
   const progress = { settled: false, observations: 0 };
   const observed = ready().finally(() => {
@@ -119,7 +130,8 @@ const waitForReady = Effect.fn(function* (page: Page, ready: () => Promise<unkno
       .locator('[data-slot="skeleton"], [data-slot="spinner"], [aria-label^="Cargando"]')
       .or(page.getByText(/^Cargando/u))
       .filter({ visible: true });
-    if ((yield* Effect.tryPromise(() => loading.count())) > 0) progress.observations++;
+    const visuallyLoading = yield* Effect.tryPromise(() => loading.evaluateAll(hasVisibleLoading));
+    if (visuallyLoading) progress.observations++;
     yield* Effect.tryPromise(() => Promise.race([observed, pause(sampleInterval)]));
   }
   yield* Effect.tryPromise(() => observed);
@@ -251,7 +263,10 @@ const readyWorkspace = (page: Page, route: Workspace): Promise<void> => {
     });
   }
   if (route.name === "review") {
-    return expect(page.getByLabel("Valor", { exact: true })).toBeVisible({ timeout });
+    return Promise.all([
+      expect(page.getByLabel("Valor", { exact: true })).toBeVisible({ timeout }),
+      expect(page.locator('[data-review="original-body"] pre')).toBeVisible({ timeout }),
+    ]).then(() => undefined);
   }
   if (route.name === "upgrade") {
     return expect(page.getByRole("button", { name: /^mensual\b/iu })).toBeEnabled({ timeout });
@@ -260,9 +275,12 @@ const readyWorkspace = (page: Page, route: Workspace): Promise<void> => {
     return expect(page.getByLabel("Nuevo correo", { exact: true })).toBeVisible({ timeout });
   }
   if (route.name === "access") {
-    return expect(page.getByText("No tienes tokens activos.", { exact: true })).toBeVisible({
-      timeout,
-    });
+    return Promise.all([
+      expect(page.getByText("No tienes tokens activos.", { exact: true })).toBeVisible({ timeout }),
+      expect(page.getByText("No hay conexiones en esta página.", { exact: true })).toBeVisible({
+        timeout,
+      }),
+    ]).then(() => undefined);
   }
   return expect(page.getByLabel("Tu autorización está vigente.", { exact: true })).toBeVisible({
     timeout,
@@ -432,6 +450,10 @@ const installWorkspaceReadiness = (): void => {
   ]).get(location.pathname);
   const visible = (element: Element): boolean => element.getClientRects().length > 0;
   const ready = (): boolean => {
+    if (location.pathname === "/app/needs-review") {
+      const original = document.querySelector('[data-review="original-body"] pre');
+      if (original === null || !visible(original)) return false;
+    }
     if (button !== undefined) {
       return Array.from(document.querySelectorAll("button")).some(
         (control) =>
@@ -483,6 +505,10 @@ const prepareBrowser = Effect.fn(function* (page: Page, cdp: CDPSession) {
   yield* Effect.tryPromise(() => page.addInitScript(installBrowserObservers));
   yield* Effect.tryPromise(() => page.addInitScript(installWorkspaceReadiness));
   yield* Effect.tryPromise(() => cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 }));
+  if (networkProfile === "poor") {
+    yield* Effect.tryPromise(() => cdp.send("Network.enable"));
+    yield* Effect.tryPromise(() => cdp.send("Network.emulateNetworkConditions", poorConnection));
+  }
   yield* Effect.tryPromise(() => page.setViewportSize({ width: 1280, height: 720 }));
 });
 const measureColdInteractions = Effect.fn(function* (
@@ -527,6 +553,7 @@ for (const profile of ["desktop"] as const) {
           test.info().attach("assessment-samples", {
             body: json({
               dataset,
+              networkProfile,
               previewCompression,
               profile,
               browser: context.browser()?.version(),
@@ -563,6 +590,7 @@ for (const profile of ["desktop"] as const) {
             test.info().attach("assessment-samples", {
               body: json({
                 dataset,
+                networkProfile,
                 previewCompression,
                 nativeReadiness: "all-workspaces",
                 coldInteractions,
@@ -618,6 +646,7 @@ for (const profile of ["desktop"] as const) {
             test.info().attach("assessment-samples", {
               body: json({
                 dataset,
+                networkProfile,
                 previewCompression,
                 nativeReadiness: "all-workspaces",
                 coldInteractions,

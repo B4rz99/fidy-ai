@@ -1,4 +1,3 @@
-import { TransactionSkeletonRows } from "@/ui/components/transaction-loading";
 import {
   type ColumnDef,
   type Table as ReactTable,
@@ -463,9 +462,6 @@ const LedgerBody = ({
           )}
         </Fragment>
       ))}
-      {rowProps.continuation === "loading" ? (
-        <TransactionSkeletonRows phase="continuation" />
-      ) : null}
     </TableBody>
   );
 };
@@ -523,13 +519,6 @@ const LedgerContents = ({
             partial={props.continuation !== "complete"}
             readOnly={props.readOnly}
           />
-          {props.continuation === "loading" ? (
-            <Table>
-              <TableBody>
-                <TransactionSkeletonRows phase="initial" />
-              </TableBody>
-            </Table>
-          ) : null}
         </>
       ) : (
         <Table aria-label="Tabla de transacciones">

@@ -1,4 +1,4 @@
-import { ReviewInboxSkeleton } from "./review-inbox-loading";
+import { PendingRead } from "./pending-read";
 import type { JSX, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CheckmarkCircle02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
@@ -42,7 +42,7 @@ export const ReviewFullState = ({
   children: ReactNode;
 }>): JSX.Element =>
   state === "loading" ? (
-    <ReviewInboxSkeleton />
+    <PendingRead label="Cargando elementos" />
   ) : (
     <div data-review="empty">
       <Empty>

@@ -1,4 +1,3 @@
-import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { acceptSubscriptionContracts } from "./subscription-interactions";
 import { PaymentEnrollmentId, ResourceLimited } from "@fidy/server/client";
@@ -456,7 +455,7 @@ for (const viewport of [
   { width: 1280, height: 720 },
   { width: 375, height: 812 },
 ]) {
-  test(`renders loading until the real Core answers Transactions at ${viewport.width}px`, ({
+  test(`waits for real Core Transactions without placeholder layouts at ${viewport.width}px`, ({
     page,
     request,
   }) => {
@@ -485,14 +484,8 @@ for (const viewport of [
             })
           ).toBeVisible()
         );
-        const desktopPanelMinimumWidth = 900;
-        const frameParts = [
-          "transaction-page-header",
-          "transaction-columns",
-          "transaction-records",
-          ...(viewport.width >= desktopPanelMinimumWidth ? ["transaction-context-panel"] : []),
-        ].map((slot) => ({ name: slot, selector: `[data-transaction-slot="${slot}"]` }));
-        const loadingFrame = yield* fromPlaywright(measureLoadingFrame(page, frameParts));
+
+        yield* fromPlaywright(expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0));
         yield* fromPlaywright(held.received);
         // Observe logical success after any bounded native-admission retries.
         const completed = page.waitForResponse(
@@ -509,8 +502,6 @@ for (const viewport of [
             })
           ).toHaveCount(0)
         );
-        const loadedFrame = yield* fromPlaywright(measureLoadingFrame(page, frameParts));
-        expectSameLoadingFrame(loadingFrame, loadedFrame);
       }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
     );
   });

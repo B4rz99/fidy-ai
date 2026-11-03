@@ -52,6 +52,12 @@ code load before the Transactions workspace becomes usable rather than moving th
 first interaction. Poppins uses Latin subsets with the original fonts retained for other scripts. Sidebar artwork
 uses display-density variants, retaining the originals for the larger access screen.
 
+The Transactions feature interface keeps route search and bootstrap hydration independent of its
+workspace, capture and calendar implementation. Its preload overlaps the list owner and the same
+presentation component used at render; Recurring likewise prepares its injected capture component
+with destination code. Other entries do not need Transaction presentation to interpret a route or
+hydrate their session registry.
+
 After the application boundary latches the browser session, the initial Budgets
 and Recurring routes may mount the same session-registry profile query before presentation loads.
 Transactions starts ordinary reads only after its fresh Consent gate, preserving Privacy-only
@@ -525,34 +531,46 @@ require a canonical reread. Original text is escaped, media locators are not ren
 URLs, and neither originals nor drafts enter browser storage. Navigation owns pending-count
 polling within the authentication registry lifetime.
 
-Main workspace display queries retain their last result for one minute of inactivity in the
+Main workspace display queries retain their last result for five minutes of inactivity in the
 current authentication registry. Returning to Budgets, Recurring, Transactions or Dashboard
 renders that result immediately. Reads younger than five seconds remain fresh on mount and
 window focus; older reads revalidate, and explicit invalidation always refreshes. Retained
 Recurring workspace returns coalesce refreshes inside the same five-second window using wall
 time, including calendar changes. Review always revalidates on return to observe remote drafts. Review categories share
-the normal category snapshot; an unvisited history panel starts only when selected. Cached profiles
-and resource results do not grant authority: the server checks live Consent, caller authority and
+the normal category snapshot; an unvisited history panel starts only when selected. Budget navigation
+uses a retained profile for display preparation while its refresh remains pending. Recurring
+transaction pickers retain their query across disclosure changes and revalidate on reopening once
+stale. Cached profiles and resource results do not grant authority: the server checks live Consent, caller authority and
 revision guards for every write; refresh failures still gate editing. Authenticated clients share
 two in-flight request permits within their session signal, including across feature clients. Queue
 time counts against the original request deadline and session retirement cancels queued work.
 Dashboard initialization remains exclusive to a declared uninitialized response during an
 actual visit. The retained Dashboard query checks the live router location before initialization,
-so Budget deletion and recovery can refresh its projection without creating a Dashboard off-route. Consent, session binding and security settings reads retain their fresh access
-checks. Router intent preloading prepares destination code without executing writes. The owned
-navigation hook prepares display reads only while an authenticated product route is active;
+so Budget deletion, recovery and navigation intent can read its projection without creating a
+Dashboard off-route. Consent and session binding retain their fresh access checks. Access listings
+retain their previous display for five minutes while rechecking both lists on every mount and
+focus; pending or failed refreshes disable decisions. Manual PAT bearer disclosure and account
+proofs still dispose with their mounted owners.
+Router intent preloading prepares destination code without executing writes. The owned
+navigation hook prepares display reads only while an authenticated product route is active,
+including Transactions with observed Granted Consent;
 independent controls such as OAuth do not start product reads on hover. Automatic Budget and Recurring
 loader preloads are disabled so a code-only speculative match cannot satisfy the actual visit.
 The owned product intent retains data preparation and the active product route's AbortSignal,
-including after deferred code import. Idle destination code warming remains independent.
+including after deferred code import. Idle code warming starts after the foreground Transaction,
+Dashboard, Budget or Recurring display is available, includes settings and Subscription code, and
+yields between destinations. Composition supplies its code loaders through a context so features
+do not import application orchestration. Reported data-saving and slow network connections skip
+broad idle warming; explicit destination intent remains available. Idle warming never starts
+product reads.
 Needs Review and Recurring route loaders preload the same presentation component used by their
 retained workspace, so resolving destination code does not introduce another lazy suspension. Retained panels activate
 only for successful route matches after destination code and mandatory access checks complete.
 Transactions and Review return their registry data-preparation promise as deferred loader work,
 owned by the route's AbortSignal. A held data read therefore leaves the workspace's approved
-loading/error controls available instead of blocking the entire route. A cached Review route commits
+pending/error controls available instead of blocking the entire route. Pending reads expose screen-reader status without visible skeletons or placeholder layouts. A cached Review route commits
 its retained display while its loader revalidates in the background. Transactions still awaits
-fresh Consent before starting that preparation or revealing the destination. Budget and first Recurring intent prepare
+fresh Consent before starting its entry preparation or revealing the destination. Budget, Dashboard, Transactions and first Recurring intent prepare
 their display data, preserving immediate cached returns. Recurring intent does not mark the
 retained planning workspace as visited.
 Actual Transactions entries refresh the shared Consent source before revealing the destination.
@@ -563,8 +581,8 @@ The route stores no copy of Consent or product data. Preparation observes the au
 registry's existing query and leaves failures there for the ordinary error view. Cached product
 information can remain visible during revalidation; waiting and failed refreshes still gate decisions.
 First destination reads can complete before reveal, with code-only preparation yielding until the
-foreground Transaction information is ready. Pointer, keyboard focus and touch intent prepare only
-the requested Budget or first Recurring resource, or first Review material, within the same two transport permits.
+foreground information is ready. Pointer, keyboard focus and touch intent prepare only
+the requested display resource or first Review material, within the same two transport permits. Transaction intent prepares data without donating an access decision to the actual entry; every actual entry still performs its fresh Consent check.
 The browser's protected User response includes an optional bounded Category display catalog;
 category views derive it from that one source and explicit category recovery refreshes its owner.
 Other transports retain the independent Category read when the inline catalog is absent.

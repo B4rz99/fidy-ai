@@ -1,10 +1,11 @@
-import { DashboardCatalogSkeleton } from "@/ui/components/dashboard-loading";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
-import type { AsyncResult } from "effect/reactivity";
-import { type JSX, Suspense, useState } from "react";
+import type { AsyncResult, AtomRegistry } from "effect/reactivity";
+import { type JSX, type ReactNode, Suspense, useState } from "react";
 import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
-import { LoadingDashboard } from "./loading";
+
 import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
@@ -14,6 +15,8 @@ import { type DashboardEditorError, useDashboardEditing } from "./editing";
 import type { DashboardView } from "./presentation";
 import { type DashboardLoadPhase, dashboardQuery } from "./query";
 import { DashboardBudgetConfiguration } from "./budget-configuration";
+import { prepareQuery } from "@/transport/query-preparation";
+import type { AnyRouter } from "@tanstack/react-router";
 
 const DashboardRoutePresentation = lazyRouteComponent(
   () => import("./view"),
@@ -26,23 +29,42 @@ DashboardViewComponent.preload?.()?.catch(() => undefined);
 
 export const DashboardFeature = ({
   apiClient,
-}: Readonly<{ apiClient: FidyClient }>): JSX.Element => {
+  children,
+}: Readonly<{ apiClient: FidyClient; children: ReactNode }>): JSX.Element => {
   const router = useRouter();
   const [dashboard] = useState(() => dashboardQuery({ apiClient, router }));
   const result = useAtomValue(dashboard.result);
   const phase = useAtomValue(dashboard.phase);
   const refresh = useAtomRefresh(dashboard.result);
   return (
-    <Suspense fallback={<LoadingDashboard />}>
+    <Suspense fallback={<PendingRead label="Cargando tablero" />}>
       <DashboardRouteContent
         apiClient={apiClient}
         result={result}
         phase={phase}
         onRefresh={refresh}
       />
+      {result._tag === "Success" ? children : null}
     </Suspense>
   );
 };
+
+DashboardFeature.preloadData = ({
+  apiClient,
+  registry,
+  router,
+  signal,
+}: Readonly<{
+  apiClient: FidyClient;
+  registry: AtomRegistry.AtomRegistry;
+  router: AnyRouter;
+  signal: AbortSignal;
+}>): Promise<void> =>
+  prepareQuery({
+    registry,
+    query: dashboardQuery({ apiClient, router }).result,
+    options: { mode: "display", signal: Option.some(signal) },
+  });
 
 const unavailableCatalogError: DashboardEditorError = {
   title: "No pudimos cargar el catálogo",
@@ -108,7 +130,7 @@ const CatalogQueryNotice = <E,>({
   const failed = catalogUnavailable(state);
   return (
     <>
-      {state._tag === "Initial" ? <DashboardCatalogSkeleton /> : null}
+      {state._tag === "Initial" ? <PendingRead label="Cargando catálogo del tablero" /> : null}
       {failed ? (
         <Button
           className="m-4"

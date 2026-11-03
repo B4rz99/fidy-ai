@@ -1,4 +1,3 @@
-import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import { signInNavigationPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
 import type { Response as BrowserResponse, Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
@@ -1619,7 +1618,7 @@ for (const [state, copy] of Object.entries({
           const loading = page.getByRole("status", { name: copy, exact: true });
           yield* Effect.tryPromise(() => expect(loading).toHaveAttribute("aria-busy", "true"));
           yield* Effect.tryPromise(() =>
-            expect(loading.locator('[data-slot="skeleton"]').first()).toBeVisible()
+            expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0)
           );
           yield* Effect.tryPromise(() => expect(loading).toContainText(copy));
           yield* Effect.tryPromise(() =>
@@ -1753,7 +1752,7 @@ const releaseReviewRoute =
   (route: Route): Promise<void> =>
     release.then(() => reviewRoute(route));
 for (const width of [compactDesktopWidth, wideDesktopWidth]) {
-  test(`Review skeleton matches the loaded frame at desktop width ${width}`, ({ page }) => {
+  test(`Review shows real content without placeholders at desktop width ${width}`, ({ page }) => {
     const release = Promise.withResolvers<void>();
     return Effect.runPromise(
       Effect.gen(function* () {
@@ -1772,17 +1771,14 @@ for (const width of [compactDesktopWidth, wideDesktopWidth]) {
             page.getByRole("status", { name: "Cargando elementos", exact: true })
           ).toHaveAttribute("aria-busy", "true")
         );
-        const frameParts = ["grid", "inbox", "detail", "columns"].map((name) => ({
-          name,
-          selector: `[data-review="${name}"]`,
-        }));
-        const loadingFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
+
+        yield* Effect.tryPromise(() =>
+          expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0)
+        );
         release.resolve();
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: "Confirmar", exact: true })).toBeVisible()
         );
-        const loadedFrame = yield* Effect.tryPromise(() => measureLoadingFrame(page, frameParts));
-        expectSameLoadingFrame(loadingFrame, loadedFrame);
       }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
     );
   });

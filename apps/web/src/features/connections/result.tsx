@@ -1,4 +1,5 @@
-import { TextSkeleton } from "@/ui/components/loading-skeletons";
+import { PendingRead } from "@/ui/components/pending-read";
+
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -40,7 +41,7 @@ const AuthorizedAccounts = ({ connection }: Readonly<{ connection: Connection }>
   );
   const result = useAtomValue(query).pipe(presentCanonicalQuery);
   if (result._tag === "Initial") {
-    return <TextSkeleton label="Cargando cuentas autorizadas" lines={1} />;
+    return <PendingRead label="Cargando cuentas autorizadas" />;
   }
   if (result._tag !== "Ready") {
     return <p>La consulta de cuentas autorizadas aún no está disponible.</p>;

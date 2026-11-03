@@ -9,11 +9,15 @@ import {
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
-const targetMilliseconds = 10;
-const budgetTargetMilliseconds = 16;
+const targetMilliseconds = 6.94;
+// Preserve the established regression gates; the one-frame stretch target is reported separately.
+const switchRegressionMilliseconds = 10;
+const budgetRegressionMilliseconds = 16;
 const measurementSamples = 5;
 const expiredDisplayMilliseconds = 6_000;
 const freshConsentTimeoutMilliseconds = 500;
+const successfulResponse = 200;
+const uninitializedDashboardResponse = 404;
 const workspaces = [
   {
     name: "Transacciones",
@@ -40,6 +44,127 @@ const workspaces = [
     identity: "navigationDashboard",
   },
 ] as const;
+
+test("prepares the Budget destination from Transactions before navigation", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationBudget" })
+      );
+      const prepared = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/budget-status" &&
+          response.status() === successfulResponse
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Presupuestos", exact: true }).hover()
+      );
+      yield* Effect.tryPromise(() => prepared);
+      expect(new URL(page.url()).pathname).toBe("/app/transactions");
+      yield* holdWorkspaceData(page, `${apiOrigin}/budget-status**`);
+      yield* Effect.tryPromise(() => openWorkspace(page, "Presupuestos"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Mes anterior", exact: true })).toBeVisible({
+          timeout: 100,
+        })
+      );
+    }).pipe(Effect.scoped)
+  ));
+
+test("reveals cached Budgets while its expired profile refresh is pending", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationBudget" })
+      );
+      yield* Effect.tryPromise(() => openWorkspace(page, "Presupuestos"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Mes anterior", exact: true })).toBeEnabled()
+      );
+      yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
+      yield* holdWorkspaceData(page, `${apiOrigin}/user`);
+      const current = yield* Clock.currentTimeMillis;
+      yield* Effect.tryPromise(() => page.clock.setFixedTime(current + expiredDisplayMilliseconds));
+      yield* Effect.tryPromise(() => openWorkspace(page, "Presupuestos"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Mes anterior", exact: true })).toBeVisible({
+          timeout: 100,
+        })
+      );
+    }).pipe(Effect.scoped)
+  ));
+
+test("retains Access listings on return while freshly checking both lists", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationBudget" })
+      );
+      yield* Effect.tryPromise(() => page.getByText("Ajustes", { exact: true }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Accesos", exact: true }).click()
+      );
+      const tokens = page.getByText("No tienes tokens activos.", { exact: true });
+      const agents = page.getByText("No hay conexiones en esta página.", { exact: true });
+      yield* Effect.tryPromise(() => expect(tokens).toBeVisible());
+      yield* Effect.tryPromise(() => expect(agents).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Cuenta", exact: true }).click()
+      );
+      yield* holdWorkspaceData(page, `${apiOrigin}/pats`);
+      yield* holdWorkspaceData(page, `${apiOrigin}/web/oauth/connections**`);
+      const rereads = Promise.all([
+        page.waitForRequest(`${apiOrigin}/pats`),
+        page.waitForRequest(`${apiOrigin}/web/oauth/connections**`),
+      ]);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Accesos", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(tokens).toBeVisible({ timeout: 100 }));
+      yield* Effect.tryPromise(() => expect(agents).toBeVisible({ timeout: 100 }));
+      yield* Effect.tryPromise(() => rereads);
+    }).pipe(Effect.scoped)
+  ));
+
+test("prepares a first Dashboard read without initializing it until the actual visit", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({
+          page,
+          request,
+          identity: "navigationFirstDashboard",
+        })
+      );
+      const initializations: string[] = [];
+      page.on("request", (entry) => {
+        if (
+          entry.method() === "POST" &&
+          new URL(entry.url()).pathname === "/dashboard/initialize"
+        ) {
+          initializations.push(entry.method());
+        }
+      });
+      const prepared = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/dashboard/view" &&
+          response.status() === uninitializedDashboardResponse
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Tablero", exact: true }).hover()
+      );
+      yield* Effect.tryPromise(() => prepared);
+      expect(initializations).toEqual([]);
+      yield* Effect.tryPromise(() => openWorkspace(page, "Tablero"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeEnabled()
+      );
+      expect(initializations.length).toBeGreaterThan(0);
+    })
+  ));
 
 test("keeps closed mobile navigation artwork out of startup and loads it when opened", ({
   page,
@@ -137,22 +262,62 @@ for (const workspace of workspaces) {
     ));
 }
 
+for (const workspace of workspaces.filter((workspace) => workspace.name !== "Transacciones")) {
+  test(`returns to ${workspace.name} on a poor connection without waiting for refreshed data`, ({
+    page,
+    request,
+    context,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          signInNavigationPerformanceThroughCore({ page, request, identity: workspace.identity })
+        );
+        yield* Effect.tryPromise(() => openWorkspace(page, workspace.name));
+        const ready = page.getByRole("button", { name: workspace.ready, exact: true });
+        yield* Effect.tryPromise(() => expect(ready).toBeEnabled());
+        yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
+        const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
+        yield* Effect.tryPromise(() => cdp.send("Network.enable"));
+        yield* Effect.tryPromise(() =>
+          cdp.send("Network.emulateNetworkConditions", {
+            offline: false,
+            latency: 400,
+            downloadThroughput: 51_200,
+            uploadThroughput: 25_600,
+          })
+        );
+        yield* holdWorkspaceData(page, `${apiOrigin}${workspace.path}`);
+        const current = yield* Clock.currentTimeMillis;
+        yield* Effect.tryPromise(() =>
+          page.clock.setFixedTime(current + expiredDisplayMilliseconds)
+        );
+        yield* Effect.tryPromise(() => openWorkspace(page, workspace.name));
+        yield* Effect.tryPromise(() => expect(ready).toBeVisible({ timeout: 100 }));
+        yield* Effect.tryPromise(() =>
+          expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0)
+        );
+      }).pipe(Effect.scoped)
+    ));
+}
+
 const recordSamples = (
   name: string,
   samples: ReadonlyArray<number>,
   development: number
 ): Promise<void> => {
   const median = samples.toSorted((left, right) => left - right)[Math.floor(samples.length / 2)];
+  if (median === undefined) throw new Error("A navigation benchmark needs at least one sample");
   return test
     .info()
     .attach("workspace-switch-duration", {
-      body: `${name}: median ${median} ms; samples ${samples.join(", ")} ms`,
+      body: `${name}: median ${median} ms; samples ${samples.join(", ")} ms; stretch target ${targetMilliseconds} ms (${median <= targetMilliseconds ? "met" : "not met"})`,
       contentType: "text/plain",
     })
     .then(() => {
-      if (development === 0 && name !== "Transacciones" && name !== "Tablero") {
+      if (development === 0 && name !== "Transacciones") {
         expect(median).toBeLessThanOrEqual(
-          name === "Presupuestos" ? budgetTargetMilliseconds : targetMilliseconds
+          name === "Presupuestos" ? budgetRegressionMilliseconds : switchRegressionMilliseconds
         );
       }
     });
@@ -301,7 +466,7 @@ test("opens recurring editors without reading hidden transaction pickers", ({ pa
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationRecurring" })
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationPicker" })
       );
       yield* Effect.tryPromise(() => openWorkspace(page, "Recurrentes"));
       yield* Effect.tryPromise(() =>

@@ -1,5 +1,6 @@
+import { PendingRead } from "@/ui/components/pending-read";
 import { Input } from "@/ui/components/input";
-import { TextSkeleton } from "@/ui/components/loading-skeletons";
+
 import { reviewMaterialQuery } from "./material-query";
 import { useReviewExpired } from "./expiry";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
@@ -60,7 +61,7 @@ const RetainedMaterial = ({
     state._tag === "Failure" ? (
       <p className="text-sm text-muted-foreground">No pudimos cargar el original.</p>
     ) : (
-      <TextSkeleton label="Cargando original" lines={6} />
+      <PendingRead label="Cargando original" />
     );
   return (
     <details open data-review="original">

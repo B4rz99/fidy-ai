@@ -7,6 +7,8 @@ import { HostedAgentProvider } from "@/features/agent/feature";
 import { OAuthAgent } from "./oauth-agent";
 import { RetainedRecurringWorkspace } from "./recurring-workspace";
 import { RetainedReviewWorkspace } from "./review-workspace";
+import { DestinationCodeContext } from "./destination-code-context";
+import { destinationCodePreloads } from "./destination-components";
 
 const ReviewPendingCount = lazy(() =>
   import("@/features/needs-review/feature").then((module) => ({
@@ -15,7 +17,13 @@ const ReviewPendingCount = lazy(() =>
 );
 
 /** One application shell survives navigation across independently authorized product routes. */
-export const ApplicationFrame = (): JSX.Element => {
+export const ApplicationFrame = (): JSX.Element => (
+  <DestinationCodeContext value={destinationCodePreloads}>
+    <ApplicationContent />
+  </DestinationCodeContext>
+);
+
+const ApplicationContent = (): JSX.Element => {
   const { authentication } = useSession();
   const prepareNavigation = useNavigationPreparation();
   const frame = useRouterState({
@@ -49,7 +57,9 @@ export const ApplicationFrame = (): JSX.Element => {
   if (frame === "standalone") return <Outlet />;
   const shell = (
     <ApplicationShell
-      prepareNavigation={prepareNavigation}
+      prepareNavigation={(destination) => {
+        prepareNavigation(destination).catch(() => undefined);
+      }}
       reviewPendingCount={
         independentControls ? null : (
           <Suspense fallback={null}>

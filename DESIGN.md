@@ -376,10 +376,10 @@ Place helper text and errors beside the affected field. A placeholder is an exam
 not a replacement for its label. Focus has a visible contrasting outline.
 
 Loading preserves the control's dimensions and identifies the action in progress.
-Pending data and view code use a skeleton matching the destination's rows, fields, panels or
-figures, rather than a separate text-only loading page. Keep already loaded information visible
-during background refreshes; append pagination skeletons below existing rows. Skeletons are
-non-interactive, retain a screen-reader loading status and respect reduced motion. Submission,
+Pending reads and view code do not render skeletons or placeholder layouts. Prepare destination
+code and display data ahead of navigation, and retain loaded information during background
+refreshes and pagination. Pending reads retain a screen-reader status without adding visible
+layout. Submission,
 payment settlement and external approval retain their action-specific feedback; errors and empty
 results keep their distinct recovery and explanation.
 Disabled controls remain readable and explain unavailable actions when necessary.
@@ -546,7 +546,7 @@ the shared component never decides whether or how to persist it.
 
 The application shell already owns the shared wordmark, sidebar, and floating
 phone navigation. Reuse that shell for signed-in views rather than copying it
-into each feature. `Button`, `Input`, `Label`, `Alert`, `Empty`, `Skeleton`, and
+into each feature. `Button`, `Input`, `Label`, `Alert`, `Empty`, and
 the overlay primitives remain the base controls; preserve their named variants,
 focus rings, comfortable hit areas, and disabled treatments.
 
@@ -868,7 +868,7 @@ history without promising a refund or reversal of a charge already started.
 Only a canonical response confirms cancellation. Results distinguish local detachment, pending provider annulment
 and verified provider annulment; uncertain and unavailable states reuse the Subscription semantic
 feedback icons and pastel treatments. Explicit recovery rereads status without replaying the
-cancellation. Initial status reads use a non-interactive skeleton; background reads retain existing
+cancellation. Initial status reads retain a screen-reader pending status; background reads retain existing
 content. The confirmation label and control dimensions remain stable while separate feedback names
 submission or status refresh accurately. Back restores focus to the initiator; completed and uncertain requests move focus
 to their result or recovery message. Keep these states usable in Light and Grafito, at mobile,

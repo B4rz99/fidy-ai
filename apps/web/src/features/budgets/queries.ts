@@ -44,11 +44,11 @@ export const preloadBudgetData = ({
         prepareQuery({
           registry,
           query: workspaceProfileQuery(apiClient),
-          options: { mode: "cached", signal },
+          options: { mode: "display", signal },
         })
       );
       const profile = presentCanonicalQuery(registry.get(workspaceProfileQuery(apiClient)));
-      if (profile._tag !== "Ready" || profile.waiting || Option.isSome(profile.refreshFailure)) {
+      if (profile._tag !== "Ready" || Option.isSome(profile.refreshFailure)) {
         return;
       }
       return yield* Effect.tryPromise(() =>

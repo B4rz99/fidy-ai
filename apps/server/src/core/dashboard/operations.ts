@@ -180,6 +180,15 @@ type PeriodInput = Readonly<{
   timeZone: IanaTimeZone;
 }>;
 
+const periodUnits = {
+  "this-week": "week",
+  "last-week": "week",
+  "this-month": "month",
+  "last-month": "month",
+  "last-7-days": "day",
+  "last-30-days": "day",
+} as const satisfies Readonly<Record<DashboardPeriod, "day" | "week" | "month">>;
+
 /** Resolves a relative period against local calendar boundaries in the explicitly supplied zone. */
 export const resolveDashboardPeriod = ({
   now,
@@ -187,52 +196,50 @@ export const resolveDashboardPeriod = ({
   timeZone,
 }: PeriodInput): AppliedDashboardPeriod => {
   const zonedNow = DateTime.setZone(now, DateTime.zoneMakeNamedUnsafe(timeZone));
-  const dayStart = DateTime.startOf(zonedNow, "day");
-  const weekStart = DateTime.startOf(zonedNow, "week", { weekStartsOn: 1 });
-  const monthStart = DateTime.startOf(zonedNow, "month");
+  const periodStart = DateTime.startOf(zonedNow, periodUnits[period], { weekStartsOn: 1 });
 
   switch (period) {
     case "this-week":
       return {
         requested: period,
         timeZone,
-        from: DateTime.toUtc(weekStart),
-        toExclusive: DateTime.toUtc(DateTime.add(weekStart, { weeks: 1 })),
+        from: DateTime.toUtc(periodStart),
+        toExclusive: DateTime.toUtc(DateTime.add(periodStart, { weeks: 1 })),
       };
     case "this-month":
       return {
         requested: period,
         timeZone,
-        from: DateTime.toUtc(monthStart),
-        toExclusive: DateTime.toUtc(DateTime.add(monthStart, { months: 1 })),
+        from: DateTime.toUtc(periodStart),
+        toExclusive: DateTime.toUtc(DateTime.add(periodStart, { months: 1 })),
       };
     case "last-week":
       return {
         requested: period,
         timeZone,
-        from: DateTime.toUtc(DateTime.subtract(weekStart, { weeks: 1 })),
-        toExclusive: DateTime.toUtc(weekStart),
+        from: DateTime.toUtc(DateTime.subtract(periodStart, { weeks: 1 })),
+        toExclusive: DateTime.toUtc(periodStart),
       };
     case "last-month":
       return {
         requested: period,
         timeZone,
-        from: DateTime.toUtc(DateTime.subtract(monthStart, { months: 1 })),
-        toExclusive: DateTime.toUtc(monthStart),
+        from: DateTime.toUtc(DateTime.subtract(periodStart, { months: 1 })),
+        toExclusive: DateTime.toUtc(periodStart),
       };
     case "last-7-days":
       return {
         requested: period,
         timeZone,
-        from: DateTime.toUtc(DateTime.subtract(dayStart, { days: rollingWeekPreviousDays })),
-        toExclusive: DateTime.toUtc(DateTime.add(dayStart, { days: 1 })),
+        from: DateTime.toUtc(DateTime.subtract(periodStart, { days: rollingWeekPreviousDays })),
+        toExclusive: DateTime.toUtc(DateTime.add(periodStart, { days: 1 })),
       };
     case "last-30-days":
       return {
         requested: period,
         timeZone,
-        from: DateTime.toUtc(DateTime.subtract(dayStart, { days: rollingMonthPreviousDays })),
-        toExclusive: DateTime.toUtc(DateTime.add(dayStart, { days: 1 })),
+        from: DateTime.toUtc(DateTime.subtract(periodStart, { days: rollingMonthPreviousDays })),
+        toExclusive: DateTime.toUtc(DateTime.add(periodStart, { days: 1 })),
       };
   }
 };

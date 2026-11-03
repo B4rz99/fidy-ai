@@ -392,6 +392,7 @@ it("withholds absence on an unavailable source and refuses revoked browser admis
       yield* Effect.tryPromise(() => db.prepare("DROP TABLE categories").run());
       const missing = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
       expect(missing.status).toBe(503);
+      expect(missing.headers.get("server-timing") ?? "").not.toContain("dashboard-");
       expect(yield* Effect.tryPromise(() => missing.json())).toEqual({ status: "unavailable" });
       expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(0);
       yield* Effect.tryPromise(() =>
@@ -402,6 +403,7 @@ it("withholds absence on an unavailable source and refuses revoked browser admis
       );
       const expired = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
       expect(expired.status).toBe(401);
+      expect(expired.headers.get("server-timing") ?? "").not.toContain("dashboard-");
       yield* Effect.tryPromise(() => expired.arrayBuffer());
       expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(0);
     })
@@ -1865,6 +1867,15 @@ it("keeps the complete browser Dashboard journey within five fresh recovery-fenc
       yield* Schema.decodeUnknownEffect(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
         yield* Effect.tryPromise(() => reply.json())
       );
+      const timings = reply.headers.get("server-timing") ?? "";
+      for (const phase of ["source", "projection", "audit", "hop", "queue", "execute"]) {
+        const field = timings
+          .split(",")
+          .find((entry) => entry.trim().startsWith(`dashboard-${phase};`));
+        expect(field).toBeDefined();
+        const duration = Number(field?.split(";dur=")[1]);
+        expect(Number.isFinite(duration) && duration >= 0).toBe(true);
+      }
       expect(observed.roundTrips()).toBe(5);
       expect(generationReads).toBe(5);
       expect(observed.cost().rowsWritten).toBeLessThanOrEqual(19);

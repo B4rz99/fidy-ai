@@ -1,3 +1,4 @@
+import { makeDashboardTiming } from "./internal/dashboard-timing";
 import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 
@@ -304,6 +305,7 @@ const queryDashboard = ({
   operation: DashboardQueryOperation;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
+    const measured = makeDashboardTiming(operation === "dashboard.getDashboardView");
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const live =
       operation === "dashboard.getDashboardView" ||
@@ -316,22 +318,29 @@ const queryDashboard = ({
       );
       return Response.json({ data, next: [] }, { headers: transactionNoStore });
     }
-    const source = yield* findDashboardSource({ db, subject, current, operation });
+    const source = yield* measured.measure(
+      "source",
+      findDashboardSource({ db, subject, current, operation })
+    );
     if (!source.live) return refusedDashboardCaller();
     if (Option.isNone(source.document)) {
       yield* accountQuery({ db, subject, current, operation });
       return yield* uninitializedDashboard;
     }
-    const value = yield* projectDashboardValue({
-      db,
-      userId: subject.userId,
-      operation,
-      document: source.document.value.document,
-      viewContext: source.viewContext,
-    });
+    const value = yield* measured.measure(
+      "projection",
+      projectDashboardValue({
+        db,
+        userId: subject.userId,
+        operation,
+        document: source.document.value.document,
+        viewContext: source.viewContext,
+      })
+    );
     if (Option.isNone(value) || value.value._tag !== "Owner") return transactionUnavailable();
-    yield* accountQuery({ db, subject, current, operation });
-    return yield* presentDashboard(value.value);
+    yield* measured.measure("audit", accountQuery({ db, subject, current, operation }));
+    const response = yield* presentDashboard(value.value);
+    return measured.respond(response);
   }).pipe(
     Effect.catchTag("DashboardQueryLimited", () =>
       Effect.succeed(

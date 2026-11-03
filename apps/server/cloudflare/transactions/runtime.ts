@@ -18,7 +18,7 @@ import {
   ConnectionInstitutions,
   registeredConnectionInstitutionIds,
 } from "../../src/shell/connections/contract";
-import { withErasureRecovery } from "../erasure/runtime";
+import { measureErasureRecovery, withErasureRecovery } from "../erasure/runtime";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import {
   executeErasureAdmission,
@@ -636,6 +636,65 @@ const observeCoordinatorRequest = <E, R>(
     })
   );
 
+type QueuedCoordinatorRequest = Readonly<{ request: Request; userId: string; queuedAt: number }>;
+
+const dashboardSuccessStatus = 200;
+
+const measuredDashboardResponse = ({
+  response,
+  queuedAt,
+  startedAt,
+}: Readonly<{ response: Response; queuedAt: number; startedAt: number }>): Response => {
+  if (response.status !== dashboardSuccessStatus) return response;
+  const headers = new Headers(response.headers);
+  const recovery = headers.get("server-timing") ?? "";
+  headers.set(
+    "server-timing",
+    recovery.replace(/\brecovery-(r2|d1|sql)/gu, "dashboard-recovery-$1")
+  );
+  const batches = headers.get("fidy-recovery-batches");
+  headers.delete("fidy-recovery-batches");
+  if (batches !== null) headers.set("fidy-dashboard-recovery-batches", batches);
+  headers.append(
+    "server-timing",
+    `dashboard-queue;dur=${(startedAt - queuedAt).toFixed(3)}, dashboard-execute;dur=${(performance.now() - startedAt).toFixed(3)}`
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
+const executeMeasuredAdmission = ({
+  admission,
+  environment,
+  erasureEnvironment,
+  queuedAt,
+  startedAt,
+}: Readonly<{
+  admission: CanonicalWorkAdmission;
+  environment: CoordinatorEnvironment;
+  erasureEnvironment: CoordinatorEnvironment;
+  queuedAt: number;
+  startedAt: number;
+}>): Effect.Effect<Response, never, Scope.Scope> => {
+  if (
+    admission.work._tag === "Batch" ||
+    admission.work.operation !== "dashboard.getDashboardView"
+  ) {
+    return executeCanonicalAdmission(admission, environment, Option.none());
+  }
+  const measured = measureErasureRecovery(erasureEnvironment);
+  return executeCanonicalAdmission(admission, measured.environment, Option.none()).pipe(
+    Effect.map((response) =>
+      response.status === dashboardSuccessStatus
+        ? measuredDashboardResponse({ response: measured.respond(response), queuedAt, startedAt })
+        : response
+    )
+  );
+};
+
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
 const executeMcpProtocolAdmission = (
   mcp: McpResidency,
@@ -777,8 +836,9 @@ export class UserTransactionCoordinator {
       this.pending = hosted.value.settled;
       return hosted.value.response;
     }
+    const queuedAt = performance.now();
     const prior = this.pending;
-    const response = prior.then(() => this.runCoordinatedRequest({ request, userId }));
+    const response = prior.then(() => this.runCoordinatedRequest({ request, userId, queuedAt }));
     this.pending = response.then(
       () => undefined,
       () => undefined
@@ -799,12 +859,8 @@ export class UserTransactionCoordinator {
     });
   }
 
-  private runCoordinatedRequest(
-    input: Readonly<{
-      request: Request;
-      userId: string;
-    }>
-  ): Promise<Response> {
+  private runCoordinatedRequest(input: QueuedCoordinatorRequest): Promise<Response> {
+    const startedAt = performance.now();
     const { request, userId } = input;
     const { env: environment, mcp, erasureEnvironment } = this;
     const clearCoordinator = this.clearErasureCoordinator.bind(this);
@@ -849,7 +905,13 @@ export class UserTransactionCoordinator {
           ) {
             return transactionUnavailable();
           }
-          return yield* executeCanonicalAdmission(admission.value, environment, Option.none());
+          return yield* executeMeasuredAdmission({
+            admission: admission.value,
+            environment,
+            erasureEnvironment,
+            queuedAt: input.queuedAt,
+            startedAt,
+          });
         })
       ).pipe(
         (work) => this.withConnectionContext(work),

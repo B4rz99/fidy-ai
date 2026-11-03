@@ -1,0 +1,48 @@
+apps/web/playwright.config.ts
+  s_12ede6869163f4::t_62f3d0b5459a77 15
+apps/web/ARCHITECTURE.md
+  s_12ede6869163f4::t_6e4ba1674e86b1 549-550,553
+  s_12ede6869163f4::t_3cb161f2ea301f 542-544
+  s_12ede6869163f4::t_da2200b71182ee 540-541,545-548,551-552,563-565
+apps/web/src/app/workspace-resume.ts
+  s_12ede6869163f4::t_78bafb6f91a036 6,16,23,29
+BACKEND_PERFORMANCE_PLAN.md
+  s_12ede6869163f4::t_5e3d46baa0d16d 152-158
+  s_12ede6869163f4::t_ed6ccaf6186054 159-162,179-187
+apps/web/src/features/dashboard/feature.tsx
+  s_12ede6869163f4::t_a7e37c77332c8f 5
+apps/web/src/features/dashboard/query.ts
+  s_12ede6869163f4::t_61449784d041b0 74
+  s_12ede6869163f4::t_a7e37c77332c8f 1,59,65,67,77
+apps/web/scripts/browser-topology.test.ts
+  s_12ede6869163f4::t_62f3d0b5459a77 100,102,105
+apps/web/src/transport/workspace-query.ts
+  s_12ede6869163f4::t_6e4ba1674e86b1 31
+  s_12ede6869163f4::t_a7e37c77332c8f 32-34
+  s_12ede6869163f4::t_5fef9ef6444ab5 35-45,144
+apps/web/e2e/workspace-navigation.spec.ts
+  s_12ede6869163f4::t_a7e37c77332c8f 238,363,424-426
+  s_12ede6869163f4::t_6e4ba1674e86b1 190-217,225-231,233-237
+  s_12ede6869163f4::t_3cb161f2ea301f 164-189
+  s_12ede6869163f4::t_0716beb60039d2 218-224,232,519,534
+apps/web/src/features/dashboard/budget-configuration.tsx
+  s_12ede6869163f4::t_846cb8e7cf236d 11,149,153
+apps/web/src/transport/workspace-query.test.ts
+  s_12ede6869163f4::t_5d44f087039cc4 8,193-273
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c24e2c8691d1667ca8b6fe0054c849b809b1bdcd",
+  "prompts": {},
+  "sessions": {
+    "s_12ede6869163f4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a127-a568-72a0-bca5-5362ac8b3305",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

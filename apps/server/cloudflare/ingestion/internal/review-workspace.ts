@@ -1,3 +1,4 @@
+import { reviewPageSelection, reviewRelation } from "./review-page";
 import type { ReviewUnavailable } from "../contract";
 import { reviewAudit } from "./review-audit";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
@@ -18,9 +19,6 @@ import { ReviewRow, projectReviewDetail, projectReviewSummary } from "./review-s
 import { validationFailed } from "./statement-ingestion";
 
 const Counts = Schema.Struct({ pendingCount: Schema.Int, total: Schema.Int });
-const relation = `SELECT *, CASE WHEN status != 'created' AND expires_at_ms <= ?
-  THEN 'expired' ELSE status END AS visible_status FROM ingestion_review_sources WHERE user_id = ?`;
-
 const firstReviewDetail = ({
   db,
   userId,
@@ -53,21 +51,16 @@ const readWorkspace = ({
     );
     if (Option.isNone(query)) return validationFailed("Invalid review selection.");
     const current = transactionNow();
-    const status = Option.getOrElse(query.value.status, () => "pending");
-    const filter =
-      status === "pending"
-        ? "visible_status = 'pending'"
-        : "visible_status != 'pending' AND (? = 'history' OR visible_status = ?)";
-    const params = status === "pending" ? [] : [status, status];
+    const { filter, params } = reviewPageSelection(query.value);
     const results = yield* Effect.tryPromise(() =>
       db.batch([
         db
           .prepare(`SELECT count(CASE WHEN visible_status = 'pending' THEN 1 END) AS pendingCount,
-      count(CASE WHEN ${filter} THEN 1 END) AS total FROM (${relation})`)
+      count(CASE WHEN ${filter} THEN 1 END) AS total FROM (${reviewRelation})`)
           .bind(...params, current, subject.userId),
         db
           .prepare(`SELECT id, source, reason, time_zone AS timeZone, visible_status AS status, created_at_ms AS createdAt,
-      expires_at_ms AS expiresAt, transaction_id AS transactionId, revision, draft_json, suggestions_json FROM (${relation}) WHERE ${filter}
+      expires_at_ms AS expiresAt, transaction_id AS transactionId, revision, draft_json, suggestions_json FROM (${reviewRelation}) WHERE ${filter}
       ORDER BY expires_at_ms, id LIMIT ? OFFSET ?`)
           .bind(
             current,

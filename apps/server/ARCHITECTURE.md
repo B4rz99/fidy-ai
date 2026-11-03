@@ -75,7 +75,14 @@ editing metadata for the selected reporting month under the same authorization a
 its report and metadata reads can run concurrently within the coordinated User query. Monthly cash flow and uncapped Category/Currency outflows derive from the same complete Transaction-owned aggregate snapshot as cap spending. The Review
 workspace projects the first revision-bound item detail from its already-read rows, using the same
 draft expiry and Category suggestion policy as an individual read, and never includes original
-material. Browser User responses can carry the bounded Category display catalog through its
+material. A separate WebSession-only `ingestion.getReviewPageContext` read shares its page selection
+and order, materializes at most 50 owned identities before inspecting retained evidence, and clips
+source excerpts to 180 characters inside D1. CSV records, up to sixteen XLSX cell displays and
+retained image captions supply unconfirmed context without another stored index or R2 fan-out.
+Email receipt timestamps provide source metadata without reading retained email objects.
+The query commits live authority and metadata-only Audit with its read, suppresses expired evidence,
+and returns no-store browser data; originals and excerpts stay out of agent queries and transcripts.
+Browser User responses can carry the bounded Category display catalog through its
 published projection seam, with live browser credential evidence checked after that read. These
 projections do not add a generic batching transport or bypass admission, Consent or write guards.
 

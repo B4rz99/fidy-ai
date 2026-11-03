@@ -13,6 +13,7 @@ import {
 } from "../../src/shell/channels/whatsapp/contract";
 import { ReviewCommand, ReviewWorkspace } from "../../src/core/ingestion/contract";
 import {
+  ReviewPageContext,
   StatementContentDigest,
   StatementSourceFormat,
   StatementStagingId,
@@ -4400,6 +4401,178 @@ it("creates one reviewed Transaction and reads its retained history after an unc
     })
   ));
 
+it("identifies incomplete statement rows with bounded browser-only source context", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          "fecha,valor,descripcion\n2026-08-01,?,Mercado original\n2026-08-02,?,Transporte original\n"
+        )
+      );
+      const read = (index: number, selection = ""): Promise<Response> =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/review-workspace/context${selection}`, {
+            headers: sessionHeaders(index),
+          })
+        );
+      const own = yield* fromTestPromise(() => read(0));
+      expect(own.status).toBe(200);
+      expect(own.headers.get("cache-control")).toContain("no-store");
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({
+            items: Schema.Array(
+              Schema.Struct({
+                id: Schema.String,
+                reference: Schema.String,
+                excerpt: Schema.String,
+              })
+            ),
+          }),
+        })
+      )(yield* fromTestPromise(() => own.json()));
+      expect(body.data.items).toHaveLength(2);
+      expect(body.data.items.map((entry) => entry.excerpt).sort()).toEqual([
+        "2026-08-01,?,Mercado original",
+        "2026-08-02,?,Transporte original",
+      ]);
+      expect(body.data.items.map((entry) => entry.reference).sort()).toEqual(["Fila 1", "Fila 2"]);
+      const foreign = yield* fromTestPromise(() => read(1));
+      expect(foreign.status).toBe(200);
+      expect(yield* fromTestPromise(() => foreign.json())).toMatchObject({ data: { items: [] } });
+      const second = yield* fromTestPromise(() => read(0, "?limit=1&offset=1"));
+      expect(yield* fromTestPromise(() => second.json())).toMatchObject({
+        data: { items: [body.data.items[1]] },
+      });
+      const invalid = yield* fromTestPromise(() => read(0, "?limit=51"));
+      expect(invalid.status).toBe(400);
+      const metadata = yield* fromTestPromise(() => reviewWorkspaceRequest(runtime));
+      expect(yield* fromTestPromise(() => metadata.text())).not.toContain("Mercado original");
+    })
+  ));
+
+it("presents spreadsheet cells and retained image captions as unconfirmed source context", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const statement = yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Template\n")
+      );
+      const spreadsheetId = "24000000-0000-4000-8000-000000001653";
+      const evidence = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        sourceFormat: "xlsx",
+        sheetName: "Octubre",
+        sheetIndex: 0,
+        rowNumber: 12,
+        hidden: false,
+        cells: [
+          { address: "A12", cellType: "string", value: "Mercado" },
+          { address: "B12", cellType: "number", value: "25000", formattedText: "$25.000" },
+        ],
+      });
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(`INSERT INTO ingestion_review_items
+      (source_kind,id,user_id,statement_submission_id,record_number,reason,original_evidence,issues_json,evidence_state,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
+      SELECT 'statement',?,user_id,statement_submission_id,12,reason,?,'[]','retained',evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,'xlsx',parser_revision,extractor_revision
+      FROM ingestion_review_items WHERE id=?`)
+          .bind(spreadsheetId, evidence, statement.reviewIds[0])
+          .run()
+      );
+      yield* admitReviewImage(runtime);
+      const receivedAt = yield* Clock.currentTimeMillis;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(receivedAt);
+      yield* admitReviewEmail(runtime);
+      const read = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request("https://api.fidyapp.com/ingestion/review-workspace/context", {
+            headers: sessionHeaders(0),
+          })
+        )
+      );
+      expect(read.status).toBe(200);
+      const context = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(ReviewPageContext) })
+      )(yield* fromTestPromise(() => read.json()));
+      expect(context.data.items).toContainEqual(
+        expect.objectContaining({
+          id: spreadsheetId,
+          reference: "Fila 12",
+          excerpt: Option.some("Mercado · $25.000"),
+        })
+      );
+      expect(context.data.items).toContainEqual(
+        expect.objectContaining({ excerpt: Option.some("Un comprobante") })
+      );
+      expect(context.data.items).toContainEqual(
+        expect.objectContaining({ receivedAt: Option.some(DateTime.makeUnsafe(receivedAt)) })
+      );
+    })
+  ));
+
+const longExcerptRepetitions = 30;
+const excerptCharacterLimit = 180;
+
+it("suppresses source excerpts for agents and expired originals without extending retention", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        runtime.db.prepare("UPDATE web_sessions SET idle_expires_at_ms = hard_expires_at_ms").run()
+      );
+      yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          `fecha,valor,descripcion\n2026-08-01,?,${"Mercado privado ".repeat(longExcerptRepetitions)}\n`
+        )
+      );
+      const current = yield* Clock.currentTimeMillis;
+      const token = agentToken("w");
+      yield* fromTestPromise(() =>
+        issuePat({
+          current,
+          db: runtime.db,
+          label: "Review reader",
+          scopes: '["read"]',
+          seed: 1350,
+          token,
+        })
+      );
+      const request = (headers: Record<string, string>, selection = ""): Promise<Response> =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/review-workspace/context${selection}`, {
+            headers,
+          })
+        );
+      const own = yield* fromTestPromise(() => request(sessionHeaders(0)));
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({ items: Schema.Array(Schema.Struct({ excerpt: Schema.String })) }),
+        })
+      )(yield* fromTestPromise(() => own.json()));
+      expect(body.data.items[0]?.excerpt.length).toBeLessThanOrEqual(excerptCharacterLimit);
+      const denied = yield* fromTestPromise(() => request({ authorization: `Bearer ${token}` }));
+      expect(denied.status).toBe(403);
+      expect(yield* fromTestPromise(() => denied.text())).not.toContain("Mercado privado");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(current + dayMilliseconds + 1);
+      const expired = yield* fromTestPromise(() => request(sessionHeaders(0), "?status=expired"));
+      expect(expired.status).toBe(200);
+      const expiredBody: unknown = yield* fromTestPromise(() => expired.json());
+      expect(expiredBody).toMatchObject({ data: { items: [{ reference: "Fila 1" }] } });
+      expect(expiredBody).not.toHaveProperty("data.items.0.excerpt");
+      expect(
+        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(expiredBody)
+      ).not.toContain("Mercado privado");
+    }).pipe(Effect.ensuring(Effect.sync(() => vi.useRealTimers())))
+  ));
+
 it("delivers retained original material only to its browser owner", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -4753,6 +4926,16 @@ it("denies agent originals and refuses review reads and writes after Consent rev
           .bind(newId(), sessionA, current, userA)
           .run()
       );
+      const context = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request("https://api.fidyapp.com/ingestion/review-workspace/context", {
+            headers: sessionHeaders(0),
+          })
+        )
+      );
+      expect(context.status).not.toBe(200);
+      expect(yield* fromTestPromise(() => context.text())).not.toContain("Private original");
       const refused = yield* fromTestPromise(() => reviewDetail(runtime, id));
       expect(refused.status).not.toBe(200);
       expect(yield* fromTestPromise(() => refused.text())).not.toContain("Private original");

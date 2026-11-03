@@ -17,6 +17,7 @@ type Work = Readonly<{ db: D1Database; subject: QueryCaller; current: number }>;
 type Operation =
   | "ingestion.getReviewWorkspace"
   | "ingestion.getReviewMaterial"
+  | "ingestion.getReviewPageContext"
   | "ingestion.getReviewItem"
   | "ingestion.applyReviewEdit";
 export const reviewAudit = ({

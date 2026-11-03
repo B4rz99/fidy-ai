@@ -1,6 +1,6 @@
 import { expectSameLoadingFrame, measureLoadingFrame } from "./loading-geometry";
 import { signInNavigationPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
-import type { Page, Route } from "@playwright/test";
+import type { Response as BrowserResponse, Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -98,6 +98,13 @@ test("saves an initial draft promptly and spaces continued autosaves", ({ page }
 
 const reviewRoute = (route: Route): Promise<void> => {
   const path = new URL(route.request().url()).pathname;
+  if (path.endsWith("/context")) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({ items: [{ id, reference: "Fila 1", expiresAt: item.expiresAt }] }),
+    });
+  }
   if (path.endsWith("/material")) {
     return route.fulfill({
       status: 200,
@@ -321,6 +328,24 @@ const workspaceFixture = (route: Route, entries: Fixture[], url: URL): Promise<v
   const visible = entries.filter((candidate) =>
     filter === "history" ? candidate.status !== "pending" : candidate.status === filter
   );
+  if (url.pathname.endsWith("/context")) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({
+        items: visible
+          .slice(
+            Number(url.searchParams.get("offset") ?? "0"),
+            Number(url.searchParams.get("offset") ?? "0") + reviewPageSize
+          )
+          .map((entry) => ({
+            id: entry.id,
+            reference: `Fila ${entries.indexOf(entry) + 1}`,
+            expiresAt: item.expiresAt,
+          })),
+      }),
+    });
+  }
   return route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -383,22 +408,20 @@ test("skips and restores in bulk, advances, and preserves edited drafts", ({ pag
         page.getByRole("button", { name: "Omitir", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).toHaveCount(0)
+        expect(page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` })
-        ).toBeVisible()
+        expect(page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 2" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Deshacer omisión" }).click()
       );
       yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(2));
       yield* Effect.tryPromise(() =>
-        page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` }).click()
+        page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" }).click()
       );
       yield* Effect.tryPromise(() =>
-        page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` }).click()
+        page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 2" }).click()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Omitir 2 seleccionados" }).click()
@@ -433,12 +456,10 @@ test("confirms creation with a toast and continues reviewing without leaving the
       );
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/needs-review$/u));
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).toHaveCount(0)
+        expect(page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("checkbox", { name: `Seleccionar Extracto ${secondId}` })
-        ).toBeVisible()
+        expect(page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 2" })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Historial", exact: true }).click()
@@ -688,7 +709,9 @@ test("opens rows without bulk selection and keeps history discoverable", ({ page
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Abrir Extracto" }).click());
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("checkbox", { name: `Seleccionar Extracto ${id}` })).not.toBeChecked()
+        expect(
+          page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" })
+        ).not.toBeChecked()
       );
       yield* Effect.tryPromise(() => page.getByRole("checkbox").check());
       yield* Effect.tryPromise(() =>
@@ -1640,3 +1663,324 @@ for (const width of [compactDesktopWidth, wideDesktopWidth]) {
     );
   });
 }
+
+const contextMobileWidth = 390;
+const contextDesktopWidth = 1440;
+
+const identifyIncompleteEntries = (count: number): Fixture[] =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `24000000-0000-4000-8000-${String(fixtureStart + index).padStart(uuidTailLength, "0")}`,
+    revision: 0,
+    status: "pending",
+    draft: undefined,
+  }));
+
+for (const width of [contextMobileWidth, contextDesktopWidth]) {
+  test(`identifies and searches incomplete originals without highlighting at ${width}px`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const entries = identifyIncompleteEntries(reviewPageSize);
+        yield* Effect.tryPromise(() => page.setViewportSize({ width, height: 900 }));
+        yield* Effect.tryPromise(() => installUser(page));
+        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+        yield* Effect.tryPromise(() =>
+          page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+        );
+        yield* Effect.tryPromise(() =>
+          page.route(
+            `${apiOrigin}/ingestion/review-workspace/context**`,
+            incompleteContextRoute(entries)
+          )
+        );
+        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        const first = page.getByRole("checkbox", {
+          name: "Seleccionar Extracto Fila 1",
+          exact: true,
+        });
+        yield* Effect.tryPromise(() =>
+          expect(first).toHaveAccessibleDescription(
+            /Original sin confirmar: 2026-10-01,25000,Mercado/u
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 3", exact: true })
+          ).toHaveAccessibleDescription(/Sin fragmento disponible/u)
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.locator('[data-review="inbox"] img')).toHaveCount(0)
+        );
+        yield* Effect.tryPromise(() =>
+          page.getByRole("textbox", { name: "Buscar pendientes en esta página" }).fill("Mercado")
+        );
+        yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText("2026-10-01,25000,Mercado", { exact: true })).toBeVisible()
+        );
+        yield* Effect.tryPromise(() => expect(page.locator("mark")).toHaveCount(0));
+        yield* Effect.tryPromise(() => first.check());
+        yield* Effect.tryPromise(() => expect(first).toBeChecked());
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Abrir Extracto Fila 1", exact: true }).click()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel("Valor", { exact: true })).toHaveValue("")
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText(/^Solo en esta página/u)).toBeVisible()
+        );
+      })
+    ));
+}
+
+const incompleteContextRoute =
+  (entries: ReadonlyArray<Fixture>) =>
+  (route: Route): Promise<void> =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({
+        items: entries.map((entry, index) => ({
+          id: entry.id,
+          reference: `Fila ${index + 1}`,
+          expiresAt: item.expiresAt,
+          ...(index === 2
+            ? {}
+            : {
+                excerpt:
+                  index === 0
+                    ? "2026-10-01,25000,Mercado"
+                    : '2026-10-02,18000,Transporte <img src=x onerror="alert(1)">',
+              }),
+        })),
+      }),
+    });
+
+test("removes expired source context from page search and accessible descriptions", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        page.clock.install({
+          time: DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:00Z")),
+        })
+      );
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/ingestion/review-workspace/context**`,
+          incompleteContextRoute([{ id, revision: 0, status: "pending", draft: undefined }])
+        )
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      const search = page.getByRole("textbox", { name: "Buscar pendientes en esta página" });
+      const checkbox = page.getByRole("checkbox", {
+        name: "Seleccionar Extracto Fila 1",
+        exact: true,
+      });
+      yield* Effect.tryPromise(() => expect(checkbox).toHaveAccessibleDescription(/Mercado/u));
+      yield* Effect.tryPromise(() => search.fill("Mercado"));
+      yield* Effect.tryPromise(() => expect(checkbox).toHaveCount(1));
+      yield* Effect.tryPromise(() => page.clock.fastForward("01:01"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Sin elementos en esta vista" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => search.fill(""));
+      yield* Effect.tryPromise(() => expect(checkbox).toBeDisabled());
+      yield* Effect.tryPromise(() =>
+        expect(checkbox).toHaveAccessibleDescription(/Original vencido/u)
+      );
+      yield* Effect.tryPromise(() => expect(checkbox).not.toHaveAccessibleDescription(/Mercado/u));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("2026-10-01,25000,Mercado", { exact: true })).toHaveCount(0)
+      );
+    })
+  ));
+
+test("keeps loaded source excerpts through draft autosaves without rereading originals", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let reads = 0;
+      const count = (): number => reads;
+      const route = (request: Route): Promise<void> => {
+        if (new URL(request.request().url()).pathname.endsWith("/context")) {
+          reads++;
+          return incompleteContextRoute([{ id, revision: 0, status: "pending", draft: undefined }])(
+            request
+          );
+        }
+        return reviewRoute(request);
+      };
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, route)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("2026-10-01,25000,Mercado", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        Promise.all([
+          page.waitForResponse(isWorkspaceResponse),
+          page.getByLabel("Valor", { exact: true }).fill("13500"),
+        ])
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText("Borrador guardado")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("2026-10-01,25000,Mercado", { exact: true })).toBeVisible()
+      );
+      expect(count()).toBe(1);
+    })
+  ));
+
+const emailReviewItems = [
+  { ...item, source: "email", createdAt: "2026-10-15T12:00:00Z" },
+  { ...item, id: secondId, source: "email", createdAt: "2026-10-16T14:00:00Z" },
+];
+const emailReviewRoute = (route: Route): Promise<void> => {
+  const path = new URL(route.request().url()).pathname;
+  if (path.endsWith("/context")) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({
+        items: emailReviewItems.map((entry, index) => ({
+          id: entry.id,
+          reference: `Elemento ${index + 1}`,
+          receivedAt: entry.createdAt,
+          expiresAt: entry.expiresAt,
+        })),
+      }),
+    });
+  }
+  if (path.endsWith("/material")) {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: response({
+        available: true,
+        text: "Asunto: Notificación bancaria\nCompra Farmacia COP 25000\nTransporte COP 18000",
+        truncated: false,
+      }),
+    });
+  }
+  const selected = emailReviewItems.find((entry) => path.endsWith(entry.id));
+  return route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: response(
+      selected === undefined
+        ? { items: emailReviewItems, pendingCount: 2, total: 2 }
+        : { item: selected, revision: 0 }
+    ),
+  });
+};
+
+test("identifies incomplete emails by receipt date and offers search inside their original", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, emailReviewRoute)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(2));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: /Abrir Correo Elemento 2.*Recibido.*16\/10\/2026/u })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Buscar pendientes en esta página" }).fill("16/10/2026")
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: /Abrir Correo Elemento 2/u }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Buscar en este original" }).fill("Farmacia")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Compra Farmacia COP 25000", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Asunto: Notificación bancaria", { exact: true })).not.toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Transporte COP 18000", { exact: true })).not.toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("1 línea con coincidencias en este original.")).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(page.locator("mark")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Buscar en este original" }).fill("Mercado")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Sin coincidencias en este original.")).toBeVisible()
+      );
+    })
+  ));
+
+const isWorkspaceResponse = (response: BrowserResponse): boolean =>
+  new URL(response.url()).pathname.endsWith("/review-workspace");
+
+const unavailablePageRows = 2;
+test("keeps fallback source references stable when filtering a later page without context", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries = identifyIncompleteEntries(reviewPageSize + unavailablePageRows);
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace/context**`, unavailableContextRoute)
+      );
+      yield* Effect.tryPromise(() => page.goto(`/app/needs-review?offset=${reviewPageSize}`));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Reintentar fragmentos" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("checkbox", { name: "Seleccionar Extracto Elemento 52", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("textbox", { name: "Buscar pendientes en esta página" }).fill("Elemento 52")
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("checkbox", { name: "Seleccionar Extracto Elemento 52", exact: true })
+        ).toHaveAccessibleDescription(/Elemento 52/u)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Abrir Extracto Elemento 52", exact: true })
+        ).toBeVisible()
+      );
+    })
+  ));
+
+const unavailableContextRoute = (route: Route): Promise<void> =>
+  route.fulfill({
+    status: 503,
+    body: '{"error":{"code":"service_unavailable","message":"Synthetic context refusal"}}',
+  });

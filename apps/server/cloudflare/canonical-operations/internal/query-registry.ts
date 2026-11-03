@@ -32,6 +32,7 @@ import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import {
   browseReviewItem,
   browseReviewMaterial,
+  browseReviewPageContext,
   browseReviewWorkspace,
   forwardingAddressResponse,
   listNeedsReviewItems,
@@ -82,6 +83,7 @@ const queryOwners = new Map<string, QueryOwner>([
   ["ingestion.getReviewWorkspace", browseReviewWorkspace],
   ["ingestion.getReviewItem", browseReviewItem],
   ["ingestion.getReviewMaterial", browseReviewMaterial],
+  ["ingestion.getReviewPageContext", browseReviewPageContext],
   ["recurringPlans.getRecurringWorkspace", browseRecurringPlans],
   ...(
     [

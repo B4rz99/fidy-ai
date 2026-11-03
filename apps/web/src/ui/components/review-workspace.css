@@ -1,5 +1,5 @@
 [data-review="workspace"] {
-  --review-height: calc(100dvh - 203px);
+  --review-height: calc(100dvh - 221px);
   --review-soft: #f5f2ee;
   --review-line: #e9e2da;
   --muted: var(--review-soft);
@@ -126,7 +126,7 @@
 [data-review="inbox-rows"] {
   flex: 1;
   overflow: auto;
-  max-height: calc(100dvh - 335px);
+  max-height: calc(100dvh - 353px);
   min-height: 0;
 }
 [data-review="inbox-row"] {
@@ -493,7 +493,7 @@
   }
 
   [data-review="panel"]:has(> [data-review="bulk"]) {
-    --review-height: calc(100dvh - 275px);
+    --review-height: calc(100dvh - 293px);
   }
   [data-review="panel"]:has(> [data-review="bulk"]) [data-review="footer"] {
     margin-top: 20px;
@@ -712,4 +712,69 @@
   [data-review="fields"] [data-review="classification"] {
     grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.35fr);
   }
+}
+
+[data-review="search-help"] {
+  padding: 12px 42px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.7;
+}
+[data-review="row-context"] {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+[data-review="context-state"] {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+[data-review="context-excerpt"] {
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1250px) {
+  [data-review="search-help"] {
+    padding-inline: 26px;
+  }
+}
+@media (max-width: 900px) {
+  [data-review="search-help"] {
+    padding-inline: 24px;
+  }
+}
+@media (max-width: 600px) {
+  [data-review="search-help"] {
+    padding-inline: 18px;
+  }
+}
+
+@media (min-width: 901px) {
+  [data-review="navigation"] {
+    padding-block: 12px;
+  }
+  [data-review="search-help"] {
+    padding-block: 6px;
+  }
+  [data-review="detail-heading"] {
+    margin-bottom: 22px;
+  }
+  [data-review="form"] {
+    gap: 14px;
+  }
+  [data-review="fields"] {
+    gap: 16px;
+  }
+}
+
+[data-review="original-search"] {
+  display: grid;
+  gap: 12px;
+}
+[data-review="original-search"] > :is(p, output) {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  line-height: 1.7;
 }

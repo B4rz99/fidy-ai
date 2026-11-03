@@ -4,7 +4,13 @@ import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } 
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
 import { Button } from "@/ui/components/button";
 import { type InboxControl, useInboxControl } from "./inbox-controller";
-import { reviewTitle } from "./presentation";
+import {
+  type PageContexts,
+  sourceExcerpt,
+  sourceReference,
+  useReviewPageContext,
+} from "./source-context";
+import { reviewAmount, reviewTitle } from "./presentation";
 import { ReviewToolbar } from "./toolbar";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Navigate, useRouter, useSearch } from "@tanstack/react-router";
@@ -15,7 +21,7 @@ import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { ReviewEditor } from "./editor";
 import { Inbox, ReviewPagination } from "./inbox";
-import type { Workspace } from "./model";
+import { type Workspace, sources } from "./model";
 import { type Filter, ReviewNavigation } from "./view-navigation";
 import { reviewWorkspaceQueries } from "./query";
 
@@ -202,6 +208,7 @@ const ReviewUnavailable = ({
         select={select}
         refresh={refresh}
         count={Option.none()}
+        contextFeedback={null}
         unavailable
         source={source}
         setSource={setSource}
@@ -275,7 +282,8 @@ const ReadyInboxView = ({
 }: ReadyInboxProps): JSX.Element => {
   const [source, setSource] = useState("all");
   const [search, setSearch] = useState("");
-  const visible = filterReviewPage({ view, source, search });
+  const context = useReviewPageContext({ filter, page, items: view.items });
+  const visible = filterReviewPage({ view, source, search, page, contexts: context.contexts });
   const inbox = useInboxControl({ view, visibleItems: visible.items, decisions });
   const control = { ...inbox, locked: inbox.locked || disabled };
   const checked = control.checked.filter((id) => visible.items.some((entry) => entry.id === id));
@@ -283,6 +291,7 @@ const ReadyInboxView = ({
     <>
       {notice}
       <ReviewNavigation
+        contextFeedback={<SourceContextFeedback context={context} />}
         unavailable={false}
         filter={filter}
         select={select}
@@ -301,6 +310,9 @@ const ReadyInboxView = ({
       />
       <ReviewToolbar view={visible} control={{ ...control, checked }} />
       <InboxWorkspace
+        unfilteredItems={view.items}
+        contexts={context.contexts}
+        contextLoading={context.loading}
         workspaceQuery={workspaceQuery}
         caughtUp={
           filter === "pending" && source === "all" && search === "" && view.pendingCount === 0
@@ -332,6 +344,9 @@ const EmptyInbox = ({
   </ReviewFullState>
 );
 const InboxWorkspace = ({
+  unfilteredItems,
+  contexts,
+  contextLoading,
   workspaceQuery,
   caughtUp,
   view,
@@ -340,6 +355,9 @@ const InboxWorkspace = ({
   move,
   pageLength,
 }: Readonly<{
+  unfilteredItems: ReadonlyArray<Workspace["items"][number]>;
+  contexts: PageContexts;
+  contextLoading: boolean;
   caughtUp: boolean;
   workspaceQuery: ReviewWorkspaceQuery;
   view: Workspace;
@@ -348,9 +366,7 @@ const InboxWorkspace = ({
   move: (offset: number) => void;
   pageLength: number;
 }>): JSX.Element => {
-  const item =
-    view.items.find((candidate) => Option.contains(control.selected, candidate.id)) ??
-    view.items[0];
+  const item = view.items.find(({ id }) => Option.contains(control.selected, id)) ?? view.items[0];
   if (item === undefined) {
     return (
       <>
@@ -364,6 +380,9 @@ const InboxWorkspace = ({
   return (
     <div data-review="grid">
       <Inbox
+        unfilteredItems={unfilteredItems}
+        contexts={contexts}
+        contextLoading={contextLoading}
         view={view}
         selected={Option.some(item.id)}
         checked={control.checked}
@@ -387,19 +406,56 @@ const filterReviewPage = ({
   view,
   source,
   search,
+  contexts,
+  page,
 }: Readonly<{
+  page: number;
+  contexts: PageContexts;
   view: Workspace;
   source: string;
   search: string;
 }>): Workspace => ({
   ...view,
   items: view.items.filter(
-    (item) =>
+    (item, index) =>
       (source === "all" || item.source === source) &&
-      reviewTitle(item).toLocaleLowerCase("es-CO").includes(search.toLocaleLowerCase("es-CO"))
+      [
+        reviewTitle(item),
+        reviewAmount(item),
+        sources[item.source],
+        sourceReference({
+          item,
+          context: Option.fromUndefinedOr(contexts.get(item.id)),
+          position: page + index + 1,
+        }),
+        Option.getOrElse(
+          sourceExcerpt({ item, context: Option.fromUndefinedOr(contexts.get(item.id)) }),
+          () => ""
+        ),
+      ]
+        .join(" ")
+        .toLocaleLowerCase("es-CO")
+        .includes(search.trim().toLocaleLowerCase("es-CO"))
   ),
 });
 const decisionLifetime =
   (decisions: ReviewDecisions): RefCallback<HTMLDivElement> =>
   (node) =>
     node === null ? undefined : decisions.mount();
+
+const SourceContextFeedback = ({
+  context,
+}: Readonly<{ context: ReturnType<typeof useReviewPageContext> }>): JSX.Element => (
+  <>
+    {context.loading ? " Cargando fragmentos…" : null}
+    {context.failed ? (
+      <>
+        {" "}
+        No pudimos cargar los fragmentos.{" "}
+        <Button variant="link" onClick={context.refresh}>
+          Reintentar fragmentos
+        </Button>
+      </>
+    ) : null}
+  </>
+);

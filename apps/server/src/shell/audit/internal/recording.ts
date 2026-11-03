@@ -32,6 +32,7 @@ const reviewOperations = new Set<string>([
   "ingestion.getReviewWorkspace",
   "ingestion.getReviewItem",
   "ingestion.getReviewMaterial",
+  "ingestion.getReviewPageContext",
   "ingestion.applyReviewEdit",
 ]);
 const sessionKind = (operation: AuditCredentialOperation): string => {

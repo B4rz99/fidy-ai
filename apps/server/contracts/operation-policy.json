@@ -465,6 +465,17 @@
       }
     },
     {
+      "id": "ingestion.getReviewPageContext",
+      "policy": {
+        "access": {
+          "type": "web-session-only"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "ingestion.getReviewWorkspace",
       "policy": {
         "access": {

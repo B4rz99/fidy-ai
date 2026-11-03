@@ -42,9 +42,9 @@ type Props = Readonly<{
 const Resources = (props: Props): JSX.Element => {
   const router = useRouter();
   const [calendar, setCalendar] = useState(false);
-  const apiClient = router.options.context.apiClient;
+  const [tab, setTab] = useState("monthly");
   const planning = useRecurringPlanning({
-    apiClient,
+    apiClient: router.options.context.apiClient,
     profileStale: props.profileStale,
     profileWaiting: props.profileWaiting,
     refreshProfile: props.refreshProfile,
@@ -67,25 +67,19 @@ const Resources = (props: Props): JSX.Element => {
   const navigate = (month: string): void => {
     router.navigate({ to: "/app/recurring", search: { month } }).catch(() => undefined);
   };
-  const view = state.value.data;
-  const notice = (
-    <SaveNotice
-      stale={planning.stale}
-      saveState={planning.saveState}
-      confirmation={planning.confirmation}
-      editConfirmation={planning.editConfirmation}
-      waiting={waiting}
-      retry={retry}
-    />
-  );
+  const readState = planning.stale ? "stale" : "current";
+
   return (
     <Suspense fallback={<RecurringSkeleton />}>
       <PreviewWorkspace
         key={`${props.month}:${JSON.stringify(props.filters)}:${Option.getOrElse(props.previous, () => "")}`}
         calendar={calendar}
         setCalendar={setCalendar}
-        notice={notice}
-        view={view}
+        notice={<SaveNotice {...planning} />}
+        tab={tab}
+        setTab={setTab}
+        readState={waiting ? "refreshing" : readState}
+        view={state.value.data}
         categories={categoryState.value.data}
         save={planning.save}
         statusFor={planning.statusFor}

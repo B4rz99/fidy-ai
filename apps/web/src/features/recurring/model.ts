@@ -2,6 +2,7 @@ import { DateTime, Option } from "effect";
 import type { CanonicalInput, CanonicalSuccess } from "@/transport/client";
 import { formatMoneyWithCode } from "@/transport/money";
 
+export type WorkspaceReadState = "current" | "refreshing" | "stale";
 export type Workspace = CanonicalSuccess<"recurringPlans.getRecurringWorkspace">["data"];
 export type Occurrence = Workspace["occurrences"][number];
 export type Plan = Workspace["document"]["plans"][number];

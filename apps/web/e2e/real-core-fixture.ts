@@ -116,6 +116,7 @@ type RecurringIdentity =
   | "recurringCapture"
   | "recurringCaptureUncertain"
   | "recurringCaptureCurrency"
+  | "recurringManagement"
   | "recurringStableReads"
   | "recurring"
   | "recurringSummary"

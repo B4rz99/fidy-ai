@@ -44,6 +44,7 @@ const FixtureWorkspace = ({
       filters={filters}
       applyFilters={setFilters}
       disabled={dataset === "stale"}
+      readState={dataset === "stale" ? "stale" : "current"}
       save={(edit) => setCapture(`Acción capturada: ${edit.kind}. La prueba no guarda cambios.`)}
       notice={
         <output>

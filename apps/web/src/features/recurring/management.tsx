@@ -6,6 +6,13 @@ import { type JSX, useState } from "react";
 import type { CanonicalSuccess } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/ui/components/empty";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { RecurringPlanBadge } from "@/ui/components/recurring";
@@ -18,6 +25,7 @@ import {
   type PlanInput,
   type Save,
   type Workspace,
+  type WorkspaceReadState,
   type planStatus,
 } from "./model";
 
@@ -161,6 +169,33 @@ const LoadedSuggestions = ({
   );
 };
 
+const allPlanStatus = {
+  value: "all",
+  label: "Todos",
+  empty: "No hay recurrentes para estos filtros",
+};
+const planStatuses = [
+  allPlanStatus,
+  { value: "active", label: "Activos", empty: "No tienes recurrentes activos" },
+  { value: "paused", label: "Pausados", empty: "No tienes recurrentes pausados" },
+  {
+    value: "stopped",
+    label: "Dejados de seguir",
+    empty: "No tienes recurrentes dejados de seguir",
+  },
+];
+
+type ManagementProps = Readonly<{
+  filters: Filters;
+  view: Workspace;
+  open: (plan: Plan) => void;
+  disabled: boolean;
+  save: Save;
+  statusFor: typeof planStatus;
+  readState: WorkspaceReadState;
+  create: () => void;
+  applyFilters: (filters: Filters) => void;
+}>;
 export const PlanManagement = ({
   view,
   open,
@@ -168,52 +203,152 @@ export const PlanManagement = ({
   save,
   filters,
   statusFor,
-}: Readonly<{
-  filters: Filters;
-  view: Workspace;
-  open: (plan: Workspace["document"]["plans"][number]) => void;
-  disabled: boolean;
-  save: Save;
-  statusFor: typeof planStatus;
-}>): JSX.Element => {
-  const [status, setStatus] = useState("all");
+  readState,
+  create,
+  applyFilters,
+}: ManagementProps): JSX.Element => {
+  const [status, setStatus] = useState(allPlanStatus);
+  const visiblePlans = view.document.plans.filter(
+    (plan) =>
+      (status.value === "all" || statusFor(plan) === status.value) &&
+      matchesPlanFilters(plan, filters)
+  );
   return (
     <section data-recurring-slot="plan-management">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
-        <h2 className="font-medium">Todos los recurrentes</h2>
-        <ChoiceDropdown
-          id="recurring-plan-status"
-          label="Estado del plan"
-          value={status}
-          options={[
-            { value: "all", label: "Todos" },
-            { value: "active", label: "Activos" },
-            { value: "paused", label: "Pausados" },
-            { value: "stopped", label: "Dejados de seguir" },
-          ]}
-          disabled={false}
-          width="auto"
-          leading={null}
-          triggerLabel={Option.none()}
-          onChange={setStatus}
-        />
+      <PlanManagementHeader status={status} select={setStatus} />
+      <div aria-live="polite">
+        {visiblePlans.length === 0 ? (
+          <output aria-label="Resultados de recurrentes">
+            <PlanManagementEmpty
+              status={status}
+              readState={readState}
+              hasPlans={view.document.plans.length > 0}
+              filtered={Object.keys(filters).length > 0}
+              disabled={disabled}
+              create={create}
+              reset={() => {
+                setStatus(allPlanStatus);
+                applyFilters({});
+              }}
+            />
+          </output>
+        ) : null}
       </div>
-      {view.document.plans.flatMap((plan) =>
-        (status === "all" || statusFor(plan) === status) && matchesPlanFilters(plan, filters)
-          ? [
-              <PlanRow
-                key={plan.id}
-                plan={plan}
-                status={statusFor(plan)}
-                open={open}
-                disabled={disabled}
-                save={save}
-                today={view.today}
-              />,
-            ]
-          : []
-      )}
+      {visiblePlans.map((plan) => (
+        <PlanRow
+          key={plan.id}
+          plan={plan}
+          status={statusFor(plan)}
+          open={open}
+          disabled={disabled}
+          save={save}
+          today={view.today}
+        />
+      ))}
     </section>
+  );
+};
+
+const PlanManagementHeader = ({
+  status,
+  select,
+}: Readonly<{
+  status: typeof allPlanStatus;
+  select: (status: typeof allPlanStatus) => void;
+}>): JSX.Element => (
+  <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+    <h2 className="font-medium">Todos los recurrentes</h2>
+    <ChoiceDropdown
+      id="recurring-plan-status"
+      label="Estado del plan"
+      value={status.value}
+      options={planStatuses}
+      disabled={false}
+      width="auto"
+      leading={null}
+      triggerLabel={Option.none()}
+      onChange={(value) =>
+        select(planStatuses.find((entry) => entry.value === value) ?? allPlanStatus)
+      }
+    />
+  </div>
+);
+
+type ManagementEmptyProps = Pick<ManagementProps, "readState" | "disabled" | "create"> &
+  Readonly<{
+    status: typeof allPlanStatus;
+    hasPlans: boolean;
+    filtered: boolean;
+    reset: () => void;
+  }>;
+const planEmptyCopy = ({
+  hasPlans,
+  filtered,
+  status,
+}: Pick<ManagementEmptyProps, "hasPlans" | "filtered" | "status">): Readonly<{
+  title: string;
+  description: string;
+}> => {
+  if (!hasPlans) {
+    return {
+      title: "Aún no tienes recurrentes",
+      description:
+        "Crea un recurrente para organizar tus próximos ingresos, gastos o transferencias.",
+    };
+  }
+  if (filtered) {
+    return {
+      title: "Sin resultados para estos filtros",
+      description: `Estado del plan: ${status.label}. Limpia los filtros para ver todos tus recurrentes.`,
+    };
+  }
+  return {
+    title: status.empty,
+    description: "Prueba otro estado o consulta todos tus recurrentes.",
+  };
+};
+const PlanManagementEmpty = ({
+  status,
+  readState,
+  hasPlans,
+  filtered,
+  disabled,
+  create,
+  reset,
+}: ManagementEmptyProps): JSX.Element => {
+  if (readState !== "current") {
+    return (
+      <p className="p-4 text-sm text-muted-foreground">
+        {readState === "refreshing"
+          ? "Actualizando recurrentes…"
+          : "No pudimos comprobar si hay recurrentes para estos filtros. Actualiza los recurrentes para consultar el estado."}
+      </p>
+    );
+  }
+  const copy = planEmptyCopy({ hasPlans, filtered, status });
+  return (
+    <Empty>
+      <EmptyHeader>
+        <EmptyTitle>{copy.title}</EmptyTitle>
+        <EmptyDescription>{copy.description}</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        {hasPlans ? (
+          <Button contentLayout="wrap" focusAppearance="subtle" variant="outline" onClick={reset}>
+            Ver todos los recurrentes
+          </Button>
+        ) : (
+          <Button
+            contentLayout="wrap"
+            focusAppearance="subtle"
+            disabled={disabled}
+            onClick={create}
+          >
+            Crear recurrente
+          </Button>
+        )}
+      </EmptyContent>
+    </Empty>
   );
 };
 

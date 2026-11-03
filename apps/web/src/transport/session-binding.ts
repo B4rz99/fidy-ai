@@ -20,7 +20,7 @@ import { browserHttpClientLayer } from "./browser-http-policy";
 export type BrowserSessionLifetime = Readonly<{
   binding: string;
   signal: AbortSignal;
-  expired: () => void;
+  recheck: () => void;
 }>;
 
 const concurrentRequests = 2;
@@ -156,7 +156,7 @@ const acceptResponse =
       return Effect.fail(closedFailure());
     }
     if (response.status === unauthorizedStatus && lifetime.binding !== "none") {
-      lifetime.expired();
+      lifetime.recheck();
     }
     return Effect.succeed(response);
   };

@@ -43,7 +43,7 @@ for (const aborted of [false, true]) {
         const clients = yield* Effect.forEach([0, 1], () =>
           Layer.build(
             bindBrowserSession({
-              lifetime: { binding: "same-session", signal: lifetime.signal, expired: vi.fn() },
+              lifetime: { binding: "same-session", signal: lifetime.signal, recheck: vi.fn() },
               transport: coordinateBrowserRequests({ transport, signal: lifetime.signal }).pipe(
                 browserHttpClientLayer("canonical", "https://api.test.fidyapp.com")
               ),
@@ -106,7 +106,7 @@ it.effect("retires a streamed response and refuses further requests from the old
         transport: Layer.succeed(HttpClient.HttpClient, transport).pipe(
           browserHttpClientLayer("canonical", "https://api.test.fidyapp.com")
         ),
-        lifetime: { binding: "session-a", signal: lifetime.signal, expired: vi.fn() },
+        lifetime: { binding: "session-a", signal: lifetime.signal, recheck: vi.fn() },
       })
     );
     const client = Context.get(services, HttpClient.HttpClient);
@@ -126,15 +126,15 @@ it.effect("retires a streamed response and refuses further requests from the old
 });
 
 for (const scenario of [
-  { binding: "session-a", status: 200, expirations: 0 },
-  { binding: "session-a", status: 401, expirations: 1 },
-  { binding: "none", status: 401, expirations: 0 },
+  { binding: "session-a", status: 200, rechecks: 0 },
+  { binding: "session-a", status: 401, rechecks: 1 },
+  { binding: "none", status: 401, rechecks: 0 },
 ]) {
   it.effect(
     `handles ${scenario.status} for ${scenario.binding} without changing request identity`,
     () => {
       const lifetime = new AbortController();
-      const expired = vi.fn();
+      const recheck = vi.fn();
       return Effect.gen(function* () {
         const transport = HttpClient.makeWith<
           HttpClientError.HttpClientError,
@@ -154,7 +154,7 @@ for (const scenario of [
         const services = yield* Layer.build(
           bindBrowserSession({
             transport: Layer.succeed(HttpClient.HttpClient, transport),
-            lifetime: { binding: scenario.binding, signal: lifetime.signal, expired },
+            lifetime: { binding: scenario.binding, signal: lifetime.signal, recheck },
           })
         );
         const reply = yield* Context.get(services, HttpClient.HttpClient).get(
@@ -162,7 +162,7 @@ for (const scenario of [
           { headers: { "Fidy-Session-Binding": "untrusted-override" } }
         );
         expect(reply.status).toBe(scenario.status);
-        expect(expired).toHaveBeenCalledTimes(scenario.expirations);
+        expect(recheck).toHaveBeenCalledTimes(scenario.rechecks);
       }).pipe(Effect.scoped);
     }
   );
@@ -190,7 +190,7 @@ it.effect("bootstraps a session identity and signed-out identity through credent
 
 it.effect("rejects a response completed synchronously as its session is retired", () => {
   const lifetime = new AbortController();
-  const expired = vi.fn();
+  const recheck = vi.fn();
   return Effect.gen(function* () {
     const transport = HttpClient.makeWith<
       HttpClientError.HttpClientError,
@@ -207,7 +207,7 @@ it.effect("rejects a response completed synchronously as its session is retired"
     const services = yield* Layer.build(
       bindBrowserSession({
         transport: Layer.succeed(HttpClient.HttpClient, transport),
-        lifetime: { binding: "session-a", signal: lifetime.signal, expired },
+        lifetime: { binding: "session-a", signal: lifetime.signal, recheck },
       })
     );
     expect(
@@ -217,6 +217,6 @@ it.effect("rejects a response completed synchronously as its session is retired"
         )
       )
     ).toBe(true);
-    expect(expired).not.toHaveBeenCalled();
+    expect(recheck).not.toHaveBeenCalled();
   }).pipe(Effect.scoped);
 });

@@ -230,6 +230,12 @@ See [ADR 0032](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-que
 
 ## 3. Browser authentication
 
+A direct-browser 401 asks the session owner to recheck its immutable binding. A still-live matching
+session retains its registry and ordinary navigation; a changed or absent binding retires the old
+lifetime, and a failed check blocks access. This distinguishes payment freshness refusals from
+session expiry without replaying a refused action. Canonical unauthenticated responses retain their
+explicit authentication-expiration policy, and every protected action keeps its server authority checks.
+
 Provider web signup/login begins at `/login`, discoverable from the public site.
 The mounted Provider Authentication feature owns its private pairing proof, one-time recovery view,
 and provider popup. It uses the generated authentication client: accept the exact disclosure revision,

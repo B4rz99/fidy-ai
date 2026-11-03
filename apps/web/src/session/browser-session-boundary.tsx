@@ -66,13 +66,13 @@ const retainedBinding = (
     observation: Option.Option<BrowserSessionObservation>;
     current: BrowserSessionObservation;
     signal: AbortSignal;
-    expired: () => void;
+    recheck: () => void;
   }>
 ): BindingState => ({
   session: Option.getOrElse(input.session, () => ({
     binding: input.current.binding,
     signal: input.signal,
-    expired: input.expired,
+    recheck: input.recheck,
   })),
   initial: Option.getOrElse(input.observation, () => input.current),
   checking: false,
@@ -132,7 +132,7 @@ const observeBinding = ({
               observation,
               current,
               signal: lifetime.signal,
-              expired,
+              recheck: validate,
             });
             session = Option.some(retained.session);
             observation = Option.some(retained.initial);

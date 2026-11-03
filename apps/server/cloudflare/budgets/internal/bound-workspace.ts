@@ -1,8 +1,8 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option } from "effect";
 import type { CanonicalBrowserRead } from "../../canonical-admission/contract";
 import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
 import { prepareReservedChangeCheck } from "../../../src/shell/sql-assertions/operations";
-import { BudgetWorkspace } from "../../../src/core/budgets/contract";
+import { encodeBudgetWorkspace as encodeWorkspace } from "./workspace-encoding";
 import {
   transactionFailure,
   transactionId,
@@ -57,9 +57,7 @@ export const prepareBoundBudgetWorkspace = (request: Request): CanonicalBrowserR
           if (Option.isNone(prepared)) return transactionUnavailable();
           const workspace = yield* prepared.value.decode(results.slice(0, statements.length));
           if (Option.isNone(workspace)) return transactionUnavailable();
-          const data = yield* Schema.encodeEffect(Schema.toCodecJson(BudgetWorkspace))(
-            workspace.value
-          );
+          const data = yield* encodeWorkspace(workspace.value);
           return Response.json({ data, next: [] }, { headers: transactionNoStore });
         }).pipe(Effect.orElseSucceed(transactionUnavailable)),
     };

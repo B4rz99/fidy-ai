@@ -1,7 +1,7 @@
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { Effect, Option } from "effect";
 import type { Budget } from "../../../src/core/budgets/contract";
-import { budgetFromRow } from "./budget-row";
+import { budgetsFromRows } from "./budget-row";
 
 const maximumBudgetCount = 128;
 
@@ -34,7 +34,7 @@ export const decodePlannedCaps = (
 ): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
   rows.length > maximumBudgetCount
     ? Effect.succeedNone
-    : Effect.forEach(rows, budgetFromRow).pipe(
+    : budgetsFromRows(rows).pipe(
         Effect.asSome,
         Effect.orElseSucceed(() => Option.none())
       );

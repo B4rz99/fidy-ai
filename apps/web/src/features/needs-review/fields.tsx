@@ -93,8 +93,12 @@ const ReviewAmount = ({ draft, change, locked }: Props): JSX.Element => {
         onBlur={() => setVisited(true)}
         onValueChange={(amount) => change(editDraft({ draft, field: "money", value: { amount } }))}
       />
-      <p id="review-amount-help" aria-live="polite" className="text-sm text-muted-foreground">
-        {Option.getOrElse(error, () => hint)}
+      <p
+        id="review-amount-help"
+        aria-live="polite"
+        className={visited ? "text-sm text-muted-foreground" : "sr-only"}
+      >
+        {visited ? Option.getOrElse(error, () => hint) : ""}
       </p>
     </div>
   );

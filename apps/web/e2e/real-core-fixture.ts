@@ -109,6 +109,8 @@ type RecurringIdentity =
   | "recurringScope"
   | "recurringScopePartial"
   | "recurringScopeAdjusted"
+  | "recurringCreation"
+  | "recurringCreationReview"
   | "recurringSuggestionsPending"
   | "recurringSuggestionsUpdating"
   | "recurringSearch"

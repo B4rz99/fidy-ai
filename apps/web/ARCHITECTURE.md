@@ -497,6 +497,14 @@ The confirmation retains the affected plan identity and confirmed document revis
 workspace reread reaches that revision, the lifecycle display uses the confirmed action's state;
 a failed refresh cannot restore an obsolete lifecycle badge or action. Recovery still gates writes.
 
+Creating a RecurringPlan from a Transaction copies its facts without requesting an association.
+The creation draft retains the selected Transaction identity locally. After acknowledged creation,
+the sheet reads the unfiltered first month through the existing canonical query and presents actual
+fulfillment, any known existing association, and the separate remaining expectation. Verification
+failure offers an explicit read retry without resubmitting creation. A pending first occurrence
+can be corrected with a forward edit from its original date. Matching and totals remain server-owned;
+the existing canonical transport observes these bounded reads and edits.
+
 Recurring manual marks disclose that they change tracking only. Transaction capture reuses the
 Transactions-owned form and canonical mutation, preserving the plan's Currency and direction.
 Application composition supplies capture through the published feature interfaces; Recurring does

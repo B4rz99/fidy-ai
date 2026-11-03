@@ -1,10 +1,7 @@
 import { useRouterState } from "@tanstack/react-router";
-import { browserCrypto } from "@/browser/crypto";
-import { Array, Effect, Option } from "effect";
+import { Array, Option } from "effect";
 import { type JSX, type ReactNode, useState } from "react";
-import { RecurringPlanId } from "@/transport/client";
 import { Button } from "@/ui/components/button";
-import { DeferredDisclosure } from "@/ui/components/disclosure";
 import {
   RecurringColumns,
   RecurringContextPanel,
@@ -21,7 +18,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { MonthCalendar } from "./month";
 import { OccurrenceList } from "./occurrence-list";
 import { TransactionLink } from "./transaction-link";
-import { TransactionPicker } from "./transactions";
+import { CreatePlan, type CreationReceipt } from "./create-plan";
+import { CreationResult } from "./creation-result";
 import { PlanForm } from "./plan-form";
 import { PlanManagement, Suggestions } from "./management";
 import {
@@ -33,7 +31,6 @@ import {
   type Save,
   type Workspace,
   type WorkspaceReadState,
-  planFromTransaction,
   type planStatus,
 } from "./model";
 
@@ -44,6 +41,7 @@ type Panel =
       seriesId: Option.Option<string>;
     }>
   | Readonly<{ kind: "occurrence" | "link"; planId: Occurrence["planId"]; date: string }>
+  | (CreationReceipt & Readonly<{ kind: "created" }>)
   | Readonly<{ kind: "plan"; planId: Occurrence["planId"] }>;
 type Props = Readonly<{
   calendar: boolean;
@@ -89,53 +87,98 @@ const Editor = ({
   save,
   statusFor,
   link,
-}: EditorProps & Readonly<{ panel: Panel; link: () => void }>): JSX.Element => {
+  created,
+  close,
+}: EditorProps &
+  Readonly<{
+    panel: Panel;
+    link: () => void;
+    created: (receipt: CreationReceipt) => void;
+    close: () => void;
+  }>): JSX.Element => {
   if (panel.kind === "occurrence") {
-    const invalidIds = new Set(view.invalidFulfillmentIds);
-    const item = selectedOccurrence(view, panel);
-    const plan = view.document.plans.find((entry) => entry.id === panel.planId);
-    const lifecycle =
-      plan === undefined ? null : (
-        <PlanLifecycle
-          plan={plan}
-          status={statusFor(plan)}
-          save={save}
-          disabled={disabled}
-          today={view.today}
-        />
-      );
-    if (Option.isNone(item)) {
-      return (
-        <div className="grid gap-5">
-          {lifecycle}
-          <p>Esta fecha ya no aparece en la vista actual. Los registros existentes se conservan.</p>
-        </div>
-      );
-    }
     return (
-      <div className="grid gap-5">
-        {lifecycle}
-        <OccurrenceDetails
-          item={item.value}
-          document={view.document}
-          transactions={view.linkedTransactions}
-          invalidMarks={view.document.fulfillments.filter(
-            (mark) =>
-              mark.planId === panel.planId && mark.date === panel.date && invalidIds.has(mark.id)
-          )}
-          categories={categories}
-          disabled={disabled}
-          save={save}
-          today={view.today}
-          link={link}
-        />
-      </div>
+      <OccurrenceEditor panel={panel} {...{ view, categories, disabled, save, statusFor, link }} />
     );
   }
   if (panel.kind === "create") {
-    return <CreatePlan panel={panel} categories={categories} disabled={disabled} save={save} />;
+    return (
+      <CreatePlan
+        {...panel}
+        categories={categories}
+        disabled={disabled}
+        save={save}
+        created={created}
+      />
+    );
+  }
+  if (panel.kind === "created") {
+    return (
+      <CreationResult
+        receipt={panel}
+        minimumRevision={view.document.revision}
+        categories={categories}
+        disabled={disabled}
+        save={save}
+        close={close}
+      />
+    );
   }
   return <PlanEditor planId={panel.planId} {...{ view, categories, disabled, save, statusFor }} />;
+};
+const OccurrenceEditor = ({
+  panel,
+  view,
+  categories,
+  disabled,
+  save,
+  statusFor,
+  link,
+}: EditorProps &
+  Readonly<{
+    panel: Extract<Panel, { kind: "occurrence" | "link" }>;
+    link: () => void;
+  }>): JSX.Element => {
+  const invalidIds = new Set(view.invalidFulfillmentIds);
+  const item = selectedOccurrence(view, panel);
+  const plan = view.document.plans.find((entry) => entry.id === panel.planId);
+  const lifecycle =
+    plan === undefined ? null : (
+      <PlanLifecycle
+        plan={plan}
+        status={statusFor(plan)}
+        save={save}
+        disabled={disabled}
+        today={view.today}
+      />
+    );
+  if (Option.isNone(item)) {
+    return (
+      <div className="grid gap-5">
+        {lifecycle}
+        <p>Esta fecha ya no aparece en la vista actual. Los registros existentes se conservan.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="grid gap-5">
+      {lifecycle}
+      <OccurrenceDetails
+        item={item.value}
+        document={view.document}
+        transactions={view.linkedTransactions}
+        invalidMarks={view.document.fulfillments.filter(
+          (mark) =>
+            mark.planId === panel.planId && mark.date === panel.date && invalidIds.has(mark.id)
+        )}
+        categories={categories}
+        disabled={disabled}
+        save={save}
+        today={view.today}
+        link={link}
+      />
+    </div>
+  );
 };
 const PlanEditor = ({
   planId,
@@ -283,9 +326,10 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
   const { view, disabled, filters, timeZone, calendar, setCalendar, tab, setTab } = props;
   const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
   const [panel, setPanel] = useState<Option.Option<Panel>>(() => Option.none());
-  const save: Save = (edit) =>
+  const save: Save = (edit, onSaved) =>
     props.save(edit, () => {
-      if (edit.kind !== "lifecycle" || edit.action === "stop") {
+      if (onSaved !== undefined) onSaved();
+      else if (edit.kind !== "lifecycle" || edit.action === "stop") {
         setPanel((current) => (current === panel ? Option.none() : current));
       }
     });
@@ -351,6 +395,7 @@ const LinkWorkspace = ({
     <TransactionLink
       key={`${item.value.planId}:${item.value.date}`}
       item={item.value}
+        document={view.document}
       disabled={props.disabled}
       save={props.save}
       notice={props.notice}
@@ -433,6 +478,29 @@ const WorkspaceBody = ({
   );
 };
 
+const editorTitle = (panel: Option.Option<Panel>, view: Workspace): string =>
+  Option.match(panel, {
+    onNone: () => "Configurar recurrente",
+    onSome: (selected) => {
+      if (selected.kind === "occurrence") {
+        return selectedOccurrence(view, selected).pipe(
+          Option.map((item) => item.plan.name),
+          Option.getOrElse(
+            () =>
+              view.document.plans.find((plan) => plan.id === selected.planId)?.revisions.at(-1)
+                ?.plan.name ?? "Recurrente no disponible"
+          )
+        );
+      }
+      if (selected.kind === "create") {
+        return "Nuevo recurrente";
+      }
+      if (selected.kind === "created") {
+        return "Recurrente guardado";
+      }
+      return "Editar recurrente";
+    },
+  });
 const EditorSheet = ({
   notice,
   panel,
@@ -448,25 +516,10 @@ const EditorSheet = ({
   const active = useRouterState({
     select: (state) => state.location.pathname === "/app/recurring",
   });
-  const title = Option.match(panel, {
-    onNone: () => "Configurar recurrente",
-    onSome: (selected) => {
-      if (selected.kind === "occurrence") {
-        return selectedOccurrence(view, selected).pipe(
-          Option.map((item) => item.plan.name),
-          Option.getOrElse(
-            () =>
-              view.document.plans.find((plan) => plan.id === selected.planId)?.revisions.at(-1)
-                ?.plan.name ?? "Recurrente no disponible"
-          )
-        );
-      }
-      return selected.kind === "create" ? "Nuevo recurrente" : "Editar recurrente";
-    },
-  });
+
   return (
     <RecurringContextPanel
-      title={title}
+      title={editorTitle(panel, view)}
       themeControl={<RecurringThemeControl theme={theme} toggle={toggle} />}
       open={active && Option.isSome(panel)}
       onClose={() => setPanel(Option.none())}
@@ -477,6 +530,8 @@ const EditorSheet = ({
           key={JSON.stringify(panel.value)}
           panel={panel.value}
           link={link}
+          created={(receipt) => setPanel(Option.some({ kind: "created", ...receipt }))}
+          close={() => setPanel(Option.none())}
           view={view}
           categories={categories}
           disabled={disabled}
@@ -484,7 +539,9 @@ const EditorSheet = ({
           statusFor={statusFor}
         />
       ) : null}
-      {Option.isSome(panel) && panel.value.kind !== "occurrence" ? (
+      {Option.isSome(panel) &&
+      panel.value.kind !== "occurrence" &&
+      panel.value.kind !== "created" ? (
         <Button variant="ghost" onClick={() => setPanel(Option.none())}>
           Cancelar
         </Button>
@@ -555,51 +612,6 @@ const WorkspaceSuggestions = ({
         next={(next) => setCursor(Option.some(next))}
         create={(initial, seriesId) =>
           setPanel(Option.some({ kind: "create", initial, seriesId: Option.some(seriesId) }))
-        }
-      />
-    </>
-  );
-};
-
-const CreatePlan = ({
-  panel,
-  categories,
-  disabled,
-  save,
-}: Readonly<{
-  panel: Extract<Panel, { kind: "create" }>;
-  categories: ReadonlyArray<Category>;
-  disabled: boolean;
-  save: Save;
-}>): JSX.Element => {
-  const [initial, setInitial] = useState(panel.initial);
-  return (
-    <>
-      <div data-recurring-slot="create-source">
-        <DeferredDisclosure title="Crear desde una transacción">
-          <TransactionPicker
-            disabled={disabled}
-            timeZone={panel.initial.timeZone}
-            choose={(transaction) =>
-              setInitial(planFromTransaction({ transaction, timeZone: panel.initial.timeZone }))
-            }
-          />
-        </DeferredDisclosure>
-      </div>
-      <PlanForm
-        key={JSON.stringify(initial)}
-        initial={initial}
-        categories={categories}
-        disabled={disabled}
-        onSubmit={(plan) =>
-          save({
-            kind: "create",
-            id: RecurringPlanId.make(
-              Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie))
-            ),
-            plan,
-            ...(Option.isSome(panel.seriesId) ? { seriesId: panel.seriesId.value } : {}),
-          })
         }
       />
     </>

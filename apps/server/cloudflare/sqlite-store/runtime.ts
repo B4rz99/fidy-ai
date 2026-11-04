@@ -1,5 +1,7 @@
+import { NativeDashboardRequest, type NativeDashboardResult } from "../dashboard/contract";
+import { readAuditedSqliteDashboard } from "../dashboard/operations";
 import { DurableObject } from "cloudflare:workers";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   SqliteStoreControlQuery,
   type SqliteStoreControlReply,
@@ -13,6 +15,39 @@ import { executeStoreQuery } from "./internal/query";
 
 /** Private binding only. Serving code has no import, restore, activation or SQL fetch endpoint. */
 export class AuthoritativeSqliteStore extends DurableObject<SqliteStoreEnvironment> {
+  dashboard(candidate: unknown): Promise<NativeDashboardResult> {
+    const input = Schema.decodeUnknownOption(NativeDashboardRequest)(candidate);
+    if (Option.isNone(input)) {
+      return Promise.resolve({
+        kind: "response",
+        response: {
+          status: 503,
+          body: {
+            error: { code: "unavailable", message: "The operation is unavailable. Retry later." },
+            next: [],
+          },
+          headers: { "cache-control": "no-store" },
+        },
+      });
+    }
+    return Effect.runPromise(
+      readAuditedSqliteDashboard({
+        input: input.value,
+        storage: this.ctx.storage,
+        bucket: Option.fromUndefinedOr(this.env.ERASURE_BUCKET),
+        browserOrigin: this.env.BROWSER_ORIGIN ?? "",
+        admitted: () => {
+          const observed = this.inspect();
+          return (
+            !("kind" in observed) &&
+            observed.admission === "Open" &&
+            observed.target.manifest === input.value.manifest &&
+            observed.target.epoch === input.value.epoch
+          );
+        },
+      })
+    );
+  }
   inspect(): SqliteStoreControlReply {
     return this.ctx.storage.transactionSync(() =>
       Option.getOrElse(

@@ -23,6 +23,11 @@ export type NativeStore = Readonly<{
   environment: SqliteStoreEnvironment;
   objectId: string;
 }>;
+const ownerVersion = (environment: SqliteStoreEnvironment): string =>
+  Option.getOrElse(
+    Schema.decodeUnknownOption(Schema.String)(environment.CF_VERSION_METADATA?.id),
+    () => ""
+  );
 /** A restored seal cannot itself authorize activation; the independent release barrier remains unqualified. */
 export const storeObservation = (store: NativeStore): Option.Option<SqliteStoreObservation> => {
   const seal = Schema.decodeUnknownOption(Seal)(store.storage.kv.get("store-seal"));
@@ -47,6 +52,7 @@ export const storeObservation = (store: NativeStore): Option.Option<SqliteStoreO
     },
     admission: admission.value.phase,
     activationId: admission.value.phase === "Closed" ? admission.value.activationId : "",
+    ownerVersion: ownerVersion(store.environment),
     queryLeases: 0,
     releaseBarrier: "Unqualified",
   });

@@ -9,7 +9,7 @@ import { installRetentionTestSchema } from "../d1-test-fixture";
 import { nativeErasurePlatform, seedPersonalClasses } from "./native.test-fixture";
 import { executeErasureAdmission } from "./operations";
 import { handleErasureOperator } from "./runtime";
-import { nativeRecoveryAdmission } from "../recovery-activation/native.test-fixture";
+import { nativeRecoveryAdmissions } from "../recovery-activation/native.test-fixture";
 
 const issuer = "https://erasure-test.cloudflareaccess.com";
 const audience = "erasure-only";
@@ -26,7 +26,7 @@ afterEach(() => vi.restoreAllMocks());
 
 effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
   it.effect(
-    "keeps activation admission closed when response and provider work have no drain proof",
+    "preserves DB-first erasure intent across source loss while awaiting a complete owner drain",
     () =>
       Effect.gen(function* () {
         const platform = yield* nativeErasurePlatform;
@@ -78,7 +78,9 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           (yield* Effect.tryPromise(() => native.registry.list({ prefix: "recovery/cases/" })))
             .objects
         ).toHaveLength(0);
-        const admission = yield* nativeRecoveryAdmission;
+        const gates = yield* nativeRecoveryAdmissions;
+        const admission = gates.source;
+        let selectedAdmission = admission;
         expect(
           yield* Effect.tryPromise(() =>
             admission.enter({ epoch: target.epoch, leaseId: "unsettled-provider" })
@@ -108,10 +110,11 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
                 DB: native.snapshot,
                 ERASURE_BUCKET: native.registry,
                 ERASURE_ACTIVATION: {
-                  admission,
+                  admission: selectedAdmission,
                   source: control,
                   serving: control,
                   sourceDb: native.db,
+                  providerDrain: Option.none(),
                   sourceTarget: target,
                   servingTarget,
                 },
@@ -134,6 +137,9 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           )
         );
         expect(record).toMatchObject({ activationId, phase: "AwaitingDrain" });
+        selectedAdmission = gates.replacement;
+        expect((yield* send()).status).toBe(503);
+        selectedAdmission = admission;
         expect(
           yield* Effect.tryPromise(() =>
             admission.enter({ epoch: target.epoch, leaseId: "stale-background" })
@@ -143,9 +149,10 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           yield* Effect.tryPromise(() =>
             admission.complete({ epoch: target.epoch, leaseId: "unsettled-provider" })
           )
-        ).toBe(false);
+        ).toBe(true);
         expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
-          closed: true,
+          closed: false,
+          paused: true,
           leases: 0,
         });
         const aborted = yield* send(AbortSignal.abort());
@@ -160,7 +167,8 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
             .objects
         ).toHaveLength(0);
         expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
-          closed: true,
+          closed: false,
+          paused: true,
           leases: 0,
         });
         yield* Effect.tryPromise(() =>
@@ -169,7 +177,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         const resumed = yield* send();
         expect(resumed.status).toBe(202);
         expect(yield* Effect.tryPromise(() => resumed.json())).toMatchObject({
-          phase: "AwaitingProvider",
+          phase: "AwaitingOwnerDrain",
           providerIsolation: "Unqualified",
         });
         const cases = yield* Effect.tryPromise(() =>

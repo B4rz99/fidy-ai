@@ -123,6 +123,7 @@ export const SqliteStoreObservation = Schema.Struct({
   }),
   admission: Schema.Literals(["Open", "Closed"]),
   activationId: Schema.String,
+  ownerVersion: Schema.String,
   queryLeases: Schema.Literal(0),
   releaseBarrier: Schema.Literal("Unqualified"),
 });
@@ -141,5 +142,8 @@ export type SqliteStoreEnvironment = Partial<
     SQLITE_STORE_MANIFEST: string;
     SQLITE_STORE_EPOCH: string;
     SQLITE_STORE_NAMESPACE_ID: string;
+    CF_VERSION_METADATA: Readonly<{ id: string }>;
+    ERASURE_BUCKET: R2Bucket;
+    BROWSER_ORIGIN: string;
   }>
 >;

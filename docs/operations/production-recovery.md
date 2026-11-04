@@ -56,3 +56,27 @@ binding inventory and resumable fail-closed activation remain separate release r
 The existing guard stays enabled until those requirements are proven. The candidate has no automatic
 retry or background dispatch; the bounded operator response and durable checkpoint own continuation.
 Provider Access-key I/O uses the existing bounded outbound policy; no User content enters telemetry.
+
+## Provider target identity inspection
+
+The existing protected release tooling exposes `inspectRecoveryTarget` in
+`infra/cloudflare/production-release.ts`. It reads Cloudflare's namespace inventory and exact
+immutable owner/caller version bindings through the bounded release HTTP adapter. The reviewed
+metadata-only probe computes `namespace.idFromName("authoritative-v1").toString()` from its actual
+binding and invokes the Store's inspection RPC. Its provider-injected `CF_VERSION_METADATA.id`
+and the Store owner's provider-injected version must match the inspected immutable versions;
+the computed object identity, Store runtime identity, namespace UUID, manifest and epoch must all
+agree. Owner routes, workers.dev, version URLs and schedules must be disabled, with exactly one
+100% owner version. A plain environment namespace or version label is insufficient.
+
+Provision that reviewed metadata-only probe under the same release authority, with a temporary
+redacted request credential. Its HTTP response must be `no-store`; it exposes no SQL, restore or
+financial response. Retire the probe and its bindings after inspection. Cloudflare's object-list
+API can omit freshly stored objects in an isolated exercise; it is not a substitute for the
+verified binding chain, fixed object selection and storage-backed runtime version inspection.
+
+The inspection result is only `TargetBindingsObserved`. It does not qualify complete caller or
+background version history, publisher pause, durable owner drain, Queue/Workflow target continuity,
+final late/pending erasure reconciliation, verified serving bootstrap or resumable activation.
+Those independent barriers remain mandatory. Do not turn this observation into an activation
+receipt or remove the existing R2 guard.

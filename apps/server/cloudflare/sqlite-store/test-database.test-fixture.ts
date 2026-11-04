@@ -1,3 +1,5 @@
+import type { NativeDashboardReader } from "../dashboard/contract";
+import { makeNativeDashboardReader } from "../dashboard/operations";
 import { Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { makeRemoteSqliteDatabase } from "./operations";
@@ -35,6 +37,7 @@ const runtime = (sequence: number): Promise<Miniflare> =>
             exports: { ActiveStoreProof: { type: "durable-object", storage: "sqlite" } },
             env: {
               ...buckets,
+              BROWSER_ORIGIN: { type: "text", value: "https://app.fidy.test" },
               SQLITE_STORE_EPOCH: { type: "text", value: "fixture" },
               SQLITE_STORE_NAMESPACE_ID: { type: "text", value: "native-fixture" },
               SQLITE_STORE_MANIFEST: { type: "text", value: "fixture" },
@@ -73,15 +76,42 @@ const database = (input: Readonly<{ runtime: Miniflare; index: number }>): D1Dat
     },
   });
 
+type TestStore = Readonly<{
+  db: D1Database;
+  bucket: R2Bucket;
+  snapshot: (input: Readonly<{ request: Request; mode: "bound" | "document" }>) => Promise<unknown>;
+}>;
+const snapshot = (input: Readonly<{ runtime: Miniflare; index: number }>): NativeDashboardReader =>
+  makeNativeDashboardReader({
+    manifest: "fixture",
+    epoch: "fixture",
+    nativeCall: (execute) => execute(),
+    store: {
+      dashboard: (call) =>
+        input.runtime
+          .dispatchFetch("https://fixture.internal/dashboard-snapshot", {
+            method: "POST",
+            headers: { "x-store-object": `owner-${input.index}` },
+            body: encodeJson({
+              url: call.request.url,
+              method: call.request.method,
+              headers: Object.fromEntries(call.request.headers),
+              mode: call.mode,
+            }),
+          })
+          .then((response) => response.json()),
+    },
+  });
+
 /** Test-only transport selection reuses the existing canonical suites against real native Store objects. */
 export const sqliteTestStorage = (): Readonly<{
-  acquire: () => Promise<Readonly<{ db: D1Database; bucket: R2Bucket }>>;
+  acquire: () => Promise<TestStore>;
   dispose: () => Promise<void>;
 }> => {
   const runtimes: Promise<Miniflare>[] = [];
   let next = poolSize;
   let active = Option.none<Promise<Miniflare>>();
-  const acquire = (): Promise<Readonly<{ db: D1Database; bucket: R2Bucket }>> => {
+  const acquire = (): Promise<TestStore> => {
     if (next === poolSize) {
       active = Option.some(runtime(runtimes.length));
       runtimes.push(Option.getOrThrow(active));
@@ -91,6 +121,7 @@ export const sqliteTestStorage = (): Readonly<{
     return Option.getOrThrow(active).then((runtime) =>
       runtime.getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>().then((bindings) => ({
         db: database({ runtime, index }),
+        snapshot: snapshot({ runtime, index }),
         bucket: Option.getOrThrow(Option.fromUndefinedOr(bindings[`BUCKET_${index}`])),
       }))
     );

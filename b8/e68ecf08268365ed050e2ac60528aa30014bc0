@@ -1,0 +1,43 @@
+apps/web/e2e/dashboard-editing.spec.ts
+  s_bae391f7738986::t_078d59ae7531b9 56,126-128,162-164,353-355,364
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_bae391f7738986::t_5dd2c112b2705e 388-408
+apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts
+  s_bae391f7738986::t_c2601513fa0213 317,327,333,337,357
+apps/server/cloudflare/dashboard/operations.ts
+  s_bae391f7738986::t_1e39e9c7a05df1 86-96,104,108,125-150,243-249,407
+apps/server/src/core/dashboard/contract.ts
+  s_bae391f7738986::t_12a606752a8912 372-374,376,397,406,414,422,451,460
+apps/server/src/shell/dashboard/contract.ts
+  s_bae391f7738986::t_20f89ff29cdefe 11,119,235-236
+apps/server/src/shell/dashboard/internal/presentation.ts
+  s_bae391f7738986::t_e4f8fbfe25140d 157,162,189
+apps/server/src/shell/dashboard/presentation.test.ts
+  s_bae391f7738986::t_35c030940e6f16 72,108,137
+apps/web/e2e/brand-token-contrast.spec.ts
+  s_bae391f7738986::t_a04bd2d233b40d 634
+apps/web/e2e/dashboard-branding.spec.ts
+  s_bae391f7738986::t_a9008a33d6e7fd 87,279
+apps/web/e2e/dashboard-categories.spec.ts
+  s_bae391f7738986::t_5176bddfb83f75 35
+apps/web/e2e/dashboard-queries.spec.ts
+  s_bae391f7738986::t_d297f7913fff0e 11
+apps/web/src/features/dashboard/editing.ts
+  s_bae391f7738986::t_268a063a80cef7 37,153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8e68ecf08268365ed050e2ac60528aa30014bc0",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

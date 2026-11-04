@@ -1,0 +1,85 @@
+apps/server/cloudflare/dashboard/operations.ts
+  s_27d58cea3847b9::t_8ba78e259a4492 244-245
+apps/web/src/transport/browser-http-policy.ts
+  s_27d58cea3847b9::t_4b2c63a79417e7 409-426,470-475
+apps/web/src/features/dashboard/query.ts
+  s_27d58cea3847b9::t_7a607f033133ff 59
+  s_27d58cea3847b9::t_2ae42341eb4e6b 47-48,50-54,75
+  s_27d58cea3847b9::t_03aedfc4ab7950 78
+  s_27d58cea3847b9::t_c92e7f758f6240 67-68
+  s_27d58cea3847b9::t_4591d1604004cd 65
+apps/server/cloudflare/transactions/internal/dashboard-query.ts
+  s_27d58cea3847b9::t_d4a0293dcc893a 58,84-87,92-110,112-116,119
+  s_27d58cea3847b9::t_9e38943cdf1528 82,117-118
+apps/server/cloudflare/transactions/search-costs.test.ts
+  s_27d58cea3847b9::t_d4a0293dcc893a 38,48,88,91-92,98,117,125
+  s_27d58cea3847b9::t_092fb84f5990c2 133
+apps/web/src/transport/client.test.ts
+  s_27d58cea3847b9::t_0ad41ea5dc4564 335-356
+  s_27d58cea3847b9::t_40bb6c7867bcf7 412
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_27d58cea3847b9::t_398b7af648e701 57-58,218,7168
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_27d58cea3847b9::t_0eef3c0ed0e788 656
+  s_27d58cea3847b9::t_8ba78e259a4492 617-618
+apps/server/cloudflare/dashboard/contract.ts
+  s_27d58cea3847b9::t_0eef3c0ed0e788 31
+apps/web/src/features/dashboard/view.tsx
+  s_27d58cea3847b9::t_f21f17230e1d2b 1-2,44,339-344,880,915-941
+  s_27d58cea3847b9::t_b2c022bfdf06c3 1102,1123
+apps/web/e2e/performance.assessment.ts
+  s_27d58cea3847b9::t_0d574540002b6a 12,522-523,556,589,630
+  s_27d58cea3847b9::t_ead483b0022a56 755,779,782
+  s_27d58cea3847b9::t_e01f28a1cf2816 756-759,761-762,775-778,780
+  s_27d58cea3847b9::t_4444afc5a8c6f9 2,68,118,686-752,754,760,763-774
+  s_27d58cea3847b9::t_3bd1de99107703 9-11,524-526,530-532
+  s_27d58cea3847b9::t_04c2999dfd427d 63-67,69,109-112
+  s_27d58cea3847b9::t_84dfe2895ea3ee 753,781
+apps/web/src/transport/workspace-query.ts
+  s_27d58cea3847b9::t_0eef3c0ed0e788 130-131
+apps/server/cloudflare/transactions/internal/dashboard-read.ts
+  s_27d58cea3847b9::t_7d93eb1833146b 38,96,98-102,173,175,177-191,228
+  s_27d58cea3847b9::t_4b2c63a79417e7 194-205,217
+  s_27d58cea3847b9::t_d20d3757f91ea7 9-10,26-34,43,52,59,64,68-69,71-73,75,78-81,83-91,109-110,112-116,207,215,218,220-221,227,229-232
+  s_27d58cea3847b9::t_e035bda75b5f14 104-108,117-123,129-134,136-140,143-159,161-172,192-193,212-214,223-226
+  s_27d58cea3847b9::t_3fab8e7d08e6d8 35,37,39-42,44-51,53-58,60-63,65-67,70,74,76-77,82,92-95,111,126,142,216,222,233
+apps/web/src/features/dashboard/feature.tsx
+  s_27d58cea3847b9::t_4b2c63a79417e7 128,131-138
+  s_27d58cea3847b9::t_abfbfa47dab2a4 83
+  s_27d58cea3847b9::t_f21f17230e1d2b 12,150,153-154
+  s_27d58cea3847b9::t_302888fb1e47d6 145
+apps/server/cloudflare/migrations/0010_effective_transaction_read_paths.sql
+  s_27d58cea3847b9::t_d4a0293dcc893a 1-102
+docs/adr/0039-performance-redesign-without-application-caches-or-locks.md
+  s_27d58cea3847b9::t_f7539ec5e34667 9,11,14-17
+  s_27d58cea3847b9::t_dd2accb072ec3e 3,5,13,19-21
+  s_27d58cea3847b9::t_8252802ee71d61 1-2,4,6,8,10,18
+  s_27d58cea3847b9::t_eed06c82dcae46 7,22-23
+  s_27d58cea3847b9::t_2e7123cbe028f2 12
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_27d58cea3847b9::t_7a607f033133ff 349,352
+  s_27d58cea3847b9::t_af5520efa569ca 147-152,208-210
+CODING_STANDARDS.md
+  s_27d58cea3847b9::t_2e7123cbe028f2 127-128
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_27d58cea3847b9::t_8ba78e259a4492 1871
+  s_27d58cea3847b9::t_b4b37498cdbf60 2753-2755,2775-2777,2901,2919,2924-2927,2929,2951-2953
+apps/server/cloudflare/transactions/contract.ts
+  s_27d58cea3847b9::t_579873d579a50e 144,148,154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ecc4cb56dcc22a353fd86f5af8ab6ac6b5f3874",
+  "prompts": {},
+  "sessions": {
+    "s_27d58cea3847b9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a4dd-5e5f-7ab2-ba87-a50b8657cdff",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

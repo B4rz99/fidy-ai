@@ -1,3 +1,4 @@
+import { captureRecoveryNativeObserver } from "../recovery-lifecycle/operations";
 import { Effect, Layer, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 
@@ -7,9 +8,18 @@ const notModifiedStatus = 304;
 const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
 
 /** Native cancellation can remain pending after the local reader is no longer owned. */
-const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>): Response => {
+type Observe = ReturnType<typeof captureRecoveryNativeObserver>;
+
+type BodyOwnership = Readonly<{
+  response: Response;
+  signal: Option.Option<AbortSignal>;
+  observe: Observe;
+}>;
+const ownResponseBody = ({ response, signal, observe }: BodyOwnership): Response => {
   if (response.body === null) return response;
   const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
+  const settled = Promise.withResolvers<void>();
+  observe(() => settled.promise).catch(() => undefined);
   let released = false;
   const release = (): void => {
     if (released) return;
@@ -19,7 +29,7 @@ const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>)
   };
   const cancel = (): void => {
     if (released) return;
-    reader.cancel().catch(() => undefined);
+    observe(() => reader.cancel()).then(settled.resolve, settled.reject);
     release();
   };
   if (Option.isSome(signal)) {
@@ -28,21 +38,21 @@ const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>)
   }
   if (noBodyStatuses.has(response.status)) {
     cancel();
-    return new Response(null, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    });
+    return new Response(null, response);
   }
   const body = new ReadableStream<Uint8Array>(
     {
-      pull: (controller): Promise<void> =>
-        reader
-          .read()
+      pull: (controller): Promise<void> => {
+        if (released) {
+          controller.close();
+          return Promise.resolve();
+        }
+        return observe(() => reader.read())
           .then((chunk) => {
             if (released) return;
             if (chunk.done) {
               release();
+              settled.resolve();
               controller.close();
             } else {
               controller.enqueue(Schema.decodeUnknownSync(Schema.Uint8Array)(chunk.value));
@@ -52,26 +62,27 @@ const ownResponseBody = (response: Response, signal: Option.Option<AbortSignal>)
             if (released) return;
             cancel();
             controller.error(error);
-          }),
+          });
+      },
       cancel,
     },
     { highWaterMark: 0 }
   );
-  return new Response(body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  });
+  return new Response(body, response);
 };
 
-const ownedNativeFetch = (native: typeof fetch): typeof fetch =>
-  Object.assign(
+const ownedNativeFetch = (native: typeof fetch): typeof fetch => {
+  const observe = captureRecoveryNativeObserver();
+  return Object.assign(
     (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
-      native(input, init).then((value) =>
-        ownResponseBody(value, Option.fromNullishOr(init?.signal))
+      observe(() =>
+        native(input, init).then((response) =>
+          ownResponseBody({ response, signal: Option.fromNullishOr(init?.signal), observe })
+        )
       ),
     { preconnect: native.preconnect }
   );
+};
 
 /** Resolve the caller's native transport for every request while retaining local body ownership. */
 export const OutboundHttpLive = HttpClient.layerMergedContext(

@@ -17,6 +17,7 @@ const compositionRoots = new Set([
   "cloudflare/release-smoke-worker.ts",
   "cloudflare/recovery-lifecycle/concurrency.test-fixture.ts",
   "cloudflare/recovery-lifecycle/queued-worker.test-fixture.ts",
+  "cloudflare/recovery-lifecycle/outbound-worker.test-fixture.ts",
   "cloudflare/recovery-lifecycle/entry.test.ts",
   "cloudflare/recovery-lifecycle/drain.test.ts",
   "cloudflare/core-worker.test-fixture.ts",

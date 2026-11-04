@@ -34,6 +34,9 @@ const setup = Effect.gen(function* () {
                   AuthoritativeSqliteStore: { type: "durable-object", storage: "sqlite" },
                 },
                 env: {
+                  DB: { type: "d1", id: "sqlite-adapter-source" },
+                  SQLITE_STORE_EPOCH: { type: "text", value: "fixture" },
+                  SQLITE_STORE_NAMESPACE_ID: { type: "text", value: "native-fixture" },
                   SQLITE_STORE_MANIFEST: { type: "text", value: "fixture" },
                   STORE: {
                     type: "durable-object",
@@ -257,4 +260,75 @@ it.live("retains native CHECK provenance and refuses a trigger forging a child a
       reason: "unavailable",
     });
   })
+);
+
+it.live("uses exactly one selected store and refuses missing, competing or inactive bindings", () =>
+  Effect.gen(function* () {
+    const runtime = yield* setup;
+    for (const path of ["missing", "both", "inactive"]) {
+      const refused = yield* Effect.tryPromise(() =>
+        runtime.dispatchFetch(`https://proof.internal/target/${path}`)
+      );
+      expect(refused.status).toBe(503);
+    }
+    const stored = yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("https://proof.internal/target/store")
+    );
+    expect(stored.status).toBe(200);
+    expect(yield* Effect.tryPromise(() => stored.json())).toEqual({ value: "one-target" });
+    const original = yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("https://proof.internal/inspect-d1")
+    );
+    expect(yield* Effect.tryPromise(() => original.json())).toBeNull();
+    const d1 = yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("https://proof.internal/target/d1")
+    );
+    expect(d1.status).toBe(200);
+  })
+);
+
+it.live(
+  "closes native SQL admission without claiming whole-operation drain and restricts control queries",
+  () =>
+    Effect.gen(function* () {
+      const runtime = yield* setup;
+      const call = (path: string, body: Schema.Json): Effect.Effect<unknown, Cause.UnknownError> =>
+        Effect.tryPromise(() =>
+          runtime.dispatchFetch(`https://proof.internal${path}`, {
+            method: "POST",
+            body: encodeJson(body),
+          })
+        ).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())));
+      const query = { kind: "batch", statements: [{ sql: "SELECT 42 AS retained", params: [] }] };
+      expect(
+        yield* call("/control/query", { activationId: "activation", epoch: "fixture", query })
+      ).toEqual({ kind: "refused", reason: "inactive" });
+      expect(yield* call("/control/close", { activationId: "activation", epoch: "stale" })).toEqual(
+        { kind: "refused", reason: "inactive" }
+      );
+      const closed = yield* call("/control/close", {
+        activationId: "activation",
+        epoch: "fixture",
+      });
+      expect(closed).toMatchObject({
+        admission: "Closed",
+        activationId: "activation",
+        queryLeases: 0,
+        releaseBarrier: "Unqualified",
+        target: { namespaceId: "native-fixture", manifest: "fixture", epoch: "fixture" },
+      });
+      expect(
+        yield* call("/control/close", { activationId: "activation", epoch: "fixture" })
+      ).toEqual(closed);
+      expect(
+        yield* call("/control/close", { activationId: "different", epoch: "fixture" })
+      ).toEqual({ kind: "refused", reason: "inactive" });
+      expect(yield* call("/rpc", query)).toEqual({ kind: "refused", reason: "closed" });
+      expect(
+        yield* call("/control/query", { activationId: "different", epoch: "fixture", query })
+      ).toEqual({ kind: "refused", reason: "inactive" });
+      expect(
+        yield* call("/control/query", { activationId: "activation", epoch: "fixture", query })
+      ).toMatchObject({ kind: "batch", results: [{ results: [{ retained: 42 }] }] });
+    })
 );

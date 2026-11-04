@@ -46,11 +46,17 @@ const receive = (candidate: unknown): SqliteStoreReply => {
   return reply;
 };
 const send =
-  (configuration: Readonly<{ store: SqliteStoreBinding; manifest: string }>) =>
+  (configuration: Readonly<{ store: SqliteStoreBinding; manifest: string; epoch: string }>) =>
   (input: unknown): Promise<SqliteStoreReply> =>
     Promise.resolve()
       .then(() => Schema.decodeUnknownSync(SqliteStoreQuery)(input))
-      .then((query) => configuration.store.query({ manifest: configuration.manifest, query }))
+      .then((query) =>
+        configuration.store.query({
+          manifest: configuration.manifest,
+          epoch: configuration.epoch,
+          query,
+        })
+      )
       .then(receive);
 const rawReply = (reply: SqliteStoreReply, names: boolean): unknown => {
   if (reply.kind !== "raw") return unavailable();
@@ -113,7 +119,7 @@ const statements = (
 };
 
 export const remoteDatabase = (
-  input: Readonly<{ store: SqliteStoreBinding; manifest: string }>
+  input: Readonly<{ store: SqliteStoreBinding; manifest: string; epoch: string }>
 ): D1Database => {
   const execute = send(input);
   const { prepare, descriptions } = statements(execute);

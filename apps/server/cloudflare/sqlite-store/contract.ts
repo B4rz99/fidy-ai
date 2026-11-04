@@ -39,6 +39,10 @@ export const SqliteStoreRequest = Schema.Struct({
     Schema.isMinLength(1),
     Schema.isMaxLength(sqliteStoreLimits.manifestCharacters)
   ),
+  epoch: Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(sqliteStoreLimits.manifestCharacters)
+  ),
   query: SqliteStoreQuery,
 });
 export type SqliteStoreRequest = typeof SqliteStoreRequest.Type;
@@ -85,10 +89,57 @@ export const SqliteStoreReply = Schema.Union([
   }),
   Schema.Struct({
     kind: Schema.Literal("refused"),
-    reason: Schema.Literals(["inactive", "invalid", "unavailable"]),
+    reason: Schema.Literals(["inactive", "invalid", "unavailable", "closed"]),
   }),
 ]);
 export type SqliteStoreReply = typeof SqliteStoreReply.Type;
 export type SqliteStoreBinding = Readonly<{
   query: (input: SqliteStoreRequest) => Promise<unknown>;
 }>;
+
+export type AuthoritativeStoreEnvironment = Partial<
+  Readonly<{
+    DB: D1Database;
+    SQLITE_STORE: Readonly<{ getByName: (name: string) => SqliteStoreBinding }>;
+    SQLITE_STORE_MANIFEST: string;
+    SQLITE_STORE_EPOCH: string;
+  }>
+>;
+
+export const SqliteStoreControlRequest = Schema.Struct({
+  activationId: SqliteStoreRequest.fields.manifest,
+  epoch: SqliteStoreRequest.fields.manifest,
+});
+export const SqliteStoreControlQuery = Schema.Struct({
+  ...SqliteStoreControlRequest.fields,
+  query: SqliteStoreQuery,
+});
+export const SqliteStoreObservation = Schema.Struct({
+  target: Schema.Struct({
+    namespaceId: Schema.String,
+    objectId: Schema.String,
+    manifest: SqliteStoreRequest.fields.manifest,
+    epoch: SqliteStoreRequest.fields.manifest,
+  }),
+  admission: Schema.Literals(["Open", "Closed"]),
+  activationId: Schema.String,
+  queryLeases: Schema.Literal(0),
+  releaseBarrier: Schema.Literal("Unqualified"),
+});
+export type SqliteStoreObservation = typeof SqliteStoreObservation.Type;
+export type SqliteStoreControlReply =
+  | SqliteStoreObservation
+  | Readonly<{ kind: "refused"; reason: "inactive" | "invalid" | "closed" }>;
+export type SqliteStoreControlBinding = Readonly<{
+  inspect: () => Promise<unknown>;
+  close: (input: typeof SqliteStoreControlRequest.Type) => Promise<unknown>;
+  controlQuery: (input: typeof SqliteStoreControlQuery.Type) => Promise<unknown>;
+}>;
+
+export type SqliteStoreEnvironment = Partial<
+  Readonly<{
+    SQLITE_STORE_MANIFEST: string;
+    SQLITE_STORE_EPOCH: string;
+    SQLITE_STORE_NAMESPACE_ID: string;
+  }>
+>;

@@ -1,24 +1,77 @@
 import { DurableObject } from "cloudflare:workers";
-import { Schema } from "effect";
-import { type SqliteStoreReply, SqliteStoreRequest } from "./contract";
+import { Option, Schema } from "effect";
+import {
+  SqliteStoreControlQuery,
+  type SqliteStoreControlReply,
+  SqliteStoreControlRequest,
+  type SqliteStoreEnvironment,
+  type SqliteStoreReply,
+  SqliteStoreRequest,
+} from "./contract";
+import { storeObservation } from "./internal/gate";
 import { executeStoreQuery } from "./internal/query";
 
-const Seal = Schema.Struct({ manifest: Schema.String, status: Schema.Literal("verified") });
-type StoreEnvironment = Partial<Readonly<{ SQLITE_STORE_MANIFEST: string }>>;
-
 /** Private binding only. Serving code has no import, restore, activation or SQL fetch endpoint. */
-export class AuthoritativeSqliteStore extends DurableObject<StoreEnvironment> {
+export class AuthoritativeSqliteStore extends DurableObject<SqliteStoreEnvironment> {
+  inspect(): SqliteStoreControlReply {
+    return this.ctx.storage.transactionSync(() =>
+      Option.getOrElse(
+        storeObservation({
+          storage: this.ctx.storage,
+          environment: this.env,
+          objectId: this.ctx.id.toString(),
+        }),
+        () => ({ kind: "refused", reason: "inactive" }) as const
+      )
+    );
+  }
+  close(candidate: unknown): SqliteStoreControlReply {
+    return this.ctx.storage.transactionSync(() => {
+      const request = Schema.decodeUnknownOption(SqliteStoreControlRequest)(candidate);
+      const observation = this.inspect();
+      if ("kind" in observation) return observation;
+      if (Option.isNone(request)) return { kind: "refused", reason: "invalid" };
+      if (
+        request.value.epoch !== observation.target.epoch ||
+        (observation.admission === "Closed" &&
+          observation.activationId !== request.value.activationId)
+      ) {
+        return { kind: "refused", reason: "inactive" };
+      }
+      this.ctx.storage.kv.put("store-admission", { phase: "Closed", ...request.value });
+      return this.inspect();
+    });
+  }
+  controlQuery(candidate: unknown): SqliteStoreReply {
+    return this.ctx.storage.transactionSync(() => {
+      const request = Schema.decodeUnknownOption(SqliteStoreControlQuery)(candidate);
+      if (Option.isNone(request)) return { kind: "refused", reason: "invalid" };
+      const observation = this.inspect();
+      if (
+        "kind" in observation ||
+        observation.admission !== "Closed" ||
+        observation.activationId !== request.value.activationId ||
+        observation.target.epoch !== request.value.epoch
+      ) {
+        return { kind: "refused", reason: "inactive" };
+      }
+      return executeStoreQuery({ storage: this.ctx.storage, candidate: request.value.query });
+    });
+  }
   query(candidate: unknown): SqliteStoreReply {
     return this.ctx.storage.transactionSync(() => {
       const request = Schema.decodeUnknownOption(SqliteStoreRequest)(candidate);
-      if (request._tag === "None") return { kind: "refused", reason: "invalid" };
-      const seal = Schema.decodeUnknownOption(Seal)(this.ctx.storage.kv.get("store-seal"));
+      if (Option.isNone(request)) return { kind: "refused", reason: "invalid" };
+      const observation = this.inspect();
       if (
-        seal._tag === "None" ||
-        seal.value.manifest !== this.env.SQLITE_STORE_MANIFEST ||
-        request.value.manifest !== this.env.SQLITE_STORE_MANIFEST
+        "kind" in observation ||
+        request.value.manifest !== observation.target.manifest ||
+        request.value.epoch !== observation.target.epoch
       ) {
         return { kind: "refused", reason: "inactive" };
+      }
+      if (observation.admission === "Closed") {
+        return { kind: "refused", reason: "closed" };
       }
       return executeStoreQuery({ storage: this.ctx.storage, candidate: request.value.query });
     });

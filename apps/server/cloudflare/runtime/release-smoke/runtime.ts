@@ -1,3 +1,4 @@
+import { withAuthoritativeStore } from "../../sqlite-store/operations";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { SmokeCompletion, SmokeExecutorEnvironment } from "./contract";
@@ -13,7 +14,7 @@ import {
 /** Native execution output is the completion receipt; only immutable release metadata is retained. */
 export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvironment, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<SmokeCompletion> {
-    const environment = this.env;
+    const environment = withAuthoritativeStore(this.env);
     const work = Effect.gen(function* () {
       const decoded = Schema.decodeUnknownOption(SmokeWork)(event.payload);
       if (Option.isNone(decoded)) return yield* new SmokeBindingFailed({ stage: "platform" });

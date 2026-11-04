@@ -1,6 +1,7 @@
+import type { AuthoritativeStoreEnvironment, SqliteStoreBinding } from "./contract";
 import { Effect, Schema } from "effect";
 import { AuthoritativeSqliteStore } from "./runtime";
-import { makeRemoteSqliteDatabase, makeSqliteDatabase } from "./operations";
+import { makeRemoteSqliteDatabase, makeSqliteDatabase, withAuthoritativeStore } from "./operations";
 
 const installProduction = (db: D1Database, request: Request): Promise<Response> =>
   Effect.runPromise(
@@ -134,23 +135,98 @@ export class ActiveStoreProof extends AuthoritativeSqliteStore {
   constructor(state: DurableObjectState, env: { SQLITE_STORE_MANIFEST: string }) {
     super(state, env);
     // Test-only bootstrap: production serving code exposes no sealing or import RPC.
-    state.storage.kv.put("store-seal", { manifest: "fixture", status: "verified" });
+    state.storage.kv.put("store-seal", {
+      manifest: "fixture",
+      epoch: "fixture",
+      status: "verified",
+    });
+    if (state.storage.kv.get("store-admission") === undefined) {
+      state.storage.kv.put("store-admission", { phase: "Open", epoch: "fixture" });
+    }
   }
 }
 export { AuthoritativeSqliteStore };
+const targetProof = (configuration: AuthoritativeStoreEnvironment): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const selected = yield* Effect.try(() => withAuthoritativeStore(configuration));
+      const { DB: db } = withAuthoritativeStore(selected);
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("CREATE TABLE target_receipts(value TEXT)"),
+          db.prepare("INSERT INTO target_receipts VALUES('one-target')"),
+        ])
+      );
+      const value = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT value FROM target_receipts").first("value")
+      );
+      return Response.json({ value });
+    }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })))
+  );
+
+type AdapterEnvironment = {
+  DB: D1Database;
+  PROOF: DurableObjectNamespace;
+  STORE: DurableObjectNamespace<ActiveStoreProof>;
+  INACTIVE: DurableObjectNamespace<AuthoritativeSqliteStore>;
+};
+const targetRequest = ({
+  env,
+  path,
+}: Readonly<{ env: AdapterEnvironment; path: string }>): Promise<Response> => {
+  const namespace = (
+    source: typeof env.STORE | typeof env.INACTIVE
+  ): { getByName: (name: string) => SqliteStoreBinding } => ({
+    getByName: (name) => ({
+      query: (input) => Promise.resolve<unknown>(source.getByName(name).query(input)),
+    }),
+  });
+  if (path === "/target/d1") return targetProof({ DB: env.DB });
+  if (path === "/target/missing") return targetProof({});
+  if (path === "/target/both") {
+    return targetProof({
+      DB: env.DB,
+      SQLITE_STORE: namespace(env.STORE),
+      SQLITE_STORE_MANIFEST: "fixture",
+      SQLITE_STORE_EPOCH: "fixture",
+    });
+  }
+  return targetProof({
+    SQLITE_STORE: namespace(path === "/target/inactive" ? env.INACTIVE : env.STORE),
+    SQLITE_STORE_MANIFEST: "fixture",
+    SQLITE_STORE_EPOCH: "fixture",
+  });
+};
+const controlRequest = ({
+  env,
+  request,
+  path,
+}: Readonly<{ env: AdapterEnvironment; request: Request; path: string }>): Promise<Response> => {
+  const store = env.STORE.getByName("store");
+  if (path === "/control/inspect") {
+    return Promise.resolve<unknown>(store.inspect()).then(Response.json);
+  }
+  return request
+    .json()
+    .then<unknown>((input) =>
+      path === "/control/close" ? store.close(input) : store.controlQuery(input)
+    )
+    .then(Response.json);
+};
 export default {
-  fetch: (
-    request: Request,
-    env: {
-      PROOF: DurableObjectNamespace;
-      STORE: DurableObjectNamespace<ActiveStoreProof>;
-      INACTIVE: DurableObjectNamespace<AuthoritativeSqliteStore>;
-    }
-  ): Promise<Response> => {
+  fetch: (request: Request, env: AdapterEnvironment): Promise<Response> => {
     const path = new URL(request.url).pathname;
+    if (path.startsWith("/control/")) return controlRequest({ env, request, path });
+    if (path.startsWith("/target/")) return targetRequest({ env, path });
+    if (path === "/inspect-d1") {
+      return env.DB.prepare("SELECT name FROM sqlite_master WHERE name='target_receipts'")
+        .first()
+        .then(Response.json);
+    }
     if (path === "/remote") {
       const db = makeRemoteSqliteDatabase({
         manifest: "fixture",
+        epoch: "fixture",
         store: {
           query: (input) => Promise.resolve<unknown>(env.STORE.getByName("store").query(input)),
         },
@@ -162,9 +238,11 @@ export default {
       return request
         .json()
         .then<unknown>((body) =>
-          store
-            .getByName("store")
-            .query({ manifest: request.headers.get("x-store-manifest") ?? "fixture", query: body })
+          store.getByName(request.headers.get("x-store-object") ?? "store").query({
+            manifest: request.headers.get("x-store-manifest") ?? "fixture",
+            epoch: request.headers.get("x-store-epoch") ?? "fixture",
+            query: body,
+          })
         )
         .then(Response.json);
     }

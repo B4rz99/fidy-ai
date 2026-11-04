@@ -13,7 +13,7 @@ import {
   DashboardUnavailable,
   DashboardView,
 } from "./contract";
-import { renderHtml } from "./internal/html";
+import { renderHtml } from "~/shell/dashboard/internal/html";
 import { renderDashboardView as render } from "~/shell/dashboard/internal/presentation";
 
 const decodeDashboardView = Schema.decodeEffect(Schema.toType(DashboardView));

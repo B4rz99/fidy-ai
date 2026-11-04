@@ -232,8 +232,8 @@ preserving unsaved drafts without showing stale financial results. Successful ed
 same Dashboard resource. Existing guarded reads, authorization, auditing and recovery checks remain
 in force for both representations; this topology does not remove R2 checks or claim one D1 trip.
 
-The mounted edit module owns serialized submission, pending placement projection and canonical
-reread recovery. Uncertain or missing-Widget outcomes discard unsent edits and block new edits
+The mounted edit module owns immediate single-in-flight submission with observed revisions, pending
+placement projection and canonical reread recovery. Uncertain or missing-Widget outcomes block new edits
 until an explicit successful canonical refresh. Route departure discards unsent edits; an
 already-sent mutation may have committed. Presentation owns local drafts and drag mechanics.
 Budget Widget configuration keeps only the selected Widget identity and local choice in React;

@@ -38,11 +38,14 @@ const InitializeDashboard = ({
       ) : null}
       <Button
         disabled={state.waiting}
-        onClick={() =>
-          initialize().then((exit) => {
-            if (Exit.isSuccess(exit)) onRefresh();
-          })
-        }
+        onClick={() => {
+          Effect.runFork(
+            Effect.tryPromise(() => initialize()).pipe(
+              Effect.orDie,
+              Effect.tap((exit) => (Exit.isSuccess(exit) ? Effect.sync(onRefresh) : Effect.void))
+            )
+          );
+        }}
       >
         Crear tablero
       </Button>

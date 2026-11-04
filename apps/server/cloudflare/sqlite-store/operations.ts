@@ -1,5 +1,9 @@
 import { resolveDatabase } from "./internal/target";
-import type { AuthoritativeStoreEnvironment, SqliteStoreBinding } from "./contract";
+import type {
+  AuthoritativeStoreEnvironment,
+  SqliteStoreBinding,
+  SqliteStoreControlBinding,
+} from "./contract";
 import { remoteDatabase } from "./internal/remote";
 import { sqliteDatabase, sqliteDatabaseUnit } from "./internal/database";
 
@@ -33,3 +37,21 @@ export const withAuthoritativeStore = <Environment extends AuthoritativeStoreEnv
   SQLITE_STORE_MANIFEST: undefined,
   SQLITE_STORE_EPOCH: undefined,
 });
+
+/** An operator resumes only the exact closed activation; ordinary request SQL remains fenced. */
+export const makeRecoverySqliteDatabase = (
+  input: Readonly<{
+    store: Pick<SqliteStoreControlBinding, "controlQuery">;
+    activationId: string;
+    epoch: string;
+    manifest: string;
+  }>
+): D1Database =>
+  remoteDatabase({
+    manifest: input.manifest,
+    epoch: input.epoch,
+    store: {
+      query: ({ query }) =>
+        input.store.controlQuery({ activationId: input.activationId, epoch: input.epoch, query }),
+    },
+  });

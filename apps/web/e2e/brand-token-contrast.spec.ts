@@ -631,6 +631,7 @@ test(`Active Access control borders are distinguishable without changing focus o
   ));
 
 const dashboardView = {
+  revision: 1,
   title: "Tablero de ejemplo",
   context: {
     serviceMarket: "CO",
@@ -663,7 +664,10 @@ const checkDashboard = Effect.fnUntraced(function* (page: Page, theme: Theme) {
       route.fulfill({ contentType: "application/json", body: response([]) })
     )
   );
-  yield* Effect.tryPromise((signal) => page.goto("/app/dashboard", { signal }));
+  yield* Effect.tryPromise((signal) => page.goto("/app/dashboard?customize=1", { signal }));
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: "Guardar", exact: true }).press("Enter", { signal })
+  );
   const personalize = page.getByRole("button", { name: "Personalizar", exact: true });
   yield* Effect.tryPromise((signal) =>
     expect(personalize).toHaveCSS("border-left-color", palette[theme].control, { signal })

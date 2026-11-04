@@ -81,7 +81,7 @@ performance targets.
 ```sh
 bun run --cwd apps/web test src/features/dashboard
 bun run --cwd apps/server test:core src/core/dashboard --coverage.enabled=false
-CLI_ACCEPTANCE_MODE=dashboard bun run --cwd apps/web test:browser --config playwright.dashboard.config.ts
+CLI_ACCEPTANCE_MODE=dashboard bun --cwd apps/web --bun playwright test --config playwright.dashboard.config.ts
 bun run --cwd apps/web test:browser dashboard-live-title.spec.ts --workers=1
 bun run --cwd apps/web test:browser dashboard-editing.spec.ts --workers=1
 bun run --cwd apps/server test:cloudflare cloudflare/dashboard --maxWorkers=1

@@ -1,3 +1,7 @@
+import {
+  type RecoveryVersionFloorWorker,
+  retireRecoveryVersionFloor,
+} from "./recovery-version-floor";
 import type { RecoveryProbeIdentity } from "./recovery-runtime-proof";
 import { inspectRecoveryNamespace } from "./recovery-provider";
 import type { RecoveryProviderTarget } from "./recovery-provider-contract";
@@ -324,6 +328,27 @@ export const inspectRecoveryTarget = Effect.fn(function* (
     read,
     readRuntime,
     probe,
+  });
+});
+
+/** Retires bounded inactive versions under the existing serialized release authority; never a drain acknowledgement. */
+export const retireRecoveryVersions = Effect.fn(function* (
+  env: Readonly<{ account: string; token: string }>,
+  worker: RecoveryVersionFloorWorker,
+  client: HttpClient.HttpClient
+) {
+  const origin = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.account)}`;
+  const headers = { authorization: `Bearer ${env.token}` };
+  return yield* retireRecoveryVersionFloor({
+    worker,
+    read: (path) =>
+      providerJson(HttpClientRequest.get(`${origin}${path}`, { headers })).pipe(
+        Effect.provideService(HttpClient.HttpClient, client)
+      ),
+    remove: (path) =>
+      providerJson(HttpClientRequest.delete(`${origin}${path}`, { headers }), true).pipe(
+        Effect.provideService(HttpClient.HttpClient, client)
+      ),
   });
 });
 

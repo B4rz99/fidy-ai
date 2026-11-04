@@ -115,6 +115,7 @@ const deliverCanonicalFault = (
   let residency = input.residencies.get(input.name);
   if (residency === undefined) {
     residency = makeMcpResidency({
+      dashboard: Option.none(),
       userId: input.name,
       db: input.db,
       enqueueCanonicalWork: input.enqueueCanonicalWork,

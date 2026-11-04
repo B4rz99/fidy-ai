@@ -1185,14 +1185,21 @@ const supportsCanonicalSnapshot = (operation: CatalogOperation): boolean =>
 
 /** Native snapshots validate and hash request material before entering the database transaction. */
 export const prepareCanonicalSnapshotMaterial = (
-  input: Readonly<{ operation: CatalogOperation; request: Request }>
+  input: Readonly<{ operation: CatalogOperation }> &
+    (
+      | Readonly<{ request: Request }>
+      | Readonly<{ canonicalInput: Schema.Json; retryKey: Option.Option<unknown> }>
+    )
 ): Effect.Effect<CanonicalSnapshotMaterial, CanonicalAdmissionUnavailable> =>
   Effect.gen(function* () {
     if (!supportsCanonicalSnapshot(input.operation)) {
       return yield* new CanonicalAdmissionUnavailable({ cause: "Unsupported native snapshot" });
     }
     const valid = yield* validatedCanonicalInput(input);
-    const wire = Option.fromNullishOr(input.request.headers.get("Fidy-Retry-Key"));
+    const wire =
+      "request" in input
+        ? Option.fromNullishOr(input.request.headers.get("Fidy-Retry-Key"))
+        : input.retryKey;
     const key = Option.flatMap(wire, Schema.decodeUnknownOption(CanonicalRetryKey));
     const retryKey = Option.isSome(key)
       ? Option.some(yield* cryptoHash(key.value))

@@ -1252,3 +1252,31 @@ it.live(
       ).toEqual({ count: 1 });
     })
 );
+
+it.live("accepts the provider's actual private Dashboard RPC binding without an HTTP facade", () =>
+  Effect.gen(function* () {
+    const native = yield* io(() => storage.acquireDocument("Live"));
+    const fixture = yield* setupOn(() => Promise.resolve(native));
+    const result = yield* io(() =>
+      native.namespace.getByName("authoritative-v1").dashboard({
+        manifest: "fixture",
+        epoch: "fixture",
+        mode: "bound",
+        request: request(),
+      })
+    );
+    expect(result).toMatchObject({
+      kind: "response",
+      response: { status: 404, body: { error: { code: "dashboard_uninitialized" } } },
+    });
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "SELECT count(*) AS count FROM audit_entries WHERE operation='dashboard.getDashboardView'"
+          )
+          .first()
+      )
+    ).toEqual({ count: 1 });
+  })
+);

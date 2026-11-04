@@ -302,7 +302,7 @@ export const reconcileErasureAdmissions = (
 
 /** Control-only copying of an independently closed source retains its retired generation; ordinary data access must use the fresh external fence. */
 export const prepareClosedSourceGenerationFence = (
-  input: Readonly<{ db: D1Database; generation: typeof ErasureGeneration.Type }>
+  input: Readonly<{ db: D1Database; generation: ErasureGeneration }>
 ): D1PreparedStatement => generationAssertion(input);
 /** Target-only frozen import verification; source generation and provider claims remain unchanged. */
 export const verifyImportedErasureCheckpoint = (

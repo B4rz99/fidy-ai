@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "53615dc8021ba89156a6541e14ec279d5ea5ec60d87579c5fb239025d1e68a69";
+const expectedEdgePolicyDigest = "ed33ed245e0233a44a4d064c5de04dbcba82d5c6c36932aa2295be464ac5e088";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/erasure/runtime.ts", import.meta.url)
@@ -24,6 +24,9 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/internal/budget-audit.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/budget-latches.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/internal/bound-workspace.ts", import.meta.url)

@@ -56,6 +56,7 @@ import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   Budget,
+  type BudgetCrossing,
   BudgetId,
   BudgetStatusReport,
   BudgetWorkspace,
@@ -1632,6 +1633,174 @@ const grantBudgetDelivery = (
     const grant = yield* findProactivityConsentGrant(context);
     return Option.getOrThrow(grant).id;
   });
+
+it("reconciles many Budget latches with bounded trips and preserves frozen crossing facts", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedCrossingConsent(db);
+      const response = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/budgets", "POST", payload()))
+      );
+      expect(response.status).toBe(201);
+      const budget = yield* Schema.decodeUnknownEffect(Created)(
+        yield* Effect.tryPromise(() => response.json())
+      );
+      const current = DateTime.nowUnsafe().epochMilliseconds;
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM seq WHERE n<30)
+          INSERT INTO categories(id,label,display_order)
+          SELECT printf('10000000-0000-4000-8000-%012d',n+8000),'Latch fixture '||n,n+8000 FROM seq`),
+          db
+            .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM seq WHERE n<30)
+          INSERT INTO budgets(id,user_id,category_id,currency,cap,created_at_ms,updated_at_ms)
+          SELECT printf('20000000-0000-4000-8000-%012d',n+8000),?,
+            printf('10000000-0000-4000-8000-%012d',n+8000),'COP','100',?,? FROM seq`)
+            .bind(users[0], current, current),
+        ])
+      );
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      const observed = observeRetentionCost(db);
+      const capturedResponse = yield* Effect.tryPromise(() =>
+        send(
+          observed.database,
+          request(0, "/transactions", "POST", {
+            money: { amount: "110", currency: "COP" },
+            direction: "outflow",
+            categoryId: category,
+            occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+          })
+        )
+      );
+      expect(capturedResponse.status).toBe(201);
+      const captured = yield* Schema.decodeUnknownEffect(Captured)(
+        yield* Effect.tryPromise(() => capturedResponse.json())
+      );
+      expect(encodeMoneyAmount(captured.data.money.amount)).toBe("110");
+      expect(observed.roundTrips()).toBeLessThanOrEqual(20);
+      const input = {
+        db,
+        userId: UserId.make(users[0]),
+        budgetId: budget.data.id,
+        period: deriveCurrentBudgetMonth({
+          now: DateTime.nowUnsafe(),
+          timeZone: IanaTimeZone.make("America/Bogota"),
+        }),
+      };
+      const crossings = yield* readBudgetCrossings(input);
+      expect(crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
+      expect(crossings.map((crossing) => encodeMoneyAmount(crossing.spent.amount))).toEqual([
+        "110",
+        "110",
+      ]);
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect(yield* readBudgetCrossings(input)).toEqual(crossings);
+      expect(yield* readBudgetCrossings({ ...input, userId: UserId.make(users[1]) })).toEqual([]);
+    })
+  ));
+
+it.each(["rejected", "unacknowledged"] as const)(
+  "retains retryable Budget work after a %s period commit without duplicating crossings",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* seedCrossingConsent(db);
+        const budgets: Array<Budget> = [];
+        for (const categoryId of [category, "10000000-0000-4000-8000-000000000001"]) {
+          const response = yield* Effect.tryPromise(() =>
+            send(db, request(0, "/budgets", "POST", { ...payload(), categoryId }))
+          );
+          expect(response.status).toBe(201);
+          const created = yield* Schema.decodeUnknownEffect(Created)(
+            yield* Effect.tryPromise(() => response.json())
+          );
+          budgets.push(created.data);
+        }
+        const now = DateTime.nowUnsafe();
+        yield* Effect.tryPromise(() =>
+          db.batch(
+            budgets.map((budget, index) =>
+              db
+                .prepare(
+                  "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES(?,?,'110','COP','outflow',?,?,?)"
+                )
+                .bind(
+                  `30000000-0000-4000-8000-00000000090${index}`,
+                  users[0],
+                  budget.categoryId,
+                  now.epochMilliseconds,
+                  now.epochMilliseconds
+                )
+            )
+          )
+        );
+        if (failure === "rejected") {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "CREATE TRIGGER reject_period_latch BEFORE INSERT ON budget_month_latches WHEN NEW.budget_id=(SELECT id FROM budgets ORDER BY category_id DESC LIMIT 1) BEGIN SELECT RAISE(ABORT,'reject_period_latch'); END"
+              )
+              .run()
+          );
+        }
+        let lostAcknowledgment = false;
+        const failing = new Proxy(db, {
+          get(target, key): unknown {
+            if (key === "batch" && failure === "unacknowledged") {
+              return <RowType>(
+                statements: Array<D1PreparedStatement>
+              ): Promise<Array<D1Result<RowType>>> =>
+                target.batch<RowType>(statements).then((result): Array<D1Result<RowType>> => {
+                  if (!lostAcknowledgment && result.some((item) => item.meta.rows_written > 0)) {
+                    lostAcknowledgment = true;
+                    throw new Error("Period commit acknowledgment lost");
+                  }
+                  return result;
+                });
+            }
+            const value: unknown = Reflect.get(target, key, target);
+            if (typeof value === "function") {
+              const bound: unknown = value.bind(target);
+              return bound;
+            }
+            return value;
+          },
+        });
+        expect(yield* evaluateBudgetAlerts({ db: failing, userId: users[0] })).toBe(false);
+        expect(lostAcknowledgment).toBe(failure === "unacknowledged");
+        const period = deriveCurrentBudgetMonth({
+          now,
+          timeZone: IanaTimeZone.make("America/Bogota"),
+        });
+        const frozen = new Map<string, ReadonlyArray<BudgetCrossing>>();
+        for (const budget of budgets) {
+          const input = { db, userId: UserId.make(users[0]), budgetId: budget.id, period };
+          const before = yield* readBudgetCrossings(input);
+          frozen.set(budget.id, before);
+          expect(before.map((crossing) => crossing.threshold)).toEqual(
+            failure === "rejected" ? [] : [80, 100]
+          );
+        }
+        if (failure === "rejected") {
+          yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_period_latch").run());
+        }
+        expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+        for (const budget of budgets) {
+          const input = { db, userId: UserId.make(users[0]), budgetId: budget.id, period };
+          const crossings = yield* readBudgetCrossings(input);
+          expect(crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
+          if (failure === "unacknowledged") expect(crossings).toEqual(frozen.get(budget.id));
+          expect(crossings.map((crossing) => encodeMoneyAmount(crossing.spent.amount))).toEqual([
+            "110",
+            "110",
+          ]);
+          expect(yield* readBudgetCrossings(input)).toEqual(crossings);
+        }
+      })
+    )
+);
 
 it("freezes both crossing facts before later corrections and isolates them from a foreign User", () =>
   Effect.runPromise(

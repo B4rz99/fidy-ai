@@ -1,18 +1,35 @@
 import { Effect, Option, Schema } from "effect";
-import { ErasureUnavailable } from "../../erasure-store/contract";
+import { ErasureGeneration, ErasureUnavailable } from "../../erasure-store/contract";
 import { RecoveryAdmissionState, RecoverySourceTarget, RecoveryTarget } from "../contract";
 
+const maximumCheckpointBytes = 64;
+const maximumCheckpointEtagBytes = 128;
+const SourceFence = Schema.Union([
+  Schema.Struct({ state: Schema.Literal("Unplanned") }),
+  Schema.Struct({
+    state: Schema.Literal("Prepared"),
+    from: ErasureGeneration,
+    retired: Schema.String.check(Schema.isUUID()),
+    registryCheckpoint: Schema.Struct({
+      value: Schema.String.check(Schema.isMaxLength(maximumCheckpointBytes)),
+      etag: Schema.String.check(Schema.isBetweenLength(1, maximumCheckpointEtagBytes)),
+    }),
+  }),
+]);
 export const ActivationRecord = Schema.Struct({
   activationId: Schema.String,
   admissionObjectId: RecoveryAdmissionState.fields.objectId,
   source: RecoverySourceTarget,
   serving: RecoveryTarget,
   cursor: Schema.String,
+  sourceFence: SourceFence,
   phase: Schema.Literals([
     "AwaitingDrain",
     "ReconcilingAdmissions",
     "AwaitingOwnerDrain",
     "AwaitingProvider",
+    "RetiringSource",
+    "SourceRetired",
   ]),
   providerIsolation: Schema.Literal("Unqualified"),
 });

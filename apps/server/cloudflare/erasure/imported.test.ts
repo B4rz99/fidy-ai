@@ -1,3 +1,4 @@
+import { observeErasureRecoveryDrain } from "./operations";
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { afterAll, expect } from "vitest";
@@ -104,6 +105,10 @@ it.effect("verifies retained sealed erasures without resetting independent custo
           .bind(reference, eventId),
       ])
     );
+    expect(yield* observeErasureRecoveryDrain({ db: native.db })).toEqual({
+      pending: 0,
+      externalPending: 1,
+    });
     const generation = yield* Effect.tryPromise(() =>
       native.bucket.put("recovery/generation", finalGeneration)
     );

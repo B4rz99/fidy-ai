@@ -150,7 +150,7 @@ const writeCheckpoint = (
   input: CandidateInput &
     Readonly<{
       bucket: R2Bucket;
-      expected: { generation: typeof ErasureGeneration.Type; etag: string };
+      expected: { generation: ErasureGeneration; etag: string };
       session: Session;
       page: R2Objects;
       ready: boolean;

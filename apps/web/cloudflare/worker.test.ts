@@ -22,7 +22,9 @@ describe("same-origin Dashboard document transport", () => {
         for (const path of ["/insights/recurring/example", "/UPGRADE", "/ruta-inexistente"]) {
           const response = yield* Effect.tryPromise(() =>
             webWorker.fetch(
-              new Request(`${appOrigin}${path}`, { headers: { accept: "text/html" } }),
+              new Request(`${appOrigin}${path}`, {
+                headers: { accept: "text/html", "sec-fetch-dest": "document" },
+              }),
               {
                 ASSETS: assets,
                 BROWSER_ORIGIN: appOrigin,
@@ -117,7 +119,7 @@ describe("same-origin Dashboard document transport", () => {
         yield* Effect.tryPromise(() =>
           webWorker.fetch(
             new Request(`${appOrigin}/dashboard/view`, {
-              headers: { authorization: "Bearer explicit-pat", cookie },
+              headers: { authorization: "Bearer explicit-pat", cookie, accept: "text/html" },
             }),
             {
               ASSETS: assets,

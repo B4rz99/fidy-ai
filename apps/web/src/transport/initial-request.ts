@@ -1,6 +1,4 @@
-import { BrowserSessionBinding } from "@fidy/server/browser-bootstrap";
-import { Option, Schema } from "effect";
-import { takeInitialDocumentBootstrap } from "./initial-dashboard";
+import { takeInitialDocumentBootstrap } from "./initial-dashboard-document";
 import { browserSessionBindingPath } from "@fidy/server/browser-transport";
 
 type ResponseOutcome = Promise<PromiseSettledResult<Response>>;
@@ -80,25 +78,28 @@ export const beginInitialBrowserRequest = ({
   const url = new URL(identity);
   if (context) url.searchParams.set("context", transactions ? "transactions" : "application");
   const bootstrap = takeInitialDocumentBootstrap();
-  const result = Option.match(bootstrap, {
-    onNone: () => send(url.href, lifetime.signal, nativeFetch),
-    onSome: (value) => preparedResponse(Schema.encodeSync(BrowserSessionBinding)(value)),
-  });
-  // Recheck the current cookie AFTER the private response, concurrently with its bounded decoding.
+  const result =
+    bootstrap._tag === "Missing"
+      ? send(url.href, lifetime.signal, nativeFetch)
+      : preparedResponse(bootstrap.body);
+  // Network context rechecks the cookie after its response; an audited document carries both
+  // observations from the same native transaction. Both pass through ordinary response codecs.
   const recheck = context
-    ? result.then((outcome): ResponseOutcome =>
-        outcome.status === "fulfilled" &&
-        outcome.value.status === successfulResponseStatus &&
-        lifetime.isCurrent()
-          ? Option.match(bootstrap, {
-              onNone: () => send(identity, lifetime.signal, nativeFetch),
-              onSome: (value) => preparedResponse({ binding: value.binding }),
-            })
-          : Promise.resolve({
-              status: "rejected",
-              reason: new DOMException("No prepared recheck", "AbortError"),
-            })
-      )
+    ? result.then((outcome): ResponseOutcome => {
+        if (
+          outcome.status === "fulfilled" &&
+          outcome.value.status === successfulResponseStatus &&
+          lifetime.isCurrent()
+        ) {
+          return bootstrap._tag === "Missing"
+            ? send(identity, lifetime.signal, nativeFetch)
+            : preparedResponse(bootstrap.body);
+        }
+        return Promise.resolve({
+          status: "rejected",
+          reason: new DOMException("No prepared recheck", "AbortError"),
+        });
+      })
     : undefined;
   const claimed = new Set<string>();
   let recheckUsable = true;
@@ -143,5 +144,8 @@ export const initialRequestFetch = (initial: InitialBrowserRequest): typeof glob
   return Object.assign(preparedFetch, nativeFetch);
 };
 
-const preparedResponse = (value: unknown): ResponseOutcome =>
-  Promise.resolve({ status: "fulfilled", value: Response.json(value) });
+const preparedResponse = (body: string): ResponseOutcome =>
+  Promise.resolve({
+    status: "fulfilled",
+    value: new Response(body, { headers: { "content-type": "application/json" } }),
+  });

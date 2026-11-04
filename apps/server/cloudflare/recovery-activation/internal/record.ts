@@ -1,3 +1,4 @@
+import { ErasureFrozenLedgerProgress } from "../../erasure/contract";
 import { Effect, Option, Schema } from "effect";
 import { ErasureGeneration, ErasureUnavailable } from "../../erasure-store/contract";
 import { RecoveryAdmissionState, RecoverySourceTarget, RecoveryTarget } from "../contract";
@@ -23,6 +24,10 @@ export const ActivationRecord = Schema.Struct({
   serving: RecoveryTarget,
   cursor: Schema.String,
   sourceFence: SourceFence,
+  sourceLedger: Schema.Union([
+    Schema.Struct({ state: Schema.Literal("NotStarted") }),
+    ErasureFrozenLedgerProgress,
+  ]),
   phase: Schema.Literals([
     "AwaitingDrain",
     "ReconcilingAdmissions",
@@ -30,6 +35,8 @@ export const ActivationRecord = Schema.Struct({
     "AwaitingProvider",
     "RetiringSource",
     "SourceRetired",
+    "ObservingSourceLedger",
+    "AwaitingFinalBarrier",
   ]),
   providerIsolation: Schema.Literal("Unqualified"),
 });

@@ -179,3 +179,29 @@ await test("shared acceptance fixtures remain unavailable to production", () => 
     assert.equal(inspect(source, fixture).length, 0);
   }
 });
+
+await test("browser observation support remains fixture-only without granting construction authority", () => {
+  const observer = "cloudflare/sqlite-store/assessment-observation.test-fixture.ts";
+  const document = "cloudflare/browser-assessment-native.test-fixture.ts";
+  for (const { from, to } of [
+    { from: "../web/scripts/serve-preview.ts", to: observer },
+    { from: "cloudflare/browser-acceptance-preview.ts", to: observer },
+    { from: "cloudflare/browser-acceptance-preview.ts", to: document },
+  ]) {
+    assert.deepEqual(inspect(from, to), []);
+  }
+  for (const from of [
+    "cloudflare/core-worker.ts",
+    "../web/cloudflare/worker.ts",
+    "../web/scripts/another-preview.ts",
+  ]) {
+    for (const to of [observer, document]) {
+      assert.ok(inspect(from, to).some((edge) => edge.name === "production-imports-test-code"));
+    }
+  }
+  assert.ok(
+    inspect("../web/scripts/serve-preview.ts", "cloudflare/sqlite-store/runtime.ts").some(
+      (edge) => edge.name === "runtime-outside-composition"
+    )
+  );
+});

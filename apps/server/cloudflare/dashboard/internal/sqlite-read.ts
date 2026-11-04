@@ -1,3 +1,6 @@
+import { liveOAuthAuthority } from "../../../src/shell/oauth-agents/operations";
+import { resolveCanonicalOAuthSnapshot } from "../../oauth-agents/operations";
+import type { OAuthCaller } from "../../../src/shell/oauth-agents/contract";
 import type {
   CanonicalSnapshotMaterial,
   CanonicalSnapshotResponse,
@@ -321,20 +324,21 @@ const consentRefusal = (): NativeDashboardResult => ({
     headers: transactionNoStore,
   },
 });
-const patWork = (
+const credentialWork = (
   input: Readonly<{
     read: NativeDashboardRead;
     unit: Unit;
     current: number;
-    subject: AuthorizedPAT;
+    authority: AuditAuthority;
+    activity: Option.Option<AuthorizedPAT>;
   }>
 ): Work => {
-  const authority = livePATAuthority(input);
+  const authority = input.authority;
   return {
     unit: input.unit,
     current: input.current,
     sql: input.read.storage.sql,
-    activity: Option.some(input.subject),
+    activity: input.activity,
     lookup: {
       authority,
       statement: {
@@ -379,7 +383,13 @@ const patSnapshot = (
   });
   if (subject === "unauthenticated") return finish(failure("unauthenticated").response);
   if (subject === "user_action_required") return consentRefusal();
-  const work = patWork({ read, unit, current, subject });
+  const work = credentialWork({
+    read,
+    unit,
+    current,
+    authority: livePATAuthority({ subject, current }),
+    activity: Option.some(subject),
+  });
   return finish(
     runCanonicalSnapshotAdmission({
       db: unit.database,
@@ -428,25 +438,119 @@ const readPATSnapshot = (read: NativeDashboardRead): Effect.Effect<NativeDashboa
     );
   }).pipe(Effect.orElseSucceed(unavailable));
 
+const oauthSnapshot = (
+  input: Readonly<{
+    read: NativeDashboardRead;
+    unit: Unit;
+    current: number;
+    subject: OAuthCaller;
+    prepared: CanonicalSnapshotMaterial;
+  }>
+): NativeDashboardResult => {
+  const { read, unit, current, prepared } = input;
+  const subject = resolveCanonicalOAuthSnapshot({
+    db: unit.database,
+    subject: input.subject,
+    current,
+    execute: unit.run,
+  });
+  if (subject === "unauthenticated") return failure("unauthenticated");
+  if (subject === "user_action_required") return consentRefusal();
+  const work = credentialWork({
+    read,
+    unit,
+    current,
+    authority: liveOAuthAuthority({
+      subject: { ...subject, requiredScope: Option.some("read") },
+      current,
+    }),
+    activity: Option.none(),
+  });
+  return validate({
+    kind: "response",
+    response: runCanonicalSnapshotAdmission({
+      db: unit.database,
+      caller: { _tag: "OAuth", value: subject },
+      current,
+      material: prepared,
+      execute: unit.run,
+      work: () => financialProjection(work, subject.userId, Option.none()).response,
+    }),
+  });
+};
+const readOAuthSnapshot = (read: NativeDashboardRead): Effect.Effect<NativeDashboardResult> =>
+  Effect.gen(function* () {
+    const input = read.input;
+    if (input.mode !== "oauth" || input.admission.operation !== "dashboard.getDashboardView") {
+      return unavailable();
+    }
+    const operation = yield* Effect.try(() =>
+      Option.getOrThrow(
+        Option.fromUndefinedOr(getBoundOperationCatalog().byId.get("dashboard.getDashboardView"))
+      )
+    );
+    const prepared = yield* prepareCanonicalSnapshotMaterial({
+      operation,
+      canonicalInput: input.admission.input,
+      retryKey: Option.fromUndefinedOr(input.admission.retryKey),
+    });
+    const unit = makeSqliteDatabaseUnit(read.storage);
+    const fence = yield* prepareRecoveryGenerationFence({ db: unit.database, bucket: read.bucket });
+    const services = yield* Effect.context<never>();
+    return yield* Effect.try(() =>
+      read.storage.transactionSync(() => {
+        if (!read.admitted()) throw new Error("Dashboard admission closed");
+        const current = Effect.runSyncWith(services)(Clock.currentTimeMillis);
+        if (current >= input.admission.deadlineMilliseconds) return unavailable();
+        unit.run([fence]);
+        const result = oauthSnapshot({
+          read,
+          unit,
+          current,
+          prepared,
+          subject: {
+            userId: input.admission.userId,
+            oauthConnectionId: input.admission.connectionId,
+            credentialId: input.admission.credentialId,
+            clientId: input.admission.clientId,
+            resource: input.admission.resource,
+            digest: new Uint8Array(input.admission.digest),
+            requiredScope: Option.none(),
+          },
+        });
+        if (
+          Effect.runSyncWith(services)(Clock.currentTimeMillis) >=
+          input.admission.deadlineMilliseconds
+        ) {
+          throw new Error("Dashboard handoff expired before commit");
+        }
+        return result;
+      })
+    );
+  }).pipe(Effect.orElseSucceed(unavailable));
+
+const browserSnapshotRequest = (request: Request, browserOrigin: string): boolean =>
+  request.method === "GET" &&
+  new URL(request.url).pathname === "/dashboard/view" &&
+  new URL(request.url).search === "" &&
+  request.headers.get("origin") === browserOrigin;
+
 /** No database work precedes the native unit; the external generation and cookie digest grant no reusable authority. */
 export const readAuditedSqliteDashboard = (
   read: NativeDashboardRead
 ): Effect.Effect<NativeDashboardResult> =>
   Effect.gen(function* () {
     const request = read.input.request;
-    if (read.input.mode !== "document" && request.headers.has("authorization")) {
+    const mode = read.input.mode;
+    if (mode === "oauth") return yield* readOAuthSnapshot(read);
+    if (mode !== "document" && request.headers.has("authorization")) {
       return yield* readPATSnapshot(read);
     }
-    if (
-      request.method !== "GET" ||
-      new URL(request.url).pathname !== "/dashboard/view" ||
-      new URL(request.url).search !== "" ||
-      request.headers.get("origin") !== read.browserOrigin
-    ) {
+    if (!browserSnapshotRequest(request, read.browserOrigin)) {
       return unavailable();
     }
     const material = yield* Effect.tryPromise(() =>
-      prepareBrowserSessionMaterial({ request, mode: read.input.mode })
+      prepareBrowserSessionMaterial({ request, mode })
     );
     if (Option.isNone(material)) return failure("unauthenticated");
     const unit = makeSqliteDatabaseUnit(read.storage);
@@ -459,10 +563,7 @@ export const readAuditedSqliteDashboard = (
         const lookup = currentBrowserSessionLookup({ ...material.value, current });
         unit.run([fence]);
         return formatted(
-          snapshot(
-            { unit, lookup, current, sql: read.storage.sql, activity: Option.none() },
-            read.input.mode
-          ),
+          snapshot({ unit, lookup, current, sql: read.storage.sql, activity: Option.none() }, mode),
           request
         );
       })

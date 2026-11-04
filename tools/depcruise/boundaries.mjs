@@ -110,6 +110,11 @@ const testRunner = new Set([
   "cloudflare/test-shards.test.ts",
 ]);
 const sharedTestSupport = new Set([
+  // This exact loopback host composes acceptance assets and counters; it is never a deployed Web Worker.
+  "../web/scripts/serve-preview.ts",
+  // The closed operator bridge and invocation-local counters serve browser hosts and native fixture assertions.
+  "cloudflare/browser-assessment-native.test-fixture.ts",
+  "cloudflare/sqlite-store/assessment-observation.test-fixture.ts",
   "cloudflare/openai.test-fixture.ts",
   // Downstream journeys publish real statements through the ingestion owner protocol.
   "cloudflare/ingestion/statement-publication.test-fixture.ts",

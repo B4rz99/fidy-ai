@@ -833,6 +833,7 @@ describe("native2025 residency integration", () => {
             })
           );
           const module = makeMcpResidency({
+            dashboard: Option.none(),
             userId,
             db: harness.db,
             enqueueCanonicalWork: (): Effect.Effect<Response> =>
@@ -957,6 +958,7 @@ describe("native2025 residency integration", () => {
         const observed: Array<Readonly<{ clock: Clock.Clock; current: number; deadline: number }>> =
           [];
         const module = makeMcpResidency({
+          dashboard: Option.none(),
           userId,
           db: harness.db,
           enqueueCanonicalWork: ({ admission }): Effect.Effect<Response> =>
@@ -1447,6 +1449,7 @@ describe("native2025 residency integration", () => {
                 : liveClock.sleep(duration),
           };
           const module = makeMcpResidency({
+            dashboard: Option.none(),
             db: harness.db,
             userId,
             enqueueCanonicalWork: () => Effect.die("Subscriptions cannot execute canonical work."),
@@ -1557,6 +1560,7 @@ describe("native2025 residency integration", () => {
               : live.sleep(duration),
         };
         const module = makeMcpResidency({
+          dashboard: Option.none(),
           db: harness.db,
           userId,
           enqueueCanonicalWork: () => Effect.die("Listing cannot execute canonical work."),
@@ -1626,6 +1630,7 @@ describe("native2025 residency integration", () => {
         const disposalFinished = yield* Deferred.make<void>();
         const progress: Array<string> = [];
         const config: Parameters<typeof makeMcpResidency>[0] = {
+          dashboard: Option.none(),
           db: harness.db,
           userId,
           enqueueCanonicalWork: ({ admission: work, signal }) =>

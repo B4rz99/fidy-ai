@@ -1,3 +1,7 @@
+import {
+  EngineDiagnosticPhase,
+  diagnoseEngineCursor,
+} from "./sqlite-engine-diagnostic.test-fixture";
 import { readSqliteBudgetCaps } from "../budgets/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { DashboardDocument, type ProjectedRange } from "../../src/core/dashboard/contract";
@@ -144,6 +148,17 @@ export class DashboardEngineProof {
           return new Response(null, { status: 204 });
         }
         const input = yield* Schema.decodeUnknownEffect(Read)(raw);
+        const phase = new URL(request.url).pathname.split("/")[2];
+        if (phase !== undefined) {
+          const selected = yield* Schema.decodeUnknownEffect(EngineDiagnosticPhase)(phase);
+          return yield* Effect.try(() =>
+            diagnoseEngineCursor(this.state.storage.sql, {
+              phase: selected,
+              userId: input.userId,
+            })
+          );
+        }
+        yield* Effect.logInfo("ENGINE_DIAGNOSTIC", { phase: "fold", event: "entered" });
         return yield* Effect.try(() =>
           this.state.storage.transactionSync(() => {
             this.state.storage.sql.exec("INSERT INTO engine_read_receipts DEFAULT VALUES");

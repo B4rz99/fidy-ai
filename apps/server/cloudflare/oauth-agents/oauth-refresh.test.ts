@@ -603,6 +603,7 @@ it("inherits the supplied Clock through MCP protocol callbacks when bounding can
                     yield* wait(request.json())
                   );
                   const residency = makeMcpResidency({
+                    dashboard: Option.none(),
                     userId,
                     db: fixture.db,
                     enqueueCanonicalWork: ({ admission: work }) =>

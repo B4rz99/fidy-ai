@@ -417,7 +417,7 @@ remains explicitly preserved. Zero owner work still leaves admission paused
 at `AwaitingProvider` until independent provider inventory and historical caller fencing permit
 final closure. For a closed, drained initial D1 source, a resumable R2 plan records the observed
 source marker and a distinct source-only retired marker before a native compare-and-set. The
-readiness predicate and retirement share one source transaction. Retrying an interrupted progress
+readiness predicate, global zero-writer check and retirement share one source transaction. Retrying an interrupted progress
 write reuses the same retired marker; the source is never stamped with the serving generation.
 This fence rejects delayed SQL that captured the old R2 generation, but cannot revoke historical
 restore or raw administration authority, so independent provider fencing remains required. The current operator always
@@ -441,6 +441,16 @@ or body reads remain unsettled. Any unknown native outcome permanently retains t
 an independently justified reconciliation exists; elapsed time and a local retry grant no authority.
 Known cancellation after fully settled IO can resume the independently persisted retirement plan.
 This serializes current controller work but does not qualify legacy provider or HTTP drain.
+
+After source retirement the operator observes the independent sealed ledger in bounded pages and
+persists its cursor, stable external generation/ETag, case count and hash chain in its R2 progress.
+The Erasure owner verifies exact native deletion dispositions and complete required-request
+coverage under RET, preserving custody and provider claims. Two read-only passes compare the
+required-case and native-request hash chains, so source verification never mutates the frozen
+database. All observation and activation progress remains outside the snapshot.
+Completed observations rescan on retry, so a late pending case or changed registry checkpoint
+refuses progress. `AwaitingFinalBarrier` remains `Unqualified`: observation does not publish a
+serving generation, issue export/bootstrap authority or replace provider history enforcement.
 
 `RecoveryClosedSourceEvidence` declares the artifact handoff: source identity, actual admission
 object, activation, frozen source generation (the retired marker for initial D1), distinct final generation/checkpoint ETag and content

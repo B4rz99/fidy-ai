@@ -4,7 +4,11 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import { RecoveryDrainObservation } from "../recovery-lifecycle/contract";
 import { observeRecoveryDrain } from "../recovery-lifecycle/operations";
-import { observeErasureRecoveryDrain, reconcileErasureAdmissions } from "../erasure/operations";
+import {
+  observeErasureRecoveryDrain,
+  observeFrozenErasureLedger,
+  reconcileErasureAdmissions,
+} from "../erasure/operations";
 import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
@@ -57,11 +61,7 @@ const requireTargets = (
     }
     return { source, serving };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
-const awaitOwnerDrain = (
-  input: ActivationInput,
-  record: ActivationRecord,
-  state: RecoveryAdmissionState
-): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
+const sourceReady = (input: ActivationInput): Effect.Effect<boolean, ErasureUnavailable> =>
   Effect.gen(function* () {
     const observation = yield* observeRecoveryDrain({ db: input.configuration.sourceDb });
     const drain = yield* Schema.decodeEffect(RecoveryDrainObservation, {
@@ -75,6 +75,17 @@ const awaitOwnerDrain = (
     }
     const erasure = yield* observeErasureRecoveryDrain({ db: input.configuration.sourceDb });
     if (drain.pending !== 0 || drain.ambiguous !== 0 || erasure.pending !== 0) {
+      return false;
+    }
+    return true;
+  }).pipe(Effect.mapError(() => new ErasureUnavailable()));
+const awaitOwnerDrain = (
+  input: ActivationInput,
+  record: ActivationRecord,
+  state: RecoveryAdmissionState
+): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    if (!(yield* sourceReady(input))) {
       return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
     }
     if (state.closed && record.source.kind === "D1") {
@@ -90,6 +101,44 @@ const awaitOwnerDrain = (
     return { ...record, cursor: "", phase: "AwaitingProvider" as const };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
+const observeSourceLedger = (
+  input: ActivationInput,
+  record: ActivationRecord,
+  state: RecoveryAdmissionState
+): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    if (
+      !state.closed ||
+      record.source.kind !== "D1" ||
+      record.sourceFence.state !== "Prepared" ||
+      !(yield* sourceReady(input))
+    ) {
+      return yield* new ErasureUnavailable();
+    }
+    const sourceLedger = yield* observeFrozenErasureLedger({
+      db: input.configuration.sourceDb,
+      bucket: input.bucket,
+      generation: record.sourceFence.retired,
+      previous:
+        record.sourceLedger.state === "NotStarted"
+          ? Option.none()
+          : Option.some(record.sourceLedger),
+    });
+    return {
+      ...record,
+      sourceLedger,
+      phase:
+        sourceLedger.state === "Observed"
+          ? ("AwaitingFinalBarrier" as const)
+          : ("ObservingSourceLedger" as const),
+    };
+  });
+
+const sourceLedgerPhases = new Set<ActivationRecord["phase"]>([
+  "SourceRetired",
+  "ObservingSourceLedger",
+  "AwaitingFinalBarrier",
+]);
 const advancePhase = (
   input: ActivationInput,
   record: ActivationRecord
@@ -111,7 +160,10 @@ const advancePhase = (
       return yield* new ErasureUnavailable();
     }
     if (state.leases > 0) return { ...record, phase: "AwaitingDrain" as const, cursor: "" };
-    if (record.phase === "RetiringSource" || record.phase === "SourceRetired") {
+    if (sourceLedgerPhases.has(record.phase)) {
+      return yield* observeSourceLedger(input, record, state);
+    }
+    if (record.phase === "RetiringSource") {
       return yield* resumeSourceRetirement({
         record,
         state,
@@ -155,6 +207,7 @@ const advance = (input: ActivationInput): Effect.Effect<Response, ErasureUnavail
         ...targets,
         cursor: "",
         sourceFence: { state: "Unplanned" },
+        sourceLedger: { state: "NotStarted" },
         phase: "AwaitingDrain",
         providerIsolation: "Unqualified",
       }),

@@ -3,7 +3,11 @@ import type { Locator, Page, Route } from "@playwright/test";
 import { ResourceLimited } from "@fidy/server/client";
 import { Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { openDashboardThroughCore, signInDashboardThroughCore } from "./real-core-fixture";
+import {
+  createDashboardIfAbsent,
+  openDashboardThroughCore,
+  signInDashboardThroughCore,
+} from "./real-core-fixture";
 
 const { expect, test } = playwright;
 const { operator } = browserAcceptanceTopology();
@@ -59,9 +63,7 @@ test("a pointer resize submits the canonical edit and retains its weight after r
       );
       yield* Effect.tryPromise(() => page.clock.resume());
       yield* Effect.tryPromise(() => openDashboardThroughCore(page));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Crear tablero", exact: true }).click()
-      );
+      yield* Effect.tryPromise(() => createDashboardIfAbsent(page));
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
       const boundary = page
         .getByRole("separator", { name: /^Redimensionar límite después de /u })

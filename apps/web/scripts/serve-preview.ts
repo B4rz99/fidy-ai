@@ -1,6 +1,10 @@
+import {
+  AssessmentNativeCounters,
+  assessmentCounterHeaders,
+} from "../../server/cloudflare/sqlite-store/assessment-observation.test-fixture";
 import webWorker from "../cloudflare/worker";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 const root = Bun.env.PREVIEW_ROOT ?? "playwright-dist";
@@ -179,35 +183,82 @@ const responseFor = (request: Request): Promise<Response> => {
   });
 };
 
+const encodeDocumentEnvelope = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+const ObservedDocument = Schema.Struct({ fixtureCounters: AssessmentNativeCounters });
+const readAssessmentDocument = (request: Request): Promise<unknown> =>
+  loopbackApiRuntime.runPromise(
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      const response = yield* client.execute(
+        HttpClientRequest.fromWeb(
+          new Request(new URL("/assessment/document", browserAcceptanceTopology().operator), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: encodeDocumentEnvelope({
+              url: request.url,
+              method: request.method,
+              headers: Object.fromEntries(request.headers),
+            }),
+          })
+        )
+      );
+      return yield* response.json;
+    })
+  );
+
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port,
   tls: { cert: Bun.file(tlsCertificate), key: Bun.file(tlsKey) },
-  fetch: (request) =>
-    webWorker.fetch(request, {
-      BROWSER_ORIGIN: browserAcceptanceTopology().app,
-      ASSETS: { fetch: responseFor },
-      API: {
-        fetch: (internal) => {
-          const target = new URL(browserAcceptanceTopology().api);
-          const source = new URL(internal.url);
-          target.pathname = source.pathname;
-          target.search = source.search;
-          return loopbackApiRuntime.runPromise(
-            Effect.gen(function* () {
-              const client = yield* HttpClient.HttpClient;
-              const response = yield* client.execute(
-                HttpClientRequest.fromWeb(new Request(target, internal))
-              );
-              return Option.getOrElse(
-                HttpClientResponse.toWeb(response),
-                () => new Response(null, { status: 503 })
-              );
-            })
-          );
+  fetch: (request) => {
+    let counts = Option.none<AssessmentNativeCounters>();
+    const observe = (raw: unknown): unknown => {
+      counts = Schema.decodeUnknownOption(ObservedDocument)(raw).pipe(
+        Option.map((result) => result.fixtureCounters)
+      );
+      return raw;
+    };
+    return webWorker
+      .fetch(request, {
+        DASHBOARD_DOCUMENTS:
+          Bun.env.FIDY_DASHBOARD_BACKEND === "audited-native-guarded"
+            ? {
+                readDashboardDocument: (incoming): Promise<unknown> =>
+                  readAssessmentDocument(incoming).then(observe),
+              }
+            : undefined,
+        BROWSER_ORIGIN: browserAcceptanceTopology().app,
+        ASSETS: { fetch: responseFor },
+        API: {
+          fetch: (internal) => {
+            const target = new URL(browserAcceptanceTopology().api);
+            const source = new URL(internal.url);
+            target.pathname = source.pathname;
+            target.search = source.search;
+            return loopbackApiRuntime.runPromise(
+              Effect.gen(function* () {
+                const client = yield* HttpClient.HttpClient;
+                const response = yield* client.execute(
+                  HttpClientRequest.fromWeb(new Request(target, internal))
+                );
+                return Option.getOrElse(
+                  HttpClientResponse.toWeb(response),
+                  () => new Response(null, { status: 503 })
+                );
+              })
+            );
+          },
         },
-      },
-    }),
+      })
+      .then((response) => {
+        if (Option.isSome(counts)) {
+          for (const [name, value] of Object.entries(assessmentCounterHeaders(counts.value))) {
+            response.headers.set(name, value);
+          }
+        }
+        return response;
+      });
+  },
 });
 
 process.stdout.write(`Static preview server listening at ${server.url}\n`);

@@ -1,3 +1,4 @@
+import type { NativeDashboardReader } from "../dashboard/contract";
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import {
@@ -65,6 +66,7 @@ type ToolAdmission = Readonly<{
   subject: OAuthCaller;
   scopes: PATScopes;
   enqueueCanonicalWork: CanonicalQueue;
+  dashboard: Option.Option<NativeDashboardReader>;
   signal: AbortSignal;
   transportDeadlineMilliseconds: number;
 }>;
@@ -121,6 +123,25 @@ const dispatchCanonicalTool = (
       const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(OAuthCanonicalAdmission))(
         admission
       );
+      if (decoded.operation === "dashboard.getDashboardView" && Option.isSome(input.dashboard)) {
+        const dashboard = input.dashboard.value;
+        return yield* Effect.tryPromise(() =>
+          dashboard({
+            mode: "oauth",
+            admission: decoded,
+            request: new Request("https://core.internal/dashboard/view", {
+              signal: AbortSignal.any([input.signal, scopeSignal]),
+            }),
+          })
+        ).pipe(
+          Effect.map(({ response }) =>
+            Response.json(response.body, {
+              status: response.status,
+              headers: response.headers,
+            })
+          )
+        );
+      }
       return yield* input.enqueueCanonicalWork({
         admission: decoded,
         signal: AbortSignal.any([input.signal, scopeSignal]),
@@ -268,11 +289,13 @@ const executeTool = (
   McpSchema.CallToolResult | McpSchema.InputRequired,
   McpSchema.InternalError,
   McpSchema.McpRequestContext
-> =>
-  protectCanonicalPressure({
+> => {
+  const work = executeAdmittedTool(input, { operation, payload, confirmation: Option.none() });
+  if (operation.id === "dashboard.getDashboardView" && Option.isSome(input.dashboard)) return work;
+  return protectCanonicalPressure({
     db: input.db,
     userId: input.subject.userId,
-    work: executeAdmittedTool(input, { operation, payload, confirmation: Option.none() }),
+    work,
     refused: (response) =>
       discloseCanonicalAllowance({
         db: input.db,
@@ -283,6 +306,7 @@ const executeTool = (
         Effect.catchCause(() => toolFailure(operation))
       ),
   });
+};
 const schemaDocument = (schema: Schema.Top): Schema.Json => {
   const document = Schema.toJsonSchemaDocument(schema);
   return Schema.decodeUnknownSync(Schema.Json)({ ...document.schema, $defs: document.definitions });
@@ -541,6 +565,7 @@ type ResidencyConfig = Readonly<{
   userId: string;
   db: D1Database;
   enqueueCanonicalWork: CanonicalQueue;
+  dashboard: Option.Option<NativeDashboardReader>;
 }>;
 type ResidentRegistry = {
   readonly observeRejections: ReturnType<typeof makeCoreRejectionObserver>;
@@ -885,6 +910,7 @@ const invokeResidentHandler = (
           subject: catalog.subject,
           scopes: catalog.scopes,
           enqueueCanonicalWork: registry.config.enqueueCanonicalWork,
+          dashboard: registry.config.dashboard,
           signal,
           transportDeadlineMilliseconds: admission.deadlineMilliseconds,
         },

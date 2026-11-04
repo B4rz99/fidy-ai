@@ -1,7 +1,10 @@
+import { observeSourceLedger } from "./internal/source-ledger";
 import { retireSource, sourceGeneration } from "./internal/source-retirement";
 import { observe as observeRecoveryDrain } from "./internal/recovery-drain";
 import { verifyImported } from "./internal/imported-checkpoint";
 import type {
+  ErasureFrozenLedgerInput,
+  ErasureFrozenLedgerProgress,
   ErasureImportedCheckpoint,
   ErasureImportedInput,
   ErasureRecoveryDrain,
@@ -322,3 +325,8 @@ export const readErasureSourceGeneration = (
 export const retireErasureSource = (
   input: Readonly<{ db: D1Database; fence: ErasureSourceRetirement }>
 ): Effect.Effect<void, ErasureUnavailable> => retireSource(input);
+
+/** Observe a fixed frozen source's complete sealed ledger in bounded units, preserving progress outside SQL and refusing late pending intent. */
+export const observeFrozenErasureLedger = (
+  input: ErasureFrozenLedgerInput
+): Effect.Effect<ErasureFrozenLedgerProgress, ErasureUnavailable> => observeSourceLedger(input);

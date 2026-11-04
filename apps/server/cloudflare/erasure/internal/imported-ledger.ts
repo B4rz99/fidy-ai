@@ -58,15 +58,15 @@ const verifyCase = (
       ])
     );
   });
-const readCase = (
-  input: ImportedInput,
-  listed: R2Object
-): Effect.Effect<
+export const readLedgerCase = ({
+  bucket,
+  listed,
+}: Readonly<{ bucket: R2Bucket; listed: R2Object }>): Effect.Effect<
   Readonly<{ record: typeof RecoveryCase.Type; body: string }>,
   ErasureUnavailable
 > =>
   Effect.gen(function* () {
-    const object = yield* io(() => input.bucket.get(listed.key));
+    const object = yield* io(() => bucket.get(listed.key));
     if (object === null) return yield* new ErasureUnavailable();
     if (object.size > maximumCaseBytes || object.etag !== listed.etag) {
       yield* io(() => object.body.cancel());
@@ -99,7 +99,7 @@ export const verifyLedgerPage = ({
     let progress = previous;
     for (const listed of page.objects) {
       if (listed.key <= progress.lastKey) return yield* new ErasureUnavailable();
-      const { record, body } = yield* readCase(input, listed);
+      const { record, body } = yield* readLedgerCase({ bucket: input.bucket, listed });
       yield* verifyCase(input, record);
       const bodyDigest = yield* checkpointDigest(body);
       const serialized = yield* Schema.encodeEffect(

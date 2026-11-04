@@ -442,6 +442,16 @@ an independently justified reconciliation exists; elapsed time and a local retry
 Known cancellation after fully settled IO can resume the independently persisted retirement plan.
 This serializes current controller work but does not qualify legacy provider or HTTP drain.
 
+After source retirement the operator observes the independent sealed ledger in bounded pages and
+persists its cursor, stable external generation/ETag, case count and hash chain in its R2 progress.
+The Erasure owner verifies exact native deletion dispositions and complete required-request
+coverage under RET, preserving custody and provider claims. Two read-only passes compare the
+required-case and native-request hash chains, so source verification never mutates the frozen
+database. All observation and activation progress remains outside the snapshot.
+Completed observations rescan on retry, so a late pending case or changed registry checkpoint
+refuses progress. `AwaitingFinalBarrier` remains `Unqualified`: observation does not publish a
+serving generation, issue export/bootstrap authority or replace provider history enforcement.
+
 `RecoveryClosedSourceEvidence` declares the artifact handoff: source identity, actual admission
 object, activation, frozen source generation (the retired marker for initial D1), distinct final generation/checkpoint ETag and content
 digests for provider and ledger evidence. `readClosedRecoverySource` currently always refuses;

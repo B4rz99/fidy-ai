@@ -1,0 +1,20 @@
+apps/web/src/transport/session-binding.test.ts
+  s_bae391f7738986::t_51fd07a9866025 125-126,135,139-144
+  s_bae391f7738986::t_1cc989b402f1b7 91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aee2694eda4311c7df7ed6b4b3221609781af3d3",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,80 @@
+apps/web/src/features/dashboard/view.tsx
+  s_27d58cea3847b9::t_f21f17230e1d2b 1-2,44,339-344,880,915-941
+  s_27d58cea3847b9::t_b2c022bfdf06c3 1102,1123
+apps/web/src/features/dashboard/query.ts
+  s_27d58cea3847b9::t_7a607f033133ff 59
+  s_27d58cea3847b9::t_c92e7f758f6240 67-68
+  s_27d58cea3847b9::t_2ae42341eb4e6b 47-48,50-54,75
+  s_27d58cea3847b9::t_4591d1604004cd 65
+  s_27d58cea3847b9::t_03aedfc4ab7950 78
+apps/server/cloudflare/migrations/0010_effective_transaction_read_paths.sql
+  s_27d58cea3847b9::t_d4a0293dcc893a 1-102
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_27d58cea3847b9::t_af5520efa569ca 148-153,158,209-211
+  s_27d58cea3847b9::t_7a607f033133ff 350,353
+  s_27d58cea3847b9::t_b294ea55878732 42-43,142
+apps/server/cloudflare/transactions/search-costs.test.ts
+  s_27d58cea3847b9::t_d4a0293dcc893a 38,48,88,91-92,98,117,125
+  s_27d58cea3847b9::t_092fb84f5990c2 133
+CODING_STANDARDS.md
+  s_27d58cea3847b9::t_2e7123cbe028f2 127-128
+apps/web/src/transport/workspace-query.ts
+  s_27d58cea3847b9::t_0eef3c0ed0e788 130-131
+apps/server/cloudflare/transactions/contract.ts
+  s_27d58cea3847b9::t_579873d579a50e 144,148,154
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_27d58cea3847b9::t_b4b37498cdbf60 2753-2755,2775-2777,2902,2920,2925-2929,2953
+apps/web/e2e/performance.assessment.ts
+  s_27d58cea3847b9::t_4444afc5a8c6f9 2,68,118,686-752,754,760,763-774
+  s_27d58cea3847b9::t_3bd1de99107703 9-11,524-526,530-532
+  s_27d58cea3847b9::t_0d574540002b6a 12,522-523,556,589,630
+  s_27d58cea3847b9::t_04c2999dfd427d 63-67,69,109-112
+  s_27d58cea3847b9::t_84dfe2895ea3ee 753,781
+  s_27d58cea3847b9::t_ead483b0022a56 755,779,782
+  s_27d58cea3847b9::t_e01f28a1cf2816 756-759,761-762,775-778,780
+docs/adr/0039-performance-redesign-without-application-caches-or-locks.md
+  s_27d58cea3847b9::t_f7539ec5e34667 9,11,14-17
+  s_27d58cea3847b9::t_8252802ee71d61 1-2,4,6,8,10,18
+  s_27d58cea3847b9::t_eed06c82dcae46 7,22-23
+  s_27d58cea3847b9::t_2e7123cbe028f2 12
+  s_27d58cea3847b9::t_dd2accb072ec3e 3,5,13,19-21
+apps/web/src/features/dashboard/feature.tsx
+  s_27d58cea3847b9::t_abfbfa47dab2a4 83
+  s_27d58cea3847b9::t_4b2c63a79417e7 128,131-138
+  s_27d58cea3847b9::t_f21f17230e1d2b 12,150,153-154
+  s_27d58cea3847b9::t_302888fb1e47d6 145
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_27d58cea3847b9::t_398b7af648e701 57-58,218,7168
+apps/server/cloudflare/transactions/internal/dashboard-read.ts
+  s_27d58cea3847b9::t_7d93eb1833146b 47,105-111,200,202,204-218,255
+  s_27d58cea3847b9::t_d20d3757f91ea7 11,15-16,32-40,52,61,68,73,77-78,80-82,84,87-90,92-100,134-135,138,234,242,245,247-248,254,256-259
+  s_27d58cea3847b9::t_4b2c63a79417e7 221-232,244
+  s_27d58cea3847b9::t_3fab8e7d08e6d8 44,46,48-51,53-60,62-67,69-72,74-76,79,83,85-86,91,101-104,136,153,169,243,249,260
+  s_27d58cea3847b9::t_e035bda75b5f14 125-127,129-132,142-144,156-161,163-167,170-184,186,188-199,219,239-241,250-253
+  s_27d58cea3847b9::t_7e12f5705df08d 41-43,114-120,123,137,139-141,146
+  s_27d58cea3847b9::t_32c8014dd5f43e 10,112-113,124,133,147-150,152,168,233
+apps/server/cloudflare/transactions/internal/dashboard-query.ts
+  s_27d58cea3847b9::t_9e38943cdf1528 82,117-118
+  s_27d58cea3847b9::t_d4a0293dcc893a 58,84-87,92-110,112-116,119
+apps/web/src/transport/client.test.ts
+  s_27d58cea3847b9::t_40bb6c7867bcf7 412
+  s_27d58cea3847b9::t_0ad41ea5dc4564 335-356
+apps/web/src/transport/browser-http-policy.ts
+  s_27d58cea3847b9::t_4b2c63a79417e7 409-426,470-475
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9b08d1cbbee67b3dd2636a253b9889a9fe0022ee",
+  "prompts": {},
+  "sessions": {
+    "s_27d58cea3847b9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a4dd-5e5f-7ab2-ba87-a50b8657cdff",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

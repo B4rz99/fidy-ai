@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { DateTime, Effect, Option } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { expect } from "vitest";
 import { nativeRecoveryAdmission } from "../recovery-activation/native.test-fixture";
 import { runRecoveryJob, runRecoveryOperation, runRecoveryQueue } from "./operations";
@@ -109,9 +109,10 @@ it.live("keeps a streaming response leased and refuses later chunks after admiss
     if (reader === undefined) throw new Error("Missing stream");
     const first = reader.read();
     controller.enqueue(new TextEncoder().encode("first permitted event"));
-    expect(new TextDecoder().decode((yield* Effect.tryPromise(() => first)).value)).toBe(
-      "first permitted event"
+    const firstBytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(
+      (yield* Effect.tryPromise(() => first)).value
     );
+    expect(new TextDecoder().decode(firstBytes)).toBe("first permitted event");
     expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({ leases: 1 });
     yield* Effect.tryPromise(() => gate.close({ epoch: "source-epoch", activationId: "cutover" }));
     const next = reader.read();

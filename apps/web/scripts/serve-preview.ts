@@ -3,12 +3,6 @@ import { browserAcceptanceTopology } from "../../server/cloudflare/browser-accep
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
-const loopbackRequestInit = { tls: { rejectUnauthorized: false }, redirect: "manual" as const };
-const loopbackApiRuntime = ManagedRuntime.make(
-  FetchHttpClient.layer.pipe(
-    Layer.provide(Layer.succeed(FetchHttpClient.RequestInit, loopbackRequestInit))
-  )
-);
 const root = Bun.env.PREVIEW_ROOT ?? "playwright-dist";
 const compression = Bun.env.PREVIEW_COMPRESSION ?? "identity";
 if (compression !== "identity" && compression !== "gzip") {
@@ -58,6 +52,15 @@ const tlsCertificate = Bun.env.PLAYWRIGHT_TLS_CERT;
 if (tlsKey === undefined || tlsCertificate === undefined) {
   throw new Error("Preview TLS key and certificate are required");
 }
+const loopbackRequestInit = {
+  tls: { ca: await Bun.file(tlsCertificate).text() },
+  redirect: "manual" as const,
+};
+const loopbackApiRuntime = ManagedRuntime.make(
+  FetchHttpClient.layer.pipe(
+    Layer.provide(Layer.succeed(FetchHttpClient.RequestInit, loopbackRequestInit))
+  )
+);
 
 const contentTypes: Readonly<Record<string, string>> = {
   ".avif": "image/avif",

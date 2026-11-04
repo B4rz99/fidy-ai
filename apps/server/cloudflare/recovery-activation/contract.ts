@@ -49,6 +49,41 @@ export type RecoveryBootstrapAccess = (
   expected: Readonly<{ activationId: string; target: RecoveryTarget; artifactDigest: string }>
 ) => Effect.Effect<RecoveryBootstrapAuthorization, ErasureUnavailable>;
 
+/** Data verification is insufficient: serving needs independent exact owner-version and final external evidence. */
+export const RecoveryServingAuthorization = Schema.Struct({
+  phase: Schema.Literal("ServingAuthorized"),
+  evidence: RecoveryClosedSourceEvidence,
+  target: RecoveryTarget,
+  artifactDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+  ownerVersion: Schema.String.check(Schema.isUUID()),
+});
+export type RecoveryServingAuthorization = typeof RecoveryServingAuthorization.Type;
+export type RecoveryServingAccess = (
+  expected: Readonly<{
+    activationId: string;
+    target: RecoveryTarget;
+    artifactDigest: string;
+    ownerVersion: string;
+  }>
+) => Effect.Effect<RecoveryServingAuthorization, ErasureUnavailable>;
+
+/** Cleanup only follows an independently earned disposition of the exact fixed artifact. */
+export const RecoveryArtifactRetirement = Schema.Struct({
+  phase: Schema.Literal("ArtifactRetirementAuthorized"),
+  reason: Schema.Literals(["Abandoned", "OpenedQualified"]),
+  activationId: Schema.String.check(Schema.isUUID()),
+  target: RecoveryTarget,
+  artifactDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+});
+export type RecoveryArtifactRetirement = typeof RecoveryArtifactRetirement.Type;
+export type RecoveryArtifactRetirementAccess = (
+  expected: Readonly<{
+    activationId: string;
+    target: RecoveryTarget;
+    artifactDigest: string;
+  }>
+) => Effect.Effect<RecoveryArtifactRetirement, ErasureUnavailable>;
+
 export const RecoveryStoreObservation = Schema.Struct({
   target: RecoveryTarget,
   admission: Schema.Literals(["Open", "Closed"]),

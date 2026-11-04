@@ -449,6 +449,10 @@ preliminary R2 progress cannot issue export/bootstrap authority while provider q
 final reconciliation remain incomplete. `readRecoveryBootstrapAuthorization` similarly refuses
 until an independent external phase authorizes the exact previously unopened target and fixed
 artifact digest; a local import cursor or schema seal cannot grant bootstrap or serving authority.
+The separate `readRecoveryServingAuthorization` binds the exact provider owner version as well;
+it currently refuses. `readRecoveryArtifactRetirement` also refuses until an external phase earns
+abandonment or qualified-open disposition for that exact artifact. Neither local verification nor
+an arbitrary caller prefix confers serving or artifact deletion permission.
 
 The Erasure-owned frozen-import verifier consumes the Store's native inactive bootstrap
 capability, so a D1 source cannot be passed as its target. It checks bounded sealed ledger pages

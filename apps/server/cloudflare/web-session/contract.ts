@@ -32,3 +32,11 @@ export type BrowserSessionMaterial = Readonly<{
   digest: Uint8Array;
   binding: Option.Option<string>;
 }>;
+
+/** Synchronous owner reads composed inside an already-open native snapshot transaction. */
+export type WebSessionSnapshotContext = Readonly<{
+  db: D1Database;
+  subject: AuthenticatedWebSession;
+  current: number;
+  execute: (statements: ReadonlyArray<D1PreparedStatement>) => ReadonlyArray<D1Result>;
+}>;

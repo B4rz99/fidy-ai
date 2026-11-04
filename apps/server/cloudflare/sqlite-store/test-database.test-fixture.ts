@@ -21,7 +21,7 @@ const moduleText = (): Promise<string> => {
   return result;
 };
 const poolSize = 16;
-const runtime = (sequence: number): Promise<Miniflare> =>
+const runtime = (sequence: number, isolation: "Live" | "Isolated" = "Live"): Promise<Miniflare> =>
   moduleText().then((module) => {
     const buckets: Record<string, { type: "r2"; name: string }> = {};
     for (let index = 0; index < poolSize; index++) {
@@ -34,9 +34,25 @@ const runtime = (sequence: number): Promise<Miniflare> =>
             name: "sqlite-owner-fixture",
             type: "worker",
             compatibilityDate: "2026-09-08",
+            compatibilityFlags: ["nodejs_compat"],
             exports: { ActiveStoreProof: { type: "durable-object", storage: "sqlite" } },
             env: {
               ...buckets,
+              RECOVERY_ISOLATION: {
+                type: "text",
+                value: isolation === "Isolated" ? "isolated" : "",
+              },
+              ERASURE_BUCKET: { type: "r2", name: `sqlite-${sequence}-0` },
+              SQLITE_STORE: {
+                type: "durable-object",
+                worker: "sqlite-owner-fixture",
+                exportName: "ActiveStoreProof",
+              },
+              DOCUMENTS: {
+                type: "worker",
+                worker: "sqlite-owner-fixture",
+                exportName: "DashboardDocumentService",
+              },
               BROWSER_ORIGIN: { type: "text", value: "https://app.fidy.test" },
               SQLITE_STORE_EPOCH: { type: "text", value: "fixture" },
               SQLITE_STORE_NAMESPACE_ID: { type: "text", value: "native-fixture" },
@@ -56,7 +72,7 @@ const runtime = (sequence: number): Promise<Miniflare> =>
       ],
     });
   });
-const database = (input: Readonly<{ runtime: Miniflare; index: number }>): D1Database =>
+const database = (input: Readonly<{ runtime: Miniflare; name: string }>): D1Database =>
   makeRemoteSqliteDatabase({
     manifest: "fixture",
     epoch: "fixture",
@@ -68,7 +84,7 @@ const database = (input: Readonly<{ runtime: Miniflare; index: number }>): D1Dat
             headers: {
               "x-store-manifest": request.manifest,
               "x-store-epoch": request.epoch,
-              "x-store-object": `owner-${input.index}`,
+              "x-store-object": input.name,
             },
             body: encodeJson(request.query),
           })
@@ -79,9 +95,10 @@ const database = (input: Readonly<{ runtime: Miniflare; index: number }>): D1Dat
 type TestStore = Readonly<{
   db: D1Database;
   bucket: R2Bucket;
+  document: (request: Request) => Promise<unknown>;
   snapshot: (input: Readonly<{ request: Request; mode: "bound" | "document" }>) => Promise<unknown>;
 }>;
-const snapshot = (input: Readonly<{ runtime: Miniflare; index: number }>): NativeDashboardReader =>
+const snapshot = (input: Readonly<{ runtime: Miniflare; name: string }>): NativeDashboardReader =>
   makeNativeDashboardReader({
     manifest: "fixture",
     epoch: "fixture",
@@ -91,7 +108,7 @@ const snapshot = (input: Readonly<{ runtime: Miniflare; index: number }>): Nativ
         input.runtime
           .dispatchFetch("https://fixture.internal/dashboard-snapshot", {
             method: "POST",
-            headers: { "x-store-object": `owner-${input.index}` },
+            headers: { "x-store-object": input.name },
             body: encodeJson({
               url: call.request.url,
               method: call.request.method,
@@ -106,6 +123,7 @@ const snapshot = (input: Readonly<{ runtime: Miniflare; index: number }>): Nativ
 /** Test-only transport selection reuses the existing canonical suites against real native Store objects. */
 export const sqliteTestStorage = (): Readonly<{
   acquire: () => Promise<TestStore>;
+  acquireDocument: (isolation: "Live" | "Isolated") => Promise<TestStore>;
   dispose: () => Promise<void>;
 }> => {
   const runtimes: Promise<Miniflare>[] = [];
@@ -120,17 +138,43 @@ export const sqliteTestStorage = (): Readonly<{
     const index = next++;
     return Option.getOrThrow(active).then((runtime) =>
       runtime.getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>().then((bindings) => ({
-        db: database({ runtime, index }),
-        snapshot: snapshot({ runtime, index }),
+        db: database({ runtime, name: `owner-${index}` }),
+        snapshot: snapshot({ runtime, name: `owner-${index}` }),
+        document: (request: Request) => documentRead(runtime, request),
         bucket: Option.getOrThrow(Option.fromUndefinedOr(bindings[`BUCKET_${index}`])),
       }))
     );
   };
   return {
     acquire,
+    acquireDocument: (isolation) => {
+      const next = runtime(runtimes.length, isolation);
+      runtimes.push(next);
+      return next.then((runtime) =>
+        runtime.getBindings<{ BUCKET_0: R2Bucket }>().then((bindings) => ({
+          db: database({ runtime, name: "authoritative-v1" }),
+          snapshot: snapshot({ runtime, name: "authoritative-v1" }),
+          bucket: bindings.BUCKET_0,
+          document: (request: Request) => documentRead(runtime, request),
+        }))
+      );
+    },
     dispose: () =>
       Promise.all(runtimes.map((runtime) => runtime.then((runtime) => runtime.dispose()))).then(
         () => undefined
       ),
   };
 };
+
+const documentRead = (runtime: Miniflare, request: Request): Promise<unknown> =>
+  runtime
+    .dispatchFetch("https://fixture.internal/document-entry", {
+      method: "POST",
+      body: encodeJson({
+        url: request.url,
+        method: request.method,
+        headers: Object.fromEntries(request.headers),
+        mode: "document",
+      }),
+    })
+    .then((response) => response.json());

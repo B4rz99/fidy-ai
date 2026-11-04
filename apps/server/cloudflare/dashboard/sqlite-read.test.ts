@@ -12,45 +12,55 @@ const userId = "10000000-0000-4000-8000-000000000001";
 const sessionId = "60000000-0000-4000-8000-000000000001";
 const io = <A>(work: () => Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(work);
-const setup = Effect.gen(function* () {
-  const fixture = yield* io(() => storage.acquire());
-  const { db, bucket } = fixture;
-  yield* io(() => installTestSchema({ db }));
-  yield* io(() => bucket.put("recovery/generation", "initial"));
-  const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
-  const digest = new Uint8Array(
-    yield* io(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode("c".repeat(43))))
-  );
-  yield* io(() =>
-    db.batch([
-      db
-        .prepare(
-          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
-        )
-        .bind(userId, current),
-      db
-        .prepare(
-          "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?,'BCDF-GHJK',?,?,'consumed',?,?)"
-        )
-        .bind(sessionId, digest, userId, current, current + 600000),
-      db
-        .prepare(
-          "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)"
-        )
-        .bind(
-          sessionId,
-          sessionId,
-          userId,
-          digest,
-          current,
-          current + 600000,
-          current + 3600000,
-          current + 7776000000
-        ),
-    ])
-  );
-  return { ...fixture, current };
-});
+const setupOn = (
+  acquire: () => ReturnType<typeof storage.acquire>
+): ReturnType<typeof setupEffect> => setupEffect(acquire);
+const setupEffect = (
+  acquire: () => ReturnType<typeof storage.acquire>
+): Effect.Effect<
+  Awaited<ReturnType<typeof storage.acquire>> & Readonly<{ current: number }>,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    const fixture = yield* io(acquire);
+    const { db, bucket } = fixture;
+    yield* io(() => installTestSchema({ db }));
+    yield* io(() => bucket.put("recovery/generation", "initial"));
+    const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
+    const digest = new Uint8Array(
+      yield* io(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode("c".repeat(43))))
+    );
+    yield* io(() =>
+      db.batch([
+        db
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+          )
+          .bind(userId, current),
+        db
+          .prepare(
+            "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?,'BCDF-GHJK',?,?,'consumed',?,?)"
+          )
+          .bind(sessionId, digest, userId, current, current + 600000),
+        db
+          .prepare(
+            "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+          )
+          .bind(
+            sessionId,
+            sessionId,
+            userId,
+            digest,
+            current,
+            current + 600000,
+            current + 3600000,
+            current + 7776000000
+          ),
+      ])
+    );
+    return { ...fixture, current };
+  });
+const setup = setupOn(() => storage.acquire());
 const request = (
   identity: Readonly<{ cookie: string; session: string }> = {
     cookie: "c".repeat(43),
@@ -675,4 +685,179 @@ it.live("validates retained layout before committing pressure, Audit or a respon
       )
     ).toEqual({ count: 0 });
   })
+);
+
+it.live(
+  "returns same-transaction document bootstrap metadata with the exact native financial view",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      yield* io(() =>
+        fixture.db.batch([
+          fixture.db
+            .prepare(
+              "UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=?,time_zone='Pacific/Kiritimati' WHERE id=?"
+            )
+            .bind(fixture.current, fixture.current + 604800000, userId),
+          fixture.db
+            .prepare(
+              "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','context-grant',?,'{}','disclosure','decision',?,?)"
+            )
+            .bind(userId, fixture.current, fixture.current),
+          fixture.db
+            .prepare(
+              "INSERT INTO user_documents(kind,user_id,document_json,revision) VALUES ('dashboard',?,?,19)"
+            )
+            .bind(
+              userId,
+              encodeJson({
+                title: "Contexto",
+                layout: {
+                  kind: "leaf",
+                  widget: {
+                    id: "30000000-0000-4000-8000-000000000001",
+                    type: "custom-metric",
+                    label: "Gastos",
+                    period: "this-month",
+                    aggregation: "sum",
+                  },
+                },
+              })
+            ),
+        ])
+      );
+      const initial = request();
+      initial.headers.delete(browserSessionBindingHeader);
+      expect(
+        yield* io(() => fixture.snapshot({ request: initial, mode: "document" }))
+      ).toMatchObject({
+        kind: "view",
+        binding: sessionId,
+        bootstrap: {
+          binding: sessionId,
+          initial: {
+            status: "Granted",
+            withdrawal: null,
+            profile: { data: { id: userId, timeZone: "Pacific/Kiritimati" } },
+          },
+        },
+        response: { status: 200, body: { data: { title: "Contexto", revision: 19 } } },
+      });
+    })
+);
+
+it.live(
+  "withholds the whole document when its identity Audit refuses and rolls back native admission",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      yield* io(() =>
+        fixture.db.batch([
+          fixture.db
+            .prepare("UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=? WHERE id=?")
+            .bind(fixture.current, fixture.current + 604800000, userId),
+          fixture.db
+            .prepare(
+              "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','context-grant',?,'{}','disclosure','decision',?,?)"
+            )
+            .bind(userId, fixture.current, fixture.current),
+          fixture.db.prepare(
+            "CREATE TRIGGER refuse_document_identity BEFORE INSERT ON audit_entries WHEN NEW.record_type='identity_read' BEGIN SELECT RAISE(ABORT,'identity_audit_refused'); END"
+          ),
+        ])
+      );
+      const initial = request();
+      initial.headers.delete(browserSessionBindingHeader);
+      expect(
+        yield* io(() => fixture.snapshot({ request: initial, mode: "document" }))
+      ).toMatchObject({ kind: "response", response: { status: 503 } });
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM canonical_request_buckets").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* io(() => fixture.db.prepare("SELECT count(*) AS count FROM audit_entries").first())
+      ).toEqual({ count: 0 });
+    })
+);
+
+it.live(
+  "uses the named private document entry without granting document mode to fragments or alternate bearers",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* setupOn(() => storage.acquireDocument("Live"));
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "INSERT INTO user_documents(kind,user_id,document_json,revision) VALUES ('dashboard',?,?,23)"
+          )
+          .bind(
+            userId,
+            encodeJson({
+              title: "<Documento>",
+              layout: {
+                kind: "leaf",
+                widget: {
+                  id: "30000000-0000-4000-8000-000000000001",
+                  type: "custom-metric",
+                  label: "Gastos",
+                  period: "this-month",
+                  aggregation: "sum",
+                },
+              },
+            })
+          )
+          .run()
+      );
+      const headers = request().headers;
+      headers.set("authorization", "Bearer alternate-user");
+      headers.set(browserSessionBindingHeader, "60000000-0000-4000-8000-000000000099");
+      headers.set("origin", "https://foreign.test");
+      const incoming = new Request("https://app.fidy.test/app/dashboard", { headers });
+      const transfer = yield* io(() => fixture.document(incoming));
+      expect(transfer).toMatchObject({
+        kind: "snapshot",
+        status: 200,
+        bootstrap: { binding: sessionId, initial: { status: "Missing" } },
+      });
+      const rendered = yield* Schema.decodeUnknownEffect(Schema.Struct({ html: Schema.String }))(
+        transfer
+      );
+      expect(rendered.html).toContain("&lt;Documento&gt;");
+      expect(
+        yield* io(() =>
+          fixture.snapshot({
+            request: request({
+              cookie: "c".repeat(43),
+              session: "60000000-0000-4000-8000-000000000099",
+            }),
+            mode: "bound",
+          })
+        )
+      ).toMatchObject({ kind: "response", response: { status: 401 } });
+    })
+);
+
+it.live(
+  "preserves deployment recovery isolation at the named document entry before any financial read",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* setupOn(() => storage.acquireDocument("Isolated"));
+      expect(
+        yield* io(() =>
+          fixture.document(
+            new Request("https://app.fidy.test/app/dashboard", { headers: request().headers })
+          )
+        )
+      ).toEqual({ kind: "refused", status: 503 });
+      expect(
+        yield* io(() => fixture.db.prepare("SELECT count(*) AS count FROM audit_entries").first())
+      ).toEqual({ count: 0 });
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM canonical_request_buckets").first()
+        )
+      ).toEqual({ count: 0 });
+    })
 );

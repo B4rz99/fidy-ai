@@ -1,3 +1,6 @@
+import { BrowserSessionBinding } from "@fidy/server/browser-bootstrap";
+import { Option, Schema } from "effect";
+import { takeInitialDocumentBootstrap } from "./initial-dashboard";
 import { browserSessionBindingPath } from "@fidy/server/browser-transport";
 
 type ResponseOutcome = Promise<PromiseSettledResult<Response>>;
@@ -76,14 +79,21 @@ export const beginInitialBrowserRequest = ({
   const identity = new URL(browserSessionBindingPath, apiOrigin).href;
   const url = new URL(identity);
   if (context) url.searchParams.set("context", transactions ? "transactions" : "application");
-  const result = send(url.href, lifetime.signal, nativeFetch);
+  const bootstrap = takeInitialDocumentBootstrap();
+  const result = Option.match(bootstrap, {
+    onNone: () => send(url.href, lifetime.signal, nativeFetch),
+    onSome: (value) => preparedResponse(Schema.encodeSync(BrowserSessionBinding)(value)),
+  });
   // Recheck the current cookie AFTER the private response, concurrently with its bounded decoding.
   const recheck = context
     ? result.then((outcome): ResponseOutcome =>
         outcome.status === "fulfilled" &&
         outcome.value.status === successfulResponseStatus &&
         lifetime.isCurrent()
-          ? send(identity, lifetime.signal, nativeFetch)
+          ? Option.match(bootstrap, {
+              onNone: () => send(identity, lifetime.signal, nativeFetch),
+              onSome: (value) => preparedResponse({ binding: value.binding }),
+            })
           : Promise.resolve({
               status: "rejected",
               reason: new DOMException("No prepared recheck", "AbortError"),
@@ -132,3 +142,6 @@ export const initialRequestFetch = (initial: InitialBrowserRequest): typeof glob
     });
   return Object.assign(preparedFetch, nativeFetch);
 };
+
+const preparedResponse = (value: unknown): ResponseOutcome =>
+  Promise.resolve({ status: "fulfilled", value: Response.json(value) });

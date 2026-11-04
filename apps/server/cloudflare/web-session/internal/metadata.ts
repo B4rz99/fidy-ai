@@ -6,7 +6,12 @@ import { decodeCategoryRead, prepareCategoryRead } from "../../../src/shell/cate
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { webSessionIdleRenewalCandidate } from "../../../src/core/web-session/operations";
-import type { AuthenticatedWebSession } from "../contract";
+import type { AuthenticatedWebSession, WebSessionSnapshotContext } from "../contract";
+import type { BrowserSessionInitialContext } from "../../../src/shell/web-session/contract";
+import {
+  decodeProcessingConsentStatusRead,
+  prepareProcessingConsentStatusRead,
+} from "../../../src/shell/processing-consent/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { attempt, uuid } from "./support";
 
@@ -71,4 +76,50 @@ export const readMetadata = (
     const loaded = yield* prepared.decode(user.results).pipe(Effect.mapError(() => undefined));
     const categories = decodeCategoryRead(taxonomy.results);
     return Option.map(categories, (value) => ({ ...loaded, categories: Option.some(value.data) }));
+  });
+
+/** The same live renewal and identity Audit participate in the caller's larger native unit. */
+export const snapshotContext = (
+  input: WebSessionSnapshotContext
+): Effect.Effect<BrowserSessionInitialContext, void> =>
+  Effect.gen(function* () {
+    const statusRead = prepareProcessingConsentStatusRead(input);
+    const statusRows = input.execute([input.db.prepare(statusRead.sql).bind(...statusRead.params)]);
+    const status = yield* decodeProcessingConsentStatusRead(statusRows[0]?.results ?? []).pipe(
+      Effect.mapError(() => undefined)
+    );
+    if (Option.isNone(status)) return yield* Effect.fail(undefined);
+    if (status.value.status !== "Granted") return status.value;
+    const userId = yield* Schema.decodeEffect(UserId)(input.subject.userId).pipe(
+      Effect.mapError(() => undefined)
+    );
+    const prepared = yield* prepareCurrentUser(userId).pipe(Effect.mapError(() => undefined));
+    const rows = input.execute(statements(input, input.current, prepared.statement));
+    const profile = yield* decodeSnapshotProfile(rows, prepared);
+    return {
+      ...status.value,
+      profile,
+      transactions: Option.none(),
+    };
+  });
+
+const decodeSnapshotProfile = (
+  rows: ReadonlyArray<D1Result>,
+  prepared: Effect.Success<ReturnType<typeof prepareCurrentUser>>
+): Effect.Effect<typeof CurrentUserMetadata.Type, void> =>
+  Effect.gen(function* () {
+    const user = rows[1];
+    const taxonomy = rows[2];
+    if (
+      rows[0]?.meta.changes !== 1 ||
+      rows[3]?.meta.changes !== 1 ||
+      user === undefined ||
+      taxonomy === undefined
+    ) {
+      return yield* Effect.fail(undefined);
+    }
+    const loaded = yield* prepared.decode(user.results).pipe(Effect.mapError(() => undefined));
+    const categories = decodeCategoryRead(taxonomy.results);
+    if (Option.isNone(categories)) return yield* Effect.fail(undefined);
+    return { ...loaded, categories: Option.some(categories.value.data) };
   });

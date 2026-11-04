@@ -632,6 +632,7 @@ export default Alchemy.Stack(
       outdir: "dist",
       env: {
         API: ingress,
+        DASHBOARD_DOCUMENTS: Cloudflare.WorkerEntrypoint(core, "DashboardDocumentService"),
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,

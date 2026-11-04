@@ -423,3 +423,5 @@ export default makeCoreWorker({
   telemetry: cloudflareWorkerTelemetry,
   institutions: registeredConnectionInstitutionIds,
 });
+
+export { DashboardDocumentService } from "./dashboard/runtime";

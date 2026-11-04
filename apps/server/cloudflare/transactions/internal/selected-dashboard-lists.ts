@@ -14,7 +14,7 @@ const Row = Schema.Struct({
     Schema.Array(Schema.Unknown).check(Schema.isMaxLength(maximumListRows))
   ),
 });
-const foldSpanish = (expression: string): string =>
+export const foldSpanish = (expression: string): string =>
   [
     ["Á", "á"],
     ["É", "é"],

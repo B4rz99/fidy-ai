@@ -201,3 +201,16 @@ export type ReviewedCaptureInput = CaptureFacts &
       "money" | "direction" | "counterparty" | "occurredAt" | "categoryId"
     >;
   }>;
+
+/** Isolated native SQLite candidate facts; the enclosing transaction owns authority and Audit. */
+export type SqliteDashboardTransactions = Readonly<{
+  ranges: ReadonlyArray<ReadonlyArray<EffectiveTransactionAggregate>>;
+  lists: ReadonlyArray<ReadonlyArray<DashboardTransactionFact>>;
+  measurement: Readonly<{
+    scans: number;
+    financialRows: number;
+    rowsRead: number;
+    workingGroups: number;
+    promotions: number;
+  }>;
+}>;

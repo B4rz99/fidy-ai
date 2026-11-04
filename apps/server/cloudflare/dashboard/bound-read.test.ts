@@ -1,4 +1,4 @@
-import { type Cause, Effect } from "effect";
+import { type Cause, DateTime, Effect } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { browserSessionBindingHeader } from "../../src/shell/browser-transport/contract";
 import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
@@ -12,7 +12,7 @@ const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
 const userId = "10000000-0000-4000-8000-000000000001";
 const sessionId = "60000000-0000-4000-8000-000000000001";
-const current = 1793815200000;
+const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
 const io = <A>(work: () => Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(work);
 const setup = Effect.gen(function* () {

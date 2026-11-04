@@ -96,3 +96,39 @@ it("prepares a maximum all-Widget layout over linked histories without duplicati
       });
     })
   ));
+
+it("prepares dense distinct amounts inside the measured period and preserves wide Money text", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      for (const history of ["dense", "wide"] as const) {
+        const db = yield* Effect.tryPromise(() => databases.acquire());
+        yield* Effect.tryPromise(() => installTestSchema({ db }));
+        const user = "98000000-0000-4000-8000-000000000112";
+        yield* Effect.tryPromise(() => seedUsers(db, [user]));
+        yield* seedAssessment({
+          db,
+          dataset: "small",
+          now: current,
+          users: [user],
+          history,
+          layout: "default",
+        });
+        const distinct = yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(DISTINCT amount) AS count FROM transactions WHERE user_id=?")
+            .bind(user)
+            .first("count")
+        );
+        expect(distinct).toBe(500);
+        if (history === "wide") {
+          const amount = yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT amount FROM transactions WHERE user_id=? ORDER BY id LIMIT 1")
+              .bind(user)
+              .first("amount")
+          );
+          expect(amount).toBe("90071992547409931234567890123456789012345678901234567890.15");
+        }
+      }
+    })
+  ));

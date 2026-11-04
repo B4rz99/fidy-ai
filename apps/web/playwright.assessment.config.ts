@@ -47,7 +47,8 @@ export default defineConfig({
           : server.command
         )
           .replaceAll("4173", String(topology.appPort))
-          .replaceAll("4174", String(topology.apiPort)),
+          .replaceAll("4174", String(topology.apiPort))
+          .replaceAll("/tmp/fidy-playwright-", `/tmp/fidy-assessment-${topology.mode}-`),
         url: server.url
           ?.replace("4173", String(topology.appPort))
           .replace("4174", String(topology.apiPort)),

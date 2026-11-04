@@ -4,6 +4,18 @@ import { compareDashboardCohorts } from "./dashboard-qualification";
 const cohort = {
   dataset: "small",
   revision: "baseline",
+  browserDigest: "browser-a",
+  runtime: "Bun pinned",
+  compression: "identity",
+  build: "production",
+  epoch: "2026-11-04T12:00:00.000Z",
+  setup: "ready",
+  activitySatisfied: true,
+  preparedUsers: 1,
+  samplesPerActor: 30,
+  sourceClean: true,
+  scheduleSatisfied: true,
+  requestedRevisionMatches: true,
   fixtureDigest: "fixture-a",
   harnessDigest: "harness-a",
   dependenciesDigest: "dependencies-a",
@@ -17,7 +29,7 @@ const cohort = {
   layout: "default",
   pacedIntervalMs: 12000,
   cpuRate: 1,
-  samples: [{ journey: "direct", outcome: "ready", durationMs: 10 }],
+  samples: [{ journey: "direct", outcome: "ready", durationMs: 10, user: 0, tab: 0, attempt: 0 }],
 } as const;
 
 describe("matched Dashboard qualification", () => {
@@ -29,20 +41,27 @@ describe("matched Dashboard qualification", () => {
   it("compares direct and return p95 separately while retaining refusals outside the percentiles", () => {
     const baseline = {
       ...cohort,
-      samples: Array.from({ length: 30 }, () => [
-        { journey: "direct", outcome: "ready", durationMs: 100 } as const,
-        { journey: "return", outcome: "ready", durationMs: 20 } as const,
+      samples: Array.from({ length: 30 }, (_, attempt) => [
+        { journey: "direct", outcome: "ready", durationMs: 100, user: 0, tab: 0, attempt } as const,
+        { journey: "return", outcome: "ready", durationMs: 20, user: 0, tab: 0, attempt } as const,
       ]).flat(),
     };
     const candidate = {
       ...baseline,
       revision: "candidate",
       samples: [
-        ...Array.from({ length: 30 }, () => [
-          { journey: "direct", outcome: "ready", durationMs: 9 } as const,
-          { journey: "return", outcome: "ready", durationMs: 3 } as const,
+        ...Array.from({ length: 30 }, (_, attempt) => [
+          { journey: "direct", outcome: "ready", durationMs: 9, user: 0, tab: 0, attempt } as const,
+          { journey: "return", outcome: "ready", durationMs: 3, user: 0, tab: 0, attempt } as const,
         ]).flat(),
-        { journey: "direct", outcome: "refused", durationMs: 0.01 } as const,
+        {
+          journey: "direct",
+          outcome: "refused",
+          durationMs: 0.01,
+          user: 0,
+          tab: 0,
+          attempt: 30,
+        } as const,
       ],
     };
     expect(compareDashboardCohorts(baseline, candidate)).toMatchObject({
@@ -60,11 +79,14 @@ describe("matched Dashboard qualification", () => {
       ...cohort,
       samples: Array.from(
         { length: 30 },
-        () =>
+        (_, attempt) =>
           ({
             journey: "direct",
             outcome: "ready",
             durationMs: 100,
+            user: 0,
+            tab: 0,
+            attempt,
           }) as const
       ),
     };
@@ -73,13 +95,44 @@ describe("matched Dashboard qualification", () => {
       revision: "candidate",
       samples: [
         ...baseline.samples.slice(1),
-        { journey: "direct", outcome: "refused", durationMs: 0.01 } as const,
+        {
+          journey: "direct",
+          outcome: "refused",
+          durationMs: 0.01,
+          user: 0,
+          tab: 0,
+          attempt: 30,
+        } as const,
       ],
     };
     expect(compareDashboardCohorts(baseline, candidate)).toMatchObject({
       direct: {
         target: { status: "insufficient", requiredSuccessfulSamples: 30 },
         candidate: { offered: 30, ready: 29, refusals: 1 },
+      },
+    });
+  });
+  it("does not let a fast represented User conceal missing concurrent participants", () => {
+    const partial = {
+      ...cohort,
+      users: 8 as const,
+      preparedUsers: 8,
+      samples: Array.from(
+        { length: 30 },
+        (_, attempt) =>
+          ({
+            user: 0,
+            tab: 0,
+            attempt,
+            journey: "direct",
+            outcome: "ready",
+            durationMs: 1,
+          }) as const
+      ),
+    };
+    expect(compareDashboardCohorts(partial, { ...partial, revision: "candidate" })).toMatchObject({
+      direct: {
+        target: { status: "insufficient", incompleteActors: 7 },
       },
     });
   });

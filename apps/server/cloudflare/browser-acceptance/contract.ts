@@ -31,3 +31,41 @@ export const browserAcceptanceTopologies = {
   oauth: topology("oauth", oauthAppPort),
   dashboard: topology("dashboard", dashboardAppPort),
 } as const;
+
+const moderateDashboardUsers = 8;
+const maximumDashboardUsers = 32;
+const uuidWidth = 12;
+const identityStep = 10;
+export const DashboardAssessmentDataset = Schema.Literals([
+  "small",
+  "heavy",
+  "extreme",
+  "breaking",
+]);
+export const DashboardAssessmentHistory = Schema.Literals([
+  "routine",
+  "dense",
+  "wide",
+  "reconciled",
+  "recurring",
+]);
+export type DashboardAssessmentHistory = typeof DashboardAssessmentHistory.Type;
+export const DashboardAssessmentLayout = Schema.Literals(["default", "maximum"]);
+export const DashboardAssessmentConfiguration = Schema.Struct({
+  dataset: DashboardAssessmentDataset,
+  backend: Schema.Literals(["legacy-d1", "audited-native-guarded", "audited-native-qualified"]),
+  users: Schema.Literals([1, moderateDashboardUsers, maximumDashboardUsers]),
+  history: DashboardAssessmentHistory,
+  layout: DashboardAssessmentLayout,
+  activity: Schema.Literals(["quiet", "ingestion-two-tabs"]),
+  epoch: Schema.DateTimeUtcFromString,
+});
+
+/** Fixed synthetic identities; an operator query cannot select an arbitrary User. */
+export const dashboardAssessmentIdentities = [
+  { key: "navigationDashboard", userId: "24000000-0000-4000-8000-000000000481" },
+  ...Array.from({ length: maximumDashboardUsers - 1 }, (_, index) => ({
+    key: `assessmentDashboard${index + 1}` as const,
+    userId: `88000000-0000-4000-8000-${String((index + 1) * identityStep + 1).padStart(uuidWidth, "0")}`,
+  })),
+] as const;

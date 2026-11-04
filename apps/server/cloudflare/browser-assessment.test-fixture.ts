@@ -1,5 +1,9 @@
 import { DateTime, Effect, Schema } from "effect";
-import { maximumAssessmentDashboard } from "./browser-assessment-layout.test-fixture";
+import {
+  defaultAssessmentDashboard,
+  maximumAssessmentDashboard,
+} from "./browser-assessment-layout.test-fixture";
+import { type DashboardAssessmentHistory } from "./browser-acceptance/contract";
 import { DashboardDocument } from "../src/core/dashboard/contract";
 
 const sizes = {
@@ -9,12 +13,14 @@ const sizes = {
   breaking: { transactions: 1_000_000, plans: 100, revisions: 100, review: 5000, currencies: 8 },
 };
 type DatasetSize = typeof sizes.small;
-type SeedUser = Readonly<{ user: string; slot: number; history: "routine" | "reconciled" }>;
+type SeedUser = Readonly<{ user: string; slot: number; history: DashboardAssessmentHistory }>;
 const userIdentityStride = 2_000_000;
 const uuidWidth = 12;
 const categoryCount = 16;
 const batchSize = 10_000;
 const recentCount = 500;
+const wideAmountBase = 90071992547409931234567890123456789012345678901234567890n;
+const currencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"];
 const minuteMs = 60_000;
 const dayMs = 86_400_000;
 const historyDays = 3650;
@@ -60,6 +66,25 @@ const reconcileRows = Effect.fn(function* ({
     ])
   );
 });
+const assessmentAmount = (
+  history: DashboardAssessmentHistory,
+  ordinal: number,
+  currency: string
+): string => {
+  if (history === "routine" || history === "reconciled" || history === "recurring") return "1000";
+  const whole = history === "wide" ? String(wideAmountBase + BigInt(ordinal)) : String(ordinal + 1);
+  return currency === "JPY" ? whole : `${whole}.15`;
+};
+const assessmentOccurrence = (
+  history: DashboardAssessmentHistory,
+  ordinal: number,
+  now: number
+): number => {
+  if (history === "routine" || history === "recurring") {
+    return now - (ordinal < recentCount ? ordinal * minuteMs : (ordinal % historyDays) * dayMs);
+  }
+  return now - ordinal;
+};
 const seedTransactions = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
   const { user, slot } = subject;
   for (let offset = 0; offset < size.transactions; offset += batchSize) {
@@ -67,19 +92,30 @@ const seedTransactions = Effect.fn(function* ({ db, size, now, subject }: SeedCo
       { length: Math.min(batchSize, size.transactions - offset) },
       (_, index) => {
         const ordinal = offset + index;
+        const currency =
+          subject.history === "routine"
+            ? "COP"
+            : currencies[
+                (subject.history === "reconciled" ? Math.floor(ordinal / 2) : ordinal) %
+                  size.currencies
+              ];
+        if (currency === undefined) {
+          throw new Error("Assessment Currency configuration is incomplete");
+        }
         return {
           id: uuid("81000000", slot * userIdentityStride + ordinal),
           category: `10000000-0000-4000-8000-${String((ordinal % categoryCount) + 1).padStart(uuidWidth, "0")}`,
-          counterparty: `Evaluación ${ordinal}`,
-          occurred:
-            now - (ordinal < recentCount ? ordinal * minuteMs : (ordinal % historyDays) * dayMs),
+          counterparty: `Evaluación ${subject.history === "recurring" ? ordinal % size.plans : ordinal}`,
+          amount: assessmentAmount(subject.history, ordinal, currency),
+          currency,
+          occurred: assessmentOccurrence(subject.history, ordinal, now),
         };
       }
     );
     yield* Effect.tryPromise(() =>
       db
         .prepare(`INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms)
-      SELECT json_extract(value,'$.id'),?,'1000','COP','outflow',json_extract(value,'$.counterparty'),json_extract(value,'$.category'),json_extract(value,'$.occurred'),json_extract(value,'$.occurred') FROM json_each(?)`)
+      SELECT json_extract(value,'$.id'),?,json_extract(value,'$.amount'),json_extract(value,'$.currency'),'outflow',json_extract(value,'$.counterparty'),json_extract(value,'$.category'),json_extract(value,'$.occurred'),json_extract(value,'$.occurred') FROM json_each(?)`)
         .bind(user, json(rows))
         .run()
     );
@@ -88,11 +124,8 @@ const seedTransactions = Effect.fn(function* ({ db, size, now, subject }: SeedCo
 });
 const seedBudgets = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
   const { user, slot } = subject;
-  const currencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"].slice(
-    0,
-    size.currencies
-  );
-  for (const [index, currency] of currencies.entries()) {
+  const selectedCurrencies = currencies.slice(0, size.currencies);
+  for (const [index, currency] of selectedCurrencies.entries()) {
     yield* Effect.tryPromise(() =>
       db
         .prepare(`INSERT INTO budgets(id,user_id,category_id,currency,cap,created_at_ms,updated_at_ms,group_name,starts_month)
@@ -209,7 +242,7 @@ export const seedAssessment = Effect.fn(function* ({
   dataset: string;
   now: number;
   users: ReadonlyArray<string>;
-  history: "routine" | "reconciled";
+  history: DashboardAssessmentHistory;
   layout: "default" | "maximum";
 }) {
   if (
@@ -226,10 +259,12 @@ export const seedAssessment = Effect.fn(function* ({
     yield* seedBudgets(context);
     yield* seedRecurring(db, size, subject);
     yield* seedReview(context);
-    if (layout === "maximum") {
-      const document = yield* Schema.encodeEffect(Schema.fromJsonString(DashboardDocument))(
-        maximumAssessmentDashboard()
-      );
+    const dashboard =
+      layout === "maximum" ? maximumAssessmentDashboard() : defaultAssessmentDashboard();
+    const document = yield* Schema.encodeEffect(Schema.fromJsonString(DashboardDocument))(
+      dashboard
+    );
+    {
       yield* Effect.tryPromise(() =>
         db
           .prepare(

@@ -14,7 +14,10 @@ import {
   makeCoreWorker,
   runBillingCollectionWorkflow,
 } from "./browser-acceptance-core-module";
-import { browserAcceptanceTopologies } from "./browser-acceptance/contract";
+import {
+  browserAcceptanceTopologies,
+  dashboardAssessmentIdentities,
+} from "./browser-acceptance/contract";
 import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
 import {
@@ -458,6 +461,7 @@ const fixtureIdentities = [
   { key: "oauthOperation", userId: oauthOperationUserId },
   ...recurringIsolatedIdentities,
   ...navigationIdentities,
+  ...dashboardAssessmentIdentities.slice(1),
   { key: "recurring", userId: recurringUserId },
   { key: "recurringSummary", userId: recurringSummaryUserId },
   { key: "recurringEditing", userId: recurringEditingUserId },
@@ -481,20 +485,22 @@ const approvedFixtureUser = (parameters: URLSearchParams): string =>
 const connectionFixture = makeConnectionFixture(firstCardUserId);
 const assessmentAcceptedStatus = 202;
 const assessmentReadyStatus = 200;
-type AssessmentPreparation = "unprepared" | "preparing" | "ready" | "failed";
-const assessmentPreparation: { status: AssessmentPreparation } = { status: "unprepared" };
+type AssessmentPreparation =
+  | Readonly<{ status: "unprepared" | "preparing" | "failed" }>
+  | (Readonly<{ status: "ready" }> & Awaited<ReturnType<typeof prepareBrowserAssessment>>);
+let assessmentPreparation: AssessmentPreparation = { status: "unprepared" };
 const assessmentOperator = (request: Request): Option.Option<Response> => {
   if (!["GET", "POST"].some((method) => operatorRoute(request, "/assessment/prepare", method))) {
     return Option.none();
   }
   if (request.method === "POST" && assessmentPreparation.status === "unprepared") {
-    assessmentPreparation.status = "preparing";
+    assessmentPreparation = { status: "preparing" };
     prepareBrowserAssessment().then(
-      () => {
-        assessmentPreparation.status = "ready";
+      (assessment) => {
+        assessmentPreparation = { status: "ready", ...assessment };
       },
       () => {
-        assessmentPreparation.status = "failed";
+        assessmentPreparation = { status: "failed" };
       }
     );
   }

@@ -1,5 +1,8 @@
 import { Schema } from "effect";
-import { DashboardDocument, type DashboardPeriod } from "../src/core/dashboard/contract";
+import { DashboardDocument, type DashboardPeriod, WidgetId } from "../src/core/dashboard/contract";
+
+import { CategoryId } from "../src/core/categories/contract";
+import { makeDefaultDashboard } from "../src/core/dashboard/operations";
 
 const widgetKinds = 4;
 const maximumWidgets = 24;
@@ -58,4 +61,15 @@ export const maximumAssessmentDashboard = (): DashboardDocument =>
         node: { kind: "leaf", widget: widget(ordinal) },
       })),
     },
+  });
+
+export const defaultAssessmentDashboard = (): DashboardDocument =>
+  makeDefaultDashboard({
+    restaurantCategoryId: CategoryId.make(categoryId),
+    widgetIds: [
+      WidgetId.make("89000000-0000-4000-8000-000000000000"),
+      WidgetId.make("89000000-0000-4000-8000-000000000001"),
+      WidgetId.make("89000000-0000-4000-8000-000000000002"),
+      WidgetId.make("89000000-0000-4000-8000-000000000003"),
+    ],
   });

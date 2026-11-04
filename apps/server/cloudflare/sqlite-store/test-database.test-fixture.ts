@@ -1,4 +1,5 @@
-import type { NativeDashboardReader } from "../dashboard/contract";
+import type { NativeDashboardBinding, NativeDashboardReader } from "../dashboard/contract";
+import type { SqliteStoreBinding } from "./contract";
 import { makeNativeDashboardReader } from "../dashboard/operations";
 import { Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
@@ -98,6 +99,12 @@ type TestStore = Readonly<{
   document: (request: Request) => Promise<unknown>;
   snapshot: (input: Readonly<{ request: Request; mode: "bound" | "document" }>) => Promise<unknown>;
 }>;
+type NativeTestStore = TestStore &
+  Readonly<{
+    namespace: Readonly<{
+      getByName: (name: string) => SqliteStoreBinding & NativeDashboardBinding;
+    }>;
+  }>;
 const snapshot = (input: Readonly<{ runtime: Miniflare; name: string }>): NativeDashboardReader =>
   makeNativeDashboardReader({
     manifest: "fixture",
@@ -123,7 +130,7 @@ const snapshot = (input: Readonly<{ runtime: Miniflare; name: string }>): Native
 /** Test-only transport selection reuses the existing canonical suites against real native Store objects. */
 export const sqliteTestStorage = (): Readonly<{
   acquire: () => Promise<TestStore>;
-  acquireDocument: (isolation: "Live" | "Isolated") => Promise<TestStore>;
+  acquireDocument: (isolation: "Live" | "Isolated") => Promise<NativeTestStore>;
   dispose: () => Promise<void>;
 }> => {
   const runtimes: Promise<Miniflare>[] = [];
@@ -151,12 +158,15 @@ export const sqliteTestStorage = (): Readonly<{
       const next = runtime(runtimes.length, isolation);
       runtimes.push(next);
       return next.then((runtime) =>
-        runtime.getBindings<{ BUCKET_0: R2Bucket }>().then((bindings) => ({
-          db: database({ runtime, name: "authoritative-v1" }),
-          snapshot: snapshot({ runtime, name: "authoritative-v1" }),
-          bucket: bindings.BUCKET_0,
-          document: (request: Request) => documentRead(runtime, request),
-        }))
+        runtime
+          .getBindings<{ BUCKET_0: R2Bucket; SQLITE_STORE: NativeTestStore["namespace"] }>()
+          .then((bindings) => ({
+            db: database({ runtime, name: "authoritative-v1" }),
+            snapshot: snapshot({ runtime, name: "authoritative-v1" }),
+            bucket: bindings.BUCKET_0,
+            namespace: bindings.SQLITE_STORE,
+            document: (request: Request) => documentRead(runtime, request),
+          }))
       );
     },
     dispose: () =>

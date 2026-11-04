@@ -374,7 +374,11 @@ Native Core HTTP and private coordinator calls, Email, Queue, scheduled work and
 entrypoints retain one independent admission lease through response release, native continuations
 and actual DB/R2/Queue/Workflow promises. A private AsyncLocalStorage capability associates
 resident concurrent Effect executions with their own root; it retains no reusable financial
-result. The production compatibility date supports this narrow native API without a Node
+result. Outbound HTTP captures that private root at request execution and retains the actual
+Fetch promise, response-reader calls, complete response-body ownership and native cancellation
+acknowledgement. Local timeout and reader-lock release do not acknowledge provider settlement;
+unknown cancellation retains the durable root. Native invocation starts synchronously before a
+resource can be locally released. The production compatibility date supports this narrow native API without a Node
 compatibility flag. Server bundles preserve native `node:*` imports. The local tracker freezes
 before root completion and refuses later IO before invoking its binding. A source publisher
 pause rejects new HTTP/Email/cron work while trusted epoch-stamped native continuations drain;

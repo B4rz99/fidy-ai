@@ -1,4 +1,6 @@
-import { Schema } from "effect";
+import { type Effect, Schema } from "effect";
+import { ErasureGeneration } from "../erasure/contract";
+import type { ErasureUnavailable } from "../erasure-store/contract";
 
 const maximumIdentityLength = 128;
 const activationName = Schema.String.check(Schema.isBetweenLength(1, maximumIdentityLength));
@@ -18,6 +20,23 @@ export const RecoverySourceTarget = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("SQLite"), ...RecoveryTarget.fields }),
 ]);
 export type RecoverySourceTarget = typeof RecoverySourceTarget.Type;
+/** Issued from the independently persisted final barrier, never from a restored SQL row or a caller assertion. */
+export const RecoveryClosedSourceEvidence = Schema.Struct({
+  activationId: Schema.String.check(Schema.isUUID()),
+  admissionObjectId: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+  source: RecoverySourceTarget,
+  sourceGeneration: ErasureGeneration,
+  finalGeneration: Schema.String.check(Schema.isUUID()),
+  finalCheckpointEtag: activationName,
+  providerEvidenceDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+  ledgerDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+});
+export type RecoveryClosedSourceEvidence = typeof RecoveryClosedSourceEvidence.Type;
+/** The implementation owns fixed bindings and validates the external phase plus the actual closed, drained gate on every read. */
+export type RecoveryClosedSourceAccess = (
+  expected: Readonly<{ activationId: string; source: RecoverySourceTarget }>
+) => Effect.Effect<RecoveryClosedSourceEvidence, ErasureUnavailable>;
+
 export const RecoveryStoreObservation = Schema.Struct({
   target: RecoveryTarget,
   admission: Schema.Literals(["Open", "Closed"]),

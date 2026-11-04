@@ -409,3 +409,17 @@ reports `Unqualified`; this progress cannot open a Store, publish a serving gene
 R2 guard, or qualify an activation. Provider-verified namespace/version history, complete operation
 and provider drain, final ledger replay and fresh serving bootstrap remain required before that
 transition can be implemented.
+
+Production `Restore` and `ReleaseRestore` read the independent activation record before touching
+restore state. Any activation record, malformed evidence or unavailable registry refuses those
+commands; the isolated candidate-only recovery boundary remains separate. Authenticated operator
+commands other than `Activation` and read-only `Receipt` hold native continuation leases, so they
+can settle while publishers are paused and are refused after final closure. `Activation` remains
+a control operation and must separately serialize its own interrupted native writes before any
+final barrier can qualify.
+
+`RecoveryClosedSourceEvidence` declares the artifact handoff: source identity, actual admission
+object, activation, old source generation, distinct final generation/checkpoint ETag and content
+digests for provider and ledger evidence. `readClosedRecoverySource` currently always refuses;
+preliminary R2 progress cannot issue export/bootstrap authority while provider qualification and
+final reconciliation remain incomplete.

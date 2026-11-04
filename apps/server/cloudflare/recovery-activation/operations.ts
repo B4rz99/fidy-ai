@@ -6,6 +6,7 @@ import { reconcileErasureAdmissions } from "../erasure/operations";
 import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
+  type RecoveryClosedSourceAccess,
   RecoverySourceTarget,
   RecoveryTarget,
 } from "./contract";
@@ -141,3 +142,16 @@ export const advanceRecoveryActivation = (
     yield* currentActivation(input);
     return yield* storeActivation({ bucket: input.bucket, record: advanced, previous });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
+
+/** Production recovery must never reauthorize a source or active target after activation begins. Candidate-only recovery uses its isolated boundary. */
+export const assertProductionRestoreAllowed = (
+  bucket: R2Bucket
+): Effect.Effect<void, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    const activation = yield* loadActivation(bucket);
+    if (Option.isSome(activation)) return yield* new ErasureUnavailable();
+  });
+
+/** Final provider qualification and ledger checkpoint production are not complete. Never issue export/bootstrap authority from preliminary progress. */
+export const readClosedRecoverySource: RecoveryClosedSourceAccess = () =>
+  Effect.fail(new ErasureUnavailable());

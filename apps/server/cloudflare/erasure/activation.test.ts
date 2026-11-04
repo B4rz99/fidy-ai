@@ -8,7 +8,7 @@ import { fixtureNativeHttpClient } from "../core-worker.test-fixture";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { nativeErasurePlatform, seedPersonalClasses } from "./native.test-fixture";
 import { executeErasureAdmission } from "./operations";
-import { handleErasureOperator } from "./runtime";
+import { handleErasureCandidateOperator, handleErasureOperator } from "./runtime";
 import { nativeRecoveryAdmissions } from "../recovery-activation/native.test-fixture";
 
 const issuer = "https://erasure-test.cloudflareaccess.com";
@@ -19,6 +19,11 @@ const target = {
   databaseId: "18500000-0000-4000-8000-000000000002",
   epoch: "source-epoch",
 };
+const control = {
+  inspect: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
+  close: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
+};
+
 const userId = "18500000-0000-4000-8000-000000000099";
 const servingTarget = {
   namespaceId: "serving-native",
@@ -27,6 +32,44 @@ const servingTarget = {
   epoch: "serving-epoch",
 };
 afterEach(() => vi.restoreAllMocks());
+
+const operatorToken = (current: number): Effect.Effect<string, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const { publicKey, privateKey } = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
+    const jwk = {
+      ...(yield* Effect.tryPromise(() => exportJWK(publicKey))),
+      kid: "activation",
+      alg: "RS256",
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(Response.json({ keys: [jwk] }))
+    );
+    const token = yield* Effect.tryPromise(() =>
+      new SignJWT({ email: "obarboza@fidyapp.com" })
+        .setProtectedHeader({ alg: "RS256", kid: "activation" })
+        .setIssuer(issuer)
+        .setAudience(audience)
+        .setSubject("operator")
+        .setIssuedAt(Math.floor(current / 1000))
+        .setExpirationTime(Math.floor(current / 1000) + 300)
+        .sign(privateKey)
+    );
+    return token;
+  });
+
+const readActivationRecord = (
+  registry: R2Bucket
+): Effect.Effect<unknown, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const stored = yield* Effect.tryPromise(() => registry.get("recovery/activation"));
+    expect(stored).not.toBeNull();
+    const record = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
+      yield* Effect.tryPromise(() =>
+        stored === null ? Promise.reject(new Error("Missing activation record")) : stored.text()
+      )
+    );
+    return record;
+  });
 
 effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
   it.effect(
@@ -37,25 +80,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         const native = yield* Effect.tryPromise(() => platform.acquire());
         yield* Effect.tryPromise(() => installRetentionTestSchema(native.db));
         const current = yield* Clock.currentTimeMillis;
-        const { publicKey, privateKey } = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
-        const jwk = {
-          ...(yield* Effect.tryPromise(() => exportJWK(publicKey))),
-          kid: "activation",
-          alg: "RS256",
-        };
-        vi.spyOn(globalThis, "fetch").mockImplementation(() =>
-          Promise.resolve(Response.json({ keys: [jwk] }))
-        );
-        const token = yield* Effect.tryPromise(() =>
-          new SignJWT({ email: "obarboza@fidyapp.com" })
-            .setProtectedHeader({ alg: "RS256", kid: "activation" })
-            .setIssuer(issuer)
-            .setAudience(audience)
-            .setSubject("operator")
-            .setIssuedAt(Math.floor(current / 1000))
-            .setExpirationTime(Math.floor(current / 1000) + 300)
-            .sign(privateKey)
-        );
+        const token = yield* operatorToken(current);
         yield* seedPersonalClasses({ db: native.db, userId, current, index: 0 });
         const interruptedRegistry = new Proxy(native.registry, {
           get: (registry, property): unknown =>
@@ -82,8 +107,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           (yield* Effect.tryPromise(() => native.registry.list({ prefix: "recovery/cases/" })))
             .objects
         ).toHaveLength(0);
-        const gates = yield* nativeRecoveryAdmissions;
-        const admission = gates.source;
+        const { source: admission, replacement } = yield* nativeRecoveryAdmissions;
         let selectedAdmission = admission;
         expect(
           yield* Effect.tryPromise(() =>
@@ -91,28 +115,32 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           )
         ).toBe(true);
         let sourceTarget = target;
-        const control = {
-          inspect: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
-          close: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
-        };
         const http = yield* fixtureNativeHttpClient;
         const operationSignal = yield* Effect.abortSignal;
+        let operatorDb = native.snapshot;
         const send = (
-          signal: AbortSignal = operationSignal
+          signal: AbortSignal = operationSignal,
+          action: "Activation" | "Restore" | "ReleaseRestore" | "Initialize" = "Activation",
+          candidate: boolean = false
         ): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
           Effect.gen(function* () {
-            return yield* handleErasureOperator({
+            const handle = candidate ? handleErasureCandidateOperator : handleErasureOperator;
+            return yield* handle({
               request: new Request("https://operator/internal/titular-erasure", {
                 method: "POST",
                 signal,
                 headers: { "content-type": "application/json", "cf-access-jwt-assertion": token },
                 body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-                  action: "Activation",
-                  activationId,
+                  action,
+                  ...(action === "Activation" ? { activationId } : {}),
                 }),
               }),
               environment: {
-                DB: native.snapshot,
+                DB: operatorDb,
+                RECOVERY_ADMISSION: { getByName: () => selectedAdmission },
+                RECOVERY_SOURCE_EPOCH: target.epoch,
+                ERASURE_CANDIDATE_DATABASE_ID: "candidate-native",
+                ERASURE_SERVING_DATABASE_ID: "serving-native",
                 ERASURE_BUCKET: native.registry,
                 ERASURE_ACTIVATION: {
                   admission: selectedAdmission,
@@ -130,20 +158,22 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           });
         const response = yield* send();
         expect(response.status).toBe(202);
-        const body: unknown = yield* Effect.tryPromise(() => response.json());
-        expect(body).toMatchObject({ phase: "AwaitingDrain", providerIsolation: "Unqualified" });
-        const stored = yield* Effect.tryPromise(() => native.registry.get("recovery/activation"));
-        expect(stored).not.toBeNull();
-        const record = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
-          yield* Effect.tryPromise(() =>
-            stored === null ? Promise.reject(new Error("Missing activation record")) : stored.text()
-          )
-        );
+        expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+          phase: "AwaitingDrain",
+          providerIsolation: "Unqualified",
+        });
+        const record = yield* readActivationRecord(native.registry);
         expect(record).toMatchObject({ activationId, phase: "AwaitingDrain", source: target });
+        operatorDb = native.db;
+        expect((yield* send(operationSignal, "Restore")).status).toBe(503);
+        expect((yield* send(operationSignal, "ReleaseRestore")).status).toBe(503);
+        operatorDb = native.snapshot;
+        yield* Effect.tryPromise(() => installRetentionTestSchema(native.snapshot));
+        expect((yield* send(operationSignal, "Restore", true)).status).toBe(202);
         sourceTarget = { ...target, databaseId: "18500000-0000-4000-8000-000000000003" };
         expect((yield* send()).status).toBe(503);
         sourceTarget = target;
-        selectedAdmission = gates.replacement;
+        selectedAdmission = replacement;
         expect((yield* send()).status).toBe(503);
         selectedAdmission = admission;
         expect(
@@ -240,12 +270,15 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
             )
             .run()
         );
+        expect((yield* send(operationSignal, "Initialize")).status).toBe(204);
         const repeated = yield* send();
         expect(repeated.status).toBe(202);
         expect(
           (yield* Effect.tryPromise(() => native.registry.list({ prefix: "recovery/cases/" })))
             .objects
         ).toHaveLength(1);
+        yield* Effect.tryPromise(() => admission.close({ activationId, epoch: target.epoch }));
+        expect((yield* send(operationSignal, "Initialize")).status).toBe(503);
       }).pipe(Effect.scoped)
   );
 });

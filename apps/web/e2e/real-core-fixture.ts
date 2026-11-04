@@ -1,3 +1,4 @@
+import { type dashboardAssessmentIdentities } from "../../server/cloudflare/browser-acceptance/contract";
 import type { APIRequestContext, APIResponse, Page, Response, Route } from "@playwright/test";
 import type { Cause } from "effect";
 import { Clock, Effect, Option, Redacted, Schema } from "effect";
@@ -462,6 +463,7 @@ export const signInRecurringNativeClockThroughCore = (
 type NavigationFixture = SignInFixture &
   Readonly<{
     identity:
+      | (typeof dashboardAssessmentIdentities)[number]["key"]
       | "navigationPayment"
       | "navigationOAuthLoading"
       | "navigationOAuthUnavailable"

@@ -1,4 +1,10 @@
 import { DateTime, Effect, Schema } from "effect";
+import {
+  defaultAssessmentDashboard,
+  maximumAssessmentDashboard,
+} from "./browser-assessment-layout.test-fixture";
+import { type DashboardAssessmentHistory } from "./browser-acceptance/contract";
+import { DashboardDocument } from "../src/core/dashboard/contract";
 
 const sizes = {
   small: { transactions: 500, plans: 10, revisions: 1, review: 50, currencies: 1 },
@@ -7,11 +13,14 @@ const sizes = {
   breaking: { transactions: 1_000_000, plans: 100, revisions: 100, review: 5000, currencies: 8 },
 };
 type DatasetSize = typeof sizes.small;
-const user = "24000000-0000-4000-8000-000000000481";
+type SeedUser = Readonly<{ user: string; slot: number; history: DashboardAssessmentHistory }>;
+const userIdentityStride = 2_000_000;
 const uuidWidth = 12;
 const categoryCount = 16;
 const batchSize = 10_000;
 const recentCount = 500;
+const wideAmountBase = 90071992547409931234567890123456789012345678901234567890n;
+const currencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"];
 const minuteMs = 60_000;
 const dayMs = 86_400_000;
 const historyDays = 3650;
@@ -20,41 +29,108 @@ const shaLength = 64;
 const json = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const uuid = (prefix: string, index: number): string =>
   `${prefix}-0000-4000-8000-${String(index).padStart(uuidWidth, "0")}`;
-const seedTransactions = Effect.fn(function* (db: D1Database, size: DatasetSize, now: number) {
+type SeedContext = Readonly<{ db: D1Database; size: DatasetSize; now: number; subject: SeedUser }>;
+const reconcileRows = Effect.fn(function* ({
+  db,
+  rows,
+  user,
+  now,
+}: Readonly<{
+  db: D1Database;
+  rows: ReadonlyArray<{ id: string }>;
+  user: string;
+  now: number;
+}>) {
+  const pairs: Array<{ first: string; second: string }> = [];
+  for (let index = 0; index < rows.length; index += 2) {
+    const first = rows[index];
+    const second = rows[index + 1];
+    if (first === undefined || second === undefined) {
+      throw new Error("Assessment Reconciliation requires complete pairs");
+    }
+    pairs.push({ first: first.id, second: second.id });
+  }
+  const encoded = json(pairs);
+  yield* Effect.tryPromise(() =>
+    db.batch([
+      db
+        .prepare(
+          "INSERT INTO transaction_reconciliation_decisions(user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,decided_at_ms) SELECT ?,json_extract(value,'$.first'),json_extract(value,'$.second'),'linked',json_extract(value,'$.first'),? FROM json_each(?)"
+        )
+        .bind(user, now, encoded),
+      db
+        .prepare(
+          "UPDATE transactions SET reconciliation_first_id=json_extract(pair.value,'$.first'),reconciliation_second_id=json_extract(pair.value,'$.second') FROM json_each(?) pair WHERE transactions.user_id=? AND transactions.id IN (json_extract(pair.value,'$.first'),json_extract(pair.value,'$.second'))"
+        )
+        .bind(encoded, user),
+    ])
+  );
+});
+const assessmentAmount = (
+  history: DashboardAssessmentHistory,
+  ordinal: number,
+  currency: string
+): string => {
+  if (history === "routine" || history === "reconciled" || history === "recurring") return "1000";
+  const whole = history === "wide" ? String(wideAmountBase + BigInt(ordinal)) : String(ordinal + 1);
+  return currency === "JPY" ? whole : `${whole}.15`;
+};
+const assessmentOccurrence = (
+  history: DashboardAssessmentHistory,
+  ordinal: number,
+  now: number
+): number => {
+  if (history === "routine" || history === "recurring") {
+    return now - (ordinal < recentCount ? ordinal * minuteMs : (ordinal % historyDays) * dayMs);
+  }
+  return now - ordinal;
+};
+const seedTransactions = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
+  const { user, slot } = subject;
   for (let offset = 0; offset < size.transactions; offset += batchSize) {
     const rows = Array.from(
       { length: Math.min(batchSize, size.transactions - offset) },
       (_, index) => {
         const ordinal = offset + index;
+        const currency =
+          subject.history === "routine"
+            ? "COP"
+            : currencies[
+                (subject.history === "reconciled" ? Math.floor(ordinal / 2) : ordinal) %
+                  size.currencies
+              ];
+        if (currency === undefined) {
+          throw new Error("Assessment Currency configuration is incomplete");
+        }
         return {
-          id: uuid("81000000", ordinal),
+          id: uuid("81000000", slot * userIdentityStride + ordinal),
           category: `10000000-0000-4000-8000-${String((ordinal % categoryCount) + 1).padStart(uuidWidth, "0")}`,
-          counterparty: `Evaluación ${ordinal}`,
-          occurred:
-            now - (ordinal < recentCount ? ordinal * minuteMs : (ordinal % historyDays) * dayMs),
+          counterparty: `Evaluación ${subject.history === "recurring" ? ordinal % size.plans : ordinal}`,
+          amount: assessmentAmount(subject.history, ordinal, currency),
+          currency,
+          occurred: assessmentOccurrence(subject.history, ordinal, now),
         };
       }
     );
     yield* Effect.tryPromise(() =>
       db
         .prepare(`INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms)
-      SELECT json_extract(value,'$.id'),?,'1000','COP','outflow',json_extract(value,'$.counterparty'),json_extract(value,'$.category'),json_extract(value,'$.occurred'),json_extract(value,'$.occurred') FROM json_each(?)`)
+      SELECT json_extract(value,'$.id'),?,json_extract(value,'$.amount'),json_extract(value,'$.currency'),'outflow',json_extract(value,'$.counterparty'),json_extract(value,'$.category'),json_extract(value,'$.occurred'),json_extract(value,'$.occurred') FROM json_each(?)`)
         .bind(user, json(rows))
         .run()
     );
+    if (subject.history === "reconciled") yield* reconcileRows({ db, rows, user, now });
   }
 });
-const seedBudgets = Effect.fn(function* (db: D1Database, size: DatasetSize, now: number) {
-  const currencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"].slice(
-    0,
-    size.currencies
-  );
-  for (const [index, currency] of currencies.entries()) {
+const seedBudgets = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
+  const { user, slot } = subject;
+  const selectedCurrencies = currencies.slice(0, size.currencies);
+  for (const [index, currency] of selectedCurrencies.entries()) {
     yield* Effect.tryPromise(() =>
       db
         .prepare(`INSERT INTO budgets(id,user_id,category_id,currency,cap,created_at_ms,updated_at_ms,group_name,starts_month)
       SELECT printf('82000000-0000-4000-8000-%012d',?*16+row_number() OVER (ORDER BY id)),?,id,?,'100000',?,?,?,'2016-01' FROM categories LIMIT 16`)
-        .bind(index, user, currency, now, now, `Grupo ${currency}`)
+        .bind(slot * userIdentityStride + index, user, currency, now, now, `Grupo ${currency}`)
         .run()
     );
   }
@@ -81,7 +157,8 @@ const planRevisions = (size: DatasetSize, index: number): string =>
       };
     })
   );
-const seedRecurring = Effect.fn(function* (db: D1Database, size: DatasetSize) {
+const seedRecurring = Effect.fn(function* (db: D1Database, size: DatasetSize, subject: SeedUser) {
+  const { user, slot } = subject;
   yield* Effect.tryPromise(() =>
     db
       .prepare(
@@ -91,7 +168,7 @@ const seedRecurring = Effect.fn(function* (db: D1Database, size: DatasetSize) {
       .run()
   );
   for (let index = 0; index < size.plans; index++) {
-    const id = uuid("83000000", index);
+    const id = uuid("83000000", slot * userIdentityStride + index);
     yield* Effect.tryPromise(() =>
       db.batch([
         db
@@ -108,9 +185,10 @@ const seedRecurring = Effect.fn(function* (db: D1Database, size: DatasetSize) {
     );
   }
 });
-const seedReview = Effect.fn(function* (db: D1Database, size: DatasetSize, now: number) {
-  const staging = uuid("84000000", 0);
-  const submission = uuid("85000000", 0);
+const seedReview = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
+  const { user, slot } = subject;
+  const staging = uuid("84000000", slot * userIdentityStride);
+  const submission = uuid("85000000", slot * userIdentityStride);
   const expires = now + retentionDays * dayMs;
   yield* Effect.tryPromise(() =>
     db
@@ -120,7 +198,7 @@ const seedReview = Effect.fn(function* (db: D1Database, size: DatasetSize, now: 
       .bind(
         staging,
         user,
-        "synthetic-assessment-original",
+        `synthetic-assessment-original-${slot}`,
         "a".repeat(shaLength),
         now,
         expires,
@@ -133,12 +211,12 @@ const seedReview = Effect.fn(function* (db: D1Database, size: DatasetSize, now: 
       .prepare(
         "INSERT INTO statement_submissions(id,user_id,idempotency_key,staging_id,submitted_at_ms,source_format,parser_revision,service_market,locale,time_zone,status,retention_expires_at_ms) VALUES(?,?,?,?,?,'csv','statement-parser-v1','CO','es-CO','America/Bogota','queued',?)"
       )
-      .bind(submission, user, uuid("86000000", 0), staging, now, expires)
+      .bind(submission, user, uuid("86000000", slot * userIdentityStride), staging, now, expires)
       .run()
   );
   for (let offset = 0; offset < size.review; offset += 100) {
     const rows = Array.from({ length: Math.min(100, size.review - offset) }, (_, index) => ({
-      id: uuid("87000000", offset + index),
+      id: uuid("87000000", slot * userIdentityStride + offset + index),
       record: offset + index + 1,
       original: `Original sintético ${offset + index}: 2026-10-01,25000,Mercado`,
     }));
@@ -156,10 +234,16 @@ export const seedAssessment = Effect.fn(function* ({
   db,
   dataset,
   now,
+  users,
+  history,
+  layout,
 }: {
   db: D1Database;
   dataset: string;
   now: number;
+  users: ReadonlyArray<string>;
+  history: DashboardAssessmentHistory;
+  layout: "default" | "maximum";
 }) {
   if (
     !(dataset === "small" || dataset === "heavy" || dataset === "extreme" || dataset === "breaking")
@@ -168,11 +252,30 @@ export const seedAssessment = Effect.fn(function* ({
   }
   const size = sizes[dataset];
   const start = performance.now();
-  yield* seedTransactions(db, size, now);
-  yield* seedBudgets(db, size, now);
-  yield* seedRecurring(db, size);
-  yield* seedReview(db, size, now);
+  for (const [slot, user] of users.entries()) {
+    const subject = { slot, user, history };
+    const context = { db, size, now, subject };
+    yield* seedTransactions(context);
+    yield* seedBudgets(context);
+    yield* seedRecurring(db, size, subject);
+    yield* seedReview(context);
+    const dashboard =
+      layout === "maximum" ? maximumAssessmentDashboard() : defaultAssessmentDashboard();
+    const document = yield* Schema.encodeEffect(Schema.fromJsonString(DashboardDocument))(
+      dashboard
+    );
+    {
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES (?,'dashboard',?,1)"
+          )
+          .bind(user, document)
+          .run()
+      );
+    }
+  }
   process.stdout.write(
-    `ASSESSMENT_SEED ${json({ dataset, ...size, milliseconds: performance.now() - start })}\n`
+    `ASSESSMENT_SEED ${json({ dataset, users: users.length, history, layout, ...size, milliseconds: performance.now() - start })}\n`
   );
 });

@@ -1,3 +1,4 @@
+import { DashboardAssessmentConfiguration } from "../../server/cloudflare/browser-acceptance/contract";
 import type { APIRequestContext } from "@playwright/test";
 import { Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
@@ -36,3 +37,16 @@ export const prepareAssessmentFixture = ({
       expect(preparation.status).toBe("ready");
     })
   );
+
+const PreparedAssessment = Schema.Struct({
+  status: Schema.Literal("ready"),
+  configuration: DashboardAssessmentConfiguration,
+  layoutDigest: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u)),
+});
+export const readPreparedAssessment = (
+  input: Readonly<{ request: APIRequestContext }>
+): Promise<typeof PreparedAssessment.Type> =>
+  input.request
+    .get(`${operatorOrigin}/assessment/prepare`)
+    .then((response) => response.json())
+    .then(Schema.decodeUnknownPromise(PreparedAssessment));

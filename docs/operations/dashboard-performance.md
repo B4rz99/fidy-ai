@@ -40,24 +40,72 @@ writes `reports/performance/assessment-<dataset>.json`, including the `dashboard
 attachment. Copy each ignored artifact before reusing the dataset name with a different profile.
 Do not commit generated results; attach dated findings and evidence to the issue or PR.
 
-| Axis           | Pinned values                                                                 |
-| -------------- | ----------------------------------------------------------------------------- |
-| Transactions   | small: 500; heavy: 10,000; extreme: 100,000; breaking: 1,000,000              |
-| Desktop        | 1280 × 720; CPU rate 1                                                        |
-| Mobile         | 390 × 844; CPU rate 4                                                         |
-| Normal network | loopback, no network emulation                                                |
-| Poor network   | 400 ms latency; download 51,200 bytes/s; upload 25,600 bytes/s                |
-| Traffic        | one User; one tab; at least 12 s between attempts, excluding attempt duration |
-| Samples        | default 20 per journey; use 30 or more for baseline collection; no retries    |
+| Axis           | Pinned values                                                    |
+| -------------- | ---------------------------------------------------------------- |
+| Transactions   | small: 500; heavy: 10,000; extreme: 100,000; breaking: 1,000,000 |
+| Desktop        | 1280 × 720; CPU rate 1                                           |
+| Mobile         | 390 × 844; CPU rate 4                                            |
+| Normal network | loopback, no network emulation                                   |
+| Poor network   | 400 ms latency; download 51,200 bytes/s; upload 25,600 bytes/s   |
+| Traffic        | 1/8/32 distinct Users; 1/2 tabs; fixed 12 s offers per actor     |
+| Samples        | 30 or more per User/tab/journey for qualification; no retries    |
 
-The existing native fixture owns amounts, date distribution, Category distribution, Budget caps,
-RecurringPlan history and default Dashboard layout. The report pins its transaction count and source
-revision. These are the routine baseline shapes; they do not claim dense wide-Money,
-Reconciliation-heavy or maximum-layout qualification. The native fixture retains real admission
-and recovery fencing. Refusals, timeouts and absent fresh reads stay in the artifact and its cohort
-summary. Successful paints alone enter p95, p99 and maximum; report offered and successful counts
-beside those statistics. Thirty observations cannot establish a precise tail distribution; p99 is
-near the observed maximum, not proof of a reliable production tail.
+The fixture seeds every selected User independently and pins the logical calendar with
+`FIDY_ASSESSMENT_EPOCH` (the same ISO instant on both revisions). Set
+`FIDY_DASHBOARD_USERS=1|8|32`, `FIDY_DASHBOARD_HISTORY=routine|dense|wide|reconciled|recurring`,
+and `FIDY_DASHBOARD_LAYOUT=default|maximum`. Maximum layouts contain 24 Widgets spanning all
+four Widget kinds. Dense histories use distinct Money amounts in the current period; wide histories
+retain exact large decimal amounts; Reconciliation histories link pairs without deleting retained
+Transactions. The default layout also has deterministic Widget identities.
+
+`FIDY_DASHBOARD_ACTIVITY=ingestion-two-tabs` opens two tabs per User and offers concurrent manual
+Transaction captures through the canonical public operation. Capture failures and timeouts remain
+in the artifact. This exercises concurrent writes, but does not qualify statement parsing or provider
+ingestion. Quiet cohorts use one tab. Fixed synthetic identities and separate browser contexts prove
+the selected Users; authentication and fixture setup finish before offers begin. A missed offering
+interval disqualifies the cohort instead of silently reducing offered load.
+
+Use a stratified matched matrix, recording every omitted cohort explicitly:
+
+| Dataset  | Users | History    | Layout  | Activity           | Profiles/networks           |
+| -------- | ----- | ---------- | ------- | ------------------ | --------------------------- |
+| small    | 1     | routine    | default | quiet              | desktop/normal, mobile/poor |
+| heavy    | 8     | dense      | maximum | quiet              | desktop/normal, mobile/poor |
+| heavy    | 32    | wide       | maximum | quiet              | desktop/normal, mobile/poor |
+| heavy    | 1     | reconciled | maximum | ingestion-two-tabs | desktop/normal, mobile/poor |
+| extreme  | 8     | recurring  | maximum | quiet              | desktop/normal, mobile/poor |
+| breaking | 1     | wide       | maximum | ingestion-two-tabs | desktop/normal, mobile/poor |
+
+Run each row on baseline and candidate with at least 30 offers per User/tab/journey. Keep failures,
+timeouts and absent fresh reads beside successful statistics. Thirty successful fresh paints are
+required for every actor and journey before comparison can meet its target. Thirty observations
+cannot establish a precise tail distribution; p99 is near the observed maximum.
+
+The sidecar `apps/web/reports/performance/dashboard-cohort-<backend>-<dataset>-<profile>-<network>-<users>users-<history>-<layout>-<activity>.json`
+pins actual Git HEAD and clean source status, the Chromium executable hash, Bun version, lockfile
+and build configuration, fixture source and layout, probe source, compression, epoch and workload.
+Set `ASSESSMENT_CHROMIUM` to the same pinned executable for both revisions. An optional
+`FIDY_ASSESSMENT_REVISION` must equal actual HEAD. Qualification rejects dirty source, unmatched
+fingerprints, incomplete setup, missing activity, missed pacing and duplicate actor attempts.
+
+The proposed HTML baseline is `0db958ab5` with the same final maintenance package pins and AWS
+record patch as the candidate, plus identical observational harness and fixtures. Preserve the old
+product behavior: copying the candidate bootstrap or renderer into the baseline invalidates the
+comparison. Pin full resulting commit hashes and review the baseline patch before collecting.
+The older 08d graph with Effect 4.0.6 is not a matched baseline.
+
+Compare sidecars from clean, fully sampled checkouts:
+
+```sh
+bun apps/web/scripts/dashboard-qualification.ts /absolute/baseline.json /absolute/candidate.json
+```
+
+`FIDY_DASHBOARD_BACKEND=legacy-d1` selects the current fixture. The two audited native backend
+labels deliberately refuse preparation until the fixture invokes the real authoritative native
+Actor path. A legacy facade cannot qualify native routing. The comparator reports complete local,
+remote application-added and complete remote request measurements as `not-measured`; these require
+separate end-to-end public-request observations and measured native RPC/R2/control-plane counters.
+No browser fixture or loopback paint result establishes these targets.
 
 Browser samples retain API request counts, response bytes and phase timings where available.
 `reportedRecoveryBatches` retains the request-local `fidy-recovery-batches` header as a guarded-batch

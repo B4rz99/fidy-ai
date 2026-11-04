@@ -2,14 +2,21 @@ import { browserAcceptanceTopology } from "../../server/cloudflare/browser-accep
 import type { CDPSession, Page, Response } from "@playwright/test";
 import { Config, Effect, Option, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { prepareAssessmentFixture } from "./assessment-fixture";
-import { signInNavigationPerformanceThroughCore } from "./real-core-fixture";
+import { prepareAssessmentFixture, readPreparedAssessment } from "./assessment-fixture";
+import { DashboardAssessmentConfiguration } from "../../server/cloudflare/browser-acceptance/contract";
+import { dashboardAssessmentProvenance } from "./dashboard-assessment-provenance";
+import {
+  type DashboardActor,
+  type DashboardAssessmentUser,
+  type DashboardIngestionObservation,
+  dashboardPacedIntervalMilliseconds,
+  prepareDashboardUsers,
+  runDashboardIngestion,
+} from "./dashboard-assessment-workload";
 import {
   type DashboardObservation,
   type DashboardOutcome,
   calibrateDashboardClock,
-  installDashboardMeasurement,
-  installDashboardNavigationMeasurement,
   summarizeDashboardSamples,
 } from "./dashboard-measurement";
 
@@ -32,21 +39,12 @@ const successfulStatus = 200;
 const actionTimeoutMs = 10_000;
 const navigationTimeoutMs = 45_000;
 const readinessTimeoutMs = 20_000;
-const paceMs = 12_000;
+const paceMs = dashboardPacedIntervalMilliseconds;
 const mobileCpuRate = 4;
-const poorConnection = {
-  offline: false,
-  latency: 400,
-  downloadThroughput: 51_200,
-  uploadThroughput: 25_600,
-};
 const setupAllowanceMs = 60_000;
 test.setTimeout(
   repetitions * 2 * (readinessTimeoutMs + paceMs + navigationTimeoutMs + actionTimeoutMs) +
     setupAllowanceMs
-);
-const revision = Effect.runSync(
-  Config.String("FIDY_ASSESSMENT_REVISION").pipe(Config.withDefault("not-supplied"))
 );
 const sizes = { small: 500, heavy: 10_000, extreme: 100_000, breaking: 1_000_000 };
 const fixture = Schema.decodeUnknownSync(
@@ -67,10 +65,17 @@ type RequestObservation = {
   responseBytes: number;
   requestDurationMs: number;
   reportedRecoveryBatches: number;
+  representation: "financial-html" | "financial-json" | "shell" | "other";
 };
 type Sample = DashboardObservation &
   Readonly<{
     journey: Journey;
+    user: number;
+    tab: number;
+    attempt: number;
+    scheduledAtMs: number;
+    offeredAtMs: number;
+    elapsedHostMs: number;
     requests: RequestObservation[];
     browserTiming:
       | Readonly<{ status: "unavailable" }>
@@ -95,6 +100,18 @@ const requestKind = (response: Response): RequestObservation["kind"] => {
 };
 const financialStatus = (response: Response): number =>
   Number(response.headers()["fidy-dashboard-status"] ?? response.status());
+const responseRepresentation = (
+  response: Response,
+  kind: RequestObservation["kind"]
+): RequestObservation["representation"] => {
+  const type = response.headers()["content-type"] ?? "";
+  if (kind === "view" && type.startsWith("application/json")) return "financial-json";
+  if (kind === "view" && type.startsWith("text/html")) return "financial-html";
+  if (kind === "document") {
+    return response.headers()["fidy-dashboard-status"] === undefined ? "shell" : "financial-html";
+  }
+  return "other";
+};
 const observeRequests = (page: Page): RequestObservation[] => {
   const requests: RequestObservation[] = [];
   page.on("response", (response) => {
@@ -103,6 +120,7 @@ const observeRequests = (page: Page): RequestObservation[] => {
     const kind = requestKind(response);
     const entry = {
       kind,
+      representation: responseRepresentation(response, kind),
       status: financialStatus(response),
       phases: response.headers()["server-timing"] ?? "",
       reportedRecoveryBatches: Option.getOrElse(
@@ -124,24 +142,6 @@ const observeRequests = (page: Page): RequestObservation[] => {
   });
   return requests;
 };
-const prepareProfile = Effect.fnUntraced(function* (page: Page, cdp: CDPSession, profile: Profile) {
-  page.setDefaultTimeout(actionTimeoutMs);
-  page.setDefaultNavigationTimeout(navigationTimeoutMs);
-  yield* Effect.tryPromise(() =>
-    cdp.send("Emulation.setCPUThrottlingRate", { rate: profile === "desktop" ? 1 : mobileCpuRate })
-  );
-  yield* Effect.tryPromise(() =>
-    page.setViewportSize(
-      profile === "desktop" ? { width: 1280, height: 720 } : { width: 390, height: 844 }
-    )
-  );
-  if (network === "poor") {
-    yield* Effect.tryPromise(() => cdp.send("Network.enable"));
-    yield* Effect.tryPromise(() => cdp.send("Network.emulateNetworkConditions", poorConnection));
-  }
-  yield* Effect.tryPromise(() => page.addInitScript(installDashboardMeasurement));
-  yield* Effect.tryPromise(() => page.addInitScript(installDashboardNavigationMeasurement));
-});
 const navigateLink = Effect.fnUntraced(function* (page: Page, name: string) {
   const link = page.getByRole("link", { name, exact: true });
   if (!(yield* Effect.tryPromise(() => link.isVisible()))) {
@@ -177,7 +177,14 @@ const navigateDashboard = Effect.fnUntraced(function* (
   return yield* Effect.tryPromise(() => measuredPaint(page));
 });
 const failedOutcome = (requests: ReadonlyArray<RequestObservation>): DashboardOutcome => {
-  if (requests.some((entry) => entry.status >= refusalStatus)) return "refused";
+  if (
+    requests.some(
+      (entry) =>
+        (entry.kind === "view" || entry.kind === "document") && entry.status >= refusalStatus
+    )
+  ) {
+    return "refused";
+  }
   if (requests.some((entry) => entry.kind === "view" || entry.kind === "document")) {
     return "timeout";
   }
@@ -194,13 +201,29 @@ const dashboardMeasurementDiagnostics = (): unknown => ({
   pending: document.querySelector('[data-dashboard-read-state="pending"]') !== null,
   ready: document.querySelector('[data-dashboard-read-state="ready"]') !== null,
 });
-const runCohort = Effect.fnUntraced(function* (page: Page, cdp: CDPSession, samples: Sample[]) {
+const runCohort = Effect.fn(function* (
+  actor: DashboardActor,
+  samples: Sample[],
+  startedAtMs: number
+) {
+  const { page, cdp } = actor;
+  let scheduledAtMs = startedAtMs + actor.offsetMilliseconds;
+  yield* Effect.sleep(Math.max(0, scheduledAtMs - performance.now()));
   const requests = observeRequests(page);
   for (let index = 0; index < repetitions; index++) {
     for (const journey of ["direct", "return"] as const) {
       requests.length = 0;
-      process.stdout.write(`DASHBOARD_SAMPLE_START ${journey} ${index}\n`);
+      const offeredAtMs = performance.now();
       const outcome = yield* navigateDashboard(page, cdp, journey).pipe(Effect.result);
+      const elapsedHostMs = performance.now() - offeredAtMs;
+      const offered = {
+        attempt: index,
+        user: actor.user,
+        tab: actor.tab,
+        scheduledAtMs,
+        offeredAtMs,
+        elapsedHostMs,
+      };
       if (
         outcome._tag === "Success" &&
         requests.some(
@@ -210,6 +233,7 @@ const runCohort = Effect.fnUntraced(function* (page: Page, cdp: CDPSession, samp
         )
       ) {
         samples.push({
+          ...offered,
           journey,
           outcome: "ready",
           durationMs: outcome.success.durationMs,
@@ -219,103 +243,189 @@ const runCohort = Effect.fnUntraced(function* (page: Page, cdp: CDPSession, samp
       } else {
         const diagnostics = yield* Effect.tryPromise(() =>
           page.evaluate(dashboardMeasurementDiagnostics)
-        );
+        ).pipe(Effect.orElseSucceed(() => ({ status: "unavailable" })));
         process.stdout.write(`DASHBOARD_MEASUREMENT_FAILURE ${encode(diagnostics)}\n`);
         samples.push({
+          ...offered,
           journey,
           outcome: failedOutcome(requests),
-          durationMs: readinessTimeoutMs,
+          durationMs: elapsedHostMs,
           browserTiming: { status: "unavailable" },
           requests: requests.slice(),
         });
       }
-      process.stdout.write(`DASHBOARD_SAMPLE_END ${journey} ${index} ${samples.at(-1)?.outcome}\n`);
-      yield* Effect.sleep(paceMs);
+      scheduledAtMs += paceMs;
+      yield* Effect.sleep(Math.max(0, scheduledAtMs - performance.now()));
     }
   }
 });
-const attachCohort = Effect.fnUntraced(function* (
-  page: Page,
-  samples: Sample[],
-  context: Readonly<{ profile: Profile; browser: string }>
-) {
-  const { profile, browser } = context;
-  const clock = yield* Effect.tryPromise(() => page.evaluate(calibrateDashboardClock));
-  yield* Effect.tryPromise(() =>
-    test.info().attach("dashboard-baseline", {
-      body: encode({
-        dataset,
-        revision,
-        transactions: sizes[fixture],
-        profile,
-        network,
-        browser,
-        clock,
-        users: 1,
-        pacedIntervalMs: paceMs,
-        cpuRate: profile === "desktop" ? 1 : mobileCpuRate,
-        readiness:
-          "completed private 200 document or fresh 200 view read, pending-to-ready commit on return; first eligible frame timestamp with following-frame confirmation",
-        databaseRoundTrips:
-          "unavailable in browser transport; native Dashboard integration separately measures them",
-        recoveryChecks:
-          "unavailable in browser transport; native Dashboard integration separately measures them",
-        samples,
-        direct: summarizeDashboardSamples(samples.filter((sample) => sample.journey === "direct")),
-        return: summarizeDashboardSamples(samples.filter((sample) => sample.journey === "return")),
-      }),
-      contentType: "application/json",
-    })
+type CohortState = {
+  users: ReadonlyArray<DashboardAssessmentUser>;
+  samples: Sample[];
+  ingestion: DashboardIngestionObservation[];
+  setup: "failed" | "ready";
+};
+type CohortAttachment = Readonly<{
+  state: CohortState;
+  prepared: Awaited<ReturnType<typeof readPreparedAssessment>>;
+  profile: Profile;
+  browser: string;
+  provenance: Effect.Success<ReturnType<typeof dashboardAssessmentProvenance>>;
+}>;
+type ActorClock = Readonly<{
+  user: number;
+  tab: number;
+  clock: ReturnType<typeof calibrateDashboardClock>;
+}>;
+const cohortBody = (
+  input: CohortAttachment,
+  configuration: typeof DashboardAssessmentConfiguration.Encoded,
+  clocks: ReadonlyArray<ActorClock>
+): string => {
+  const { state, profile } = input;
+  return encode({
+    ...input.provenance,
+    dataset,
+    transactions: sizes[fixture],
+    profile,
+    network,
+    browser: input.browser,
+    clockByActor: clocks,
+    configuration,
+    backendRequested: configuration.backend,
+    epoch: configuration.epoch,
+    users: configuration.users,
+    tabs: configuration.activity === "quiet" ? 1 : 2,
+    ingestion: configuration.activity !== "quiet",
+    history: configuration.history,
+    layout: configuration.layout,
+    setup: state.setup,
+    preparedUsers: state.users.length,
+    activitySatisfied:
+      configuration.activity === "quiet" ||
+      state.users.every((user) =>
+        state.ingestion.some((sample) => sample.user === user.user && sample.outcome === "created")
+      ),
+    ingestionSamples: state.ingestion,
+    pacedIntervalMs: paceMs,
+    cpuRate: profile === "desktop" ? 1 : mobileCpuRate,
+    readiness:
+      "fresh successful document or fragment; browser-local first eligible frame, with next-frame confirmation",
+    databaseRoundTrips:
+      "unavailable in browser transport; complete native public request measurements required separately",
+    recoveryChecks:
+      "unavailable in browser transport; complete native public request measurements required separately",
+    samplesPerActor: repetitions,
+    scheduleSatisfied:
+      state.samples.every((sample) => sample.offeredAtMs - sample.scheduledAtMs < paceMs) &&
+      state.ingestion.every((sample) => sample.offeredAtMs - sample.scheduledAtMs < paceMs),
+    samples: state.samples,
+    direct: summarizeDashboardSamples(
+      state.samples.filter((sample) => sample.journey === "direct")
+    ),
+    return: summarizeDashboardSamples(
+      state.samples.filter((sample) => sample.journey === "return")
+    ),
+  });
+};
+const attachCohort = Effect.fn(function* (input: CohortAttachment) {
+  const { state, prepared, profile } = input;
+  const configuration = yield* Schema.encodeEffect(DashboardAssessmentConfiguration)(
+    prepared.configuration
   );
+  const actors = state.users.flatMap((user) => user.actors);
+  const clocks = yield* Effect.forEach(actors, (actor) =>
+    Effect.tryPromise(() => actor.page.evaluate(calibrateDashboardClock)).pipe(
+      Effect.map((clock) => ({ user: actor.user, tab: actor.tab, clock })),
+      Effect.orElseSucceed(() => ({
+        user: actor.user,
+        tab: actor.tab,
+        clock: { positiveTickMs: 0, clockReadOverheadMs: 0 },
+      }))
+    )
+  );
+  const body = cohortBody(input, configuration, clocks);
+  yield* Effect.tryPromise(() =>
+    test.info().attach("dashboard-baseline", { body, contentType: "application/json" })
+  );
+  const name = `${dataset}-${profile}-${network}-${configuration.users}users-${configuration.history}-${configuration.layout}-${configuration.activity}`;
+  yield* Effect.tryPromise(() =>
+    Bun.write(
+      new URL(
+        `../reports/performance/dashboard-cohort-${configuration.backend}-${name}.json`,
+        import.meta.url
+      ),
+      body
+    )
+  );
+});
+const measureUsers = Effect.fn(function* (
+  users: ReadonlyArray<DashboardAssessmentUser>,
+  state: CohortState,
+  configuration: typeof DashboardAssessmentConfiguration.Type
+) {
+  yield* Effect.sleep(paceMs);
+  const startedAtMs = performance.now();
+  const reads = Effect.forEach(
+    users.flatMap((user) => user.actors),
+    (actor) => runCohort(actor, state.samples, startedAtMs),
+    { concurrency: "unbounded", discard: true }
+  );
+  const writes =
+    configuration.activity === "quiet"
+      ? Effect.void
+      : Effect.forEach(
+          users,
+          (user) =>
+            runDashboardIngestion(user, {
+              epoch: configuration.epoch,
+              offers: repetitions * 2,
+              startedAtMs,
+              userCount: configuration.users,
+              samples: state.ingestion,
+            }),
+          { concurrency: "unbounded", discard: true }
+        );
+  yield* Effect.all([reads, writes], { concurrency: "unbounded", discard: true });
 });
 
 test.beforeAll(prepareAssessmentFixture);
 for (const profile of ["desktop", "mobile"] as const) {
-  test(`measures fresh Dashboard direct entry and return on ${profile}`, ({
-    page,
-    request,
-    context,
-  }) =>
+  test(`measures fresh Dashboard direct entry and return on ${profile}`, ({ browser, request }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        process.stdout.write("DASHBOARD_AUTH_START\n");
-        yield* Effect.tryPromise(() =>
-          signInNavigationPerformanceThroughCore({ page, request, identity: "navigationDashboard" })
+        const prepared = yield* Effect.tryPromise(() => readPreparedAssessment({ request }));
+        const configuration = yield* Schema.encodeEffect(DashboardAssessmentConfiguration)(
+          prepared.configuration
         );
-        process.stdout.write("DASHBOARD_AUTHENTICATED\n");
-        const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
-        yield* prepareProfile(page, cdp, profile);
-        yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
-        yield* Effect.tryPromise(() =>
-          expect(
-            page
-              .getByRole("button", { name: "Crear tablero", exact: true })
-              .or(page.getByRole("button", { name: "Personalizar", exact: true }))
-          ).toBeVisible()
-        );
-        if (
-          yield* Effect.tryPromise(() =>
-            page.getByRole("button", { name: "Crear tablero", exact: true }).isVisible()
-          )
-        ) {
-          yield* Effect.tryPromise(() =>
-            page.getByRole("button", { name: "Crear tablero", exact: true }).click()
-          );
-        }
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeEnabled()
-        );
-        yield* Effect.sleep(paceMs);
-        const samples: Sample[] = [];
-        yield* runCohort(page, cdp, samples).pipe(
+        const provenance = yield* dashboardAssessmentProvenance({
+          configuration,
+          layoutDigest: prepared.layoutDigest,
+        });
+        const state: CohortState = { users: [], samples: [], ingestion: [], setup: "failed" };
+        yield* Effect.gen(function* () {
+          state.users = yield* prepareDashboardUsers({
+            browser,
+            request,
+            configuration: prepared.configuration,
+            profile,
+            network,
+          });
+          state.setup = "ready";
+          yield* measureUsers(state.users, state, prepared.configuration);
+        }).pipe(
           Effect.ensuring(
-            attachCohort(page, samples, {
-              profile,
-              browser: context.browser()?.version() ?? "unknown",
-            }).pipe(Effect.orDie)
+            attachCohort({ state, prepared, profile, browser: browser.version(), provenance }).pipe(
+              Effect.orDie
+            )
           )
         );
-        expect(samples.length).toBe(repetitions * 2);
-      })
+        expect(state.samples.length).toBe(
+          repetitions *
+            2 *
+            prepared.configuration.users *
+            (prepared.configuration.activity === "quiet" ? 1 : 2)
+        );
+      }).pipe(Effect.scoped)
     ));
 }

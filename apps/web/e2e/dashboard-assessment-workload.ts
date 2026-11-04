@@ -131,7 +131,7 @@ const prepareUser = Effect.fn(function* (input: Setup, user: number) {
     prepareActor(input, { context, page, user, tab, count: pages.length })
   );
   const headers = yield* Effect.tryPromise(() => browserSessionHeaders(context.request));
-  const observed = yield* Effect.tryPromise(() =>
+  const observed: unknown = yield* Effect.tryPromise(() =>
     context.request.get(`${appOrigin}/user`, { headers }).then((response) => response.json())
   );
   const current = yield* Schema.decodeUnknownEffect(UserIdentityResponse)(observed);

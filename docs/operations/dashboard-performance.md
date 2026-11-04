@@ -99,6 +99,11 @@ those facts and return their preparation fingerprint. Keep the historical Core, 
 renderer, static preview and cross-origin production launcher unchanged. A classifier entry for an
 absent candidate bootstrap module in the shared Vite configuration remains unreachable.
 
+The prepared historical checkout is pinned at
+`d49c2e47fe1cd9f238586d83dfb62cfb3eee2aca`. Its maintenance and fixture patches preserve the
+product paths above. Refresh the shared overlay if the candidate dependencies or harness change;
+a historical pin alone does not establish a matched pair.
+
 Set `FIDY_ASSESSMENT_SURFACE=legacy-cross-origin` on this baseline and `same-origin` on the HTML
 candidate. This selects only the observer's public API address; it does not change application
 routing. The assessment config verifies that the pinned production launcher actually uses the

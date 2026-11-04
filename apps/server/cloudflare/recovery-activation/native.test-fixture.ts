@@ -11,7 +11,7 @@ export const nativeRecoveryAdmission: Effect.Effect<RecoveryAdmissionBinding, ne
       Bun.build({
         entrypoints: [new URL("./worker.test-fixture.ts", import.meta.url).pathname],
         target: "browser",
-        external: ["cloudflare:workers"],
+        external: ["cloudflare:workers", "node:*"],
       })
     );
     const output = built.outputs[0];

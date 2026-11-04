@@ -2,9 +2,9 @@ import { it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { expect } from "vitest";
 import { nativeRecoveryAdmission } from "../recovery-activation/native.test-fixture";
-import { runRecoveryOperation } from "./operations";
+import { runRecoveryJob, runRecoveryOperation } from "./operations";
 import type { RecoveryAdmissionBinding } from "../recovery-activation/contract";
-import { runRecoveryFetch } from "./runtime";
+import { runRecoveryFetch, trackRecoveryNative } from "./runtime";
 
 it.effect("withholds a held operation after closing admission and denies new work", () =>
   Effect.gen(function* () {
@@ -48,6 +48,39 @@ it.effect("withholds a held operation after closing admission and denies new wor
       closed: true,
       leases: 0,
     });
+  }).pipe(Effect.scoped)
+);
+
+it.effect("denies stale and missing durable-job epochs before any owner work", () =>
+  Effect.gen(function* () {
+    const gate = yield* nativeRecoveryAdmission;
+    const environment = {
+      RECOVERY_SOURCE_EPOCH: "source-epoch",
+      RECOVERY_ADMISSION: { getByName: (): RecoveryAdmissionBinding => gate },
+    };
+    let executions = 0;
+    const work = (): Promise<void> => {
+      executions++;
+      return Promise.resolve();
+    };
+    yield* Effect.tryPromise(() =>
+      expect(
+        runRecoveryJob({ environment, payload: { recoveryEpoch: "old-epoch" }, work })
+      ).rejects.toThrow()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(runRecoveryJob({ environment, payload: {}, work })).rejects.toThrow()
+    );
+    expect(executions).toBe(0);
+    expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({ leases: 0 });
+    yield* Effect.tryPromise(() =>
+      runRecoveryJob({
+        environment,
+        payload: { recoveryEpoch: "source-epoch", id: "known-job" },
+        work,
+      })
+    );
+    expect(executions).toBe(1);
   }).pipe(Effect.scoped)
 );
 
@@ -122,5 +155,95 @@ it.effect("retains a fetch through waitUntil and withholds its financial result 
       closed: true,
       leases: 0,
     });
+  }).pipe(Effect.scoped)
+);
+
+it.effect("refuses late native work before invocation after its root has settled", () =>
+  Effect.gen(function* () {
+    const gate = yield* nativeRecoveryAdmission;
+    const environment = {
+      RECOVERY_SOURCE_EPOCH: "source-epoch",
+      RECOVERY_ADMISSION: { getByName: (): RecoveryAdmissionBinding => gate },
+    };
+    const later = Promise.withResolvers<void>();
+    const completed = Promise.withResolvers<string>();
+    let invoked = false;
+    yield* Effect.tryPromise(() =>
+      runRecoveryOperation({
+        environment,
+        work: () => {
+          later.promise
+            .then(() =>
+              trackRecoveryNative({
+                environment,
+                work: () => {
+                  invoked = true;
+                  return Promise.resolve();
+                },
+              })
+            )
+            .then(
+              () => completed.resolve("escaped"),
+              () => completed.resolve("denied")
+            );
+          return Promise.resolve();
+        },
+      })
+    );
+    later.resolve();
+    expect(yield* Effect.tryPromise(() => completed.promise)).toBe("denied");
+    expect(invoked).toBe(false);
+    expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({ leases: 0 });
+  }).pipe(Effect.scoped)
+);
+
+it.effect("drains a queued continuation after pause without admitting a new publisher", () =>
+  Effect.gen(function* () {
+    const gate = yield* nativeRecoveryAdmission;
+    const environment = {
+      RECOVERY_SOURCE_EPOCH: "source-epoch",
+      RECOVERY_ADMISSION: { getByName: (): RecoveryAdmissionBinding => gate },
+    };
+    const published = { recoveryEpoch: "source-epoch", id: "admitted-before-pause" };
+    yield* Effect.tryPromise(() => gate.pause({ epoch: "source-epoch", activationId: "cutover" }));
+    let publishedAgain = false;
+    yield* Effect.tryPromise(() =>
+      expect(
+        runRecoveryOperation({
+          environment,
+          work: () => {
+            publishedAgain = true;
+            return Promise.resolve();
+          },
+        })
+      ).rejects.toThrow()
+    );
+    let processed = false;
+    yield* Effect.tryPromise(() =>
+      runRecoveryJob({
+        environment,
+        payload: published,
+        work: () => {
+          processed = true;
+          return Promise.resolve();
+        },
+      })
+    );
+    expect(publishedAgain).toBe(false);
+    expect(processed).toBe(true);
+    expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({
+      paused: true,
+      leases: 0,
+    });
+    yield* Effect.tryPromise(() => gate.close({ epoch: "source-epoch", activationId: "cutover" }));
+    yield* Effect.tryPromise(() =>
+      expect(
+        runRecoveryJob({
+          environment,
+          payload: published,
+          work: () => Promise.resolve(),
+        })
+      ).rejects.toThrow()
+    );
   }).pipe(Effect.scoped)
 );

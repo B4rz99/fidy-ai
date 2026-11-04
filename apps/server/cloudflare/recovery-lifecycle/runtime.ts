@@ -1,7 +1,19 @@
+import { environment as nativeEnvironment } from "./internal/environment";
+import { database } from "./internal/database";
+import { bucket } from "./internal/objects";
 import type { RecoveryAdmissionEnvironment } from "../recovery-activation/contract";
 import { Option } from "effect";
-import { admitRecoveryOperation } from "./operations";
-import type { RecoveryOperationLease } from "./contract";
+import { admitRecoveryContinuation, admitRecoveryOperation } from "./operations";
+import type {
+  RecoveryDispatchEnvironment,
+  RecoveryLifecycleEnvironment,
+  RecoveryNativeTracker,
+  RecoveryOperationLease,
+} from "./contract";
+import { bindings as dispatchBindings } from "./internal/bindings";
+import { publisher } from "./internal/dispatch";
+import { native, within } from "./internal/context";
+import { tracker as makeTracker } from "./internal/tracker";
 
 type Lifetime = Pick<ExecutionContext, "waitUntil">;
 
@@ -37,11 +49,14 @@ const continuations = (
   };
 };
 
-const streamingResponse = (
-  response: Response,
-  lease: RecoveryOperationLease,
-  settle: () => Promise<void>
-): Response => {
+type ResponseInput = Readonly<{
+  response: Response;
+  lease: RecoveryOperationLease;
+  tracker: RecoveryNativeTracker;
+  settle: () => Promise<void>;
+}>;
+
+const streamingResponse = ({ response, lease, tracker, settle }: ResponseInput): Response => {
   const reader = response.body?.getReader();
   if (reader === undefined) throw new Error("Streaming response has no body");
   const body = new ReadableStream<Uint8Array>(
@@ -49,11 +64,12 @@ const streamingResponse = (
       pull: (controller): Promise<void> =>
         lease
           .assertOpen()
-          .then(() => reader.read())
+          .then(() => within({ tracker, work: () => reader.read() }))
           .then((chunk) =>
             lease.assertOpen().then(() => {
               if (chunk.done) {
                 return settle()
+                  .then(() => tracker.settle())
                   .then(() => lease.complete())
                   .then(() => controller.close());
               }
@@ -70,40 +86,115 @@ const streamingResponse = (
   return new Response(body, response);
 };
 
-const bufferedResponse = (
-  response: Response,
-  lease: RecoveryOperationLease,
-  settle: () => Promise<void>
-): Promise<Response> => {
-  const read = response.body === null ? Promise.resolve(null) : response.arrayBuffer();
+const bufferedResponse = ({
+  response,
+  lease,
+  tracker,
+  settle,
+}: ResponseInput): Promise<Response> => {
+  const read =
+    response.body === null
+      ? Promise.resolve(null)
+      : within({ tracker, work: () => response.arrayBuffer() });
   return read.then((body) =>
     settle()
+      .then(() => tracker.settle())
       .then(() => lease.complete())
       .then(() => new Response(body, response))
   );
 };
 
 /** Financial release includes native continuation work, not only the handler's first Promise. */
-export const runRecoveryFetch = ({
+const runFetch = ({
   environment,
   work,
   context,
+  admit,
 }: Readonly<{
   environment: RecoveryAdmissionEnvironment;
   work: (context: Option.Option<Lifetime>) => Promise<Response>;
   context: Option.Option<Lifetime>;
-}>): Promise<Response> =>
-  admitRecoveryOperation(environment)
+  admit: typeof admitRecoveryOperation;
+}>): Promise<Response> => {
+  if (
+    environment.RECOVERY_ADMISSION === undefined &&
+    environment.RECOVERY_SOURCE_EPOCH === undefined
+  ) {
+    return work(context);
+  }
+  return admit(environment)
     .then((admission) => {
       if (Option.isNone(admission)) return work(context);
       const lifetime = continuations(context);
-      return work(lifetime.context).then((response) => {
+      const tracker = makeTracker();
+      return within({ tracker, work: () => work(lifetime.context) }).then((response) => {
         if (response.headers.get("content-type")?.split(";")[0] === "text/event-stream") {
-          return admission.value
-            .assertOpen()
-            .then(() => streamingResponse(response, admission.value, lifetime.settle));
+          return admission.value.assertOpen().then(() =>
+            streamingResponse({
+              response,
+              lease: admission.value,
+              tracker,
+              settle: lifetime.settle,
+            })
+          );
         }
-        return bufferedResponse(response, admission.value, lifetime.settle);
+        return bufferedResponse({
+          response,
+          lease: admission.value,
+          tracker,
+          settle: lifetime.settle,
+        });
       });
     })
     .catch(unavailable);
+};
+
+type FetchInput = Readonly<{
+  environment: RecoveryAdmissionEnvironment;
+  work: (context: Option.Option<Lifetime>) => Promise<Response>;
+  context: Option.Option<Lifetime>;
+}>;
+
+/** Ordinary HTTP ingress is refused after the source publisher pause. */
+export const runRecoveryFetch = (input: FetchInput): Promise<Response> =>
+  runFetch({ ...input, admit: admitRecoveryOperation });
+
+/** Private native coordinator calls continue already-published work while paused. */
+export const runRecoveryContinuationFetch = (input: FetchInput): Promise<Response> =>
+  runFetch({ ...input, admit: admitRecoveryContinuation });
+
+/** Exact operator routes retain their owner authentication and use source control IO. */
+export const runRecoveryControl = <A>(work: () => Promise<A>): Promise<A> => {
+  const tracker = makeTracker();
+  return within({ tracker, work }).then((result) => tracker.settle().then(() => result));
+};
+
+/** Wrap selected capabilities before recovery guards or cancellable Effects capture them. */
+export const withRecoveryNativeEnvironment = nativeEnvironment;
+
+/** Native publishers retain their actual handoff Promise and stamp the trusted target epoch. */
+export const withRecoveryDispatch = <Environment extends RecoveryDispatchEnvironment>(
+  environment: Environment
+): Environment => dispatchBindings(environment);
+
+/** Narrow native publishers carry identities without gaining other Queue capabilities. */
+export const makeRecoveryPublisher = <Work, Result>(
+  input: Readonly<{
+    binding: Readonly<{ send: (work: Work) => Promise<Result> }>;
+    environment: RecoveryLifecycleEnvironment;
+  }>
+): Readonly<{ send: (work: Work) => Promise<Result> }> => publisher(input);
+
+/** Native promises remain owned even when a surrounding Effect stops waiting for them. */
+export const trackRecoveryNative = <A>(
+  input: Readonly<{
+    environment: RecoveryLifecycleEnvironment;
+    work: () => Promise<A>;
+  }>
+): Promise<A> => native(input);
+
+/** Wrap the selected native database below recovery guards and Effect cancellation. */
+export const withRecoveryDatabase = database;
+
+/** Private object IO belongs to its root until the provider's actual Promise settles. */
+export const withRecoveryBucket = bucket;

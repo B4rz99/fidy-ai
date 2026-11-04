@@ -1,4 +1,5 @@
 import type { AuthoritativeStoreEnvironment } from "../sqlite-store/contract";
+import { withRecoveryNativeEnvironment } from "../recovery-lifecycle/runtime";
 import { withAuthoritativeStore } from "../sqlite-store/operations";
 import { makeWorkerCrypto } from "../secret-material/runtime";
 import { makeUserRecoveryAlarm } from "./internal/recovery-alarm";
@@ -759,7 +760,7 @@ export class UserTransactionCoordinator {
       activation: Option.none(),
     }
   ) {
-    const env = withAuthoritativeStore(bindings);
+    const env = withRecoveryNativeEnvironment(withAuthoritativeStore(bindings));
     this.state = state;
     this.recoveryAlarm = makeUserRecoveryAlarm(state.storage);
     this.institutions = configuration.institutions;
@@ -815,6 +816,16 @@ export class UserTransactionCoordinator {
   }
 
   fetch(request: Request): Promise<Response> {
+    return this.fetchWithContext({ request, context: Option.none() });
+  }
+
+  fetchWithContext({
+    request,
+    context,
+  }: Readonly<{
+    request: Request;
+    context: Option.Option<Pick<ExecutionContext, "waitUntil">>;
+  }>): Promise<Response> {
     const environment = this.env;
     const userId = this.state.id.name;
     const path = new URL(request.url).pathname;
@@ -837,6 +848,7 @@ export class UserTransactionCoordinator {
     }).accept({ request, preceding: this.pending });
     if (Option.isSome(hosted)) {
       this.pending = hosted.value.settled;
+      Option.map(context, (value) => value.waitUntil(hosted.value.settled));
       return hosted.value.response;
     }
     const queuedAt = performance.now();

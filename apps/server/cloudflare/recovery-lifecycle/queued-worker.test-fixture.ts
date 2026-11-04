@@ -49,10 +49,16 @@ export default {
     if (path === "/close") {
       return gate(environment)
         .close({ epoch: "source-epoch", activationId: "cutover" })
-        .then(Response.json);
+        .then((value) => Response.json(value));
     }
-    if (path === "/leases") return gate(environment).inspect().then(Response.json);
-    return Effect.runPromise(observeRecoveryDrain({ db: environment.DB })).then(Response.json);
+    if (path === "/leases") {
+      return gate(environment)
+        .inspect()
+        .then((value) => Response.json(value));
+    }
+    return Effect.runPromise(observeRecoveryDrain({ db: environment.DB })).then((value) =>
+      Response.json(value)
+    );
   },
   queue(batch: MessageBatch<unknown>, environment: Environment): Promise<void> {
     return barrier(environment, "wait").then(() =>

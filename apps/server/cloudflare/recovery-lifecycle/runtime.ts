@@ -4,7 +4,7 @@ import { environment as nativeEnvironment } from "./internal/environment";
 import { database } from "./internal/database";
 import { bucket } from "./internal/objects";
 import type { RecoveryAdmissionEnvironment } from "../recovery-activation/contract";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { admitRecoveryContinuation, admitRecoveryOperation } from "./operations";
 import type {
   RecoveryDispatchEnvironment,
@@ -76,7 +76,7 @@ const streamingResponse = ({ response, lease, tracker, settle }: ResponseInput):
                   .then(() => lease.complete())
                   .then(() => controller.close());
               }
-              controller.enqueue(chunk.value);
+              controller.enqueue(Schema.decodeUnknownSync(Schema.Uint8Array)(chunk.value));
               return undefined;
             })
           )

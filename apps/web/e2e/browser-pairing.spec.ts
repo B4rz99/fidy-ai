@@ -6,7 +6,9 @@ import { installUser } from "./http-fixtures";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import {
   boundSessionRequests,
+  createDashboardIfAbsent,
   openBrowserLogin,
+  openDashboardThroughCore,
   openUpgradeThroughCore,
   reloadTransactionsThroughCore,
   visiblePairingCode,
@@ -424,8 +426,8 @@ const verifyRevokedBrowser = (
 const editAndCheckDashboard = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(page.goto("/app/dashboard"));
-      yield* wait(expect(page.getByRole("button", { name: "Personalizar" })).toBeVisible());
+      yield* wait(openDashboardThroughCore(page));
+      yield* wait(createDashboardIfAbsent(page));
       yield* wait(page.getByRole("button", { name: "Personalizar" }).click());
       yield* wait(
         page

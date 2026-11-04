@@ -14,10 +14,8 @@ const Status = Schema.NumberFromString.check(
 export const takeInitialDashboardHtml = (binding: string): Option.Option<InitialDashboardHtml> => {
   const available = takeInitialDocumentHtml();
   if (available._tag === "Missing") return Option.none();
-  const identity = Schema.decodeUnknownOption(BrowserSessionBinding.fields.binding)(
-    available.binding
-  );
-  const status = Schema.decodeUnknownOption(Status)(available.status);
+  const identity = Schema.decodeOption(BrowserSessionBinding.fields.binding)(available.binding);
+  const status = Schema.decodeOption(Status)(available.status);
   if (Option.isNone(identity) || identity.value !== binding || Option.isNone(status)) {
     return Option.none();
   }

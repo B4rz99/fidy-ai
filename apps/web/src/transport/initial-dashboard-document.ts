@@ -11,7 +11,7 @@ const captureBootstrap = (): InitialDocumentBootstrap => {
   const context = document.getElementById("dashboard-bootstrap");
   const body = context?.textContent;
   context?.remove();
-  return body === null || body === undefined ? { _tag: "Missing" } : { _tag: "Captured", body };
+  return body === undefined ? { _tag: "Missing" } : { _tag: "Captured", body };
 };
 
 /** Capture raw document bytes before React replaces them; ordinary codecs validate their claims. */

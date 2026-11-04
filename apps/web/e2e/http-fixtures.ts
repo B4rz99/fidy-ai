@@ -15,9 +15,11 @@ export const routeBrowserApi: {
     page
       .route(url, (route, request) => {
         const resource = request.resourceType();
-        return resource === "fetch" || resource === "xhr"
-          ? handler(route, request)
-          : route.fallback();
+        if (resource === "fetch" || resource === "xhr") {
+          const handled: unknown = handler(route, request);
+          return Promise.resolve(handled).then(() => undefined);
+        }
+        return route.fallback();
       })
       .then(() => undefined)
 );

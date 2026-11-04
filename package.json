@@ -110,6 +110,7 @@
   "packageManager": "bun@1.4.4",
   "patchedDependencies": {
     "alchemy@2.0.0-beta.80": "patches/alchemy@2.0.0-beta.80.patch",
-    "@distilled.cloud/cloudflare@1.0.0-rc.13": "patches/@distilled.cloud%2Fcloudflare@1.0.0-rc.13.patch"
+    "@distilled.cloud/cloudflare@1.0.0-rc.13": "patches/@distilled.cloud%2Fcloudflare@1.0.0-rc.13.patch",
+    "@distilled.cloud/aws@1.0.0-rc.13": "patches/@distilled.cloud%2Faws@1.0.0-rc.13.patch"
   }
 }

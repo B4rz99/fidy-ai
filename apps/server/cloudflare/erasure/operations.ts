@@ -1,3 +1,4 @@
+import { preservePendingAdmissions } from "./internal/pending-admissions";
 import { initializeRegistryStorage } from "./internal/registry-initialization";
 import { sweepControlObjects } from "./internal/control-objects";
 import { requireInventory } from "./internal/inventory";
@@ -283,3 +284,9 @@ export const prepareRecoveryGenerationFence = (
   expectedGeneration(configuration).pipe(
     Effect.map(({ generation }) => generationAssertion({ db: configuration.db, generation }))
   );
+
+/** Preserves live DB-first erasure admissions in the independent registry before a recovery's final checkpoint. Requires closed, fully drained source admission. */
+export const reconcileErasureAdmissions = (
+  input: Readonly<{ db: D1Database; bucket: R2Bucket; cursor: string }>
+): Effect.Effect<Readonly<{ cursor: string; complete: boolean }>, ErasureUnavailable> =>
+  preservePendingAdmissions(input);

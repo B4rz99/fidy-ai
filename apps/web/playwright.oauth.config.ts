@@ -19,7 +19,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/fidy-oauth-key.pem -out /tmp/fidy-oauth-cert.pem -subj /CN=127.0.0.1 -days 1 >/dev/null 2>&1 && VITE_API_ORIGIN=${topology.api} bun --bun vite build --mode production --outDir dist/oauth-acceptance && CLI_ACCEPTANCE_MODE=${topology.mode} PLAYWRIGHT_TLS_KEY=/tmp/fidy-oauth-key.pem PLAYWRIGHT_TLS_CERT=/tmp/fidy-oauth-cert.pem PREVIEW_ROOT=dist/oauth-acceptance PREVIEW_PORT=${topology.appPort} bun scripts/serve-preview.ts`,
+      command: `openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/fidy-oauth-key.pem -out /tmp/fidy-oauth-cert.pem -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1 -days 1 >/dev/null 2>&1 && VITE_API_ORIGIN=${topology.api} bun --bun vite build --mode production --outDir dist/oauth-acceptance && CLI_ACCEPTANCE_MODE=${topology.mode} PLAYWRIGHT_TLS_KEY=/tmp/fidy-oauth-key.pem PLAYWRIGHT_TLS_CERT=/tmp/fidy-oauth-cert.pem PREVIEW_ROOT=dist/oauth-acceptance PREVIEW_PORT=${topology.appPort} bun scripts/serve-preview.ts`,
       url: `${topology.app}/`,
       ignoreHTTPSErrors: true,
       timeout: 120_000,

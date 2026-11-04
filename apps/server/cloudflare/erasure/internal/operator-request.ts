@@ -1,3 +1,4 @@
+import { advanceRecoveryActivation } from "../../recovery-activation/operations";
 import { verifyCandidate } from "./candidate";
 import { initializeRegistry } from "./initialize";
 import { releaseRestore, restoreNext } from "./restore";
@@ -56,7 +57,7 @@ export const operatorRequest = (
 
 type UserCommand = Exclude<
   typeof ErasureOperatorAction.Type,
-  { action: "Restore" | "ReleaseRestore" | "Initialize" | "VerifyCandidate" }
+  { action: "Restore" | "ReleaseRestore" | "Initialize" | "VerifyCandidate" | "Activation" }
 >;
 const forwardCommand = (
   input: Readonly<{
@@ -94,7 +95,7 @@ const forwardCommand = (
 const commandPath = (
   command: Exclude<
     typeof ErasureOperatorAction.Type,
-    { action: "Restore" | "ReleaseRestore" | "Initialize" | "VerifyCandidate" }
+    { action: "Restore" | "ReleaseRestore" | "Initialize" | "VerifyCandidate" | "Activation" }
   >
 ): string => {
   switch (command.action) {
@@ -109,7 +110,7 @@ const commandPath = (
 const commandBody = (
   command: Exclude<
     typeof ErasureOperatorAction.Type,
-    { action: "Restore" | "ReleaseRestore" | "Initialize" | "VerifyCandidate" }
+    { action: "Restore" | "ReleaseRestore" | "Initialize" | "VerifyCandidate" | "Activation" }
   >,
   admission: Readonly<{
     userId: string;
@@ -146,7 +147,12 @@ const candidateCommand = (
 ): Effect.Effect<Option.Option<Response>, ErasureUnavailable> => {
   if (Option.isNone(input.candidateTargetId)) return Effect.succeedNone;
   const action = input.command.action;
-  if (action === "Initialize" || action === "ReleaseRestore" || action === "CustodyEvidence") {
+  if (
+    action === "Initialize" ||
+    action === "ReleaseRestore" ||
+    action === "CustodyEvidence" ||
+    action === "Activation"
+  ) {
     return Effect.succeedSome(reply(invalidStatus));
   }
   if (action !== "VerifyCandidate") return Effect.succeedNone;
@@ -156,6 +162,28 @@ const candidateCommand = (
     signal: input.request.signal,
     expiresAtMs: input.expiresAtMs,
   }).pipe(Effect.asSome);
+};
+
+const activationCommand = (
+  input: Readonly<{
+    activationId: string;
+    request: Request;
+    environment: ErasureOperatorEnvironment;
+    operator: Readonly<{ expiresAtMs: number }>;
+  }>
+): Effect.Effect<Response, ErasureUnavailable> => {
+  const configuration = input.environment.ERASURE_ACTIVATION;
+  const bucket = input.environment.ERASURE_BUCKET;
+  if (configuration === undefined || bucket === undefined) {
+    return Effect.succeed(reply(unavailableStatus));
+  }
+  return advanceRecoveryActivation({
+    activationId: input.activationId,
+    configuration,
+    bucket,
+    signal: input.request.signal,
+    expiresAtMs: input.operator.expiresAtMs,
+  });
 };
 
 const executeCommand = (
@@ -177,6 +205,9 @@ const executeCommand = (
     });
     if (Option.isSome(candidate)) return candidate.value;
     if (command.action === "VerifyCandidate") return reply(invalidStatus);
+    if (command.action === "Activation") {
+      return yield* activationCommand({ ...input, activationId: command.activationId });
+    }
     if (command.action === "Initialize") return yield* initializeRegistry(input.environment);
     if (command.action === "Restore") {
       return yield* restoreNext({

@@ -1,3 +1,4 @@
+import type { RecoveryActivationEnvironment } from "../recovery-activation/contract";
 import type { ErasureOriginals, ErasureStore, ErasureUnavailable } from "../erasure-store/contract";
 import type { Effect } from "effect";
 import { type Option, Schema } from "effect";
@@ -55,6 +56,7 @@ export const ErasureOperatorAction = Schema.Union([
   Schema.Struct({ action: Schema.Literal("Initialize") }),
   Schema.Struct({ action: Schema.Literal("Restore") }),
   Schema.Struct({ action: Schema.Literal("VerifyCandidate") }),
+  Schema.Struct({ action: Schema.Literal("Activation"), activationId: ErasureReference }),
   Schema.Struct({ action: Schema.Literal("ReleaseRestore") }),
   Schema.Struct({
     action: Schema.Literal("CustodyEvidence"),
@@ -80,6 +82,7 @@ export type ErasureOperatorEnvironment = Readonly<{
       BILLING_SUPPORT_AUDIENCE: string;
       ERASURE_REQUIRED: string;
       ERASURE_BUCKET: R2Bucket;
+      ERASURE_ACTIVATION: RecoveryActivationEnvironment;
     }>
   >;
 

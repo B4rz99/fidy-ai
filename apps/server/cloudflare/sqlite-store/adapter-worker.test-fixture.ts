@@ -213,14 +213,14 @@ const controlRequest = ({
 }: Readonly<{ env: AdapterEnvironment; request: Request; path: string }>): Promise<Response> => {
   const store = env.STORE.getByName("store");
   if (path === "/control/inspect") {
-    return Promise.resolve<unknown>(store.inspect()).then(Response.json);
+    return Promise.resolve<unknown>(store.inspect()).then((value) => Response.json(value));
   }
   return request
     .json()
     .then<unknown>((input) =>
       path === "/control/close" ? store.close(input) : store.controlQuery(input)
     )
-    .then(Response.json);
+    .then((value) => Response.json(value));
 };
 const SnapshotFixture = Schema.Struct({
   url: Schema.String,
@@ -251,7 +251,7 @@ export default {
     if (path === "/inspect-d1") {
       return env.DB.prepare("SELECT name FROM sqlite_master WHERE name='target_receipts'")
         .first()
-        .then(Response.json);
+        .then((value) => Response.json(value));
     }
     if (path === "/remote") {
       const db = makeRemoteSqliteDatabase({
@@ -274,7 +274,7 @@ export default {
             query: body,
           })
         )
-        .then(Response.json);
+        .then((value) => Response.json(value));
     }
     return env.PROOF.getByName("synthetic").fetch(request);
   },

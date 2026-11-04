@@ -54,6 +54,11 @@ available at `https://unpkg.com/effect@4.0.7/src/<module>.ts` and
   formatting can use exponent notation; do not substitute it for the owner codec.
 - `OptionFromOptionalKey` permits omitted query keys. Stable OpenAPI now describes that
   optionality correctly. A documentation flag must not add a runtime default or authority.
+- Dictionary values use `Schema.UndefinedOr`, not optional-property wrappers: index signatures
+  already permit absent keys. The retained `@distilled.cloud/aws@1.0.0-rc.13` patch applies this
+  to S3 Metadata in both published source and JavaScript. Alchemist eagerly imports that schema
+  even for Cloudflare-only resource commands; the resource planning and retirement tests cover
+  its import and the actual deployment-engine interface.
 - `AtomHttpApi` still turns Schema/low-level HTTP failures into defects while retaining declared
   endpoint failures. The session registry remains the isolation boundary. React registry
   disposal remains delayed 500 ms; it is not credential revocation. Web transport/lifetime

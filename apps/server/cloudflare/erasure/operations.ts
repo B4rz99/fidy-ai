@@ -1,3 +1,4 @@
+import type { ErasureGeneration } from "./contract";
 import { preservePendingAdmissions } from "./internal/pending-admissions";
 import { initializeRegistryStorage } from "./internal/registry-initialization";
 import { sweepControlObjects } from "./internal/control-objects";
@@ -290,3 +291,8 @@ export const reconcileErasureAdmissions = (
   input: Readonly<{ db: D1Database; bucket: R2Bucket; cursor: string }>
 ): Effect.Effect<Readonly<{ cursor: string; complete: boolean }>, ErasureUnavailable> =>
   preservePendingAdmissions(input);
+
+/** Control-only copying of an independently closed source retains its retired generation; ordinary data access must use the fresh external fence. */
+export const prepareClosedSourceGenerationFence = (
+  input: Readonly<{ db: D1Database; generation: typeof ErasureGeneration.Type }>
+): D1PreparedStatement => generationAssertion(input);

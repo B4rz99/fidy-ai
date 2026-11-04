@@ -37,6 +37,18 @@ export type RecoveryClosedSourceAccess = (
   expected: Readonly<{ activationId: string; source: RecoverySourceTarget }>
 ) => Effect.Effect<RecoveryClosedSourceEvidence, ErasureUnavailable>;
 
+/** Only an independent external phase may authorize a previously unopened exact target's fixed artifact. */
+export const RecoveryBootstrapAuthorization = Schema.Struct({
+  phase: Schema.Literal("BootstrapAuthorized"),
+  evidence: RecoveryClosedSourceEvidence,
+  target: RecoveryTarget,
+  artifactDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+});
+export type RecoveryBootstrapAuthorization = typeof RecoveryBootstrapAuthorization.Type;
+export type RecoveryBootstrapAccess = (
+  expected: Readonly<{ activationId: string; target: RecoveryTarget; artifactDigest: string }>
+) => Effect.Effect<RecoveryBootstrapAuthorization, ErasureUnavailable>;
+
 export const RecoveryStoreObservation = Schema.Struct({
   target: RecoveryTarget,
   admission: Schema.Literals(["Open", "Closed"]),

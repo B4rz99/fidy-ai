@@ -7,6 +7,7 @@ import { observeErasureRecoveryDrain, reconcileErasureAdmissions } from "../eras
 import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
+  type RecoveryBootstrapAccess,
   type RecoveryClosedSourceAccess,
   RecoverySourceTarget,
   RecoveryTarget,
@@ -174,4 +175,8 @@ export const assertProductionRestoreAllowed = (
 
 /** Final provider qualification and ledger checkpoint production are not complete. Never issue export/bootstrap authority from preliminary progress. */
 export const readClosedRecoverySource: RecoveryClosedSourceAccess = () =>
+  Effect.fail(new ErasureUnavailable());
+
+/** No independent producer has established the final handoff or never-opened target history. Local import state cannot grant this authority. */
+export const readRecoveryBootstrapAuthorization: RecoveryBootstrapAccess = () =>
   Effect.fail(new ErasureUnavailable());

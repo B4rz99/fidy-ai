@@ -438,7 +438,9 @@ final barrier can qualify.
 object, activation, frozen source generation (the retired marker for initial D1), distinct final generation/checkpoint ETag and content
 digests for provider and ledger evidence. `readClosedRecoverySource` currently always refuses;
 preliminary R2 progress cannot issue export/bootstrap authority while provider qualification and
-final reconciliation remain incomplete.
+final reconciliation remain incomplete. `readRecoveryBootstrapAuthorization` similarly refuses
+until an independent external phase authorizes the exact previously unopened target and fixed
+artifact digest; a local import cursor or schema seal cannot grant bootstrap or serving authority.
 
 The Erasure-owned frozen-import verifier consumes the Store's native inactive bootstrap
 capability, so a D1 source cannot be passed as its target. It checks bounded sealed ledger pages

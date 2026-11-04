@@ -1,6 +1,7 @@
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { expect } from "vitest";
+import { RecoveryControllerClaim } from "./contract";
 import { nativeRecoveryAdmission } from "./native.test-fixture";
 
 it.effect(
@@ -79,5 +80,42 @@ it.effect(
           gate.enter({ epoch: queuedJob.epoch, leaseId: "late-publisher" })
         )
       ).toBe(false);
+    }).pipe(Effect.scoped)
+);
+
+it.effect(
+  "retains one opaque controller through lost replies and never reacquires a released claim",
+  () =>
+    Effect.gen(function* () {
+      const gate = yield* nativeRecoveryAdmission;
+      const first = yield* Schema.decodeEffect(RecoveryControllerClaim)({
+        epoch: "source-epoch",
+        activationId: "activation",
+        claimId: "18500000-0000-4000-8000-000000000011",
+      });
+      const second = yield* Schema.decodeEffect(RecoveryControllerClaim)({
+        ...first,
+        claimId: "18500000-0000-4000-8000-000000000012",
+      });
+      expect(yield* Effect.tryPromise(() => gate.acquireController(first))).toBe(true);
+      expect(yield* Effect.tryPromise(() => gate.acquireController(first))).toBe(true);
+      expect(yield* Effect.tryPromise(() => gate.acquireController(second))).toBe(false);
+      yield* Effect.tryPromise(() =>
+        gate.close({ epoch: first.epoch, activationId: first.activationId })
+      );
+      expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({
+        controllerBusy: true,
+      });
+      expect(yield* Effect.tryPromise(() => gate.releaseController(first))).toBe(true);
+      expect(yield* Effect.tryPromise(() => gate.acquireController(first))).toBe(false);
+      expect(yield* Effect.tryPromise(() => gate.acquireController(second))).toBe(true);
+      expect(yield* Effect.tryPromise(() => gate.releaseController(first))).toBe(true);
+      expect(yield* Effect.tryPromise(() => gate.acquireController(first))).toBe(false);
+      expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({
+        controllerBusy: true,
+      });
+      expect(yield* Effect.tryPromise(() => gate.retainController(second))).toBe(true);
+      expect(yield* Effect.tryPromise(() => gate.releaseController(second))).toBe(false);
+      expect(yield* Effect.tryPromise(() => gate.acquireController(second))).toBe(false);
     }).pipe(Effect.scoped)
 );

@@ -1,3 +1,4 @@
+import { environment as nativeEnvironment } from "./internal/environment";
 import { check, epoch } from "./internal/epoch";
 import { newId } from "../secret-material/operations";
 import { capture, within } from "./internal/context";
@@ -14,6 +15,7 @@ import {
   type RecoveryDrainObservation,
   type RecoveryDrainUnavailable,
   type RecoveryLifecycleEnvironment,
+  type RecoveryNativeEnvironment,
   type RecoveryOperationLease,
   RecoveryOperationUnavailable,
 } from "./contract";
@@ -161,3 +163,17 @@ export const observeRecoveryDrain = (
 /** Native transport composition captures its current root without receiving an ID or public bypass. */
 export const captureRecoveryNativeObserver = (): (<A>(work: () => Promise<A>) => Promise<A>) =>
   capture();
+
+/** Authenticated control owners keep fixed native capabilities and every child Promise in one captured lifetime. */
+export const runRecoveryControlOperation = <Environment extends RecoveryNativeEnvironment, A>({
+  environment,
+  work,
+}: Readonly<{
+  environment: Environment;
+  work: (owned: Environment) => Promise<A>;
+}>): Promise<A> => {
+  const tracker = makeTracker();
+  return within({ tracker, work: () => work(nativeEnvironment(environment)) }).then((result) =>
+    tracker.settle().then(() => result)
+  );
+};

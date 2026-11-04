@@ -1,6 +1,4 @@
 import { Effect, Option, Schema } from "effect";
-import { Hex } from "effect/encoding";
-import { digestBytes } from "../../secret-material/operations";
 import { RecoveryClosedSourceEvidence, RecoveryTarget } from "../../recovery-activation/contract";
 import {
   type ClosedSnapshotSource,
@@ -10,16 +8,14 @@ import {
   SnapshotUnavailable,
 } from "../contract";
 import { evidence, readRows, row, table } from "./export";
-import { artifactIo, artifactPut } from "./artifact";
+import { artifactIo, artifactPut, artifactScope } from "./artifact";
 
 const maximumProgressBytes = 1048576;
 type Previous = Option.Option<Readonly<{ state: SnapshotBuildState; etag: string }>>;
 const jobKey = (input: ClosedSnapshotSource): Effect.Effect<string, SnapshotUnavailable> =>
-  Effect.gen(function* () {
-    const target = yield* Schema.encodeEffect(Schema.fromJsonString(RecoveryTarget))(input.target);
-    const digest = Hex.encode(yield* digestBytes(new TextEncoder().encode(target)));
-    return `recovery/sqlite-snapshots/jobs/${input.activationId}/${digest}`;
-  }).pipe(Effect.mapError(() => new SnapshotUnavailable()));
+  artifactScope(input).pipe(
+    Effect.map((scope) => `recovery/sqlite-snapshots/jobs/${scope}/progress`)
+  );
 const load = (
   input: ClosedSnapshotSource,
   key: string

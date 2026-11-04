@@ -1,9 +1,14 @@
+import { advanceImport } from "./internal/import";
+import type { Effect } from "effect";
+import type { SnapshotUnavailable } from "../sqlite-snapshot/contract";
 import { bootstrapTarget } from "./internal/bootstrap-target";
 import { resolveDatabase } from "./internal/target";
 import type {
   AuthoritativeStoreEnvironment,
   SqliteBootstrapTarget,
   SqliteBootstrapTargetInput,
+  SqliteImportInput,
+  SqliteImportStatus,
   SqliteStoreBinding,
   SqliteStoreControlBinding,
 } from "./contract";
@@ -63,3 +68,8 @@ export const makeRecoverySqliteDatabase = (
 export const makeSqliteBootstrapTarget = (
   input: SqliteBootstrapTargetInput
 ): SqliteBootstrapTarget => bootstrapTarget(input);
+
+/** One local bounded artifact application step. It cannot open or seal a serving target. */
+export const advanceSqliteImport = (
+  input: SqliteImportInput
+): Effect.Effect<SqliteImportStatus, SnapshotUnavailable> => advanceImport(input);

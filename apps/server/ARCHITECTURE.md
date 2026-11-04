@@ -417,10 +417,15 @@ remains explicitly preserved. Zero owner work still leaves admission paused
 at `AwaitingProvider` until independent provider inventory and historical caller fencing permit
 final closure. For a closed, drained initial D1 source, a resumable R2 plan records the observed
 source marker and a distinct source-only retired marker before a native compare-and-set. The
-readiness predicate, global zero-writer check and retirement share one source transaction. Retrying an interrupted progress
+readiness predicate, global zero-writer check, complete source-only DML trigger installation and
+retirement share one source transaction. The freeze covers every mutable application table,
+including the published marker: captured legacy INSERT/UPDATE/DELETE cannot write after RET even
+without a generation assertion. Its immutable schema sentinel binds exact table/trigger hashes to
+the plan persisted outside the source. Application paths have no arbitrary DDL authority;
+privileged provider administration remains outside that application fence. Retrying an interrupted progress
 write reuses the same retired marker; the source is never stamped with the serving generation.
-This fence rejects delayed SQL that captured the old R2 generation, but cannot revoke historical
-restore or raw administration authority, so independent provider fencing remains required. The current operator always
+This fence rejects delayed raw application DML and SQL that captured the old R2 generation.
+Privileged in-place provider restore remains separate, so independent provider fencing is required. The current operator always
 reports `Unqualified`; this progress cannot open a Store, publish a serving generation, remove the
 R2 guard, or qualify an activation. Provider-verified namespace/version history, complete operation
 and provider drain, final ledger replay and fresh serving bootstrap remain required before that
@@ -463,6 +468,13 @@ The separate `readRecoveryServingAuthorization` binds the exact provider owner v
 it currently refuses. `readRecoveryArtifactRetirement` also refuses until an external phase earns
 abandonment or qualified-open disposition for that exact artifact. Neither local verification nor
 an arbitrary caller prefix confers serving or artifact deletion permission.
+
+Frozen-source evidence records either an exact native DML freeze descriptor or no source freeze.
+Only independently verified native descriptors can support production D1 export authorization.
+The Erasure schema classifier checks reserved control objects against the generation, immutable
+sentinel and exact table/action/name/SQL; a reserved mismatch refuses export. Only matching
+source-control triggers are excluded from serving artifacts. Domain and financial triggers remain.
+This schema provenance is physical verification bookkeeping, never serving authorization.
 
 The Erasure-owned frozen-import verifier consumes the Store's native inactive bootstrap
 capability, so a D1 source cannot be passed as its target. It checks bounded sealed ledger pages

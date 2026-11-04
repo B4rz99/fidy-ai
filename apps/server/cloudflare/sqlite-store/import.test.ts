@@ -35,7 +35,10 @@ it.live(
         ])
       );
       const retired = "18460000-0000-4000-8000-000000000005";
-      yield* retireErasureSource({ db: native.db, fence: { from: "initial", retired } });
+      const sourceFreeze = yield* retireErasureSource({
+        db: native.db,
+        fence: { from: "initial", retired },
+      });
       const target = yield* Schema.decodeUnknownEffect(RecoveryTarget)(yield* io(native.identity));
       // Component copy evidence only; never production provider or serving qualification.
       const evidence: RecoveryClosedSourceEvidence = {
@@ -43,6 +46,7 @@ it.live(
         admissionObjectId: "1".repeat(64),
         source: { kind: "D1", databaseId: "18460000-0000-4000-8000-000000000001", epoch: "source" },
         sourceGeneration: retired,
+        sourceFreeze: { kind: "NativeDmlFreeze", plan: sourceFreeze },
         finalGeneration: "18460000-0000-4000-8000-000000000004",
         finalCheckpointEtag: "native-final",
         providerEvidenceDigest: "0".repeat(64),

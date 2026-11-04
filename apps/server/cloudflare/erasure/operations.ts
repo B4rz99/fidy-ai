@@ -1,3 +1,4 @@
+import { classifySourceObject, prepareFreeze } from "./internal/source-freeze";
 import { observeSourceLedger } from "./internal/source-ledger";
 import { retireSource, sourceGeneration } from "./internal/source-retirement";
 import { observe as observeRecoveryDrain } from "./internal/recovery-drain";
@@ -9,6 +10,7 @@ import type {
   ErasureImportedInput,
   ErasureRecoveryDrain,
   ErasureSourceRetirement,
+  ErasureSourceSchemaInput,
 } from "./contract";
 import { preservePendingAdmissions } from "./internal/pending-admissions";
 import { initializeRegistryStorage } from "./internal/registry-initialization";
@@ -29,7 +31,11 @@ import {
   type ErasureRegistryInitialization,
 } from "./contract";
 import { progress } from "./internal/progress";
-import { type ErasureGeneration, ErasureUnavailable } from "../erasure-store/contract";
+import {
+  type ErasureGeneration,
+  type ErasureSourceFreezePlan,
+  ErasureUnavailable,
+} from "../erasure-store/contract";
 import type { ErasureStore } from "../erasure-store/contract";
 import { admitDeletion } from "./internal/admission";
 
@@ -324,9 +330,21 @@ export const readErasureSourceGeneration = (
 /** Retire only the exact observed source marker in one native unit, refusing unfinished financial deletion. */
 export const retireErasureSource = (
   input: Readonly<{ db: D1Database; fence: ErasureSourceRetirement }>
-): Effect.Effect<void, ErasureUnavailable> => retireSource(input);
+): Effect.Effect<ErasureSourceFreezePlan, ErasureUnavailable> => retireSource(input);
 
 /** Observe a fixed frozen source's complete sealed ledger in bounded units, preserving progress outside SQL and refusing late pending intent. */
 export const observeFrozenErasureLedger = (
   input: ErasureFrozenLedgerInput
 ): Effect.Effect<ErasureFrozenLedgerProgress, ErasureUnavailable> => observeSourceLedger(input);
+
+/** Describe exact source-only trigger ownership before any retirement SQL, for independently persisted activation progress. */
+export const prepareErasureSourceFreeze = (
+  input: Readonly<{ db: D1Database; generation: string }>
+): Effect.Effect<ErasureSourceFreezePlan, ErasureUnavailable> =>
+  prepareFreeze(input).pipe(Effect.map((freeze) => freeze.plan));
+
+/** Exclude only exact verified source-freeze control triggers; every application object remains part of the snapshot. */
+export const classifyErasureSourceSchemaObject = (
+  input: ErasureSourceSchemaInput
+): Effect.Effect<"SourceControl" | "Application", ErasureUnavailable> =>
+  classifySourceObject(input);

@@ -13,6 +13,8 @@ const compositionRoots = new Set([
   "src/shell/memory/memory-policy.test.ts",
   "cloudflare/core-worker.ts",
   "cloudflare/sqlite-store/adapter-worker.test-fixture.ts",
+  "cloudflare/sqlite-store/import-worker.test-fixture.ts",
+  "cloudflare/sqlite-store/import.test-fixture.ts",
   "cloudflare/erasure/candidate-worker.ts",
   "cloudflare/erasure/imported-worker.test-fixture.ts",
   "cloudflare/release-smoke-worker.ts",

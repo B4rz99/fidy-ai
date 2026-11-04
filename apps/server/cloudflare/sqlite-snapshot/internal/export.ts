@@ -152,7 +152,7 @@ const retain = (
     const bytes = new TextEncoder().encode(encoded);
     if (bytes.byteLength > snapshotPageBytes) return yield* new SnapshotUnavailable();
     const digest = Hex.encode(yield* digestBytes(bytes));
-    const key = `recovery/sqlite-snapshots/pages/${digest}`;
+    const key = `recovery/sqlite-snapshots/pages/${input.activationId}/${digest}`;
     const latest = yield* evidence(input);
     const expected = yield* Schema.encodeEffect(
       Schema.fromJsonString(RecoveryClosedSourceEvidence)

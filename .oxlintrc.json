@@ -315,6 +315,7 @@
         "apps/server/cloudflare/d1-migration-test-worker.fixture.ts",
         "apps/server/cloudflare/dashboard/sqlite-engine-proof-worker.test-fixture.ts",
         "apps/server/cloudflare/sqlite-store/adapter-worker.test-fixture.ts",
+        "apps/server/cloudflare/sqlite-store/import-worker.test-fixture.ts",
         "apps/server/cloudflare/ingestion/email-worker.ts",
         "apps/server/cloudflare/documents/document-extraction-worker.ts",
         "apps/server/cloudflare/documents/document-parsing-worker.ts",

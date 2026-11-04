@@ -1,5 +1,9 @@
-import type { RecoveryTarget } from "../recovery-activation/contract";
-import { Schema } from "effect";
+import type {
+  RecoveryBootstrapAuthorization,
+  RecoveryTarget,
+} from "../recovery-activation/contract";
+import { type Effect, Schema } from "effect";
+import type { SnapshotArtifact, SnapshotUnavailable } from "../sqlite-snapshot/contract";
 
 export const sqliteStoreLimits = {
   statements: 4096,
@@ -144,6 +148,8 @@ export type SqliteStoreEnvironment = Partial<
     SQLITE_STORE_EPOCH: string;
     SQLITE_STORE_NAMESPACE_ID: string;
     SQLITE_STORE_ARTIFACT_DIGEST: string;
+    SQLITE_STORE_ACTIVATION_ID: string;
+    SQLITE_STORE_ARTIFACTS: R2Bucket;
     CF_VERSION_METADATA: Readonly<{ id: string }>;
     ERASURE_BUCKET: R2Bucket;
     BROWSER_ORIGIN: string;
@@ -163,4 +169,18 @@ export type SqliteBootstrapTargetInput = Readonly<{
   state: DurableObjectState;
   environment: SqliteStoreEnvironment;
   activationId: string;
+}>;
+
+/** Local-only importer input: composition supplies the recovery owner's authorization for one fixed inactive deployment target. */
+export type SqliteImportInput = Readonly<{
+  state: DurableObjectState;
+  environment: SqliteStoreEnvironment;
+  readArtifact: (digest: string) => Effect.Effect<SnapshotArtifact, SnapshotUnavailable>;
+  authorization: RecoveryBootstrapAuthorization;
+}>;
+export type SqliteImportStatus = Readonly<{
+  phase: "Importing" | "ErasureVerification";
+  stage: string;
+  copiedRows: number;
+  schemaObjects: number;
 }>;

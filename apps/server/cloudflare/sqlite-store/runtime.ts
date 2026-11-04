@@ -1,7 +1,8 @@
+import { bootstrapPending, bootstrapStep } from "./internal/bootstrap";
 import { NativeDashboardRequest, type NativeDashboardResult } from "../dashboard/contract";
 import { readAuditedSqliteDashboard } from "../dashboard/operations";
 import { DurableObject } from "cloudflare:workers";
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import {
   SqliteStoreControlQuery,
   type SqliteStoreControlReply,
@@ -15,6 +16,26 @@ import { executeStoreQuery } from "./internal/query";
 
 /** Private binding only. Serving code has no import, restore, activation or SQL fetch endpoint. */
 export class AuthoritativeSqliteStore extends DurableObject<SqliteStoreEnvironment> {
+  constructor(state: DurableObjectState, environment: SqliteStoreEnvironment) {
+    super(state, environment);
+    if (bootstrapPending({ state, environment })) {
+      state.waitUntil(state.storage.setAlarm(Effect.runSync(Clock.currentTimeMillis)));
+    }
+  }
+  alarm(): Promise<void> {
+    return Effect.runPromise(
+      bootstrapStep({ state: this.ctx, environment: this.env }).pipe(
+        Effect.flatMap((pending) =>
+          pending
+            ? Clock.currentTimeMillis.pipe(
+                Effect.flatMap((now) => Effect.tryPromise(() => this.ctx.storage.setAlarm(now)))
+              )
+            : Effect.void
+        )
+      )
+    );
+  }
+
   dashboard(candidate: unknown): Promise<NativeDashboardResult> {
     const input = Schema.decodeUnknownOption(NativeDashboardRequest)(candidate);
     if (Option.isNone(input)) {

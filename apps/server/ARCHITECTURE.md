@@ -449,3 +449,19 @@ object, artifact and closed-source evidence digest. Only a complete matching led
 absence/writer proof advances the target's generation. The source's generation, custody events
 and provider claims are preserved. This inactive copy observation remains `Unqualified`; it
 cannot issue closed-source authority or open serving admission.
+
+The inactive Store importer consumes hash-validated schema and data chains in local native
+units, committing each applied object or row with its import checkpoint. It creates tables
+before copying rows, preserves exact integer/blob cells and `sqlite_sequence`, then installs
+views, indexes and triggers without replaying application write side effects. Foreign keys are
+enabled in a later native turn and checked per table; large-table verification CPU and storage
+headroom still require provider qualification. Imported data never becomes a second live writer.
+
+An explicit `SQLITE_STORE_ACTIVATION_ID`, `SQLITE_STORE_ARTIFACT_DIGEST` and private
+`SQLITE_STORE_ARTIFACTS` binding enable constructor/alarm bootstrap for a fresh, unsealed target.
+Every alarm consumes recovery-owned bootstrap authorization for the actual object and fixed
+artifact; missing or changed evidence refuses work. Existing seals or incomplete/malformed
+checkpoints are never repaired by restarting bootstrap. Ordinary sealed constructors perform no
+external metadata read. After complete native and Erasure verification, only a local data seal
+may be written: admission stays `Closed` and the release barrier stays `Unqualified`. Independently
+qualified serving-open authority and artifact retirement remain separate required controls.

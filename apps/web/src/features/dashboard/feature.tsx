@@ -179,6 +179,11 @@ const DashboardLoadNotice = ({
   }
 };
 
+const dashboardReadState = (waiting: boolean, failed: boolean): "ready" | "pending" | "failed" => {
+  if (failed) return "failed";
+  return waiting ? "pending" : "ready";
+};
+
 export const DashboardRouteContent = ({
   apiClient,
   onRefresh,
@@ -209,9 +214,9 @@ export const DashboardRouteContent = ({
   }
 
   const catalogState = presentCanonicalQuery(catalogResult);
-  const catalogFailed = catalogUnavailable(catalogState);
   const dashboardFailed = Option.isSome(dashboardState.refreshFailure);
-  const error = resolveEditorError(editError, catalogFailed, dashboardFailed);
+  const error = resolveEditorError(editError, catalogUnavailable(catalogState), dashboardFailed);
+  const readState = dashboardReadState(dashboardState.waiting, dashboardFailed);
 
   return (
     <DashboardBudgetConfiguration
@@ -220,7 +225,7 @@ export const DashboardRouteContent = ({
       view={dashboardState.value.data}
       onGesture={editing.onGesture}
     >
-      <div className="contents" ref={lifecycleRef}>
+      <div className="contents" data-dashboard-read-state={readState} ref={lifecycleRef}>
         <DashboardQueryNotices
           catalog={catalogState}
           dashboard={dashboardState}

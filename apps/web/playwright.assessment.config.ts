@@ -17,7 +17,14 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   ...(dataset !== ""
-    ? { projects: [{ name: "assessment", testMatch: "performance.assessment.ts" }] }
+    ? {
+        projects: [
+          {
+            name: "assessment",
+            testMatch: ["performance.assessment.ts", "dashboard.assessment.ts"],
+          },
+        ],
+      }
     : {}),
   timeout: 600_000,
   reporter: [

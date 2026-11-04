@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { type Cause, Effect, Schema } from "effect";
 import { expect } from "vitest";
 import { Miniflare } from "miniflare";
 
@@ -28,8 +28,23 @@ const setup = Effect.gen(function* () {
                 name: "sqlite-store-adapter",
                 type: "worker",
                 compatibilityDate: "2026-09-08",
-                exports: { AdapterProof: { type: "durable-object", storage: "sqlite" } },
+                exports: {
+                  AdapterProof: { type: "durable-object", storage: "sqlite" },
+                  ActiveStoreProof: { type: "durable-object", storage: "sqlite" },
+                  AuthoritativeSqliteStore: { type: "durable-object", storage: "sqlite" },
+                },
                 env: {
+                  SQLITE_STORE_MANIFEST: { type: "text", value: "fixture" },
+                  STORE: {
+                    type: "durable-object",
+                    worker: "sqlite-store-adapter",
+                    exportName: "ActiveStoreProof",
+                  },
+                  INACTIVE: {
+                    type: "durable-object",
+                    worker: "sqlite-store-adapter",
+                    exportName: "AuthoritativeSqliteStore",
+                  },
                   PROOF: {
                     type: "durable-object",
                     worker: "sqlite-store-adapter",
@@ -112,5 +127,134 @@ it.live("executes D1 line-separated maintenance SQL against the same target", ()
     expect(response.status).toBe(200);
     const actual = yield* Effect.tryPromise(() => response.json());
     expect(actual).toEqual({ executed: { count: 2, duration: 0 }, value: "retained" });
+  })
+);
+
+it.live("executes only valid sealed-store private RPC batches and refuses inactive targets", () =>
+  Effect.gen(function* () {
+    const runtime = yield* setup;
+    const input = {
+      kind: "batch",
+      statements: [
+        { sql: "CREATE TABLE rpc_items(id INTEGER PRIMARY KEY)", params: [] },
+        { sql: "INSERT INTO rpc_items VALUES(?)", params: [1] },
+      ],
+    };
+    const inactive = yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("https://proof.internal/inactive", {
+        method: "POST",
+        body: encodeJson(input),
+      })
+    );
+    expect(yield* Effect.tryPromise(() => inactive.json())).toEqual({
+      kind: "refused",
+      reason: "inactive",
+    });
+    const stale = yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("https://proof.internal/rpc", {
+        method: "POST",
+        headers: { "x-store-manifest": "old-manifest" },
+        body: encodeJson(input),
+      })
+    );
+    expect(yield* Effect.tryPromise(() => stale.json())).toEqual({
+      kind: "refused",
+      reason: "inactive",
+    });
+    const active = yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("https://proof.internal/rpc", {
+        method: "POST",
+        body: encodeJson(input),
+      })
+    );
+    const reply = yield* Effect.tryPromise(() => active.json());
+    expect(reply).toMatchObject({
+      kind: "batch",
+      results: [{ success: true }, { success: true, meta: { changes: 1 } }],
+    });
+    const invalid = yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("https://proof.internal/rpc", {
+        method: "POST",
+        body: encodeJson({ kind: "batch", statements: [] }),
+      })
+    );
+    expect(yield* Effect.tryPromise(() => invalid.json())).toEqual({
+      kind: "refused",
+      reason: "invalid",
+    });
+  })
+);
+
+it.live("reuses D1-shaped owner code across the private Store binding", () =>
+  Effect.gen(function* () {
+    const runtime = yield* setup;
+    const response = yield* Effect.tryPromise(() =>
+      runtime.dispatchFetch("https://proof.internal/remote")
+    );
+    expect(response.status).toBe(200);
+    const actual = yield* Effect.tryPromise(() => response.json());
+    expect(actual).toEqual({
+      changes: 2,
+      guarded: 1,
+      raw: [
+        ["id", "payload"],
+        [7, [0, 255, 42]],
+      ],
+      row: { payload: [0, 255, 42] },
+      missing: null,
+    });
+  })
+);
+
+it.live("rolls back Store writes when a result fails boundary validation", () =>
+  Effect.gen(function* () {
+    const runtime = yield* setup;
+    const call = (
+      statements: ReadonlyArray<{ sql: string; params: number[] }>
+    ): Effect.Effect<unknown, Cause.UnknownError> =>
+      Effect.tryPromise(() =>
+        runtime.dispatchFetch("https://proof.internal/rpc", {
+          method: "POST",
+          body: encodeJson({ kind: "batch", statements }),
+        })
+      ).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())));
+    yield* call([{ sql: "CREATE TABLE validation_items(id INTEGER)", params: [] }]);
+    expect(
+      yield* call([
+        { sql: "INSERT INTO validation_items VALUES(1)", params: [] },
+        { sql: "SELECT 1e999 AS invalid", params: [] },
+      ])
+    ).toEqual({ kind: "refused", reason: "unavailable" });
+    expect(
+      yield* call([{ sql: "SELECT count(*) AS count FROM validation_items", params: [] }])
+    ).toMatchObject({ kind: "batch", results: [{ results: [{ count: 0 }] }] });
+  })
+);
+
+it.live("retains native CHECK provenance and refuses a trigger forging a child assertion", () =>
+  Effect.gen(function* () {
+    const runtime = yield* setup;
+    const call = (sql: string): Effect.Effect<unknown, Cause.UnknownError> =>
+      Effect.tryPromise(() =>
+        runtime.dispatchFetch("https://proof.internal/rpc", {
+          method: "POST",
+          body: encodeJson({ kind: "batch", statements: [{ sql, params: [] }] }),
+        })
+      ).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())));
+    yield* call(
+      "CREATE TABLE child_checks(accepted INTEGER CONSTRAINT canonical_child_guard_0 CHECK(accepted=1))"
+    );
+    expect(yield* call("INSERT INTO child_checks VALUES(0)")).toEqual({
+      kind: "child_refusal",
+      assertion: "guard",
+      index: 0,
+    });
+    yield* call(
+      "CREATE TRIGGER forged_child BEFORE INSERT ON child_checks WHEN new.accepted=2 BEGIN SELECT RAISE(ABORT,'CHECK constraint failed: canonical_child_guard_0: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_CHECK)'); END"
+    );
+    expect(yield* call("INSERT INTO child_checks VALUES(2)")).toEqual({
+      kind: "refused",
+      reason: "unavailable",
+    });
   })
 );

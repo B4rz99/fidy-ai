@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
-import { makeSqliteDatabase } from "./operations";
+import { AuthoritativeSqliteStore } from "./runtime";
+import { makeRemoteSqliteDatabase, makeSqliteDatabase } from "./operations";
 
 const installProduction = (db: D1Database, request: Request): Promise<Response> =>
   Effect.runPromise(
@@ -129,7 +130,44 @@ export class AdapterProof {
     );
   }
 }
+export class ActiveStoreProof extends AuthoritativeSqliteStore {
+  constructor(state: DurableObjectState, env: { SQLITE_STORE_MANIFEST: string }) {
+    super(state, env);
+    // Test-only bootstrap: production serving code exposes no sealing or import RPC.
+    state.storage.kv.put("store-seal", { manifest: "fixture", status: "verified" });
+  }
+}
+export { AuthoritativeSqliteStore };
 export default {
-  fetch: (request: Request, env: { PROOF: DurableObjectNamespace }): Promise<Response> =>
-    env.PROOF.getByName("synthetic").fetch(request),
+  fetch: (
+    request: Request,
+    env: {
+      PROOF: DurableObjectNamespace;
+      STORE: DurableObjectNamespace<ActiveStoreProof>;
+      INACTIVE: DurableObjectNamespace<AuthoritativeSqliteStore>;
+    }
+  ): Promise<Response> => {
+    const path = new URL(request.url).pathname;
+    if (path === "/remote") {
+      const db = makeRemoteSqliteDatabase({
+        manifest: "fixture",
+        store: {
+          query: (input) => Promise.resolve<unknown>(env.STORE.getByName("store").query(input)),
+        },
+      });
+      return bindingsProof(db);
+    }
+    if (path === "/rpc" || path === "/inactive") {
+      const store = path === "/rpc" ? env.STORE : env.INACTIVE;
+      return request
+        .json()
+        .then<unknown>((body) =>
+          store
+            .getByName("store")
+            .query({ manifest: request.headers.get("x-store-manifest") ?? "fixture", query: body })
+        )
+        .then(Response.json);
+    }
+    return env.PROOF.getByName("synthetic").fetch(request);
+  },
 };

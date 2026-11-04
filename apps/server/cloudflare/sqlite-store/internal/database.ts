@@ -97,8 +97,21 @@ const execLines = (storage: DurableObjectStorage, query: string): Promise<D1Exec
     })
   );
 
-export const sqliteDatabase = (storage: DurableObjectStorage): D1Database => {
+type SqliteDatabaseUnit = Readonly<{
+  database: D1Database;
+  run: (statements: ReadonlyArray<D1PreparedStatement>) => D1Result[];
+}>;
+export const sqliteDatabaseUnit = (storage: DurableObjectStorage): SqliteDatabaseUnit => {
   const preparations = new WeakMap<D1PreparedStatement, Preparation>();
+  const run = (statements: ReadonlyArray<D1PreparedStatement>): D1Result[] =>
+    storage.transactionSync(() => {
+      if (statements.length === 0) throw new Error("No SQL statements detected");
+      return statements.map((statement) => {
+        const prepared = preparations.get(statement);
+        if (prepared === undefined) throw new Error("Statement belongs to another database");
+        return execute(storage, prepared);
+      });
+    });
   const prepare = (prepared: Preparation): D1PreparedStatement => {
     const statement = new Proxy(statementPrototype, {
       get(target, key, receiver): unknown {
@@ -125,24 +138,12 @@ export const sqliteDatabase = (storage: DurableObjectStorage): D1Database => {
     preparations.set(statement, prepared);
     return statement;
   };
-  return new Proxy(databasePrototype, {
+  const database = new Proxy(databasePrototype, {
     get(target, key, receiver): unknown {
       if (key === "prepare") return (query: string) => prepare({ query, bindings: [] });
       if (key === "exec") return (query: string) => execLines(storage, query);
       if (key === "batch") {
-        return (statements: D1PreparedStatement[]) =>
-          promise(() =>
-            storage.transactionSync(() => {
-              if (statements.length === 0) throw new Error("No SQL statements detected");
-              return statements.map((statement) => {
-                const prepared = preparations.get(statement);
-                if (prepared === undefined) {
-                  throw new Error("Statement belongs to another database");
-                }
-                return execute(storage, prepared);
-              });
-            })
-          );
+        return (statements: D1PreparedStatement[]) => promise(() => run(statements));
       }
       if (key === "withSession") {
         return () => ({
@@ -154,4 +155,8 @@ export const sqliteDatabase = (storage: DurableObjectStorage): D1Database => {
       return Reflect.get(target, key, receiver);
     },
   });
+  return { database, run };
 };
+
+export const sqliteDatabase = (storage: DurableObjectStorage): D1Database =>
+  sqliteDatabaseUnit(storage).database;

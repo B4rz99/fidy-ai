@@ -1,5 +1,8 @@
+import type { RecoveryAdmissionEnvironment } from "../recovery-activation/contract";
+import type { AuthoritativeStoreEnvironment, SqliteStoreBinding } from "../sqlite-store/contract";
 import { CanonicalSnapshotResponse } from "../canonical-admission/contract";
 import { SqliteStoreRequest } from "../sqlite-store/contract";
+import { BrowserSessionBinding } from "../../src/shell/web-session/contract";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { type Effect, type Option, Schema } from "effect";
 import type {
@@ -54,6 +57,7 @@ export const NativeDashboardRequest = Schema.Struct({
   mode: Schema.Literals(["bound", "document"]),
 });
 export type NativeDashboardRequest = typeof NativeDashboardRequest.Type;
+const Bootstrap = Schema.optionalKey(Schema.toEncoded(BrowserSessionBinding));
 const Measurement = Schema.Struct({
   scans: Schema.Int,
   financialRows: Schema.Int,
@@ -66,9 +70,15 @@ export const NativeDashboardResult = Schema.Union([
     kind: Schema.Literal("view"),
     response: CanonicalSnapshotResponse,
     binding: WebSessionId,
+    bootstrap: Bootstrap,
     measurement: Measurement,
+    html: Schema.optionalKey(Schema.String),
   }),
-  Schema.Struct({ kind: Schema.Literal("response"), response: CanonicalSnapshotResponse }),
+  Schema.Struct({
+    kind: Schema.Literal("response"),
+    response: CanonicalSnapshotResponse,
+    bootstrap: Bootstrap,
+  }),
 ]);
 export type NativeDashboardResult = typeof NativeDashboardResult.Type;
 export type NativeDashboardRead = Readonly<{
@@ -85,3 +95,24 @@ export type NativeDashboardBinding = Readonly<{
 export type NativeDashboardReader = (
   input: Pick<NativeDashboardRequest, "request" | "mode">
 ) => Promise<NativeDashboardResult>;
+
+/** Trusted Core bindings select one fixed target; browser callers never provide a target or mode. */
+export type DashboardDocumentEnvironment = Omit<AuthoritativeStoreEnvironment, "SQLITE_STORE"> &
+  RecoveryAdmissionEnvironment &
+  Readonly<{ BROWSER_ORIGIN: string }> &
+  Partial<
+    Readonly<{
+      RECOVERY_ISOLATION: string;
+      SMOKE_PROOF: string;
+      SQLITE_STORE: Readonly<{
+        getByName: (name: string) => SqliteStoreBinding & NativeDashboardBinding;
+      }>;
+    }>
+  >;
+
+export type NativeDashboardReaderConfiguration = Readonly<{
+  store: NativeDashboardBinding;
+  manifest: string;
+  epoch: string;
+  nativeCall: (execute: () => Promise<unknown>) => Promise<unknown>;
+}>;

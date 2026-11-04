@@ -1,5 +1,5 @@
 import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
-import { readMetadata } from "./internal/metadata";
+import { readMetadata, snapshotContext } from "./internal/metadata";
 import { bindingResponse } from "./internal/binding";
 import { type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
@@ -162,3 +162,8 @@ export const currentBrowserSessionLookup = (
   input: BrowserSessionMaterial & Readonly<{ current: number }>
 ): BoundWebSessionLookup =>
   currentSessionLookup({ ...input, freshness: "live", requireConsent: true });
+
+/** Complete fresh application bootstrap assembled by owners inside one synchronous native transaction. */
+export const readWebSessionSnapshotContext = (
+  input: Parameters<typeof snapshotContext>[0]
+): ReturnType<typeof snapshotContext> => snapshotContext(input);

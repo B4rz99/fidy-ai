@@ -1,7 +1,26 @@
 import type { Page } from "@playwright/test";
+import { Function } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 
 export const apiOrigin = browserAcceptanceTopology().app;
+type BrowserRouteUrl = Parameters<Page["route"]>[0];
+type BrowserRouteHandler = Parameters<Page["route"]>[1];
+/** Same-origin API fixtures leave documents and static resources with the Web Worker. */
+export const routeBrowserApi: {
+  (page: Page, url: BrowserRouteUrl, handler: BrowserRouteHandler): Promise<void>;
+  (url: BrowserRouteUrl, handler: BrowserRouteHandler): (page: Page) => Promise<void>;
+} = Function.dual(
+  3,
+  (page: Page, url: BrowserRouteUrl, handler: BrowserRouteHandler): Promise<void> =>
+    page
+      .route(url, (route, request) => {
+        const resource = request.resourceType();
+        return resource === "fetch" || resource === "xhr"
+          ? handler(route, request)
+          : route.fallback();
+      })
+      .then(() => undefined)
+);
 const defaultUser = {
   id: "24000000-0000-4000-8000-000000000241",
   serviceMarket: "CO",

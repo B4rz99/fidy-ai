@@ -1,12 +1,13 @@
+import { nativeReader } from "./internal/native-reader";
 import { readAuditedSqliteDashboard as nativeDashboard } from "./internal/sqlite-read";
 import {
   type DashboardMutationOperation,
   type DashboardQueryOperation,
   type DashboardRequest,
-  type NativeDashboardBinding,
   type NativeDashboardRead,
   type NativeDashboardReader,
-  NativeDashboardResult,
+  type NativeDashboardReaderConfiguration,
+  type NativeDashboardResult,
 } from "./contract";
 import { prepareBoundDashboardRead as ownerPrepareBoundDashboardRead } from "./internal/bound-read";
 import type { CanonicalBrowserRead } from "../canonical-admission/contract";
@@ -423,23 +424,6 @@ export const readAuditedSqliteDashboard = (
 ): Effect.Effect<NativeDashboardResult> => nativeDashboard(input);
 
 /** Trusted composition tracks the actual native RPC before decoding or an outer request timeout. */
-export const makeNativeDashboardReader =
-  (
-    input: Readonly<{
-      store: NativeDashboardBinding;
-      manifest: string;
-      epoch: string;
-      nativeCall: (execute: () => Promise<unknown>) => Promise<unknown>;
-    }>
-  ): NativeDashboardReader =>
-  (request) => {
-    try {
-      return input
-        .nativeCall(() =>
-          input.store.dashboard({ manifest: input.manifest, epoch: input.epoch, ...request })
-        )
-        .then(Schema.decodeUnknownSync(NativeDashboardResult));
-    } catch (cause) {
-      return Promise.reject(cause);
-    }
-  };
+export const makeNativeDashboardReader = (
+  input: NativeDashboardReaderConfiguration
+): NativeDashboardReader => nativeReader(input);

@@ -1,7 +1,7 @@
 import { captureInThemes } from "./themed-capture";
 import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
-import { apiOrigin, installUser, response } from "./http-fixtures";
+import { apiOrigin, installUser, response, routeBrowserApi } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 import {
   captureReport,
@@ -62,7 +62,7 @@ test("a malformed report response refuses partial financial facts", ({ page }) =
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => installUser(page));
       yield* Effect.tryPromise(() =>
-        page.route(`${apiOrigin}${reportPath}`, malformedReportHandler)
+        routeBrowserApi(page, `${apiOrigin}${reportPath}`, malformedReportHandler)
       );
       yield* Effect.tryPromise(() => page.goto(reportPath));
       yield* Effect.tryPromise(() => expect(page.getByText("Informe no disponible")).toBeVisible());
@@ -96,7 +96,7 @@ const retryJourney = Effect.fnUntraced(function* (page: Page) {
     calls += 1;
     return calls === 1;
   });
-  yield* Effect.tryPromise(() => page.route(`${apiOrigin}${reportPath}`, handler));
+  yield* Effect.tryPromise(() => routeBrowserApi(page, `${apiOrigin}${reportPath}`, handler));
   yield* Effect.tryPromise(() => page.goto(reportPath));
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("status", { name: "Cargando informe", exact: true })).toHaveAttribute(
@@ -156,7 +156,7 @@ test("the complete historical report preserves every item, explicit currencies a
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => installUser(page));
       yield* Effect.tryPromise(() =>
-        page.route(`${apiOrigin}${reportPath}`, completeReportHandler)
+        routeBrowserApi(page, `${apiOrigin}${reportPath}`, completeReportHandler)
       );
       yield* Effect.tryPromise(() => page.goto(reportPath));
       yield* Effect.tryPromise(() =>
@@ -227,7 +227,7 @@ const prepareVisualReport = Effect.fnUntraced(function* (page: Page, state: Visu
     if (state === "loading") return pending.promise.then(() => visualReportHandler(route));
     return visualReportHandler(route);
   };
-  yield* Effect.tryPromise(() => page.route(`${apiOrigin}${visualReportPath}`, handler));
+  yield* Effect.tryPromise(() => routeBrowserApi(page, `${apiOrigin}${visualReportPath}`, handler));
   yield* Effect.tryPromise(() =>
     page.goto(state === "invalid" ? "/insights/recurring/invalid" : visualReportPath)
   );

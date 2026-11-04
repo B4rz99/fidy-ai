@@ -1,0 +1,33 @@
+apps/server/cloudflare/erasure/restore.test.ts
+  s_bae391f7738986::t_bb661a6a5a3ae7 296-319
+  s_bae391f7738986::t_8559b45d8de10d 401,404,412,431,604-607
+  s_bae391f7738986::t_beb1b7a6ee653d 267-295,608
+apps/server/ARCHITECTURE.md
+  s_bae391f7738986::t_e40d847124a133 189-190
+apps/server/cloudflare/erasure/contract.ts
+  s_bae391f7738986::t_0b3d090aa86a6f 53
+apps/server/cloudflare/erasure/erasure.test.ts
+  s_bae391f7738986::t_a41aa531990bfc 243
+apps/server/cloudflare/erasure/internal/generation.ts
+  s_bae391f7738986::t_2297b3c6248c3e 50-64,66-70,74-76
+apps/server/cloudflare/erasure/internal/restore-case.ts
+  s_bae391f7738986::t_09a51c76e40318 92-96
+apps/server/cloudflare/erasure/internal/restore.ts
+  s_bae391f7738986::t_8f31aa0b35be11 3,5,39-44,55,77-78,81,109,113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99b9dc5faa3ae704d691e555269162b57de6c22c",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

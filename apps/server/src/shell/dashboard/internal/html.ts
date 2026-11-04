@@ -1,7 +1,7 @@
 import { BigDecimal, DateTime, Option } from "effect";
 import { type MoneyGroups, type ReadonlyMoney, encodeMoneyAmount } from "~/core/_shared/money";
 import type { DashboardBucket } from "~/core/dashboard/contract";
-import type { DashboardView, DashboardWidgetView } from "../contract";
+import type { DashboardView, DashboardWidgetView } from "~/shell/dashboard/contract";
 
 const escape = (value: string): string =>
   value.replace(/[&<>"']/gu, (character) => {

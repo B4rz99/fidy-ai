@@ -1,0 +1,37 @@
+.gitignore
+  s_bae391f7738986::t_70234f0b7ce725 12
+apps/server/cloudflare/browser-acceptance-core-module.ts
+  s_bae391f7738986::t_e40af68151892e 4,17,23-24,30-31,45-46
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_bae391f7738986::t_7716cb56005770 15
+apps/server/cloudflare/browser-acceptance-public-bundle.d.mts
+  s_bae391f7738986::t_955198a6951007 1
+apps/web/e2e/dashboard-core.spec.ts
+  s_bae391f7738986::t_42835ffcd3a79a 28-33,35-42
+apps/web/e2e/dashboard-pointer-resize.spec.ts
+  s_bae391f7738986::t_865c84fb52caea 62-64
+apps/web/e2e/dashboard-queries.spec.ts
+  s_bae391f7738986::t_f2215d8c01da21 153-158
+apps/web/src/features/dashboard/FEATURE.md
+  s_bae391f7738986::t_2e319d8be3723e 58
+apps/web/src/features/dashboard/feature.tsx
+  s_bae391f7738986::t_fa670d2a79cba1 1,4-5,38,46,104-106,113-121,123,125-138,141,144-170,180
+apps/web/src/features/dashboard/query.ts
+  s_bae391f7738986::t_9290e3b2ef7fb9 7-11,17,20,22-29,33-34,36-37,39,45-61,65-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9566ea1423e3aa73cd54f6d48b4df4edceed1c7f",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

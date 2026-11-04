@@ -99,7 +99,7 @@ const readFinancialBody = Effect.fnUntraced(function* (
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const parts: string[] = [];
   let bytes = 0;
-  while (true) {
+  for (;;) {
     const chunk = yield* Effect.tryPromise(() => reader.read());
     if (chunk.done) break;
     bytes += chunk.value.byteLength;

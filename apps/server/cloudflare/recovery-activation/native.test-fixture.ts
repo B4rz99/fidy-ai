@@ -54,6 +54,11 @@ export const nativeRecoveryAdmission: Effect.Effect<RecoveryAdmissionBinding, ne
         .then((response) => response.json());
     return {
       inspect: () => dispatch({ action: "inspect" }),
+      pause: (input) => dispatch({ action: "pause", input }),
+      enterContinuation: (input) =>
+        dispatch({ action: "enterContinuation", input }).then(
+          Schema.decodeUnknownSync(Schema.Boolean)
+        ),
       enter: (input) =>
         dispatch({ action: "enter", input }).then(Schema.decodeUnknownSync(Schema.Boolean)),
       complete: (input) =>

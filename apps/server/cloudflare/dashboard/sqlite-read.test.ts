@@ -786,7 +786,7 @@ it.live(
   "uses the named private document entry without granting document mode to fragments or alternate bearers",
   () =>
     Effect.gen(function* () {
-      const fixture = yield* setupOn(() => storage.acquireDocument());
+      const fixture = yield* setupOn(() => storage.acquireDocument("Live"));
       yield* io(() =>
         fixture.db
           .prepare(
@@ -836,5 +836,28 @@ it.live(
           })
         )
       ).toMatchObject({ kind: "response", response: { status: 401 } });
+    })
+);
+
+it.live(
+  "preserves deployment recovery isolation at the named document entry before any financial read",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* setupOn(() => storage.acquireDocument("Isolated"));
+      expect(
+        yield* io(() =>
+          fixture.document(
+            new Request("https://app.fidy.test/app/dashboard", { headers: request().headers })
+          )
+        )
+      ).toEqual({ kind: "refused", status: 503 });
+      expect(
+        yield* io(() => fixture.db.prepare("SELECT count(*) AS count FROM audit_entries").first())
+      ).toEqual({ count: 0 });
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM canonical_request_buckets").first()
+        )
+      ).toEqual({ count: 0 });
     })
 );

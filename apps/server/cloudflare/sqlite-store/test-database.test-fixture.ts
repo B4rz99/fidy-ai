@@ -21,7 +21,7 @@ const moduleText = (): Promise<string> => {
   return result;
 };
 const poolSize = 16;
-const runtime = (sequence: number): Promise<Miniflare> =>
+const runtime = (sequence: number, isolation: "Live" | "Isolated" = "Live"): Promise<Miniflare> =>
   moduleText().then((module) => {
     const buckets: Record<string, { type: "r2"; name: string }> = {};
     for (let index = 0; index < poolSize; index++) {
@@ -38,6 +38,10 @@ const runtime = (sequence: number): Promise<Miniflare> =>
             exports: { ActiveStoreProof: { type: "durable-object", storage: "sqlite" } },
             env: {
               ...buckets,
+              RECOVERY_ISOLATION: {
+                type: "text",
+                value: isolation === "Isolated" ? "isolated" : "",
+              },
               ERASURE_BUCKET: { type: "r2", name: `sqlite-${sequence}-0` },
               SQLITE_STORE: {
                 type: "durable-object",
@@ -119,7 +123,7 @@ const snapshot = (input: Readonly<{ runtime: Miniflare; name: string }>): Native
 /** Test-only transport selection reuses the existing canonical suites against real native Store objects. */
 export const sqliteTestStorage = (): Readonly<{
   acquire: () => Promise<TestStore>;
-  acquireDocument: () => Promise<TestStore>;
+  acquireDocument: (isolation: "Live" | "Isolated") => Promise<TestStore>;
   dispose: () => Promise<void>;
 }> => {
   const runtimes: Promise<Miniflare>[] = [];
@@ -143,8 +147,8 @@ export const sqliteTestStorage = (): Readonly<{
   };
   return {
     acquire,
-    acquireDocument: () => {
-      const next = runtime(runtimes.length);
+    acquireDocument: (isolation) => {
+      const next = runtime(runtimes.length, isolation);
       runtimes.push(next);
       return next.then((runtime) =>
         runtime.getBindings<{ BUCKET_0: R2Bucket }>().then((bindings) => ({

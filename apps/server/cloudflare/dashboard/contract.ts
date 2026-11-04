@@ -102,6 +102,8 @@ export type DashboardDocumentEnvironment = Omit<AuthoritativeStoreEnvironment, "
   Readonly<{ BROWSER_ORIGIN: string }> &
   Partial<
     Readonly<{
+      RECOVERY_ISOLATION: string;
+      SMOKE_PROOF: string;
       SQLITE_STORE: Readonly<{
         getByName: (name: string) => SqliteStoreBinding & NativeDashboardBinding;
       }>;

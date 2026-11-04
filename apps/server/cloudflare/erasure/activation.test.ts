@@ -549,8 +549,11 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
               .first("generation")
           )
         ).toBe(plan.sourceFence.retired);
-        expect(plan.sourceFence.retired).not.toBe("initial");
-        expect((yield* send()).status).toBe(202);
+        const ledgerObserved = yield* send();
+        expect(yield* Effect.tryPromise(() => ledgerObserved.json())).toMatchObject({
+          phase: "AwaitingFinalBarrier",
+          sourceLedger: { state: "Observed", checkedCases: 0, providerIsolation: "Unqualified" },
+        });
         registry = unavailableProgress(native.registry);
         expect((yield* send()).status).toBe(503);
         expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({

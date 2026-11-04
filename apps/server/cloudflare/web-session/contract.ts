@@ -33,6 +33,10 @@ export type BrowserSessionMaterial = Readonly<{
   binding: Option.Option<string>;
 }>;
 
+export type CanonicalBrowserBinding =
+  | Readonly<{ kind: "independent" }>
+  | Readonly<{ kind: "cookie"; material: Option.Option<BrowserSessionMaterial> }>;
+
 /** Synchronous owner reads composed inside an already-open native snapshot transaction. */
 export type WebSessionSnapshotContext = Readonly<{
   db: D1Database;

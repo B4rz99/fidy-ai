@@ -14,30 +14,30 @@ const Replay = Schema.Struct({
 });
 export type Replay = typeof Replay.Type;
 
-/** Read only live exact-User retained outcomes; the coordinator rechecks authority before disclosure. */
-export const retainedReplay = ({
+type ReplayRead = Readonly<{ db: D1Database; userId: string; retryKey: string; current: number }>;
+export const prepareReplayRead = ({
   db,
   userId,
   retryKey,
   current,
-}: Readonly<{ db: D1Database; userId: string; retryKey: string; current: number }>): Effect.Effect<
-  Option.Option<Replay>,
-  CanonicalAdmissionUnavailable
-> =>
-  Effect.tryPromise({
-    try: () =>
-      db
-        .prepare(
-          `SELECT identity,operation,input_digest AS inputHash,state,accepted_at_ms AS acceptedAt,status,body,content_type AS contentType FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND accepted_at_ms > ?`
-        )
-        .bind(userId, retryKey, current - canonicalRetryLifetimeMs)
-        .first<unknown>(),
-    catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
-  }).pipe(
-    Effect.map((row) =>
-      row === null ? Option.none() : Option.some(Schema.decodeUnknownSync(Replay)(row))
+}: ReplayRead): D1PreparedStatement =>
+  db
+    .prepare(
+      `SELECT identity,operation,input_digest AS inputHash,state,accepted_at_ms AS acceptedAt,status,body,content_type AS contentType FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND accepted_at_ms > ?`
     )
-  );
+    .bind(userId, retryKey, current - canonicalRetryLifetimeMs);
+export const decodeReplayRead = (row: unknown): Option.Option<Replay> =>
+  row === null || row === undefined
+    ? Option.none()
+    : Option.some(Schema.decodeUnknownSync(Replay)(row));
+/** Read only live exact-User retained outcomes; the coordinator rechecks authority before disclosure. */
+export const retainedReplay = (
+  input: ReplayRead
+): Effect.Effect<Option.Option<Replay>, CanonicalAdmissionUnavailable> =>
+  Effect.tryPromise({
+    try: () => prepareReplayRead(input).first<unknown>(),
+    catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
+  }).pipe(Effect.map(decodeReplayRead));
 
 /** Claim participates in the same D1 acceptance batch as canonical allowance consumption. */
 export const claimReplay = ({

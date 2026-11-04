@@ -163,3 +163,9 @@ export type ProactivityOfferReplacement = Readonly<{
   offerId: ConsentRecordId;
   proof: OwnedStatement;
 }>;
+
+/** The Consent-owned status query and decoder can participate in an enclosing native snapshot. */
+export type PreparedConsentStatus = Readonly<{
+  statement: D1PreparedStatement;
+  decode: (row: unknown) => Option.Option<ConsentStatus>;
+}>;

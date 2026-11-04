@@ -225,9 +225,21 @@ const executeAuthenticatedCommand = (input: CommandInput): Effect.Effect<Respons
       return yield* execution;
     }
     const run = Effect.runPromiseWith(yield* Effect.context<never>());
+    const configuration = Option.isSome(input.candidateTargetId)
+      ? undefined
+      : input.environment.ERASURE_ACTIVATION;
+    const environment =
+      configuration === undefined
+        ? input.environment
+        : {
+            RECOVERY_SOURCE_EPOCH: configuration.sourceTarget.epoch,
+            RECOVERY_ADMISSION: {
+              getByName: (): typeof configuration.admission => configuration.admission,
+            },
+          };
     return yield* Effect.tryPromise(() =>
       runRecoveryContinuation({
-        environment: input.environment,
+        environment,
         work: () => run(execution),
       })
     ).pipe(Effect.orElseSucceed(() => reply(unavailableStatus)));

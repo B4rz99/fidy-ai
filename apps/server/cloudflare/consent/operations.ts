@@ -22,7 +22,7 @@ import {
 import { performEgress } from "./internal/egress";
 import { onboardingEvidence, revocationEvidence } from "./internal/evidence";
 import { acceptedCallerProjection, operationalProjection } from "./internal/pre-user-projections";
-import { loadStanding, loadStatus } from "./internal/standing";
+import { loadStanding, loadStatus, prepareStatus } from "./internal/standing";
 import { withdrawalProjection } from "./internal/withdrawal-projection";
 import {
   createOffer,
@@ -310,3 +310,6 @@ export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
     coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
 SELECT CASE WHEN state='awaiting_delivery' THEN 1 WHEN state='outbound_started' AND rejected_at_ms IS NOT NULL THEN 0 WHEN state='outbound_started' AND disclosure_message_id IS NOT NULL THEN 3 WHEN state='outbound_started' THEN 2 WHEN state='awaiting_decision' THEN 3 WHEN state IN('accepted','declined') THEN 0 ELSE 2 END AS disposition FROM pending_consent_exchanges
   )`);
+
+/** Decode Consent from the same native unit as its caller's live credential and protected work. */
+export const prepareConsentStatus: typeof prepareStatus = (input) => prepareStatus(input);

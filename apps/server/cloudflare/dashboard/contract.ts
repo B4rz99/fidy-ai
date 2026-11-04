@@ -78,6 +78,7 @@ export const NativeDashboardResult = Schema.Union([
     kind: Schema.Literal("response"),
     response: CanonicalSnapshotResponse,
     bootstrap: Bootstrap,
+    html: Schema.optionalKey(Schema.String),
   }),
 ]);
 export type NativeDashboardResult = typeof NativeDashboardResult.Type;

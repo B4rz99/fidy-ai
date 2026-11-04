@@ -1,3 +1,4 @@
+import { prepareMaterial, resolveSnapshot } from "./internal/pat-snapshot";
 import { Effect } from "effect";
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import {
@@ -64,3 +65,10 @@ export const getPATActivity = (
 /** Answer retained activity inside a verified, admitted hosted Turn, with the same projection and Audit as browser execution. */
 export const getHeldPATActivity = (input: PATActivityRead): Effect.Effect<Response> =>
   getHeldActivity(input);
+
+/** Prepare opaque PAT lookup material without making a database trip. */
+export const prepareCanonicalPATMaterial: typeof prepareMaterial = (request) =>
+  prepareMaterial(request);
+/** Resolve the credential and Consent inside the caller's enclosing native transaction. */
+export const resolveCanonicalPATSnapshot: typeof resolveSnapshot = (input) =>
+  resolveSnapshot(input);

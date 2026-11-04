@@ -1,6 +1,6 @@
 import { type CoreHttpEnvironment } from "../contract";
 import { afterAll, expect, it } from "@effect/vitest";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import {
@@ -113,6 +113,7 @@ for (const path of [
         yield* TestClock.setTime(current);
         const clients = yield* Layer.build(FetchHttpClient.layer);
         const response = yield* executeCoreHttp({
+          dashboard: Option.none(),
           bankAuthentication: Effect.void,
           request: new Request(`https://api.fidyapp.com${path}`, {
             method: "POST",

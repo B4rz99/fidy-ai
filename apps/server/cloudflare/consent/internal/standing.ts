@@ -1,6 +1,11 @@
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { DisclosureSnapshot, OnboardingConsentBasis } from "../../../src/shell/consent/contract";
-import { type ConsentStanding, type ConsentStatus, ConsentUnavailable } from "../contract";
+import {
+  type ConsentStanding,
+  type ConsentStatus,
+  ConsentUnavailable,
+  type PreparedConsentStatus,
+} from "../contract";
 
 const StandingRow = Schema.Struct({
   id: Schema.String,
@@ -12,29 +17,34 @@ const StatusRow = Schema.Struct({
   revoked: Schema.Literals([0, 1]),
 });
 
-export const loadStatus = ({
+export const prepareStatus = ({
   db,
   userId,
-}: Readonly<{ db: D1Database; userId: string }>): Effect.Effect<
-  ConsentStatus,
-  ConsentUnavailable
-> =>
-  Effect.tryPromise({
-    try: () =>
-      db
-        .prepare(`SELECT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id = ?) AS granted,
+}: Readonly<{ db: D1Database; userId: string }>): PreparedConsentStatus => ({
+  statement: db
+    .prepare(`SELECT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='processing_grant') AS onboarding_consent_records WHERE user_id = ?) AS granted,
       EXISTS (SELECT 1 FROM (SELECT w.id,w.user_id,w.grant_record_id,w.session_id,w.occurred_at_ms FROM consent_history w WHERE w.record_type='processing_withdrawal' AND NOT EXISTS(SELECT 1 FROM consent_history n WHERE n.record_type='processing_renewal' AND n.withdrawal_id=w.id AND n.user_id=w.user_id)) AS consent_user_revocations WHERE user_id = ?) AS revoked`)
-        .bind(userId, userId)
-        .first(),
-    catch: () => new ConsentUnavailable(),
-  }).pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(StatusRow)),
-    Effect.map((row): ConsentStatus => {
-      if (row.revoked === 1) return "Revoked";
-      return row.granted === 1 ? "Granted" : "Missing";
+    .bind(userId, userId),
+  decode: (row) =>
+    Option.map(Schema.decodeUnknownOption(StatusRow)(row), (value): ConsentStatus => {
+      if (value.revoked === 1) return "Revoked";
+      return value.granted === 1 ? "Granted" : "Missing";
     }),
-    Effect.mapError(() => new ConsentUnavailable())
-  );
+});
+
+export const loadStatus = (
+  input: Readonly<{ db: D1Database; userId: string }>
+): Effect.Effect<ConsentStatus, ConsentUnavailable> =>
+  Effect.suspend(() => {
+    const prepared = prepareStatus(input);
+    return Effect.tryPromise({
+      try: () => prepared.statement.first(),
+      catch: () => new ConsentUnavailable(),
+    }).pipe(
+      Effect.flatMap((row) => Effect.fromOption(prepared.decode(row))),
+      Effect.mapError(() => new ConsentUnavailable())
+    );
+  });
 
 export const loadStanding = ({
   db,

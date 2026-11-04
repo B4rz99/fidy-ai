@@ -1,4 +1,4 @@
-import type { AuthoritativeStoreEnvironment } from "../sqlite-store/contract";
+import type { DashboardDocumentEnvironment } from "../dashboard/contract";
 import type { RecoveryLifecycleEnvironment } from "../recovery-lifecycle/contract";
 import type { ProviderEnvironment } from "../provider-authentication/contract";
 import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
@@ -43,7 +43,7 @@ export type CoreHttpEnvironment = RecoveryLifecycleEnvironment &
     }>
   >;
 
-export type CoreHttpBindings = Omit<CoreHttpEnvironment, "DB"> & AuthoritativeStoreEnvironment;
+export type CoreHttpBindings = Omit<CoreHttpEnvironment, "DB"> & DashboardDocumentEnvironment;
 
 /** One private request, including an optional bounded post-commit publication lifetime. */
 export type CoreHttpHandler = (

@@ -1,4 +1,6 @@
-import { Data, type Effect, Schema } from "effect";
+import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
+import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
+import { Data, type Effect, type Option, Schema } from "effect";
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
@@ -52,3 +54,20 @@ export const CanonicalSnapshotResponse = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
 });
 export type CanonicalSnapshotResponse = typeof CanonicalSnapshotResponse.Type;
+
+/** Hashes and reflected input facts prepared without making a database read. */
+export type CanonicalSnapshotMaterial = Readonly<{
+  operation: CatalogOperation;
+  valid: Option.Option<Readonly<{ inputHash: string; scopes: ReadonlyArray<CanonicalCapability> }>>;
+  retryKey: Option.Option<string>;
+  invalidRetryKey: boolean;
+}>;
+/** Fixed native execution capability; callers cannot select a public SQL transport. */
+export type CanonicalSnapshotCall = Readonly<{
+  db: D1Database;
+  caller: Exclude<AuthorizedCanonicalCaller, { _tag: "WebSession" }>;
+  current: number;
+  material: CanonicalSnapshotMaterial;
+  execute: (statements: ReadonlyArray<D1PreparedStatement>) => ReadonlyArray<D1Result>;
+  work: () => CanonicalSnapshotResponse;
+}>;

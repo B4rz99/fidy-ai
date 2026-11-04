@@ -1,6 +1,6 @@
 import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
 import { readMetadata, snapshotContext } from "./internal/metadata";
-import { bindingResponse } from "./internal/binding";
+import { acceptsSnapshotBinding, bindingResponse, snapshotBinding } from "./internal/binding";
 import { type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import type {
@@ -167,3 +167,13 @@ export const currentBrowserSessionLookup = (
 export const readWebSessionSnapshotContext = (
   input: Parameters<typeof snapshotContext>[0]
 ): ReturnType<typeof snapshotContext> => snapshotContext(input);
+
+/** Preserve cookie-bearing canonical ingress checks inside its native transaction. */
+export const prepareCanonicalBrowserBinding = (
+  request: Parameters<typeof snapshotBinding>[0]
+): ReturnType<typeof snapshotBinding> => snapshotBinding(request);
+
+/** Binding correlation neither selects the PAT User nor grants canonical authority. */
+export const acceptsCanonicalBrowserBinding = (
+  input: Parameters<typeof acceptsSnapshotBinding>[0]
+): ReturnType<typeof acceptsSnapshotBinding> => acceptsSnapshotBinding(input);

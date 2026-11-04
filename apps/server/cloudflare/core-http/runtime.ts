@@ -1,9 +1,12 @@
 import {
   runRecoveryControl,
   runRecoveryFetch,
+  trackRecoveryNative,
   withRecoveryDispatch,
   withRecoveryStore,
 } from "../recovery-lifecycle/runtime";
+import type { NativeDashboardReader } from "../dashboard/contract";
+import { makeNativeDashboardReader } from "../dashboard/operations";
 import {
   bancolombiaSandboxAdmission,
   verifyBancolombiaSandboxAuthentication,
@@ -18,7 +21,7 @@ import type { CoreRejectionBoundary } from "../runtime/operational-health/contra
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { Clock, Context, Effect, Layer, Option } from "effect";
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import type { TelemetryService } from "../../src/shell/observability/contract";
@@ -42,8 +45,34 @@ type CoreComposition = Readonly<{
 
 const selectedEnvironment = (
   environment: Parameters<CoreHttpHandler>[1]
-): Effect.Effect<Option.Option<CoreHttpEnvironment>> =>
-  Effect.try(() => withRecoveryStore(environment)).pipe(Effect.option);
+): Effect.Effect<
+  Option.Option<
+    Readonly<{ environment: CoreHttpEnvironment; dashboard: Option.Option<NativeDashboardReader> }>
+  >
+> =>
+  Effect.gen(function* () {
+    const selected = yield* Effect.try(() => withRecoveryStore(environment));
+    const namespace = environment.SQLITE_STORE;
+    if (namespace === undefined) {
+      return { environment: selected, dashboard: Option.none<NativeDashboardReader>() };
+    }
+    const manifest = yield* Schema.decodeUnknownEffect(Schema.String)(
+      environment.SQLITE_STORE_MANIFEST
+    );
+    const epoch = yield* Schema.decodeUnknownEffect(Schema.String)(environment.SQLITE_STORE_EPOCH);
+    const dashboard = yield* Effect.try(() =>
+      makeNativeDashboardReader({
+        store: namespace.getByName("authoritative-v1"),
+        manifest,
+        epoch,
+        nativeCall: (work) => trackRecoveryNative({ environment, work }),
+      })
+    );
+    return {
+      environment: selected,
+      dashboard: Option.some(dashboard),
+    };
+  }).pipe(Effect.option);
 
 const isolatedResponse = (
   request: Request,
@@ -63,7 +92,7 @@ const makeRequestHandler = ({ telemetry, institutions }: CoreComposition): CoreH
     Effect.gen(function* () {
       const selected = yield* selectedEnvironment(bindings);
       if (Option.isNone(selected)) return new Response(null, { status: 503 });
-      const environment = selected.value;
+      const { environment, dashboard } = selected.value;
       const isolated = isolatedResponse(request, environment);
       if (Option.isSome(isolated)) return isolated.value;
       const recovery = measureErasureRecovery(environment);
@@ -71,6 +100,7 @@ const makeRequestHandler = ({ telemetry, institutions }: CoreComposition): CoreH
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
       );
       const response = yield* executeCoreHttp({
+        dashboard,
         bankAuthentication: verifyBancolombiaSandboxAuthentication(environment),
         request,
         environment:

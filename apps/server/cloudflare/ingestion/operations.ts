@@ -218,3 +218,14 @@ export const prepareReviewEdit = (
 ): Effect.Effect<CanonicalMutationPreparation> => prepareEdit(input);
 export const reviewRefusal = (input: ReviewAuditWork): CanonicalMutationRefusal =>
   refuseReview(input);
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT CASE WHEN status IN('queued','processing') THEN 1 WHEN status IN('completed','failed') THEN 0 ELSE 2 END AS disposition FROM statement_submissions
+UNION ALL SELECT CASE WHEN outcome IS NOT NULL THEN 0 WHEN state IN('storing','queued') THEN 1 ELSE 2 END FROM forwarded_email_receipts
+UNION ALL SELECT CASE WHEN status IN('pending','deleting') AND object_deleted_at_ms IS NULL THEN 1 WHEN status IN('available','published') THEN 3 WHEN object_deleted_at_ms IS NOT NULL THEN 0 ELSE 2 END FROM statement_staging_objects
+  )`);

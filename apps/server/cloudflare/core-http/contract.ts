@@ -1,9 +1,11 @@
 import type { AuthoritativeStoreEnvironment } from "../sqlite-store/contract";
+import type { RecoveryLifecycleEnvironment } from "../recovery-lifecycle/contract";
 import type { ProviderEnvironment } from "../provider-authentication/contract";
 import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
 
 /** Private HTTP binding boundary; no model execution or scheduled maintenance authority. */
-export type CoreHttpEnvironment = ProviderEnvironment &
+export type CoreHttpEnvironment = RecoveryLifecycleEnvironment &
+  ProviderEnvironment &
   Readonly<{
     DB: D1Database;
     RELEASE_GIT_SHA: string;

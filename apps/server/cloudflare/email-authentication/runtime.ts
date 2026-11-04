@@ -1,4 +1,6 @@
-import { withAuthoritativeStore } from "../sqlite-store/operations";
+import { runRecoveryJob } from "../recovery-lifecycle/operations";
+import type { RecoveryLifecycleEnvironment } from "../recovery-lifecycle/contract";
+import { withRecoveryStore } from "../recovery-lifecycle/runtime";
 import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -53,24 +55,29 @@ export const runBrowserPairingEmailWorkflow = (input: EmailWorkflowInput): Promi
 /** Select this Queue protocol without interpreting it as authority. */
 export const isBrowserPairingEmailWork = (value: unknown): boolean => recognizesPairing(value);
 export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
-  EmailDeliveryEnvironment,
+  EmailDeliveryEnvironment & RecoveryLifecycleEnvironment,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runPairing({
-          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.browserPairingEmail",
-        parent: workTraceParent(event.payload),
-      }
-    );
+    return runRecoveryJob({
+      environment: this.env,
+      payload: event.payload,
+      work: () =>
+        observeWorkerPromise(
+          () =>
+            runPairing({
+              environment: withErasureRecovery(withRecoveryStore(this.env)),
+              payload: event.payload,
+              activity: (name, options, activity) => step.do(name, options, activity),
+            }),
+          {
+            environment: workerRelease(this.env),
+            telemetry: cloudflareWorkerTelemetry,
+            operation: "workflow.browserPairingEmail",
+            parent: workTraceParent(event.payload),
+          }
+        ),
+    });
   }
 }
 /** Offer bounded EmailReplacement intents; a missed Queue offer remains durably recoverable. */
@@ -92,24 +99,29 @@ export const runEmailReplacementWorkflow = (input: EmailWorkflowInput): Promise<
 /** Select this Queue protocol without interpreting it as authority. */
 export const isEmailReplacementWork = (value: unknown): boolean => recognizesReplacement(value);
 export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
-  EmailDeliveryEnvironment,
+  EmailDeliveryEnvironment & RecoveryLifecycleEnvironment,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runReplacement({
-          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.emailReplacement",
-        parent: workTraceParent(event.payload),
-      }
-    );
+    return runRecoveryJob({
+      environment: this.env,
+      payload: event.payload,
+      work: () =>
+        observeWorkerPromise(
+          () =>
+            runReplacement({
+              environment: withErasureRecovery(withRecoveryStore(this.env)),
+              payload: event.payload,
+              activity: (name, options, activity) => step.do(name, options, activity),
+            }),
+          {
+            environment: workerRelease(this.env),
+            telemetry: cloudflareWorkerTelemetry,
+            operation: "workflow.emailReplacement",
+            parent: workTraceParent(event.payload),
+          }
+        ),
+    });
   }
 }
 

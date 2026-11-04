@@ -1,4 +1,6 @@
-import { withAuthoritativeStore } from "../sqlite-store/operations";
+import { runRecoveryJob } from "../recovery-lifecycle/operations";
+import type { RecoveryLifecycleEnvironment } from "../recovery-lifecycle/contract";
+import { withRecoveryStore } from "../recovery-lifecycle/runtime";
 import { withErasureRecovery } from "../erasure/runtime";
 import { evidenceRetentionDue, summariesDue } from "./internal/cadence";
 import { projections as erasureProjections } from "./internal/erasure";
@@ -416,25 +418,30 @@ const runProactivityWorkflow = ({
 
 /** Native Workflow persists identities and wake-up instants only; every wake rechecks live User authority. */
 export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
-  ProactivityBackgroundEnvironment,
+  ProactivityBackgroundEnvironment & RecoveryLifecycleEnvironment,
   ProactivityDeliveryWork
 > {
   run(event: WorkflowEvent<ProactivityDeliveryWork>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runProactivityWorkflow({
-          coordinator: this.env.USER_TRANSACTION_COORDINATOR,
-          payload: event.payload,
-          step,
-          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.proactivityDelivery",
-        parent: workTraceParent(event.payload),
-      }
-    );
+    return runRecoveryJob({
+      environment: this.env,
+      payload: event.payload,
+      work: () =>
+        observeWorkerPromise(
+          () =>
+            runProactivityWorkflow({
+              coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+              payload: event.payload,
+              step,
+              environment: withErasureRecovery(withRecoveryStore(this.env)),
+            }),
+          {
+            environment: workerRelease(this.env),
+            telemetry: cloudflareWorkerTelemetry,
+            operation: "workflow.proactivityDelivery",
+            parent: workTraceParent(event.payload),
+          }
+        ),
+    });
   }
 }
 

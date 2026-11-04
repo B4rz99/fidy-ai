@@ -29,7 +29,7 @@ const createRuntime = Effect.fn(function* (source: "detection" | "digest") {
         ).pathname,
       ],
       target: "browser",
-      external: ["cloudflare:workers"],
+      external: ["cloudflare:workers", "node:*"],
     })
   );
   const output = build.outputs[0];

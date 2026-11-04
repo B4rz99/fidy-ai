@@ -51,3 +51,13 @@ export const prepareEmailPendingWorkObservation = (
 export const prepareEmailRejectedWorkObservation = (
   input: EmailRejectedWorkObservationInput
 ): D1PreparedStatement => rejectedWork(input);
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT CASE WHEN email_state='awaiting_delivery' THEN 1 WHEN email_state IN('sending','ambiguous') THEN 2 WHEN email_state='awaiting_proof' THEN 3 WHEN email_state IN('approved','rejected') THEN 0 ELSE 2 END AS disposition FROM browser_login_pairings WHERE email_work_id IS NOT NULL
+UNION ALL SELECT CASE WHEN state='awaiting_delivery' THEN 1 WHEN state IN('sending','ambiguous') THEN 2 WHEN state='awaiting_proof' THEN 3 WHEN state='rejected' THEN 0 ELSE 2 END FROM email_replacements
+  )`);

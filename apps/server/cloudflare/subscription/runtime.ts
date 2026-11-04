@@ -1,4 +1,6 @@
-import { withAuthoritativeStore } from "../sqlite-store/operations";
+import { runRecoveryJob } from "../recovery-lifecycle/operations";
+import type { RecoveryLifecycleEnvironment } from "../recovery-lifecycle/contract";
+import { withRecoveryStore } from "../recovery-lifecycle/runtime";
 import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -148,22 +150,30 @@ export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void>
     })
   );
 
-export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
+export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
+  BillingRuntime & RecoveryLifecycleEnvironment,
+  unknown
+> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runRefundWorkflow({
-          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.billingRefund",
-        parent: workTraceParent(event.payload),
-      }
-    );
+    return runRecoveryJob({
+      environment: this.env,
+      payload: event.payload,
+      work: () =>
+        observeWorkerPromise(
+          () =>
+            runRefundWorkflow({
+              environment: withErasureRecovery(withRecoveryStore(this.env)),
+              payload: event.payload,
+              activity: (name, options, activity) => step.do(name, options, activity),
+            }),
+          {
+            environment: workerRelease(this.env),
+            telemetry: cloudflareWorkerTelemetry,
+            operation: "workflow.billingRefund",
+            parent: workTraceParent(event.payload),
+          }
+        ),
+    });
   }
 }
 
@@ -203,23 +213,31 @@ export const sweepExpiredEnrollmentAdmission = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> => sweep(input);
 
-export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
+export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
+  BillingRuntime & RecoveryLifecycleEnvironment,
+  unknown
+> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runBillingCollectionWorkflow({
-          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
-          payload: event.payload,
-          activity: (name, options, activity) => step.do(name, options, activity),
-          sleep: (name, duration) => step.sleep(name, duration),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.billingCollection",
-        parent: workTraceParent(event.payload),
-      }
-    );
+    return runRecoveryJob({
+      environment: this.env,
+      payload: event.payload,
+      work: () =>
+        observeWorkerPromise(
+          () =>
+            runBillingCollectionWorkflow({
+              environment: withErasureRecovery(withRecoveryStore(this.env)),
+              payload: event.payload,
+              activity: (name, options, activity) => step.do(name, options, activity),
+              sleep: (name, duration) => step.sleep(name, duration),
+            }),
+          {
+            environment: workerRelease(this.env),
+            telemetry: cloudflareWorkerTelemetry,
+            operation: "workflow.billingCollection",
+            parent: workTraceParent(event.payload),
+          }
+        ),
+    });
   }
 }
 

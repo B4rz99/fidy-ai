@@ -1,4 +1,9 @@
-import { withAuthoritativeStore } from "../sqlite-store/operations";
+import {
+  runRecoveryControl,
+  runRecoveryFetch,
+  withRecoveryDispatch,
+  withRecoveryStore,
+} from "../recovery-lifecycle/runtime";
 import {
   bancolombiaSandboxAdmission,
   verifyBancolombiaSandboxAuthentication,
@@ -38,7 +43,7 @@ type CoreComposition = Readonly<{
 const selectedEnvironment = (
   environment: Parameters<CoreHttpHandler>[1]
 ): Effect.Effect<Option.Option<CoreHttpEnvironment>> =>
-  Effect.try(() => withAuthoritativeStore(environment)).pipe(Effect.option);
+  Effect.try(() => withRecoveryStore(environment)).pipe(Effect.option);
 
 const isolatedResponse = (
   request: Request,
@@ -52,7 +57,7 @@ const isolatedResponse = (
     },
   });
 
-export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
+const makeRequestHandler = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
   return (request, bindings, context) =>
     Effect.gen(function* () {
@@ -106,4 +111,26 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         ),
       Effect.runPromise
     );
+};
+
+/** The operator remains Access-authenticated while ordinary source admission is closed. */
+export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
+  const execute = makeRequestHandler({ telemetry, institutions });
+  return (request, environment, context) => {
+    const url = new URL(request.url);
+    if (
+      request.method === "POST" &&
+      url.pathname === "/internal/titular-erasure" &&
+      url.search === "" &&
+      !request.headers.has("origin")
+    ) {
+      return runRecoveryControl(() => execute(request, environment, context));
+    }
+    return runRecoveryFetch({
+      environment,
+      context: Option.fromUndefinedOr(context),
+      work: (lifetime) =>
+        execute(request, withRecoveryDispatch(environment), Option.getOrUndefined(lifetime)),
+    });
+  };
 };

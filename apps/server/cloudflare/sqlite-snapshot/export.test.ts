@@ -9,7 +9,11 @@ import {
   type RecoveryClosedSourceAccess,
 } from "../recovery-activation/contract";
 import { ErasureUnavailable } from "../erasure-store/contract";
-import { exportClosedSnapshotTable } from "./operations";
+import {
+  advanceClosedSnapshot,
+  exportClosedSnapshotTable,
+  readSnapshotArtifact,
+} from "./operations";
 import { SnapshotTablePage } from "./contract";
 
 const platform = isolatedTestStorage();
@@ -267,4 +271,95 @@ it.live(
       ).toBe(true);
       expect(yield* io(() => fixture.bucket.list())).toMatchObject({ objects: [] });
     }).pipe(Effect.scoped)
+);
+
+it.live(
+  "resumes bounded full-schema export into a sealed manifest without dropping financial rows or native schema objects",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* closedSnapshot((db) =>
+        db.batch([
+          db.prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES ('10000000-0000-4000-8000-000000000001','CO','es-CO','America/Bogota',0)"
+          ),
+          db.prepare(
+            "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES ('40000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','123456789012345678901234567890.01','COP','outflow',(SELECT id FROM categories LIMIT 1),0,0)"
+          ),
+        ])
+      );
+      let artifactDigest = Option.none<string>();
+      for (let step = 0; step < 2000; step++) {
+        const result = yield* advanceClosedSnapshot(fixture);
+        if (result.kind === "Ready") {
+          artifactDigest = Option.some(result.artifactDigest);
+          break;
+        }
+      }
+      const digest = Option.getOrThrow(artifactDigest);
+      const manifest = yield* readSnapshotArtifact({
+        artifacts: fixture.artifacts,
+        activationId,
+        digest,
+      });
+      expect(manifest.kind).toBe("manifest");
+      if (manifest.kind !== "manifest") return yield* Effect.die(new Error("Missing manifest"));
+      expect(manifest.schemaObjects).toBeGreaterThan(100);
+      expect(manifest.rows).toBeGreaterThan(2);
+      let head = manifest.dataHead;
+      let found = false;
+      while (Option.isSome(head)) {
+        const page = yield* readSnapshotArtifact({
+          artifacts: fixture.artifacts,
+          activationId,
+          digest: head.value,
+        });
+        if (page.kind !== "data") return yield* Effect.die(new Error("Invalid data chain"));
+        if (page.table === "transactions") {
+          expect(page.cells).toContainEqual({
+            kind: "text",
+            value: "123456789012345678901234567890.01",
+          });
+          found = true;
+        }
+        head = page.previous;
+      }
+      expect(found).toBe(true);
+      expect(yield* advanceClosedSnapshot(fixture)).toMatchObject({
+        kind: "Ready",
+        artifactDigest: digest,
+      });
+    }).pipe(Effect.scoped),
+  { timeout: 60000 }
+);
+
+it.live("resumes an applied snapshot checkpoint after its storage reply is lost", () =>
+  Effect.gen(function* () {
+    const fixture = yield* closedSnapshot((db) => db.prepare("SELECT 1").run());
+    let interrupted = false;
+    const artifacts = new Proxy(fixture.artifacts, {
+      get: (bucket, property): unknown =>
+        property === "put"
+          ? (key: string, value: string, options: R2PutOptions): ReturnType<R2Bucket["put"]> =>
+              bucket.put(key, value, options).then((stored) => {
+                if (!interrupted && key.includes("/jobs/")) {
+                  interrupted = true;
+                  throw new Error("Applied checkpoint reply lost");
+                }
+                return stored;
+              })
+          : Reflect.get(bucket, property, bucket),
+    });
+    expect(
+      Exit.isFailure(yield* Effect.exit(advanceClosedSnapshot({ ...fixture, artifacts })))
+    ).toBe(true);
+    expect(interrupted).toBe(true);
+    expect(yield* advanceClosedSnapshot(fixture)).toMatchObject({
+      kind: "Continue",
+      schemaObjects: 1,
+    });
+    expect(yield* advanceClosedSnapshot(fixture)).toMatchObject({
+      kind: "Continue",
+      schemaObjects: 2,
+    });
+  }).pipe(Effect.scoped)
 );

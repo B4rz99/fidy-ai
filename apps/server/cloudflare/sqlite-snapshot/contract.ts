@@ -54,7 +54,7 @@ export const SnapshotTablePage = Schema.Struct({
 });
 export type SnapshotTablePage = typeof SnapshotTablePage.Type;
 /** Fixed private operator capabilities only. The recovery owner grants export access after actual source closure. */
-export type ClosedSnapshotExport = Readonly<{
+export type ClosedSnapshotSource = Readonly<{
   db: D1Database;
   /** Dedicated private temporary data artifacts; never the independent Erasure metadata registry. */
   artifacts: R2Bucket;
@@ -62,12 +62,83 @@ export type ClosedSnapshotExport = Readonly<{
   target: RecoveryTarget;
   activationId: string;
   closedSource: RecoveryClosedSourceAccess;
-  table: string;
-  afterRowid: Option.Option<string>;
 }>;
+export type ClosedSnapshotExport = ClosedSnapshotSource &
+  Readonly<{ table: string; afterRowid: Option.Option<string> }>;
 export type SnapshotPageReceipt = Readonly<{
   key: string;
   digest: string;
   rowid: Option.Option<string>;
 }>;
 export class SnapshotUnavailable extends Data.TaggedError("SnapshotUnavailable") {}
+
+export const SnapshotDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
+const Head = Schema.OptionFromNullOr(SnapshotDigest);
+export const SnapshotSchemaObject = Schema.Struct({
+  position: SnapshotInteger,
+  type: Schema.Literals(["table", "index", "trigger", "view"]),
+  name: Identifier,
+  tableName: Identifier,
+  sql: Schema.String,
+});
+export type SnapshotSchemaObject = typeof SnapshotSchemaObject.Type;
+export const SnapshotSchemaNode = Schema.Struct({
+  kind: Schema.Literal("schema"),
+  previous: Head,
+  object: SnapshotSchemaObject,
+});
+export const SnapshotDataNode = Schema.Struct({
+  kind: Schema.Literal("data"),
+  previous: Head,
+  table: Identifier,
+  rowid: SnapshotInteger,
+  cells: Schema.Array(SnapshotCell).check(Schema.isMaxLength(maximumColumns)),
+});
+const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const Counts = { schemaObjects: Count, rows: Count };
+export const SnapshotManifest = Schema.Struct({
+  kind: Schema.Literal("manifest"),
+  version: Schema.Literal(1),
+  evidence: RecoveryClosedSourceEvidence,
+  target: RecoveryTarget,
+  schemaHead: Head,
+  dataHead: Head,
+  ...Counts,
+});
+export const SnapshotArtifact = Schema.Union([
+  SnapshotSchemaNode,
+  SnapshotDataNode,
+  SnapshotManifest,
+]);
+export type SnapshotArtifact = typeof SnapshotArtifact.Type;
+const BuildCommon = {
+  evidence: RecoveryClosedSourceEvidence,
+  target: RecoveryTarget,
+  schemaHead: Head,
+  dataHead: Head,
+  ...Counts,
+};
+export const SnapshotBuildState = Schema.Union([
+  Schema.Struct({
+    phase: Schema.Literal("Catalog"),
+    schemaCursor: Schema.OptionFromNullOr(SnapshotInteger),
+    ...BuildCommon,
+  }),
+  Schema.Struct({
+    phase: Schema.Literal("Rows"),
+    schemaCursor: SnapshotInteger,
+    table: SnapshotTable,
+    afterRowid: Schema.OptionFromNullOr(SnapshotInteger),
+    ...BuildCommon,
+  }),
+  Schema.Struct({ phase: Schema.Literal("Ready"), artifactDigest: SnapshotDigest, ...BuildCommon }),
+]);
+export type SnapshotBuildState = typeof SnapshotBuildState.Type;
+export type SnapshotBuildStatus =
+  | Readonly<{ kind: "Continue"; schemaObjects: number; rows: number }>
+  | Readonly<{ kind: "Ready"; artifactDigest: string; schemaObjects: number; rows: number }>;
+export type SnapshotArtifactRead = Readonly<{
+  artifacts: R2Bucket;
+  activationId: string;
+  digest: string;
+}>;

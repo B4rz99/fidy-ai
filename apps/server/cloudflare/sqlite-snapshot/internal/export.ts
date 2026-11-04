@@ -8,6 +8,7 @@ import {
 } from "../../recovery-activation/contract";
 import {
   type ClosedSnapshotExport,
+  type ClosedSnapshotSource,
   SnapshotCell,
   SnapshotInteger,
   type SnapshotPageReceipt,
@@ -24,8 +25,8 @@ const Rows = Schema.Array(Schema.Record(Schema.String, Schema.Unknown));
 const Catalog = Schema.Tuple([Schema.Struct({ name: Schema.String, sql: Schema.String })]);
 const Column = Schema.Struct({ name: Schema.String, hidden: Schema.Int });
 const encodeSource = Schema.encodeSync(Schema.fromJsonString(RecoverySourceTarget));
-const evidence = (
-  input: ClosedSnapshotExport
+export const evidence = (
+  input: ClosedSnapshotSource
 ): Effect.Effect<RecoveryClosedSourceEvidence, SnapshotUnavailable> =>
   input.closedSource({ activationId: input.activationId, source: input.source }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(RecoveryClosedSourceEvidence)),
@@ -37,11 +38,15 @@ const evidence = (
     ),
     Effect.mapError(() => new SnapshotUnavailable())
   );
-const readRows = (
-  input: ClosedSnapshotExport,
-  proof: RecoveryClosedSourceEvidence,
-  statement: D1PreparedStatement
-): Effect.Effect<ReadonlyArray<Record<string, unknown>>, SnapshotUnavailable> =>
+export const readRows = ({
+  input,
+  proof,
+  statement,
+}: Readonly<{
+  input: ClosedSnapshotSource;
+  proof: RecoveryClosedSourceEvidence;
+  statement: D1PreparedStatement;
+}>): Effect.Effect<ReadonlyArray<Record<string, unknown>>, SnapshotUnavailable> =>
   io(() =>
     input.db.batch([
       prepareClosedSourceGenerationFence({ db: input.db, generation: proof.sourceGeneration }),
@@ -51,32 +56,35 @@ const readRows = (
     Effect.flatMap((rows) => Schema.decodeUnknownEffect(Rows)(rows[1]?.results)),
     Effect.mapError(() => new SnapshotUnavailable())
   );
-const table = (
-  input: ClosedSnapshotExport,
-  proof: RecoveryClosedSourceEvidence
-): Effect.Effect<SnapshotTable, SnapshotUnavailable> =>
+export const table = ({
+  input,
+  proof,
+}: Readonly<{ input: ClosedSnapshotExport; proof: RecoveryClosedSourceEvidence }>): Effect.Effect<
+  SnapshotTable,
+  SnapshotUnavailable
+> =>
   Effect.gen(function* () {
-    const rows = yield* readRows(
+    const rows = yield* readRows({
       input,
       proof,
-      input.db
+      statement: input.db
         .prepare(
           "SELECT name,sql FROM sqlite_schema WHERE type='table' AND name=? AND name NOT GLOB '__cf_*' AND name NOT GLOB '_cf_*' AND (name NOT GLOB 'sqlite_*' OR name='sqlite_sequence')"
         )
-        .bind(input.table)
-    );
+        .bind(input.table),
+    });
     const [catalog] = yield* Schema.decodeUnknownEffect(Catalog)(rows);
     if (/WITHOUT\s+ROWID|CREATE\s+VIRTUAL/iu.test(catalog.sql)) {
       return yield* new SnapshotUnavailable();
     }
     const columns = yield* Schema.decodeUnknownEffect(Schema.Array(Column))(
-      yield* readRows(
+      yield* readRows({
         input,
         proof,
-        input.db
+        statement: input.db
           .prepare("SELECT name,hidden FROM pragma_table_xinfo(?) ORDER BY cid")
-          .bind(catalog.name)
-      )
+          .bind(catalog.name),
+      })
     );
     return yield* Schema.decodeEffect(SnapshotTable)({
       ...catalog,
@@ -107,22 +115,26 @@ const projection = (name: string, index: number): string => {
   const column = quote(name);
   return `typeof(${column}) AS k${index}, CASE typeof(${column}) WHEN 'integer' THEN CAST(${column} AS TEXT) WHEN 'real' THEN printf('%!.17g',${column}) ELSE ${column} END AS v${index}`;
 };
-const row = (
-  input: ClosedSnapshotExport,
-  proof: RecoveryClosedSourceEvidence,
-  retained: SnapshotTable
-): Effect.Effect<SnapshotTablePage["row"], SnapshotUnavailable> =>
+export const row = ({
+  input,
+  proof,
+  retained,
+}: Readonly<{
+  input: ClosedSnapshotExport;
+  proof: RecoveryClosedSourceEvidence;
+  retained: SnapshotTable;
+}>): Effect.Effect<SnapshotTablePage["row"], SnapshotUnavailable> =>
   Effect.gen(function* () {
     const after = yield* Option.match(input.afterRowid, {
       onNone: () => Effect.succeed(Option.none<string>()),
       onSome: (value) => Schema.decodeEffect(SnapshotInteger)(value).pipe(Effect.asSome),
     });
     const sql = `SELECT CAST(_rowid_ AS TEXT) AS position, ${retained.columns.map(projection).join(",")} FROM ${quote(retained.name)} ${Option.isSome(after) ? "WHERE _rowid_ > CAST(? AS INTEGER)" : ""} ORDER BY _rowid_ LIMIT 1`;
-    const selected = yield* readRows(
+    const selected = yield* readRows({
       input,
       proof,
-      input.db.prepare(sql).bind(...Option.toArray(after))
-    );
+      statement: input.db.prepare(sql).bind(...Option.toArray(after)),
+    });
     const first = selected[0];
     if (first === undefined) return { kind: "end" } as const;
     return {
@@ -174,8 +186,8 @@ export const exportTable = (
 ): Effect.Effect<SnapshotPageReceipt, SnapshotUnavailable> =>
   Effect.gen(function* () {
     const proof = yield* evidence(input);
-    const retained = yield* table(input, proof);
-    const selected = yield* row(input, proof, retained);
+    const retained = yield* table({ input, proof });
+    const selected = yield* row({ input, proof, retained });
     return yield* retain(input, {
       version: 1,
       evidence: proof,

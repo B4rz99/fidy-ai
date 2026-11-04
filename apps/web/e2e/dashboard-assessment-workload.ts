@@ -10,7 +10,10 @@ import {
   type DashboardAssessmentConfiguration,
   dashboardAssessmentIdentities,
 } from "../../server/cloudflare/browser-acceptance/contract";
-import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
+import {
+  browserAcceptanceTopology,
+  dashboardAssessmentApiOrigin,
+} from "../../server/cloudflare/browser-acceptance/operations";
 import { browserSessionHeaders, signInNavigationPerformanceThroughCore } from "./real-core-fixture";
 import {
   installDashboardMeasurement,
@@ -110,7 +113,6 @@ const prepareUser = Effect.fn(function* (input: Setup, user: number) {
       input.browser.newContext({
         baseURL: appOrigin,
         ignoreHTTPSErrors: true,
-        extraHTTPHeaders: { "x-acceptance-source": `203.0.113.${user + 1}` },
       })
     ),
     (context) => Effect.tryPromise(() => context.close()).pipe(Effect.orDie)
@@ -132,7 +134,9 @@ const prepareUser = Effect.fn(function* (input: Setup, user: number) {
   );
   const headers = yield* Effect.tryPromise(() => browserSessionHeaders(context.request));
   const observed: unknown = yield* Effect.tryPromise(() =>
-    context.request.get(`${appOrigin}/user`, { headers }).then((response) => response.json())
+    context.request
+      .get(`${dashboardAssessmentApiOrigin()}/user`, { headers })
+      .then((response) => response.json())
   );
   const current = yield* Schema.decodeUnknownEffect(UserIdentityResponse)(observed);
   expect(current.data.id).toBe(identity.userId);
@@ -165,7 +169,7 @@ const ingestionRequest = Effect.fn(function* (
 ) {
   const started = performance.now();
   const reply = yield* Effect.tryPromise(() =>
-    user.request.post(`${appOrigin}/transactions`, {
+    user.request.post(`${dashboardAssessmentApiOrigin()}/transactions`, {
       headers: user.headers,
       data: {
         money: { amount: "0.01", currency: "COP" },

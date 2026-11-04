@@ -23,3 +23,13 @@ export const browserAssessmentConfiguration = (): typeof DashboardAssessmentConf
     activity: Bun.env.FIDY_DASHBOARD_ACTIVITY ?? "quiet",
     epoch: Bun.env.FIDY_ASSESSMENT_EPOCH ?? DateTime.formatIso(Effect.runSync(DateTime.now)),
   });
+
+/** The observer follows each pinned product's existing API surface; it never rewrites application routing. */
+export const dashboardAssessmentSurface = (): "legacy-cross-origin" | "same-origin" =>
+  Schema.decodeUnknownSync(Schema.Literals(["legacy-cross-origin", "same-origin"]))(
+    Bun.env.FIDY_ASSESSMENT_SURFACE ?? "same-origin"
+  );
+export const dashboardAssessmentApiOrigin = (): string => {
+  const topology = browserAcceptanceTopology();
+  return dashboardAssessmentSurface() === "legacy-cross-origin" ? topology.api : topology.app;
+};

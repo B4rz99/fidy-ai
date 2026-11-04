@@ -169,6 +169,10 @@ await test("shared acceptance fixtures remain unavailable to production", () => 
       source: "cloudflare/browser-acceptance-seed.ts",
       fixture: "cloudflare/browser-assessment.test-fixture.ts",
     },
+    {
+      source: "cloudflare/browser-acceptance-seed.ts",
+      fixture: "cloudflare/browser-assessment-prepare.test-fixture.ts",
+    },
   ]) {
     assert.equal(
       inspect("cloudflare/core-worker.ts", fixture).some(

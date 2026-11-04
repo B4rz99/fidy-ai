@@ -18,6 +18,11 @@ export const DashboardCohort = Schema.Struct({
   dataset: Schema.Literals(["small", "heavy", "extreme", "breaking"]),
   revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
   browserDigest: fingerprint,
+  adapterDigest: fingerprint,
+  surface: Schema.Literals(["legacy-cross-origin", "same-origin"]),
+  trafficSource: Schema.Literal("shared-loopback"),
+  backendRequested: Schema.Literals(["legacy-d1", "audited-native-guarded"]),
+  nativeCountersObserved: Schema.Boolean,
   runtime: Schema.NonEmptyString,
   compression: Schema.Literals(["identity", "gzip"]),
   build: Schema.Literal("production"),
@@ -65,6 +70,7 @@ type Cohort = typeof DashboardCohort.Type;
 const matchingKeys = [
   "dataset",
   "browserDigest",
+  "trafficSource",
   "runtime",
   "compression",
   "build",
@@ -162,7 +168,19 @@ export const compareDashboardCohorts: {
   (candidate: Cohort): (baseline: Cohort) => CohortComparison;
   (baseline: Cohort, candidate: Cohort): CohortComparison;
 } = Function.dual(2, (baseline: Cohort, candidate: Cohort): CohortComparison => {
-  const differences = matchingKeys.filter((key) => baseline[key] !== candidate[key]);
+  const missingCounters = [
+    ["baseline", baseline],
+    ["candidate", candidate],
+  ] as const;
+  const missing = missingCounters
+    .filter(
+      ([, cohort]) => cohort.backendRequested !== "legacy-d1" && !cohort.nativeCountersObserved
+    )
+    .map(([side]) => `${side}.nativeCountersObserved`);
+  const differences = [
+    ...matchingKeys.filter((key) => baseline[key] !== candidate[key]),
+    ...missing,
+  ];
   if (differences.length > 0) return { status: "unmatched", differences };
   return {
     status: "measured",
@@ -187,7 +205,22 @@ if (import.meta.main) {
     const baseline = yield* readCohort(before);
     const candidate = yield* readCohort(after);
     return {
+      implementations: {
+        baseline: {
+          revision: baseline.revision,
+          backend: baseline.backendRequested,
+          surface: baseline.surface,
+          adapterDigest: baseline.adapterDigest,
+        },
+        candidate: {
+          revision: candidate.revision,
+          backend: candidate.backendRequested,
+          surface: candidate.surface,
+          adapterDigest: candidate.adapterDigest,
+        },
+      },
       browser: compareDashboardCohorts(baseline, candidate),
+      providerQualification: { status: "not-qualified" },
       completeLocalRequest: { status: "not-measured" },
       remoteApplicationAdded: { status: "not-measured" },
       remoteCompleteRequest: { status: "not-measured" },

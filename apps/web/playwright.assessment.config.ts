@@ -1,7 +1,10 @@
 import { defineConfig } from "@playwright/test";
 import base from "./playwright.config";
 import { Config, Effect } from "effect";
-import { browserAcceptanceTopology } from "../server/cloudflare/browser-acceptance/operations";
+import {
+  browserAcceptanceTopology,
+  dashboardAssessmentSurface,
+} from "../server/cloudflare/browser-acceptance/operations";
 
 const topology = browserAcceptanceTopology();
 
@@ -12,6 +15,14 @@ const development =
 const executablePath = Effect.runSync(
   Config.String("ASSESSMENT_CHROMIUM").pipe(Config.withDefault(""))
 );
+const productionLauncher = Array.isArray(base.webServer) ? base.webServer[0]?.command : "";
+const expectedApiPort = dashboardAssessmentSurface() === "legacy-cross-origin" ? "4174" : "4173";
+if (
+  !development &&
+  productionLauncher?.includes(`VITE_API_ORIGIN=https://127.0.0.1:${expectedApiPort}`) !== true
+) {
+  throw new Error("Assessment surface does not match the pinned product launcher");
+}
 export default defineConfig({
   ...base,
   workers: 1,

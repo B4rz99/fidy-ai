@@ -1,3 +1,4 @@
+import { dashboardAssessmentSurface } from "../../server/cloudflare/browser-acceptance/operations";
 import { Effect, Schema, Struct } from "effect";
 import { type DashboardAssessmentConfiguration } from "../../server/cloudflare/browser-acceptance/contract";
 
@@ -52,6 +53,14 @@ const sourceProvenance = (): Readonly<{
   };
 };
 
+const adapterFiles = [
+  "apps/web/scripts/serve-preview.ts",
+  "apps/web/playwright.config.ts",
+  "apps/server/cloudflare/browser-acceptance-preview.ts",
+  "apps/server/cloudflare/browser-acceptance-seed.ts",
+  "apps/server/cloudflare/d1-test-fixture.ts",
+];
+
 /** Pins observation code separately from target behavior. Both revisions must copy identical fixture/harness files. */
 export const dashboardAssessmentProvenance = Effect.fn(function* (
   input: Readonly<{
@@ -66,22 +75,19 @@ export const dashboardAssessmentProvenance = Effect.fn(function* (
     "e2e/dashboard-measurement.ts",
     "e2e/assessment-fixture.ts",
     "e2e/real-core-fixture.ts",
+    "e2e/acceptance-clock.ts",
+    "e2e/playwright-runtime.ts",
     "playwright.assessment.config.ts",
-    "scripts/serve-preview.ts",
   ]);
   const builderDigest = yield* hashFiles(new URL("../../server/cloudflare/", import.meta.url), [
     "browser-assessment.test-fixture.ts",
     "browser-assessment-layout.test-fixture.ts",
-    "browser-acceptance-seed.ts",
+    "browser-assessment-prepare.test-fixture.ts",
     "browser-acceptance-clock.test-fixture.ts",
-    "browser-assessment-native.test-fixture.ts",
-    "browser-acceptance-preview.ts",
-    "sqlite-store/assessment-observation.test-fixture.ts",
-    "sqlite-store/test-database.test-fixture.ts",
-    "sqlite-store/adapter-worker.test-fixture.ts",
     "browser-acceptance/contract.ts",
     "browser-acceptance/operations.ts",
   ]);
+  const adapterDigest = yield* hashFiles(new URL("../../../", import.meta.url), adapterFiles);
   const dependenciesDigest = yield* hashFiles(new URL("../../../", import.meta.url), [
     "bun.lock",
     "package.json",
@@ -92,6 +98,9 @@ export const dashboardAssessmentProvenance = Effect.fn(function* (
   return {
     ...sourceProvenance(),
     harnessDigest,
+    adapterDigest,
+    surface: dashboardAssessmentSurface(),
+    trafficSource: "shared-loopback" as const,
     dependenciesDigest,
     fixtureDigest: new Bun.CryptoHasher("sha256")
       .update(

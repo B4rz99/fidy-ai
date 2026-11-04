@@ -1,16 +1,30 @@
 import { Effect, Schema } from "effect";
-import { type RecoveryAdmissionBinding, RecoveryClose, RecoveryLease } from "./contract";
+import {
+  type RecoveryAdmissionBinding,
+  RecoveryClose,
+  RecoveryControllerClaim,
+  RecoveryLease,
+} from "./contract";
 
 export { RecoveryAdmissionGate } from "./runtime";
 
+const LeaseCommand = Schema.Struct({
+  action: Schema.Literals(["enter", "complete", "enterContinuation"]),
+  input: RecoveryLease,
+});
+const ControllerCommand = Schema.Struct({
+  action: Schema.Literals(["acquireController", "releaseController", "retainController"]),
+  input: RecoveryControllerClaim,
+});
+const TransitionCommand = Schema.Struct({
+  action: Schema.Literals(["pause", "close"]),
+  input: RecoveryClose,
+});
 const Command = Schema.Union([
   Schema.Struct({ action: Schema.Literal("inspect") }),
-  Schema.Struct({
-    action: Schema.Literals(["enter", "complete", "enterContinuation"]),
-    input: RecoveryLease,
-  }),
-  Schema.Struct({ action: Schema.Literal("pause"), input: RecoveryClose }),
-  Schema.Struct({ action: Schema.Literal("close"), input: RecoveryClose }),
+  LeaseCommand,
+  ControllerCommand,
+  TransitionCommand,
 ]);
 export default {
   fetch: (
@@ -28,10 +42,20 @@ export default {
         if (command.action === "inspect") {
           return Response.json(yield* Effect.tryPromise(() => gate.inspect()));
         }
-        if (command.action === "pause" || command.action === "close") {
-          return Response.json(yield* Effect.tryPromise(() => gate[command.action](command.input)));
+        if ("claimId" in command.input) {
+          const selected = yield* Schema.decodeUnknownEffect(ControllerCommand)(command);
+          return Response.json(
+            yield* Effect.tryPromise(() => gate[selected.action](selected.input))
+          );
         }
-        return Response.json(yield* Effect.tryPromise(() => gate[command.action](command.input)));
+        if ("leaseId" in command.input) {
+          const selected = yield* Schema.decodeUnknownEffect(LeaseCommand)(command);
+          return Response.json(
+            yield* Effect.tryPromise(() => gate[selected.action](selected.input))
+          );
+        }
+        const selected = yield* Schema.decodeUnknownEffect(TransitionCommand)(command);
+        return Response.json(yield* Effect.tryPromise(() => gate[selected.action](selected.input)));
       })
     ),
 };

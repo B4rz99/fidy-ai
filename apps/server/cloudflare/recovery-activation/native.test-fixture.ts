@@ -21,6 +21,18 @@ const nativeBinding = ({
       .then((response) => response.json());
   return {
     inspect: () => dispatch({ action: "inspect" }),
+    acquireController: (input) =>
+      dispatch({ action: "acquireController", input }).then(
+        Schema.decodeUnknownSync(Schema.Boolean)
+      ),
+    releaseController: (input) =>
+      dispatch({ action: "releaseController", input }).then(
+        Schema.decodeUnknownSync(Schema.Boolean)
+      ),
+    retainController: (input) =>
+      dispatch({ action: "retainController", input }).then(
+        Schema.decodeUnknownSync(Schema.Boolean)
+      ),
     pause: (input) => dispatch({ action: "pause", input }),
     enterContinuation: (input) =>
       dispatch({ action: "enterContinuation", input }).then(

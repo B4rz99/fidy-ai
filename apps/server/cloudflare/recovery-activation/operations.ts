@@ -1,3 +1,4 @@
+import { runController } from "./internal/controller";
 import { planSourceRetirement, resumeSourceRetirement } from "./internal/source-retirement";
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../erasure-store/contract";
@@ -128,9 +129,7 @@ const advancePhase = (
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 /** Advances only fixed binding-selected targets. Local observations never qualify provider isolation or open serving admission. */
-export const advanceRecoveryActivation = (
-  input: ActivationInput
-): Effect.Effect<Response, ErasureUnavailable> =>
+const advance = (input: ActivationInput): Effect.Effect<Response, ErasureUnavailable> =>
   Effect.gen(function* () {
     yield* currentActivation(input);
     const targets = yield* requireTargets(input);
@@ -163,6 +162,27 @@ export const advanceRecoveryActivation = (
     yield* currentActivation(input);
     return yield* storeActivation({ bucket: input.bucket, record: advanced, previous });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
+
+/** Access authentication precedes the private exclusive claim; final publication shares this same durable controller authority. */
+export const advanceRecoveryActivation = (
+  input: ActivationInput
+): Effect.Effect<Response, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    const run = Effect.runPromiseWith(yield* Effect.context<never>());
+    return yield* Effect.tryPromise({
+      try: () =>
+        runController({
+          ...input,
+          work: (owned) =>
+            run(
+              advance({ ...input, ...owned }).pipe(
+                Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+              )
+            ),
+        }),
+      catch: () => new ErasureUnavailable(),
+    });
+  });
 
 /** Production recovery must never reauthorize a source or active target after activation begins. Candidate-only recovery uses its isolated boundary. */
 export const assertProductionRestoreAllowed = (

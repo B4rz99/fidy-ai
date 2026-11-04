@@ -431,8 +431,16 @@ restore state. Any activation record, malformed evidence or unavailable registry
 commands; the isolated candidate-only recovery boundary remains separate. Authenticated operator
 commands other than `Activation` and read-only `Receipt` hold native continuation leases, so they
 can settle while publishers are paused and are refused after final closure. `Activation` remains
-a control operation and must separately serialize its own interrupted native writes before any
-final barrier can qualify.
+a control operation with an exclusive opaque claim in the independent Gate. Acquisition occurs
+after Access authentication; request/response bodies never expose the claim identity. The Gate
+retains non-expiring Held/Unknown claims and released tombstones, so exact lost acquire/release
+replies can retry without reacquiring a released identity or clearing a newer owner. Controller
+IO captures its native DB/R2 promises and R2 bodies before Effect scheduling, and materializes
+its bounded metadata response before release. A second controller refuses while native writes
+or body reads remain unsettled. Any unknown native outcome permanently retains the claim until
+an independently justified reconciliation exists; elapsed time and a local retry grant no authority.
+Known cancellation after fully settled IO can resume the independently persisted retirement plan.
+This serializes current controller work but does not qualify legacy provider or HTTP drain.
 
 `RecoveryClosedSourceEvidence` declares the artifact handoff: source identity, actual admission
 object, activation, frozen source generation (the retired marker for initial D1), distinct final generation/checkpoint ETag and content

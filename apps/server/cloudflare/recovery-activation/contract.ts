@@ -77,6 +77,11 @@ export const RecoveryClose = Schema.Struct({
   epoch: Schema.String,
   activationId: Schema.String.check(Schema.isBetweenLength(1, maximumIdentityLength)),
 });
+export const RecoveryControllerClaim = Schema.Struct({
+  ...RecoveryClose.fields,
+  claimId: Schema.String.check(Schema.isUUID()).pipe(Schema.brand("RecoveryControllerClaimId")),
+});
+export type RecoveryControllerClaim = typeof RecoveryControllerClaim.Type;
 export const RecoveryAdmissionState = Schema.Struct({
   objectId: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
   epoch: Schema.String,
@@ -84,10 +89,14 @@ export const RecoveryAdmissionState = Schema.Struct({
   closed: Schema.Boolean,
   paused: Schema.Boolean,
   leases: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  controllerBusy: Schema.Boolean,
 });
 export type RecoveryAdmissionState = typeof RecoveryAdmissionState.Type;
 export type RecoveryAdmissionBinding = Readonly<{
   inspect: () => Promise<unknown>;
+  acquireController: (input: RecoveryControllerClaim) => Promise<boolean>;
+  releaseController: (input: RecoveryControllerClaim) => Promise<boolean>;
+  retainController: (input: RecoveryControllerClaim) => Promise<boolean>;
   pause: (input: typeof RecoveryClose.Type) => Promise<unknown>;
   enterContinuation: (input: typeof RecoveryLease.Type) => Promise<boolean>;
   enter: (input: typeof RecoveryLease.Type) => Promise<boolean>;

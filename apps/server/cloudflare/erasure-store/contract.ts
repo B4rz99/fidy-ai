@@ -1,7 +1,10 @@
-import { Data } from "effect";
+import { Data, Schema } from "effect";
 import type { Effect, Option } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import { type ErasureClass } from "../../src/core/erasure/contract";
+import { type ErasureClass, ErasureReference } from "../../src/core/erasure/contract";
+
+export const ErasureGeneration = Schema.Union([Schema.Literal("initial"), ErasureReference]);
+export type ErasureGeneration = typeof ErasureGeneration.Type;
 
 export class ErasureUnavailable extends Data.TaggedError("ErasureUnavailable") {}
 export type ErasureScope = Readonly<{ userId: string; reference: string }>;

@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect";
-import { ErasureGeneration, type ErasureRecoveryConfiguration } from "../contract";
-import { ErasureUnavailable } from "../../erasure-store/contract";
+import type { ErasureRecoveryConfiguration } from "../contract";
+import { ErasureGeneration, ErasureUnavailable } from "../../erasure-store/contract";
 
 export const generationKey = "recovery/generation";
 const maximumGenerationBytes = 64;
@@ -8,10 +8,7 @@ const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
 const decodeGeneration = (
   object: R2ObjectBody
-): Effect.Effect<
-  Readonly<{ generation: typeof ErasureGeneration.Type; etag: string }>,
-  ErasureUnavailable
-> =>
+): Effect.Effect<Readonly<{ generation: ErasureGeneration; etag: string }>, ErasureUnavailable> =>
   Effect.gen(function* () {
     if (object.size > maximumGenerationBytes) {
       yield* io(() => object.body.cancel());
@@ -24,10 +21,7 @@ const decodeGeneration = (
 
 export const expectedGeneration = (
   configuration: ErasureRecoveryConfiguration
-): Effect.Effect<
-  Readonly<{ generation: typeof ErasureGeneration.Type; etag: string }>,
-  ErasureUnavailable
-> =>
+): Effect.Effect<Readonly<{ generation: ErasureGeneration; etag: string }>, ErasureUnavailable> =>
   Effect.gen(function* () {
     if (Option.isNone(configuration.bucket)) return yield* new ErasureUnavailable();
     const bucket = configuration.bucket.value;
@@ -37,7 +31,7 @@ export const expectedGeneration = (
   });
 
 export const generationAssertion = (
-  input: Readonly<{ db: D1Database; generation: typeof ErasureGeneration.Type }>
+  input: Readonly<{ db: D1Database; generation: ErasureGeneration }>
 ): D1PreparedStatement =>
   input.db
     // Invalid JSON raises a native SQL error on mismatch, rolling back the enclosing batch.

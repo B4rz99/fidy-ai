@@ -80,3 +80,56 @@ background version history, publisher pause, durable owner drain, Queue/Workflow
 final late/pending erasure reconciliation, verified serving bootstrap or resumable activation.
 Those independent barriers remain mandatory. Do not turn this observation into an activation
 receipt or remove the existing R2 guard.
+
+## Retiring eligible historical Worker versions
+
+Under the same serialized protected release authority, `retireRecoveryVersions` accepts the fixed
+Worker name, provider Worker ID and sole current immutable version. It independently resolves that
+ID back to the name and requires the exact version to remain at 100%. It reads the complete
+[deployable version set](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/list/)
+with `deployable=true`, then retires at most four other versions through the
+[Worker version deletion API](https://developers.cloudflare.com/api/resources/workers/subresources/beta/subresources/workers/subresources/versions/methods/delete/).
+A split deployment, changed identity, duplicate/incomplete inventory or uncertain deletion refuses
+progress. Re-run after inspecting an interrupted call: the next invocation reads provider state,
+so an already retired version is not blindly deleted again. `Retiring` requires another bounded
+invocation; `EligibleVersionsRetired` requires the provider to report only the exact current version
+eligible and the deployment still matching afterward.
+
+This observation establishes a control over future version deployments. It does not acknowledge
+already running requests, Workflow instances, queued messages, alarms or provider effects. It also
+does not prove that a namespace never had restore capabilities. Fresh serving namespace allocation
+and reviewed historical code provenance, disabled version URLs, staged drain and the final external
+checkpoint remain independent requirements. Never treat retirement alone as permission to close
+continuation admission or open serving admission.
+
+## Verifying a frozen import's erasure checkpoint
+
+`verifyImportedErasureCheckpoint` is an Erasure-owned private composition seam for the fresh
+inactive SQLite target. It accepts the native bootstrap capability from
+`makeSqliteBootstrapTarget`, the closed-source evidence and the fixed independent registry. The
+capability derives its actual object identity from the native state and rechecks the deployment
+manifest/epoch, absent seal, closed admission and completed import phase before each native SQL
+unit. A D1 source handle cannot be supplied as this native storage target. Equal source/target
+objects, namespaces or epochs refuse verification, including an equal actual object with a
+conflicting namespace label.
+
+Each invocation reads at most four sealed ledger cases, checks their same-User request identity,
+completed financial deletion steps, absent User and absent writer records, and records bounded progress
+with R2 compare-and-swap outside the imported database. The checkpoint binds the actual target,
+artifact digest and digest of the complete closed-source evidence. Lost replies resume from
+independently read progress; completing a checkpoint starts a fresh pass on repetition. Existing
+custody events, provider claims and external-pending dispositions remain unchanged. Unsealed
+cases, missing ledger membership, incomplete deletion or changed independent generation/ETag
+remain blocked.
+
+The ledger digest starts with SHA-256 of the UTF-8 string `fidy-erasure-ledger-v1`. In strictly
+increasing key order, each next digest is SHA-256 of the compact JSON string array containing
+`[previousDigest, key, objectEtag, SHA256(rawCaseBody)]`. The final source controller must bind this
+exact digest and the stable final generation/ETag into its evidence. After the complete native
+verification matches that evidence, only the inactive target's published generation advances;
+the retired source retains its old generation and recovery fence.
+
+The result remains `providerIsolation: Unqualified`. This seam neither produces the independent
+closed-source proof nor opens a Store. The production closed-source accessor currently refuses
+all requests while the complete provider floor, final source reconciliation and activation
+producer remain unfinished. Local verification cannot replace those requirements.

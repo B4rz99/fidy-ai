@@ -1,7 +1,6 @@
 import { Clock, Effect, Option, Schema } from "effect";
-import { ErasureUnavailable } from "../../erasure-store/contract";
+import { ErasureGeneration, ErasureUnavailable } from "../../erasure-store/contract";
 import type { ErasureOperatorEnvironment } from "../contract";
-import { ErasureGeneration } from "../contract";
 import { RecoveryCase } from "./recovery-case";
 import { expectedGeneration } from "./generation";
 import { recoveryWindowMs } from "./retention-policy";
@@ -151,7 +150,7 @@ const writeCheckpoint = (
   input: CandidateInput &
     Readonly<{
       bucket: R2Bucket;
-      expected: { generation: typeof ErasureGeneration.Type; etag: string };
+      expected: { generation: ErasureGeneration; etag: string };
       session: Session;
       page: R2Objects;
       ready: boolean;

@@ -1,4 +1,11 @@
-import type { RecoveryActivationEnvironment } from "../recovery-activation/contract";
+import type { SqliteBootstrapTarget } from "../sqlite-store/contract";
+import { ErasureGeneration } from "../erasure-store/contract";
+import {
+  type RecoveryActivationEnvironment,
+  type RecoveryAdmissionEnvironment,
+  type RecoveryClosedSourceEvidence,
+  RecoveryTarget,
+} from "../recovery-activation/contract";
 import type { ErasureOriginals, ErasureStore, ErasureUnavailable } from "../erasure-store/contract";
 import type { Effect } from "effect";
 import { type Option, Schema } from "effect";
@@ -42,7 +49,6 @@ export type ErasureRecoveryConfiguration = Readonly<{
   db: D1Database;
   bucket: Option.Option<R2Bucket>;
 }>;
-export const ErasureGeneration = Schema.Union([Schema.Literal("initial"), ErasureReference]);
 
 export const ErasureCustodyAdmission = Schema.Struct({
   ...ErasureContinuation.fields,
@@ -70,12 +76,13 @@ export const ErasureOperatorAction = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("Receipt"), userId: UserId, reference: ErasureReference }),
 ]);
-export type ErasureOperatorEnvironment = Readonly<{
-  DB: D1Database;
-  CLOUDFLARE_ACCESS_ISSUER: string;
-  CLOUDFLARE_ACCESS_AUDIENCE: string;
-  USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-}> &
+export type ErasureOperatorEnvironment = RecoveryAdmissionEnvironment &
+  Readonly<{
+    DB: D1Database;
+    CLOUDFLARE_ACCESS_ISSUER: string;
+    CLOUDFLARE_ACCESS_AUDIENCE: string;
+    USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+  }> &
   Partial<
     Readonly<{
       ERASURE_SUPPORT_AUDIENCE: string;
@@ -108,3 +115,36 @@ export const ErasureCandidateConfiguration = Schema.Struct({
 });
 export type ErasureCandidateEnvironment = ErasureOperatorEnvironment &
   typeof ErasureCandidateConfiguration.Type;
+
+const importDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
+const maximumImportCursorLength = 2048;
+const maximumLedgerKeyLength = 256;
+export const ErasureImportedCheckpoint = Schema.Struct({
+  artifactDigest: importDigest,
+  target: RecoveryTarget,
+  evidenceDigest: importDigest,
+  cursor: Schema.String.check(Schema.isMaxLength(maximumImportCursorLength)),
+  lastKey: Schema.String.check(Schema.isMaxLength(maximumLedgerKeyLength)),
+  checkedCases: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  digest: importDigest,
+  state: Schema.Literals(["Verifying", "Verified"]),
+  providerIsolation: Schema.Literal("Unqualified"),
+});
+export type ErasureImportedCheckpoint = typeof ErasureImportedCheckpoint.Type;
+export type ErasureImportedInput = Readonly<{
+  target: SqliteBootstrapTarget;
+  evidence: RecoveryClosedSourceEvidence;
+  bucket: R2Bucket;
+}>;
+
+export const ErasureRecoveryDrain = Schema.Struct({
+  pending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  externalPending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export type ErasureRecoveryDrain = typeof ErasureRecoveryDrain.Type;
+
+export const ErasureSourceRetirement = Schema.Struct({
+  from: ErasureGeneration,
+  retired: ErasureReference,
+});
+export type ErasureSourceRetirement = typeof ErasureSourceRetirement.Type;

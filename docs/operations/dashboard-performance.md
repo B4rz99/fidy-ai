@@ -88,11 +88,27 @@ Set `ASSESSMENT_CHROMIUM` to the same pinned executable for both revisions. An o
 `FIDY_ASSESSMENT_REVISION` must equal actual HEAD. Qualification rejects dirty source, unmatched
 fingerprints, incomplete setup, missing activity, missed pacing and duplicate actor attempts.
 
-The proposed HTML baseline is `0db958ab5` with the same final maintenance package pins and AWS
-record patch as the candidate, plus identical observational harness and fixtures. Preserve the old
-product behavior: copying the candidate bootstrap or renderer into the baseline invalidates the
-comparison. Pin full resulting commit hashes and review the baseline patch before collecting.
-The older 08d graph with Effect 4.0.6 is not a matched baseline.
+Build the historical baseline from `0db958ab57b3e47991df8e25feda52db798de4c6`, before the HTML
+implementation and already on Effect 4.0.7. Apply the candidate's final workspace package pins,
+lockfile, AWS record compatibility patch and build configuration. Copy the common observational
+harness and logical fixture builders byte for byte. Adapt only the private fixture host to seed
+those facts and return their preparation fingerprint. Keep the historical Core, browser source,
+renderer, static preview and cross-origin production launcher unchanged. A classifier entry for an
+absent candidate bootstrap module in the shared Vite configuration remains unreachable.
+
+Set `FIDY_ASSESSMENT_SURFACE=legacy-cross-origin` on this baseline and `same-origin` on the HTML
+candidate. This selects only the observer's public API address; it does not change application
+routing. The assessment config verifies that the pinned production launcher actually uses the
+selected surface. Record both full resulting commit hashes and audit the baseline patch against
+the historical revision before collecting. The older 08d graph with Effect 4.0.6 is not matched.
+
+`harnessDigest`, `fixtureDigest` and `dependenciesDigest` must match across the pair. The fixture
+fingerprint includes the exact common builders, selected logical history and prepared document.
+`adapterDigest` separately pins the preview, seed adapter, static/native host and base launcher;
+these intentionally differ because the implementations differ. They are also covered by each
+clean source revision. A different adapter never permits different workload or financial facts.
+Use `FIDY_DASHBOARD_SAMPLES=1` for functional setup controls only; such artifacts cannot qualify
+latency targets. Coordinate a quiet host window before collecting any distributions.
 
 Compare sidecars from clean, fully sampled checkouts:
 

@@ -124,6 +124,8 @@ const sharedTestSupport = new Set([
   "cloudflare/browser-assessment.test-fixture.ts",
   // Default and maximum layouts are shared pure inputs for native/browser assessment harnesses.
   "cloudflare/browser-assessment-layout.test-fixture.ts",
+  // Both historical and current browser hosts seed identical logical facts through this closed helper.
+  "cloudflare/browser-assessment-prepare.test-fixture.ts",
   "cloudflare/bancolombia-activation.test-fixture.ts",
   "cloudflare/browser-acceptance-clock.test-fixture.ts",
   "src/shell/testing/credential-evidence-harness.ts",

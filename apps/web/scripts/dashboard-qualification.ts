@@ -18,6 +18,8 @@ export const DashboardCohort = Schema.Struct({
   dataset: Schema.Literals(["small", "heavy", "extreme", "breaking"]),
   revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
   browserDigest: fingerprint,
+  adapterDigest: fingerprint,
+  surface: Schema.Literals(["legacy-cross-origin", "same-origin"]),
   runtime: Schema.NonEmptyString,
   compression: Schema.Literals(["identity", "gzip"]),
   build: Schema.Literal("production"),

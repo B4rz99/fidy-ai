@@ -1,0 +1,33 @@
+apps/server/ARCHITECTURE.md
+  s_27d58cea3847b9::t_8554a761c75ce2 179-185,277-280
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_27d58cea3847b9::t_c646233715857b 617-619
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_27d58cea3847b9::t_7ec6584724d7c4 1871
+apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts
+  s_27d58cea3847b9::t_5933ff29fa4162 5,177-181,185-194
+apps/server/cloudflare/dashboard/internal/dashboard-snapshot.test.ts
+  s_27d58cea3847b9::t_3b85309e03eed0 313-339
+apps/server/cloudflare/dashboard/internal/dashboard-view.ts
+  s_27d58cea3847b9::t_7af1b50fff125f 4,24,110-119
+apps/server/cloudflare/dashboard/operations.ts
+  s_27d58cea3847b9::t_0fe2ac5c7fbe68 244-245
+apps/server/cloudflare/user-documents/operations.ts
+  s_27d58cea3847b9::t_26ef46d9542eb9 8-9,12-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2dbe593da61fd3dabf788d52723f3d73fa5563fb",
+  "prompts": {},
+  "sessions": {
+    "s_27d58cea3847b9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a4dd-5e5f-7ab2-ba87-a50b8657cdff",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

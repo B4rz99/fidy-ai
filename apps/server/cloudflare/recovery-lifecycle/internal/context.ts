@@ -30,3 +30,10 @@ export const native = <A>({
     ? Promise.reject(new RecoveryOperationUnavailable())
     : tracker.run(work);
 };
+
+/** Capture the private root once; stream callbacks can later run outside its async resource. */
+export const capture = (): (<A>(work: () => Promise<A>) => Promise<A>) => {
+  const tracker = context.getStore();
+  return <A>(work: () => Promise<A>): Promise<A> =>
+    tracker === undefined ? work() : tracker.run(work);
+};

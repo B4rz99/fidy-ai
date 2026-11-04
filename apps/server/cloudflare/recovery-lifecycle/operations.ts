@@ -1,6 +1,6 @@
 import { check, epoch } from "./internal/epoch";
 import { newId } from "../secret-material/operations";
-import { within } from "./internal/context";
+import { capture, within } from "./internal/context";
 import { tracker as makeTracker } from "./internal/tracker";
 import { observe } from "./internal/drain";
 import { type Effect, Option, Schema } from "effect";
@@ -157,3 +157,7 @@ export const runRecoveryQueue = ({
 export const observeRecoveryDrain = (
   input: Readonly<{ db: D1Database }>
 ): Effect.Effect<typeof RecoveryDrainObservation.Type, RecoveryDrainUnavailable> => observe(input);
+
+/** Native transport composition captures its current root without receiving an ID or public bypass. */
+export const captureRecoveryNativeObserver = (): (<A>(work: () => Promise<A>) => Promise<A>) =>
+  capture();

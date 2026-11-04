@@ -173,7 +173,7 @@ const buildPlatformModule = (): Promise<string> =>
   Bun.build({
     entrypoints: [new URL("../coordinator-test-harness.ts", import.meta.url).pathname],
     target: "browser",
-    external: ["cloudflare:workers"],
+    external: ["cloudflare:workers", "node:*"],
   }).then((built) => {
     const output = built.outputs[0];
     if (!built.success || output === undefined) throw new Error("Coordinator bundle failed");
@@ -426,7 +426,7 @@ it("inherits the statement read owner's Clock for credential expiry and Audit", 
         sleep: (duration) => clock.sleep(duration),
       });
       const query = {
-        environment: coreEnvironment(runtime),
+        environment: { ...coreEnvironment(runtime), DB: runtime.db },
         request: new Request(
           "https://core.internal/ingestion/submissions/10000000-0000-4000-8000-000000000999"
         ),

@@ -8,6 +8,8 @@ const cohort = {
   adapterDigest: "adapter-a",
   surface: "legacy-cross-origin",
   trafficSource: "shared-loopback",
+  backendRequested: "legacy-d1",
+  nativeCountersObserved: false,
   runtime: "Bun pinned",
   compression: "identity",
   build: "production",
@@ -56,6 +58,16 @@ describe("matched Dashboard qualification", () => {
         fixtureDigest: "different-financial-history",
       })
     ).toMatchObject({ status: "unmatched", differences: ["fixtureDigest"] });
+  });
+  it("refuses a native comparison without actual private-call observations", () => {
+    expect(
+      compareDashboardCohorts(cohort, {
+        ...cohort,
+        revision: "candidate",
+        backendRequested: "audited-native-guarded",
+        nativeCountersObserved: false,
+      })
+    ).toMatchObject({ status: "unmatched", differences: ["candidate.nativeCountersObserved"] });
   });
   it("refuses a faster candidate measured with a different browser", () => {
     expect(

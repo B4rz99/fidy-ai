@@ -1,0 +1,30 @@
+apps/server/src/shell/dashboard/contract.ts
+  s_bae391f7738986::t_85417503627c77 130-131,193
+apps/web/cloudflare/dashboard-fragment.ts
+  s_bae391f7738986::t_85417503627c77 3,18-32,37-38,40,44-45,94
+apps/web/cloudflare/dashboard-fragment.test.ts
+  s_bae391f7738986::t_ccd00fa9e7954f 201
+  s_bae391f7738986::t_85417503627c77 139,160-170,175
+apps/web/src/features/dashboard/view.tsx
+  s_bae391f7738986::t_85417503627c77 243-244,259,268
+apps/server/src/shell/dashboard/operations-view.test.ts
+  s_bae391f7738986::t_3d6a89ac59ddd7 17
+apps/server/src/client.ts
+  s_bae391f7738986::t_85417503627c77 100-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c1168c3362b55d1670a5a97610d86b4a44fd19e3",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

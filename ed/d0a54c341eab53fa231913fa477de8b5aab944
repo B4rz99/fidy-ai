@@ -1,0 +1,33 @@
+apps/web/cloudflare/dashboard-fragment.test.ts
+  s_bae391f7738986::t_9b2a8553f29270 74,80,93,97,115,125-126
+  s_bae391f7738986::t_88d3537fdbca52 1-2,51-65,67-73,75-79,81-92,94-96,98-114,116-124,127-134
+  s_bae391f7738986::t_d2559765a82ae3 3-50,66
+apps/web/cloudflare/dashboard-fragment.ts
+  s_bae391f7738986::t_be3c3c854fb76b 6
+  s_bae391f7738986::t_8fc11c803868c5 20-35
+  s_bae391f7738986::t_7a464ce731f78c 1-5,7-19,36
+apps/web/src/features/dashboard/view.tsx
+  s_bae391f7738986::t_be3c3c854fb76b 1,194-195,198,200,203,205-260,270-275,277-304,363
+  s_bae391f7738986::t_847412c7eb4266 375-379
+apps/web/src/ui/components/dashboard-document.ts
+  s_bae391f7738986::t_be3c3c854fb76b 1-4
+apps/web/src/ui/components/dashboard.tsx
+  s_bae391f7738986::t_be3c3c854fb76b 1,132-133
+  s_bae391f7738986::t_2902e0975d017b 134-149,151-153,155-175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "edd0a54c341eab53fa231913fa477de8b5aab944",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

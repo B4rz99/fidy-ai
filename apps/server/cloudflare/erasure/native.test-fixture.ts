@@ -1,3 +1,4 @@
+import { asynchronousNativeDatabase } from "../d1-test-bridge.test-fixture";
 import { coordinatorTestDatabase } from "../d1-test-fixture";
 import { Effect, FileSystem, Option, type Scope } from "effect";
 import { Miniflare } from "miniflare";
@@ -12,6 +13,7 @@ type NativeBindings = Readonly<{
   snapshot: D1Database;
   originals: R2Bucket;
   registry: R2Bucket;
+  candidateCoordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
   coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
 }>;
 const build = (): Effect.Effect<string> =>
@@ -34,47 +36,77 @@ const create = (
 ): Miniflare =>
   new Miniflare({
     resourcePersistencePath: input.directory,
-    workers: [
-      {
-        config: {
-          name: "titular-erasure",
-          type: "worker",
-          compatibilityDate: "2026-09-08",
-          exports: { UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" } },
-          env: {
-            DB: { type: "d1", id: input.restored === true ? "titular-before" : "titular-erasure" },
-            SNAPSHOT_DB: { type: "d1", id: "titular-before" },
-            EMAIL_BUCKET: { type: "r2", name: "erasure-originals" },
-            STATEMENT_STAGING_BUCKET: { type: "r2", name: "erasure-originals" },
-            ERASURE_BUCKET: { type: "r2", name: "erasure-registry" },
-            ERASURE_REQUIRED: { type: "text", value: "true" },
-            USER_TRANSACTION_COORDINATOR: {
-              type: "durable-object",
-              worker: "titular-erasure",
-              exportName: "UserTransactionCoordinator",
-            },
-            OPENAI_API_KEY: { type: "text", value: "" },
-            HOSTED_AI_MODEL: { type: "text", value: approvedOpenAiModel },
+    workers: ["titular-erasure", "titular-candidate"].map((name) => ({
+      config: {
+        name,
+        type: "worker",
+        compatibilityDate: "2026-09-08",
+        exports: { UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" } },
+        env: {
+          DB: {
+            type: "d1",
+            id:
+              name === "titular-candidate" || input.restored === true
+                ? "titular-before"
+                : "titular-erasure",
           },
-          manifest: {
-            mainModule: "index.mjs",
-            modules: { "index.mjs": { type: "esm", contents: input.module } },
+          EMAIL_BUCKET: { type: "r2", name: "erasure-originals" },
+          STATEMENT_STAGING_BUCKET: { type: "r2", name: "erasure-originals" },
+          ERASURE_BUCKET: { type: "r2", name: "erasure-registry" },
+          ERASURE_REQUIRED: { type: "text", value: "true" },
+          USER_TRANSACTION_COORDINATOR: {
+            type: "durable-object",
+            worker: name,
+            exportName: "UserTransactionCoordinator",
           },
+          OPENAI_API_KEY: { type: "text", value: "" },
+          HOSTED_AI_MODEL: { type: "text", value: approvedOpenAiModel },
+        },
+        manifest: {
+          mainModule: "index.mjs",
+          modules: { "index.mjs": { type: "esm", contents: input.module } },
         },
       },
-    ],
+    })),
   });
 const bindings = (runtime: Miniflare): Promise<NativeBindings> =>
   Promise.all([
     coordinatorTestDatabase({ runtime, binding: "DB" }),
-    coordinatorTestDatabase({ runtime, binding: "SNAPSHOT_DB" }),
+    Promise.all([
+      runtime.getD1Database("DB", "titular-candidate"),
+      runtime.getWorker("titular-candidate"),
+    ]).then(([native, worker]) =>
+      asynchronousNativeDatabase({
+        native,
+        nativeAccess: () => undefined,
+        dispatch: (body) => worker.fetch("https://candidate/DB/query", { method: "POST", body }),
+      })
+    ),
     runtime.getBindings<{ EMAIL_BUCKET: R2Bucket; ERASURE_BUCKET: R2Bucket }>(),
-    runtime.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR"),
-  ]).then(([db, snapshot, buckets, namespace]) => ({
+    runtime.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR", "titular-erasure"),
+    runtime.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR", "titular-candidate"),
+  ]).then(([db, snapshot, buckets, namespace, candidateNamespace]) => ({
     db,
     snapshot,
     originals: buckets.EMAIL_BUCKET,
     registry: buckets.ERASURE_BUCKET,
+    candidateCoordinator: {
+      getByName: (name): Pick<Fetcher, "fetch"> => ({
+        fetch: (input, init) => {
+          const request = new Request(input, init);
+          return request.text().then((body) =>
+            candidateNamespace
+              .getByName(name)
+              .fetch(request.url, {
+                method: request.method,
+                headers: Object.fromEntries(request.headers),
+                body,
+              })
+              .then(replayNativeResponse)
+          );
+        },
+      }),
+    },
     coordinator: {
       getByName: (name): Pick<Fetcher, "fetch"> => ({
         fetch: (input, init) => {

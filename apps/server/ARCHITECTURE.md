@@ -188,7 +188,13 @@ An independent registry fences ordinary activity after database restoration unti
 Fresh authenticated account deletion fences new activity and waits for confirmed upload settlement
 before removing owner records and User file prefixes. Minimal independent markers protect restoration;
 external acknowledgments remain distinct from verified cleanup. Metadata outlives supported backups,
-then expires after external completion. Migration and release checks follow the
+then expires after external completion. An operator-only candidate Worker can replay that same ledger
+into a distinct database through its own coordinator namespace. Bounded verification records replay
+progress in independent R2 and never publishes a serving generation. Configured database IDs are
+checked for distinctness but do not prove provider bindings; checkpoints remain explicitly
+unqualified for activation. The live recovery guard remains required. See the
+[isolated-candidate procedure](../../docs/operations/production-recovery.md#isolated-erasure-replay-candidate).
+Migration and release checks follow the
 [release procedure](../../docs/operations/production-releases.md).
 
 A naked browser Category GET can compose mounted-cookie authentication, User pressure, the

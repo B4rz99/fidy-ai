@@ -54,6 +54,7 @@ export const ErasureRestoreAdmission = Schema.Struct({
 export const ErasureOperatorAction = Schema.Union([
   Schema.Struct({ action: Schema.Literal("Initialize") }),
   Schema.Struct({ action: Schema.Literal("Restore") }),
+  Schema.Struct({ action: Schema.Literal("VerifyCandidate") }),
   Schema.Struct({ action: Schema.Literal("ReleaseRestore") }),
   Schema.Struct({
     action: Schema.Literal("CustodyEvidence"),
@@ -96,3 +97,11 @@ export type ErasureRegistryInitialization<Requirements = never> = Readonly<{
   empty: Effect.Effect<boolean, ErasureUnavailable, Requirements>;
   install: (key: string, value: string) => Effect.Effect<boolean, ErasureUnavailable, Requirements>;
 }>;
+
+const databaseTargetId = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9-]{1,80}$/u));
+export const ErasureCandidateConfiguration = Schema.Struct({
+  ERASURE_CANDIDATE_DATABASE_ID: databaseTargetId,
+  ERASURE_SERVING_DATABASE_ID: databaseTargetId,
+});
+export type ErasureCandidateEnvironment = ErasureOperatorEnvironment &
+  typeof ErasureCandidateConfiguration.Type;

@@ -5,7 +5,12 @@ import type {
 } from "./contract";
 import { Effect, Schema } from "effect";
 import { AuthoritativeSqliteStore } from "./runtime";
-import { makeRemoteSqliteDatabase, makeSqliteDatabase, withAuthoritativeStore } from "./operations";
+import {
+  makeRemoteSqliteDatabase,
+  makeSqliteBootstrapTarget,
+  makeSqliteDatabase,
+  withAuthoritativeStore,
+} from "./operations";
 
 const installProduction = (db: D1Database, request: Request): Promise<Response> =>
   Effect.runPromise(
@@ -43,6 +48,52 @@ const installProduction = (db: D1Database, request: Request): Promise<Response> 
     }).pipe(Effect.catch((error) => Effect.succeed(new Response(String(error), { status: 500 }))))
   );
 
+const digestCharacters = 64;
+const bootstrapProof = (
+  state: DurableObjectState,
+  environment: SqliteStoreEnvironment
+): Promise<Response> => {
+  const activationId = "18460000-0000-4000-8000-000000000011";
+  const artifactDigest = "f".repeat(digestCharacters);
+  const configured = { ...environment, SQLITE_STORE_ARTIFACT_DIGEST: artifactDigest };
+  state.storage.kv.put("store-admission", {
+    phase: "Closed",
+    activationId,
+    epoch: configured.SQLITE_STORE_EPOCH,
+  });
+  state.storage.kv.put("store-bootstrap", {
+    phase: "ErasureVerification",
+    activationId,
+    artifactDigest,
+  });
+  const local = makeSqliteBootstrapTarget({ state, environment: configured, activationId });
+  state.storage.kv.put("store-bootstrap", { phase: "Importing", activationId, artifactDigest });
+  let checkpointRefused = false;
+  try {
+    local.assertInactive();
+  } catch {
+    checkpointRefused = true;
+  }
+  state.storage.kv.put("store-bootstrap", {
+    phase: "ErasureVerification",
+    activationId,
+    artifactDigest,
+  });
+  state.storage.kv.put("store-seal", {
+    manifest: configured.SQLITE_STORE_MANIFEST,
+    epoch: configured.SQLITE_STORE_EPOCH,
+    status: "verified",
+  });
+  let servingRefused = false;
+  try {
+    local.assertInactive();
+  } catch {
+    servingRefused = true;
+  }
+  return Promise.resolve(
+    Response.json({ inactive: true, checkpointRefused, servingRefused, target: local.target })
+  );
+};
 const binaryRowId = 7;
 const highestByte = 255;
 const payloadMarker = 42;
@@ -80,11 +131,18 @@ const bindingsProof = (db: D1Database): Promise<Response> =>
 
 export class AdapterProof {
   private readonly storage: DurableObjectStorage;
-  constructor(state: DurableObjectState) {
+  private readonly state: DurableObjectState;
+  private readonly environment: SqliteStoreEnvironment;
+  constructor(state: DurableObjectState, environment: SqliteStoreEnvironment) {
     this.storage = state.storage;
+    this.state = state;
+    this.environment = environment;
   }
   fetch(request: Request): Promise<Response> {
     const db = makeSqliteDatabase(this.storage);
+    if (new URL(request.url).pathname === "/bootstrap-target") {
+      return bootstrapProof(this.state, this.environment);
+    }
     if (new URL(request.url).pathname === "/schema") return installProduction(db, request);
     if (new URL(request.url).pathname === "/bindings") return bindingsProof(db);
     if (new URL(request.url).pathname === "/exec") {

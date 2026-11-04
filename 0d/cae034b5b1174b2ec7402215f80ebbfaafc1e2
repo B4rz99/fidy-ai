@@ -1,0 +1,25 @@
+apps/web/src/features/dashboard/budget-configuration.tsx
+  s_bae391f7738986::t_0ff5028eaec519 2,73,82,87,89-90,98-103,109,123
+apps/web/src/features/dashboard/editing.ts
+  s_bae391f7738986::t_8d76c66be85314 17-21,35-36,81,116,125-135,140,178-180,186,213-229,257,260,265-268
+apps/web/src/features/dashboard/feature.tsx
+  s_bae391f7738986::t_6e59ad50d2ac72 143
+apps/web/src/features/dashboard/view.tsx
+  s_bae391f7738986::t_86c999c67e6e4a 10,505,522,526,607,610,1058,1065
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0dcae034b5b1174b2ec7402215f80ebbfaafc1e2",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

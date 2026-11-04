@@ -273,6 +273,13 @@ independently, retains phase-specific operational evidence and reports aggregate
 remaining phase has run. Interruption stops progression. Durable grant claims and cleanup checkpoints
 remain separate from provider I/O, and unknown authorization outcomes do not authorize replay.
 
+Dashboard view timing headers carry request-local numeric metadata only. The Core coordinator hop
+contains the coordinator queue and execution; execution contains source/context selection,
+financial projection and final owner Audit/accounting phases. Coordinator recovery R2/D1/SQL
+measurements use a distinct Dashboard prefix, so they do not overwrite outer Core measurements.
+These spans overlap hierarchically. Workers production clocks advance at I/O boundaries; CPU-only
+decoding, aggregation and encoding require a separate native CPU profile, not zero-duration claims.
+
 ## 8. Evidence and test boundaries
 
 Core tests exercise pure decisions; contract tests check derived public declarations; provider tests

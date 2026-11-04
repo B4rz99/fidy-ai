@@ -55,7 +55,7 @@ import { listCategoriesPath } from "../../../src/shell/categories/contract";
 import { MemoryId, RememberInput, ReviseInput } from "../../../src/core/memory/contract";
 import { type TelemetryService } from "../../../src/shell/observability/contract";
 import { observeCanonicalResponse } from "../../runtime/application-observation/operations";
-import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+import { type Cause, Clock, Duration, Effect, Exit, Option, Schema } from "effect";
 import {
   correctionInput,
   prepareBoundTransactionRead,
@@ -381,6 +381,8 @@ const canonicalCall = (operation: CanonicalOperationId, input: unknown): Canonic
 };
 
 /** Encode one work admission and deliver it to the caller's User coordinator. */
+const dashboardSuccessStatus = 200;
+
 const sendToCoordinator = ({
   environment,
   subject,
@@ -396,15 +398,31 @@ const sendToCoordinator = ({
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalWorkAdmission))(
       coordinatorAdmission(subject, work)
     );
-    return yield* Effect.tryPromise(() =>
-      stub.fetch(
-        new Request(`https://coordinator.internal/${coordinatorRoutes[work._tag]}`, {
-          method: "POST",
-          headers: { "content-type": "application/json", ...traceHeaders },
-          body,
-        })
+    const [duration, response] = yield* Effect.timed(
+      Effect.tryPromise(() =>
+        stub.fetch(
+          new Request(`https://coordinator.internal/${coordinatorRoutes[work._tag]}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...traceHeaders },
+            body,
+          })
+        )
       )
     );
+    if (
+      work._tag === "Batch" ||
+      work.operation !== "dashboard.getDashboardView" ||
+      response.status !== dashboardSuccessStatus
+    ) {
+      return response;
+    }
+    const headers = new Headers(response.headers);
+    headers.append("server-timing", `dashboard-hop;dur=${Duration.toMillis(duration).toFixed(3)}`);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   });
 
 const maximumBatchBytes = maximumAtomicBatchCalls * maximumTransactionInputBytes;

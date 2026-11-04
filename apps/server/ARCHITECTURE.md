@@ -417,7 +417,7 @@ remains explicitly preserved. Zero owner work still leaves admission paused
 at `AwaitingProvider` until independent provider inventory and historical caller fencing permit
 final closure. For a closed, drained initial D1 source, a resumable R2 plan records the observed
 source marker and a distinct source-only retired marker before a native compare-and-set. The
-readiness predicate and retirement share one source transaction. Retrying an interrupted progress
+readiness predicate, global zero-writer check and retirement share one source transaction. Retrying an interrupted progress
 write reuses the same retired marker; the source is never stamped with the serving generation.
 This fence rejects delayed SQL that captured the old R2 generation, but cannot revoke historical
 restore or raw administration authority, so independent provider fencing remains required. The current operator always

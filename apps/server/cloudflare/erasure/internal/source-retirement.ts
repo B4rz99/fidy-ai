@@ -30,6 +30,7 @@ export const retireSource = (
           input.db
             .prepare(`SELECT json(CASE WHEN EXISTS(SELECT 1 FROM erasure_control WHERE kind='published' AND generation IN(?,?))
         AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE ${unfinishedFinancialDeletion})
+        AND NOT EXISTS(SELECT 1 FROM erasure_writers)
         THEN 'true' ELSE '' END) AS ready`)
             .bind(fence.from, fence.retired),
           input.db

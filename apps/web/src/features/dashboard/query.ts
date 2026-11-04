@@ -1,3 +1,4 @@
+import { revalidateWorkspaceQuery } from "@/transport/workspace-query";
 import { Effect } from "effect";
 import { type AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
@@ -14,5 +15,11 @@ export const dashboardQuery: (
           return yield* client.dashboard.getDashboardView();
         })
       )
-      .pipe(apiClient.runtime.factory.withReactivity(["dashboard"]), Atom.setIdleTTL(0))
+      .pipe(
+        Atom.setIdleTTL(0),
+        apiClient.runtime.factory.withReactivity(["dashboard"]),
+        Atom.setIdleTTL(0),
+        revalidateWorkspaceQuery,
+        Atom.setIdleTTL(0)
+      )
   );

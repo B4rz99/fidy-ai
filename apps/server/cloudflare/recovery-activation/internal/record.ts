@@ -1,13 +1,19 @@
 import { Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../../erasure-store/contract";
-import { RecoveryTarget } from "../contract";
+import { RecoveryAdmissionState, RecoveryTarget } from "../contract";
 
 export const ActivationRecord = Schema.Struct({
   activationId: Schema.String,
+  admissionObjectId: RecoveryAdmissionState.fields.objectId,
   source: RecoveryTarget,
   serving: RecoveryTarget,
   cursor: Schema.String,
-  phase: Schema.Literals(["AwaitingDrain", "ReconcilingAdmissions", "AwaitingProvider"]),
+  phase: Schema.Literals([
+    "AwaitingDrain",
+    "ReconcilingAdmissions",
+    "AwaitingOwnerDrain",
+    "AwaitingProvider",
+  ]),
   providerIsolation: Schema.Literal("Unqualified"),
 });
 export type ActivationRecord = typeof ActivationRecord.Type;

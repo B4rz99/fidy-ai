@@ -22,7 +22,9 @@ export default {
         const command = yield* Schema.decodeUnknownEffect(Command)(
           yield* Effect.tryPromise(() => request.json())
         );
-        const gate = environment.GATE.getByName("source-only");
+        const gate = environment.GATE.getByName(
+          new URL(request.url).pathname === "/replacement" ? "replacement" : "source-only"
+        );
         if (command.action === "inspect") {
           return Response.json(yield* Effect.tryPromise(() => gate.inspect()));
         }

@@ -34,6 +34,7 @@ export class RecoveryAdmissionGate extends DurableObject<GateEnvironment> {
       );
       return {
         ...this.#state(),
+        objectId: this.ctx.id.toString(),
         leases: this.ctx.storage.sql
           .exec<{ count: number }>("SELECT count(*) AS count FROM recovery_leases")
           .one().count,

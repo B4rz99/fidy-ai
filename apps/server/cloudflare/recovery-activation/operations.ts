@@ -4,6 +4,7 @@ import { reconcileErasureAdmissions } from "../erasure/operations";
 import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
+  RecoveryDrainStatus,
   RecoveryTarget,
 } from "./contract";
 import {
@@ -42,12 +43,22 @@ const requireTargets = (
     }
     return { source, serving };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
-const advancePhase = (
+const awaitOwnerDrain = (
   input: ActivationInput,
   record: ActivationRecord
 ): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
   Effect.gen(function* () {
-    const state = yield* Schema.decodeUnknownEffect(RecoveryAdmissionState)(
+    const observeDrain = input.configuration.providerDrain;
+    if (Option.isNone(observeDrain)) {
+      return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
+    }
+    const drain = yield* Schema.decodeUnknownEffect(RecoveryDrainStatus)(
+      yield* activationIo(() => observeDrain.value(input.configuration.sourceDb))
+    );
+    if (drain.pending !== 0 || drain.ambiguous !== 0) {
+      return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
+    }
+    const closed = yield* Schema.decodeUnknownEffect(RecoveryAdmissionState)(
       yield* activationIo(() =>
         input.configuration.admission.close({
           activationId: input.activationId,
@@ -55,8 +66,28 @@ const advancePhase = (
         })
       )
     );
+    return {
+      ...record,
+      cursor: "",
+      phase: closed.leases === 0 ? ("AwaitingProvider" as const) : ("AwaitingDrain" as const),
+    };
+  }).pipe(Effect.mapError(() => new ErasureUnavailable()));
+
+const advancePhase = (
+  input: ActivationInput,
+  record: ActivationRecord
+): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    const state = yield* Schema.decodeUnknownEffect(RecoveryAdmissionState)(
+      yield* activationIo(() =>
+        input.configuration.admission.pause({
+          activationId: input.activationId,
+          epoch: record.source.epoch,
+        })
+      )
+    );
     if (
-      !state.closed ||
+      !state.paused ||
       state.activationId !== input.activationId ||
       state.epoch !== record.source.epoch
     ) {
@@ -68,11 +99,10 @@ const advancePhase = (
       bucket: input.bucket,
       cursor: record.cursor,
     });
-    return {
-      ...record,
-      cursor: pending.cursor,
-      phase: pending.complete ? ("AwaitingProvider" as const) : ("ReconcilingAdmissions" as const),
-    };
+    if (!pending.complete) {
+      return { ...record, cursor: pending.cursor, phase: "ReconcilingAdmissions" as const };
+    }
+    return yield* awaitOwnerDrain(input, record);
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 /** Advances only fixed binding-selected targets. Local observations never qualify provider isolation or open serving admission. */
@@ -83,9 +113,13 @@ export const advanceRecoveryActivation = (
     yield* currentActivation(input);
     const targets = yield* requireTargets(input);
     const previous = yield* loadActivation(input.bucket);
+    const admission = yield* Schema.decodeUnknownEffect(RecoveryAdmissionState)(
+      yield* activationIo(() => input.configuration.admission.inspect())
+    );
     if (
       Option.isSome(previous) &&
       (previous.value.record.activationId !== input.activationId ||
+        previous.value.record.admissionObjectId !== admission.objectId ||
         !sameTarget({ left: previous.value.record.source, right: targets.source }) ||
         !sameTarget({ left: previous.value.record.serving, right: targets.serving }))
     ) {
@@ -94,6 +128,7 @@ export const advanceRecoveryActivation = (
     const record = Option.match(previous, {
       onNone: (): ActivationRecord => ({
         activationId: input.activationId,
+        admissionObjectId: admission.objectId,
         ...targets,
         cursor: "",
         phase: "AwaitingDrain",

@@ -359,8 +359,10 @@ all financial semantics.
 
 The recovery activation operator owns an independent `RecoveryAdmissionGate` SQLite Durable
 Object outside every recoverable financial snapshot. Source operation leases have no automatic
-expiry: unknown work remains a drain blocker. Closing admission rejects new work and prevents
-release from an outstanding lease; only the exact epoch and lease can settle its local lifetime.
+expiry: unknown work remains a drain blocker. Pausing rejects ordinary publisher roots while stamped native continuations retain their existing
+owner job authority and can settle previously admitted work. Final closure rejects continuations
+too and prevents release from an outstanding lease; only the exact epoch and lease can settle
+its local lifetime.
 Durable provider intent/reconciliation standing is a separate final drain obligation.
 
 The Access-authenticated `Activation` erasure command binds resumable progress in R2 to one
@@ -368,7 +370,9 @@ activation identity and the fixed source/serving target manifests and epochs. A 
 or target cannot resume that record. Before any final qualification it preserves live DB-first
 pending erasure admissions as independent unsealed cases, including admissions absent from an
 older candidate snapshot. It never manufactures sealing evidence or repeats provider effects.
-Missing source evidence fails closed. The current operator stops at `AwaitingProvider` and always
+Missing source evidence fails closed. Missing owner drain observation retains `AwaitingOwnerDrain` while native continuations remain
+admissible. Only proven zero pending/ambiguous owner work permits final closure. The current
+operator stops at `AwaitingProvider` and always
 reports `Unqualified`; this progress cannot open a Store, publish a serving generation, remove the
 R2 guard, or qualify an activation. Provider-verified namespace/version history, complete operation
 and provider drain, final ledger replay and fresh serving bootstrap remain required before that

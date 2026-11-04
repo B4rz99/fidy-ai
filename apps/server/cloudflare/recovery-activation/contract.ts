@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { type Option, Schema } from "effect";
 
 const maximumIdentityLength = 128;
 const activationName = Schema.String.check(Schema.isBetweenLength(1, maximumIdentityLength));
@@ -21,11 +21,17 @@ export type RecoveryStoreControl = Readonly<{
   inspect: () => Promise<unknown>;
   close: (input: Readonly<{ activationId: string; epoch: string }>) => Promise<unknown>;
 }>;
+export const RecoveryDrainStatus = Schema.Struct({
+  pending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  ambiguous: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+
 export type RecoveryActivationEnvironment = Readonly<{
   admission: RecoveryAdmissionBinding;
   source: RecoveryStoreControl;
   serving: RecoveryStoreControl;
   sourceDb: D1Database;
+  providerDrain: Option.Option<(db: D1Database) => Promise<unknown>>;
   sourceTarget: RecoveryTarget;
   servingTarget: RecoveryTarget;
 }>;
@@ -39,6 +45,7 @@ export const RecoveryClose = Schema.Struct({
   activationId: Schema.String.check(Schema.isBetweenLength(1, maximumIdentityLength)),
 });
 export const RecoveryAdmissionState = Schema.Struct({
+  objectId: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
   epoch: Schema.String,
   activationId: Schema.String,
   closed: Schema.Boolean,

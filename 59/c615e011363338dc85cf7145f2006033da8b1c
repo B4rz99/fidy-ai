@@ -1,0 +1,33 @@
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_bae391f7738986::t_10548153e1592f 393,397,399-401
+  s_bae391f7738986::t_e2ec183060095a 402-410
+apps/web/e2e/dashboard-editing.spec.ts
+  s_bae391f7738986::t_10548153e1592f 175-179,181-196
+  s_bae391f7738986::t_e2ec183060095a 161-174,180
+apps/web/e2e/dashboard-live-customization.spec.ts
+  s_bae391f7738986::t_6e4a920c6fa746 3,9,15-42,84,89,96
+apps/web/src/features/dashboard/budget-configuration.tsx
+  s_bae391f7738986::t_dceaf70e153090 1,24,72,81-87,93,98-99,101,104,109-112
+apps/web/src/features/dashboard/editing.ts
+  s_bae391f7738986::t_d91a6b232b746e 31-35,72-75,126-127,147,161-165,175,222,235-236,268
+apps/web/src/features/dashboard/feature.tsx
+  s_bae391f7738986::t_6fd8ab47bfe907 150
+apps/web/src/features/dashboard/view.tsx
+  s_bae391f7738986::t_e1af65204548dc 10,503,506,517,523,527,608-612,646,895-896,1077,1080-1083,1085-1088
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "59c615e011363338dc85cf7145f2006033da8b1c",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

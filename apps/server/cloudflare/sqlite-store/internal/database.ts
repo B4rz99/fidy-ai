@@ -147,8 +147,8 @@ export const sqliteDatabaseUnit = (storage: DurableObjectStorage): SqliteDatabas
       }
       if (key === "withSession") {
         return () => ({
-          prepare: receiver.prepare,
-          batch: receiver.batch,
+          prepare: (query: string) => prepare({ query, bindings: [] }),
+          batch: (statements: D1PreparedStatement[]) => promise(() => run(statements)),
           getBookmark: () => null,
         });
       }

@@ -1,3 +1,4 @@
+import { withAuthoritativeStore } from "../sqlite-store/operations";
 import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -59,7 +60,7 @@ export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
     return observeWorkerPromise(
       () =>
         runPairing({
-          environment: withErasureRecovery(this.env),
+          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
           payload: event.payload,
           activity: (name, options, activity) => step.do(name, options, activity),
         }),
@@ -98,7 +99,7 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
     return observeWorkerPromise(
       () =>
         runReplacement({
-          environment: withErasureRecovery(this.env),
+          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
           payload: event.payload,
           activity: (name, options, activity) => step.do(name, options, activity),
         }),

@@ -1,3 +1,4 @@
+import { withAuthoritativeStore } from "../sqlite-store/operations";
 import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -152,7 +153,7 @@ export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, 
     return observeWorkerPromise(
       () =>
         runRefundWorkflow({
-          environment: withErasureRecovery(this.env),
+          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
           payload: event.payload,
           activity: (name, options, activity) => step.do(name, options, activity),
         }),
@@ -207,7 +208,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
     return observeWorkerPromise(
       () =>
         runBillingCollectionWorkflow({
-          environment: withErasureRecovery(this.env),
+          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
           payload: event.payload,
           activity: (name, options, activity) => step.do(name, options, activity),
           sleep: (name, duration) => step.sleep(name, duration),

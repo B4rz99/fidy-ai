@@ -431,6 +431,15 @@ await db
 export const prepareBrowserAssessment = (): Promise<void> => {
   const dataset = Bun.env.FIDY_ASSESSMENT ?? "small";
   return import("./browser-assessment.test-fixture").then(({ seedAssessment }) =>
-    Effect.runPromise(seedAssessment({ db, dataset, now }))
+    Effect.runPromise(
+      seedAssessment({
+        db,
+        dataset,
+        now,
+        users: ["24000000-0000-4000-8000-000000000481"],
+        history: "routine",
+        layout: "default",
+      })
+    )
   );
 };

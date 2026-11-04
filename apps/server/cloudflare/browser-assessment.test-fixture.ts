@@ -7,7 +7,8 @@ const sizes = {
   breaking: { transactions: 1_000_000, plans: 100, revisions: 100, review: 5000, currencies: 8 },
 };
 type DatasetSize = typeof sizes.small;
-const user = "24000000-0000-4000-8000-000000000481";
+type SeedUser = Readonly<{ user: string; slot: number }>;
+const userIdentityStride = 2_000_000;
 const uuidWidth = 12;
 const categoryCount = 16;
 const batchSize = 10_000;
@@ -20,14 +21,16 @@ const shaLength = 64;
 const json = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const uuid = (prefix: string, index: number): string =>
   `${prefix}-0000-4000-8000-${String(index).padStart(uuidWidth, "0")}`;
-const seedTransactions = Effect.fn(function* (db: D1Database, size: DatasetSize, now: number) {
+type SeedContext = Readonly<{ db: D1Database; size: DatasetSize; now: number; subject: SeedUser }>;
+const seedTransactions = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
+  const { user, slot } = subject;
   for (let offset = 0; offset < size.transactions; offset += batchSize) {
     const rows = Array.from(
       { length: Math.min(batchSize, size.transactions - offset) },
       (_, index) => {
         const ordinal = offset + index;
         return {
-          id: uuid("81000000", ordinal),
+          id: uuid("81000000", slot * userIdentityStride + ordinal),
           category: `10000000-0000-4000-8000-${String((ordinal % categoryCount) + 1).padStart(uuidWidth, "0")}`,
           counterparty: `Evaluación ${ordinal}`,
           occurred:
@@ -44,7 +47,8 @@ const seedTransactions = Effect.fn(function* (db: D1Database, size: DatasetSize,
     );
   }
 });
-const seedBudgets = Effect.fn(function* (db: D1Database, size: DatasetSize, now: number) {
+const seedBudgets = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
+  const { user, slot } = subject;
   const currencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"].slice(
     0,
     size.currencies
@@ -54,7 +58,7 @@ const seedBudgets = Effect.fn(function* (db: D1Database, size: DatasetSize, now:
       db
         .prepare(`INSERT INTO budgets(id,user_id,category_id,currency,cap,created_at_ms,updated_at_ms,group_name,starts_month)
       SELECT printf('82000000-0000-4000-8000-%012d',?*16+row_number() OVER (ORDER BY id)),?,id,?,'100000',?,?,?,'2016-01' FROM categories LIMIT 16`)
-        .bind(index, user, currency, now, now, `Grupo ${currency}`)
+        .bind(slot * userIdentityStride + index, user, currency, now, now, `Grupo ${currency}`)
         .run()
     );
   }
@@ -81,7 +85,8 @@ const planRevisions = (size: DatasetSize, index: number): string =>
       };
     })
   );
-const seedRecurring = Effect.fn(function* (db: D1Database, size: DatasetSize) {
+const seedRecurring = Effect.fn(function* (db: D1Database, size: DatasetSize, subject: SeedUser) {
+  const { user, slot } = subject;
   yield* Effect.tryPromise(() =>
     db
       .prepare(
@@ -91,7 +96,7 @@ const seedRecurring = Effect.fn(function* (db: D1Database, size: DatasetSize) {
       .run()
   );
   for (let index = 0; index < size.plans; index++) {
-    const id = uuid("83000000", index);
+    const id = uuid("83000000", slot * userIdentityStride + index);
     yield* Effect.tryPromise(() =>
       db.batch([
         db
@@ -108,9 +113,10 @@ const seedRecurring = Effect.fn(function* (db: D1Database, size: DatasetSize) {
     );
   }
 });
-const seedReview = Effect.fn(function* (db: D1Database, size: DatasetSize, now: number) {
-  const staging = uuid("84000000", 0);
-  const submission = uuid("85000000", 0);
+const seedReview = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
+  const { user, slot } = subject;
+  const staging = uuid("84000000", slot * userIdentityStride);
+  const submission = uuid("85000000", slot * userIdentityStride);
   const expires = now + retentionDays * dayMs;
   yield* Effect.tryPromise(() =>
     db
@@ -120,7 +126,7 @@ const seedReview = Effect.fn(function* (db: D1Database, size: DatasetSize, now: 
       .bind(
         staging,
         user,
-        "synthetic-assessment-original",
+        `synthetic-assessment-original-${slot}`,
         "a".repeat(shaLength),
         now,
         expires,
@@ -133,12 +139,12 @@ const seedReview = Effect.fn(function* (db: D1Database, size: DatasetSize, now: 
       .prepare(
         "INSERT INTO statement_submissions(id,user_id,idempotency_key,staging_id,submitted_at_ms,source_format,parser_revision,service_market,locale,time_zone,status,retention_expires_at_ms) VALUES(?,?,?,?,?,'csv','statement-parser-v1','CO','es-CO','America/Bogota','queued',?)"
       )
-      .bind(submission, user, uuid("86000000", 0), staging, now, expires)
+      .bind(submission, user, uuid("86000000", slot * userIdentityStride), staging, now, expires)
       .run()
   );
   for (let offset = 0; offset < size.review; offset += 100) {
     const rows = Array.from({ length: Math.min(100, size.review - offset) }, (_, index) => ({
-      id: uuid("87000000", offset + index),
+      id: uuid("87000000", slot * userIdentityStride + offset + index),
       record: offset + index + 1,
       original: `Original sintético ${offset + index}: 2026-10-01,25000,Mercado`,
     }));
@@ -156,10 +162,16 @@ export const seedAssessment = Effect.fn(function* ({
   db,
   dataset,
   now,
+  users,
+  history,
+  layout,
 }: {
   db: D1Database;
   dataset: string;
   now: number;
+  users: ReadonlyArray<string>;
+  history: "routine";
+  layout: "default";
 }) {
   if (
     !(dataset === "small" || dataset === "heavy" || dataset === "extreme" || dataset === "breaking")
@@ -168,11 +180,15 @@ export const seedAssessment = Effect.fn(function* ({
   }
   const size = sizes[dataset];
   const start = performance.now();
-  yield* seedTransactions(db, size, now);
-  yield* seedBudgets(db, size, now);
-  yield* seedRecurring(db, size);
-  yield* seedReview(db, size, now);
+  for (const [slot, user] of users.entries()) {
+    const subject = { slot, user };
+    const context = { db, size, now, subject };
+    yield* seedTransactions(context);
+    yield* seedBudgets(context);
+    yield* seedRecurring(db, size, subject);
+    yield* seedReview(context);
+  }
   process.stdout.write(
-    `ASSESSMENT_SEED ${json({ dataset, ...size, milliseconds: performance.now() - start })}\n`
+    `ASSESSMENT_SEED ${json({ dataset, users: users.length, history, layout, ...size, milliseconds: performance.now() - start })}\n`
   );
 });

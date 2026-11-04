@@ -1,7 +1,8 @@
+import { erasureAdmissionCondition } from "~/shell/erasure/operations";
 import { verifiedEmailUsers } from "~/shell/email-authentication/operations";
 import { existingUserSelection } from "~/shell/identity/operations";
 import { UserId } from "~/core/identity/contract";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import {
   ProCommand,
   ProGrantEntry,
@@ -23,18 +24,30 @@ export const prepareProGrant = (
   }>
 ): ProStatement => {
   const selected = selectProUser(input.selector);
+  const fence = erasureAdmissionCondition({
+    subject: { _tag: "Owner", column: "u.id" },
+    admitted: false,
+  });
+  const candidates = `WITH candidates AS (${selected.sql}), winner AS MATERIALIZED
+    (SELECT userId FROM candidates WHERE (SELECT COUNT(*) FROM candidates)=1)`;
   return {
-    sql: `WITH candidates AS (${selected.sql})
+    sql: `${candidates}
       INSERT INTO pro_grant_events(user_id, action, operator, occurred_at_ms)
-      SELECT userId, ?, ?, ? FROM candidates WHERE (SELECT COUNT(*) FROM candidates) = 1
+      SELECT u.id, ?, ?, ? FROM winner w JOIN users u ON u.id=w.userId
+      WHERE ${fence.sql}
       RETURNING user_id AS userId, action`,
     params: [...selected.params, input.action, input.operator, input.now],
+    admission: Option.some({
+      sql: `${candidates} SELECT CASE WHEN (SELECT COUNT(*) FROM candidates)<>1 THEN 1
+        ELSE COALESCE((SELECT ${fence.sql} FROM winner w JOIN users u ON u.id=w.userId),0) END AS allowed`,
+      params: selected.params,
+    }),
   };
 };
 
 const selectProUser = (
   selector: Readonly<{ userId: string }> | Readonly<{ email: string }>
-): ProStatement => {
+): OwnedStatement => {
   if ("userId" in selector) return existingUserSelection(selector.userId);
   return verifiedEmailUsers(selector.email);
 };
@@ -48,9 +61,14 @@ export const activeProGrantSelection = (users: OwnedStatement): OwnedStatement =
 });
 
 /** Bounded active grants only; no email, provider identity or billing details leave storage. */
+const listingFence = erasureAdmissionCondition({
+  subject: { _tag: "Owner", column: "u.id" },
+  admitted: false,
+});
 export const listProGrants: ProStatement = {
-  sql: `SELECT g.user_id AS userId, g.action FROM pro_grant_events g
-    WHERE g.action = 'grant' AND g.sequence =
+  admission: Option.none(),
+  sql: `SELECT g.user_id AS userId, g.action FROM pro_grant_events g JOIN users u ON u.id=g.user_id
+    WHERE ${listingFence.sql} AND g.action = 'grant' AND g.sequence =
       (SELECT MAX(latest.sequence) FROM pro_grant_events latest WHERE latest.user_id = g.user_id)
     ORDER BY g.user_id LIMIT ${maximumProGrants + 1}`,
   params: [],
@@ -86,6 +104,7 @@ export const executeProCommand = Effect.fn(function* (
     const candidates = yield* input.query({
       sql: `SELECT userId FROM (${selected.sql}) ORDER BY userId LIMIT 2`,
       params: selected.params,
+      admission: Option.none(),
     });
     const decoded = yield* Schema.decodeUnknownEffect(
       Schema.Array(Schema.Struct({ userId: UserId }))

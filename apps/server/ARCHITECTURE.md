@@ -492,3 +492,8 @@ repeats bounded first-page deletes until each candidate prefix is observed empty
 is retried from current storage; an empty-prefix observation supplies no provider or continuation
 qualification. The retirement accessor currently refuses, preserving all artifacts until that
 independent disposition exists.
+
+The private named `ProGrantService` entry executes bounded operator grant/revoke/list commands
+against the same selected authoritative database as Core. The repository operator launcher opens
+that fixed service binding through Wrangler under Node; it does not accept a physical database
+identifier or expose SQL. Recovery admission and per-User Erasure admission remain enforced.

@@ -1,6 +1,10 @@
 import { ErasureFrozenLedgerProgress } from "../../erasure/contract";
 import { Effect, Option, Schema } from "effect";
-import { ErasureGeneration, ErasureUnavailable } from "../../erasure-store/contract";
+import {
+  ErasureGeneration,
+  ErasureSourceFreezePlan,
+  ErasureUnavailable,
+} from "../../erasure-store/contract";
 import { RecoveryAdmissionState, RecoverySourceTarget, RecoveryTarget } from "../contract";
 
 const maximumCheckpointBytes = 64;
@@ -11,6 +15,7 @@ const SourceFence = Schema.Union([
     state: Schema.Literal("Prepared"),
     from: ErasureGeneration,
     retired: Schema.String.check(Schema.isUUID()),
+    freeze: ErasureSourceFreezePlan,
     registryCheckpoint: Schema.Struct({
       value: Schema.String.check(Schema.isMaxLength(maximumCheckpointBytes)),
       etag: Schema.String.check(Schema.isBetweenLength(1, maximumCheckpointEtagBytes)),

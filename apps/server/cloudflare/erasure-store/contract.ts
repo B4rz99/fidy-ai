@@ -6,6 +6,22 @@ import { type ErasureClass, ErasureReference } from "../../src/core/erasure/cont
 export const ErasureGeneration = Schema.Union([Schema.Literal("initial"), ErasureReference]);
 export type ErasureGeneration = typeof ErasureGeneration.Type;
 
+const freezeDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
+export const ErasureSourceFreezePlan = Schema.Struct({
+  version: Schema.Literal(1),
+  generation: ErasureReference,
+  tableCount: Schema.Int.check(Schema.isGreaterThan(0)),
+  tablesDigest: freezeDigest,
+  triggersDigest: freezeDigest,
+});
+export type ErasureSourceFreezePlan = typeof ErasureSourceFreezePlan.Type;
+
+export const ErasureSourceFreezeDescriptor = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("NoSourceFreeze") }),
+  Schema.Struct({ kind: Schema.Literal("NativeDmlFreeze"), plan: ErasureSourceFreezePlan }),
+]);
+export type ErasureSourceFreezeDescriptor = typeof ErasureSourceFreezeDescriptor.Type;
+
 export class ErasureUnavailable extends Data.TaggedError("ErasureUnavailable") {}
 export type ErasureScope = Readonly<{ userId: string; reference: string }>;
 export type ErasureOriginals = Readonly<{

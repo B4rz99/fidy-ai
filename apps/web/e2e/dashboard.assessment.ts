@@ -190,7 +190,7 @@ const dashboardMeasurementDiagnostics = (): unknown => ({
   reads: performance
     .getEntriesByType("resource")
     .filter((entry) => new URL(entry.name).pathname === "/dashboard/view")
-    .map((entry) => entry.toJSON()),
+    .map((entry): unknown => entry.toJSON()),
   pending: document.querySelector('[data-dashboard-read-state="pending"]') !== null,
   ready: document.querySelector('[data-dashboard-read-state="ready"]') !== null,
 });

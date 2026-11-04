@@ -5,12 +5,14 @@ import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
   RecoveryDrainStatus,
+  RecoverySourceTarget,
   RecoveryTarget,
 } from "./contract";
 import {
   type ActivationRecord,
   activationIo,
   loadActivation,
+  sameSource,
   sameTarget,
   storeActivation,
 } from "./internal/record";
@@ -32,13 +34,18 @@ const currentActivation = (input: ActivationInput): Effect.Effect<void, ErasureU
 const requireTargets = (
   input: ActivationInput
 ): Effect.Effect<
-  Readonly<{ source: RecoveryTarget; serving: RecoveryTarget }>,
+  Readonly<{ source: RecoverySourceTarget; serving: RecoveryTarget }>,
   ErasureUnavailable
 > =>
   Effect.gen(function* () {
-    const source = yield* Schema.decodeEffect(RecoveryTarget)(input.configuration.sourceTarget);
+    const source = yield* Schema.decodeEffect(RecoverySourceTarget)(
+      input.configuration.sourceTarget
+    );
     const serving = yield* Schema.decodeEffect(RecoveryTarget)(input.configuration.servingTarget);
-    if (source.namespaceId === serving.namespaceId || source.epoch === serving.epoch) {
+    if (
+      (source.kind === "SQLite" && source.namespaceId === serving.namespaceId) ||
+      source.epoch === serving.epoch
+    ) {
       return yield* new ErasureUnavailable();
     }
     return { source, serving };
@@ -120,7 +127,7 @@ export const advanceRecoveryActivation = (
       Option.isSome(previous) &&
       (previous.value.record.activationId !== input.activationId ||
         previous.value.record.admissionObjectId !== admission.objectId ||
-        !sameTarget({ left: previous.value.record.source, right: targets.source }) ||
+        !sameSource({ left: previous.value.record.source, right: targets.source }) ||
         !sameTarget({ left: previous.value.record.serving, right: targets.serving }))
     ) {
       return yield* new ErasureUnavailable();

@@ -9,6 +9,15 @@ export const RecoveryTarget = Schema.Struct({
   epoch: activationName,
 });
 export type RecoveryTarget = typeof RecoveryTarget.Type;
+export const RecoverySourceTarget = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("D1"),
+    databaseId: Schema.String.check(Schema.isUUID()),
+    epoch: activationName,
+  }),
+  Schema.Struct({ kind: Schema.Literal("SQLite"), ...RecoveryTarget.fields }),
+]);
+export type RecoverySourceTarget = typeof RecoverySourceTarget.Type;
 export const RecoveryStoreObservation = Schema.Struct({
   target: RecoveryTarget,
   admission: Schema.Literals(["Open", "Closed"]),
@@ -28,11 +37,10 @@ export const RecoveryDrainStatus = Schema.Struct({
 
 export type RecoveryActivationEnvironment = Readonly<{
   admission: RecoveryAdmissionBinding;
-  source: RecoveryStoreControl;
   serving: RecoveryStoreControl;
   sourceDb: D1Database;
   providerDrain: Option.Option<(db: D1Database) => Promise<unknown>>;
-  sourceTarget: RecoveryTarget;
+  sourceTarget: RecoverySourceTarget;
   servingTarget: RecoveryTarget;
 }>;
 

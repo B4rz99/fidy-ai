@@ -366,7 +366,11 @@ its local lifetime.
 Durable provider intent/reconciliation standing is a separate final drain obligation.
 
 The Access-authenticated `Activation` erasure command binds resumable progress in R2 to one
-activation identity and the fixed source/serving target manifests and epochs. A different identity
+activation identity, actual admission object, fixed source identity and serving manifest/epoch. The
+initial source is a D1 database UUID and epoch; later SQLite sources carry namespace, object,
+manifest and epoch. These configured identities do not qualify provider bindings. D1 uses the
+same independent admission barrier while retaining its fixed private database capability for
+pending-intent reconciliation and frozen export. A different identity
 or target cannot resume that record. Before any final qualification it preserves live DB-first
 pending erasure admissions as independent unsealed cases, including admissions absent from an
 older candidate snapshot. It never manufactures sealing evidence or repeats provider effects.

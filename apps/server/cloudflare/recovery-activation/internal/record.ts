@@ -1,11 +1,11 @@
 import { Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../../erasure-store/contract";
-import { RecoveryAdmissionState, RecoveryTarget } from "../contract";
+import { RecoveryAdmissionState, RecoverySourceTarget, RecoveryTarget } from "../contract";
 
 export const ActivationRecord = Schema.Struct({
   activationId: Schema.String,
   admissionObjectId: RecoveryAdmissionState.fields.objectId,
-  source: RecoveryTarget,
+  source: RecoverySourceTarget,
   serving: RecoveryTarget,
   cursor: Schema.String,
   phase: Schema.Literals([
@@ -29,6 +29,17 @@ export const sameTarget = ({
   left.objectId === right.objectId &&
   left.manifest === right.manifest &&
   left.epoch === right.epoch;
+export const sameSource = ({
+  left,
+  right,
+}: Readonly<{ left: RecoverySourceTarget; right: RecoverySourceTarget }>): boolean => {
+  if (left.kind === "D1") {
+    return (
+      right.kind === "D1" && left.databaseId === right.databaseId && left.epoch === right.epoch
+    );
+  }
+  return right.kind === "SQLite" && sameTarget({ left, right });
+};
 export const loadActivation = (
   bucket: R2Bucket
 ): Effect.Effect<

@@ -15,13 +15,17 @@ const issuer = "https://erasure-test.cloudflareaccess.com";
 const audience = "erasure-only";
 const activationId = "18500000-0000-4000-8000-000000000001";
 const target = {
-  namespaceId: "source-native",
-  objectId: "source-object",
-  manifest: "sealed-source",
+  kind: "D1" as const,
+  databaseId: "18500000-0000-4000-8000-000000000002",
   epoch: "source-epoch",
 };
 const userId = "18500000-0000-4000-8000-000000000099";
-const servingTarget = { ...target, namespaceId: "serving-native", epoch: "serving-epoch" };
+const servingTarget = {
+  namespaceId: "serving-native",
+  objectId: "serving-object",
+  manifest: "sealed-serving",
+  epoch: "serving-epoch",
+};
 afterEach(() => vi.restoreAllMocks());
 
 effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
@@ -86,6 +90,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
             admission.enter({ epoch: target.epoch, leaseId: "unsettled-provider" })
           )
         ).toBe(true);
+        let sourceTarget = target;
         const control = {
           inspect: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
           close: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
@@ -111,11 +116,10 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
                 ERASURE_BUCKET: native.registry,
                 ERASURE_ACTIVATION: {
                   admission: selectedAdmission,
-                  source: control,
                   serving: control,
                   sourceDb: native.db,
                   providerDrain: Option.none(),
-                  sourceTarget: target,
+                  sourceTarget,
                   servingTarget,
                 },
                 CLOUDFLARE_ACCESS_ISSUER: issuer,
@@ -136,7 +140,10 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
             stored === null ? Promise.reject(new Error("Missing activation record")) : stored.text()
           )
         );
-        expect(record).toMatchObject({ activationId, phase: "AwaitingDrain" });
+        expect(record).toMatchObject({ activationId, phase: "AwaitingDrain", source: target });
+        sourceTarget = { ...target, databaseId: "18500000-0000-4000-8000-000000000003" };
+        expect((yield* send()).status).toBe(503);
+        sourceTarget = target;
         selectedAdmission = gates.replacement;
         expect((yield* send()).status).toBe(503);
         selectedAdmission = admission;

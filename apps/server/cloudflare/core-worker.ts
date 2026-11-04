@@ -34,6 +34,7 @@ import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/tel
 
 import { UserTransactionCoordinator as UserCoordinatorRuntime } from "./transactions/runtime";
 
+export { ProGrantService } from "./pro-grants/runtime";
 export {
   BrowserPairingEmailWorkflowV1,
   EmailReplacementWorkflowV1,

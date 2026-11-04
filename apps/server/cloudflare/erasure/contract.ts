@@ -1,5 +1,5 @@
 import type { SqliteBootstrapTarget } from "../sqlite-store/contract";
-import { ErasureGeneration } from "../erasure-store/contract";
+import { ErasureGeneration, type ErasureSourceFreezePlan } from "../erasure-store/contract";
 import {
   type RecoveryActivationEnvironment,
   type RecoveryAdmissionEnvironment,
@@ -174,4 +174,18 @@ export type ErasureFrozenLedgerInput = Readonly<{
   bucket: R2Bucket;
   generation: string;
   previous: Option.Option<ErasureFrozenLedgerProgress>;
+}>;
+
+export const ErasureSourceSchemaObject = Schema.Struct({
+  type: Schema.Literals(["table", "index", "trigger", "view"]),
+  name: Schema.String,
+  tableName: Schema.String,
+  sql: Schema.String,
+});
+export type ErasureSourceSchemaObject = typeof ErasureSourceSchemaObject.Type;
+export type ErasureSourceSchemaInput = Readonly<{
+  db: D1Database;
+  generation: string;
+  freeze: Option.Option<ErasureSourceFreezePlan>;
+  object: ErasureSourceSchemaObject;
 }>;

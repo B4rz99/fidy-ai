@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from "effect";
+import { classifyErasureSourceSchemaObject } from "../../erasure/operations";
 import { RecoveryClosedSourceEvidence, RecoveryTarget } from "../../recovery-activation/contract";
 import {
   type ClosedSnapshotSource,
@@ -50,6 +51,20 @@ const stable = (
     const target = yield* Schema.encodeEffect(Schema.fromJsonString(RecoveryTarget))(input.target);
     if (expected !== actual || oldTarget !== target) return yield* new SnapshotUnavailable();
   }).pipe(Effect.mapError(() => new SnapshotUnavailable()));
+const classify = (
+  input: ClosedSnapshotSource,
+  state: SnapshotBuildState,
+  object: SnapshotSchemaObject
+): Effect.Effect<"SourceControl" | "Application", SnapshotUnavailable> =>
+  classifyErasureSourceSchemaObject({
+    db: input.db,
+    generation: state.evidence.sourceGeneration,
+    freeze:
+      state.evidence.sourceFreeze.kind === "NativeDmlFreeze"
+        ? Option.some(state.evidence.sourceFreeze.plan)
+        : Option.none(),
+    object,
+  }).pipe(Effect.mapError(() => new SnapshotUnavailable()));
 const catalog = (
   input: ClosedSnapshotSource,
   state: Extract<SnapshotBuildState, { phase: "Catalog" }>
@@ -75,6 +90,9 @@ const catalog = (
     }
     const object = yield* Schema.decodeUnknownEffect(SnapshotSchemaObject)(first);
     yield* stable(input, state);
+    if ((yield* classify(input, state, object)) === "SourceControl") {
+      return { ...state, schemaCursor: Option.some(object.position) };
+    }
     const schemaHead = Option.some(
       yield* artifactPut({
         ...input,

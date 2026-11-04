@@ -1,3 +1,6 @@
+import type { RecoveryProbeIdentity } from "./recovery-runtime-proof";
+import { inspectRecoveryNamespace } from "./recovery-provider";
+import type { RecoveryProviderTarget } from "./recovery-provider-contract";
 import { ReleaseSmokeFailed } from "./smoke-exchange";
 import { verifyStableWorkerIdentity } from "./stable-worker-identity";
 import { RecoveryRequest, recoverStaged } from "./staged-recovery";
@@ -12,6 +15,7 @@ import {
   Config as EffectConfig,
   Layer,
   Option,
+  Redacted,
   Schedule,
   Schema,
   Stream,
@@ -258,12 +262,16 @@ const boundedJson = Effect.fn(function* (
 const providerJson = Effect.fn(
   function* (
     request: HttpClientRequest.HttpClientRequest,
-    reportDeploymentRejection: boolean = false
+    reportDeploymentRejection: boolean = false,
+    requirePrivateMetadata: boolean = false
   ) {
     const client = yield* HttpClient.HttpClient;
     const response = yield* HttpClient.withScope(client)
       .execute(request)
       .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
+    if (requirePrivateMetadata && response.headers["cache-control"] !== "no-store") {
+      return yield* Effect.fail(Error("Recovery runtime identity response is not private"));
+    }
     return yield* boundedJson(response, reportDeploymentRejection);
   },
   Effect.scoped,
@@ -271,6 +279,53 @@ const providerJson = Effect.fn(
   Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
   Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
 );
+
+/** The existing release authority reads platform identities; configuration labels do not establish a recovery target binding. */
+export const inspectRecoveryTarget = Effect.fn(function* (
+  env: Readonly<{
+    account: string;
+    token: string;
+    revision: string;
+    probe: RecoveryProbeIdentity & Readonly<{ proof: Redacted.Redacted<string> }>;
+  }>,
+  target: RecoveryProviderTarget,
+  client: HttpClient.HttpClient
+) {
+  const probe = env.probe;
+  const read = (path: string): Effect.Effect<unknown, Error> =>
+    providerJson(
+      HttpClientRequest.get(
+        `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.account)}${path}`,
+        { headers: { authorization: `Bearer ${env.token}` } }
+      )
+    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const subdomain = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      success: Schema.Literal(true),
+      result: Schema.Struct({ subdomain: Schema.String.check(Schema.isPattern(/^[a-z0-9-]+$/u)) }),
+    })
+  )(yield* read("/workers/subdomain"));
+  const origin = `https://${encodeURIComponent(probe.name)}.${subdomain.result.subdomain}.workers.dev`;
+  const readRuntime = providerJson(
+    HttpClientRequest.post(origin, {
+      headers: {
+        authorization: `Bearer ${Redacted.value(probe.proof)}`,
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      },
+      body: HttpBody.text(encodeJson({ action: "attest" }), "application/json"),
+    }),
+    false,
+    true
+  ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  return yield* inspectRecoveryNamespace({
+    target,
+    revision: env.revision,
+    read,
+    readRuntime,
+    probe,
+  });
+});
 
 type RecoveryAccessConfig = Pick<Config, "account" | "token"> &
   Readonly<{ issuer: string; operatorEmail: string }>;

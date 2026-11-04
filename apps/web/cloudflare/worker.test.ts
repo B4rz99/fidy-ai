@@ -16,6 +16,26 @@ const assets = {
 };
 
 describe("same-origin Dashboard document transport", () => {
+  it("serves application and unknown documents without forwarding their paths to Core", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        for (const path of ["/insights/recurring/example", "/UPGRADE", "/ruta-inexistente"]) {
+          const response = yield* Effect.tryPromise(() =>
+            webWorker.fetch(
+              new Request(`${appOrigin}${path}`, { headers: { accept: "text/html" } }),
+              {
+                ASSETS: assets,
+                BROWSER_ORIGIN: appOrigin,
+                API: { fetch: () => Promise.reject(new Error("Unexpected API forwarding")) },
+              }
+            )
+          );
+          expect(response.status).toBe(200);
+          expect(yield* Effect.tryPromise(() => response.text())).toContain('id="root"');
+        }
+      })
+    ));
+
   it("derives the current cookie binding and releases one complete private document without using a supplied binding", () =>
     Effect.runPromise(
       Effect.gen(function* () {

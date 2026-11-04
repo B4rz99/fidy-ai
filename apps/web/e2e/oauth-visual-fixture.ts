@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
-import { apiOrigin } from "./http-fixtures";
+import { apiOrigin, routeBrowserApi } from "./http-fixtures";
 
 export const reviewReference = "10000000-0000-4000-8000-000000000001";
 const connection = {
@@ -116,6 +116,6 @@ export const installOAuthReview = Effect.fnUntraced(function* (
     );
     return fulfill(route, {}, missingStatus);
   };
-  yield* Effect.tryPromise(() => page.route(`${apiOrigin}/**`, handler));
+  yield* Effect.tryPromise(() => routeBrowserApi(page, `${apiOrigin}/**`, handler));
   return { unexpected, mutations, release: (): void => held.resolve() };
 });

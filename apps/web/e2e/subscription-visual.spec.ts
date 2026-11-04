@@ -4,7 +4,7 @@ import { acceptSubscriptionContracts } from "./subscription-interactions";
 import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { apiOrigin } from "./http-fixtures";
+import { apiOrigin, routeBrowserApi } from "./http-fixtures";
 import {
   type SubscriptionFixtureState,
   installSubscriptionFixture,
@@ -775,10 +775,13 @@ test("Paid access and billing history remain available when the offer catalog fa
 const installUnavailableMethods = Effect.fnUntraced(function* (page: Page) {
   let unavailable = true;
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/web/subscription/payment-enrollments/availability`, (route) =>
-      unavailable
-        ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
-        : route.fallback()
+    routeBrowserApi(
+      page,
+      `${apiOrigin}/web/subscription/payment-enrollments/availability`,
+      (route) =>
+        unavailable
+          ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
+          : route.fallback()
     )
   );
   return (): void => {
@@ -856,7 +859,7 @@ const installUnresolvedConsent = Effect.fnUntraced(function* (
 ) {
   const blocked: string[] = [];
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/web/consent`, (route) =>
+    routeBrowserApi(page, `${apiOrigin}/web/consent`, (route) =>
       route.fulfill({
         status: consent === "unknown" ? unavailableConsentStatus : availableConsentStatus,
         contentType: "application/json",
@@ -875,7 +878,7 @@ const installUnresolvedConsent = Effect.fnUntraced(function* (
     )
   );
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/**`, (route) => {
+    routeBrowserApi(page, `${apiOrigin}/**`, (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path === "/web/consent" || path === "/web/session/binding") return route.fallback();
       blocked.push(`${route.request().method()} ${path}`);

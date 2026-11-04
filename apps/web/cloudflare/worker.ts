@@ -39,6 +39,12 @@ const isApplication = (path: string): boolean =>
   applicationDocuments.has(path) ||
   applicationPrefixes.some((prefix) => path.startsWith(prefix)) ||
   path.includes(".");
+const acceptsDocument = (request: Request): boolean =>
+  request.method === "GET" &&
+  request.headers
+    .get("accept")
+    ?.split(",")
+    .some((type) => type.split(";")[0]?.trim() === "text/html") === true;
 // Reflect the same public contracts used by the browser. No private routes or arbitrary
 // destinations acquire app-host cookies merely because they share a path prefix.
 const publicRoutes: Array<Readonly<{ method: string; segments: ReadonlyArray<string> }>> = [];
@@ -177,7 +183,9 @@ export default {
         directDashboard(request, environment).pipe(Effect.orElseSucceed(unavailable))
       );
     }
-    if (isApplication(url.pathname)) return environment.ASSETS.fetch(request);
+    if (isApplication(url.pathname) || acceptsDocument(request)) {
+      return environment.ASSETS.fetch(request);
+    }
     if (!isPublicRequest(request, url.pathname)) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }

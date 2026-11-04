@@ -1,3 +1,5 @@
+import type { AuthoritativeStoreEnvironment } from "../sqlite-store/contract";
+import { withAuthoritativeStore } from "../sqlite-store/operations";
 import { makeWorkerCrypto } from "../secret-material/runtime";
 import { makeUserRecoveryAlarm } from "./internal/recovery-alarm";
 import {
@@ -746,7 +748,7 @@ export class UserTransactionCoordinator {
       id: Readonly<{ name: string }>;
       storage: Pick<DurableObjectStorage, "setAlarm" | "deleteAlarm" | "getAlarm">;
     }>,
-    env: CoordinatorEnvironment,
+    bindings: Omit<CoordinatorEnvironment, "DB"> & AuthoritativeStoreEnvironment,
     configuration: Readonly<{
       institutions: typeof registeredConnectionInstitutionIds;
       bank: Option.Option<ConnectionBankPreparation>;
@@ -757,6 +759,7 @@ export class UserTransactionCoordinator {
       activation: Option.none(),
     }
   ) {
+    const env = withAuthoritativeStore(bindings);
     this.state = state;
     this.recoveryAlarm = makeUserRecoveryAlarm(state.storage);
     this.institutions = configuration.institutions;
@@ -766,8 +769,8 @@ export class UserTransactionCoordinator {
     this.activation = Option.orElse(configuration.activation, () =>
       makeBancolombiaSandboxActivation({ environment: env, userId: state.id.name })
     );
-    this.erasureEnvironment = env;
-    this.env = withErasureRecovery(env);
+    this.erasureEnvironment = withAuthoritativeStore(env);
+    this.env = withErasureRecovery(this.erasureEnvironment);
     this.mcp = makeMcpResidency({
       userId: state.id.name,
       db: this.env.DB,

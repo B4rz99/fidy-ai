@@ -1,3 +1,4 @@
+import type { AuthoritativeStoreEnvironment } from "../sqlite-store/contract";
 import type { ProviderEnvironment } from "../provider-authentication/contract";
 import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
 
@@ -40,9 +41,11 @@ export type CoreHttpEnvironment = ProviderEnvironment &
     }>
   >;
 
+export type CoreHttpBindings = Omit<CoreHttpEnvironment, "DB"> & AuthoritativeStoreEnvironment;
+
 /** One private request, including an optional bounded post-commit publication lifetime. */
 export type CoreHttpHandler = (
   request: Request,
-  environment: CoreHttpEnvironment,
+  environment: CoreHttpBindings,
   context?: Pick<ExecutionContext, "waitUntil">
 ) => Promise<Response>;

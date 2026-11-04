@@ -1,3 +1,4 @@
+import { sqliteTestStorage } from "./sqlite-store/test-database.test-fixture";
 import { Miniflare } from "miniflare";
 import { type NativeImagePool, nativeImagePool } from "./d1-test-images.test-fixture";
 import { asynchronousNativeDatabase } from "./d1-test-bridge.test-fixture";
@@ -299,6 +300,10 @@ export const isolatedTestDatabases = (
   acquire: () => Promise<D1Database>;
   dispose: () => Promise<void>;
 }> => {
+  if (Bun.env.FIDY_TEST_SQLITE_STORE === "true") {
+    const pool = sqliteTestStorage();
+    return { acquire: () => pool.acquire().then(({ db }) => db), dispose: pool.dispose };
+  }
   const pool = bindingPool(false);
   return {
     acquire: () => pool.acquire().then((slot) => acquireDatabase(slot, options.transport)),
@@ -314,6 +319,7 @@ export const isolatedTestStorage = (): Readonly<{
   acquire: () => Promise<Readonly<{ db: D1Database; bucket: R2Bucket }>>;
   dispose: () => Promise<void>;
 }> => {
+  if (Bun.env.FIDY_TEST_SQLITE_STORE === "true") return sqliteTestStorage();
   const pool = bindingPool(true);
   return {
     acquire: () =>

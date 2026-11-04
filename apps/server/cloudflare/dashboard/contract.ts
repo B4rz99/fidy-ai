@@ -1,5 +1,6 @@
 import { CanonicalSnapshotResponse } from "../canonical-admission/contract";
 import { SqliteStoreRequest } from "../sqlite-store/contract";
+import { BrowserSessionBinding } from "../../src/shell/web-session/contract";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { type Effect, type Option, Schema } from "effect";
 import type {
@@ -54,6 +55,7 @@ export const NativeDashboardRequest = Schema.Struct({
   mode: Schema.Literals(["bound", "document"]),
 });
 export type NativeDashboardRequest = typeof NativeDashboardRequest.Type;
+const Bootstrap = Schema.optionalKey(Schema.toEncoded(BrowserSessionBinding));
 const Measurement = Schema.Struct({
   scans: Schema.Int,
   financialRows: Schema.Int,
@@ -66,9 +68,14 @@ export const NativeDashboardResult = Schema.Union([
     kind: Schema.Literal("view"),
     response: CanonicalSnapshotResponse,
     binding: WebSessionId,
+    bootstrap: Bootstrap,
     measurement: Measurement,
   }),
-  Schema.Struct({ kind: Schema.Literal("response"), response: CanonicalSnapshotResponse }),
+  Schema.Struct({
+    kind: Schema.Literal("response"),
+    response: CanonicalSnapshotResponse,
+    bootstrap: Bootstrap,
+  }),
 ]);
 export type NativeDashboardResult = typeof NativeDashboardResult.Type;
 export type NativeDashboardRead = Readonly<{

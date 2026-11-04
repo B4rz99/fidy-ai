@@ -1,3 +1,4 @@
+import { BrowserSessionBinding } from "../../../src/shell/web-session/contract";
 import type { Category } from "../../../src/core/categories/contract";
 import { WebSessionId } from "../../../src/core/web-session/contract";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -22,6 +23,7 @@ import { quotaStatusForUserSelection } from "../../quotas/operations";
 import {
   currentBrowserSessionLookup,
   prepareBrowserSessionMaterial,
+  readWebSessionSnapshotContext,
   resolveBoundCanonicalWebSession,
 } from "../../web-session/operations";
 import type { AuthenticatedWebSession, BoundWebSessionLookup } from "../../web-session/contract";
@@ -162,11 +164,8 @@ const admitSnapshot = (work: Work): Admission => {
     return recoverAdmission(work, cause);
   }
 };
-const snapshot = (work: Work): NativeDashboardResult => {
+const financialSnapshot = (work: Work, subject: AuthenticatedWebSession): NativeDashboardResult => {
   const { current, sql } = work;
-  const admission = admitSnapshot(work);
-  if ("result" in admission) return admission.result;
-  const subject = admission.subject;
   const retained = retainedDashboard(work);
   const document = Option.isSome(retained) ? retained.value.document : undefined;
   if (document === undefined) {
@@ -216,6 +215,31 @@ const snapshot = (work: Work): NativeDashboardResult => {
     measurement: facts.measurement,
   };
 };
+const snapshot = (
+  work: Work,
+  mode: NativeDashboardRead["input"]["mode"]
+): NativeDashboardResult => {
+  const admission = admitSnapshot(work);
+  if ("result" in admission) return admission.result;
+  const subject = admission.subject;
+  const bootstrap =
+    mode === "document"
+      ? Schema.encodeSync(BrowserSessionBinding)({
+          binding: Schema.decodeSync(WebSessionId)(subject.id),
+          initial: Option.some(
+            Effect.runSync(
+              readWebSessionSnapshotContext({
+                db: work.unit.database,
+                subject,
+                current: work.current,
+                execute: work.unit.run,
+              })
+            )
+          ),
+        })
+      : undefined;
+  return { ...financialSnapshot(work, subject), ...(bootstrap === undefined ? {} : { bootstrap }) };
+};
 const validate = (result: NativeDashboardResult): NativeDashboardResult => {
   if (new TextEncoder().encode(encodeResult(result)).byteLength > maximumResultBytes) {
     throw new Error("Dashboard result exceeds resource budget");
@@ -249,7 +273,9 @@ export const readAuditedSqliteDashboard = (
         const current = Effect.runSyncWith(services)(Clock.currentTimeMillis);
         const lookup = currentBrowserSessionLookup({ ...material.value, current });
         unit.run([fence]);
-        return validate(snapshot({ unit, lookup, current, sql: read.storage.sql }));
+        return validate(
+          snapshot({ unit, lookup, current, sql: read.storage.sql }, read.input.mode)
+        );
       })
     );
   }).pipe(Effect.orElseSucceed(unavailable));

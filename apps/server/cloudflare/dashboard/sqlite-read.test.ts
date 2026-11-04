@@ -676,3 +676,98 @@ it.live("validates retained layout before committing pressure, Audit or a respon
     ).toEqual({ count: 0 });
   })
 );
+
+it.live(
+  "returns same-transaction document bootstrap metadata with the exact native financial view",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      yield* io(() =>
+        fixture.db.batch([
+          fixture.db
+            .prepare(
+              "UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=?,time_zone='Pacific/Kiritimati' WHERE id=?"
+            )
+            .bind(fixture.current, fixture.current + 604800000, userId),
+          fixture.db
+            .prepare(
+              "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','context-grant',?,'{}','disclosure','decision',?,?)"
+            )
+            .bind(userId, fixture.current, fixture.current),
+          fixture.db
+            .prepare(
+              "INSERT INTO user_documents(kind,user_id,document_json,revision) VALUES ('dashboard',?,?,19)"
+            )
+            .bind(
+              userId,
+              encodeJson({
+                title: "Contexto",
+                layout: {
+                  kind: "leaf",
+                  widget: {
+                    id: "30000000-0000-4000-8000-000000000001",
+                    type: "custom-metric",
+                    label: "Gastos",
+                    period: "this-month",
+                    aggregation: "sum",
+                  },
+                },
+              })
+            ),
+        ])
+      );
+      const initial = request();
+      initial.headers.delete(browserSessionBindingHeader);
+      expect(
+        yield* io(() => fixture.snapshot({ request: initial, mode: "document" }))
+      ).toMatchObject({
+        kind: "view",
+        binding: sessionId,
+        bootstrap: {
+          binding: sessionId,
+          initial: {
+            status: "Granted",
+            withdrawal: null,
+            profile: { data: { id: userId, timeZone: "Pacific/Kiritimati" } },
+          },
+        },
+        response: { status: 200, body: { data: { title: "Contexto", revision: 19 } } },
+      });
+    })
+);
+
+it.live(
+  "withholds the whole document when its identity Audit refuses and rolls back native admission",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      yield* io(() =>
+        fixture.db.batch([
+          fixture.db
+            .prepare("UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=? WHERE id=?")
+            .bind(fixture.current, fixture.current + 604800000, userId),
+          fixture.db
+            .prepare(
+              "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','context-grant',?,'{}','disclosure','decision',?,?)"
+            )
+            .bind(userId, fixture.current, fixture.current),
+          fixture.db.prepare(
+            "CREATE TRIGGER refuse_document_identity BEFORE INSERT ON audit_entries WHEN NEW.record_type='identity_read' BEGIN SELECT RAISE(ABORT,'identity_audit_refused'); END"
+          ),
+        ])
+      );
+      const initial = request();
+      initial.headers.delete(browserSessionBindingHeader);
+      expect(
+        yield* io(() => fixture.snapshot({ request: initial, mode: "document" }))
+      ).toMatchObject({ kind: "response", response: { status: 503 } });
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM canonical_request_buckets").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* io(() => fixture.db.prepare("SELECT count(*) AS count FROM audit_entries").first())
+      ).toEqual({ count: 0 });
+    })
+);

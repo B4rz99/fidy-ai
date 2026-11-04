@@ -1,3 +1,10 @@
+import type { CoreHttpBindings } from "../core-http/contract";
+import { makeCoreHttp } from "../core-http/runtime";
+import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
+import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
+import { NativeDashboardResult } from "./contract";
+import { freeAllowanceLimits } from "../../src/core/quotas/contract";
+import { allowancePeriod } from "../../src/core/quotas/operations";
 import { it } from "@effect/vitest";
 import { type Cause, DateTime, Effect, Schema } from "effect";
 import { afterAll, expect } from "vitest";
@@ -859,5 +866,389 @@ it.live(
           fixture.db.prepare("SELECT count(*) AS count FROM canonical_request_buckets").first()
         )
       ).toEqual({ count: 0 });
+    })
+);
+
+const patSnapshotFixture = Effect.gen(function* () {
+  const fixture = yield* setup;
+  const bearer = `fin_token001_${"c".repeat(43)}`;
+  const digest = new Uint8Array(
+    yield* io(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer)))
+  );
+  const document = {
+    title: "PAT nativo",
+    layout: {
+      kind: "leaf",
+      widget: {
+        id: "30000000-0000-4000-8000-000000000001",
+        type: "custom-metric",
+        label: "Gastos",
+        period: "this-month",
+        aggregation: "sum",
+      },
+    },
+  };
+  yield* io(() =>
+    fixture.db.batch([
+      fixture.db
+        .prepare(
+          "INSERT INTO pats(id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id) VALUES ('native-pat',?,'token001',?,'Native agent','[\"read\"]',30,?,?,?,'native-pat-request')"
+        )
+        .bind(userId, digest, fixture.current, fixture.current, fixture.current + 3600000),
+      fixture.db
+        .prepare(
+          "INSERT INTO user_documents(kind,user_id,document_json,revision) VALUES ('dashboard',?,?,7)"
+        )
+        .bind(userId, encodeJson(document)),
+      fixture.db
+        .prepare(
+          "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES ('pat-wide',?,'123456789012345678901234567890.01','COP','outflow',(SELECT id FROM categories LIMIT 1),?,?)"
+        )
+        .bind(userId, fixture.current, fixture.current),
+    ])
+  );
+  return { ...fixture, bearer };
+});
+
+it.live(
+  "commits PAT admission, exact financial view, allowance and accepted activity in one native Store read",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* patSnapshotFixture;
+      const actual = yield* io(() =>
+        fixture.snapshot({
+          mode: "bound",
+          request: new Request("https://core.internal/dashboard/view", {
+            headers: { authorization: `Bearer ${fixture.bearer}` },
+          }),
+        })
+      );
+      expect(actual).toMatchObject({
+        response: {
+          status: 200,
+          body: {
+            data: {
+              title: "PAT nativo",
+              revision: 7,
+              layout: {
+                widget: {
+                  result: {
+                    moneyGroups: [
+                      { currency: "COP", outflow: { amount: "123456789012345678901234567890.01" } },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE record_type='credential_call' AND operation='dashboard.getDashboardView' AND outcome='accepted'"
+            )
+            .first()
+        )
+      ).toEqual({ count: 1 });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT last_used_at_ms AS lastUsed FROM pats WHERE id='native-pat'")
+            .first<number>("lastUsed")
+        )
+      ).toBeGreaterThan(0);
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS count FROM commercial_allowance_consumptions WHERE user_id=? AND allowance='canonical_call'"
+            )
+            .bind(userId)
+            .first()
+        )
+      ).toEqual({ count: 1 });
+    })
+);
+
+type PATFixture = Effect.Success<typeof patSnapshotFixture>;
+const patRead = (
+  fixture: PATFixture,
+  headers: Record<string, string> = {}
+): Promise<NativeDashboardResult> =>
+  fixture
+    .snapshot({
+      mode: "bound",
+      request: new Request("https://core.internal/dashboard/view", {
+        headers: { authorization: `Bearer ${fixture.bearer}`, ...headers },
+      }),
+    })
+    .then(Schema.decodeUnknownSync(NativeDashboardResult));
+
+it.live(
+  "refuses a live PAT without read scope, audits the refusal and discloses standing without charging",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* patSnapshotFixture;
+      yield* io(() =>
+        fixture.db.prepare("UPDATE pats SET scopes_json='[\"write\"]' WHERE id='native-pat'").run()
+      );
+      expect(yield* io(() => patRead(fixture))).toMatchObject({
+        response: {
+          status: 403,
+          body: { error: { code: "scope_missing" } },
+          headers: { "fidy-canonical-remaining": "50" },
+        },
+      });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT outcome FROM audit_entries WHERE record_type='credential_call'")
+            .all()
+        )
+      ).toMatchObject({ results: [{ outcome: "rejected" }] });
+    })
+);
+
+it.live(
+  "replays the exact PAT envelope without reading changed facts or spending another commercial unit",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* patSnapshotFixture;
+      const headers = { "Fidy-Retry-Key": "native-snapshot-retry" };
+      const first = yield* io(() => patRead(fixture, headers));
+      yield* io(() =>
+        fixture.db.prepare("UPDATE transactions SET amount='2.01' WHERE id='pat-wide'").run()
+      );
+      const replay = yield* io(() => patRead(fixture, headers));
+      expect(replay.response.body).toEqual(first.response.body);
+      expect(replay.response.status).toBe(200);
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ count: 1 });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE record_type='credential_call' AND outcome='accepted'"
+            )
+            .first()
+        )
+      ).toEqual({ count: 2 });
+      yield* io(() =>
+        fixture.db
+          .prepare("UPDATE pats SET revoked_at_ms=? WHERE id='native-pat'")
+          .bind(fixture.current)
+          .run()
+      );
+      expect(yield* io(() => patRead(fixture, headers))).toMatchObject({
+        response: { status: 401 },
+      });
+    })
+);
+
+it.live("rolls back the PAT charge, pressure and activity when native financial Audit fails", () =>
+  Effect.gen(function* () {
+    const fixture = yield* patSnapshotFixture;
+    yield* io(() =>
+      fixture.db.exec(
+        "CREATE TRIGGER reject_native_pat_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' BEGIN SELECT RAISE(ABORT,'synthetic native audit failure'); END"
+      )
+    );
+    expect(yield* io(() => patRead(fixture))).toMatchObject({
+      response: { status: 503, body: { error: { code: "unavailable" } } },
+    });
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+          .first()
+      )
+    ).toEqual({ count: 0 });
+    expect(
+      yield* io(() =>
+        fixture.db.prepare("SELECT count(*) AS count FROM canonical_request_buckets").first()
+      )
+    ).toEqual({ count: 0 });
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT last_used_at_ms AS lastUsed FROM pats WHERE id='native-pat'")
+          .first()
+      )
+    ).toEqual({ lastUsed: null });
+  })
+);
+
+it.live("preserves an exhausted PAT allowance refusal without releasing financial data", () =>
+  Effect.gen(function* () {
+    const fixture = yield* patSnapshotFixture;
+    const period = DateTime.toEpochMillis(
+      allowancePeriod(DateTime.makeUnsafe(fixture.current)).startsAt
+    );
+    yield* io(() =>
+      fixture.db
+        .prepare(
+          `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<${freeAllowanceLimits.canonical_call}) INSERT INTO commercial_allowance_consumptions SELECT ?, 'canonical_call', 'prior-'||i, ?, ?, 1 FROM n`
+        )
+        .bind(userId, period, fixture.current)
+        .run()
+    );
+    expect(yield* io(() => patRead(fixture))).toMatchObject({
+      response: {
+        status: 429,
+        body: { error: { code: "quota_exhausted" } },
+        headers: { "fidy-canonical-remaining": "0" },
+      },
+    });
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+          .first()
+      )
+    ).toEqual({ count: freeAllowanceLimits.canonical_call });
+  })
+);
+
+it.live("applies the trusted source envelope only to unresolved native PAT calls", () =>
+  Effect.gen(function* () {
+    const fixture = yield* patSnapshotFixture;
+    const statuses: number[] = [];
+    for (let index = 0; index < 11; index++) {
+      const result = yield* io(() =>
+        patRead(fixture, {
+          authorization: `Bearer fin_missing1_${"c".repeat(43)}`,
+          "x-canonical-source": "d".repeat(64),
+        })
+      );
+      statuses.push(result.response.status);
+    }
+    expect(statuses).toEqual([...Array.from({ length: 10 }, () => 401), 429]);
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "SELECT count(*) AS count FROM audit_entries WHERE operation='dashboard.getDashboardView'"
+          )
+          .first()
+      )
+    ).toEqual({ count: 0 });
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+          .first()
+      )
+    ).toEqual({ count: 0 });
+  })
+);
+
+const coreBindings = (store: NonNullable<CoreHttpBindings["SQLITE_STORE"]>): CoreHttpBindings => ({
+  SQLITE_STORE: store,
+  SQLITE_STORE_MANIFEST: "fixture",
+  SQLITE_STORE_EPOCH: "fixture",
+  RELEASE_GIT_SHA: "0".repeat(40),
+  CONTRACT_DIGEST: "0".repeat(64),
+  BROWSER_ORIGIN: "https://app.fidy.test",
+  USER_TRANSACTION_COORDINATOR: {
+    getByName: () => ({
+      fetch: () => Promise.reject(new Error("Dashboard read must not enter coordinator")),
+    }),
+  },
+  KAPSO_API_KEY: "unused",
+  KAPSO_WEBHOOK_SECRET: "unused",
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
+  WHATSAPP_BUSINESS_PORTFOLIO_ID: "unused",
+  CLOUDFLARE_ACCESS_ISSUER: "https://unused.example",
+  CLOUDFLARE_ACCESS_AUDIENCE: "unused",
+  WOMPI_ENVIRONMENT: "sandbox",
+  WOMPI_PUBLIC_KEY: "",
+  WOMPI_PRIVATE_KEY: "",
+  WOMPI_INTEGRITY_SECRET: "",
+});
+
+it.live(
+  "routes public PAT Dashboard JSON and HTML through one actual native snapshot with no legacy SQL",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* patSnapshotFixture;
+      let nativeCalls = 0;
+      let genericQueries = 0;
+      const environment = coreBindings({
+        getByName: () => ({
+          query: (): Promise<never> => {
+            genericQueries++;
+            return Promise.reject(new Error("No legacy SQL"));
+          },
+          dashboard: (input): Promise<unknown> => {
+            nativeCalls++;
+            return fixture.snapshot(input);
+          },
+        }),
+      });
+      const core = makeCoreHttp({
+        telemetry: cloudflareWorkerTelemetry,
+        institutions: registeredConnectionInstitutionIds,
+      });
+      for (const accept of ["application/json", "text/html"]) {
+        const response = yield* io(() =>
+          core(
+            new Request("https://api.fidy.test/dashboard/view", {
+              headers: { authorization: `Bearer ${fixture.bearer}`, accept },
+            }),
+            environment
+          )
+        );
+        expect(response.status).toBe(200);
+        expect(response.headers.get("content-type")).toContain(accept);
+        const body = yield* io(() => response.text());
+        expect(body).toContain("PAT nativo");
+        expect(body).not.toContain("NaN");
+      }
+      expect(nativeCalls).toBe(2);
+      expect(genericQueries).toBe(0);
+    })
+);
+
+it.live(
+  "preserves cookie lifetime binding before PAT work without falling back to cookie authority",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* patSnapshotFixture;
+      const cookie = `__Host-fidy_session=${"c".repeat(43)}`;
+      expect((yield* io(() => patRead(fixture, { cookie }))).response.status).toBe(401);
+      expect(
+        (yield* io(() => patRead(fixture, { cookie, [browserSessionBindingHeader]: sessionId })))
+          .response.status
+      ).toBe(200);
+      expect(
+        (yield* io(() =>
+          patRead(fixture, {
+            cookie,
+            [browserSessionBindingHeader]: sessionId,
+            authorization: "Bearer invalid",
+          })
+        )).response.status
+      ).toBe(401);
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ count: 1 });
     })
 );

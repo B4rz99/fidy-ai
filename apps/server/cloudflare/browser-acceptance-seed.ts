@@ -2,6 +2,11 @@ import { Clock, DateTime, Effect, Schema } from "effect";
 import { DisclosureSnapshot } from "../src/shell/consent/contract";
 import { currentDisclosureFor } from "../src/shell/consent/operations";
 import { installTestSchema, isolatedTestStorage } from "./d1-test-fixture";
+import {
+  DashboardAssessmentConfiguration,
+  dashboardAssessmentIdentities,
+} from "./browser-acceptance/contract";
+import { browserAssessmentConfiguration } from "./browser-acceptance/operations";
 
 const storage = isolatedTestStorage();
 export const { db, bucket: erasureRegistry } = await storage.acquire();
@@ -157,7 +162,11 @@ await seedIdentity({
   consentId: "24000000-0000-4000-8000-000000000672",
 });
 await Promise.all(
-  [...navigationIdentities, ...recurringIsolatedIdentities].map((identity) =>
+  [
+    ...navigationIdentities,
+    ...recurringIsolatedIdentities,
+    ...dashboardAssessmentIdentities.slice(1),
+  ].map((identity) =>
     seedIdentity({
       userId: identity.userId,
       bsuid: `CO.${identity.key}`,
@@ -428,9 +437,44 @@ await db
   .run();
 
 /** Prepare an isolated navigation workspace before measured work; ordinary regressions use small. */
-export const prepareBrowserAssessment = (): Promise<void> => {
-  const dataset = Bun.env.FIDY_ASSESSMENT ?? "small";
+export const prepareBrowserAssessment = (): Promise<
+  Readonly<{ configuration: typeof DashboardAssessmentConfiguration.Encoded; layoutDigest: string }>
+> => {
+  const configuration = browserAssessmentConfiguration();
+  if (configuration.backend !== "legacy-d1") {
+    return Promise.reject(new Error("The audited native Dashboard fixture binding is unavailable"));
+  }
   return import("./browser-assessment.test-fixture").then(({ seedAssessment }) =>
-    Effect.runPromise(seedAssessment({ db, dataset, now }))
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* seedAssessment({
+          db,
+          dataset: configuration.dataset,
+          now: DateTime.toEpochMillis(configuration.epoch),
+          users: dashboardAssessmentIdentities
+            .slice(0, configuration.users)
+            .map((identity) => identity.userId),
+          history: configuration.history,
+          layout: configuration.layout,
+        });
+        const first = dashboardAssessmentIdentities[0];
+        const document = yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT document_json FROM user_documents WHERE user_id=? AND kind='dashboard'"
+            )
+            .bind(first.userId)
+            .first("document_json")
+        );
+        const encoded = yield* Schema.decodeUnknownEffect(Schema.String)(document);
+        const prepared = yield* Schema.encodeEffect(DashboardAssessmentConfiguration)(
+          configuration
+        );
+        return {
+          configuration: prepared,
+          layoutDigest: new Bun.CryptoHasher("sha256").update(encoded).digest("hex"),
+        };
+      })
+    )
   );
 };

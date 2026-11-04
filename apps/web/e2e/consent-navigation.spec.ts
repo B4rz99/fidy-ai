@@ -6,7 +6,7 @@ import { playwright } from "./playwright-runtime";
 import { openUpgradeThroughCore, signInNavigationThroughCore } from "./real-core-fixture";
 
 const { test, expect } = playwright;
-const { api } = browserAcceptanceTopology();
+const { app: api } = browserAcceptanceTopology();
 const successStatus = 200;
 
 const readConsentOnUnload = (url: string): void =>

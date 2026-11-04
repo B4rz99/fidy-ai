@@ -6,7 +6,11 @@ import {
   measureCanonicalPhase,
   reportedSqlDuration,
 } from "./internal/response-timing";
-import type { CanonicalSnapshotResponse } from "./contract";
+import type {
+  CanonicalSnapshotCall,
+  CanonicalSnapshotMaterial,
+  CanonicalSnapshotResponse,
+} from "./contract";
 import { OAuthNativeReview } from "../oauth-confirmation/contract";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
 import { Clock, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
@@ -61,9 +65,18 @@ import {
   acquireRequest,
   admitUnresolvedSource,
   prepareBoundBrowserSnapshot,
+  prepareSnapshotProtection,
   releaseRequest,
+  sourceAdmissionStatement,
 } from "./internal/protection";
-import { type Replay, claimReplay, completeReplay, retainedReplay } from "./internal/replay";
+import {
+  type Replay,
+  claimReplay,
+  completeReplay,
+  decodeReplayRead,
+  prepareReplayRead,
+  retainedReplay,
+} from "./internal/replay";
 
 type RequestCall<E, R> = Readonly<{
   db: D1Database;
@@ -313,6 +326,8 @@ const replayResponse = (replay: Replay): Response => {
   return new Response(replay.body.value, { status: replay.status.value, headers });
 };
 const forbiddenHttpStatus = 403;
+const rateLimitedHttpStatus = 429;
+const unauthorizedHttpStatus = 401;
 /** A withdrawn-Consent refusal is public recovery guidance, never the original financial body. Rebuild the closed refusal instead of turning it into an invalid-credential response. */
 const deniedDisclosure = (response: Response): Effect.Effect<Response> => {
   if (response.status !== forbiddenHttpStatus) return Effect.succeed(noAuthority());
@@ -486,9 +501,19 @@ const recoverAcceptance = <E, R>(
     }
     return Option.getOrElse(yield* replayOf(call), unavailable);
   });
-const acceptanceStatements = <E, R>(
-  call: MeteredCall<E, R>
-): ReadonlyArray<D1PreparedStatement> => {
+type AcceptanceCall = Pick<
+  MeteredCall<never, never>,
+  | "db"
+  | "caller"
+  | "operation"
+  | "current"
+  | "inputHash"
+  | "identity"
+  | "retryKey"
+  | "scopes"
+  | "consumptionIdentity"
+>;
+const acceptanceStatements = (call: AcceptanceCall): ReadonlyArray<D1PreparedStatement> => {
   const { db, caller, operation, current, inputHash, identity, retryKey, scopes } = call;
   if (caller._tag === "WebSession") return [];
   return [
@@ -1148,3 +1173,300 @@ export const canonicalSnapshotPressureRefusal = (cause: unknown): boolean =>
   /^(?:D1_(?:EXEC_)?ERROR: )?canonical_request_(?:rate|concurrency): SQLITE_CONSTRAINT(?: \(extended: SQLITE_CONSTRAINT_TRIGGER\))?$/u.test(
     cause.message
   );
+
+const supportsCanonicalSnapshot = (operation: CatalogOperation): boolean =>
+  operation.id === "dashboard.getDashboardView" &&
+  operation.method === "GET" &&
+  operation.route === "/dashboard/view" &&
+  operation.policy.requiredTier === "free" &&
+  operation.policy.kind === "query" &&
+  operation.policy.agentConfirmation === "not-required" &&
+  Option.contains(userOwnedAgentCapability(operation.policy.access), "read");
+
+/** Native snapshots validate and hash request material before entering the database transaction. */
+export const prepareCanonicalSnapshotMaterial = (
+  input: Readonly<{ operation: CatalogOperation; request: Request }>
+): Effect.Effect<CanonicalSnapshotMaterial, CanonicalAdmissionUnavailable> =>
+  Effect.gen(function* () {
+    if (!supportsCanonicalSnapshot(input.operation)) {
+      return yield* new CanonicalAdmissionUnavailable({ cause: "Unsupported native snapshot" });
+    }
+    const valid = yield* validatedCanonicalInput(input);
+    const wire = Option.fromNullishOr(input.request.headers.get("Fidy-Retry-Key"));
+    const key = Option.flatMap(wire, Schema.decodeUnknownOption(CanonicalRetryKey));
+    const retryKey = Option.isSome(key)
+      ? Option.some(yield* cryptoHash(key.value))
+      : Option.none<string>();
+    return {
+      operation: input.operation,
+      valid,
+      retryKey,
+      invalidRetryKey: Option.isSome(wire) && Option.isNone(key),
+    };
+  });
+
+type NativeCall = CanonicalSnapshotCall & AcceptanceCall;
+const snapshotJson = (
+  status: number,
+  body: Schema.Json,
+  headers: Record<string, string> = {}
+): CanonicalSnapshotResponse => ({
+  status,
+  body,
+  headers: { "content-type": "application/json", "cache-control": "no-store", ...headers },
+});
+const snapshotInvalid = (message: string): CanonicalSnapshotResponse =>
+  snapshotJson(unsuccessfulHttpStatus, {
+    error: { code: "validation_failed", message, fields: [] },
+    next: [],
+  });
+const snapshotNoAuthority = (): CanonicalSnapshotResponse =>
+  canonicalSnapshotFailure("unauthenticated");
+const snapshotStanding = (
+  call: CanonicalSnapshotCall,
+  response: CanonicalSnapshotResponse
+): CanonicalSnapshotResponse => {
+  const rows = call.execute(
+    prepareAuthorizedQuotaRead({
+      db: call.db,
+      userId: call.caller.value.userId,
+      current: call.current,
+      authority: proof(credentialAt(call.caller, call.current)),
+    })
+  );
+  return attachCanonicalSnapshotStanding({
+    response,
+    row: rows[1]?.results[0],
+    current: call.current,
+  });
+};
+const snapshotRefusal = (
+  call: CanonicalSnapshotCall,
+  response: CanonicalSnapshotResponse
+): CanonicalSnapshotResponse => {
+  const rows = call.execute([
+    prepareCanonicalAdmissionRefusal({
+      db: call.db,
+      authority: credentialAt(call.caller, call.current),
+      id: newId(),
+      operation: call.material.operation.id,
+      current: call.current,
+    }),
+  ]);
+  return rows[0]?.meta.changes === 1 ? snapshotStanding(call, response) : snapshotNoAuthority();
+};
+const snapshotScope = (
+  call: CanonicalSnapshotCall,
+  scopes: ReadonlyArray<CanonicalCapability>
+): "accepted" | "unauthenticated" | "scope_missing" => {
+  const rows = call.execute([
+    bind(call.db, proof(credentialAt(call.caller, call.current))),
+    bind(call.db, proof(authorityAt(call.caller, call.current, scopes))),
+  ]);
+  if (rows[0]?.results.length !== 1) return "unauthenticated";
+  return rows[1]?.results.length === 1 ? "accepted" : "scope_missing";
+};
+const snapshotScopeRefusal = (call: CanonicalSnapshotCall): CanonicalSnapshotResponse =>
+  snapshotRefusal(
+    call,
+    snapshotJson(forbiddenHttpStatus, {
+      error: {
+        code: "scope_missing",
+        message: "This credential lacks the required operation scope.",
+      },
+      next: [],
+    })
+  );
+const hasCompletedReplay = (replay: Replay): boolean =>
+  replay.state === "completed" && Option.isSome(replay.status) && Option.isSome(replay.body);
+const snapshotReplay = (call: NativeCall): Option.Option<CanonicalSnapshotResponse> => {
+  if (Option.isNone(call.retryKey)) return Option.none();
+  const replay = decodeReplayRead(
+    call.execute([
+      prepareReplayRead({
+        db: call.db,
+        userId: call.caller.value.userId,
+        retryKey: call.retryKey.value,
+        current: call.current,
+      }),
+    ])[0]?.results[0]
+  );
+  if (Option.isNone(replay)) return Option.none();
+  if (replay.value.operation !== call.operation.id || replay.value.inputHash !== call.inputHash) {
+    return Option.some(
+      snapshotRefusal(
+        call,
+        snapshotInvalid("The retry key is already bound to different operation inputs.")
+      )
+    );
+  }
+  if (!hasCompletedReplay(replay.value)) {
+    return Option.some(snapshotRefusal(call, canonicalSnapshotFailure("unavailable")));
+  }
+  return Option.some(completedSnapshotReplay(call, replay.value, call.retryKey.value));
+};
+const completedSnapshotReplay = (
+  call: NativeCall,
+  replay: Replay,
+  retryKey: string
+): CanonicalSnapshotResponse => {
+  const authority = externalAuthority(call.caller, call.current, call.scopes);
+  const auditId = newId();
+  const accepted = Option.getOrThrow(replay.status) < unsuccessfulHttpStatus;
+  const rows = call.execute([
+    prepareCanonicalReplayAccess({
+      db: call.db,
+      authority,
+      id: auditId,
+      operation: call.operation.id,
+      current: call.current,
+      outcome: accepted ? "accepted" : "rejected",
+      retainedResponseProof: {
+        sql: "SELECT 1 FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND identity = ? AND operation = ? AND input_digest = ? AND state = 'completed' AND accepted_at_ms = ? AND accepted_at_ms > ?",
+        params: [
+          call.caller.value.userId,
+          retryKey,
+          replay.identity,
+          call.operation.id,
+          call.inputHash,
+          replay.acceptedAt,
+          call.current - canonicalRetryLifetimeMs,
+        ],
+      },
+    }),
+    ...replayPATActivity({
+      db: call.db,
+      authority,
+      accepted,
+      current: call.current,
+      auditId,
+      operation: call.operation,
+    }),
+  ]);
+  if (!replayReceiptComplete({ rows, accepted: accepted && authority.table === "pats" })) {
+    throw new Error("Canonical replay Audit refused");
+  }
+  const body = Schema.decodeSync(Schema.fromJsonString(Schema.Json))(
+    Option.getOrThrow(replay.body)
+  );
+  return snapshotStanding(call, snapshotJson(Option.getOrThrow(replay.status), body));
+};
+const snapshotExhausted = (call: NativeCall): CanonicalSnapshotResponse =>
+  snapshotRefusal(
+    call,
+    snapshotJson(rateLimitedHttpStatus, {
+      error: {
+        code: "quota_exhausted",
+        message: "Your Free canonical-call allowance is exhausted.",
+        allowance: "canonical_call",
+        resetsAt: DateTime.formatIso(allowancePeriod(DateTime.makeUnsafe(call.current)).resetsAt),
+      },
+      next: [],
+    })
+  );
+const snapshotAccepted = (call: NativeCall): CanonicalSnapshotResponse => {
+  const replay = snapshotReplay(call);
+  if (Option.isSome(replay)) return replay.value;
+  try {
+    call.execute(acceptanceStatements(call));
+  } catch (cause) {
+    if (quotaFailure(cause) === "exhausted") return snapshotExhausted(call);
+    if (quotaFailure(cause) === "authority") return snapshotNoAuthority();
+    throw cause;
+  }
+  const response = call.work();
+  if (Option.isSome(call.retryKey)) {
+    const body = Schema.encodeSync(Schema.fromJsonString(Schema.Json))(response.body);
+    const rows = call.execute([
+      completeReplay({
+        db: call.db,
+        userId: call.caller.value.userId,
+        retryKey: call.retryKey.value,
+        identity: call.identity,
+        response: new Response(null, {
+          status: response.status,
+          headers: { ...response.headers, "content-type": "application/json" },
+        }),
+        body,
+      }),
+    ]);
+    if (rows[0]?.meta.changes !== 1) throw new Error("Canonical replay completion refused");
+  }
+  return snapshotStanding(call, response);
+};
+const snapshotInputRefusal = (
+  input: CanonicalSnapshotCall
+): Option.Option<CanonicalSnapshotResponse> => {
+  const valid = input.material.valid;
+  if (Option.isNone(valid)) {
+    return Option.some(
+      snapshotRefusal(input, snapshotInvalid("Invalid canonical operation input."))
+    );
+  }
+  const scoped = snapshotScope(input, valid.value.scopes);
+  if (scoped === "unauthenticated") return Option.some(snapshotNoAuthority());
+  if (scoped === "scope_missing") return Option.some(snapshotScopeRefusal(input));
+  if (input.material.invalidRetryKey) {
+    return Option.some(snapshotRefusal(input, snapshotInvalid("Invalid canonical retry key.")));
+  }
+  return Option.none();
+};
+/** Execute existing canonical scope, pressure, replay, commercial accounting and standing in one synchronous native unit. */
+export const runCanonicalSnapshotAdmission = (
+  input: CanonicalSnapshotCall
+): CanonicalSnapshotResponse => {
+  if (!supportsCanonicalSnapshot(input.material.operation)) {
+    throw new Error("Unsupported native snapshot");
+  }
+  const scope = userOwnedAgentCapability(input.material.operation.policy.access);
+  const primary = snapshotScope(input, Option.toArray(scope));
+  if (primary === "unauthenticated") return snapshotNoAuthority();
+  try {
+    input.execute(
+      prepareSnapshotProtection({
+        db: input.db,
+        current: input.current,
+        statement: proof(credentialAt(input.caller, input.current)),
+      })
+    );
+  } catch (cause) {
+    if (canonicalSnapshotPressureRefusal(cause)) {
+      return snapshotStanding(input, canonicalSnapshotFailure("rate_limited"));
+    }
+    throw cause;
+  }
+  if (primary === "scope_missing") return snapshotScopeRefusal(input);
+  const refusal = snapshotInputRefusal(input);
+  if (Option.isSome(refusal)) return refusal.value;
+  const valid = Option.getOrThrow(input.material.valid);
+  const identity = newId();
+  return snapshotAccepted({
+    ...input,
+    operation: input.material.operation,
+    scopes: valid.scopes,
+    identity,
+    consumptionIdentity: identity,
+    inputHash: valid.inputHash,
+    retryKey: input.material.retryKey,
+  });
+};
+
+/** Only a 401 outcome enters the ingress-owned keyed source envelope; no credential or address is retained. */
+export const protectCanonicalSnapshotSource = (
+  input: Readonly<{
+    db: D1Database;
+    request: Request;
+    current: number;
+    execute: CanonicalSnapshotCall["execute"];
+    response: CanonicalSnapshotResponse;
+  }>
+): CanonicalSnapshotResponse => {
+  if (input.response.status !== unauthorizedHttpStatus) return input.response;
+  const source = input.request.headers.get("x-canonical-source");
+  if (source === null) return input.response;
+  if (!/^[0-9a-f]{64}$/u.test(source)) return canonicalSnapshotFailure("unavailable");
+  const rows = input.execute([
+    sourceAdmissionStatement({ db: input.db, current: input.current, source }),
+  ]);
+  return rows[0]?.results.length === 1 ? input.response : canonicalSnapshotFailure("rate_limited");
+};

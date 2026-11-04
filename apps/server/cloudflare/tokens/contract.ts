@@ -1,3 +1,4 @@
+import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import type { HostedCanonicalCaller } from "../canonical-work/contract";
 import type { PATActivityAuthority } from "../../src/shell/audit/contract";
 import type { PATSubject } from "../../src/shell/tokens/contract";
@@ -32,4 +33,14 @@ export type PATActivityRead = Readonly<{
   shortId: string;
   current: number;
   authority: PATActivityAuthority;
+}>;
+
+/** Irreversible lookup material prepared before a native snapshot; it grants no User authority. */
+export type CanonicalPATMaterial = Readonly<{ shortId: string; digest: Uint8Array }>;
+export type CanonicalPATSnapshot = Readonly<{
+  db: D1Database;
+  material: CanonicalPATMaterial;
+  operation: CatalogOperation;
+  current: number;
+  execute: (statements: ReadonlyArray<D1PreparedStatement>) => ReadonlyArray<D1Result>;
 }>;

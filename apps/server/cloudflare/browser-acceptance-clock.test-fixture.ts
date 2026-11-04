@@ -1,5 +1,5 @@
 import { setSystemTime } from "bun:test";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
 
 const maximumAdvanceMilliseconds = 5_000;
 export const AcceptanceClockAdvance = Schema.Struct({
@@ -8,7 +8,11 @@ export const AcceptanceClockAdvance = Schema.Struct({
     Schema.isLessThanOrEqualTo(maximumAdvanceMilliseconds)
   ),
 });
-const origin = Effect.runSync(Clock.currentTimeMillis);
+const assessmentEpoch = Option.fromUndefinedOr(Bun.env.FIDY_ASSESSMENT_EPOCH);
+const origin = Option.match(assessmentEpoch, {
+  onNone: () => Effect.runSync(Clock.currentTimeMillis),
+  onSome: (value) => DateTime.toEpochMillis(Schema.decodeSync(Schema.DateTimeUtcFromString)(value)),
+});
 let monotonicOrigin = performance.now();
 let advancedMilliseconds = 0;
 let pausedAt = Option.none<number>();
@@ -35,3 +39,5 @@ export const advanceAcceptanceClock = (milliseconds: number): void => {
   advancedMilliseconds += milliseconds;
   synchronizeAcceptanceClock();
 };
+
+if (Option.isSome(assessmentEpoch)) synchronizeAcceptanceClock();

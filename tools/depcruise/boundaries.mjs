@@ -14,6 +14,7 @@ const compositionRoots = new Set([
   "cloudflare/core-worker.ts",
   "cloudflare/sqlite-store/adapter-worker.test-fixture.ts",
   "cloudflare/erasure/candidate-worker.ts",
+  "cloudflare/erasure/imported-worker.test-fixture.ts",
   "cloudflare/release-smoke-worker.ts",
   "cloudflare/recovery-lifecycle/concurrency.test-fixture.ts",
   "cloudflare/recovery-lifecycle/queued-worker.test-fixture.ts",

@@ -59,12 +59,29 @@ const paint = Schema.Struct({
 type Profile = "desktop" | "mobile";
 type Journey = "direct" | "return";
 type RequestObservation = {
+  path: string;
+  retryAfter: string;
+  hostClock: string;
+  nativeClock: string;
   kind: "view" | "document" | "catalog" | "other";
   status: number;
   phases: string;
   responseBytes: number;
   requestDurationMs: number;
   reportedRecoveryBatches: number;
+  nativeCalls: Readonly<
+    Record<
+      | "dashboardRpc"
+      | "entryRpc"
+      | "genericRpc"
+      | "r2Get"
+      | "r2Head"
+      | "r2Put"
+      | "r2Delete"
+      | "r2List",
+      number
+    >
+  >;
   representation: "financial-html" | "financial-json" | "shell" | "other";
 };
 type Sample = DashboardObservation &
@@ -112,6 +129,23 @@ const responseRepresentation = (
   }
   return "other";
 };
+const nativeCalls = (response: Response): RequestObservation["nativeCalls"] => {
+  const read = (name: string): number =>
+    Option.getOrElse(
+      decodeRecoveryBatches(response.headers()[`fidy-assessment-${name}`]),
+      () => -1
+    );
+  return {
+    dashboardRpc: read("native-rpc"),
+    entryRpc: read("entry-rpc"),
+    genericRpc: read("generic-rpc"),
+    r2Get: read("r2-get"),
+    r2Head: read("r2-head"),
+    r2Put: read("r2-put"),
+    r2Delete: read("r2-delete"),
+    r2List: read("r2-list"),
+  };
+};
 const observeRequests = (page: Page): RequestObservation[] => {
   const requests: RequestObservation[] = [];
   page.on("response", (response) => {
@@ -120,8 +154,13 @@ const observeRequests = (page: Page): RequestObservation[] => {
     const kind = requestKind(response);
     const entry = {
       kind,
+      path: url.pathname,
+      retryAfter: response.headers()["retry-after"] ?? "",
+      hostClock: response.headers()["fidy-assessment-host-clock"] ?? "",
+      nativeClock: response.headers()["fidy-assessment-native-clock"] ?? "",
       representation: responseRepresentation(response, kind),
       status: financialStatus(response),
+      nativeCalls: nativeCalls(response),
       phases: response.headers()["server-timing"] ?? "",
       reportedRecoveryBatches: Option.getOrElse(
         decodeRecoveryBatches(response.headers()["fidy-recovery-batches"]),
@@ -277,6 +316,37 @@ type ActorClock = Readonly<{
   tab: number;
   clock: ReturnType<typeof calibrateDashboardClock>;
 }>;
+const observedNativeSample = (sample: Sample): boolean => {
+  const financial = sample.requests.filter(
+    (request) => request.kind === "view" || request.kind === "document"
+  );
+  const call = financial[0];
+  return (
+    financial.length === 1 &&
+    call?.nativeCalls.dashboardRpc === 1 &&
+    call.nativeCalls.genericRpc === 0 &&
+    call.nativeCalls.r2Get === 1 &&
+    call.nativeCalls.entryRpc === (sample.journey === "direct" ? 1 : 0)
+  );
+};
+const observedNativeCohort = (
+  input: Readonly<{ state: CohortState; backend: string }>
+): object => ({
+  databaseRoundTrips:
+    input.backend === "audited-native-guarded"
+      ? "actual provider dashboardRpc and genericRpc calls recorded per response; no inferred counts"
+      : "unavailable in browser transport; complete native public request measurements required separately",
+  recoveryChecks:
+    input.backend === "audited-native-guarded"
+      ? "actual invocation-local native and Core R2 operations per response; unavailable remains -1"
+      : "unavailable in browser transport; native public request measurements required separately",
+  fixtureTransport:
+    input.backend === "audited-native-guarded"
+      ? "full-app elapsed includes loopback private document operator HTTP; Store work uses actual provider RPC"
+      : "legacy D1 path",
+  nativeCountersObserved:
+    input.backend === "audited-native-guarded" && input.state.samples.every(observedNativeSample),
+});
 const cohortBody = (
   input: CohortAttachment,
   configuration: typeof DashboardAssessmentConfiguration.Encoded,
@@ -311,10 +381,7 @@ const cohortBody = (
     cpuRate: profile === "desktop" ? 1 : mobileCpuRate,
     readiness:
       "fresh successful document or fragment; browser-local first eligible frame, with next-frame confirmation",
-    databaseRoundTrips:
-      "unavailable in browser transport; complete native public request measurements required separately",
-    recoveryChecks:
-      "unavailable in browser transport; complete native public request measurements required separately",
+    ...observedNativeCohort({ state, backend: configuration.backend }),
     samplesPerActor: repetitions,
     scheduleSatisfied:
       state.samples.every((sample) => sample.offeredAtMs - sample.scheduledAtMs < paceMs) &&

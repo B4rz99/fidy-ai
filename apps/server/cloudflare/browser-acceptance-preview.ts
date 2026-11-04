@@ -1,3 +1,11 @@
+import { assessmentDocumentOperator } from "./browser-assessment-native.test-fixture";
+import {
+  assessmentCounterHeaders,
+  assessmentNativeContext,
+  emptyAssessmentCounters,
+  observeAssessmentBucket,
+  observeAssessmentNamespace,
+} from "./sqlite-store/assessment-observation.test-fixture";
 import { makeConnectionFixture } from "./browser-acceptance-connections.test-fixture";
 import { captureWhatsApp, whatsappOperator } from "./browser-acceptance-whatsapp";
 import {
@@ -22,6 +30,8 @@ import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
 import {
   accessUserId,
+  assessmentNativeDocument,
+  assessmentNativeNamespace,
   budgetEditingUserId,
   budgetUserId,
   dashboardUserId,
@@ -511,6 +521,17 @@ const assessmentOperator = (request: Request): Option.Option<Response> => {
     })
   );
 };
+const nativeDocumentOperator = (request: Request): Option.Option<Promise<Response>> =>
+  operatorRoute(request, "/assessment/document", "POST") && assessmentNativeDocument !== undefined
+    ? Option.some(
+        assessmentDocumentOperator({
+          request,
+          read: assessmentNativeDocument,
+          incomingOrigin: isolatedBrowserOrigin,
+          logicalOrigin: browserOrigin,
+        })
+      )
+    : Option.none();
 const operator = Bun.serve({
   hostname: "127.0.0.1",
   port: operatorPort,
@@ -518,7 +539,9 @@ const operator = Bun.serve({
     synchronizeAcceptanceClock();
     if (request.headers.has("origin")) return new Response(null, { status: 403 });
 
-    const assessment = assessmentOperator(request);
+    const assessment = nativeDocumentOperator(request).pipe(
+      Option.orElse(() => assessmentOperator(request))
+    );
     if (Option.isSome(assessment)) return assessment.value;
 
     if (operatorRoute(request, "/assertion", "GET")) {
@@ -584,9 +607,15 @@ const digestHexLength = 64;
 const syntheticGrantKeyLength = 43;
 const coreEnvironment: Parameters<typeof core.fetch>[1] = {
   BANCOLOMBIA_SANDBOX_GRANT_KEY: "A".repeat(syntheticGrantKeyLength),
-  DB: browserDatabase,
+  DB: assessmentNativeNamespace === undefined ? browserDatabase : undefined,
+  SQLITE_STORE:
+    assessmentNativeNamespace === undefined
+      ? undefined
+      : observeAssessmentNamespace(assessmentNativeNamespace),
+  SQLITE_STORE_MANIFEST: assessmentNativeNamespace === undefined ? undefined : "fixture",
+  SQLITE_STORE_EPOCH: assessmentNativeNamespace === undefined ? undefined : "fixture",
   ERASURE_REQUIRED: "true",
-  ERASURE_BUCKET: erasureRegistry,
+  ERASURE_BUCKET: observeAssessmentBucket(erasureRegistry),
   OPENAI_API_KEY: "synthetic-browser-openai",
   CONTRACT_DIGEST: "a".repeat(digestHexLength),
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
@@ -618,32 +647,43 @@ const server = Bun.serve({
   port: publicPort,
   tls: { cert: Bun.file(certificate), key: Bun.file(key) },
   fetch: (request) => {
-    synchronizeAcceptanceClock();
-    const ingress = bridgeIngressRequest(request);
-    ingress.headers.set(
-      "cf-connecting-ip",
-      request.headers.get("x-acceptance-source") ?? "127.0.0.1"
-    );
-    ingress.headers.delete("x-acceptance-source");
-    if (acceptanceMode !== "shared" && ingress.headers.get("origin") === isolatedBrowserOrigin) {
-      ingress.headers.set("origin", browserOrigin);
-    }
-    return worker
-      .fetch(ingress, {
-        RELEASE_GIT_SHA: "browser-acceptance",
-        BROWSER_ORIGIN: browserOrigin,
-        LOCAL_CANONICAL_READ_BEARER: "",
-        PAT_ADMISSION_KEY: "a".repeat(admissionKeyLength),
-        CORE: {
-          fetch: (forwarded) => core.fetch(new Request(forwarded), coreEnvironment),
-        },
-      })
-      .then(bridgeBrowserOrigin)
-      .then((response) => {
-        response.headers.set("x-acceptance-clock", "controlled");
-
-        return response;
-      });
+    const counters = emptyAssessmentCounters();
+    return assessmentNativeContext.run(counters, () => {
+      synchronizeAcceptanceClock();
+      const ingress = bridgeIngressRequest(request);
+      ingress.headers.set(
+        "cf-connecting-ip",
+        request.headers.get("x-acceptance-source") ?? "127.0.0.1"
+      );
+      ingress.headers.delete("x-acceptance-source");
+      if (acceptanceMode !== "shared" && ingress.headers.get("origin") === isolatedBrowserOrigin) {
+        ingress.headers.set("origin", browserOrigin);
+      }
+      return worker
+        .fetch(ingress, {
+          RELEASE_GIT_SHA: "browser-acceptance",
+          BROWSER_ORIGIN: browserOrigin,
+          LOCAL_CANONICAL_READ_BEARER: "",
+          PAT_ADMISSION_KEY: "a".repeat(admissionKeyLength),
+          CORE: {
+            fetch: (forwarded) => core.fetch(new Request(forwarded), coreEnvironment),
+          },
+        })
+        .then(bridgeBrowserOrigin)
+        .then((response) => {
+          response.headers.set("x-acceptance-clock", "controlled");
+          response.headers.set(
+            "fidy-assessment-host-clock",
+            String(Effect.runSync(Clock.currentTimeMillis))
+          );
+          if (assessmentNativeNamespace !== undefined) {
+            for (const [name, value] of Object.entries(assessmentCounterHeaders(counters))) {
+              response.headers.set(name, value);
+            }
+          }
+          return response;
+        });
+    });
   },
 });
 

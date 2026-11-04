@@ -100,9 +100,14 @@ Compare sidecars from clean, fully sampled checkouts:
 bun apps/web/scripts/dashboard-qualification.ts /absolute/baseline.json /absolute/candidate.json
 ```
 
-`FIDY_DASHBOARD_BACKEND=legacy-d1` selects the current fixture. The two audited native backend
-labels deliberately refuse preparation until the fixture invokes the real authoritative native
-Actor path. A legacy facade cannot qualify native routing. The comparator reports complete local,
+`FIDY_DASHBOARD_BACKEND=legacy-d1` selects the legacy D1 fixture. `audited-native-guarded` selects
+one actual native Store namespace for fixture seeding, Core, coordinators and the named document
+entry. Its closed bootstrap and logical clock are test-only. `audited-native-qualified` continues
+to refuse preparation until provider qualification is complete. A D1-shaped facade cannot qualify
+native routing. Invocation-local `nativeCalls` record actual Store Dashboard RPCs, generic Store
+RPCs, named document entry RPCs and R2 operations separately. Missing observations remain -1. Full
+browser elapsed includes the private fixture HTTP document bridge; do not subtract it. Clock
+headers retain the observed logical clock in each realm. The comparator reports complete local,
 remote application-added and complete remote request measurements as `not-measured`; these require
 separate end-to-end public-request observations and measured native RPC/R2/control-plane counters.
 No browser fixture or loopback paint result establishes these targets.
@@ -112,8 +117,10 @@ Browser samples retain API request counts, response bytes and phase timings wher
 subtotal when exposed; -1 means absent. It is not a total across Worker/coordinator boundaries or
 an R2 generation-read count.
 A byte/duration sentinel of -1 means the browser transport could not obtain that observation.
-Database round trips and R2 generation-check counts are explicitly unavailable from browser
-transport: measure those separately at the native Dashboard public request seam. Do not infer them
+Legacy browser transport cannot observe database round trips or R2 generation checks. The native
+guarded fixture exposes actual private binding and R2 operation counts through test-only response
+headers; these are independent observations, rather than inferred phase durations. Measure the
+complete native public request seam separately for its latency target. Do not infer them
 from phase duration or reuse earlier counts for a different revision.
 
 The complete 1/8/32-User, two-tab ingestion, remote-provider, wide-Money, maximum-layout and paired

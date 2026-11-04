@@ -52,17 +52,15 @@ const title = (entry: DashboardWidgetView): string => {
       return entry.widget.label;
   }
 };
+type RenderContext = DashboardView & Readonly<{ dateFormatter: Intl.DateTimeFormat }>;
 const calendarMonthWidth = 7;
-const transactionDate = (date: DateTime.Utc, view: DashboardView): string =>
-  new Intl.DateTimeFormat(view.context.locale, {
-    timeZone: view.context.timeZone,
-    dateStyle: "medium",
-  }).format(date.epochMilliseconds);
+const transactionDate = (date: DateTime.Utc, view: RenderContext): string =>
+  view.dateFormatter.format(date.epochMilliseconds);
 const localDate = (date: DateTime.Utc, zone: string): string =>
   DateTime.formatIsoDate(DateTime.setZone(date, DateTime.zoneMakeNamedUnsafe(zone)));
 const transactions = (
   entry: Extract<DashboardWidgetView["result"], { transactions: unknown }>,
-  view: DashboardView
+  view: RenderContext
 ): string => {
   if (entry.transactions.length === 0) return "<p>No hay transacciones en esta lista</p>";
   return `<ul class="dashboard-html-transactions">${entry.transactions
@@ -119,7 +117,7 @@ const chart = (result: ChartResult): string => {
     ? "<p>No hay transacciones en este periodo</p>"
     : `<div class="dashboard-html-chart">${series}</div>`;
 };
-const widget = (entry: DashboardWidgetView, view: DashboardView): string => {
+const widget = (entry: DashboardWidgetView, view: RenderContext): string => {
   const result = entry.result;
   let body: string;
   if ("transactions" in result) body = transactions(result, view);
@@ -131,10 +129,18 @@ const widget = (entry: DashboardWidgetView, view: DashboardView): string => {
   }
   return `<section class="dashboard-html-card" data-widget-id="${escape(entry.widget.id)}"><h2>${escape(title(entry))}</h2>${body}</section>`;
 };
-const layout = (node: DashboardView["layout"], view: DashboardView): string => {
+const layout = (node: DashboardView["layout"], view: RenderContext): string => {
   if (node.kind === "leaf") return widget(node.widget, view);
   return `<div class="dashboard-html-layout dashboard-html-${node.axis}">${node.children.map((child) => `<div data-weight="${child.weight}">${layout(child.node, view)}</div>`).join("")}</div>`;
 };
 
-export const renderHtml = (view: DashboardView): string =>
-  `<main class="dashboard-surface dashboard-html" data-dashboard-read-state="ready"><header class="dashboard-header"><h1>${escape(view.title)}</h1><form method="get" action="/app/dashboard"><button type="submit" name="customize" value="1" data-dashboard-customize>Personalizar</button></form></header><div aria-label="Diseño responsivo del tablero">${layout(view.layout, view)}</div></main>`;
+export const renderHtml = (view: DashboardView): string => {
+  const context: RenderContext = {
+    ...view,
+    dateFormatter: new Intl.DateTimeFormat(view.context.locale, {
+      timeZone: view.context.timeZone,
+      dateStyle: "medium",
+    }),
+  };
+  return `<main class="dashboard-surface dashboard-html" data-dashboard-read-state="ready"><header class="dashboard-header"><h1>${escape(view.title)}</h1><form method="get" action="/app/dashboard"><button type="submit" name="customize" value="1" data-dashboard-customize>Personalizar</button></form></header><div aria-label="Diseño responsivo del tablero">${layout(view.layout, context)}</div></main>`;
+};

@@ -155,6 +155,7 @@ const directDashboard = Effect.fnUntraced(function* (request: Request, environme
   for (const name of ["content-length", "etag", "last-modified", "content-encoding"]) {
     resultHeaders.delete(name);
   }
+  resultHeaders.set("fidy-dashboard-status", String(financial.status));
   resultHeaders.set("cache-control", "no-store");
   resultHeaders.set("content-type", "text/html; charset=utf-8");
   return new Response(output, { headers: resultHeaders });

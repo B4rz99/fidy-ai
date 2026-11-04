@@ -1,5 +1,5 @@
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
-import type { CDPSession, Page } from "@playwright/test";
+import type { CDPSession, Page, Response } from "@playwright/test";
 import { Config, Effect, Option, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { prepareAssessmentFixture } from "./assessment-fixture";
@@ -14,7 +14,7 @@ import {
 } from "./dashboard-measurement";
 
 const { test, expect } = playwright;
-const { api: apiOrigin } = browserAcceptanceTopology();
+const { api: apiOrigin, app: appOrigin } = browserAcceptanceTopology();
 const defaultRepetitions = 20;
 const maximumRepetitions = 1000;
 const repetitions = Effect.runSync(
@@ -61,7 +61,7 @@ const paint = Schema.Struct({
 type Profile = "desktop" | "mobile";
 type Journey = "direct" | "return";
 type RequestObservation = {
-  kind: "view" | "catalog" | "other";
+  kind: "view" | "document" | "catalog" | "other";
   status: number;
   phases: string;
   responseBytes: number;
@@ -86,18 +86,24 @@ const measuredPaint = (page: Page): Promise<typeof paint.Type> =>
 const decodeRecoveryBatches = Schema.decodeUnknownOption(
   Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
 );
+const requestKind = (response: Response): RequestObservation["kind"] => {
+  const path = new URL(response.url()).pathname;
+  if (path === "/dashboard/view") return "view";
+  if (path === "/app/dashboard" && response.request().isNavigationRequest()) return "document";
+  if (path === "/dashboard/catalog") return "catalog";
+  return "other";
+};
+const financialStatus = (response: Response): number =>
+  Number(response.headers()["fidy-dashboard-status"] ?? response.status());
 const observeRequests = (page: Page): RequestObservation[] => {
   const requests: RequestObservation[] = [];
   page.on("response", (response) => {
     const url = new URL(response.url());
-    if (url.origin !== apiOrigin) return;
-    const path = url.pathname;
-    let kind: RequestObservation["kind"] = "other";
-    if (path === "/dashboard/view") kind = "view";
-    if (path === "/dashboard/catalog") kind = "catalog";
+    if (url.origin !== apiOrigin && url.origin !== appOrigin) return;
+    const kind = requestKind(response);
     const entry = {
       kind,
-      status: response.status(),
+      status: financialStatus(response),
       phases: response.headers()["server-timing"] ?? "",
       reportedRecoveryBatches: Option.getOrElse(
         decodeRecoveryBatches(response.headers()["fidy-recovery-batches"]),
@@ -172,9 +178,22 @@ const navigateDashboard = Effect.fnUntraced(function* (
 });
 const failedOutcome = (requests: ReadonlyArray<RequestObservation>): DashboardOutcome => {
   if (requests.some((entry) => entry.status >= refusalStatus)) return "refused";
-  if (requests.some((entry) => entry.kind === "view")) return "timeout";
+  if (requests.some((entry) => entry.kind === "view" || entry.kind === "document")) {
+    return "timeout";
+  }
   return "no-fresh-read";
 };
+const dashboardMeasurementDiagnostics = (): unknown => ({
+  marks: performance
+    .getEntriesByType("mark")
+    .map((entry) => ({ name: entry.name, at: entry.startTime })),
+  reads: performance
+    .getEntriesByType("resource")
+    .filter((entry) => new URL(entry.name).pathname === "/dashboard/view")
+    .map((entry) => entry.toJSON()),
+  pending: document.querySelector('[data-dashboard-read-state="pending"]') !== null,
+  ready: document.querySelector('[data-dashboard-read-state="ready"]') !== null,
+});
 const runCohort = Effect.fnUntraced(function* (page: Page, cdp: CDPSession, samples: Sample[]) {
   const requests = observeRequests(page);
   for (let index = 0; index < repetitions; index++) {
@@ -184,7 +203,11 @@ const runCohort = Effect.fnUntraced(function* (page: Page, cdp: CDPSession, samp
       const outcome = yield* navigateDashboard(page, cdp, journey).pipe(Effect.result);
       if (
         outcome._tag === "Success" &&
-        requests.some((entry) => entry.kind === "view" && entry.status === successfulStatus)
+        requests.some(
+          (entry) =>
+            (entry.kind === "view" || entry.kind === "document") &&
+            entry.status === successfulStatus
+        )
       ) {
         samples.push({
           journey,
@@ -194,6 +217,10 @@ const runCohort = Effect.fnUntraced(function* (page: Page, cdp: CDPSession, samp
           requests: requests.slice(),
         });
       } else {
+        const diagnostics = yield* Effect.tryPromise(() =>
+          page.evaluate(dashboardMeasurementDiagnostics)
+        );
+        process.stdout.write(`DASHBOARD_MEASUREMENT_FAILURE ${encode(diagnostics)}\n`);
         samples.push({
           journey,
           outcome: failedOutcome(requests),
@@ -228,7 +255,7 @@ const attachCohort = Effect.fnUntraced(function* (
         pacedIntervalMs: paceMs,
         cpuRate: profile === "desktop" ? 1 : mobileCpuRate,
         readiness:
-          "completed fresh 200 view read, pending-to-ready commit on return; first eligible frame timestamp with following-frame confirmation",
+          "completed private 200 document or fresh 200 view read, pending-to-ready commit on return; first eligible frame timestamp with following-frame confirmation",
         databaseRoundTrips:
           "unavailable in browser transport; native Dashboard integration separately measures them",
         recoveryChecks:
@@ -259,6 +286,22 @@ for (const profile of ["desktop", "mobile"] as const) {
         const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
         yield* prepareProfile(page, cdp, profile);
         yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+        yield* Effect.tryPromise(() =>
+          expect(
+            page
+              .getByRole("button", { name: "Crear tablero", exact: true })
+              .or(page.getByRole("button", { name: "Personalizar", exact: true }))
+          ).toBeVisible()
+        );
+        if (
+          yield* Effect.tryPromise(() =>
+            page.getByRole("button", { name: "Crear tablero", exact: true }).isVisible()
+          )
+        ) {
+          yield* Effect.tryPromise(() =>
+            page.getByRole("button", { name: "Crear tablero", exact: true }).click()
+          );
+        }
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeEnabled()
         );

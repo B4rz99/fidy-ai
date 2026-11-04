@@ -6,7 +6,6 @@ import { type ComponentType, type JSX, type ReactNode, useState } from "react";
 import type { FidyClient } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
-import { PendingRead } from "@/ui/components/pending-read";
 import { dashboardHtmlQuery } from "./html-query";
 
 const initialization = Atom.family((apiClient: FidyClient) =>
@@ -65,7 +64,7 @@ const DashboardHtmlRead = ({ apiClient, children }: Props): JSX.Element => {
   if (state._tag === "Initial" || state.waiting) {
     return (
       <div data-dashboard-read-state="pending">
-        <PendingRead label="Cargando tablero" />
+        <output aria-busy="true">Cargando tablero…</output>
       </div>
     );
   }

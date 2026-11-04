@@ -2111,6 +2111,16 @@ it(
             }))
           );
         }
+        const representation = yield* Effect.tryPromise(() =>
+          send(db, 0, { path: "/dashboard/view", method: "GET", body: {} })
+        );
+        expect(representation.status).toBe(200);
+        const html = yield* Effect.tryPromise(() => representation.text());
+        expect(html).toContain(`${"8".repeat(64)}.08 COP`);
+        expect(html).toContain(`${"8".repeat(64)}.08 KWD`);
+        expect(html).toContain(`${"8".repeat(64)}.08 USD`);
+        expect(html).toContain('aria-label="Serie COP"');
+        expect(html).toContain('<svg role="img"');
         expect(largestRead).toBeLessThanOrEqual(16_387);
         expect(planningRowsRead).toBeLessThanOrEqual(100_000);
       })
@@ -2406,6 +2416,16 @@ it(
         expect(BigDecimal.format(bar.widget.result.spent.amount)).toBe("25.02");
         if (bar.widget.result.status.type !== "under") throw new Error("Expected remaining Budget");
         expect(BigDecimal.format(bar.widget.result.status.remaining.amount)).toBe("74.98");
+        const representation = yield* Effect.tryPromise(() =>
+          send(db, 0, { path: "/dashboard/view", method: "GET", body: {} })
+        );
+        const html = yield* Effect.tryPromise(() => representation.text());
+        expect(html).toContain("74.98 COP");
+        expect(html).toContain("25.02 COP");
+        expect(html).toContain("100 COP");
+        expect(html).toContain('<progress aria-label="Presupuesto utilizado"');
+        expect(html).toContain('class="dashboard-html-transactions"');
+        expect(html).toContain("Salidas");
       })
     ),
   30_000

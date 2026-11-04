@@ -43,6 +43,7 @@ describe("same-origin Dashboard document transport", () => {
           )
         );
         expect(response.headers.get("cache-control")).toBe("no-store");
+        expect(response.headers.get("fidy-dashboard-status")).toBe("200");
         expect(yield* Effect.tryPromise(() => response.text())).toContain(html);
         expect(observed.map((request) => new URL(request.url).origin)).toEqual([
           "https://api.fidyapp.com",

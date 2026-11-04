@@ -1,4 +1,4 @@
-import type { Route } from "@playwright/test";
+import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { playwright } from "./playwright-runtime";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
@@ -14,6 +14,26 @@ const refuseDashboard = (route: Route): Promise<void> =>
     status: 503,
     json: { error: { code: "unavailable", message: "Retry." }, next: [] },
   });
+const captureReadScreenshots = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise(() =>
+    page.screenshot({ path: "test-results/dashboard-html-desktop.png", fullPage: true })
+  );
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+  yield* Effect.tryPromise(() =>
+    page.screenshot({ path: "test-results/dashboard-html-mobile.png", fullPage: true })
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.screenshot({ path: "test-results/dashboard-html-mobile-dark.png", fullPage: true })
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Activar tema claro", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 1280, height: 720 }));
+});
+
 test("Dashboard absence requires creation and direct entry paints one escaped HTML read without catalog", ({
   page,
   request,
@@ -56,6 +76,7 @@ test("Dashboard absence requires creation and direct entry paints one escaped HT
       );
       expect(requests).not.toContain("/dashboard/view");
       expect(requests).not.toContain("/dashboard/catalog");
+      yield* captureReadScreenshots(page);
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Personalizar", exact: true }).click()
       );
@@ -63,8 +84,27 @@ test("Dashboard absence requires creation and direct entry paints one escaped HT
         expect(page.getByRole("list", { name: "Widgets disponibles para arrastrar" })).toBeVisible()
       );
       expect(requests.filter((path) => path === "/dashboard/catalog")).toHaveLength(1);
+      yield* Effect.tryPromise(() =>
+        page.screenshot({ path: "test-results/dashboard-customize-desktop.png", fullPage: true })
+      );
     })
   ));
+
+const openCreatedDashboard = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
+  expect(
+    (yield* Effect.tryPromise(() =>
+      request.post(`${operator}/dashboard/reset?dashboard=true`)
+    )).status()
+  ).toBe(noContentStatus);
+  yield* Effect.tryPromise(() => signInDashboardPerformanceThroughCore({ page, request }));
+  yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Crear tablero", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeEnabled()
+  );
+});
 
 test("Dashboard return fetches one fresh same-origin HTML fragment and a failed return withholds financial content", ({
   page,
@@ -72,11 +112,7 @@ test("Dashboard return fetches one fresh same-origin HTML fragment and a failed 
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => signInDashboardPerformanceThroughCore({ page, request }));
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeEnabled()
-      );
+      yield* openCreatedDashboard(page, request);
       yield* Effect.sleep("12 seconds");
       yield* Effect.tryPromise(() =>
         page.getByRole("link", { name: "Transacciones", exact: true }).click()
@@ -123,6 +159,68 @@ test("Dashboard return fetches one fresh same-origin HTML fragment and a failed 
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeEnabled()
+      );
+    })
+  ));
+
+const holdFirstDashboard =
+  (held: Route[]) =>
+  (route: Route): Promise<void> | void => {
+    if (held.length === 0) {
+      held.push(route);
+      return;
+    }
+    return route.fulfill({
+      contentType: "text/html",
+      body: '<main data-dashboard-read-state="ready"><h1>Visita vigente</h1></main>',
+    });
+  };
+const routeCount = (routes: Route[]) => (): number => routes.length;
+
+test("a superseded Dashboard transfer cannot replace a later mounted visit", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* openCreatedDashboard(page, request);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Transacciones", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
+      );
+      const held: Route[] = [];
+      yield* Effect.tryPromise(() => page.route("**/dashboard/view", holdFirstDashboard(held)));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Tablero", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.locator('[data-dashboard-read-state="pending"]')).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect.poll(routeCount(held)).toBe(1));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Transacciones", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Tablero", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Visita vigente", exact: true })).toBeVisible()
+      );
+      for (const route of held) {
+        yield* Effect.tryPromise(() =>
+          route.fulfill({
+            contentType: "text/html",
+            body: '<main data-dashboard-read-state="ready"><h1>Visita obsoleta</h1></main>',
+          })
+        );
+      }
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Visita vigente", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Visita obsoleta", exact: true })).toHaveCount(0)
       );
     })
   ));

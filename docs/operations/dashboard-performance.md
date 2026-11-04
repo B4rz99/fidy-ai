@@ -6,8 +6,8 @@ sampling. Each pair contains a cache-cleared direct document entry, followed by 
 Transactions and return to Dashboard. Returning does not replace the document or authentication
 registry. Neither journey can qualify from retained display alone.
 
-The probe timestamps navigation in the browser. A completed fresh view resource, successful HTTP
-status, committed ready state and an enabled Dashboard action are required. Returns additionally
+The probe timestamps navigation in the browser. A completed fresh view resource or a private initial HTML document with matching successful
+financial status, committed ready state and an enabled Dashboard action are required. Returns additionally
 require a pending-to-ready transition after that navigation started. The first eligible animation
 frame supplies elapsed time; the following frame confirms readiness and records its extra elapsed
 time separately. This is a browser paint-opportunity measurement, not compositor presentation timing.
@@ -71,3 +71,16 @@ from phase duration or reuse earlier counts for a different revision.
 The complete 1/8/32-User, two-tab ingestion, remote-provider, wide-Money, maximum-layout and paired
 backend/renderer qualification belongs to issue #1852. Loopback browser elapsed time does not prove
 the 0.1 ms full-local-request or 6 ms remote application-added targets, or a 10× improvement.
+
+The HTML candidate uses the same probe clock and two-frame confirmation. Its direct document
+qualifies only while the initial private transfer declares a successful financial read and the
+navigation itself is successful. `fidy-dashboard-status` carries that financial status for the
+request log; an HTTP 200 asset shell cannot conceal a refused financial read. Returns still require
+a fresh successful fragment and a pending-to-ready commit. Direct documents include all assets in
+the measured navigation; document and fragment durations therefore describe different journeys.
+
+Chromium may expose `PerformanceResourceTiming.responseStatus` as zero for a successful proxied
+fragment. Zero is unavailable status metadata. Fragment qualification therefore combines a completed
+fresh resource, the current visit's pending-to-ready typed-client commit and the independently
+recorded public HTTP 200 response. Refused reads never enter successful statistics. The direct
+probe additionally verifies the navigation response status before accepting its initial marker.

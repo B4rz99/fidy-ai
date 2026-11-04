@@ -75,59 +75,58 @@ export const installDashboardNavigationMeasurement = (): void => {
 
 /** A retained display without a new completed read cannot qualify. Duration stays on the browser clock. */
 export const installDashboardMeasurement = (): void => {
-  let responseAt = -1;
-  let pendingAt = -1;
-  let scheduledAt = -1;
+  const state = { response: -1, pending: -1, scheduled: -1 };
   const observerWork = new Map<number, number>();
   const started = (): number =>
     performance.getEntriesByName("dashboard-navigation-start").at(-1)?.startTime ?? 0;
   const ready = (): boolean =>
-    (document
+    document
       .querySelector('[data-dashboard-read-state="ready"] .dashboard-header button:enabled')
-      ?.getClientRects().length ?? 0) > 0;
+      ?.checkVisibility() === true;
+  const navigation = performance.getEntriesByType("navigation")[0];
+  const freshRead = (start: number): boolean =>
+    state.response >= start ||
+    (start === 0 &&
+      navigation instanceof PerformanceNavigationTiming &&
+      navigation.responseStatus === successfulStatus &&
+      document.getElementById("dashboard-initial")?.dataset.status === "200");
+  const successfulStatus = 200;
   const inspect = (): void => {
     const before = performance.now();
     const navigationStart = started();
     if (document.querySelector('[data-dashboard-read-state="pending"]') !== null) {
-      pendingAt = navigationStart;
+      state.pending = navigationStart;
     }
     const eligible =
-      responseAt >= navigationStart &&
-      (navigationStart === 0 || pendingAt === navigationStart) &&
+      freshRead(navigationStart) &&
+      (navigationStart === 0 || state.pending === navigationStart) &&
       ready() &&
-      scheduledAt !== navigationStart;
-    observerWork.set(
-      navigationStart,
-      (observerWork.get(navigationStart) ?? 0) + performance.now() - before
-    );
+      state.scheduled !== navigationStart;
+    const previousWork = observerWork.get(navigationStart) ?? 0;
+    observerWork.set(navigationStart, previousWork + performance.now() - before);
     if (!eligible) return;
-    scheduledAt = navigationStart;
+    state.scheduled = navigationStart;
     requestAnimationFrame(() => {
       const paintedAt = performance.now();
       requestAnimationFrame(() => {
         if (navigationStart !== started() || !ready()) return;
-        performance.mark("dashboard-fresh-paint", {
-          detail: {
-            durationMs: paintedAt - navigationStart,
-            confirmationOverheadMs: performance.now() - paintedAt,
-            observerWorkMs: observerWork.get(navigationStart) ?? 0,
-          },
-        });
+        const durationMs = paintedAt - navigationStart;
+        const confirmationOverheadMs = performance.now() - paintedAt;
+        const observerWorkMs = observerWork.get(navigationStart) ?? 0;
+        const detail = { durationMs, confirmationOverheadMs, observerWorkMs };
+        performance.mark("dashboard-fresh-paint", { detail });
       });
     });
   };
-  new MutationObserver(inspect).observe(document, {
-    subtree: true,
-    childList: true,
-    attributes: true,
-  });
+  const changes = { subtree: true, childList: true, attributes: true };
+  new MutationObserver(inspect).observe(document, changes);
   new PerformanceObserver((list) => {
     for (const entry of list.getEntries()) {
       if (
         entry instanceof PerformanceResourceTiming &&
         new URL(entry.name).pathname === "/dashboard/view"
       ) {
-        responseAt = entry.startTime;
+        state.response = entry.startTime;
       }
     }
     inspect();

@@ -5,6 +5,7 @@ import {
   type BudgetStatus,
 } from "../../../src/core/budgets/contract";
 import { advanceBudgetLatch } from "../../../src/core/budgets/operations";
+import type { CurrencyMismatch } from "../../../src/core/_shared/money";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { currentProactivityGrantQuery } from "../../consent/operations";
 import { newId } from "../../secret-material/operations";
@@ -21,32 +22,39 @@ export const prepareOptInFence = (
 
 const Marks = Schema.Struct({ highest_reached: BudgetMonthLatch.fields.highestReached });
 
-const findLatch = (
-  input: Readonly<{ db: D1Database; userId: string; status: BudgetStatus }>
-): Effect.Effect<Option.Option<BudgetMonthLatch>, Cause.UnknownError> =>
+const findLatches = (
+  input: Readonly<{ db: D1Database; userId: string; statuses: ReadonlyArray<BudgetStatus> }>
+): Effect.Effect<Option.Option<ReadonlyArray<BudgetMonthLatch>>, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const row = yield* Effect.tryPromise(() =>
-      input.db
-        .prepare(
-          "SELECT highest_reached FROM budget_month_latches WHERE user_id=? AND budget_id=? AND from_utc_ms=? AND time_zone=?"
+    if (input.statuses.length === 0) return Option.some([]);
+    const rows = yield* Effect.tryPromise(() =>
+      input.db.batch(
+        input.statuses.map((status) =>
+          input.db
+            .prepare(
+              "SELECT highest_reached FROM budget_month_latches WHERE user_id=? AND budget_id=? AND from_utc_ms=? AND time_zone=?"
+            )
+            .bind(
+              input.userId,
+              status.budget.id,
+              status.period.from.epochMilliseconds,
+              status.period.timeZone
+            )
         )
-        .bind(
-          input.userId,
-          input.status.budget.id,
-          input.status.period.from.epochMilliseconds,
-          input.status.period.timeZone
-        )
-        .first()
+      )
     );
-    const marks =
-      row === null
-        ? Option.some({ highest_reached: 0 as const })
-        : Schema.decodeUnknownOption(Marks)(row);
-    return Option.map(marks, (value) => ({
-      budgetId: input.status.budget.id,
-      period: input.status.period,
-      highestReached: value.highest_reached,
-    }));
+    if (rows.length !== input.statuses.length) return Option.none();
+    return Option.all(
+      input.statuses.map((status, index) => {
+        const marks = Schema.decodeUnknownOption(Schema.Array(Marks))(rows[index]?.results);
+        if (Option.isNone(marks) || marks.value.length > 1) return Option.none();
+        return Option.some({
+          budgetId: status.budget.id,
+          period: status.period,
+          highestReached: marks.value[0]?.highest_reached ?? 0,
+        });
+      })
+    );
   });
 
 const encodeCrossings = (
@@ -76,28 +84,27 @@ const encodeCrossings = (
     ).pipe(Effect.map((json) => ({ threshold, json })))
   );
 
-/** Commit monotone threshold evidence and at most one pending occurrence for each threshold. */
-export const reconcileStatus = ({
+const prepareStatus = ({
   db,
   userId,
   context,
   status,
+  latch,
 }: Readonly<{
   db: D1Database;
   userId: string;
   context: UserContext;
   status: BudgetStatus;
-}>): Effect.Effect<boolean> =>
+  latch: BudgetMonthLatch;
+}>): Effect.Effect<ReadonlyArray<D1PreparedStatement>, Schema.SchemaError | CurrencyMismatch> =>
   Effect.gen(function* () {
     const timeZone = context.timeZone;
     const budgetId = status.budget.id;
     const from = status.period.from.epochMilliseconds;
-    const latch = yield* findLatch({ db, userId, status });
-    if (Option.isNone(latch)) return false;
     const advanced = yield* advanceBudgetLatch({
       budget: status.budget,
       spent: status.spent,
-      latch: latch.value,
+      latch,
     });
     const next = advanced.latch;
     const detectedAt = yield* DateTime.now;
@@ -112,7 +119,7 @@ export const reconcileStatus = ({
       thresholds: advanced.newlyReached,
       detectedAt,
     });
-    const writes = [
+    return [
       db
         .prepare(`INSERT INTO budget_month_latches
       (user_id, budget_id, from_utc_ms, time_zone, highest_reached)
@@ -134,5 +141,26 @@ export const reconcileStatus = ({
         )
         .bind(userId, groupId, detectedAt.epochMilliseconds, userId, groupId),
     ];
-    return yield* Effect.tryPromise(() => db.batch(writes)).pipe(Effect.as(true));
+  });
+
+/** Commit the bounded report's monotone threshold evidence and one pending occurrence per crossing. */
+export const reconcileStatuses = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    context: UserContext;
+    statuses: ReadonlyArray<BudgetStatus>;
+  }>
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const latches = yield* findLatches(input);
+    if (Option.isNone(latches)) return false;
+    const writes: Array<D1PreparedStatement> = [];
+    for (const [index, status] of input.statuses.entries()) {
+      const latch = latches.value[index];
+      if (latch === undefined) return false;
+      writes.push(...(yield* prepareStatus({ ...input, status, latch })));
+    }
+    if (writes.length === 0) return true;
+    return yield* Effect.tryPromise(() => input.db.batch(writes)).pipe(Effect.as(true));
   }).pipe(Effect.orElseSucceed(() => false));

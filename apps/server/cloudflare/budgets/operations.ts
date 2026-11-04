@@ -67,7 +67,7 @@ import {
   reviewBudget,
   updateBudgetStatement,
 } from "./internal/budgets";
-import { prepareOptInFence, reconcileStatus } from "./internal/budget-latches";
+import { prepareOptInFence, reconcileStatuses } from "./internal/budget-latches";
 import {
   discoverUsers,
   findFirstCreation,
@@ -753,10 +753,7 @@ const reconcilePendingPeriod = ({
       now,
     });
     if (Option.isNone(report)) return false;
-    for (const status of report.value.statuses) {
-      if (!(yield* reconcileStatus({ db, userId, context, status }))) return false;
-    }
-    return true;
+    return yield* reconcileStatuses({ db, userId, context, statuses: report.value.statuses });
   });
 
 const pendingPeriod = Effect.fn(function* ({

@@ -5,28 +5,28 @@ import { budgetsFromRows } from "./budget-row";
 
 const maximumBudgetCount = 128;
 
-export const preparePlannedCaps = (
+const plannedCapsProjection = (
   input: Readonly<{
-    db: D1Database;
     month: string;
     includeInactive: boolean;
   }> &
     (Readonly<{ userId: string }> | Readonly<{ userSelection: OwnedStatement }>)
-): D1PreparedStatement => {
-  const { db, month, includeInactive } = input;
+): OwnedStatement => {
+  const { month, includeInactive } = input;
   const selection =
     "userId" in input ? { sql: "SELECT ? AS userId", params: [input.userId] } : input.userSelection;
   // The mounted credential selects at most one User; scalar equality retains the ordered cap index.
   const predicate =
     "userId" in input ? "b.user_id=?" : `b.user_id = (SELECT userId FROM (${selection.sql}))`;
-  return db
-    .prepare(`SELECT b.id,b.category_id,
+  return {
+    sql: `SELECT b.id,b.category_id,
       COALESCE((SELECT g.currency FROM (SELECT rowid,user_id,group_name,month,currency FROM budget_month_plan_records WHERE kind='currency') g WHERE g.user_id=b.user_id AND g.group_name=b.group_name AND g.month<=? ORDER BY g.month DESC LIMIT 1),b.currency) AS currency,
       COALESCE((SELECT p.cap FROM (SELECT rowid,user_id,budget_id,month,cap FROM budget_month_plan_records WHERE kind='cap') p WHERE p.user_id=b.user_id AND p.budget_id=b.id AND p.month<=? ORDER BY p.month DESC LIMIT 1),b.cap) AS cap,
       b.created_at_ms,b.updated_at_ms,b.group_name,
       CASE WHEN b.starts_month IS NULL OR b.starts_month<=? THEN 1 ELSE 0 END AS active_in_month FROM budgets b WHERE ${predicate} AND (?=1 OR b.starts_month IS NULL OR b.starts_month<=?)
-      ORDER BY b.currency,b.category_id LIMIT ${maximumBudgetCount + 1}`)
-    .bind(month, month, month, ...selection.params, includeInactive ? 1 : 0, month);
+      ORDER BY b.currency,b.category_id LIMIT ${maximumBudgetCount + 1}`,
+    params: [month, month, month, ...selection.params, includeInactive ? 1 : 0, month],
+  };
 };
 
 export const decodePlannedCaps = (
@@ -49,5 +49,30 @@ export const readPlannedCaps = (
 ): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
   Effect.tryPromise(() => preparePlannedCaps(input).all()).pipe(
     Effect.flatMap((rows) => decodePlannedCaps(rows.results)),
+    Effect.orElseSucceed(() => Option.none())
+  );
+
+export const preparePlannedCaps = (
+  input: Parameters<typeof plannedCapsProjection>[0] & Readonly<{ db: D1Database }>
+): D1PreparedStatement => {
+  const statement = plannedCapsProjection(input);
+  return input.db.prepare(statement.sql).bind(...statement.params);
+};
+
+export const readSqlitePlannedCaps = (
+  input: Readonly<{ sql: SqlStorage; userId: string; month: string }>
+): Effect.Effect<Option.Option<ReadonlyArray<Budget>>> =>
+  Effect.try(() => {
+    const statement = plannedCapsProjection({ ...input, includeInactive: true });
+    return input.sql
+      .exec(
+        statement.sql,
+        ...statement.params.map((value) =>
+          value instanceof Uint8Array ? value.slice().buffer : value
+        )
+      )
+      .toArray();
+  }).pipe(
+    Effect.flatMap(decodePlannedCaps),
     Effect.orElseSucceed(() => Option.none())
   );

@@ -1,3 +1,4 @@
+import { readSqliteDashboardTransactions as ownerReadSqliteDashboardTransactions } from "./internal/sqlite-dashboard";
 import { prepareSelectedDashboardLists as ownerPrepareSelectedDashboardLists } from "./internal/selected-dashboard-lists";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
 import { prepareBoundTransactionRead as ownerPrepareBoundRead } from "./internal/bound-history";
@@ -268,3 +269,8 @@ export const readBrowserTransactionPage = (
 /** Compose layout-selected bounded lists from authoritative effective Transactions. */
 export const prepareSelectedDashboardLists: typeof ownerPrepareSelectedDashboardLists = (input) =>
   ownerPrepareSelectedDashboardLists(input);
+
+/** Fold complete authoritative ranges through an isolated SQLite cursor in the caller-owned synchronous transaction. */
+export const readSqliteDashboardTransactions: typeof ownerReadSqliteDashboardTransactions = (
+  input
+) => ownerReadSqliteDashboardTransactions(input);

@@ -1,5 +1,6 @@
-import type { AuthoritativeStoreEnvironment } from "../sqlite-store/contract";
-import { withRecoveryStore } from "../recovery-lifecycle/runtime";
+import type { NativeDashboardReader, NativeDashboardStoreEnvironment } from "../dashboard/contract";
+import { makeNativeDashboardReader } from "../dashboard/operations";
+import { trackRecoveryNative, withRecoveryStore } from "../recovery-lifecycle/runtime";
 import { withAuthoritativeStore } from "../sqlite-store/operations";
 import { makeWorkerCrypto } from "../secret-material/runtime";
 import { makeUserRecoveryAlarm } from "./internal/recovery-alarm";
@@ -749,7 +750,7 @@ export class UserTransactionCoordinator {
       id: Readonly<{ name: string }>;
       storage: Pick<DurableObjectStorage, "setAlarm" | "deleteAlarm" | "getAlarm">;
     }>,
-    bindings: Omit<CoordinatorEnvironment, "DB"> & AuthoritativeStoreEnvironment,
+    bindings: Omit<CoordinatorEnvironment, "DB"> & NativeDashboardStoreEnvironment,
     configuration: Readonly<{
       institutions: typeof registeredConnectionInstitutionIds;
       bank: Option.Option<ConnectionBankPreparation>;
@@ -761,6 +762,18 @@ export class UserTransactionCoordinator {
     }
   ) {
     const env = withRecoveryStore(bindings);
+    const namespace = bindings.SQLITE_STORE;
+    const dashboard: Option.Option<NativeDashboardReader> =
+      namespace === undefined
+        ? Option.none()
+        : Option.some(
+            makeNativeDashboardReader({
+              store: namespace.getByName("authoritative-v1"),
+              manifest: Schema.decodeUnknownSync(Schema.String)(bindings.SQLITE_STORE_MANIFEST),
+              epoch: Schema.decodeUnknownSync(Schema.String)(bindings.SQLITE_STORE_EPOCH),
+              nativeCall: (work) => trackRecoveryNative({ environment: bindings, work }),
+            })
+          );
     this.state = state;
     this.recoveryAlarm = makeUserRecoveryAlarm(state.storage);
     this.institutions = configuration.institutions;
@@ -775,6 +788,7 @@ export class UserTransactionCoordinator {
     this.mcp = makeMcpResidency({
       userId: state.id.name,
       db: this.env.DB,
+      dashboard,
       enqueueCanonicalWork: (input) => this.enqueueOAuthCanonicalWork(input),
     });
   }

@@ -1,3 +1,6 @@
+import { makeMcpResidency } from "../mcp/runtime";
+import { OAuthMcpAdmission } from "../mcp/contract";
+import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import type { CoreHttpBindings } from "../core-http/contract";
 import { makeCoreHttp } from "../core-http/runtime";
 import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
@@ -6,7 +9,7 @@ import { NativeDashboardResult } from "./contract";
 import { freeAllowanceLimits } from "../../src/core/quotas/contract";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { it } from "@effect/vitest";
-import { type Cause, DateTime, Effect, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { afterAll, expect } from "vitest";
 import { sqliteTestStorage } from "../sqlite-store/test-database.test-fixture";
 import { installTestSchema } from "../d1-test-fixture";
@@ -1278,5 +1281,369 @@ it.live("accepts the provider's actual private Dashboard RPC binding without an 
           .first()
       )
     ).toEqual({ count: 1 });
+  })
+);
+
+type OAuthFixture = PATFixture & Readonly<{ admission: OAuthCanonicalAdmission }>;
+const oauthSnapshotFixture = (
+  scopes: ReadonlyArray<"read" | "write"> = ["read"]
+): Effect.Effect<OAuthFixture, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const fixture = yield* patSnapshotFixture;
+    const connectionId = "70000000-0000-4000-8000-000000000001";
+    const clientId = "70000000-0000-4000-8000-000000000002";
+    const credentialId = "70000000-0000-4000-8000-000000000003";
+    const digest = new Uint8Array(32).fill(7);
+    const statements = [
+      fixture.db
+        .prepare(
+          "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','native-processing-grant',?,'{}','disclosed','accepted',?,?)"
+        )
+        .bind(userId, fixture.current, fixture.current),
+      fixture.db
+        .prepare(
+          "INSERT INTO oauth_connections(id,request_id,user_id,client_id,claimed_client_name,redirect_uri,resource,scopes_json,approved_at_ms,expires_at_ms) VALUES (?,'native-oauth-request',?,?,'Native OAuth','https://agent.test/callback','https://api.fidyapp.com/mcp',json(?),?,?)"
+        )
+        .bind(
+          connectionId,
+          userId,
+          clientId,
+          encodeJson(scopes),
+          fixture.current,
+          fixture.current + 3600000
+        ),
+      fixture.db
+        .prepare(
+          "INSERT INTO consent_history(record_type,id,user_id,connection_id,session_id,disclosure_json,occurred_at_ms) VALUES ('oauth_grant','native-oauth-grant',?,?,?,json_object('revision','fixture','text','Synthetic grant'),?)"
+        )
+        .bind(userId, connectionId, sessionId, fixture.current),
+      fixture.db
+        .prepare(
+          "INSERT INTO oauth_credentials(kind,id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES ('access',?,?,?,?,?,?,json(?))"
+        )
+        .bind(
+          credentialId,
+          connectionId,
+          userId,
+          digest,
+          fixture.current,
+          fixture.current + 3600000,
+          encodeJson(scopes)
+        ),
+    ];
+    yield* io(() => fixture.db.batch(statements));
+    const admission = yield* Schema.decodeEffect(OAuthCanonicalAdmission)({
+      userId,
+      connectionId,
+      credentialId,
+      clientId,
+      digest: Array.from(digest),
+      resource: "https://api.fidyapp.com/mcp",
+      operation: "dashboard.getDashboardView",
+      input: {},
+      deadlineMilliseconds: fixture.current + 30000,
+    });
+    return { ...fixture, admission };
+  });
+
+it.live(
+  "rechecks OAuth authority and accounts the exact Dashboard in the native financial unit",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* oauthSnapshotFixture();
+      const result = yield* io(() =>
+        fixture.snapshot({
+          mode: "oauth",
+          admission: fixture.admission,
+          request: new Request("https://core.internal/dashboard/view"),
+        })
+      );
+      expect(result).toMatchObject({
+        response: {
+          status: 200,
+          body: {
+            data: {
+              title: "PAT nativo",
+              revision: 7,
+              layout: {
+                widget: {
+                  result: {
+                    moneyGroups: [
+                      {
+                        currency: "COP",
+                        outflow: { amount: "123456789012345678901234567890.01" },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ count: 1 });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE oauth_connection_id=? AND oauth_credential_id=? AND operation='dashboard.getDashboardView' AND outcome='accepted'"
+            )
+            .bind(fixture.admission.connectionId, fixture.admission.credentialId)
+            .first()
+        )
+      ).toEqual({ count: 1 });
+    })
+);
+
+const mcpFrame = (
+  admission: OAuthCanonicalAdmission,
+  body: Schema.Json,
+  session: Option.Option<string>
+): Effect.Effect<OAuthMcpAdmission, Schema.SchemaError> =>
+  Schema.decodeEffect(OAuthMcpAdmission)({
+    userId: admission.userId,
+    connectionId: admission.connectionId,
+    credentialId: admission.credentialId,
+    clientId: admission.clientId,
+    resource: admission.resource,
+    digest: admission.digest,
+    deadlineMilliseconds: admission.deadlineMilliseconds,
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      "mcp-protocol-version": "2025-11-25",
+      ...Option.match(session, { onNone: () => ({}), onSome: (id) => ({ "mcp-session-id": id }) }),
+    },
+    body: Array.from(new TextEncoder().encode(encodeJson(body))),
+  });
+
+it.live(
+  "uses the native financial unit from the real MCP SDK without the foreground canonical queue",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* oauthSnapshotFixture();
+      let legacyCalls = 0;
+      let nativeCalls = 0;
+      const module = makeMcpResidency({
+        userId,
+        db: fixture.db,
+        dashboard: Option.some((input) => {
+          nativeCalls++;
+          return fixture.snapshot(input);
+        }),
+        enqueueCanonicalWork: () =>
+          Effect.sync(() => {
+            legacyCalls++;
+            return new Response(null, { status: 503 });
+          }),
+      });
+      const invoke = (
+        body: Schema.Json,
+        session: Option.Option<string>
+      ): Effect.Effect<Response, Schema.SchemaError> =>
+        mcpFrame(fixture.admission, body, session).pipe(
+          Effect.flatMap((admission) =>
+            module.handle({ admission, signal: new AbortController().signal })
+          )
+        );
+      try {
+        const initialized = yield* invoke(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+              protocolVersion: "2025-11-25",
+              capabilities: {},
+              clientInfo: { name: "native-dashboard-test", version: "1" },
+            },
+          },
+          Option.none()
+        );
+        const session = Option.fromNullOr(initialized.headers.get("mcp-session-id"));
+        yield* io(() => initialized.text());
+        yield* invoke({ jsonrpc: "2.0", method: "notifications/initialized" }, session);
+        const response = yield* invoke(
+          {
+            jsonrpc: "2.0",
+            id: 2,
+            method: "tools/call",
+            params: {
+              name: "dashboard.getDashboardView",
+              arguments: {},
+            },
+          },
+          session
+        );
+        expect(response.status).toBe(200);
+        const body = yield* io(() => response.text());
+        expect(body).toContain("PAT nativo");
+        expect(body).toContain("123456789012345678901234567890.01");
+        expect(nativeCalls).toBe(1);
+        expect(legacyCalls).toBe(0);
+        expect(
+          yield* io(() =>
+            fixture.db
+              .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+              .first()
+          )
+        ).toEqual({ count: 1 });
+      } finally {
+        yield* module.dispose();
+      }
+    })
+);
+
+const oauthRead = (
+  fixture: OAuthFixture,
+  overrides: Partial<typeof OAuthCanonicalAdmission.Encoded> = {}
+): Effect.Effect<NativeDashboardResult, Cause.UnknownError | Schema.SchemaError> =>
+  Schema.decodeEffect(OAuthCanonicalAdmission)({ ...fixture.admission, ...overrides }).pipe(
+    Effect.flatMap((admission) =>
+      io(() =>
+        fixture.snapshot({
+          mode: "oauth",
+          admission,
+          request: new Request("https://core.internal/dashboard/view"),
+        })
+      )
+    )
+  );
+
+it.live("refuses forged OAuth caller facts and expired handoffs before financial accounting", () =>
+  Effect.gen(function* () {
+    const fixture = yield* oauthSnapshotFixture();
+    for (const overrides of [
+      { digest: Array.from(new Uint8Array(32).fill(8)) },
+      { userId: "70000000-0000-4000-8000-000000000004" },
+      { clientId: "70000000-0000-4000-8000-000000000004" },
+    ]) {
+      expect((yield* oauthRead(fixture, overrides)).response.status).toBe(401);
+    }
+    expect(
+      (yield* oauthRead(fixture, { deadlineMilliseconds: fixture.current - 1 })).response.status
+    ).toBe(503);
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+          .first()
+      )
+    ).toEqual({ count: 0 });
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "SELECT count(*) AS count FROM audit_entries WHERE operation='dashboard.getDashboardView'"
+          )
+          .first()
+      )
+    ).toEqual({ count: 0 });
+  })
+);
+
+it.live("audits a native OAuth read-scope refusal without spending a commercial unit", () =>
+  Effect.gen(function* () {
+    const fixture = yield* oauthSnapshotFixture(["write"]);
+    expect(yield* oauthRead(fixture)).toMatchObject({
+      response: {
+        status: 403,
+        body: { error: { code: "scope_missing" } },
+        headers: { "fidy-canonical-remaining": "50" },
+      },
+    });
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+          .first()
+      )
+    ).toEqual({ count: 0 });
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT outcome FROM audit_entries WHERE operation='dashboard.getDashboardView'")
+          .first()
+      )
+    ).toEqual({ outcome: "rejected" });
+  })
+);
+
+it.live(
+  "replays native OAuth results without recharging and rechecks withdrawn Consent before disclosure",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* oauthSnapshotFixture();
+      const key = { retryKey: "native_oauth_retry" };
+      const first = yield* oauthRead(fixture, key);
+      expect(first.response.status).toBe(200);
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES ('oauth-later',?,'99.00','COP','outflow',(SELECT id FROM categories LIMIT 1),?,?)"
+          )
+          .bind(userId, fixture.current, fixture.current)
+          .run()
+      );
+      const replay = yield* oauthRead(fixture, key);
+      expect(replay.response.body).toEqual(first.response.body);
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal','native-withdrawal',?,'native-processing-grant',?,?)"
+          )
+          .bind(userId, sessionId, fixture.current)
+          .run()
+      );
+      expect(yield* oauthRead(fixture, key)).toMatchObject({
+        response: { status: 403, body: { error: { code: "user_action_required" } } },
+      });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ count: 1 });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE operation='dashboard.getDashboardView'"
+            )
+            .first()
+        )
+      ).toEqual({ count: 2 });
+    })
+);
+
+it.live("rolls back native OAuth charge and pressure when its financial Audit fails", () =>
+  Effect.gen(function* () {
+    const fixture = yield* oauthSnapshotFixture();
+    yield* io(() =>
+      fixture.db.exec(
+        "CREATE TRIGGER reject_native_oauth_audit BEFORE INSERT ON audit_entries WHEN NEW.oauth_connection_id IS NOT NULL BEGIN SELECT RAISE(ABORT,'synthetic OAuth audit failure'); END"
+      )
+    );
+    expect((yield* oauthRead(fixture)).response.status).toBe(503);
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+          .first()
+      )
+    ).toEqual({ count: 0 });
+    expect(
+      yield* io(() =>
+        fixture.db.prepare("SELECT count(*) AS count FROM canonical_request_buckets").first()
+      )
+    ).toEqual({ count: 0 });
   })
 );

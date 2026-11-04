@@ -97,7 +97,7 @@ type TestStore = Readonly<{
   db: D1Database;
   bucket: R2Bucket;
   document: (request: Request) => Promise<unknown>;
-  snapshot: (input: Readonly<{ request: Request; mode: "bound" | "document" }>) => Promise<unknown>;
+  snapshot: NativeDashboardReader;
 }>;
 type NativeTestStore = TestStore &
   Readonly<{
@@ -112,18 +112,22 @@ const snapshot = (input: Readonly<{ runtime: Miniflare; name: string }>): Native
     nativeCall: (execute) => execute(),
     store: {
       dashboard: (call) =>
-        input.runtime
-          .dispatchFetch("https://fixture.internal/dashboard-snapshot", {
-            method: "POST",
-            headers: { "x-store-object": input.name },
-            body: encodeJson({
-              url: call.request.url,
-              method: call.request.method,
-              headers: Object.fromEntries(call.request.headers),
-              mode: call.mode,
-            }),
-          })
-          .then((response) => response.json()),
+        call.mode === "oauth"
+          ? input.runtime
+              .getBindings<{ SQLITE_STORE: NativeTestStore["namespace"] }>()
+              .then(({ SQLITE_STORE }) => SQLITE_STORE.getByName(input.name).dashboard(call))
+          : input.runtime
+              .dispatchFetch("https://fixture.internal/dashboard-snapshot", {
+                method: "POST",
+                headers: { "x-store-object": input.name },
+                body: encodeJson({
+                  url: call.request.url,
+                  method: call.request.method,
+                  headers: Object.fromEntries(call.request.headers),
+                  mode: call.mode,
+                }),
+              })
+              .then((response) => response.json()),
     },
   });
 

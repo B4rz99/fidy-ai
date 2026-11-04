@@ -1,3 +1,4 @@
+import { resolveSnapshot } from "./internal/native-snapshot";
 import { Clock, Effect, Option, Redacted, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
 import {
@@ -130,3 +131,8 @@ export const authenticateOAuth = (
     const scopes = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(row.scopes_json);
     return Option.some({ subject, scopes });
   }).pipe(Effect.catchCause(() => Effect.succeedNone));
+
+/** Resolve exact OAuth credential and Consent inside the caller's existing synchronous native unit. */
+export const resolveCanonicalOAuthSnapshot = (
+  input: Parameters<typeof resolveSnapshot>[0]
+): ReturnType<typeof resolveSnapshot> => resolveSnapshot(input);

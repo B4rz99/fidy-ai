@@ -4,6 +4,7 @@ import { CanonicalSnapshotResponse } from "../canonical-admission/contract";
 import { SqliteStoreRequest } from "../sqlite-store/contract";
 import { BrowserSessionBinding } from "../../src/shell/web-session/contract";
 import { WebSessionId } from "../../src/core/web-session/contract";
+import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { type Effect, type Option, Schema } from "effect";
 import type {
   ApplyDashboardEditCanonicalInput,
@@ -50,13 +51,25 @@ export type DashboardRequest = Readonly<{
       }>
   );
 
-export const NativeDashboardRequest = Schema.Struct({
+const NativeBrowserDashboardRequest = Schema.Struct({
   manifest: SqliteStoreRequest.fields.manifest,
   epoch: SqliteStoreRequest.fields.epoch,
   request: Schema.instanceOf(Request),
   mode: Schema.Literals(["bound", "document"]),
 });
+const NativeOAuthDashboardRequest = Schema.Struct({
+  ...NativeBrowserDashboardRequest.fields,
+  mode: Schema.Literal("oauth"),
+  admission: OAuthCanonicalAdmission,
+});
+export const NativeDashboardRequest = Schema.Union([
+  NativeBrowserDashboardRequest,
+  NativeOAuthDashboardRequest,
+]);
 export type NativeDashboardRequest = typeof NativeDashboardRequest.Type;
+export type NativeDashboardInvocation =
+  | Pick<typeof NativeBrowserDashboardRequest.Type, "request" | "mode">
+  | Pick<typeof NativeOAuthDashboardRequest.Type, "request" | "mode" | "admission">;
 const Bootstrap = Schema.optionalKey(Schema.toEncoded(BrowserSessionBinding));
 const Measurement = Schema.Struct({
   scans: Schema.Int,
@@ -94,22 +107,24 @@ export type NativeDashboardBinding = Readonly<{
   dashboard: (input: NativeDashboardRequest) => Promise<unknown>;
 }>;
 export type NativeDashboardReader = (
-  input: Pick<NativeDashboardRequest, "request" | "mode">
+  input: NativeDashboardInvocation
 ) => Promise<NativeDashboardResult>;
 
-/** Trusted Core bindings select one fixed target; browser callers never provide a target or mode. */
-export type DashboardDocumentEnvironment = Omit<AuthoritativeStoreEnvironment, "SQLITE_STORE"> &
-  RecoveryAdmissionEnvironment &
-  Readonly<{ BROWSER_ORIGIN: string }> &
+/** Native Core composition lends the fixed Store's Dashboard capability as well as owner SQL. */
+export type NativeDashboardStoreEnvironment = Omit<AuthoritativeStoreEnvironment, "SQLITE_STORE"> &
   Partial<
     Readonly<{
-      RECOVERY_ISOLATION: string;
-      SMOKE_PROOF: string;
       SQLITE_STORE: Readonly<{
         getByName: (name: string) => SqliteStoreBinding & NativeDashboardBinding;
       }>;
     }>
   >;
+
+/** Trusted Core bindings select one fixed target; browser callers never provide a target or mode. */
+export type DashboardDocumentEnvironment = NativeDashboardStoreEnvironment &
+  RecoveryAdmissionEnvironment &
+  Readonly<{ BROWSER_ORIGIN: string }> &
+  Partial<Readonly<{ RECOVERY_ISOLATION: string; SMOKE_PROOF: string }>>;
 
 export type NativeDashboardReaderConfiguration = Readonly<{
   store: NativeDashboardBinding;

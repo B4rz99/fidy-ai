@@ -375,8 +375,10 @@ or target cannot resume that record. Before any final qualification it preserves
 pending erasure admissions as independent unsealed cases, including admissions absent from an
 older candidate snapshot. It never manufactures sealing evidence or repeats provider effects.
 Missing source evidence fails closed. Missing owner drain observation retains `AwaitingOwnerDrain` while native continuations remain
-admissible. Only proven zero pending/ambiguous owner work permits final closure. The current
-operator stops at `AwaitingProvider` and always
+admissible. The operator requires the closed nine-owner coverage observation and consistent
+owner totals; a bare zero count cannot advance. Zero owner work still leaves admission paused
+at `AwaitingProvider` until independent provider inventory and historical caller fencing permit
+final closure. The current operator always
 reports `Unqualified`; this progress cannot open a Store, publish a serving generation, remove the
 R2 guard, or qualify an activation. Provider-verified namespace/version history, complete operation
 and provider drain, final ledger replay and fresh serving bootstrap remain required before that

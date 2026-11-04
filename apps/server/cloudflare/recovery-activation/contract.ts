@@ -30,11 +30,6 @@ export type RecoveryStoreControl = Readonly<{
   inspect: () => Promise<unknown>;
   close: (input: Readonly<{ activationId: string; epoch: string }>) => Promise<unknown>;
 }>;
-export const RecoveryDrainStatus = Schema.Struct({
-  pending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  ambiguous: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-});
-
 export type RecoveryActivationEnvironment = Readonly<{
   admission: RecoveryAdmissionBinding;
   serving: RecoveryStoreControl;

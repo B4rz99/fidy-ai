@@ -1,10 +1,10 @@
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../erasure-store/contract";
+import { RecoveryDrainObservation } from "../recovery-lifecycle/contract";
 import { reconcileErasureAdmissions } from "../erasure/operations";
 import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
-  RecoveryDrainStatus,
   RecoverySourceTarget,
   RecoveryTarget,
 } from "./contract";
@@ -59,25 +59,21 @@ const awaitOwnerDrain = (
     if (Option.isNone(observeDrain)) {
       return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
     }
-    const drain = yield* Schema.decodeUnknownEffect(RecoveryDrainStatus)(
-      yield* activationIo(() => observeDrain.value(input.configuration.sourceDb))
-    );
+    const drain = yield* Schema.decodeUnknownEffect(RecoveryDrainObservation, {
+      onExcessProperty: "error",
+    })(yield* activationIo(() => observeDrain.value(input.configuration.sourceDb)));
+    const owners = Object.values(drain.owners);
+    const pending = owners.reduce((total, owner) => total + owner.pending, 0);
+    const ambiguous = owners.reduce((total, owner) => total + owner.ambiguous, 0);
+    if (pending !== drain.pending || ambiguous !== drain.ambiguous) {
+      return yield* new ErasureUnavailable();
+    }
     if (drain.pending !== 0 || drain.ambiguous !== 0) {
       return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
     }
-    const closed = yield* Schema.decodeUnknownEffect(RecoveryAdmissionState)(
-      yield* activationIo(() =>
-        input.configuration.admission.close({
-          activationId: input.activationId,
-          epoch: record.source.epoch,
-        })
-      )
-    );
-    return {
-      ...record,
-      cursor: "",
-      phase: closed.leases === 0 ? ("AwaitingProvider" as const) : ("AwaitingDrain" as const),
-    };
+    // Owner rows cannot prove identity-free Queue/Workflow inventory or historical caller fencing.
+    // Keep native continuations admissible until the independent provider barrier is established.
+    return { ...record, cursor: "", phase: "AwaitingProvider" as const };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 const advancePhase = (

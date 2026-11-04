@@ -91,6 +91,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           )
         ).toBe(true);
         let sourceTarget = target;
+        let providerDrain: Option.Option<(db: D1Database) => Promise<unknown>> = Option.none();
         const control = {
           inspect: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
           close: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
@@ -118,7 +119,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
                   admission: selectedAdmission,
                   serving: control,
                   sourceDb: native.db,
-                  providerDrain: Option.none(),
+                  providerDrain,
                   sourceTarget,
                   servingTarget,
                 },
@@ -199,6 +200,14 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           )
         );
         expect(intent).toMatchObject({ userId, sealed: false });
+        providerDrain = Option.some(() => Promise.resolve({ pending: 0, ambiguous: 0 }));
+        expect((yield* send()).status).toBe(503);
+        expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
+          closed: false,
+          paused: true,
+          leases: 0,
+        });
+        providerDrain = Option.none();
         const repeated = yield* send();
         expect(repeated.status).toBe(202);
         expect(

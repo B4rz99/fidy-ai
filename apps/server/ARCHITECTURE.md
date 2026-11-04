@@ -176,6 +176,13 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+Dashboard reads and mutation acknowledgments include the observed document revision without
+copying it into the retained document JSON. An edit supplies that exact `expectedRevision`; zero
+addresses absence, and a changed revision returns a rejected conflict before any owner write.
+The atomic write compares the same revision with live authority and required Audit, so another
+coordinator or tab cannot silently replace a newer document. Individual, atomic-batch and hosted
+execution share the declared revision-bearing input.
+
 Dashboard deduplicates requested chart intervals before calling Transactions' bounded multi-interval
 reader. Wider selections first count bounded projection rows at one fact revision. Compatible ranges
 expand native batches beyond four intervals only within a raw-result budget; larger working sets

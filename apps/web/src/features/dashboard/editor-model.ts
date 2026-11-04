@@ -59,9 +59,19 @@ export type DashboardGesture =
       weight: number;
     }>
   | Readonly<{ kind: "remove-widget"; widgetId: WidgetId }>
-  | Readonly<{ kind: "retitle-dashboard"; title: string }>
-  | Readonly<{ kind: "configure-budget"; widget: BudgetWidget; target: BudgetTarget }>
-  | Readonly<{ kind: "retitle-widget"; title: string; widget: DashboardWidget }>;
+  | Readonly<{ kind: "retitle-dashboard"; title: string; expectedRevision: number }>
+  | Readonly<{
+      kind: "configure-budget";
+      widget: BudgetWidget;
+      target: BudgetTarget;
+      expectedRevision: number;
+    }>
+  | Readonly<{
+      kind: "retitle-widget";
+      title: string;
+      widget: DashboardWidget;
+      expectedRevision: number;
+    }>;
 
 const placementFor = (target: Readonly<DashboardDropTarget>): Placement => {
   if (target.kind === "dashboard-edge") return target.edge;

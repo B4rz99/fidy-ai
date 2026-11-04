@@ -53,6 +53,7 @@ const leaf = (id: string, title: string): Readonly<Record<string, unknown>> => (
   },
 });
 const view = {
+  revision: 1,
   title: "Mi tablero",
   context: {
     serviceMarket: "CO",
@@ -95,6 +96,7 @@ const install = Effect.fnUntraced(function* (page: Page, edits: Array<unknown>) 
       return route.fulfill({
         contentType: "application/json",
         body: response({
+          revision: 1,
           title: view.title,
           layout: {
             kind: "leaf",
@@ -122,7 +124,9 @@ const install = Effect.fnUntraced(function* (page: Page, edits: Array<unknown>) 
 const expectSwap = (edits: Array<unknown>): Promise<void> =>
   expect
     .poll(() => edits)
-    .toEqual([{ op: "swap-widgets", widgetId: firstId, withWidgetId: secondId }]);
+    .toEqual([
+      { expectedRevision: 1, op: "swap-widgets", widgetId: firstId, withWidgetId: secondId },
+    ]);
 
 test("validates and cancels Dashboard title drafts without saving", ({ page }) =>
   Effect.runPromise(

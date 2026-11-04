@@ -16,17 +16,17 @@ const refuseDashboard = (route: Route): Promise<void> =>
   });
 const captureReadScreenshots = Effect.fnUntraced(function* (page: Page) {
   yield* Effect.tryPromise(() =>
-    page.screenshot({ path: "test-results/dashboard-html-desktop.png", fullPage: true })
+    page.screenshot({ path: "../../reports/design/dashboard-html-desktop.png", fullPage: true })
   );
   yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
   yield* Effect.tryPromise(() =>
-    page.screenshot({ path: "test-results/dashboard-html-mobile.png", fullPage: true })
+    page.screenshot({ path: "../../reports/design/dashboard-html-mobile.png", fullPage: true })
   );
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click()
   );
   yield* Effect.tryPromise(() =>
-    page.screenshot({ path: "test-results/dashboard-html-mobile-dark.png", fullPage: true })
+    page.screenshot({ path: "../../reports/design/dashboard-html-mobile-dark.png", fullPage: true })
   );
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Activar tema claro", exact: true }).click()
@@ -85,7 +85,10 @@ test("Dashboard absence requires creation and direct entry paints one escaped HT
       );
       expect(requests.filter((path) => path === "/dashboard/catalog")).toHaveLength(1);
       yield* Effect.tryPromise(() =>
-        page.screenshot({ path: "test-results/dashboard-customize-desktop.png", fullPage: true })
+        page.screenshot({
+          path: "../../reports/design/dashboard-customize-desktop.png",
+          fullPage: true,
+        })
       );
     })
   ));

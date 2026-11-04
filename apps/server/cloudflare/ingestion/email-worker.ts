@@ -1,3 +1,4 @@
+import { withAuthoritativeStore } from "../sqlite-store/operations";
 import { withErasureRecovery } from "../erasure/runtime";
 import { Effect } from "effect";
 import type { TelemetryService } from "../../src/shell/observability/contract";
@@ -21,7 +22,10 @@ type EmailWorker = Readonly<{
 /** Compose the native Email entrypoints with narrow Ingestion and Maintenance authorities. */
 export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
   email: (message, environment) =>
-    receiveForwardedEmail({ message, environment: withErasureRecovery(environment) }).pipe(
+    receiveForwardedEmail({
+      message,
+      environment: withErasureRecovery(withAuthoritativeStore(environment)),
+    }).pipe(
       observeWorkerExecution({
         telemetry,
         environment: workerRelease(environment),
@@ -31,7 +35,7 @@ export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
     ),
   scheduled: (controller, environment) =>
     runEmailMaintenance({
-      environment: withErasureRecovery(environment),
+      environment: withErasureRecovery(withAuthoritativeStore(environment)),
       scheduledAtEpochMs: controller.scheduledTime,
     }).pipe(
       observeWorkerExecution({

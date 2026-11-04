@@ -1,3 +1,4 @@
+import { withAuthoritativeStore } from "./sqlite-store/operations";
 import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { resumeErasureCases, sweepErasureControlObjects } from "./erasure/operations";
 import { withErasureRecovery } from "./erasure/runtime";
@@ -206,8 +207,8 @@ class CoreMaintenanceCoordinator {
     environment: CoreEnvironment
   ) {
     this.state = state;
-    this.erasureEnvironment = environment;
-    this.environment = withErasureRecovery(environment);
+    this.erasureEnvironment = withAuthoritativeStore(environment);
+    this.environment = withErasureRecovery(this.erasureEnvironment);
   }
 
   private resumeErasureWork(): Effect.Effect<void> {
@@ -330,7 +331,8 @@ export const makeCoreWorker = ({
   institutions,
 }: Parameters<typeof makeCoreHttp>[0]): CoreWorker => ({
   fetch: makeCoreHttp({ telemetry, institutions }),
-  queue: (batch, environment) => makeCoreQueue(telemetry)(batch, withErasureRecovery(environment)),
+  queue: (batch, environment) =>
+    makeCoreQueue(telemetry)(batch, withErasureRecovery(withAuthoritativeStore(environment))),
   scheduled: (controller, environment) =>
     Effect.gen(function* () {
       const executor = environment.USER_TRANSACTION_COORDINATOR;

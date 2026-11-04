@@ -1,3 +1,4 @@
+import { withAuthoritativeStore } from "../sqlite-store/operations";
 import {
   bancolombiaSandboxAdmission,
   verifyBancolombiaSandboxAuthentication,
@@ -16,7 +17,7 @@ import { Clock, Context, Effect, Layer, Option } from "effect";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import type { TelemetryService } from "../../src/shell/observability/contract";
-import type { CoreHttpHandler } from "./contract";
+import type { CoreHttpEnvironment, CoreHttpHandler } from "./contract";
 import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
 import { recoveryIsolationResponse } from "../release-isolation/operations";
@@ -34,17 +35,31 @@ type CoreComposition = Readonly<{
   institutions: typeof registeredConnectionInstitutionIds;
 }>;
 
+const selectedEnvironment = (
+  environment: Parameters<CoreHttpHandler>[1]
+): Effect.Effect<Option.Option<CoreHttpEnvironment>> =>
+  Effect.try(() => withAuthoritativeStore(environment)).pipe(Effect.option);
+
+const isolatedResponse = (
+  request: Request,
+  environment: Parameters<CoreHttpHandler>[1]
+): Option.Option<Response> =>
+  recoveryIsolationResponse({
+    request,
+    environment: {
+      mode: Option.fromUndefinedOr(environment.RECOVERY_ISOLATION),
+      proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
+    },
+  });
+
 export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
-  return (request, environment, context) =>
+  return (request, bindings, context) =>
     Effect.gen(function* () {
-      const isolated = recoveryIsolationResponse({
-        request,
-        environment: {
-          mode: Option.fromUndefinedOr(environment.RECOVERY_ISOLATION),
-          proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
-        },
-      });
+      const selected = yield* selectedEnvironment(bindings);
+      if (Option.isNone(selected)) return new Response(null, { status: 503 });
+      const environment = selected.value;
+      const isolated = isolatedResponse(request, environment);
       if (Option.isSome(isolated)) return isolated.value;
       const recovery = measureErasureRecovery(environment);
       const clients = yield* Layer.build(OutboundHttpLive).pipe(
@@ -73,12 +88,12 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
       return recovery.respond(response);
     }).pipe(
       Effect.provideService(ConnectionInstitutions, institutions),
-      Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(environment)),
+      Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(bindings)),
       Effect.scoped,
       (work) =>
         Effect.flatMap(Clock.currentTimeMillis, (receivedAtUnixMilliseconds) =>
           observeWorkerRequest(work, {
-            environment,
+            environment: bindings,
             telemetry,
             operation: "worker.core.fetch",
             parent: Option.getOrUndefined(

@@ -1,3 +1,4 @@
+import { withAuthoritativeStore } from "../sqlite-store/operations";
 import { withErasureRecovery } from "../erasure/runtime";
 import { evidenceRetentionDue, summariesDue } from "./internal/cadence";
 import { projections as erasureProjections } from "./internal/erasure";
@@ -425,7 +426,7 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
           coordinator: this.env.USER_TRANSACTION_COORDINATOR,
           payload: event.payload,
           step,
-          environment: withErasureRecovery(this.env),
+          environment: withErasureRecovery(withAuthoritativeStore(this.env)),
         }),
       {
         environment: workerRelease(this.env),

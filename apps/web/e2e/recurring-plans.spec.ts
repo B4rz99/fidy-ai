@@ -1549,17 +1549,7 @@ test("capturing recurring income preserves its Currency and direction", ({ page,
       yield* Effect.tryPromise(() =>
         expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("20,5")
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Registrar", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        expectPayment(page.getByText("Transacción vinculada.", { exact: true })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expectPayment(
-          page.getByRole("button", { name: "Vincular transacción creada", exact: true })
-        ).toHaveCount(0)
-      );
+      yield* captureSplitPayment(page, "20,5", true);
       yield* Effect.tryPromise(() =>
         expectPayment(recurringItem(page, /Honorarios en USD.*Completados/u)).toBeVisible()
       );

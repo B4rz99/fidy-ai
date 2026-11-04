@@ -23,7 +23,11 @@ describe("same-origin Dashboard document transport", () => {
         const response = yield* Effect.tryPromise(() =>
           webWorker.fetch(
             new Request(`${appOrigin}/app/dashboard`, {
-              headers: { cookie, "Fidy-Session-Binding": "forged-mounted-binding" },
+              headers: {
+                cookie,
+                "Fidy-Session-Binding": "forged-mounted-binding",
+                authorization: "Bearer unrelated-principal",
+              },
             }),
             {
               ASSETS: assets,
@@ -52,6 +56,7 @@ describe("same-origin Dashboard document transport", () => {
         expect(observed[0]?.headers.has("Fidy-Session-Binding")).toBe(false);
         expect(observed[1]?.headers.get("Fidy-Session-Binding")).toBe(binding);
         expect(observed[1]?.headers.get("cookie")).toBe(cookie);
+        expect(observed.every((request) => !request.headers.has("authorization"))).toBe(true);
       })
     ));
 
@@ -82,6 +87,32 @@ describe("same-origin Dashboard document transport", () => {
         expect(response.headers.get("set-cookie")).toBe(issued);
         expect(new URL(observed[0]?.url ?? "").origin).toBe("https://api.fidyapp.com");
         expect(observed[0]?.redirect).toBe("manual");
+      })
+    ));
+
+  it("preserves canonical bearer precedence for declared API requests", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Request[] = [];
+        yield* Effect.tryPromise(() =>
+          webWorker.fetch(
+            new Request(`${appOrigin}/dashboard/view`, {
+              headers: { authorization: "Bearer explicit-pat", cookie },
+            }),
+            {
+              ASSETS: assets,
+              BROWSER_ORIGIN: appOrigin,
+              API: {
+                fetch: (request): Promise<Response> => {
+                  requests.push(request);
+                  return Promise.resolve(new Response("{}"));
+                },
+              },
+            }
+          )
+        );
+        expect(requests[0]?.headers.get("authorization")).toBe("Bearer explicit-pat");
+        expect(requests[0]?.headers.get("cookie")).toBe(cookie);
       })
     ));
 

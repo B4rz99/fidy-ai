@@ -127,8 +127,10 @@ const financialContent = Effect.fnUntraced(function* (response: Response) {
 const directDashboard = Effect.fnUntraced(function* (request: Request, environment: Environment) {
   const headers = new Headers(request.headers);
   headers.delete(browserSessionBindingHeader);
+  headers.delete("authorization");
+  const mountedRequest = new Request(request, { headers });
   const bootstrap = apiRequest(
-    new Request(request, { headers }),
+    mountedRequest,
     browserSessionBindingPath,
     environment.BROWSER_ORIGIN
   );
@@ -141,7 +143,7 @@ const directDashboard = Effect.fnUntraced(function* (request: Request, environme
   if (Option.isNone(session)) {
     return yield* Effect.tryPromise(() => environment.ASSETS.fetch(request));
   }
-  const query = apiRequest(request, "/dashboard/view", environment.BROWSER_ORIGIN);
+  const query = apiRequest(mountedRequest, "/dashboard/view", environment.BROWSER_ORIGIN);
   query.headers.set(browserSessionBindingHeader, session.value);
   query.headers.set("accept", "text/html");
   const financial = yield* Effect.tryPromise(() => environment.API.fetch(query));

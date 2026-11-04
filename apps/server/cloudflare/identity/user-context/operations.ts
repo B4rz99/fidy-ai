@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { UserContext } from "../../../src/core/identity/contract";
 import { Effect, Option, Schema } from "effect";
 import {
@@ -54,3 +55,13 @@ export const prepareUserContext = ({
     FROM users WHERE id = ?
   ) ${statement.sql}`)
     .bind(userId, ...statement.params);
+
+/** Compose current interpretation context for a live at-most-one-User selection in its native snapshot. */
+export const prepareSelectedUserContext = ({
+  db,
+  userSelection,
+}: Readonly<{ db: D1Database; userSelection: OwnedStatement }>): D1PreparedStatement =>
+  db
+    .prepare(`SELECT service_market AS serviceMarket, locale, time_zone AS timeZone FROM users
+    WHERE id = (SELECT userId FROM (${userSelection.sql}))`)
+    .bind(...userSelection.params);

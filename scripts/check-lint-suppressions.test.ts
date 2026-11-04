@@ -106,6 +106,7 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
       expect(exceptions.toSorted()).toEqual(
         [
           "nodeBuiltinImport:./apps/cli/src/credential/internal/local-path.ts",
+          "nodeBuiltinImport:./apps/server/cloudflare/recovery-lifecycle/internal/context.ts",
           "nodeBuiltinImport:./apps/web/cloudflare/production-policy/artifact.ts",
           "nodeBuiltinImport:./apps/web/scripts/build-production.test.ts",
           "nodeBuiltinImport:./apps/web/scripts/check-browser-bundle.test.ts",

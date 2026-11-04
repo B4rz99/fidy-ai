@@ -1,7 +1,6 @@
 import { Clock, Effect, Option, Schema } from "effect";
-import { ErasureUnavailable } from "../../erasure-store/contract";
+import { ErasureGeneration, ErasureUnavailable } from "../../erasure-store/contract";
 import type { ErasureOperatorEnvironment } from "../contract";
-import { ErasureGeneration } from "../contract";
 import { RecoveryCase } from "./recovery-case";
 import { expectedGeneration } from "./generation";
 import { recoveryWindowMs } from "./retention-policy";

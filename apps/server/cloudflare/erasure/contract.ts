@@ -1,3 +1,4 @@
+import { ErasureGeneration } from "../erasure-store/contract";
 import type {
   RecoveryActivationEnvironment,
   RecoveryAdmissionEnvironment,
@@ -45,7 +46,6 @@ export type ErasureRecoveryConfiguration = Readonly<{
   db: D1Database;
   bucket: Option.Option<R2Bucket>;
 }>;
-export const ErasureGeneration = Schema.Union([Schema.Literal("initial"), ErasureReference]);
 
 export const ErasureCustodyAdmission = Schema.Struct({
   ...ErasureContinuation.fields,

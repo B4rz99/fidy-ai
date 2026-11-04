@@ -137,8 +137,6 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
               }),
               environment: {
                 DB: operatorDb,
-                RECOVERY_ADMISSION: { getByName: () => selectedAdmission },
-                RECOVERY_SOURCE_EPOCH: target.epoch,
                 ERASURE_CANDIDATE_DATABASE_ID: "candidate-native",
                 ERASURE_SERVING_DATABASE_ID: "serving-native",
                 ERASURE_BUCKET: native.registry,

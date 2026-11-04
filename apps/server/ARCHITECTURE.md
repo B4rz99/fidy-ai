@@ -431,8 +431,16 @@ restore state. Any activation record, malformed evidence or unavailable registry
 commands; the isolated candidate-only recovery boundary remains separate. Authenticated operator
 commands other than `Activation` and read-only `Receipt` hold native continuation leases, so they
 can settle while publishers are paused and are refused after final closure. `Activation` remains
-a control operation and must separately serialize its own interrupted native writes before any
-final barrier can qualify.
+a control operation with an exclusive opaque claim in the independent Gate. Acquisition occurs
+after Access authentication; request/response bodies never expose the claim identity. The Gate
+retains non-expiring Held/Unknown claims and released tombstones, so exact lost acquire/release
+replies can retry without reacquiring a released identity or clearing a newer owner. Controller
+IO captures its native DB/R2 promises and R2 bodies before Effect scheduling, and materializes
+its bounded metadata response before release. A second controller refuses while native writes
+or body reads remain unsettled. Any unknown native outcome permanently retains the claim until
+an independently justified reconciliation exists; elapsed time and a local retry grant no authority.
+Known cancellation after fully settled IO can resume the independently persisted retirement plan.
+This serializes current controller work but does not qualify legacy provider or HTTP drain.
 
 `RecoveryClosedSourceEvidence` declares the artifact handoff: source identity, actual admission
 object, activation, frozen source generation (the retired marker for initial D1), distinct final generation/checkpoint ETag and content
@@ -441,6 +449,10 @@ preliminary R2 progress cannot issue export/bootstrap authority while provider q
 final reconciliation remain incomplete. `readRecoveryBootstrapAuthorization` similarly refuses
 until an independent external phase authorizes the exact previously unopened target and fixed
 artifact digest; a local import cursor or schema seal cannot grant bootstrap or serving authority.
+The separate `readRecoveryServingAuthorization` binds the exact provider owner version as well;
+it currently refuses. `readRecoveryArtifactRetirement` also refuses until an external phase earns
+abandonment or qualified-open disposition for that exact artifact. Neither local verification nor
+an arbitrary caller prefix confers serving or artifact deletion permission.
 
 The Erasure-owned frozen-import verifier consumes the Store's native inactive bootstrap
 capability, so a D1 source cannot be passed as its target. It checks bounded sealed ledger pages

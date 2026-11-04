@@ -1,3 +1,4 @@
+import { runController } from "./internal/controller";
 import { planSourceRetirement, resumeSourceRetirement } from "./internal/source-retirement";
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../erasure-store/contract";
@@ -7,8 +8,10 @@ import { observeErasureRecoveryDrain, reconcileErasureAdmissions } from "../eras
 import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
+  type RecoveryArtifactRetirementAccess,
   type RecoveryBootstrapAccess,
   type RecoveryClosedSourceAccess,
+  type RecoveryServingAccess,
   RecoverySourceTarget,
   RecoveryTarget,
 } from "./contract";
@@ -128,9 +131,7 @@ const advancePhase = (
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 /** Advances only fixed binding-selected targets. Local observations never qualify provider isolation or open serving admission. */
-export const advanceRecoveryActivation = (
-  input: ActivationInput
-): Effect.Effect<Response, ErasureUnavailable> =>
+const advance = (input: ActivationInput): Effect.Effect<Response, ErasureUnavailable> =>
   Effect.gen(function* () {
     yield* currentActivation(input);
     const targets = yield* requireTargets(input);
@@ -164,6 +165,27 @@ export const advanceRecoveryActivation = (
     return yield* storeActivation({ bucket: input.bucket, record: advanced, previous });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
+/** Access authentication precedes the private exclusive claim; final publication shares this same durable controller authority. */
+export const advanceRecoveryActivation = (
+  input: ActivationInput
+): Effect.Effect<Response, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    const run = Effect.runPromiseWith(yield* Effect.context<never>());
+    return yield* Effect.tryPromise({
+      try: () =>
+        runController({
+          ...input,
+          work: (owned) =>
+            run(
+              advance({ ...input, ...owned }).pipe(
+                Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+              )
+            ),
+        }),
+      catch: () => new ErasureUnavailable(),
+    });
+  });
+
 /** Production recovery must never reauthorize a source or active target after activation begins. Candidate-only recovery uses its isolated boundary. */
 export const assertProductionRestoreAllowed = (
   bucket: R2Bucket
@@ -179,4 +201,12 @@ export const readClosedRecoverySource: RecoveryClosedSourceAccess = () =>
 
 /** No independent producer has established the final handoff or never-opened target history. Local import state cannot grant this authority. */
 export const readRecoveryBootstrapAuthorization: RecoveryBootstrapAccess = () =>
+  Effect.fail(new ErasureUnavailable());
+
+/** Neither a verified local seal nor configured IDs establish independent serving qualification. */
+export const readRecoveryServingAuthorization: RecoveryServingAccess = () =>
+  Effect.fail(new ErasureUnavailable());
+
+/** Never grant deletion from a local import checkpoint, absence of retries, or an operator-asserted artifact status. */
+export const readRecoveryArtifactRetirement: RecoveryArtifactRetirementAccess = () =>
   Effect.fail(new ErasureUnavailable());

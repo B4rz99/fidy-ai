@@ -1,7 +1,11 @@
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { type Cause, Effect, type Scope } from "effect";
 import { playwright } from "./playwright-runtime";
-import { signInNavigationThroughCore } from "./real-core-fixture";
+import {
+  createDashboardIfAbsent,
+  openDashboardThroughCore,
+  signInNavigationThroughCore,
+} from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const successStatus = 200;
@@ -22,7 +26,8 @@ test("persists the Dashboard title through the visible editor and browser reload
           identity: "navigationDashboard",
         })
       );
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+      yield* Effect.tryPromise(() => createDashboardIfAbsent(page));
       yield* Effect.tryPromise(() => expect(page.getByRole("heading", { level: 1 })).toBeVisible());
       const currentTitle = yield* Effect.tryPromise(() =>
         page.getByRole("heading", { level: 1 }).innerText()
@@ -122,10 +127,11 @@ test("a stale title draft conflicts across tabs and survives a failed refresh", 
           identity: "navigationDashboard",
         })
       );
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+      yield* Effect.tryPromise(() => createDashboardIfAbsent(page));
       const second = yield* acquireTab(context);
       yield* Effect.tryPromise(() => second.clock.install());
-      yield* Effect.tryPromise(() => second.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(second));
       yield* openTitleDraft(page);
       yield* openTitleDraft(second);
       yield* preserveFailedDraft(second);

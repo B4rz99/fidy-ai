@@ -2,7 +2,7 @@ import { browserAcceptanceTopology } from "../../server/cloudflare/browser-accep
 import type { APIRequestContext, Locator, Page, Route } from "@playwright/test";
 import { Effect, Option } from "effect";
 import { playwright } from "./playwright-runtime";
-import { signInDashboardThroughCore } from "./real-core-fixture";
+import { openDashboardThroughCore, signInDashboardThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
 const { operator } = browserAcceptanceTopology();
@@ -25,7 +25,10 @@ const openDashboard = Effect.fnUntraced(function* ({
     signInDashboardThroughCore({ page, deferFreshEntry: true, request })
   );
   yield* Effect.tryPromise(() => page.clock.resume());
-  yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+  yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Crear tablero", exact: true }).click()
+  );
 });
 
 const loseAcknowledgment = Effect.fnUntraced(function* (
@@ -211,7 +214,11 @@ test("Dashboard catalog drag adds a persistent Widget", ({ page, request }) =>
         ).toHaveCount(2)
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { level: 2 })).toHaveCount(widgetCountWithAddition)
+        expect(
+          page
+            .getByRole("region", { name: "Diseño responsivo del tablero", exact: true })
+            .getByRole("heading", { level: 2 })
+        ).toHaveCount(widgetCountWithAddition)
       );
     })
   ));
@@ -228,17 +235,22 @@ test("Dashboard pointer swaps and edge moves persist without losing Widgets", ({
         announcement: "Colocar sobre Presupuesto de restaurantes",
       });
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { level: 2 }).nth(1)).toHaveText(
-          "Presupuesto de restaurantes"
-        )
+        expect(
+          page
+            .getByRole("region", { name: "Diseño responsivo del tablero", exact: true })
+            .getByRole("heading", { level: 2 })
+            .first()
+        ).toHaveText("Presupuesto de restaurantes")
       );
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { level: 2 }).first()).toHaveText(
-          "Presupuesto de restaurantes"
-        )
+        expect(
+          page
+            .getByRole("region", { name: "Diseño responsivo del tablero", exact: true })
+            .getByRole("heading", { level: 2 })
+            .first()
+        ).toHaveText("Presupuesto de restaurantes")
       );
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
       yield* dragWidget({
         page,
         source: page.getByRole("button", { name: "Arrastrar Salidas del mes", exact: true }).last(),
@@ -248,11 +260,20 @@ test("Dashboard pointer swaps and edge moves persist without losing Widgets", ({
         announcement: "Colocar arriba de Presupuesto de restaurantes",
       });
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { level: 2 }).nth(1)).toHaveText("Salidas del mes")
+        expect(
+          page
+            .getByRole("region", { name: "Diseño responsivo del tablero", exact: true })
+            .getByRole("heading", { level: 2 })
+            .first()
+        ).toHaveText("Salidas del mes")
       );
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { level: 2 })).toHaveText([
+        expect(
+          page
+            .getByRole("region", { name: "Diseño responsivo del tablero", exact: true })
+            .getByRole("heading", { level: 2 })
+        ).toHaveText([
           "Salidas del mes",
           "Presupuesto de restaurantes",
           "Gastos por categoría",

@@ -72,7 +72,7 @@ const scenarios = [
     initialize: 403,
     second: 200,
     visible: false,
-    notice: "No pudimos inicializar el tablero.",
+    notice: "No pudimos crear tu tablero. Intenta de nuevo.",
     calls: ["read", "initialize"],
   },
   {
@@ -81,7 +81,7 @@ const scenarios = [
     initialize: 503,
     second: 200,
     visible: false,
-    notice: "No pudimos inicializar el tablero.",
+    notice: "No pudimos crear tu tablero. Intenta de nuevo.",
     calls: ["read", "initialize"],
   },
   {
@@ -90,7 +90,7 @@ const scenarios = [
     initialize: 200,
     second: 503,
     visible: false,
-    notice: "El tablero se inicializó, pero no pudimos leerlo.",
+    notice: "No pudimos cargar tu tablero",
     calls: ["read", "initialize", "read"],
   },
   {
@@ -99,7 +99,7 @@ const scenarios = [
     initialize: 200,
     second: 404,
     visible: false,
-    notice: "El tablero se inicializó, pero no pudimos leerlo.",
+    notice: "No pudimos cargar tu tablero",
     calls: ["read", "initialize", "read"],
   },
   {
@@ -114,24 +114,63 @@ const scenarios = [
 ] as const;
 type Scenario = (typeof scenarios)[number];
 const readBody = (status: number): string => {
-  if (status === ok) return response(view);
+  if (status === ok) return `<main><h1>${view.title}</h1><h2>Gastos visibles</h2></main>`;
   return status === absentStatus ? absent : failure("unavailable");
 };
-const runScenario = Effect.fnUntraced(function* (page: Page, scenario: Scenario) {
-  const calls: Array<string> = [];
-  let initialized = scenario.first === ok;
+const assertScenario = Effect.fnUntraced(function* (
+  page: Page,
+  scenario: Scenario,
+  calls: Array<string>
+) {
+  if (scenario.visible) {
+    yield* Effect.tryPromise(() => expect(page.getByText("Gastos visibles").first()).toBeVisible());
+  } else {
+    if (scenario.name === "second-read-absent") {
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Crear tablero", exact: true })).toBeEnabled()
+      );
+      yield* Effect.tryPromise(() => expect.poll(() => calls).toEqual(scenario.calls));
+    } else {
+      yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
+    }
+    yield* Effect.tryPromise(() => expect(page.getByText("Gastos visibles")).toHaveCount(0));
+    if (scenario.notice !== "" && scenario.name !== "second-read-absent") {
+      yield* Effect.tryPromise(() => expect(page.getByText(scenario.notice)).toBeVisible());
+    }
+  }
+});
+const installEntry = Effect.fnUntraced(function* (page: Page) {
   yield* Effect.tryPromise(() => installUser(page));
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/transactions?*`, (route) =>
+      route.fulfill({ json: { data: [], next: [] } })
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/categories`, (route) =>
+      route.fulfill({ json: { data: [], next: [] } })
+    )
+  );
   yield* Effect.tryPromise(() =>
     page.route(`${apiOrigin}/dashboard/catalog`, (route) =>
       route.fulfill({ contentType: "application/json", body: response([]) })
     )
   );
+});
+const runScenario = Effect.fnUntraced(function* (page: Page, scenario: Scenario) {
+  const calls: Array<string> = [];
+  let initialized = scenario.first === ok;
+  yield* installEntry(page);
   yield* Effect.tryPromise(() =>
     page.route(`${apiOrigin}/dashboard/view`, (route) => {
       calls.push("read");
       const status = initialized ? scenario.second : scenario.first;
       const body = readBody(status);
-      return route.fulfill({ status, contentType: "application/json", body });
+      return route.fulfill({
+        status,
+        contentType: status === ok ? "text/html" : "application/json",
+        body,
+      });
     })
   );
   yield* Effect.tryPromise(() =>
@@ -150,16 +189,19 @@ const runScenario = Effect.fnUntraced(function* (page: Page, scenario: Scenario)
       return route.fulfill({ status: scenario.initialize, contentType: "application/json", body });
     })
   );
-  yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
-  if (scenario.visible) {
-    yield* Effect.tryPromise(() => expect(page.getByText("Gastos visibles").first()).toBeVisible());
-  } else {
-    yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
-    yield* Effect.tryPromise(() => expect(page.getByText("Gastos visibles")).toHaveCount(0));
-    if (scenario.notice !== "") {
-      yield* Effect.tryPromise(() => expect(page.getByText(scenario.notice)).toBeVisible());
-    }
+  // Enter through navigation so the browser owns the mocked HTML-fragment boundary.
+  yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+  yield* Effect.tryPromise(() => page.getByRole("link", { name: "Tablero", exact: true }).click());
+  if (scenario.first === absentStatus) {
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Crear tablero", exact: true })).toBeVisible()
+    );
+    expect(calls).toEqual(["read"]);
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Crear tablero", exact: true }).click()
+    );
   }
+  yield* assertScenario(page, scenario, calls);
   expect(calls.filter((call, index) => index === 0 || call !== calls[index - 1])).toEqual(
     scenario.calls
   );

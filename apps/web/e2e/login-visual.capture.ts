@@ -8,7 +8,7 @@ import { playwright } from "./playwright-runtime";
 const { expect, test } = playwright;
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
-const apiOrigin = browserAcceptanceTopology().api;
+const apiOrigin = browserAcceptanceTopology().app;
 const captureDirectory = Effect.runSync(
   Config.String("FIDY_LOGIN_CAPTURE_DIRECTORY").pipe(Config.withDefault("/tmp/fidy-login-captures"))
 );

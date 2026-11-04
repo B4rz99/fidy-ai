@@ -9,11 +9,42 @@ import { advanceRefusedRequest, installAcceptanceClock } from "./acceptance-cloc
 const { expect } = playwright;
 
 const successStatus = 200;
+const absentDashboardStatus = 404;
 const resourceLimitedStatus = 429;
 const noContentStatus = 204;
 const pairingTimeoutMilliseconds = 15_000;
 const firstPollMilliseconds = 5_000;
-const { api: apiOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
+const { app: apiOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
+
+/** A declared document-read refusal is recovered through the public fragment retry. */
+export const openDashboardThroughCore = (page: Page): Promise<void> =>
+  page.goto("/app/dashboard").then((document) => {
+    if (document?.headers()["fidy-dashboard-status"] !== "429") return;
+    const recovered = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/dashboard/view" &&
+        response.status() !== resourceLimitedStatus,
+      { timeout: 15_000 }
+    );
+    return page
+      .getByRole("button", { name: "Reintentar carga del tablero", exact: true })
+      .click()
+      .then(() => recovered)
+      .then((response) => {
+        expect([successStatus, absentDashboardStatus]).toContain(response.status());
+      });
+  });
+
+/** Existing feature journeys explicitly create an absent Dashboard through its visible action. */
+export const createDashboardIfAbsent = (page: Page): Promise<void> => {
+  const create = page.getByRole("button", { name: "Crear tablero", exact: true });
+  const customize = page.getByRole("button", { name: "Personalizar", exact: true });
+  return expect(create.or(customize))
+    .toBeVisible()
+    .then(() => create.isVisible())
+    .then((absent) => (absent ? create.click() : undefined))
+    .then(() => expect(customize).toBeEnabled());
+};
 
 /** The browser obtains a WebSession only from real Core redemption, never from a route mock. */
 export const visiblePairingCode = (page: Page): Promise<string> =>

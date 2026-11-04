@@ -111,10 +111,7 @@ const install = Effect.fnUntraced(function* (page: Page, edits: Array<unknown>) 
       });
     })
   );
-  yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
-  yield* Effect.tryPromise(() =>
-    page.getByRole("button", { name: "Personalizar", exact: true }).click()
-  );
+  yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
   yield* Effect.tryPromise(() =>
     expect(
       page.getByRole("button", { name: "Arrastrar Gastos visibles", exact: true })
@@ -322,9 +319,9 @@ test("Dashboard successful drop stays pending until the canonical reread", ({ pa
       const handle = page.getByRole("button", { name: "Arrastrar Gastos visibles", exact: true });
       try {
         yield* Effect.tryPromise(() => expectSwap(edits));
-        yield* Effect.tryPromise(() => expect(handle).toBeDisabled());
+        yield* Effect.tryPromise(() => expect(handle).toBeHidden());
         yield* Effect.tryPromise(() =>
-          expect(page.getByRole("status").filter({ hasText: "Guardando cambio" })).toBeVisible()
+          expect(page.getByRole("button", { name: "Reintentando…", exact: true })).toBeDisabled()
         );
       } finally {
         refresh.resolve();
@@ -348,10 +345,21 @@ test("Dashboard abandons pending placement when the successful save cannot be re
       yield* Effect.tryPromise(() => page.mouse.up());
       yield* Effect.tryPromise(() => expectSwap(edits));
       yield* Effect.tryPromise(() =>
-        expect(page.getByRole("alert").filter({ hasText: "se guardó" })).toBeVisible()
+        expect(
+          page.getByRole("button", { name: "Reintentar actualización del tablero", exact: true })
+        ).toBeEnabled()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Vista previa de la distribución", { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { level: 2 })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => page.unroute(`${apiOrigin}/dashboard/view`, failView));
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("button", { name: "Reintentar actualización del tablero", exact: true })
+          .click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { level: 2 }).last()).toHaveText("Otro Widget")

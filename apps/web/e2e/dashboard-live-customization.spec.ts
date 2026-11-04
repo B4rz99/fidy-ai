@@ -1,7 +1,11 @@
 import { Effect } from "effect";
 import type { Page, Response } from "@playwright/test";
 import { playwright } from "./playwright-runtime";
-import { signInFirstDaviplataThroughCore } from "./real-core-fixture";
+import {
+  createDashboardIfAbsent,
+  openDashboardThroughCore,
+  signInFirstDaviplataThroughCore,
+} from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const successStatus = 200;
@@ -9,6 +13,13 @@ const admittedEdit = (page: Page): Promise<Response> =>
   page.waitForResponse(
     (response) => response.url().endsWith("/dashboard/edits") && response.status() === successStatus
   );
+
+const showSavedDashboard = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Guardar", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+});
 
 test("persists Widget renaming and removal through the real Dashboard editor", ({
   page,
@@ -19,7 +30,9 @@ test("persists Widget renaming and removal through the real Dashboard editor", (
       yield* Effect.tryPromise(() =>
         signInFirstDaviplataThroughCore({ page, deferFreshEntry: true, request })
       );
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+      yield* Effect.tryPromise(() => createDashboardIfAbsent(page));
+
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Personalizar", exact: true }).click()
       );
@@ -40,10 +53,7 @@ test("persists Widget renaming and removal through the real Dashboard editor", (
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible()
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Guardar", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() => page.reload());
+      yield* showSavedDashboard(page);
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible()
       );
@@ -58,10 +68,7 @@ test("persists Widget renaming and removal through the real Dashboard editor", (
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { name: title, exact: true })).toHaveCount(0)
       );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Guardar", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() => page.reload());
+      yield* showSavedDashboard(page);
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeVisible()
       );

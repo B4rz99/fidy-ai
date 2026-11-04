@@ -2,7 +2,12 @@ import type { Locator, Page } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
-import { signInDashboardThroughCore, signInNavigationThroughCore } from "./real-core-fixture";
+import {
+  createDashboardIfAbsent,
+  openDashboardThroughCore,
+  signInDashboardThroughCore,
+  signInNavigationThroughCore,
+} from "./real-core-fixture";
 
 const { expect, test } = playwright;
 
@@ -122,7 +127,10 @@ test("Dashboard keeps Personalizar clear of the assistant and theme controls on 
       const viewport = { width: 1280, height: 720 };
       yield* Effect.tryPromise(() => page.setViewportSize(viewport));
       yield* installRecentTransactions(page);
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
       const personalize = page.getByRole("button", { name: "Personalizar", exact: true });
       const agent = page.getByRole("button", { name: "Abrir agente Fidy", exact: true });
       const theme = page.getByRole("button", { name: /Activar tema (claro|oscuro)/u });
@@ -149,7 +157,8 @@ test("application appearance follows the system until a manual choice survives n
         signInDashboardThroughCore({ page, deferFreshEntry: true, request })
       );
       yield* Effect.tryPromise(() => page.clock.resume());
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+      yield* Effect.tryPromise(() => createDashboardIfAbsent(page));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Activar tema claro" })).toBeVisible()
       );
@@ -196,7 +205,8 @@ test("mobile navigation keeps the header usable and hides the assistant until na
         })
       );
       yield* Effect.tryPromise(() => page.clock.resume());
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+      yield* Effect.tryPromise(() => createDashboardIfAbsent(page));
       const menu = page.getByRole("button", { name: "Menú de navegación", exact: true });
       const assistant = page.getByRole("button", { name: "Abrir agente Fidy", exact: true });
       const theme = page.getByRole("button", { name: /Activar tema (claro|oscuro)/u });
@@ -239,7 +249,10 @@ test("recent Transactions retain ten canonical entries grouped by local date wit
   Effect.runPromise(
     Effect.gen(function* () {
       yield* installRecentTransactions(page);
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
       const today = page.getByRole("region", { name: "24 de octubre de 2026", exact: true });
       const yesterday = page.getByRole("region", { name: "23 de octubre de 2026", exact: true });
       yield* Effect.tryPromise(() => expect(today).toBeVisible());
@@ -339,7 +352,10 @@ test("long personalized Widget titles remain clear of the currency badge and edi
       const title = personalizedBudgetTitle;
       yield* Effect.tryPromise(() => page.setViewportSize(mobileViewport));
       yield* installPersonalizedBudget(page);
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
       const heading = page.getByRole("heading", { name: title, exact: true });
       const card = page.locator("[data-slot=card]").filter({ has: heading });
       const currency = card.getByText("COP", { exact: true });
@@ -389,7 +405,10 @@ test("a recent dashboard Transaction opens history on its local date", ({ page }
     Effect.gen(function* () {
       yield* installRecentTransactions(page);
       yield* installRecentHistory(page);
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
       yield* Effect.tryPromise(() =>
         page.getByRole("link", { name: /^Comercio de prueba 5,/u }).click()
       );

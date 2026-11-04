@@ -3,7 +3,7 @@ import type { Locator, Page, Route } from "@playwright/test";
 import { ResourceLimited } from "@fidy/server/client";
 import { Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
-import { signInDashboardThroughCore } from "./real-core-fixture";
+import { openDashboardThroughCore, signInDashboardThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
 const { operator } = browserAcceptanceTopology();
@@ -58,7 +58,10 @@ test("a pointer resize submits the canonical edit and retains its weight after r
         signInDashboardThroughCore({ page, deferFreshEntry: true, request })
       );
       yield* Effect.tryPromise(() => page.clock.resume());
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Crear tablero", exact: true }).click()
+      );
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
       const boundary = page
         .getByRole("separator", { name: /^Redimensionar límite después de /u })
@@ -97,7 +100,6 @@ test("a pointer resize submits the canonical edit and retains its weight after r
       ]);
       expect(edits).toEqual(edits.map(() => committed[0]));
       yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Personalizar" }).click());
       yield* Effect.tryPromise(() => expect(boundary).toHaveAttribute("aria-valuenow", weight));
     })
   ));

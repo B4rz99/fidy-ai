@@ -23,7 +23,7 @@ const successStatus = 204;
 const millisecondsPerSecond = 1_000;
 const maximumRetrySeconds = 5;
 const resourceLimitedStatus = 429;
-const { api, operator } = browserAcceptanceTopology();
+const { app: api, operator } = browserAcceptanceTopology();
 const RetrySeconds = Schema.NumberFromString.check(
   Schema.isInt(),
   Schema.isGreaterThan(0),

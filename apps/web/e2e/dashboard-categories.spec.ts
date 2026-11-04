@@ -124,7 +124,10 @@ test("16 spending categories use readable emoji labels below even the smallest b
   Effect.runPromise(
     Effect.gen(function* () {
       yield* installSpending(page);
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
       const restaurant = page.getByRole("img", { name: "Restaurantes", exact: true });
       yield* Effect.tryPromise(() => expect(restaurant).toHaveText("🍽️"));
       const other = page.getByRole("img", { name: labels[15], exact: true });
@@ -178,7 +181,10 @@ test("keyboard navigation exposes exact amounts separately for each Currency", (
         },
       };
       yield* installSpending(page, value);
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
       const cop = page.getByRole("region", { name: "Serie COP" });
       const usd = page.getByRole("region", { name: "Serie USD" });
       yield* Effect.tryPromise(() => cop.getByRole("application").focus());
@@ -210,7 +216,10 @@ test("an empty spending period retains its empty state", ({ page }) =>
           },
         },
       });
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
       yield* Effect.tryPromise(() =>
         expect(
           page.getByText("No hay transacciones en este periodo", { exact: true })
@@ -227,7 +236,10 @@ test("touch selection reveals a category's exact amount on a phone", ({ page }) 
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
       yield* installSpending(page);
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Guardar", exact: true }).click()
+      );
       const series = page.getByRole("region", { name: "Serie COP" });
       yield* Effect.tryPromise(() => series.locator(".recharts-bar-rectangle").first().tap());
       yield* Effect.tryPromise(() =>
@@ -307,7 +319,10 @@ for (const count of [halfCategoryCount, categoryCount]) {
             },
           },
         });
-        yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+        yield* Effect.tryPromise(() => page.goto("/app/dashboard?customize=1"));
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Guardar", exact: true }).click()
+        );
         const series = page.getByRole("region", { name: "Serie COP" });
         yield* Effect.tryPromise(() => expect(series.getByRole("img")).toHaveCount(count));
         yield* Effect.tryPromise(() =>

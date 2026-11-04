@@ -13,7 +13,7 @@ import {
 } from "./real-core-fixture";
 
 const { expect, test } = playwright;
-const { api: apiOrigin, app: appOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
+const { app: apiOrigin, app: appOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const json = (value: object): string => JSON.stringify(value);

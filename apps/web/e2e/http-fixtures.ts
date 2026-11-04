@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 
-export const apiOrigin = browserAcceptanceTopology().api;
+export const apiOrigin = browserAcceptanceTopology().app;
 const defaultUser = {
   id: "24000000-0000-4000-8000-000000000241",
   serviceMarket: "CO",

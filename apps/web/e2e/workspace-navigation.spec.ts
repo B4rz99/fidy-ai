@@ -1,7 +1,8 @@
-import type { Page, Route } from "@playwright/test";
+import type { BrowserContext, Page, Route } from "@playwright/test";
 import { type Cause, Clock, Effect, type Scope } from "effect";
 import { apiOrigin } from "./http-fixtures";
 import {
+  createDashboardIfAbsent,
   navigateThroughConsent,
   signInNavigationPerformanceThroughCore,
   signInNavigationThroughCore,
@@ -216,7 +217,10 @@ test("retains Access listings on return while freshly checking both lists", ({ p
     }).pipe(Effect.scoped)
   ));
 
-test("reads and initializes a first Dashboard only on the actual visit", ({ page, request }) =>
+test("reads a first Dashboard only on its actual visit and creates it only on request", ({
+  page,
+  request,
+}) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const initializations: string[] = [];
@@ -242,6 +246,14 @@ test("reads and initializes a first Dashboard only on the actual visit", ({ page
       expect(initializations).toEqual([]);
       expect(reads).toEqual([]);
       yield* Effect.tryPromise(() => openWorkspace(page, "Tablero"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Crear tablero", exact: true })).toBeEnabled()
+      );
+      expect(initializations).toEqual([]);
+      expect(reads).toHaveLength(1);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Crear tablero", exact: true }).click()
+      );
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeEnabled()
       );
@@ -285,7 +297,7 @@ test("keeps closed mobile navigation artwork out of startup and loads it when op
     })
   ));
 
-for (const workspace of workspaces) {
+for (const workspace of workspaces.filter((workspace) => workspace.name !== "Tablero")) {
   test(`returns to ${workspace.name} from cached data while refreshing`, ({ page, request }) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -346,7 +358,9 @@ for (const workspace of workspaces) {
     ));
 }
 
-for (const workspace of workspaces.filter((workspace) => workspace.name !== "Transacciones")) {
+for (const workspace of workspaces.filter(
+  (workspace) => workspace.name !== "Transacciones" && workspace.name !== "Tablero"
+)) {
   test(`returns to ${workspace.name} on a poor connection without waiting for refreshed data`, ({
     page,
     request,
@@ -384,6 +398,78 @@ for (const workspace of workspaces.filter((workspace) => workspace.name !== "Tra
       }).pipe(Effect.scoped)
     ));
 }
+
+const slowWorkspaceConnection = Effect.fnUntraced(function* (page: Page, context: BrowserContext) {
+  const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
+  yield* Effect.tryPromise(() => cdp.send("Network.enable"));
+  yield* Effect.tryPromise(() =>
+    cdp.send("Network.emulateNetworkConditions", {
+      offline: false,
+      latency: 400,
+      downloadThroughput: 51_200,
+      uploadThroughput: 25_600,
+    })
+  );
+});
+
+test("returns to Tablero over a poor connection only after a fresh read and withholds content if that read fails", ({
+  page,
+  request,
+  context,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationPerformanceThroughCore({ page, request, identity: "navigationDashboard" })
+      );
+      yield* Effect.tryPromise(() => openWorkspace(page, "Tablero"));
+      yield* Effect.tryPromise(() => createDashboardIfAbsent(page));
+      const title = yield* Effect.tryPromise(() =>
+        page.getByRole("heading", { level: 1 }).innerText()
+      );
+      yield* Effect.tryPromise(() => openWorkspace(page, "Por revisar"));
+      yield* slowWorkspaceConnection(page, context);
+      const refresh = Promise.withResolvers<void>();
+      const refuse = (route: Route): Promise<void> =>
+        refresh.promise.then(() =>
+          route.fulfill({
+            status: 503,
+            json: { error: { code: "unavailable", message: "Retry." }, next: [] },
+          })
+        );
+      yield* Effect.tryPromise(() => page.route(`${apiOrigin}/dashboard/view`, refuse));
+      const read = page.waitForRequest(`${apiOrigin}/dashboard/view`);
+      yield* Effect.tryPromise(() => openWorkspace(page, "Tablero"));
+      try {
+        yield* Effect.tryPromise(() => read);
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("heading", { name: title, exact: true })).toHaveCount(0)
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Personalizar", exact: true })).toHaveCount(0)
+        );
+      } finally {
+        refresh.resolve();
+      }
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Reintentar carga del tablero", exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: title, exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => page.unroute(`${apiOrigin}/dashboard/view`, refuse));
+      const retry = page.waitForResponse(`${apiOrigin}/dashboard/view`);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar carga del tablero", exact: true }).click()
+      );
+      expect((yield* Effect.tryPromise(() => retry)).status()).toBe(successfulResponse);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible()
+      );
+    })
+  ));
 
 const recordSamples = (
   name: string,

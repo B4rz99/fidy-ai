@@ -100,9 +100,14 @@ Compare sidecars from clean, fully sampled checkouts:
 bun apps/web/scripts/dashboard-qualification.ts /absolute/baseline.json /absolute/candidate.json
 ```
 
-`FIDY_DASHBOARD_BACKEND=legacy-d1` selects the current fixture. The two audited native backend
-labels deliberately refuse preparation until the fixture invokes the real authoritative native
-Actor path. A legacy facade cannot qualify native routing. The comparator reports complete local,
+`FIDY_DASHBOARD_BACKEND=legacy-d1` selects the legacy D1 fixture. `audited-native-guarded` selects
+one actual native Store namespace for fixture seeding, Core, coordinators and the named document
+entry. Its closed bootstrap and logical clock are test-only. `audited-native-qualified` continues
+to refuse preparation until provider qualification is complete. A D1-shaped facade cannot qualify
+native routing. Invocation-local `nativeCalls` record actual Store Dashboard RPCs, generic Store
+RPCs, named document entry RPCs and R2 operations separately. Missing observations remain -1. Full
+browser elapsed includes the private fixture HTTP document bridge; do not subtract it. Clock
+headers retain the observed logical clock in each realm. The comparator reports complete local,
 remote application-added and complete remote request measurements as `not-measured`; these require
 separate end-to-end public-request observations and measured native RPC/R2/control-plane counters.
 No browser fixture or loopback paint result establishes these targets.
@@ -112,8 +117,10 @@ Browser samples retain API request counts, response bytes and phase timings wher
 subtotal when exposed; -1 means absent. It is not a total across Worker/coordinator boundaries or
 an R2 generation-read count.
 A byte/duration sentinel of -1 means the browser transport could not obtain that observation.
-Database round trips and R2 generation-check counts are explicitly unavailable from browser
-transport: measure those separately at the native Dashboard public request seam. Do not infer them
+Legacy browser transport cannot observe database round trips or R2 generation checks. The native
+guarded fixture exposes actual private binding and R2 operation counts through test-only response
+headers; these are independent observations, rather than inferred phase durations. Measure the
+complete native public request seam separately for its latency target. Do not infer them
 from phase duration or reuse earlier counts for a different revision.
 
 The complete 1/8/32-User, two-tab ingestion, remote-provider, wide-Money, maximum-layout and paired
@@ -132,3 +139,23 @@ fragment. Zero is unavailable status metadata. Fragment qualification therefore 
 fresh resource, the current visit's pending-to-ready typed-client commit and the independently
 recorded public HTTP 200 response. Refused reads never enter successful statistics. The direct
 probe additionally verifies the navigation response status before accepting its initial marker.
+
+## Diagnose a long-seed native transport failure
+
+The synthetic engine probe can retain an initial failed read and continue separate diagnostic
+requests for COUNT, streaming plain/effective cursors, Money decoding and complete folding. These
+requests keep scalar counts and bounded results; they never materialize a million-row array. The
+original failed read still fails the test. Run outside qualification collection:
+
+```sh
+DASHBOARD_ENGINE_STRESS=true DASHBOARD_ENGINE_DIAGNOSTIC=true \
+  bun run --cwd apps/server test:cloudflare -- cloudflare/dashboard/sqlite-engine-proof.test.ts \
+  -t 'keeps cursor working groups bounded'
+```
+
+`DASHBOARD_ENGINE_DIAGNOSTIC_SMALL=true` selects a 500-row functional control.
+`DASHBOARD_ENGINE_FRESH_AFTER_SEED=true` sends `Connection: close` on the synthetic seed request
+and writes a separate `dashboard-engine-fresh-connection.json`, preserving the original stress
+artifact. Compare the first read and every subsequent diagnostic outcome before assigning a cause.
+These fixture HTTP requests are not production native RPCs and do not authorize automatic replay of
+production financial work. Generated artifacts remain under ignored `apps/server/test-results`.

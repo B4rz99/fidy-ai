@@ -67,12 +67,18 @@ export const dashboardAssessmentProvenance = Effect.fn(function* (
     "e2e/assessment-fixture.ts",
     "e2e/real-core-fixture.ts",
     "playwright.assessment.config.ts",
+    "scripts/serve-preview.ts",
   ]);
   const builderDigest = yield* hashFiles(new URL("../../server/cloudflare/", import.meta.url), [
     "browser-assessment.test-fixture.ts",
     "browser-assessment-layout.test-fixture.ts",
     "browser-acceptance-seed.ts",
     "browser-acceptance-clock.test-fixture.ts",
+    "browser-assessment-native.test-fixture.ts",
+    "browser-acceptance-preview.ts",
+    "sqlite-store/assessment-observation.test-fixture.ts",
+    "sqlite-store/test-database.test-fixture.ts",
+    "sqlite-store/adapter-worker.test-fixture.ts",
     "browser-acceptance/contract.ts",
     "browser-acceptance/operations.ts",
   ]);

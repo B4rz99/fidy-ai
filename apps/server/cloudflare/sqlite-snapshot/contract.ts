@@ -139,6 +139,16 @@ export type SnapshotBuildStatus =
   | Readonly<{ kind: "Ready"; artifactDigest: string; schemaObjects: number; rows: number }>;
 export type SnapshotArtifactRead = Readonly<{
   artifacts: R2Bucket;
+  target: RecoveryTarget;
   activationId: string;
   digest: string;
 }>;
+
+/** Trusted operator composition fixes this dedicated temporary bucket; no caller selects a bucket or arbitrary key prefix over a public transport. */
+export type SnapshotArtifactRetirementInput = Readonly<{
+  artifacts: R2Bucket;
+  activationId: string;
+  target: RecoveryTarget;
+  artifactDigest: string;
+}>;
+export type SnapshotArtifactRetirementStatus = Readonly<{ complete: boolean; deleted: number }>;

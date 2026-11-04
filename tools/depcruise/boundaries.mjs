@@ -13,6 +13,8 @@ const compositionRoots = new Set([
   "src/shell/memory/memory-policy.test.ts",
   "cloudflare/core-worker.ts",
   "cloudflare/sqlite-store/adapter-worker.test-fixture.ts",
+  "cloudflare/sqlite-store/import-worker.test-fixture.ts",
+  "cloudflare/sqlite-store/import.test-fixture.ts",
   "cloudflare/erasure/candidate-worker.ts",
   "cloudflare/erasure/imported-worker.test-fixture.ts",
   "cloudflare/release-smoke-worker.ts",
@@ -57,6 +59,8 @@ const compositionRoots = new Set([
   "cloudflare/categories/keyword-rules.test.ts",
   "cloudflare/dashboard/dashboard.test.ts",
   "cloudflare/dashboard/bound-read.test.ts",
+  // Native audited Dashboard tests construct the actual Core HTTP composition.
+  "cloudflare/dashboard/sqlite-read.test.ts",
   "cloudflare/email-authentication/retention.test.ts",
   "cloudflare/ingestion/forwarded-email.test.ts",
   "cloudflare/ingestion/statement-ingestion.test.ts",
@@ -104,6 +108,11 @@ const testRunner = new Set([
   "cloudflare/test-shards.test.ts",
 ]);
 const sharedTestSupport = new Set([
+  // This exact loopback host composes acceptance assets and counters; it is never a deployed Web Worker.
+  "../web/scripts/serve-preview.ts",
+  // The closed operator bridge and invocation-local counters serve browser hosts and native fixture assertions.
+  "cloudflare/browser-assessment-native.test-fixture.ts",
+  "cloudflare/sqlite-store/assessment-observation.test-fixture.ts",
   "cloudflare/openai.test-fixture.ts",
   // Downstream journeys publish real statements through the ingestion owner protocol.
   "cloudflare/ingestion/statement-publication.test-fixture.ts",
@@ -113,6 +122,8 @@ const sharedTestSupport = new Set([
   "cloudflare/schema-cutover.test-fixture.ts",
   "cloudflare/browser-acceptance-connections.test-fixture.ts",
   "cloudflare/browser-assessment.test-fixture.ts",
+  // Default and maximum layouts are shared pure inputs for native/browser assessment harnesses.
+  "cloudflare/browser-assessment-layout.test-fixture.ts",
   "cloudflare/bancolombia-activation.test-fixture.ts",
   "cloudflare/browser-acceptance-clock.test-fixture.ts",
   "src/shell/testing/credential-evidence-harness.ts",

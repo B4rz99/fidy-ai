@@ -9,7 +9,7 @@ import { NativeDashboardResult } from "./contract";
 import { freeAllowanceLimits } from "../../src/core/quotas/contract";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { it } from "@effect/vitest";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import { afterAll, expect } from "vitest";
 import { sqliteTestStorage } from "../sqlite-store/test-database.test-fixture";
 import { installTestSchema } from "../d1-test-fixture";
@@ -831,6 +831,9 @@ it.live(
         status: 200,
         bootstrap: { binding: sessionId, initial: { status: "Missing" } },
       });
+      expect(transfer).toMatchObject({
+        fixtureCounters: { nativeRpc: 1, r2Get: 1, genericRpc: 0 },
+      });
       const rendered = yield* Schema.decodeUnknownEffect(Schema.Struct({ html: Schema.String }))(
         transfer
       );
@@ -860,7 +863,11 @@ it.live(
             new Request("https://app.fidy.test/app/dashboard", { headers: request().headers })
           )
         )
-      ).toEqual({ kind: "refused", status: 503 });
+      ).toMatchObject({
+        kind: "refused",
+        status: 503,
+        fixtureCounters: { nativeRpc: 0, r2Get: 0 },
+      });
       expect(
         yield* io(() => fixture.db.prepare("SELECT count(*) AS count FROM audit_entries").first())
       ).toEqual({ count: 0 });
@@ -1272,6 +1279,7 @@ it.live("accepts the provider's actual private Dashboard RPC binding without an 
       kind: "response",
       response: { status: 404, body: { error: { code: "dashboard_uninitialized" } } },
     });
+    expect(result).toMatchObject({ fixtureCounters: { nativeRpc: 1, r2Get: 1, r2Head: 0 } });
     expect(
       yield* io(() =>
         fixture.db
@@ -1645,5 +1653,52 @@ it.live("rolls back native OAuth charge and pressure when its financial Audit fa
         fixture.db.prepare("SELECT count(*) AS count FROM canonical_request_buckets").first()
       )
     ).toEqual({ count: 0 });
+  })
+);
+
+it.live("keeps native R2 observations separate across concurrent provider calls", () =>
+  Effect.gen(function* () {
+    const native = yield* io(() => storage.acquireDocument("Live"));
+    yield* setupOn(() => Promise.resolve(native));
+    const call = (): Promise<unknown> =>
+      native.namespace.getByName("authoritative-v1").dashboard({
+        manifest: "fixture",
+        epoch: "fixture",
+        mode: "bound",
+        request: request(),
+      });
+    const results = yield* Effect.all([io(call), io(call)], { concurrency: "unbounded" });
+    for (const result of results) {
+      expect(result).toMatchObject({
+        fixtureCounters: { nativeRpc: 1, entryRpc: 0, genericRpc: 0, r2Get: 1 },
+      });
+    }
+  })
+);
+
+it.live("applies a trusted logical clock offset only inside its isolated native fixture", () =>
+  Effect.gen(function* () {
+    const oneDayMilliseconds = 86400000;
+    const native = yield* io(() =>
+      storage.acquireDocument("Live", {
+        browserOrigin: "https://app.fidy.test",
+        clockOffset: Option.some(-oneDayMilliseconds),
+      })
+    );
+    yield* setupOn(() => Promise.resolve(native));
+    const before = yield* Clock.currentTimeMillis;
+    const raw = yield* io(() =>
+      native.namespace
+        .getByName("authoritative-v1")
+        .dashboard({ manifest: "fixture", epoch: "fixture", mode: "bound", request: request() })
+    );
+    const observed = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ fixtureCounters: Schema.Struct({ nativeClock: Schema.Finite }) })
+    )(raw);
+    const after = yield* Clock.currentTimeMillis;
+    expect(observed.fixtureCounters.nativeClock).toBeGreaterThanOrEqual(
+      before - oneDayMilliseconds
+    );
+    expect(observed.fixtureCounters.nativeClock).toBeLessThanOrEqual(after - oneDayMilliseconds);
   })
 );

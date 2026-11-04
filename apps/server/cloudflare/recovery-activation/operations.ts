@@ -1,14 +1,21 @@
+import { runController } from "./internal/controller";
 import { planSourceRetirement, resumeSourceRetirement } from "./internal/source-retirement";
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import { RecoveryDrainObservation } from "../recovery-lifecycle/contract";
 import { observeRecoveryDrain } from "../recovery-lifecycle/operations";
-import { observeErasureRecoveryDrain, reconcileErasureAdmissions } from "../erasure/operations";
+import {
+  observeErasureRecoveryDrain,
+  observeFrozenErasureLedger,
+  reconcileErasureAdmissions,
+} from "../erasure/operations";
 import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
+  type RecoveryArtifactRetirementAccess,
   type RecoveryBootstrapAccess,
   type RecoveryClosedSourceAccess,
+  type RecoveryServingAccess,
   RecoverySourceTarget,
   RecoveryTarget,
 } from "./contract";
@@ -54,11 +61,7 @@ const requireTargets = (
     }
     return { source, serving };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
-const awaitOwnerDrain = (
-  input: ActivationInput,
-  record: ActivationRecord,
-  state: RecoveryAdmissionState
-): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
+const sourceReady = (input: ActivationInput): Effect.Effect<boolean, ErasureUnavailable> =>
   Effect.gen(function* () {
     const observation = yield* observeRecoveryDrain({ db: input.configuration.sourceDb });
     const drain = yield* Schema.decodeEffect(RecoveryDrainObservation, {
@@ -72,6 +75,17 @@ const awaitOwnerDrain = (
     }
     const erasure = yield* observeErasureRecoveryDrain({ db: input.configuration.sourceDb });
     if (drain.pending !== 0 || drain.ambiguous !== 0 || erasure.pending !== 0) {
+      return false;
+    }
+    return true;
+  }).pipe(Effect.mapError(() => new ErasureUnavailable()));
+const awaitOwnerDrain = (
+  input: ActivationInput,
+  record: ActivationRecord,
+  state: RecoveryAdmissionState
+): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    if (!(yield* sourceReady(input))) {
       return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
     }
     if (state.closed && record.source.kind === "D1") {
@@ -87,6 +101,44 @@ const awaitOwnerDrain = (
     return { ...record, cursor: "", phase: "AwaitingProvider" as const };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
+const observeSourceLedger = (
+  input: ActivationInput,
+  record: ActivationRecord,
+  state: RecoveryAdmissionState
+): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    if (
+      !state.closed ||
+      record.source.kind !== "D1" ||
+      record.sourceFence.state !== "Prepared" ||
+      !(yield* sourceReady(input))
+    ) {
+      return yield* new ErasureUnavailable();
+    }
+    const sourceLedger = yield* observeFrozenErasureLedger({
+      db: input.configuration.sourceDb,
+      bucket: input.bucket,
+      generation: record.sourceFence.retired,
+      previous:
+        record.sourceLedger.state === "NotStarted"
+          ? Option.none()
+          : Option.some(record.sourceLedger),
+    });
+    return {
+      ...record,
+      sourceLedger,
+      phase:
+        sourceLedger.state === "Observed"
+          ? ("AwaitingFinalBarrier" as const)
+          : ("ObservingSourceLedger" as const),
+    };
+  });
+
+const sourceLedgerPhases = new Set<ActivationRecord["phase"]>([
+  "SourceRetired",
+  "ObservingSourceLedger",
+  "AwaitingFinalBarrier",
+]);
 const advancePhase = (
   input: ActivationInput,
   record: ActivationRecord
@@ -108,7 +160,10 @@ const advancePhase = (
       return yield* new ErasureUnavailable();
     }
     if (state.leases > 0) return { ...record, phase: "AwaitingDrain" as const, cursor: "" };
-    if (record.phase === "RetiringSource" || record.phase === "SourceRetired") {
+    if (sourceLedgerPhases.has(record.phase)) {
+      return yield* observeSourceLedger(input, record, state);
+    }
+    if (record.phase === "RetiringSource") {
       return yield* resumeSourceRetirement({
         record,
         state,
@@ -128,9 +183,7 @@ const advancePhase = (
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 /** Advances only fixed binding-selected targets. Local observations never qualify provider isolation or open serving admission. */
-export const advanceRecoveryActivation = (
-  input: ActivationInput
-): Effect.Effect<Response, ErasureUnavailable> =>
+const advance = (input: ActivationInput): Effect.Effect<Response, ErasureUnavailable> =>
   Effect.gen(function* () {
     yield* currentActivation(input);
     const targets = yield* requireTargets(input);
@@ -154,6 +207,7 @@ export const advanceRecoveryActivation = (
         ...targets,
         cursor: "",
         sourceFence: { state: "Unplanned" },
+        sourceLedger: { state: "NotStarted" },
         phase: "AwaitingDrain",
         providerIsolation: "Unqualified",
       }),
@@ -163,6 +217,27 @@ export const advanceRecoveryActivation = (
     yield* currentActivation(input);
     return yield* storeActivation({ bucket: input.bucket, record: advanced, previous });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
+
+/** Access authentication precedes the private exclusive claim; final publication shares this same durable controller authority. */
+export const advanceRecoveryActivation = (
+  input: ActivationInput
+): Effect.Effect<Response, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    const run = Effect.runPromiseWith(yield* Effect.context<never>());
+    return yield* Effect.tryPromise({
+      try: () =>
+        runController({
+          ...input,
+          work: (owned) =>
+            run(
+              advance({ ...input, ...owned }).pipe(
+                Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+              )
+            ),
+        }),
+      catch: () => new ErasureUnavailable(),
+    });
+  });
 
 /** Production recovery must never reauthorize a source or active target after activation begins. Candidate-only recovery uses its isolated boundary. */
 export const assertProductionRestoreAllowed = (
@@ -179,4 +254,12 @@ export const readClosedRecoverySource: RecoveryClosedSourceAccess = () =>
 
 /** No independent producer has established the final handoff or never-opened target history. Local import state cannot grant this authority. */
 export const readRecoveryBootstrapAuthorization: RecoveryBootstrapAccess = () =>
+  Effect.fail(new ErasureUnavailable());
+
+/** Neither a verified local seal nor configured IDs establish independent serving qualification. */
+export const readRecoveryServingAuthorization: RecoveryServingAccess = () =>
+  Effect.fail(new ErasureUnavailable());
+
+/** Never grant deletion from a local import checkpoint, absence of retries, or an operator-asserted artifact status. */
+export const readRecoveryArtifactRetirement: RecoveryArtifactRetirementAccess = () =>
   Effect.fail(new ErasureUnavailable());

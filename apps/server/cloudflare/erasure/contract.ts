@@ -148,3 +148,30 @@ export const ErasureSourceRetirement = Schema.Struct({
   retired: ErasureReference,
 });
 export type ErasureSourceRetirement = typeof ErasureSourceRetirement.Type;
+
+/** Bounded frozen-source observation, not a final checkpoint or serving authorization. */
+export const ErasureFrozenLedgerProgress = Schema.Struct({
+  generation: ErasureReference,
+  registryGeneration: ErasureGeneration,
+  registryEtag: Schema.String.check(Schema.isBetweenLength(1, maximumLedgerKeyLength)),
+  capturedAtMs: Schema.Int,
+  cursor: Schema.String.check(Schema.isMaxLength(maximumImportCursorLength)),
+  lastKey: Schema.String.check(Schema.isMaxLength(maximumLedgerKeyLength)),
+  checkedCases: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  checkedRequiredCases: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  checkedRequests: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  requiredDigest: importDigest,
+  requestsDigest: importDigest,
+  requestCursor: Schema.String.check(Schema.isMaxLength(maximumLedgerKeyLength)),
+  phase: Schema.Literals(["Ledger", "Requests"]),
+  digest: importDigest,
+  state: Schema.Literals(["Observing", "Observed"]),
+  providerIsolation: Schema.Literal("Unqualified"),
+});
+export type ErasureFrozenLedgerProgress = typeof ErasureFrozenLedgerProgress.Type;
+export type ErasureFrozenLedgerInput = Readonly<{
+  db: D1Database;
+  bucket: R2Bucket;
+  generation: string;
+  previous: Option.Option<ErasureFrozenLedgerProgress>;
+}>;

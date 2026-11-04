@@ -417,7 +417,7 @@ remains explicitly preserved. Zero owner work still leaves admission paused
 at `AwaitingProvider` until independent provider inventory and historical caller fencing permit
 final closure. For a closed, drained initial D1 source, a resumable R2 plan records the observed
 source marker and a distinct source-only retired marker before a native compare-and-set. The
-readiness predicate and retirement share one source transaction. Retrying an interrupted progress
+readiness predicate, global zero-writer check and retirement share one source transaction. Retrying an interrupted progress
 write reuses the same retired marker; the source is never stamped with the serving generation.
 This fence rejects delayed SQL that captured the old R2 generation, but cannot revoke historical
 restore or raw administration authority, so independent provider fencing remains required. The current operator always
@@ -431,8 +431,26 @@ restore state. Any activation record, malformed evidence or unavailable registry
 commands; the isolated candidate-only recovery boundary remains separate. Authenticated operator
 commands other than `Activation` and read-only `Receipt` hold native continuation leases, so they
 can settle while publishers are paused and are refused after final closure. `Activation` remains
-a control operation and must separately serialize its own interrupted native writes before any
-final barrier can qualify.
+a control operation with an exclusive opaque claim in the independent Gate. Acquisition occurs
+after Access authentication; request/response bodies never expose the claim identity. The Gate
+retains non-expiring Held/Unknown claims and released tombstones, so exact lost acquire/release
+replies can retry without reacquiring a released identity or clearing a newer owner. Controller
+IO captures its native DB/R2 promises and R2 bodies before Effect scheduling, and materializes
+its bounded metadata response before release. A second controller refuses while native writes
+or body reads remain unsettled. Any unknown native outcome permanently retains the claim until
+an independently justified reconciliation exists; elapsed time and a local retry grant no authority.
+Known cancellation after fully settled IO can resume the independently persisted retirement plan.
+This serializes current controller work but does not qualify legacy provider or HTTP drain.
+
+After source retirement the operator observes the independent sealed ledger in bounded pages and
+persists its cursor, stable external generation/ETag, case count and hash chain in its R2 progress.
+The Erasure owner verifies exact native deletion dispositions and complete required-request
+coverage under RET, preserving custody and provider claims. Two read-only passes compare the
+required-case and native-request hash chains, so source verification never mutates the frozen
+database. All observation and activation progress remains outside the snapshot.
+Completed observations rescan on retry, so a late pending case or changed registry checkpoint
+refuses progress. `AwaitingFinalBarrier` remains `Unqualified`: observation does not publish a
+serving generation, issue export/bootstrap authority or replace provider history enforcement.
 
 `RecoveryClosedSourceEvidence` declares the artifact handoff: source identity, actual admission
 object, activation, frozen source generation (the retired marker for initial D1), distinct final generation/checkpoint ETag and content
@@ -441,6 +459,10 @@ preliminary R2 progress cannot issue export/bootstrap authority while provider q
 final reconciliation remain incomplete. `readRecoveryBootstrapAuthorization` similarly refuses
 until an independent external phase authorizes the exact previously unopened target and fixed
 artifact digest; a local import cursor or schema seal cannot grant bootstrap or serving authority.
+The separate `readRecoveryServingAuthorization` binds the exact provider owner version as well;
+it currently refuses. `readRecoveryArtifactRetirement` also refuses until an external phase earns
+abandonment or qualified-open disposition for that exact artifact. Neither local verification nor
+an arbitrary caller prefix confers serving or artifact deletion permission.
 
 The Erasure-owned frozen-import verifier consumes the Store's native inactive bootstrap
 capability, so a D1 source cannot be passed as its target. It checks bounded sealed ledger pages
@@ -449,3 +471,34 @@ object, artifact and closed-source evidence digest. Only a complete matching led
 absence/writer proof advances the target's generation. The source's generation, custody events
 and provider claims are preserved. This inactive copy observation remains `Unqualified`; it
 cannot issue closed-source authority or open serving admission.
+
+The inactive Store importer consumes hash-validated schema and data chains in local native
+units, committing each applied object or row with its import checkpoint. It creates tables
+before copying rows, preserves exact integer/blob cells and `sqlite_sequence`, then installs
+views, indexes and triggers without replaying application write side effects. Foreign keys are
+enabled in a later native turn and checked per table; large-table verification CPU and storage
+headroom still require provider qualification. Imported data never becomes a second live writer.
+
+An explicit `SQLITE_STORE_ACTIVATION_ID`, `SQLITE_STORE_ARTIFACT_DIGEST` and private
+`SQLITE_STORE_ARTIFACTS` binding enable constructor/alarm bootstrap for a fresh, unsealed target.
+Every alarm consumes recovery-owned bootstrap authorization for the actual object and fixed
+artifact; missing or changed evidence refuses work. Existing seals or incomplete/malformed
+checkpoints are never repaired by restarting bootstrap. Ordinary sealed constructors perform no
+external metadata read. After complete native and Erasure verification, only a local data seal
+may be written: admission stays `Closed` and the release barrier stays `Unqualified`. Independently
+qualified serving-open authority and artifact retirement remain separate required controls.
+
+The private Store `open` control accepts only activation and epoch. Actual target identity,
+artifact digest, owner version and copied evidence come from native/deployment state; an
+independent serving authorization must match them exactly. After its await, readiness is
+rechecked and the Erasure-owned final-generation assertion shares the native transaction that
+opens admission. The serving accessor currently refuses, so a local data seal cannot open a
+target. Existing transitional reads retain their fresh R2 generation guard.
+
+Temporary snapshot objects and progress are partitioned by activation and the hash of the fixed
+target identity. Artifact retirement takes no arbitrary prefix: it requires the recovery owner's
+exact abandoned or qualified-open disposition, rechecks that authority before deletion, and
+repeats bounded first-page deletes until each candidate prefix is observed empty. A lost reply
+is retried from current storage; an empty-prefix observation supplies no provider or continuation
+qualification. The retirement accessor currently refuses, preserving all artifacts until that
+independent disposition exists.

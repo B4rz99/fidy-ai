@@ -1,4 +1,7 @@
-import { Clock, DateTime, Effect, Schema } from "effect";
+import "./browser-acceptance-clock.test-fixture";
+import { sqliteTestStorage } from "./sqlite-store/test-database.test-fixture";
+import { browserOrigins } from "./runtime/contract";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { DisclosureSnapshot } from "../src/shell/consent/contract";
 import { currentDisclosureFor } from "../src/shell/consent/operations";
 import { installTestSchema, isolatedTestStorage } from "./d1-test-fixture";
@@ -9,7 +12,19 @@ import {
 import { browserAssessmentConfiguration } from "./browser-acceptance/operations";
 
 const storage = isolatedTestStorage();
-export const { db, bucket: erasureRegistry } = await storage.acquire();
+const nativeStorage = sqliteTestStorage();
+const nativeStore =
+  browserAssessmentConfiguration().backend === "audited-native-guarded"
+    ? await nativeStorage.acquireDocument("Live", {
+        browserOrigin: browserOrigins.acceptance,
+        clockOffset: Option.some(
+          Effect.runSync(Clock.currentTimeMillis) - (performance.timeOrigin + performance.now())
+        ),
+      })
+    : undefined;
+export const assessmentNativeNamespace = nativeStore?.namespace;
+export const assessmentNativeDocument = nativeStore?.document;
+export const { db, bucket: erasureRegistry } = nativeStore ?? (await storage.acquire());
 
 await installTestSchema({ db });
 await erasureRegistry.put("recovery/generation", "initial");
@@ -441,8 +456,18 @@ export const prepareBrowserAssessment = (): Promise<
   Readonly<{ configuration: typeof DashboardAssessmentConfiguration.Encoded; layoutDigest: string }>
 > => {
   const configuration = browserAssessmentConfiguration();
-  if (configuration.backend !== "legacy-d1") {
-    return Promise.reject(new Error("The audited native Dashboard fixture binding is unavailable"));
+  if (configuration.backend === "audited-native-qualified") {
+    return Promise.reject(
+      new Error("The native qualified backend requires completed provider qualification")
+    );
+  }
+  if (
+    configuration.backend === "audited-native-guarded" &&
+    assessmentNativeNamespace === undefined
+  ) {
+    return Promise.reject(
+      new Error("The authoritative native Dashboard fixture binding is unavailable")
+    );
   }
   return import("./browser-assessment.test-fixture").then(({ seedAssessment }) =>
     Effect.runPromise(

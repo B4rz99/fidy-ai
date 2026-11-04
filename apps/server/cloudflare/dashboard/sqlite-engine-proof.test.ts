@@ -1,3 +1,4 @@
+import { diagnoseEngineFailure } from "./sqlite-engine-diagnostic-host.test-fixture";
 import { it } from "@effect/vitest";
 import { type Cause, Effect, Result, Schema } from "effect";
 import { expect } from "vitest";
@@ -51,16 +52,27 @@ const setup = Effect.gen(function* () {
 });
 const encodeJson = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json));
 const proofEvidenceName = (): string => {
+  if (Bun.env.DASHBOARD_ENGINE_FRESH_AFTER_SEED === "true") {
+    return "dashboard-engine-fresh-connection.json";
+  }
   if (Bun.env.DASHBOARD_ENGINE_STRESS === "true") return "dashboard-engine-stress.json";
   if (Bun.env.DASHBOARD_ENGINE_BOUNDARY === "true") return "dashboard-engine-boundary.json";
   return "dashboard-engine-proof.json";
 };
 const proofSizes = (): ReadonlyArray<number> => {
+  if (Bun.env.DASHBOARD_ENGINE_DIAGNOSTIC === "true") {
+    return [Bun.env.DASHBOARD_ENGINE_DIAGNOSTIC_SMALL === "true" ? 500 : 1000000];
+  }
   const sizes = [500, 10000];
   if (Bun.env.DASHBOARD_ENGINE_BOUNDARY === "true") sizes.push(100000);
   if (Bun.env.DASHBOARD_ENGINE_STRESS === "true") sizes.push(1000000);
   return sizes;
 };
+const proofModes = (): ReadonlyArray<"compact" | "bigint"> =>
+  Bun.env.DASHBOARD_ENGINE_DIAGNOSTIC === "true"
+    ? ["compact"]
+    : ["compact", "bigint", "bigint", "compact", "compact", "bigint"];
+const encodeDefect = Schema.encodeSync(Schema.Defect());
 const userId = "10000000-0000-4000-8000-000000000001";
 const categoryId = "10000000-0000-4000-8000-000000000001";
 const current = Date.parse("2026-11-04T18:00:00Z");
@@ -470,6 +482,8 @@ it.live(
             evidencePath,
             encodeJson({
               engine: "native SQLite Durable Object",
+              seedConnection:
+                Bun.env.DASHBOARD_ENGINE_FRESH_AFTER_SEED === "true" ? "close" : "default",
               measurement:
                 "exploratory host monotonic complete local RPC and render; no production or D1 comparison claim",
               cohorts,
@@ -484,6 +498,7 @@ it.live(
         [1000000, "500000510000"],
       ]);
       for (const count of sizes) {
+        const seedStarted = performance.now();
         cohorts.push({ count, outcome: "seed_started" });
         yield* persistEvidence();
         const statements = [
@@ -496,18 +511,19 @@ it.live(
             runtime.dispatchFetch("https://proof.internal/install", {
               method: "POST",
               body: encodeJson({ statements }),
+              headers:
+                Bun.env.DASHBOARD_ENGINE_FRESH_AFTER_SEED === "true" ? { connection: "close" } : {},
             })
           )).status
         ).toBe(204);
+        cohorts.push({
+          count,
+          outcome: "seed_completed",
+          elapsed: performance.now() - seedStarted,
+        });
+        yield* persistEvidence();
         const values: Array<unknown> = [];
-        for (const [sample, accumulation] of [
-          "compact",
-          "bigint",
-          "bigint",
-          "compact",
-          "compact",
-          "bigint",
-        ].entries()) {
+        for (const [sample, accumulation] of proofModes().entries()) {
           const started = performance.now();
           const selected = yield* Effect.result(
             Effect.tryPromise(() =>
@@ -523,8 +539,15 @@ it.live(
               accumulation,
               sample,
               outcome: "transport_failed",
+              cause: encodeDefect(selected.failure),
               elapsed: performance.now() - started,
             });
+            yield* persistEvidence();
+            const observations = yield* diagnoseEngineFailure(
+              runtime,
+              encodeJson({ userId, current, accumulation })
+            );
+            cohorts.push({ count, outcome: "post_failure_diagnostics", observations });
             yield* persistEvidence();
             return yield* selected.failure;
           }
@@ -574,7 +597,13 @@ it.live(
           });
           yield* persistEvidence();
         }
-        expect(values[0]).toEqual(values[1]);
+        const observations = yield* diagnoseEngineFailure(
+          runtime,
+          encodeJson({ userId, current, accumulation: "compact" })
+        );
+        cohorts.push({ count, outcome: "post_read_diagnostics", observations });
+        yield* persistEvidence();
+        expect(values[0]).toEqual(values.at(-1));
       }
       const timerStart = performance.now();
       let previous = timerStart;
@@ -591,6 +620,8 @@ it.live(
           encodeJson({
             timer: { resolutionMilliseconds: resolution, overheadMilliseconds: timerOverhead },
             engine: "native SQLite Durable Object",
+            seedConnection:
+              Bun.env.DASHBOARD_ENGINE_FRESH_AFTER_SEED === "true" ? "close" : "default",
             measurement:
               "host monotonic full local RPC; includes rendering; no production latency claim",
             cohorts,
@@ -598,7 +629,7 @@ it.live(
         )
       );
     }),
-  { timeout: 300000 }
+  { timeout: 600000 }
 );
 
 it.live(

@@ -1,3 +1,11 @@
+import { DashboardDocumentService } from "../dashboard/runtime";
+import type { DashboardDocumentEnvironment } from "../dashboard/contract";
+import {
+  observeAssessmentBucket,
+  observeAssessmentCall,
+  observeAssessmentDocumentCall,
+  observeAssessmentNamespace,
+} from "./assessment-observation.test-fixture";
 import type {
   AuthoritativeStoreEnvironment,
   SqliteStoreBinding,
@@ -193,14 +201,25 @@ export class AdapterProof {
     );
   }
 }
+const nativeWallClock = Date.now.bind(Date);
 export class ActiveStoreProof extends AuthoritativeSqliteStore {
   constructor(
     state: DurableObjectState,
-    env: SqliteStoreEnvironment & Partial<Record<`BUCKET_${number}`, R2Bucket>>
+    env: SqliteStoreEnvironment &
+      Partial<Record<`BUCKET_${number}`, R2Bucket>> &
+      Partial<Record<"FIDY_TEST_CLOCK_OFFSET", string>>
   ) {
+    if (env.FIDY_TEST_CLOCK_OFFSET !== undefined && env.FIDY_TEST_CLOCK_OFFSET !== "") {
+      const offset = Schema.decodeSync(Schema.Finite)(Number(env.FIDY_TEST_CLOCK_OFFSET));
+      Date.now = (): number => Math.floor(nativeWallClock() + offset);
+    }
     const matched = /^owner-(\d+)$/u.exec(state.id.name ?? "");
     const index = matched === null ? 0 : Number(matched[1]);
-    super(state, { ...env, ERASURE_BUCKET: env[`BUCKET_${index}`] });
+    const bucket = env[`BUCKET_${index}`];
+    super(state, {
+      ...env,
+      ERASURE_BUCKET: bucket === undefined ? undefined : observeAssessmentBucket(bucket),
+    });
     // Test-only bootstrap: production serving code exposes no sealing or import RPC.
     state.storage.kv.put("store-seal", {
       manifest: "fixture",
@@ -211,9 +230,27 @@ export class ActiveStoreProof extends AuthoritativeSqliteStore {
       state.storage.kv.put("store-admission", { phase: "Open", epoch: "fixture" });
     }
   }
+  dashboard(candidate: unknown): ReturnType<AuthoritativeSqliteStore["dashboard"]> {
+    return observeAssessmentCall(() => super.dashboard(candidate));
+  }
 }
 export { AuthoritativeSqliteStore };
-export { DashboardDocumentService } from "../dashboard/runtime";
+export class AssessmentDocumentService extends DashboardDocumentService {
+  constructor(context: ExecutionContext, environment: DashboardDocumentEnvironment) {
+    super(context, {
+      ...environment,
+      SQLITE_STORE:
+        environment.SQLITE_STORE === undefined
+          ? undefined
+          : observeAssessmentNamespace(environment.SQLITE_STORE),
+    });
+  }
+  readDashboardDocument(
+    request: Request
+  ): ReturnType<DashboardDocumentService["readDashboardDocument"]> {
+    return observeAssessmentDocumentCall(() => super.readDashboardDocument(request));
+  }
+}
 const targetProof = (configuration: AuthoritativeStoreEnvironment): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -356,3 +393,5 @@ export default {
     return env.PROOF.getByName("synthetic").fetch(request);
   },
 };
+
+export { DashboardDocumentService };

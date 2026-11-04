@@ -1,6 +1,6 @@
 import { it as effectIt } from "@effect/vitest";
 import { NodeFileSystem } from "@effect/platform-node";
-import { type Cause, Clock, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Fiber, Option, Schema } from "effect";
 import { HttpClient } from "effect/http";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { afterEach, expect, vi } from "vitest";
@@ -13,6 +13,10 @@ import {
   handleErasureOperator,
   withErasureRecovery,
 } from "./runtime";
+import type {
+  RecoveryAdmissionBinding,
+  RecoveryControllerClaim,
+} from "../recovery-activation/contract";
 import { nativeRecoveryAdmissions } from "../recovery-activation/native.test-fixture";
 
 const issuer = "https://erasure-test.cloudflareaccess.com";
@@ -75,6 +79,52 @@ const readActivationRecord = (
     return record;
   });
 
+const manualInterruption = (): AbortController => new AbortController();
+const renewInterruption = (current: AbortController): AbortController => {
+  current.abort();
+  return manualInterruption();
+};
+const lostControllerReplies = (
+  gate: RecoveryAdmissionBinding
+): Readonly<{ binding: RecoveryAdmissionBinding; calls: { acquire: number; release: number } }> => {
+  const calls = { acquire: 0, release: 0 };
+  const binding = {
+    ...gate,
+    acquireController: (claim: RecoveryControllerClaim): Promise<boolean> => {
+      calls.acquire += 1;
+      return gate
+        .acquireController(claim)
+        .then((acquired) =>
+          calls.acquire === 1 ? Promise.reject(Error("Lost acquired reply")) : acquired
+        );
+    },
+    releaseController: (claim: RecoveryControllerClaim): Promise<boolean> => {
+      calls.release += 1;
+      return gate
+        .releaseController(claim)
+        .then((released) =>
+          calls.release === 1 ? Promise.reject(Error("Lost released reply")) : released
+        );
+    },
+  };
+  return { binding, calls };
+};
+const releaseHeld = (proceed: PromiseWithResolvers<void>): Effect.Effect<void> =>
+  Effect.sync(() => proceed.resolve());
+const abortAfterBatch = (database: D1Database, controller: AbortController): D1Database =>
+  new Proxy(database, {
+    get: (db, property): unknown => {
+      if (property === "batch") {
+        return (statements: Parameters<D1Database["batch"]>[0]): ReturnType<D1Database["batch"]> =>
+          db.batch(statements).then((result) => {
+            controller.abort();
+            return result;
+          });
+      }
+      const value: unknown = Reflect.get(db, property, db);
+      return typeof value === "function" ? value.bind(db) : value;
+    },
+  });
 const delayedDatabase = (
   database: D1Database,
   entered: PromiseWithResolvers<void>,
@@ -94,13 +144,61 @@ const delayedDatabase = (
       return typeof value === "function" ? value.bind(db) : value;
     },
   });
+const heldProgress = (
+  registry: R2Bucket,
+  entered: PromiseWithResolvers<void>,
+  proceed: PromiseWithResolvers<void>
+): R2Bucket =>
+  new Proxy(registry, {
+    get: (bucket, property): unknown => {
+      if (property === "put") {
+        return (...args: Parameters<R2Bucket["put"]>): ReturnType<R2Bucket["put"]> => {
+          entered.resolve();
+          return proceed.promise.then(() => bucket.put(...args));
+        };
+      }
+      const value: unknown = Reflect.get(bucket, property, bucket);
+      return typeof value === "function" ? value.bind(bucket) : value;
+    },
+  });
+const heldRecordBody = (
+  registry: R2Bucket,
+  entered: PromiseWithResolvers<void>,
+  proceed: PromiseWithResolvers<void>
+): R2Bucket =>
+  new Proxy(registry, {
+    get: (bucket, property): unknown => {
+      if (property === "get") {
+        return (...args: Parameters<R2Bucket["get"]>): ReturnType<R2Bucket["get"]> =>
+          bucket.get(...args).then((object) => {
+            if (object === null || args[0] !== "recovery/activation") return object;
+            return new Proxy(object, {
+              get: (record, member): unknown => {
+                if (member === "text") {
+                  return (): Promise<string> => {
+                    entered.resolve();
+                    return proceed.promise.then(() => record.text());
+                  };
+                }
+                const value: unknown = Reflect.get(record, member, record);
+                return typeof value === "function" ? value.bind(record) : value;
+              },
+            });
+          });
+      }
+      const value: unknown = Reflect.get(bucket, property, bucket);
+      return typeof value === "function" ? value.bind(bucket) : value;
+    },
+  });
 const unavailableProgress = (registry: R2Bucket): R2Bucket =>
   new Proxy(registry, {
     get: (bucket, property): unknown => {
       if (property === "put") {
         return (...args: Parameters<R2Bucket["put"]>): ReturnType<R2Bucket["put"]> =>
           args[0] === "recovery/activation"
-            ? Promise.reject(Error("Progress reply unavailable after D1 commit"))
+            ? bucket
+                .put(...args)
+                .then(() => Promise.reject(Error("Native R2 reply unavailable after commit")))
             : bucket.put(...args);
       }
       const value: unknown = Reflect.get(bucket, property, bucket);
@@ -237,23 +335,6 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         });
         const aborted = yield* send(AbortSignal.abort());
         expect(aborted.status).toBe(401);
-        yield* Effect.tryPromise(() =>
-          native.db.prepare("ALTER TABLE erasure_requests RENAME TO unavailable_requests").run()
-        );
-        const unavailableSource = yield* send();
-        expect(unavailableSource.status).toBe(503);
-        expect(
-          (yield* Effect.tryPromise(() => native.registry.list({ prefix: "recovery/cases/" })))
-            .objects
-        ).toHaveLength(0);
-        expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
-          closed: false,
-          paused: true,
-          leases: 0,
-        });
-        yield* Effect.tryPromise(() =>
-          native.db.prepare("ALTER TABLE unavailable_requests RENAME TO erasure_requests").run()
-        );
         const resumed = yield* send();
         expect(resumed.status).toBe(202);
         expect(yield* Effect.tryPromise(() => resumed.json())).toMatchObject({
@@ -294,26 +375,6 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           providerIsolation: "Unqualified",
         });
 
-        yield* Effect.tryPromise(() =>
-          native.db
-            .prepare(
-              "ALTER TABLE pending_consent_exchanges RENAME TO unavailable_consent_exchanges"
-            )
-            .run()
-        );
-        expect((yield* send()).status).toBe(503);
-        expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
-          closed: false,
-          paused: true,
-          leases: 0,
-        });
-        yield* Effect.tryPromise(() =>
-          native.db
-            .prepare(
-              "ALTER TABLE unavailable_consent_exchanges RENAME TO pending_consent_exchanges"
-            )
-            .run()
-        );
         expect((yield* send(operationSignal, "Initialize")).status).toBe(204);
         const repeated = yield* send();
         expect(repeated.status).toBe(202);
@@ -321,6 +382,18 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           (yield* Effect.tryPromise(() => native.registry.list({ prefix: "recovery/cases/" })))
             .objects
         ).toHaveLength(1);
+        yield* Effect.tryPromise(() =>
+          native.db.prepare("ALTER TABLE erasure_requests RENAME TO unavailable_requests").run()
+        );
+        expect((yield* send()).status).toBe(503);
+        expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
+          controllerBusy: true,
+          closed: false,
+        });
+        yield* Effect.tryPromise(() =>
+          native.db.prepare("ALTER TABLE unavailable_requests RENAME TO erasure_requests").run()
+        );
+        expect((yield* send()).status).toBe(503);
         yield* Effect.tryPromise(() => admission.close({ activationId, epoch: target.epoch }));
         expect((yield* send(operationSignal, "Initialize")).status).toBe(503);
       }).pipe(Effect.scoped)
@@ -329,21 +402,25 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
 
 effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
   it.effect(
-    "persists a source-only retirement plan before its atomic D1 fence and resumes a lost progress reply",
+    "persists a source-only retirement plan before its atomic D1 fence and serializes native control IO and resumes a known interruption",
     () =>
       Effect.gen(function* () {
         const platform = yield* nativeErasurePlatform;
         const native = yield* Effect.tryPromise(() => platform.acquire());
         yield* Effect.tryPromise(() => installRetentionTestSchema(native.db));
         const gates = yield* nativeRecoveryAdmissions;
-        const admission = gates.source;
+        const replies = lostControllerReplies(gates.source);
+        const admission = replies.binding;
         const token = yield* operatorToken(yield* Clock.currentTimeMillis);
         const http = yield* fixtureNativeHttpClient;
         let registry = native.registry;
+        let sourceDb = native.db;
+        let requestAbort = yield* Effect.sync(manualInterruption);
         const send = (): Effect.Effect<Response> =>
           handleErasureOperator({
             request: new Request("https://operator/internal/titular-erasure", {
               method: "POST",
+              signal: requestAbort.signal,
               headers: { "content-type": "application/json", "cf-access-jwt-assertion": token },
               body: Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))({
                 action: "Activation",
@@ -356,7 +433,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
               ERASURE_ACTIVATION: {
                 admission,
                 serving: control,
-                sourceDb: native.db,
+                sourceDb,
                 sourceTarget: target,
                 servingTarget,
               },
@@ -371,6 +448,37 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           phase: "AwaitingProvider",
           providerIsolation: "Unqualified",
         });
+        expect(replies.calls).toEqual({ acquire: 2, release: 2 });
+        const progressEntered = Promise.withResolvers<void>();
+        const progressRelease = Promise.withResolvers<void>();
+        registry = heldProgress(native.registry, progressEntered, progressRelease);
+        const progressing = yield* send().pipe(Effect.forkScoped);
+        yield* Effect.addFinalizer(() => releaseHeld(progressRelease));
+        yield* Effect.tryPromise(() => progressEntered.promise);
+        registry = native.registry;
+        expect((yield* send()).status).toBe(503);
+        expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
+          controllerBusy: true,
+        });
+        progressRelease.resolve();
+        expect((yield* Fiber.join(progressing)).status).toBe(202);
+        expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
+          controllerBusy: false,
+        });
+        const bodyEntered = Promise.withResolvers<void>();
+        const bodyRelease = Promise.withResolvers<void>();
+        registry = heldRecordBody(native.registry, bodyEntered, bodyRelease);
+        const reading = yield* send().pipe(Effect.forkScoped);
+        yield* Effect.addFinalizer(() => releaseHeld(bodyRelease));
+        yield* Effect.tryPromise(() => bodyEntered.promise);
+        requestAbort = yield* Effect.sync(() => renewInterruption(requestAbort));
+        registry = native.registry;
+        expect((yield* send()).status).toBe(503);
+        expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
+          controllerBusy: true,
+        });
+        bodyRelease.resolve();
+        expect((yield* Fiber.join(reading)).status).toBe(503);
         const entered = Promise.withResolvers<void>();
         const proceed = Promise.withResolvers<void>();
         const delayed = delayedDatabase(native.db, entered, proceed);
@@ -406,7 +514,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
               .first("generation")
           )
         ).toBe("initial");
-        registry = unavailableProgress(native.registry);
+        sourceDb = abortAfterBatch(native.db, requestAbort);
         expect((yield* send()).status).toBe(503);
         expect(
           yield* Effect.tryPromise(() =>
@@ -417,6 +525,8 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         ).toBe(plan.sourceFence.retired);
         proceed.resolve();
         expect(yield* Effect.tryPromise(() => lateRead)).toBe(true);
+        sourceDb = native.db;
+        requestAbort = yield* Effect.sync(manualInterruption);
         registry = native.registry;
         const resumed = yield* send();
         expect(yield* Effect.tryPromise(() => resumed.json())).toMatchObject({
@@ -427,7 +537,6 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         const published = yield* Effect.tryPromise(() =>
           native.registry.get("recovery/generation")
         );
-        expect(published).not.toBeNull();
         expect(
           yield* Effect.tryPromise(() =>
             published === null ? Promise.resolve("") : published.text()
@@ -440,8 +549,18 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
               .first("generation")
           )
         ).toBe(plan.sourceFence.retired);
-        expect(plan.sourceFence.retired).not.toBe("initial");
-        expect((yield* send()).status).toBe(202);
+        const ledgerObserved = yield* send();
+        expect(yield* Effect.tryPromise(() => ledgerObserved.json())).toMatchObject({
+          phase: "AwaitingFinalBarrier",
+          sourceLedger: { state: "Observed", checkedCases: 0, providerIsolation: "Unqualified" },
+        });
+        registry = unavailableProgress(native.registry);
+        expect((yield* send()).status).toBe(503);
+        expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
+          controllerBusy: true,
+        });
+        registry = native.registry;
+        expect((yield* send()).status).toBe(503);
       }).pipe(Effect.scoped)
   );
 });

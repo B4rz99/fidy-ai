@@ -1,0 +1,27 @@
+apps/server/ARCHITECTURE.md
+  s_bae391f7738986::t_790aeae3ab5dd3 189-190
+apps/server/cloudflare/erasure/internal/generation.ts
+  s_bae391f7738986::t_79a88b2b6f7e97 49-58
+apps/server/cloudflare/erasure/internal/restore-case.ts
+  s_bae391f7738986::t_0817ea2b62220a 5,92
+apps/server/cloudflare/erasure/internal/restore.ts
+  s_bae391f7738986::t_e15663992e727c 5,74,86,105-117
+apps/server/cloudflare/erasure/restore.test.ts
+  s_bae391f7738986::t_37f7adbdadd6be 550
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cc39341b1d17637a8afad02f050ecef9035465b3",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

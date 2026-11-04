@@ -301,3 +301,12 @@ export const recordWebOnboardingConsent = (
       input.acceptedAtMs,
       input.acceptedAtMs
     );
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT CASE WHEN state='awaiting_delivery' THEN 1 WHEN state='outbound_started' AND rejected_at_ms IS NOT NULL THEN 0 WHEN state='outbound_started' AND disclosure_message_id IS NOT NULL THEN 3 WHEN state='outbound_started' THEN 2 WHEN state='awaiting_decision' THEN 3 WHEN state IN('accepted','declined') THEN 0 ELSE 2 END AS disposition FROM pending_consent_exchanges
+  )`);

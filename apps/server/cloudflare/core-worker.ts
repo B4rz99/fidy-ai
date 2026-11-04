@@ -9,7 +9,7 @@ import {
   runRecoveryContinuationFetch,
   runRecoveryControl,
   withRecoveryDispatch,
-  withRecoveryNativeEnvironment,
+  withRecoveryStore,
 } from "./recovery-lifecycle/runtime";
 import { withAuthoritativeStore } from "./sqlite-store/operations";
 import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
@@ -224,7 +224,7 @@ class CoreMaintenanceCoordinator {
     environment: CoreEnvironment
   ) {
     this.state = state;
-    this.erasureEnvironment = withRecoveryNativeEnvironment(
+    this.erasureEnvironment = withRecoveryStore(
       withAuthoritativeStore(withRecoveryDispatch(environment))
     );
     this.environment = withErasureRecovery(this.erasureEnvironment);
@@ -391,9 +391,7 @@ export const makeCoreWorker = ({
       work: () =>
         makeCoreQueue(telemetry)(
           batch,
-          withErasureRecovery(
-            withRecoveryNativeEnvironment(withAuthoritativeStore(withRecoveryDispatch(environment)))
-          )
+          withErasureRecovery(withRecoveryStore(withRecoveryDispatch(environment)))
         ),
     }),
   scheduled: (controller, environment) =>

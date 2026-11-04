@@ -1,7 +1,6 @@
 import { runRecoveryJob } from "../../recovery-lifecycle/operations";
 import type { RecoveryLifecycleEnvironment } from "../../recovery-lifecycle/contract";
-import { withRecoveryNativeEnvironment } from "../../recovery-lifecycle/runtime";
-import { withAuthoritativeStore } from "../../sqlite-store/operations";
+import { withRecoveryStore } from "../../recovery-lifecycle/runtime";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { SmokeCompletion, SmokeExecutorEnvironment } from "./contract";
@@ -28,7 +27,7 @@ export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<
   }
 
   private execute(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<SmokeCompletion> {
-    const environment = withRecoveryNativeEnvironment(withAuthoritativeStore(this.env));
+    const environment = withRecoveryStore(this.env);
     const work = Effect.gen(function* () {
       const decoded = Schema.decodeUnknownOption(SmokeWork)(event.payload);
       if (Option.isNone(decoded)) return yield* new SmokeBindingFailed({ stage: "platform" });

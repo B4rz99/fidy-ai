@@ -331,3 +331,12 @@ export const requiresErasureSuppression = (
       catch: () => new ConnectionRetentionUnavailable(),
     }).pipe(Effect.map((pending) => pending !== 0));
   });
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT CASE WHEN state IN('claimed','quarantined') THEN 2 WHEN state='cleanup_required' AND cleaned_at_ms IS NULL THEN 2 WHEN state='active' THEN 3 WHEN state='cleanup_required' AND cleaned_at_ms IS NOT NULL AND envelope IS NULL THEN 0 ELSE 2 END AS disposition FROM connection_grants
+  )`);

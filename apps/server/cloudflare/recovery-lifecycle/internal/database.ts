@@ -1,6 +1,6 @@
 import type { RecoveryLifecycleEnvironment } from "../contract";
 import { RecoveryOperationUnavailable } from "../contract";
-import { native } from "./context";
+import { sql as native } from "./sql-settlement";
 
 const statements = (
   environment: RecoveryLifecycleEnvironment

@@ -130,3 +130,12 @@ export const readAdmittedHostedConsent = (
   input: Readonly<{ db: D1Database; userId: UserId; turnId: TranscriptTurnId }>
 ): Effect.Effect<Option.Option<OnboardingConsentBasis>, AgentUnavailable> =>
   readAdmittedBasis(input);
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT CASE WHEN status='pending' THEN 1 WHEN status IN('completed','failed','interrupted') THEN 0 ELSE 2 END AS disposition FROM hosted_turns
+  )`);

@@ -365,6 +365,30 @@ too and prevents release from an outstanding lease; only the exact epoch and lea
 its local lifetime.
 Durable provider intent/reconciliation standing is a separate final drain obligation.
 
+Native Core HTTP and private coordinator calls, Email, Queue, scheduled work and Workflow
+entrypoints retain one independent admission lease through response release, native continuations
+and actual DB/R2/Queue/Workflow promises. A private AsyncLocalStorage capability associates
+resident concurrent Effect executions with their own root; it retains no reusable financial
+result. The production compatibility date supports this narrow native API without a Node
+compatibility flag. Server bundles preserve native `node:*` imports. The local tracker freezes
+before root completion and refuses later IO before invoking its binding. A source publisher
+pause rejects new HTTP/Email/cron work while trusted epoch-stamped native continuations drain;
+final close then rejects both. Erasure operator and exact private erasure control paths retain
+their existing authentication independently of ordinary admission.
+
+Actual Store RPC promises are tracked before decoding structured owner refusals. Initial source
+D1 uses a private classifier only around actual native IO: an exact native Error/cause pair and
+allowlisted SQLite extended constraint acknowledgement may settle execution while preserving the
+owner refusal. It grants no business authority. Arbitrary root Errors, forged CHECK prose in a
+TRIGGER acknowledgement and unknown transport failures remain drain blockers.
+
+The fixed source owner drain projection has no expiry, Consent, feature or sampling filters.
+It distinguishes queued work, ambiguity and preserved User-waiting/provider-identified standing;
+none of those observations authorizes another send. Missing owner evidence refuses observation.
+This SQL projection does not prove platform Queue/Workflow emptiness or exhaustive private-object
+custody; independently verified provider inventory, version history and the erasure prefix replay
+remain separate activation barriers.
+
 The Access-authenticated `Activation` erasure command binds resumable progress in R2 to one
 activation identity, actual admission object, fixed source identity and serving manifest/epoch. The
 initial source is a D1 database UUID and epoch; later SQLite sources carry namespace, object,

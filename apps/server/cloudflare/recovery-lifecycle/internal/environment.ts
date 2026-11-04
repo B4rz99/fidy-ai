@@ -16,11 +16,10 @@ type NativeEnvironment = RecoveryLifecycleEnvironment &
   >;
 
 /** Capture native capabilities after target selection and before any recovery wrapper. */
-export const environment = <Environment extends NativeEnvironment>(
+export const objects = <Environment extends NativeEnvironment>(
   input: Environment
 ): Environment => ({
   ...input,
-  DB: database({ binding: input.DB, environment: input }),
   ...(input.ERASURE_BUCKET === undefined
     ? {}
     : { ERASURE_BUCKET: bucket({ binding: input.ERASURE_BUCKET, environment: input }) }),
@@ -38,4 +37,11 @@ export const environment = <Environment extends NativeEnvironment>(
   ...(input.SMOKE_BUCKET === undefined
     ? {}
     : { SMOKE_BUCKET: bucket({ binding: input.SMOKE_BUCKET, environment: input }) }),
+});
+
+export const environment = <Environment extends NativeEnvironment>(
+  input: Environment
+): Environment => ({
+  ...objects(input),
+  DB: database({ binding: input.DB, environment: input }),
 });

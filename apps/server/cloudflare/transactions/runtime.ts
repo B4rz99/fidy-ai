@@ -1,5 +1,5 @@
 import type { AuthoritativeStoreEnvironment } from "../sqlite-store/contract";
-import { withRecoveryNativeEnvironment } from "../recovery-lifecycle/runtime";
+import { withRecoveryStore } from "../recovery-lifecycle/runtime";
 import { withAuthoritativeStore } from "../sqlite-store/operations";
 import { makeWorkerCrypto } from "../secret-material/runtime";
 import { makeUserRecoveryAlarm } from "./internal/recovery-alarm";
@@ -760,7 +760,7 @@ export class UserTransactionCoordinator {
       activation: Option.none(),
     }
   ) {
-    const env = withRecoveryNativeEnvironment(withAuthoritativeStore(bindings));
+    const env = withRecoveryStore(bindings);
     this.state = state;
     this.recoveryAlarm = makeUserRecoveryAlarm(state.storage);
     this.institutions = configuration.institutions;

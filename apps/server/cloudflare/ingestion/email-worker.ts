@@ -1,8 +1,5 @@
 import { runRecoveryOperation } from "../recovery-lifecycle/operations";
-import {
-  makeRecoveryPublisher,
-  withRecoveryNativeEnvironment,
-} from "../recovery-lifecycle/runtime";
+import { makeRecoveryPublisher, withRecoveryStore } from "../recovery-lifecycle/runtime";
 import type { RecoveryLifecycleEnvironment } from "../recovery-lifecycle/contract";
 import type { AuthoritativeStoreEnvironment } from "../sqlite-store/contract";
 import { withAuthoritativeStore } from "../sqlite-store/operations";
@@ -23,7 +20,7 @@ type EmailBindings = Omit<ForwardedEmailEnvironment, "DB"> &
   RecoveryLifecycleEnvironment;
 
 const selected = (environment: EmailBindings): ForwardedEmailEnvironment =>
-  withRecoveryNativeEnvironment(
+  withRecoveryStore(
     withAuthoritativeStore({
       ...environment,
       EMAIL_QUEUE: makeRecoveryPublisher({ binding: environment.EMAIL_QUEUE, environment }),

@@ -1,9 +1,8 @@
-import { withAuthoritativeStore } from "../sqlite-store/operations";
 import {
   runRecoveryControl,
   runRecoveryFetch,
   withRecoveryDispatch,
-  withRecoveryNativeEnvironment,
+  withRecoveryStore,
 } from "../recovery-lifecycle/runtime";
 import {
   bancolombiaSandboxAdmission,
@@ -44,9 +43,7 @@ type CoreComposition = Readonly<{
 const selectedEnvironment = (
   environment: Parameters<CoreHttpHandler>[1]
 ): Effect.Effect<Option.Option<CoreHttpEnvironment>> =>
-  Effect.try(() => withRecoveryNativeEnvironment(withAuthoritativeStore(environment))).pipe(
-    Effect.option
-  );
+  Effect.try(() => withRecoveryStore(environment)).pipe(Effect.option);
 
 const isolatedResponse = (
   request: Request,

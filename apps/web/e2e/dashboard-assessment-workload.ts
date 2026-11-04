@@ -113,7 +113,6 @@ const prepareUser = Effect.fn(function* (input: Setup, user: number) {
       input.browser.newContext({
         baseURL: appOrigin,
         ignoreHTTPSErrors: true,
-        extraHTTPHeaders: { "x-acceptance-source": `203.0.113.${user + 1}` },
       })
     ),
     (context) => Effect.tryPromise(() => context.close()).pipe(Effect.orDie)

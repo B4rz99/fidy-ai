@@ -53,6 +53,14 @@ const sourceProvenance = (): Readonly<{
   };
 };
 
+const adapterFiles = [
+  "apps/web/scripts/serve-preview.ts",
+  "apps/web/playwright.config.ts",
+  "apps/server/cloudflare/browser-acceptance-preview.ts",
+  "apps/server/cloudflare/browser-acceptance-seed.ts",
+  "apps/server/cloudflare/d1-test-fixture.ts",
+];
+
 /** Pins observation code separately from target behavior. Both revisions must copy identical fixture/harness files. */
 export const dashboardAssessmentProvenance = Effect.fn(function* (
   input: Readonly<{
@@ -79,13 +87,7 @@ export const dashboardAssessmentProvenance = Effect.fn(function* (
     "browser-acceptance/contract.ts",
     "browser-acceptance/operations.ts",
   ]);
-  const adapterDigest = yield* hashFiles(new URL("../../../", import.meta.url), [
-    "apps/web/scripts/serve-preview.ts",
-    "apps/web/playwright.config.ts",
-    "apps/server/cloudflare/browser-acceptance-preview.ts",
-    "apps/server/cloudflare/browser-acceptance-seed.ts",
-    "apps/server/cloudflare/d1-test-fixture.ts",
-  ]);
+  const adapterDigest = yield* hashFiles(new URL("../../../", import.meta.url), adapterFiles);
   const dependenciesDigest = yield* hashFiles(new URL("../../../", import.meta.url), [
     "bun.lock",
     "package.json",
@@ -98,6 +100,7 @@ export const dashboardAssessmentProvenance = Effect.fn(function* (
     harnessDigest,
     adapterDigest,
     surface: dashboardAssessmentSurface(),
+    trafficSource: "shared-loopback" as const,
     dependenciesDigest,
     fixtureDigest: new Bun.CryptoHasher("sha256")
       .update(

@@ -7,6 +7,7 @@ const cohort = {
   browserDigest: "browser-a",
   adapterDigest: "adapter-a",
   surface: "legacy-cross-origin",
+  trafficSource: "shared-loopback",
   runtime: "Bun pinned",
   compression: "identity",
   build: "production",

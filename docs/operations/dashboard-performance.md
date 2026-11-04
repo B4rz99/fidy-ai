@@ -62,7 +62,10 @@ Transactions. The default layout also has deterministic Widget identities.
 Transaction captures through the canonical public operation. Capture failures and timeouts remain
 in the artifact. This exercises concurrent writes, but does not qualify statement parsing or provider
 ingestion. Quiet cohorts use one tab. Fixed synthetic identities and separate browser contexts prove
-the selected Users; authentication and fixture setup finish before offers begin. A missed offering
+the selected Users; authentication and fixture setup finish before offers begin. Browser contexts
+share the fixture loopback source address (`trafficSource: shared-loopback`); shared-source pressure
+refusals remain part of the workload. Do not inject synthetic browser headers: they would add
+preflights to the historical cross-origin surface. A missed offering
 interval disqualifies the cohort instead of silently reducing offered load.
 
 Use a stratified matched matrix, recording every omitted cohort explicitly:

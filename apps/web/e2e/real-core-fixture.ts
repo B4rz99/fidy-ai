@@ -123,7 +123,9 @@ const observeConsentRead = (page: Page): Promise<ConsentRead> => {
       if (isConsentRead(response)) consentReads.set(page, { status: response.status() });
     });
   }
-  return page.waitForResponse(isConsentRead).then((response) => ({ status: response.status() }));
+  return page
+    .waitForResponse(isConsentRead, { timeout: pairingTimeoutMilliseconds })
+    .then((response) => ({ status: response.status() }));
 };
 export const confirmConsentRead = ({
   page,

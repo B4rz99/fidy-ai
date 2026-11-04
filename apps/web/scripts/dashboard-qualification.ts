@@ -20,6 +20,7 @@ export const DashboardCohort = Schema.Struct({
   browserDigest: fingerprint,
   adapterDigest: fingerprint,
   surface: Schema.Literals(["legacy-cross-origin", "same-origin"]),
+  trafficSource: Schema.Literal("shared-loopback"),
   runtime: Schema.NonEmptyString,
   compression: Schema.Literals(["identity", "gzip"]),
   build: Schema.Literal("production"),
@@ -67,6 +68,7 @@ type Cohort = typeof DashboardCohort.Type;
 const matchingKeys = [
   "dataset",
   "browserDigest",
+  "trafficSource",
   "runtime",
   "compression",
   "build",

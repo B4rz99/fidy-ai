@@ -159,3 +159,16 @@ export const prepareSubscriptionCancellation = (
 export const subscriptionCancellationRefusal = (
   work: CanonicalPreparationWork
 ): CanonicalMutationRefusal => cancellationRefusal(work);
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT CASE WHEN status IN('succeeded','failed') THEN 0 WHEN status='pending' AND collection_state='armed' THEN 1 WHEN status='pending' AND collection_state='sent' AND checkout_transaction_id IS NOT NULL THEN 3 ELSE 2 END AS disposition FROM billing_attempts
+UNION ALL SELECT CASE WHEN status IN('succeeded','failed') THEN 0 WHEN status='pending' AND progress='queued' AND submission_claimed_at_ms IS NULL THEN 1 WHEN status='pending' AND provider_refund_id IS NOT NULL AND progress='verifying' THEN 3 ELSE 2 END FROM refund_attempts
+UNION ALL SELECT CASE WHEN status='preparing' THEN 1 WHEN status IN('creating','verifying') THEN 2 WHEN status='prepared' THEN 3 WHEN status IN('available','refused','expired') THEN 0 ELSE 2 END FROM payment_enrollments
+UNION ALL SELECT CASE WHEN provider_accepted_at_ms IS NOT NULL THEN 0 WHEN send_started_at_ms IS NULL THEN 1 ELSE 2 END FROM billing_price_notices
+UNION ALL SELECT CASE WHEN source_cancellation_state IN('detached','voided') THEN 0 WHEN source_cancellation_state='void-pending' AND void_started_at_ms IS NULL THEN 1 ELSE 2 END FROM subscription_cancellations
+  )`);

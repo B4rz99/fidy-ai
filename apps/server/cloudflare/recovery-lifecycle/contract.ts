@@ -67,6 +67,7 @@ export const RecoveryDrainObservation = Schema.Struct({
     insights: OwnerDrain,
     ingestion: OwnerDrain,
     connections: OwnerDrain,
+    providerAuthentication: OwnerDrain,
     consentIngress: OwnerDrain,
     privateObjects: OwnerDrain,
   }),

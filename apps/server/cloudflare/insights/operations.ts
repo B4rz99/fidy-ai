@@ -428,3 +428,13 @@ export const readProactiveTranscript = (
   input: Readonly<{ db: D1Database; userId: UserId; insightEventId: InsightEventId; now: number }>
 ): ReturnType<typeof readAssociatedProactiveTranscript> =>
   readAssociatedProactiveTranscript({ ...input, association: transcriptAssociationQuery(input) });
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT CASE WHEN state='ready' THEN 1 WHEN state IN('settled','expired','refused') THEN 0 ELSE 2 END AS disposition FROM weekly_question_requests
+UNION ALL SELECT CASE WHEN dispatch_state='ready' THEN 1 WHEN dispatch_state='started' THEN 2 WHEN dispatch_state IN('settled','expired','refused') OR dispatch_state IS NULL THEN 0 ELSE 2 END FROM proactive_messages
+  )`);

@@ -1,3 +1,4 @@
+import { select } from "./internal/selection";
 import { environment as nativeEnvironment } from "./internal/environment";
 import { database } from "./internal/database";
 import { bucket } from "./internal/objects";
@@ -198,3 +199,6 @@ export const withRecoveryDatabase = database;
 
 /** Private object IO belongs to its root until the provider's actual Promise settles. */
 export const withRecoveryBucket = bucket;
+
+/** Resolve one target and retain actual source D1 or Store RPC promises before decoding. */
+export const withRecoveryStore = select;

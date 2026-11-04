@@ -321,3 +321,13 @@ export const admitStatusLookup = (
   }>
 ): ReturnType<ReturnType<typeof makeStatusLookupAdmissionOwned>> =>
   makeStatusLookupAdmissionOwned(input.database)(input.request);
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT CASE WHEN state IN('staged','ready') THEN 1 WHEN state IN('sending','ambiguous') THEN 2 WHEN state IN('accepted','unconfirmed') AND provider_message_id IS NOT NULL THEN 3 WHEN state IN('rejected','delivered','expired') THEN 0 ELSE 2 END AS disposition FROM whatsapp_deliveries
+UNION ALL SELECT CASE WHEN outcome='started' THEN 2 WHEN outcome IN('accepted','failed') THEN 0 ELSE 2 END FROM whatsapp_event_records WHERE kind='voice-refusal' 
+  )`);

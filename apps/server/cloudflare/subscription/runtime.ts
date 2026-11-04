@@ -1,7 +1,6 @@
 import { runRecoveryJob } from "../recovery-lifecycle/operations";
 import type { RecoveryLifecycleEnvironment } from "../recovery-lifecycle/contract";
-import { withRecoveryNativeEnvironment } from "../recovery-lifecycle/runtime";
-import { withAuthoritativeStore } from "../sqlite-store/operations";
+import { withRecoveryStore } from "../recovery-lifecycle/runtime";
 import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -163,9 +162,7 @@ export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<
         observeWorkerPromise(
           () =>
             runRefundWorkflow({
-              environment: withErasureRecovery(
-                withRecoveryNativeEnvironment(withAuthoritativeStore(this.env))
-              ),
+              environment: withErasureRecovery(withRecoveryStore(this.env)),
               payload: event.payload,
               activity: (name, options, activity) => step.do(name, options, activity),
             }),
@@ -228,9 +225,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
         observeWorkerPromise(
           () =>
             runBillingCollectionWorkflow({
-              environment: withErasureRecovery(
-                withRecoveryNativeEnvironment(withAuthoritativeStore(this.env))
-              ),
+              environment: withErasureRecovery(withRecoveryStore(this.env)),
               payload: event.payload,
               activity: (name, options, activity) => step.do(name, options, activity),
               sleep: (name, duration) => step.sleep(name, duration),

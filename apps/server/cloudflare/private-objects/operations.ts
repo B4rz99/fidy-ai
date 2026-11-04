@@ -86,3 +86,12 @@ export const eraseObservedPrivateObject = (
     );
     yield* io(() => input.bucket.delete(input.key));
   });
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT 1 AS disposition FROM erasure_writers
+  )`);

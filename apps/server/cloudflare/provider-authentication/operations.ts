@@ -86,3 +86,13 @@ export const handleProviderAuthentication = (
     });
     return Option.isSome(refusal) ? refusal.value : yield* dispatchProviderAuthentication(input);
   });
+
+/** Observe every retained source intent without expiry, Consent, sampling, or feature filters.
+ * Disposition 3 retains an immutable provider identity or a User-waiting state; it never authorizes a fresh send. */
+export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
+  db.prepare(`SELECT coalesce(sum(disposition=1),0) AS pending,
+    coalesce(sum(disposition=2),0) AS ambiguous,
+    coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
+SELECT CASE WHEN state='exchanging' THEN 2 WHEN state IN('pending','verified') THEN 3 WHEN state IN('completed','rejected') THEN 0 ELSE 2 END AS disposition FROM provider_authentication_attempts
+UNION ALL SELECT CASE WHEN consumed_at_ms IS NOT NULL OR decision IS NOT NULL THEN 0 WHEN review_started_ms IS NOT NULL AND review_message_id IS NULL THEN 2 ELSE 3 END FROM whatsapp_provider_handoffs
+  )`);

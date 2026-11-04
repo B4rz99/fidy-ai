@@ -1,7 +1,8 @@
 import { newId } from "../secret-material/operations";
 import { within } from "./internal/context";
 import { tracker as makeTracker } from "./internal/tracker";
-import { Option, Schema } from "effect";
+import { observe } from "./internal/drain";
+import { type Effect, Option, Schema } from "effect";
 import {
   type RecoveryAdmissionBinding,
   type RecoveryAdmissionEnvironment,
@@ -9,6 +10,8 @@ import {
   type RecoveryLease,
 } from "../recovery-activation/contract";
 import {
+  type RecoveryDrainObservation,
+  type RecoveryDrainUnavailable,
   type RecoveryLifecycleEnvironment,
   type RecoveryOperationLease,
   RecoveryOperationUnavailable,
@@ -177,3 +180,8 @@ export const runRecoveryQueue = ({
     for (const message of batch.messages) checkRecoveryWork({ environment, payload: message.body });
     return runRecoveryContinuation({ environment, work });
   });
+
+/** Observe fixed source owner standing; provider inventory and namespace history qualify separately. */
+export const observeRecoveryDrain = (
+  input: Readonly<{ db: D1Database }>
+): Effect.Effect<typeof RecoveryDrainObservation.Type, RecoveryDrainUnavailable> => observe(input);

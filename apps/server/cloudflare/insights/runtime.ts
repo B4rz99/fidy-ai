@@ -1,7 +1,6 @@
 import { runRecoveryJob } from "../recovery-lifecycle/operations";
 import type { RecoveryLifecycleEnvironment } from "../recovery-lifecycle/contract";
-import { withRecoveryNativeEnvironment } from "../recovery-lifecycle/runtime";
-import { withAuthoritativeStore } from "../sqlite-store/operations";
+import { withRecoveryStore } from "../recovery-lifecycle/runtime";
 import { withErasureRecovery } from "../erasure/runtime";
 import { evidenceRetentionDue, summariesDue } from "./internal/cadence";
 import { projections as erasureProjections } from "./internal/erasure";
@@ -433,9 +432,7 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
               coordinator: this.env.USER_TRANSACTION_COORDINATOR,
               payload: event.payload,
               step,
-              environment: withErasureRecovery(
-                withRecoveryNativeEnvironment(withAuthoritativeStore(this.env))
-              ),
+              environment: withErasureRecovery(withRecoveryStore(this.env)),
             }),
           {
             environment: workerRelease(this.env),

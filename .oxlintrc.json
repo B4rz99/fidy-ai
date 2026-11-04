@@ -306,6 +306,7 @@
         "apps/server/cloudflare/erasure/candidate-worker.ts",
         "apps/server/cloudflare/recovery-activation/worker.test-fixture.ts",
         "apps/server/cloudflare/recovery-lifecycle/concurrency.test-fixture.ts",
+        "apps/server/cloudflare/recovery-lifecycle/queued-worker.test-fixture.ts",
         "apps/site/cloudflare/worker.ts",
         "apps/web/cloudflare/worker.ts",
         "apps/server/cloudflare/release-smoke-worker.ts",

@@ -1,3 +1,4 @@
+import { check, epoch } from "./internal/epoch";
 import { newId } from "../secret-material/operations";
 import { within } from "./internal/context";
 import { tracker as makeTracker } from "./internal/tracker";
@@ -15,7 +16,6 @@ import {
   type RecoveryLifecycleEnvironment,
   type RecoveryOperationLease,
   RecoveryOperationUnavailable,
-  RecoveryWorkMetadata,
 } from "./contract";
 
 const admission = (
@@ -128,43 +128,15 @@ export const runRecoveryJob = <A>({
     return runRecoveryContinuation({ environment, work: () => work(payload) });
   });
 
-/** Job authority follows the selected immutable target; legacy unqualified fixtures have no epoch. */
+/** Job authority follows the selected immutable target. */
 export const recoveryWorkEpoch = (
   environment: RecoveryLifecycleEnvironment
-): Option.Option<string> => {
-  const source = Option.fromUndefinedOr(environment.RECOVERY_SOURCE_EPOCH);
-  const store = Option.fromUndefinedOr(environment.SQLITE_STORE_EPOCH);
-  if (Option.isSome(source) && Option.isSome(store) && source.value !== store.value) {
-    throw new RecoveryOperationUnavailable();
-  }
-  const epoch = Option.orElse(source, () => store);
-  return Option.map(
-    epoch,
-    (value) => Schema.decodeSync(RecoveryWorkMetadata)({ recoveryEpoch: value }).recoveryEpoch
-  );
-};
+): Option.Option<string> => epoch(environment);
 
-const WorkMetadataPresence = Schema.Struct({ recoveryEpoch: Schema.Unknown });
-/** Stale or unstamped durable work is refused before a store or provider can be reached. */
-export const checkRecoveryWork = ({
-  environment,
-  payload,
-}: Readonly<{
-  environment: RecoveryLifecycleEnvironment;
-  payload: unknown;
-}>): void => {
-  const expected = recoveryWorkEpoch(environment);
-  const metadata = Schema.decodeUnknownOption(RecoveryWorkMetadata)(payload);
-  if (Option.isNone(expected)) {
-    if (Option.isSome(Schema.decodeUnknownOption(WorkMetadataPresence)(payload))) {
-      throw new RecoveryOperationUnavailable();
-    }
-    return;
-  }
-  if (Option.isNone(metadata) || metadata.value.recoveryEpoch !== expected.value) {
-    throw new RecoveryOperationUnavailable();
-  }
-};
+/** Validate trusted publication metadata before native owner work. */
+export const checkRecoveryWork = (
+  input: Readonly<{ environment: RecoveryLifecycleEnvironment; payload: unknown }>
+): void => check(input);
 
 /** Refusing a batch never acknowledges unprocessed native Queue deliveries. */
 export const runRecoveryQueue = ({

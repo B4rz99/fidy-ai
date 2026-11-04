@@ -75,3 +75,14 @@ export const RecoveryDrainObservation = Schema.Struct({
 
 /** Missing tables, unknown owner states, or unavailable evidence cannot authorize final close. */
 export class RecoveryDrainUnavailable extends Data.TaggedError("RecoveryDrainUnavailable") {}
+
+export type RecoveryNativeEnvironment = RecoveryLifecycleEnvironment &
+  Readonly<{ DB: D1Database }> &
+  Partial<
+    Readonly<{
+      ERASURE_BUCKET: object;
+      STATEMENT_STAGING_BUCKET: object;
+      EMAIL_BUCKET: object;
+      SMOKE_BUCKET: object;
+    }>
+  >;

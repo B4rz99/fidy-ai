@@ -1,3 +1,4 @@
+import type { AuthoritativeStoreEnvironment } from "../sqlite-store/contract";
 import { select } from "./internal/selection";
 import { environment as nativeEnvironment } from "./internal/environment";
 import { database } from "./internal/database";
@@ -8,6 +9,7 @@ import { admitRecoveryContinuation, admitRecoveryOperation } from "./operations"
 import type {
   RecoveryDispatchEnvironment,
   RecoveryLifecycleEnvironment,
+  RecoveryNativeEnvironment,
   RecoveryNativeTracker,
   RecoveryOperationLease,
 } from "./contract";
@@ -171,7 +173,9 @@ export const runRecoveryControl = <A>(work: () => Promise<A>): Promise<A> => {
 };
 
 /** Wrap selected capabilities before recovery guards or cancellable Effects capture them. */
-export const withRecoveryNativeEnvironment = nativeEnvironment;
+export const withRecoveryNativeEnvironment = <Environment extends RecoveryNativeEnvironment>(
+  environment: Environment
+): Environment => nativeEnvironment(environment);
 
 /** Native publishers retain their actual handoff Promise and stamp the trusted target epoch. */
 export const withRecoveryDispatch = <Environment extends RecoveryDispatchEnvironment>(
@@ -195,10 +199,19 @@ export const trackRecoveryNative = <A>(
 ): Promise<A> => native(input);
 
 /** Wrap the selected native database below recovery guards and Effect cancellation. */
-export const withRecoveryDatabase = database;
+export const withRecoveryDatabase = (
+  input: Readonly<{ binding: D1Database; environment: RecoveryLifecycleEnvironment }>
+): D1Database => database(input);
 
 /** Private object IO belongs to its root until the provider's actual Promise settles. */
-export const withRecoveryBucket = bucket;
+export const withRecoveryBucket = <Bucket extends object>(
+  input: Readonly<{ binding: Bucket; environment: RecoveryLifecycleEnvironment }>
+): Bucket => bucket(input);
 
 /** Resolve one target and retain actual source D1 or Store RPC promises before decoding. */
-export const withRecoveryStore = select;
+export const withRecoveryStore = <
+  Environment extends AuthoritativeStoreEnvironment & RecoveryLifecycleEnvironment,
+>(
+  environment: Environment
+): Omit<Environment, keyof AuthoritativeStoreEnvironment> & Readonly<{ DB: D1Database }> =>
+  select(environment);

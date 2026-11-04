@@ -1,7 +1,7 @@
 import { Array as EffectArray, Option } from "effect";
 import type { RecoveryLifecycleEnvironment } from "../contract";
 import { native } from "./context";
-import { recoveryWorkEpoch } from "../operations";
+import { epoch as recoveryWorkEpoch } from "./epoch";
 
 const stamp = <Work>(environment: RecoveryLifecycleEnvironment, work: Work): Work =>
   Option.match(recoveryWorkEpoch(environment), {

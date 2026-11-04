@@ -6,7 +6,12 @@ import type { Cause, Scope } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { advanceRefusedRequest } from "./acceptance-clock";
 import { playwright } from "./playwright-runtime";
-import { browserSessionHeaders, signInBudgetThroughCore } from "./real-core-fixture";
+import {
+  browserSessionHeaders,
+  createDashboardIfAbsent,
+  openDashboardThroughCore,
+  signInBudgetThroughCore,
+} from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const { api } = browserAcceptanceTopology();
@@ -21,6 +26,11 @@ const fixtureOperations = {
 };
 type FixtureSuccess = CanonicalSuccess<"budgets.createBudget" | "transactions.createTransaction">;
 const categoryId = "10000000-0000-4000-8000-000000000001";
+const openBudgetDashboard = (page: Page): Promise<void> =>
+  openDashboardThroughCore(page)
+    .then(() => createDashboardIfAbsent(page))
+    .then(() => page.getByRole("button", { name: "Personalizar", exact: true }).click())
+    .then(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
 const admittedRequest = (
   page: Page,
   send: () => Promise<APIResponse>
@@ -81,7 +91,7 @@ const verifyCapChanges = (page: Page, budgetId: string): Effect.Effect<void, Cau
     const widget = page.locator('[data-slot="card"]').filter({
       has: page.getByRole("heading", { name: "Presupuesto de restaurantes", exact: true }),
     });
-    yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+    yield* Effect.tryPromise(() => openBudgetDashboard(page));
     yield* Effect.tryPromise(() =>
       expect(widget.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "80", {
         timeout: canonicalRecoveryMilliseconds,
@@ -126,9 +136,7 @@ const verifyCapChanges = (page: Page, budgetId: string): Effect.Effect<void, Cau
         page.getByText("Presupuesto eliminado de todos los meses.", { exact: true })
       ).toBeVisible()
     );
-    yield* Effect.tryPromise(() =>
-      page.getByRole("link", { name: "Tablero", exact: true }).click()
-    );
+    yield* Effect.tryPromise(() => openBudgetDashboard(page));
     yield* Effect.tryPromise(() =>
       expect(widget).toContainText("No hay presupuesto para este mes", {
         timeout: canonicalRecoveryMilliseconds,
@@ -192,7 +200,7 @@ test("configures a non-COP Budget target with keyboard and persists it after rel
           occurredAt: DateTime.formatIso(yield* DateTime.now),
         });
       }
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => openBudgetDashboard(page));
       const widget = page.locator('[data-widget-type="budget-bar"]');
       yield* Effect.tryPromise(() =>
         expect(
@@ -231,6 +239,9 @@ const verifyConfigurationFocus = (page: Page): Effect.Effect<void, Cause.Unknown
   Effect.gen(function* () {
     const dialog = page.getByRole("dialog", { name: "Configurar presupuesto", exact: true });
     yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Guardar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Personalizar", exact: true }).click()
     );
     const configure = page.getByRole("button", { name: "Configurar presupuesto", exact: true });
@@ -254,7 +265,7 @@ test("recovers failed Budget choices and offers creation when no monthly Budget 
         signInBudgetThroughCore({ page, deferFreshEntry: true, request })
       );
       yield* Effect.tryPromise(() => page.clock.resume());
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => openBudgetDashboard(page));
       yield* Effect.tryPromise(() => page.route("**/budget-status?*", unavailableBudgetChoices));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Elegir presupuesto", exact: true }).click()

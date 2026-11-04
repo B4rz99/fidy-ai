@@ -2,7 +2,7 @@ import { initializeRegistryStorage } from "./internal/registry-initialization";
 import { sweepControlObjects } from "./internal/control-objects";
 import { requireInventory } from "./internal/inventory";
 import { purgeCompletedCases } from "./internal/control-retention";
-import { expectedGeneration } from "./internal/generation";
+import { expectedGeneration, generationAssertion } from "./internal/generation";
 import { restoreCase } from "./internal/restore-case";
 import { recordCustodyEvidence } from "./internal/provider-evidence";
 import { receipt } from "./internal/receipt";
@@ -275,3 +275,11 @@ export const prepareLocalErasureRegistry = <Requirements>(
   input: ErasureRegistryInitialization<Requirements>
 ): Effect.Effect<void, ErasureUnavailable, Requirements> =>
   initializeRegistryStorage({ ...input, mode: "LocalStartup" });
+
+/** One fresh external generation read, followed by a read-only assertion in the protected native unit. */
+export const prepareRecoveryGenerationFence = (
+  configuration: ErasureRecoveryConfiguration
+): Effect.Effect<D1PreparedStatement, ErasureUnavailable> =>
+  expectedGeneration(configuration).pipe(
+    Effect.map(({ generation }) => generationAssertion({ db: configuration.db, generation }))
+  );

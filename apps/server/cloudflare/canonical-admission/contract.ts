@@ -1,4 +1,4 @@
-import { Data, type Effect } from "effect";
+import { Data, type Effect, Schema } from "effect";
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
@@ -44,3 +44,11 @@ export const canonicalRequestProtection = {
   leaseMs: 90000,
   retryAfterSeconds: 1,
 } as const;
+
+/** Plain RPC response data; the owner validates it before releasing the native transaction. */
+export const CanonicalSnapshotResponse = Schema.Struct({
+  status: Schema.Int,
+  body: Schema.Json,
+  headers: Schema.Record(Schema.String, Schema.String),
+});
+export type CanonicalSnapshotResponse = typeof CanonicalSnapshotResponse.Type;

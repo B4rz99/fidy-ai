@@ -1,4 +1,7 @@
-import type { RecoveryActivationEnvironment } from "../recovery-activation/contract";
+import type {
+  RecoveryActivationEnvironment,
+  RecoveryAdmissionEnvironment,
+} from "../recovery-activation/contract";
 import type { ErasureOriginals, ErasureStore, ErasureUnavailable } from "../erasure-store/contract";
 import type { Effect } from "effect";
 import { type Option, Schema } from "effect";
@@ -70,12 +73,13 @@ export const ErasureOperatorAction = Schema.Union([
   }),
   Schema.Struct({ action: Schema.Literal("Receipt"), userId: UserId, reference: ErasureReference }),
 ]);
-export type ErasureOperatorEnvironment = Readonly<{
-  DB: D1Database;
-  CLOUDFLARE_ACCESS_ISSUER: string;
-  CLOUDFLARE_ACCESS_AUDIENCE: string;
-  USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-}> &
+export type ErasureOperatorEnvironment = RecoveryAdmissionEnvironment &
+  Readonly<{
+    DB: D1Database;
+    CLOUDFLARE_ACCESS_ISSUER: string;
+    CLOUDFLARE_ACCESS_AUDIENCE: string;
+    USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+  }> &
   Partial<
     Readonly<{
       ERASURE_SUPPORT_AUDIENCE: string;

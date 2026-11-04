@@ -395,14 +395,36 @@ custody; independently verified provider inventory, version history and the eras
 remain separate activation barriers.
 
 The Access-authenticated `Activation` erasure command binds resumable progress in R2 to one
-activation identity and the fixed source/serving target manifests and epochs. A different identity
+activation identity, actual admission object, fixed source identity and serving manifest/epoch. The
+initial source is a D1 database UUID and epoch; later SQLite sources carry namespace, object,
+manifest and epoch. These configured identities do not qualify provider bindings. D1 uses the
+same independent admission barrier while retaining its fixed private database capability for
+pending-intent reconciliation and frozen export. A different identity
 or target cannot resume that record. Before any final qualification it preserves live DB-first
 pending erasure admissions as independent unsealed cases, including admissions absent from an
 older candidate snapshot. It never manufactures sealing evidence or repeats provider effects.
-Missing source evidence fails closed. Missing owner drain observation retains `AwaitingOwnerDrain` while native continuations remain
-admissible. Only proven zero pending/ambiguous owner work permits final closure. The current
-operator stops at `AwaitingProvider` and always
+Missing source or owner evidence fails closed. The operator invokes the fixed published owner
+drain observer, including pre-User Consent notifications, without a configurable zero-count
+callback. Unfinished owner work retains `AwaitingOwnerDrain` while native continuations remain
+admissible. The operator requires the closed ten-owner coverage observation and consistent
+owner totals; a bare zero count cannot advance. Zero owner work still leaves admission paused
+at `AwaitingProvider` until independent provider inventory and historical caller fencing permit
+final closure. The current operator always
 reports `Unqualified`; this progress cannot open a Store, publish a serving generation, remove the
 R2 guard, or qualify an activation. Provider-verified namespace/version history, complete operation
 and provider drain, final ledger replay and fresh serving bootstrap remain required before that
 transition can be implemented.
+
+Production `Restore` and `ReleaseRestore` read the independent activation record before touching
+restore state. Any activation record, malformed evidence or unavailable registry refuses those
+commands; the isolated candidate-only recovery boundary remains separate. Authenticated operator
+commands other than `Activation` and read-only `Receipt` hold native continuation leases, so they
+can settle while publishers are paused and are refused after final closure. `Activation` remains
+a control operation and must separately serialize its own interrupted native writes before any
+final barrier can qualify.
+
+`RecoveryClosedSourceEvidence` declares the artifact handoff: source identity, actual admission
+object, activation, old source generation, distinct final generation/checkpoint ETag and content
+digests for provider and ledger evidence. `readClosedRecoverySource` currently always refuses;
+preliminary R2 progress cannot issue export/bootstrap authority while provider qualification and
+final reconciliation remain incomplete.

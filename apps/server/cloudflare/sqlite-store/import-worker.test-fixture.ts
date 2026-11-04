@@ -80,6 +80,16 @@ export class ImportStoreProof extends AuthoritativeSqliteStore {
       rows: sql.exec("SELECT CAST(sequence AS TEXT) AS sequence FROM audit_entries").toArray(),
       money: sql.exec("SELECT amount FROM transactions").toArray(),
       foreignKeys: sql.exec("PRAGMA foreign_keys").toArray(),
+      sourceControls: sql
+        .exec(
+          "SELECT count(*) AS count FROM sqlite_schema WHERE type='trigger' AND name GLOB 'fidy_source_retired_v1_*'"
+        )
+        .toArray(),
+      domainGuards: sql
+        .exec(
+          "SELECT count(*) AS count FROM sqlite_schema WHERE type='trigger' AND name NOT GLOB 'fidy_source_retired_v1_*'"
+        )
+        .toArray(),
       generation: sql
         .exec("SELECT generation FROM erasure_control WHERE kind='published'")
         .toArray(),

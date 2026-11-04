@@ -34,6 +34,11 @@ it.live(
           ),
         ])
       );
+      const domainGuards = yield* io(() =>
+        native.db
+          .prepare("SELECT count(*) AS count FROM sqlite_schema WHERE type='trigger'")
+          .first<{ count: number }>()
+      );
       const retired = "18460000-0000-4000-8000-000000000005";
       const sourceFreeze = yield* retireErasureSource({
         db: native.db,
@@ -99,6 +104,8 @@ it.live(
       expect(rowReplyLost).toBe(true);
       expect(yield* readErasureSourceGeneration({ db: native.db })).toBe(retired);
       expect(yield* io(native.facts)).toMatchObject({
+        sourceControls: [{ count: 0 }],
+        domainGuards: [domainGuards],
         rows: [{ sequence: "9007199254740993" }],
         money: [{ amount: "123456789012345678901234567890.01" }],
         foreignKeys: [{ foreign_keys: 1 }],

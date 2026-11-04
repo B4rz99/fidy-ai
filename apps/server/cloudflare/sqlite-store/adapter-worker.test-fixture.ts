@@ -1,4 +1,8 @@
-import type { AuthoritativeStoreEnvironment, SqliteStoreBinding } from "./contract";
+import type {
+  AuthoritativeStoreEnvironment,
+  SqliteStoreBinding,
+  SqliteStoreEnvironment,
+} from "./contract";
 import { Effect, Schema } from "effect";
 import { AuthoritativeSqliteStore } from "./runtime";
 import { makeRemoteSqliteDatabase, makeSqliteDatabase, withAuthoritativeStore } from "./operations";
@@ -132,8 +136,13 @@ export class AdapterProof {
   }
 }
 export class ActiveStoreProof extends AuthoritativeSqliteStore {
-  constructor(state: DurableObjectState, env: { SQLITE_STORE_MANIFEST: string }) {
-    super(state, env);
+  constructor(
+    state: DurableObjectState,
+    env: SqliteStoreEnvironment & Partial<Record<`BUCKET_${number}`, R2Bucket>>
+  ) {
+    const matched = /^owner-(\d+)$/u.exec(state.id.name ?? "");
+    const index = matched === null ? 0 : Number(matched[1]);
+    super(state, { ...env, ERASURE_BUCKET: env[`BUCKET_${index}`] });
     // Test-only bootstrap: production serving code exposes no sealing or import RPC.
     state.storage.kv.put("store-seal", {
       manifest: "fixture",
@@ -213,9 +222,30 @@ const controlRequest = ({
     )
     .then((value) => Response.json(value));
 };
+const SnapshotFixture = Schema.Struct({
+  url: Schema.String,
+  method: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String),
+  mode: Schema.Literals(["bound", "document"]),
+});
+const dashboardRequest = (request: Request, env: AdapterEnvironment): Promise<Response> =>
+  request
+    .json()
+    .then(Schema.decodeUnknownSync(SnapshotFixture))
+    .then<unknown>((input) =>
+      env.STORE.getByName(request.headers.get("x-store-object") ?? "store").dashboard({
+        manifest: "fixture",
+        epoch: "fixture",
+        request: new Request(input.url, { method: input.method, headers: input.headers }),
+        mode: input.mode,
+      })
+    )
+    .then((value) => Response.json(value));
+const queryPaths = new Set(["/rpc", "/inactive"]);
 export default {
   fetch: (request: Request, env: AdapterEnvironment): Promise<Response> => {
     const path = new URL(request.url).pathname;
+    if (path === "/dashboard-snapshot") return dashboardRequest(request, env);
     if (path.startsWith("/control/")) return controlRequest({ env, request, path });
     if (path.startsWith("/target/")) return targetRequest({ env, path });
     if (path === "/inspect-d1") {
@@ -233,7 +263,7 @@ export default {
       });
       return bindingsProof(db);
     }
-    if (path === "/rpc" || path === "/inactive") {
+    if (queryPaths.has(path)) {
       const store = path === "/rpc" ? env.STORE : env.INACTIVE;
       return request
         .json()

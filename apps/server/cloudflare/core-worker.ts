@@ -345,13 +345,7 @@ export class UserTransactionCoordinator {
       request.method === "POST" &&
       url.origin === "https://coordinator.internal" &&
       url.search === "" &&
-      [
-        "/erasure-admit",
-        "/erasure-continue",
-        "/erasure-receipt",
-        "/erasure-custody-evidence",
-        "/erasure-restore",
-      ].includes(url.pathname)
+      url.pathname === "/erasure-receipt"
     ) {
       return runRecoveryControl(() => delegate.fetch(request));
     }

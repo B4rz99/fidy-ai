@@ -1,22 +1,9 @@
-import type { RecoveryLifecycleEnvironment } from "../contract";
+import type { RecoveryNativeEnvironment } from "../contract";
 import { bucket } from "./objects";
 import { database } from "./database";
 
-type NativeEnvironment = RecoveryLifecycleEnvironment &
-  Readonly<{
-    DB: D1Database;
-  }> &
-  Partial<
-    Readonly<{
-      ERASURE_BUCKET: object;
-      STATEMENT_STAGING_BUCKET: object;
-      EMAIL_BUCKET: object;
-      SMOKE_BUCKET: object;
-    }>
-  >;
-
 /** Capture native capabilities after target selection and before any recovery wrapper. */
-export const objects = <Environment extends NativeEnvironment>(
+export const objects = <Environment extends RecoveryNativeEnvironment>(
   input: Environment
 ): Environment => ({
   ...input,
@@ -39,7 +26,7 @@ export const objects = <Environment extends NativeEnvironment>(
     : { SMOKE_BUCKET: bucket({ binding: input.SMOKE_BUCKET, environment: input }) }),
 });
 
-export const environment = <Environment extends NativeEnvironment>(
+export const environment = <Environment extends RecoveryNativeEnvironment>(
   input: Environment
 ): Environment => ({
   ...objects(input),

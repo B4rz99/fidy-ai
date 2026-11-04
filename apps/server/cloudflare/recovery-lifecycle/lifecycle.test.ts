@@ -1,8 +1,8 @@
 import { it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { DateTime, Effect, Option } from "effect";
 import { expect } from "vitest";
 import { nativeRecoveryAdmission } from "../recovery-activation/native.test-fixture";
-import { runRecoveryJob, runRecoveryOperation } from "./operations";
+import { runRecoveryJob, runRecoveryOperation, runRecoveryQueue } from "./operations";
 import type { RecoveryAdmissionBinding } from "../recovery-activation/contract";
 import { runRecoveryFetch, trackRecoveryNative } from "./runtime";
 
@@ -245,5 +245,59 @@ it.effect("drains a queued continuation after pause without admitting a new publ
         })
       ).rejects.toThrow()
     );
+  }).pipe(Effect.scoped)
+);
+
+it.effect("refused native Queue work is never acknowledged or passed to an owner", () =>
+  Effect.gen(function* () {
+    const gate = yield* nativeRecoveryAdmission;
+    const environment = {
+      RECOVERY_SOURCE_EPOCH: "source-epoch",
+      RECOVERY_ADMISSION: { getByName: (): RecoveryAdmissionBinding => gate },
+    };
+    let acknowledgements = 0;
+    let executions = 0;
+    const batch: MessageBatch<unknown> = {
+      queue: "retained-source-work",
+      metadata: {
+        metrics: {
+          backlogCount: 1,
+          backlogBytes: 1,
+          oldestMessageTimestamp: DateTime.toDateUtc(DateTime.makeUnsafe(0)),
+        },
+      },
+      messages: [
+        {
+          id: "native-message",
+          timestamp: DateTime.toDateUtc(DateTime.makeUnsafe(0)),
+          attempts: 1,
+          body: { recoveryEpoch: "old-epoch" },
+          ack: () => {
+            acknowledgements++;
+          },
+          retry: () => undefined,
+        },
+      ],
+      ackAll: () => {
+        acknowledgements++;
+      },
+      retryAll: () => undefined,
+    };
+    yield* Effect.tryPromise(() =>
+      expect(
+        runRecoveryQueue({
+          environment,
+          batch,
+          work: () => {
+            executions++;
+            batch.ackAll();
+            return Promise.resolve();
+          },
+        })
+      ).rejects.toThrow()
+    );
+    expect(acknowledgements).toBe(0);
+    expect(executions).toBe(0);
+    expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({ leases: 0 });
   }).pipe(Effect.scoped)
 );

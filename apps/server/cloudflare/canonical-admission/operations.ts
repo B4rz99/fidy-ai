@@ -6,6 +6,7 @@ import {
   measureCanonicalPhase,
   reportedSqlDuration,
 } from "./internal/response-timing";
+import type { CanonicalSnapshotResponse } from "./contract";
 import { OAuthNativeReview } from "../oauth-confirmation/contract";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
 import { Clock, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
@@ -1083,4 +1084,67 @@ export const admitCanonicalOperation = <E, R>(
     Effect.flatMap((response) =>
       discloseCanonicalAllowance({ db: input.db, caller: input.caller, response })
     )
+  );
+
+/** Prepare unmetered browser pressure and exact current authority for a synchronous native unit. */
+export const prepareCanonicalSnapshotAdmission = (
+  input: Readonly<{ db: D1Database; lookup: BoundWebSessionLookup; current: number }>
+): ReadonlyArray<D1PreparedStatement> => prepareBoundBrowserSnapshot(input);
+
+/** Preserve canonical standing headers without serializing any financial body. */
+export const attachCanonicalSnapshotStanding = (
+  input: Readonly<{ response: CanonicalSnapshotResponse; row: unknown; current: number }>
+): CanonicalSnapshotResponse => {
+  const status = Option.getOrThrow(decodeQuotaStatus({ row: input.row, current: input.current }));
+  const response = attachStanding(
+    new Response(null, { status: input.response.status, headers: input.response.headers }),
+    status,
+    input.current
+  );
+  return { ...input.response, headers: Object.fromEntries(response.headers) };
+};
+
+/** Closed admission outcomes reused by native snapshots; no later storage read is authorized. */
+export const canonicalSnapshotFailure = (
+  kind: "unauthenticated" | "unavailable" | "rate_limited"
+): CanonicalSnapshotResponse => {
+  if (kind === "unauthenticated") {
+    return {
+      status: 401,
+      body: {
+        error: { code: kind, message: "Present a currently authorized credential and retry." },
+        next: [],
+      },
+      headers: {},
+    };
+  }
+  if (kind === "rate_limited") {
+    return {
+      status: 429,
+      body: {
+        error: {
+          code: kind,
+          message: "Too many concurrent or recent requests. Retry later.",
+          retryAfterSeconds: canonicalRequestProtection.retryAfterSeconds,
+        },
+        next: [],
+      },
+      headers: { "retry-after": String(canonicalRequestProtection.retryAfterSeconds) },
+    };
+  }
+  return {
+    status: 503,
+    body: {
+      error: { code: kind, message: "The operation is unavailable. Retry later." },
+      next: [],
+    },
+    headers: {},
+  };
+};
+
+/** Recognize only the admission owner's native pressure trigger, never arbitrary SQL prose. */
+export const canonicalSnapshotPressureRefusal = (cause: unknown): boolean =>
+  cause instanceof Error &&
+  /^(?:D1_(?:EXEC_)?ERROR: )?canonical_request_(?:rate|concurrency): SQLITE_CONSTRAINT(?: \(extended: SQLITE_CONSTRAINT_TRIGGER\))?$/u.test(
+    cause.message
   );

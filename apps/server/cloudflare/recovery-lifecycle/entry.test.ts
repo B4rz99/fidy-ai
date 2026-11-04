@@ -2,6 +2,7 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, expect } from "vitest";
 import type { CoreHttpBindings } from "../core-http/contract";
+import { UserTransactionCoordinator } from "../core-worker";
 import { makeCoreHttp } from "../core-http/runtime";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
@@ -56,6 +57,42 @@ it.effect("the actual Core fetch root rejects later requests after source admiss
       core(new Request("https://api.fidyapp.com/health"), bindings)
     );
     expect(refused.status).toBe(503);
+    expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({
+      closed: true,
+      leases: 0,
+    });
+  }).pipe(Effect.scoped)
+);
+
+it.effect("private mutating erasure continuations are refused after the final source close", () =>
+  Effect.gen(function* () {
+    const gate = yield* nativeRecoveryAdmission;
+    const db = yield* Effect.tryPromise(() => databases.acquire());
+    const coordinator = new UserTransactionCoordinator(
+      {
+        id: { name: "10000000-0000-4000-8000-000000000001" },
+        storage: {
+          setAlarm: (): Promise<void> => Promise.resolve(),
+          deleteAlarm: (): Promise<void> => Promise.resolve(),
+          getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+        },
+      },
+      { ...environment(db, gate), OPENAI_API_KEY: "", HOSTED_AI_MODEL: "gpt-6-luna" }
+    );
+    yield* Effect.tryPromise(() => gate.close({ epoch: "source-epoch", activationId: "cutover" }));
+    for (const path of [
+      "erasure-admit",
+      "erasure-continue",
+      "erasure-custody-evidence",
+      "erasure-restore",
+    ]) {
+      const response = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request(`https://coordinator.internal/${path}`, { method: "POST", body: "{}" })
+        )
+      );
+      expect(response.status).toBe(503);
+    }
     expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({
       closed: true,
       leases: 0,

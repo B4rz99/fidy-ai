@@ -12,12 +12,15 @@ import { currentUser } from "./internal/current-user";
 import type {
   AuthenticatedWebSession,
   BoundWebSessionLookup,
+  BrowserSessionMaterial,
   WebSessionAuthentication,
   WebSessionEstablishment,
   WebSessionRequest,
 } from "./contract";
 import {
   authenticate,
+  browserSessionMaterial,
+  currentSessionLookup,
   decodeSessionLookup,
   observeEntry,
   prepareSessionLookup,
@@ -139,3 +142,23 @@ export const browserSessionBindingResponse = (
 export const readWebSessionEntry = (
   input: Parameters<typeof observeEntry>[0]
 ): ReturnType<typeof observeEntry> => observeEntry(input);
+
+/** Hash a cookie before entering native storage; document mode is private composition only. */
+export const prepareBrowserSessionMaterial = (
+  input: Readonly<{ request: Request; mode: "bound" | "document" }>
+): Promise<Option.Option<BrowserSessionMaterial>> => {
+  const binding = Schema.decodeUnknownOption(WebSessionId)(
+    input.request.headers.get(browserSessionBindingHeader)
+  );
+  return input.mode === "bound" && Option.isNone(binding)
+    ? Promise.resolve(Option.none())
+    : browserSessionMaterial({
+        request: input.request,
+        binding: input.mode === "document" ? Option.none() : binding,
+      });
+};
+/** Rebuild live expiry, Consent and Erasure checks at the native transaction's own instant. */
+export const currentBrowserSessionLookup = (
+  input: BrowserSessionMaterial & Readonly<{ current: number }>
+): BoundWebSessionLookup =>
+  currentSessionLookup({ ...input, freshness: "live", requireConsent: true });

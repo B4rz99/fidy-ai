@@ -1,3 +1,13 @@
+import { readAuditedSqliteDashboard as nativeDashboard } from "./internal/sqlite-read";
+import {
+  type DashboardMutationOperation,
+  type DashboardQueryOperation,
+  type DashboardRequest,
+  type NativeDashboardBinding,
+  type NativeDashboardRead,
+  type NativeDashboardReader,
+  NativeDashboardResult,
+} from "./contract";
 import { prepareBoundDashboardRead as ownerPrepareBoundDashboardRead } from "./internal/bound-read";
 import type { CanonicalBrowserRead } from "../canonical-admission/contract";
 import { makeDashboardTiming } from "./internal/dashboard-timing";
@@ -40,11 +50,6 @@ import {
   projectDashboardValue,
   validCategories,
 } from "./internal/dashboard-mutation";
-import {
-  type DashboardMutationOperation,
-  type DashboardQueryOperation,
-  type DashboardRequest,
-} from "./contract";
 
 import {
   type CanonicalMutationPreparation,
@@ -411,3 +416,30 @@ const classifyDashboardConflict = (
       ? dashboardRevisionRefusal(input)
       : dashboardRefusal({ ...input, code: "validation_failed" });
   }).pipe(Effect.orElseSucceed(() => dashboardRefusal({ ...input, code: "validation_failed" })));
+
+/** One native Store transaction owns authority, all Widget facts, Audit and response validation. */
+export const readAuditedSqliteDashboard = (
+  input: NativeDashboardRead
+): Effect.Effect<NativeDashboardResult> => nativeDashboard(input);
+
+/** Trusted composition tracks the actual native RPC before decoding or an outer request timeout. */
+export const makeNativeDashboardReader =
+  (
+    input: Readonly<{
+      store: NativeDashboardBinding;
+      manifest: string;
+      epoch: string;
+      nativeCall: (execute: () => Promise<unknown>) => Promise<unknown>;
+    }>
+  ): NativeDashboardReader =>
+  (request) => {
+    try {
+      return input
+        .nativeCall(() =>
+          input.store.dashboard({ manifest: input.manifest, epoch: input.epoch, ...request })
+        )
+        .then(Schema.decodeUnknownSync(NativeDashboardResult));
+    } catch (cause) {
+      return Promise.reject(cause);
+    }
+  };

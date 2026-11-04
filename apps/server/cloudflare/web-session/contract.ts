@@ -1,3 +1,4 @@
+import type { Option } from "effect";
 import type { BrowserPairingClaim } from "../browser-login/contract";
 import type { WebSessionAuthority, WebSessionSubject } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
@@ -25,3 +26,9 @@ export type WebSessionRequest = Readonly<{ request: Request; db: D1Database }>;
 
 /** Pairing owner work committed with its one-time WebSession issuance. */
 export type WebSessionEstablishment = Readonly<{ db: D1Database; claim: BrowserPairingClaim }>;
+
+/** Credential material only; executing its current-time lookup is still required for authority. */
+export type BrowserSessionMaterial = Readonly<{
+  digest: Uint8Array;
+  binding: Option.Option<string>;
+}>;

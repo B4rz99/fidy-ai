@@ -10,6 +10,7 @@ import { WebSessionId } from "../../../src/core/web-session/contract";
 import type {
   AuthenticatedWebSession,
   BoundWebSessionLookup,
+  BrowserSessionMaterial,
   WebSessionAuthentication,
 } from "../contract";
 import { sessionCookie, sessionDigest } from "./credentials";
@@ -41,36 +42,51 @@ export const prepareSessionLookup = ({
   }>): Promise<Option.Option<BoundWebSessionLookup>> => {
   const token = sessionCookie(request);
   if (Option.isNone(token)) return Promise.resolve(Option.none());
-  return sessionDigest(token.value).then((digest) => {
-    const requested = {
-      table: "web_sessions" as const,
-      predicate: `token_digest = ? AND revoked_at_ms IS NULL ${freshness === "fresh" ? "AND fresh_until_ms > ?" : ""}
+  return sessionDigest(token.value).then((digest) =>
+    Option.some(currentSessionLookup({ digest, binding, current, freshness, requireConsent }))
+  );
+};
+
+export const currentSessionLookup = ({
+  digest,
+  binding,
+  current,
+  freshness,
+  requireConsent,
+}: BrowserSessionMaterial &
+  Readonly<{
+    current: number;
+    freshness: "live" | "fresh";
+    requireConsent: boolean;
+  }>): BoundWebSessionLookup => {
+  const requested = {
+    table: "web_sessions" as const,
+    predicate: `token_digest = ? AND revoked_at_ms IS NULL ${freshness === "fresh" ? "AND fresh_until_ms > ?" : ""}
           AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
           ${Option.isSome(binding) ? "AND id = ?" : ""}`,
-      bindings: [
-        digest,
-        ...(freshness === "fresh" ? [current] : []),
-        current,
-        current,
-        ...(Option.isSome(binding) ? [binding.value] : []),
-      ],
-    };
-    const authority = requireConsent
-      ? protectConsentAuthority({
-          authority: requested,
-          subject: { _tag: "Owner", column: "web_sessions.user_id" },
-          requirement: "unrevoked",
-        })
-      : requested;
-    return Option.some({
+    bindings: [
       digest,
-      authority,
-      statement: {
-        sql: `SELECT id, user_id AS userId FROM web_sessions WHERE ${authority.predicate}`,
-        params: authority.bindings,
-      },
-    });
-  });
+      ...(freshness === "fresh" ? [current] : []),
+      current,
+      current,
+      ...(Option.isSome(binding) ? [binding.value] : []),
+    ],
+  };
+  const authority = requireConsent
+    ? protectConsentAuthority({
+        authority: requested,
+        subject: { _tag: "Owner", column: "web_sessions.user_id" },
+        requirement: "unrevoked",
+      })
+    : requested;
+  return {
+    digest,
+    authority,
+    statement: {
+      sql: `SELECT id, user_id AS userId FROM web_sessions WHERE ${authority.predicate}`,
+      params: authority.bindings,
+    },
+  };
 };
 
 export const authenticate = ({
@@ -126,3 +142,16 @@ export const observeEntry = (
       status: value,
     }));
   });
+
+export const browserSessionMaterial = ({
+  request,
+  binding,
+}: Readonly<{ request: Request; binding: Option.Option<string> }>): Promise<
+  Option.Option<BrowserSessionMaterial>
+> => {
+  const token = sessionCookie(request);
+  if (Option.isNone(token) || request.headers.has("authorization")) {
+    return Promise.resolve(Option.none());
+  }
+  return sessionDigest(token.value).then((digest) => Option.some({ digest, binding }));
+};

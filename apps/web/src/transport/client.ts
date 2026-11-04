@@ -1,9 +1,12 @@
+import { type InitialDashboardHtml, takeInitialDashboardHtml } from "./initial-dashboard";
 import {
   type BrowserSessionLifetime,
   bindBrowserSession,
   coordinateBrowserRequests,
 } from "./session-binding";
 import {
+  DashboardHtmlApi,
+  type DashboardHtmlApiGroups,
   FidyApi,
   type FidyApiGroups,
   HostedTurnApi,
@@ -188,11 +191,19 @@ export const makeHostedTurnClient = (options: BrowserClientOptions): HostedTurnC
     transformResponse: observeBrowserDecode,
   });
 
-export type FidyClient = AtomHttpApi.AtomHttpApiClient<
+type CanonicalFidyClient = AtomHttpApi.AtomHttpApiClient<
   never,
   "@fidy/web/FidyClient",
   FidyApiGroups
 >;
+
+export type DashboardHtmlClient = AtomHttpApi.AtomHttpApiClient<
+  never,
+  "@fidy/web/DashboardHtmlClient",
+  DashboardHtmlApiGroups
+> &
+  Readonly<{ takeInitial: () => Option.Option<InitialDashboardHtml> }>;
+export type FidyClient = CanonicalFidyClient & Readonly<{ dashboardHtml: DashboardHtmlClient }>;
 
 /**
  * Derives the sole browser transport from the server-owned canonical API declaration. `apiOrigin`
@@ -203,8 +214,8 @@ export type FidyClient = AtomHttpApi.AtomHttpApiClient<
  * transport failures once, and exposes transport or schema failures as sanitized defects while
  * retaining canonical request decoding and endpoint-declared failures.
  */
-export const makeFidyClient = (options: FidyClientOptions): FidyClient =>
-  AtomHttpApi.Service<never>()("@fidy/web/FidyClient", {
+export const makeFidyClient = (options: FidyClientOptions): FidyClient => {
+  const canonical = AtomHttpApi.Service<never>()("@fidy/web/FidyClient", {
     api: FidyApi,
     baseUrl: options.apiOrigin,
     httpClient: Layer.merge(
@@ -215,6 +226,21 @@ export const makeFidyClient = (options: FidyClientOptions): FidyClient =>
       "observer" in options ? options.observer : undefined
     ),
   });
+  const dashboardHtml = AtomHttpApi.Service<never>()("@fidy/web/DashboardHtmlClient", {
+    api: DashboardHtmlApi,
+    baseUrl: options.apiOrigin,
+    httpClient: browserClientLayer(options, "canonical"),
+    transformResponse: observeAuthenticationExpiration(
+      "observer" in options ? options.observer : undefined
+    ),
+  });
+  return Object.assign(canonical, {
+    dashboardHtml: Object.assign(dashboardHtml, {
+      takeInitial: () =>
+        "session" in options ? takeInitialDashboardHtml(options.session.binding) : Option.none(),
+    }),
+  });
+};
 
 export type WebAuthClient = AtomHttpApi.AtomHttpApiClient<
   never,

@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "../../../design/tokens.css";
 @import "tw-animate-css";
+@import "./ui/components/dashboard.css";
+@import "./ui/components/dashboard-html.css";
 @import "shadcn/tailwind.css";
 @font-face {
   font-family: Poppins;

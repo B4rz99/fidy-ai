@@ -1,10 +1,11 @@
+import { DashboardHtmlFeature } from "./html-feature";
 import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
 import type { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { type JSX, type ReactNode, Suspense, useState } from "react";
-import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
+import { lazyRouteComponent } from "@tanstack/react-router";
 
 import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -13,9 +14,8 @@ import type { FidyClient } from "@/transport/client";
 import { workspaceDashboardCatalogQuery } from "@/transport/workspace-query";
 import { type DashboardEditorError, useDashboardEditing } from "./editing";
 import type { DashboardView } from "./presentation";
-import { type DashboardLoadPhase, dashboardQuery } from "./query";
+import { dashboardQuery } from "./query";
 import { DashboardBudgetConfiguration } from "./budget-configuration";
-import { prepareQuery } from "@/transport/query-preparation";
 import type { AnyRouter } from "@tanstack/react-router";
 
 const DashboardRoutePresentation = lazyRouteComponent(
@@ -30,41 +30,52 @@ DashboardViewComponent.preload?.()?.catch(() => undefined);
 export const DashboardFeature = ({
   apiClient,
   children,
-}: Readonly<{ apiClient: FidyClient; children: ReactNode }>): JSX.Element => {
-  const router = useRouter();
-  const [dashboard] = useState(() => dashboardQuery({ apiClient, router }));
-  const result = useAtomValue(dashboard.result);
-  const phase = useAtomValue(dashboard.phase);
-  const refresh = useAtomRefresh(dashboard.result);
+}: Readonly<{ apiClient: FidyClient; children: ReactNode }>): JSX.Element => (
+  <DashboardHtmlFeature apiClient={apiClient} editor={DashboardStructuredEditor}>
+    {children}
+  </DashboardHtmlFeature>
+);
+
+const DashboardStructuredEditor = ({
+  apiClient,
+  onRefreshHtml,
+}: Readonly<{ apiClient: FidyClient; onRefreshHtml: () => void }>): JSX.Element => {
+  const [dashboard] = useState(() => dashboardQuery(apiClient));
+  const result = useAtomValue(dashboard);
+  const refresh = useAtomRefresh(dashboard);
+  const state = presentCanonicalQuery(result);
+  const blocked = state._tag === "Ready" && (state.waiting || Option.isSome(state.refreshFailure));
+  const onRefresh = (): void => {
+    refresh();
+    onRefreshHtml();
+  };
   return (
-    <Suspense fallback={<PendingRead label="Cargando tablero" />}>
-      <DashboardRouteContent
-        apiClient={apiClient}
-        result={result}
-        phase={phase}
-        onRefresh={refresh}
-      />
-      {result._tag === "Success" ? children : null}
+    <Suspense fallback={<PendingRead label="Cargando personalización" />}>
+      {blocked ? (
+        <CanonicalQueryRetry
+          title="No pudimos actualizar tu tablero"
+          description="Conservamos tus cambios sin guardar."
+          onRetry={onRefresh}
+          retryLabel="Reintentar actualización del tablero"
+          retryingLabel="Reintentando…"
+          waiting={state.waiting}
+        />
+      ) : null}
+      <div hidden={blocked}>
+        <DashboardRouteContent apiClient={apiClient} result={result} onRefresh={onRefresh} />
+      </div>
     </Suspense>
   );
 };
 
-DashboardFeature.preloadData = ({
-  apiClient,
-  registry,
-  router,
-  signal,
-}: Readonly<{
-  apiClient: FidyClient;
-  registry: AtomRegistry.AtomRegistry;
-  router: AnyRouter;
-  signal: AbortSignal;
-}>): Promise<void> =>
-  prepareQuery({
-    registry,
-    query: dashboardQuery({ apiClient, router }).result,
-    options: { mode: "display", signal: Option.some(signal) },
-  });
+DashboardFeature.preloadData = (
+  _input: Readonly<{
+    apiClient: FidyClient;
+    registry: AtomRegistry.AtomRegistry;
+    router: AnyRouter;
+    signal: AbortSignal;
+  }>
+): Promise<void> => Promise.resolve();
 
 const unavailableCatalogError: DashboardEditorError = {
   title: "No pudimos cargar el catálogo",
@@ -163,22 +174,6 @@ const DashboardQueryNotices = <CatalogError, DashboardError>({
   </>
 );
 
-const DashboardLoadNotice = ({
-  phase,
-  waiting,
-}: Readonly<{ phase: DashboardLoadPhase; waiting: boolean }>): JSX.Element => {
-  switch (phase) {
-    case "reading":
-      return <></>;
-    case "initializing":
-      if (waiting) return <></>;
-      return <p aria-live="polite">No pudimos inicializar el tablero.</p>;
-    case "reading-initialized":
-      if (waiting) return <></>;
-      return <p aria-live="polite">El tablero se inicializó, pero no pudimos leerlo.</p>;
-  }
-};
-
 const dashboardReadState = (waiting: boolean, failed: boolean): "ready" | "pending" | "failed" => {
   if (failed) return "failed";
   return waiting ? "pending" : "ready";
@@ -188,12 +183,10 @@ export const DashboardRouteContent = ({
   apiClient,
   onRefresh,
   result,
-  phase,
 }: Readonly<{
   apiClient: FidyClient;
   onRefresh: () => void;
   result: AsyncResult.AsyncResult<Readonly<{ data: DashboardView }>, unknown>;
-  phase: DashboardLoadPhase;
 }>): JSX.Element => {
   const [catalogAtom] = useState(() => workspaceDashboardCatalogQuery(apiClient));
   const catalogResult = useAtomValue(catalogAtom);
@@ -207,7 +200,6 @@ export const DashboardRouteContent = ({
   if (dashboardState._tag !== "Ready") {
     return (
       <div className="contents" ref={lifecycleRef}>
-        <DashboardLoadNotice phase={phase} waiting={dashboardState.waiting} />
         <DashboardRoutePresentation onRefresh={onRefresh} result={result} />
       </div>
     );
@@ -239,6 +231,7 @@ export const DashboardRouteContent = ({
             ...editing,
           })}
           view={dashboardState.value.data}
+          initiallyEditing
         />
       </div>
     </DashboardBudgetConfiguration>

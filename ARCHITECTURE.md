@@ -84,3 +84,13 @@ versions before promotion. Code rollback changes traffic, not database or extern
 Domain terms belong in [GLOSSARY.md](GLOSSARY.md), coding and storage conventions in
 [CODING_STANDARDS.md](CODING_STANDARDS.md), security invariants in
 [SECURITY_STANDARDS.md](SECURITY_STANDARDS.md), and durable design rationale in [ADRs](docs/adr/).
+
+### Same-origin Dashboard documents
+
+The Web Worker owns app documents and static assets. It forwards only declared browser/public
+method/path pairs through a fixed Ingress service binding. App-host session bootstrap and redemption
+retain the host-only `__Host-fidy_session` cookie; no cookie Domain or cross-origin bearer bridge is
+introduced. Direct Dashboard documents compose the guarded public HTML representation into assets;
+in-app visits request the same representation as a fragment. External canonical API clients retain
+Ingress access and the structured contract. See the application architecture documents for lifecycle,
+output bounds, explicit initialization and editor draft ownership.

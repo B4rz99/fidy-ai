@@ -13,6 +13,7 @@ import {
   DashboardUnavailable,
   DashboardView,
 } from "./contract";
+import { renderHtml } from "./internal/html";
 import { renderDashboardView as render } from "~/shell/dashboard/internal/presentation";
 
 const decodeDashboardView = Schema.decodeEffect(Schema.toType(DashboardView));
@@ -174,3 +175,6 @@ export const toApiFailure = ({
         next: dashboardRecovery(caller),
       })
     : toNonInvalidApiFailure(failure, caller);
+
+/** Render only a validated complete view; all financial text and attributes are escaped. */
+export const renderDashboardHtml = (view: DashboardView): string => renderHtml(view);

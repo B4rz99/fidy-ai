@@ -1,3 +1,4 @@
+import { captureInitialDashboardHtml } from "@/transport/initial-dashboard";
 import { preloadWebRouteCode } from "./entry-code";
 import { tryMountProviderReturn } from "./provider-return";
 import { beginInitialBrowserRequest } from "@/transport/initial-request";
@@ -6,6 +7,7 @@ import { observeInitialBrowserRequest } from "@/session/initial-request";
 
 export const mountWebApplication = (): void => {
   if (tryMountProviderReturn()) return;
+  captureInitialDashboardHtml();
   const ready = Promise.withResolvers<void>();
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => ready.resolve(), { once: true });

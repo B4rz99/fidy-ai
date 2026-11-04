@@ -18,7 +18,7 @@ import { type Budget, BudgetProgress } from "~/core/budgets/contract";
 import type { UserContext } from "~/core/identity/contract";
 
 import { type Brand, Data, Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import { Currency, MoneyGroups } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 
@@ -27,6 +27,11 @@ import {
   NextOperations,
   NotFound,
   OperationResponse,
+  ResourceLimited,
+  ScopeMissing,
+  Unauthenticated,
+  Unavailable,
+  UserActionRequired,
   ValidationFailed,
 } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
@@ -265,3 +270,24 @@ export class DashboardCategoryNotFound extends Data.TaggedError("DashboardCatego
 }> {}
 
 export type DashboardApiFailure = NotFound | ValidationFailed | DashboardUninitialized;
+
+/** HTML representation of the same canonical query; it adds no operation or authority. */
+export const DashboardHtmlApi = HttpApi.make("dashboardHtml").add(
+  HttpApiGroup.make("dashboardHtml").add(
+    HttpApiEndpoint.get("view", "/dashboard/view", {
+      headers: Schema.Struct({ accept: Schema.Literal("text/html") }),
+      success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/html" })),
+      error: [
+        DashboardUninitialized,
+        Unauthenticated,
+        UserActionRequired,
+        ResourceLimited,
+        Unavailable,
+        ScopeMissing,
+        ValidationFailed,
+      ],
+    })
+  )
+);
+export type DashboardHtmlApiGroups =
+  typeof DashboardHtmlApi extends HttpApi.HttpApi<infer _Id, infer Groups> ? Groups : never;

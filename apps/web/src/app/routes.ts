@@ -105,6 +105,8 @@ const signedInIndexRoute = createRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/dashboard",
+  validateSearch: (search) =>
+    Schema.decodeSync(Schema.Struct({ customize: Schema.optionalKey(Schema.Literal(1)) }))(search),
   component: DashboardRoute,
 });
 const budgetsRoute = createRoute({

@@ -141,31 +141,49 @@ beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
 const coordinatorObservers = new WeakMap<D1Database, (operation: string) => void>();
+type DashboardHttpInput =
+  | string
+  | Readonly<{ path: string; method: "POST" | "PUT" | "GET"; body: object }>;
+const dashboardHttpInput = (
+  input: DashboardHttpInput
+): Readonly<{ path: string; init: RequestInit }> => {
+  if (typeof input === "string") {
+    return { path: input, init: { method: "GET", headers: { accept: "application/json" } } };
+  }
+  if (input.method === "GET") {
+    return { path: input.path, init: { method: "GET", headers: { accept: "text/html" } } };
+  }
+  return {
+    path: input.path,
+    init: {
+      method: input.method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input.body),
+    },
+  };
+};
 const send = (
   db: D1Database,
   credential: number | string,
-  pathAndBody: string | Readonly<{ path: string; method: "POST" | "PUT"; body: object }>
+  pathAndBody: DashboardHttpInput
 ): Promise<Response> => {
+  const input = dashboardHttpInput(pathAndBody);
   vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
   return publicWorker.fetch(
-    new Request(
-      `https://api.fidyapp.com${typeof pathAndBody === "string" ? pathAndBody : pathAndBody.path}`,
-      {
-        method: typeof pathAndBody === "string" ? "GET" : pathAndBody.method,
-        headers: {
-          origin: "https://app.fidyapp.com",
-          "cf-connecting-ip": "192.0.2.35",
-          ...(typeof credential === "number"
-            ? {
-                "Fidy-Session-Binding": sessions[credential] ?? "invalid",
-                cookie: `__Host-fidy_session=${bearer(credential)}`,
-              }
-            : { authorization: `Bearer ${credential}`, "x-provider-id": users[0] ?? "" }),
-          ...(typeof pathAndBody === "string" ? {} : { "content-type": "application/json" }),
-        },
-        ...(typeof pathAndBody === "string" ? {} : { body: JSON.stringify(pathAndBody.body) }),
-      }
-    ),
+    new Request(`https://api.fidyapp.com${input.path}`, {
+      ...input.init,
+      headers: {
+        ...Object.fromEntries(new Headers(input.init.headers)),
+        origin: "https://app.fidyapp.com",
+        "cf-connecting-ip": "192.0.2.35",
+        ...(typeof credential === "number"
+          ? {
+              "Fidy-Session-Binding": sessions[credential] ?? "invalid",
+              cookie: `__Host-fidy_session=${bearer(credential)}`,
+            }
+          : { authorization: `Bearer ${credential}`, "x-provider-id": users[0] ?? "" }),
+      },
+    }),
     {
       BROWSER_ORIGIN: "https://app.fidyapp.com",
       LOCAL_CANONICAL_READ_BEARER: "",
@@ -3232,3 +3250,34 @@ it(
     ),
   30_000
 );
+
+it("serves escaped ready Dashboard HTML after the same guarded read while preserving structured callers", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* initializedSetup();
+      const saved = yield* Effect.tryPromise(() =>
+        send(db, 0, {
+          path: "/dashboard/edits",
+          method: "POST",
+          body: { op: "set-title", title: '<img src=x onerror="alert(1)">' },
+        })
+      );
+      expect(saved.status).toBe(200);
+      const reply = yield* Effect.tryPromise(() =>
+        send(db, 0, { path: "/dashboard/view", method: "GET", body: {} })
+      );
+      expect(reply.status).toBe(200);
+      expect(reply.headers.get("content-type")).toContain("text/html");
+      expect(reply.headers.get("cache-control")).toBe("no-store");
+      const html = yield* Effect.tryPromise(() => reply.text());
+      expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+      expect(html).not.toContain("<img src=x");
+      expect(html).toContain('data-dashboard-read-state="ready"');
+      const structured = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
+      expect(structured.headers.get("content-type")).toContain("application/json");
+      const decoded = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+      )(yield* Effect.tryPromise(() => structured.json()));
+      expect(decoded.data.title).toBe('<img src=x onerror="alert(1)">');
+    })
+  ));

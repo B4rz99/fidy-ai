@@ -1,6 +1,14 @@
+import webWorker from "../cloudflare/worker";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
-import { Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
+const loopbackRequestInit = { tls: { rejectUnauthorized: false }, redirect: "manual" as const };
+const loopbackApiRuntime = ManagedRuntime.make(
+  FetchHttpClient.layer.pipe(
+    Layer.provide(Layer.succeed(FetchHttpClient.RequestInit, loopbackRequestInit))
+  )
+);
 const root = Bun.env.PREVIEW_ROOT ?? "playwright-dist";
 const compression = Bun.env.PREVIEW_COMPRESSION ?? "identity";
 if (compression !== "identity" && compression !== "gzip") {
@@ -173,12 +181,30 @@ const server = Bun.serve({
   port,
   tls: { cert: Bun.file(tlsCertificate), key: Bun.file(tlsKey) },
   fetch: (request) =>
-    request.method === "GET" || request.method === "HEAD"
-      ? responseFor(request)
-      : new Response(null, {
-          status: 405,
-          headers: policyHeadersFor(new URL(request.url).pathname),
-        }),
+    webWorker.fetch(request, {
+      BROWSER_ORIGIN: browserAcceptanceTopology().app,
+      ASSETS: { fetch: responseFor },
+      API: {
+        fetch: (internal) => {
+          const target = new URL(browserAcceptanceTopology().api);
+          const source = new URL(internal.url);
+          target.pathname = source.pathname;
+          target.search = source.search;
+          return loopbackApiRuntime.runPromise(
+            Effect.gen(function* () {
+              const client = yield* HttpClient.HttpClient;
+              const response = yield* client.execute(
+                HttpClientRequest.fromWeb(new Request(target, internal))
+              );
+              return Option.getOrElse(
+                HttpClientResponse.toWeb(response),
+                () => new Response(null, { status: 503 })
+              );
+            })
+          );
+        },
+      },
+    }),
 });
 
 process.stdout.write(`Static preview server listening at ${server.url}\n`);

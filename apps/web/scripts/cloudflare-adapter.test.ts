@@ -15,11 +15,11 @@ const expectStaticSecurityHeaders = (headers: string): void => {
 };
 
 describe("Cloudflare static artifact policy", () => {
-  it("allows only the production API and applies production security and cache policy", () =>
+  it("allows the app origin and production API and applies production security and cache policy", () =>
     Bun.file(`${cloudflareRoot}/production/_headers`)
       .text()
       .then((headers) => {
-        expect(headers).toContain("connect-src https://api.fidyapp.com");
+        expect(headers).toContain("connect-src 'self' https://api.fidyapp.com");
         expect(headers).not.toContain("connect-src 'none'");
         expect(headers).toContain("frame-ancestors 'none'");
         expect(headers).toContain("worker-src 'none'");

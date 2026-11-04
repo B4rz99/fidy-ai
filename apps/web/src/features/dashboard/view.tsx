@@ -1068,11 +1068,13 @@ const EditableDashboardTitle = ({
 export const DashboardViewComponent = ({
   editor,
   view,
+  initiallyEditing,
 }: Readonly<{
   editor: Option.Option<DashboardEditor>;
   view: DashboardView;
+  initiallyEditing: boolean;
 }>): JSX.Element => {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initiallyEditing);
   const activeEditor = Option.filter(editor, () => editing);
   const pending = Option.flatMap(activeEditor, (current) => current.pendingPlacement);
   const editorError = Option.flatMap(editor, (current) => current.error);
@@ -1158,6 +1160,12 @@ export const DashboardRouteContent = ({
         />
       );
     case "Ready":
-      return <DashboardViewComponent editor={Option.none()} view={state.value.data} />;
+      return (
+        <DashboardViewComponent
+          editor={Option.none()}
+          view={state.value.data}
+          initiallyEditing={false}
+        />
+      );
   }
 };

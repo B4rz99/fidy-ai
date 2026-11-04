@@ -1,3 +1,5 @@
+import { DashboardView } from "../../../src/shell/dashboard/contract";
+import { renderDashboardHtml } from "../../../src/shell/dashboard/operations";
 import { browserSessionBindingResponse } from "../../web-session/operations";
 import type { BancolombiaAuthenticationFailed } from "../../bancolombia-authentication/contract";
 import { ReviewCommand } from "../../../src/core/ingestion/contract";
@@ -1825,5 +1827,33 @@ export const executeCoreHttp = (
     db: input.environment.DB,
     browserOrigin: input.environment.BROWSER_ORIGIN,
   }).pipe(
-    Effect.flatMap(Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed }))
+    Effect.flatMap(Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed })),
+    Effect.flatMap((response) => dashboardHtmlResponse(input.request, response))
   );
+
+const dashboardHtmlResponse = (request: Request, response: Response): Effect.Effect<Response> => {
+  if (
+    request.method !== "GET" ||
+    new URL(request.url).pathname !== "/dashboard/view" ||
+    request.headers.get("accept") !== "text/html" ||
+    response.status !== HTTP_OK
+  ) {
+    return Effect.succeed(response);
+  }
+  return Effect.gen(function* () {
+    const decoded = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+    )(yield* Effect.tryPromise(() => response.json()));
+    const headers = new Headers(response.headers);
+    headers.set("content-type", "text/html; charset=utf-8");
+    headers.set("cache-control", "no-store");
+    headers.set("vary", "Accept");
+    const html = renderDashboardHtml(decoded.data);
+    const maximumHtmlBytes = 1_048_576;
+    if (new TextEncoder().encode(html).byteLength > maximumHtmlBytes) return unavailable();
+    for (const name of ["content-length", "etag", "content-encoding", "last-modified"]) {
+      headers.delete(name);
+    }
+    return new Response(html, { headers });
+  }).pipe(Effect.orElseSucceed(unavailable));
+};

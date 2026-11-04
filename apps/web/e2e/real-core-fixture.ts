@@ -464,6 +464,10 @@ export const signInNativeClockThroughCore = (
   input: Omit<NavigationFixture, "deferFreshEntry">
 ): Promise<void> => signInThroughBrowser({ ...input, clockMode: "native-performance" });
 
+/** Dashboard response probes keep the browser and native fixture clocks live. */
+export const signInDashboardPerformanceThroughCore = (input: BrowserFixture): Promise<void> =>
+  signInWithIdentity({ ...input, identity: "dashboard", clockMode: "native-performance" });
+
 /** Budget editor journeys cannot race the Budget Widget's cap mutations. */
 export const signInBudgetEditingThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity({ ...input, identity: "budgetEditing", clockMode: "controlled" });

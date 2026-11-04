@@ -331,3 +331,15 @@ AccessTier and Subscription status. The native `bun run pro` operator tool uses 
 Cloudflare admin authority through Outbound HTTP; no Worker, PAT, browser or hosted-agent operation
 can mint that authority. Its grant/revoke statement resolves exactly one existing User atomically.
 See [operator procedure](../../docs/operations/manual-pro-grants.md).
+
+### Dashboard browser representation
+
+The public canonical `GET /dashboard/view` retains its structured response contract. An exact
+`Accept: text/html` selects a no-store escaped presentation of the same successfully completed,
+guarded DashboardView. Rendering happens after authorization, recovery admission, complete owner
+composition and Audit; refusals keep their existing structured status. No partial financial view is
+released. All four Widget types retain exact Money text, Currency grouping, periods and local-time
+links. Dimensionless chart/progress geometry alone uses bounded numeric ratios. The browser Web
+Worker composes this representation into direct documents through public Ingress; it has no private
+Core capability. The full guarded reader remains until a separately qualified native reader covers
+all financial semantics.

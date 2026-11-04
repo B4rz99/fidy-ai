@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-export const BrowserAcceptanceMode = Schema.Literals(["shared", "cli", "oauth"]);
+export const BrowserAcceptanceMode = Schema.Literals(["shared", "cli", "oauth", "dashboard"]);
 export type BrowserAcceptanceMode = typeof BrowserAcceptanceMode.Type;
 export type BrowserAcceptanceTopology = Readonly<{
   mode: BrowserAcceptanceMode;
@@ -23,9 +23,11 @@ const topology = (mode: BrowserAcceptanceMode, appPort: number): BrowserAcceptan
 const sharedAppPort = 4173;
 const cliAppPort = 4183;
 const oauthAppPort = 4193;
+const dashboardAppPort = 4203;
 /** Synthetic loopback identities owned by broad acceptance composition, never production authority. */
 export const browserAcceptanceTopologies = {
   shared: topology("shared", sharedAppPort),
   cli: topology("cli", cliAppPort),
   oauth: topology("oauth", oauthAppPort),
+  dashboard: topology("dashboard", dashboardAppPort),
 } as const;

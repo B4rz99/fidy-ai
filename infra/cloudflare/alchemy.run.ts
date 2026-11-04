@@ -624,12 +624,15 @@ export default Alchemy.Stack(
     });
 
     const web = yield* Cloudflare.Website.StaticSite("Web", {
+      main: "../../apps/web/cloudflare/worker.ts",
       name: productionTopology.web.workerName,
       observability: freeTierWorkerObservability,
       command: "bun run build:production",
       cwd: "../../apps/web",
       outdir: "dist",
       env: {
+        API: ingress,
+        BROWSER_ORIGIN: resolveBrowserOrigin(production),
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
@@ -641,6 +644,7 @@ export default Alchemy.Stack(
         },
       },
       assets: {
+        runWorkerFirst: ["/*", "!/assets/*"],
         htmlHandling: "none",
         notFoundHandling: "single-page-application",
       },

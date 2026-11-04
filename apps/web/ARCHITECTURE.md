@@ -8,7 +8,7 @@ production topology, and browser-to-server ownership.
 
 ## 1. Application shape
 
-`apps/web` is the `@fidy/web` React/Vite application package and produces a portable static artifact.
+`apps/web` is the `@fidy/web` React/Vite application package and produces static assets served by its Web Worker.
 It owns product browser routing, providers and styles. Public marketing and policy copy belong to
 `apps/site`, which renders the public website with Astro. Its server imports use the
 browser-safe `@fidy/server/client` declaration seam and the narrow `browser-bootstrap` and dependency-free
@@ -208,12 +208,30 @@ client retains authorization, transport policy and telemetry ownership.
 
 ### Dashboard first use
 
-The authenticated Dashboard's Effect Atom owner explicitly reads the canonical view, initializes
-only on the owner-declared `DashboardUninitialized` failure, then reads again. It exposes workflow
-phase feedback without copying server state into React. Initialization and second-read failures are
-presented truthfully; unavailability never triggers creation, and a load makes at most one
-initialization attempt. Concurrent tabs rely on canonical initialization idempotence. Successful
-edits invalidate the same Dashboard resource; queries themselves never create or repair domain state.
+The Web Worker serves browser documents and forwards only method/path pairs reflected from the
+public canonical, WebAuth, hosted-turn and subscription-enrollment contracts to a fixed Ingress
+service binding. It never chooses a destination from request input. Browser requests use the app
+origin, including session establishment and bootstrap, preserving the Secure, HttpOnly, host-only
+`__Host-fidy_session` cookie. External canonical API clients continue to use Ingress directly.
+
+Direct `/app/dashboard` entry derives the mounted binding through the existing cookie bootstrap,
+then requests the guarded `/dashboard/view` representation with `Accept: text/html`. It embeds the
+complete escaped result in the asset document under `no-store`; the browser consumes that initial
+result once only when its authenticated mounted binding matches. The transfer and renderer each
+bound output to one MiB; a partial, oversized or failed read never releases financial HTML.
+The document is usable before React loads. In-app entry uses the same endpoint as an HTML fragment.
+Every mounted visit owns a separate query atom with zero idle retention. Pending and failed reads
+withhold financial content and expose an explicit Retry. Disposed visits cannot replace newer views.
+The `data-dashboard-read-state` marker describes committed readiness for browser measurement.
+
+An absent document offers **Crear tablero**; only that explicit gesture initializes it. Reads never
+create domain state. **Personalizar** navigates to the validated `customize=1` route, where the
+structured canonical snapshot and Widget catalog are loaded. Financial HTML is never an editor
+snapshot. The structured editor stays mounted but hidden while a refresh is pending or failed,
+preserving unsaved drafts without showing stale financial results. Successful edits invalidate the
+same Dashboard resource. Existing guarded reads, authorization, auditing and recovery checks remain
+in force for both representations; this topology does not remove R2 checks or claim one D1 trip.
+
 The mounted edit module owns serialized submission, pending placement projection and canonical
 reread recovery. Uncertain or missing-Widget outcomes discard unsent edits and block new edits
 until an explicit successful canonical refresh. Route departure discards unsent edits; an

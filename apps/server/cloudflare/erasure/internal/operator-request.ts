@@ -1,4 +1,8 @@
-import { advanceRecoveryActivation } from "../../recovery-activation/operations";
+import { runRecoveryContinuation } from "../../recovery-lifecycle/operations";
+import {
+  advanceRecoveryActivation,
+  assertProductionRestoreAllowed,
+} from "../../recovery-activation/operations";
 import { verifyCandidate } from "./candidate";
 import { initializeRegistry } from "./initialize";
 import { releaseRestore, restoreNext } from "./restore";
@@ -47,7 +51,7 @@ export const operatorRequest = (
     if (Option.isNone(action)) return reply(invalidStatus);
     const current = yield* Clock.currentTimeMillis;
     if (operator.value.expiresAtMs <= current) return reply(unauthorizedStatus);
-    return yield* executeCommand({
+    return yield* executeAuthenticatedCommand({
       ...input,
       command: action.value,
       operator: operator.value,
@@ -186,15 +190,63 @@ const activationCommand = (
   });
 };
 
-const executeCommand = (
+const allowProductionRestore = (
   input: Readonly<{
-    request: Request;
-    environment: ErasureOperatorEnvironment;
     candidateTargetId: Option.Option<string>;
-    operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;
     command: typeof ErasureOperatorAction.Type;
-    current: number;
+    environment: ErasureOperatorEnvironment;
   }>
+): Effect.Effect<void, ErasureUnavailable> => {
+  if (Option.isSome(input.candidateTargetId)) return Effect.void;
+  if (input.command.action !== "Restore" && input.command.action !== "ReleaseRestore") {
+    return Effect.void;
+  }
+  const bucket = input.environment.ERASURE_BUCKET;
+  return bucket === undefined
+    ? Effect.fail(new ErasureUnavailable())
+    : assertProductionRestoreAllowed(bucket);
+};
+
+type CommandInput = Readonly<{
+  request: Request;
+  environment: ErasureOperatorEnvironment;
+  candidateTargetId: Option.Option<string>;
+  operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;
+  command: typeof ErasureOperatorAction.Type;
+  current: number;
+}>;
+
+const executeAuthenticatedCommand = (input: CommandInput): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const execution = executeCommand(input).pipe(
+      Effect.orElseSucceed(() => reply(unavailableStatus))
+    );
+    if (input.command.action === "Activation" || input.command.action === "Receipt") {
+      return yield* execution;
+    }
+    const run = Effect.runPromiseWith(yield* Effect.context<never>());
+    const configuration = Option.isSome(input.candidateTargetId)
+      ? undefined
+      : input.environment.ERASURE_ACTIVATION;
+    const environment =
+      configuration === undefined
+        ? input.environment
+        : {
+            RECOVERY_SOURCE_EPOCH: configuration.sourceTarget.epoch,
+            RECOVERY_ADMISSION: {
+              getByName: (): typeof configuration.admission => configuration.admission,
+            },
+          };
+    return yield* Effect.tryPromise(() =>
+      runRecoveryContinuation({
+        environment,
+        work: () => run(execution),
+      })
+    ).pipe(Effect.orElseSucceed(() => reply(unavailableStatus)));
+  });
+
+const executeCommand = (
+  input: CommandInput
 ): Effect.Effect<Response, ErasureUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
     const command = input.command;
@@ -209,6 +261,7 @@ const executeCommand = (
       return yield* activationCommand({ ...input, activationId: command.activationId });
     }
     if (command.action === "Initialize") return yield* initializeRegistry(input.environment);
+    yield* allowProductionRestore(input);
     if (command.action === "Restore") {
       return yield* restoreNext({
         ...input,

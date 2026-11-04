@@ -1,3 +1,4 @@
+import type { RecoveryTarget } from "../recovery-activation/contract";
 import { Schema } from "effect";
 
 export const sqliteStoreLimits = {
@@ -142,8 +143,24 @@ export type SqliteStoreEnvironment = Partial<
     SQLITE_STORE_MANIFEST: string;
     SQLITE_STORE_EPOCH: string;
     SQLITE_STORE_NAMESPACE_ID: string;
+    SQLITE_STORE_ARTIFACT_DIGEST: string;
     CF_VERSION_METADATA: Readonly<{ id: string }>;
     ERASURE_BUCKET: R2Bucket;
     BROWSER_ORIGIN: string;
   }>
 >;
+
+/** Captured local bootstrap control. It grants no serving or provider qualification; every native unit rechecks inactivity after external I/O. */
+export type SqliteBootstrapTarget = Readonly<{
+  storage: DurableObjectStorage;
+  objectId: string;
+  target: RecoveryTarget;
+  activationId: string;
+  artifactDigest: string;
+  assertInactive: () => void;
+}>;
+export type SqliteBootstrapTargetInput = Readonly<{
+  state: DurableObjectState;
+  environment: SqliteStoreEnvironment;
+  activationId: string;
+}>;

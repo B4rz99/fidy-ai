@@ -1,16 +1,22 @@
+import { planSourceRetirement, resumeSourceRetirement } from "./internal/source-retirement";
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../erasure-store/contract";
-import { reconcileErasureAdmissions } from "../erasure/operations";
+import { RecoveryDrainObservation } from "../recovery-lifecycle/contract";
+import { observeRecoveryDrain } from "../recovery-lifecycle/operations";
+import { observeErasureRecoveryDrain, reconcileErasureAdmissions } from "../erasure/operations";
 import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
-  RecoveryDrainStatus,
+  type RecoveryBootstrapAccess,
+  type RecoveryClosedSourceAccess,
+  RecoverySourceTarget,
   RecoveryTarget,
 } from "./contract";
 import {
   type ActivationRecord,
   activationIo,
   loadActivation,
+  sameSource,
   sameTarget,
   storeActivation,
 } from "./internal/record";
@@ -32,45 +38,53 @@ const currentActivation = (input: ActivationInput): Effect.Effect<void, ErasureU
 const requireTargets = (
   input: ActivationInput
 ): Effect.Effect<
-  Readonly<{ source: RecoveryTarget; serving: RecoveryTarget }>,
+  Readonly<{ source: RecoverySourceTarget; serving: RecoveryTarget }>,
   ErasureUnavailable
 > =>
   Effect.gen(function* () {
-    const source = yield* Schema.decodeEffect(RecoveryTarget)(input.configuration.sourceTarget);
+    const source = yield* Schema.decodeEffect(RecoverySourceTarget)(
+      input.configuration.sourceTarget
+    );
     const serving = yield* Schema.decodeEffect(RecoveryTarget)(input.configuration.servingTarget);
-    if (source.namespaceId === serving.namespaceId || source.epoch === serving.epoch) {
+    if (
+      (source.kind === "SQLite" && source.namespaceId === serving.namespaceId) ||
+      source.epoch === serving.epoch
+    ) {
       return yield* new ErasureUnavailable();
     }
     return { source, serving };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 const awaitOwnerDrain = (
   input: ActivationInput,
-  record: ActivationRecord
+  record: ActivationRecord,
+  state: RecoveryAdmissionState
 ): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
   Effect.gen(function* () {
-    const observeDrain = input.configuration.providerDrain;
-    if (Option.isNone(observeDrain)) {
+    const observation = yield* observeRecoveryDrain({ db: input.configuration.sourceDb });
+    const drain = yield* Schema.decodeEffect(RecoveryDrainObservation, {
+      onExcessProperty: "error",
+    })(observation);
+    const owners = Object.values(drain.owners);
+    const pending = owners.reduce((total, owner) => total + owner.pending, 0);
+    const ambiguous = owners.reduce((total, owner) => total + owner.ambiguous, 0);
+    if (pending !== drain.pending || ambiguous !== drain.ambiguous) {
+      return yield* new ErasureUnavailable();
+    }
+    const erasure = yield* observeErasureRecoveryDrain({ db: input.configuration.sourceDb });
+    if (drain.pending !== 0 || drain.ambiguous !== 0 || erasure.pending !== 0) {
       return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
     }
-    const drain = yield* Schema.decodeUnknownEffect(RecoveryDrainStatus)(
-      yield* activationIo(() => observeDrain.value(input.configuration.sourceDb))
-    );
-    if (drain.pending !== 0 || drain.ambiguous !== 0) {
-      return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
+    if (state.closed && record.source.kind === "D1") {
+      return yield* planSourceRetirement({
+        record,
+        state,
+        configuration: input.configuration,
+        bucket: input.bucket,
+      });
     }
-    const closed = yield* Schema.decodeUnknownEffect(RecoveryAdmissionState)(
-      yield* activationIo(() =>
-        input.configuration.admission.close({
-          activationId: input.activationId,
-          epoch: record.source.epoch,
-        })
-      )
-    );
-    return {
-      ...record,
-      cursor: "",
-      phase: closed.leases === 0 ? ("AwaitingProvider" as const) : ("AwaitingDrain" as const),
-    };
+    // Owner rows cannot prove identity-free Queue/Workflow inventory or historical caller fencing.
+    // Keep native continuations admissible until the independent provider barrier is established.
+    return { ...record, cursor: "", phase: "AwaitingProvider" as const };
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 const advancePhase = (
@@ -94,6 +108,14 @@ const advancePhase = (
       return yield* new ErasureUnavailable();
     }
     if (state.leases > 0) return { ...record, phase: "AwaitingDrain" as const, cursor: "" };
+    if (record.phase === "RetiringSource" || record.phase === "SourceRetired") {
+      return yield* resumeSourceRetirement({
+        record,
+        state,
+        configuration: input.configuration,
+        bucket: input.bucket,
+      });
+    }
     const pending = yield* reconcileErasureAdmissions({
       db: input.configuration.sourceDb,
       bucket: input.bucket,
@@ -102,7 +124,7 @@ const advancePhase = (
     if (!pending.complete) {
       return { ...record, cursor: pending.cursor, phase: "ReconcilingAdmissions" as const };
     }
-    return yield* awaitOwnerDrain(input, record);
+    return yield* awaitOwnerDrain(input, record, state);
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 /** Advances only fixed binding-selected targets. Local observations never qualify provider isolation or open serving admission. */
@@ -120,7 +142,7 @@ export const advanceRecoveryActivation = (
       Option.isSome(previous) &&
       (previous.value.record.activationId !== input.activationId ||
         previous.value.record.admissionObjectId !== admission.objectId ||
-        !sameTarget({ left: previous.value.record.source, right: targets.source }) ||
+        !sameSource({ left: previous.value.record.source, right: targets.source }) ||
         !sameTarget({ left: previous.value.record.serving, right: targets.serving }))
     ) {
       return yield* new ErasureUnavailable();
@@ -131,6 +153,7 @@ export const advanceRecoveryActivation = (
         admissionObjectId: admission.objectId,
         ...targets,
         cursor: "",
+        sourceFence: { state: "Unplanned" },
         phase: "AwaitingDrain",
         providerIsolation: "Unqualified",
       }),
@@ -140,3 +163,20 @@ export const advanceRecoveryActivation = (
     yield* currentActivation(input);
     return yield* storeActivation({ bucket: input.bucket, record: advanced, previous });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
+
+/** Production recovery must never reauthorize a source or active target after activation begins. Candidate-only recovery uses its isolated boundary. */
+export const assertProductionRestoreAllowed = (
+  bucket: R2Bucket
+): Effect.Effect<void, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    const activation = yield* loadActivation(bucket);
+    if (Option.isSome(activation)) return yield* new ErasureUnavailable();
+  });
+
+/** Final provider qualification and ledger checkpoint production are not complete. Never issue export/bootstrap authority from preliminary progress. */
+export const readClosedRecoverySource: RecoveryClosedSourceAccess = () =>
+  Effect.fail(new ErasureUnavailable());
+
+/** No independent producer has established the final handoff or never-opened target history. Local import state cannot grant this authority. */
+export const readRecoveryBootstrapAuthorization: RecoveryBootstrapAccess = () =>
+  Effect.fail(new ErasureUnavailable());

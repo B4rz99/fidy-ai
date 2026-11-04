@@ -142,6 +142,12 @@ export type SqliteStoreControlBinding = Readonly<{
   controlQuery: (input: typeof SqliteStoreControlQuery.Type) => Promise<unknown>;
 }>;
 
+/** Separate private activation controller capability; caller fields never contain ledger or provider authority. */
+export type SqliteStoreServingBinding = Readonly<{
+  inspect: () => Promise<unknown>;
+  open: (input: typeof SqliteStoreControlRequest.Type) => Promise<unknown>;
+}>;
+
 export type SqliteStoreEnvironment = Partial<
   Readonly<{
     SQLITE_STORE_MANIFEST: string;

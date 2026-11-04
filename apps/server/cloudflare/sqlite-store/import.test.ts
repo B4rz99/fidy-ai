@@ -106,6 +106,11 @@ it.live(
         admission: { phase: "Closed", activationId: evidence.activationId, epoch: target.epoch },
         seal: null,
       });
+      expect(
+        yield* io(() =>
+          native.tryOpen({ activationId: evidence.activationId, epoch: target.epoch })
+        )
+      ).toMatchObject({ kind: "refused", reason: "inactive" });
       expect((yield* io(native.activateFixture)).status).toBe(204);
       expect((yield* io(() => native.step({ artifactDigest, evidence }))).status).toBe(503);
     }).pipe(Effect.scoped),

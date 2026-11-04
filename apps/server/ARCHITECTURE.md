@@ -477,3 +477,18 @@ checkpoints are never repaired by restarting bootstrap. Ordinary sealed construc
 external metadata read. After complete native and Erasure verification, only a local data seal
 may be written: admission stays `Closed` and the release barrier stays `Unqualified`. Independently
 qualified serving-open authority and artifact retirement remain separate required controls.
+
+The private Store `open` control accepts only activation and epoch. Actual target identity,
+artifact digest, owner version and copied evidence come from native/deployment state; an
+independent serving authorization must match them exactly. After its await, readiness is
+rechecked and the Erasure-owned final-generation assertion shares the native transaction that
+opens admission. The serving accessor currently refuses, so a local data seal cannot open a
+target. Existing transitional reads retain their fresh R2 generation guard.
+
+Temporary snapshot objects and progress are partitioned by activation and the hash of the fixed
+target identity. Artifact retirement takes no arbitrary prefix: it requires the recovery owner's
+exact abandoned or qualified-open disposition, rechecks that authority before deletion, and
+repeats bounded first-page deletes until each candidate prefix is observed empty. A lost reply
+is retried from current storage; an empty-prefix observation supplies no provider or continuation
+qualification. The retirement accessor currently refuses, preserving all artifacts until that
+independent disposition exists.

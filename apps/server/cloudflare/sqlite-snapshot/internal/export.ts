@@ -1,3 +1,4 @@
+import { artifactScope } from "./artifact";
 import { Effect, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { digestBytes } from "../../secret-material/operations";
@@ -152,7 +153,8 @@ const retain = (
     const bytes = new TextEncoder().encode(encoded);
     if (bytes.byteLength > snapshotPageBytes) return yield* new SnapshotUnavailable();
     const digest = Hex.encode(yield* digestBytes(bytes));
-    const key = `recovery/sqlite-snapshots/pages/${input.activationId}/${digest}`;
+    const scope = yield* artifactScope(input);
+    const key = `recovery/sqlite-snapshots/pages/${scope}/${digest}`;
     const latest = yield* evidence(input);
     const expected = yield* Schema.encodeEffect(
       Schema.fromJsonString(RecoveryClosedSourceEvidence)

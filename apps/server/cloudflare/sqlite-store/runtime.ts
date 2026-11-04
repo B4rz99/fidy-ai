@@ -1,3 +1,4 @@
+import { openStore } from "./internal/open";
 import { bootstrapPending, bootstrapStep } from "./internal/bootstrap";
 import { NativeDashboardRequest, type NativeDashboardResult } from "../dashboard/contract";
 import { readAuditedSqliteDashboard } from "../dashboard/operations";
@@ -79,6 +80,20 @@ export class AuthoritativeSqliteStore extends DurableObject<SqliteStoreEnvironme
         }),
         () => ({ kind: "refused", reason: "inactive" }) as const
       )
+    );
+  }
+  open(candidate: unknown): Promise<SqliteStoreControlReply> {
+    const request = Schema.decodeUnknownOption(SqliteStoreControlRequest)(candidate);
+    if (Option.isNone(request)) return Promise.resolve({ kind: "refused", reason: "invalid" });
+    return Effect.runPromise(
+      openStore({
+        store: {
+          storage: this.ctx.storage,
+          environment: this.env,
+          objectId: this.ctx.id.toString(),
+        },
+        request: request.value,
+      })
     );
   }
   close(candidate: unknown): SqliteStoreControlReply {

@@ -48,6 +48,7 @@ export class ImportStoreProof extends AuthoritativeSqliteStore {
           readArtifact: (digest) =>
             readSnapshotArtifact({
               artifacts: this.fixtureEnvironment.ARTIFACTS,
+              target: this.identity(),
               activationId: command.evidence.activationId,
               digest,
             }),
@@ -134,6 +135,12 @@ export default {
     }
     if (path === "/activate-fixture") {
       return store.activateFixture().then(() => new Response(null, { status: 204 }));
+    }
+    if (path === "/open") {
+      return request
+        .json()
+        .then((value): Promise<unknown> => store.open(value))
+        .then((value) => Response.json(value));
     }
     if (path === "/identity") return store.identity().then((value) => Response.json(value));
     if (path === "/facts") {

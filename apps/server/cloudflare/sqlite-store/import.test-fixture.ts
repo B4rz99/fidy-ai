@@ -53,6 +53,7 @@ export const nativeSqliteImport: Effect.Effect<
     interrupt: (
       input: Readonly<{ artifactDigest: string; evidence: RecoveryClosedSourceEvidence }>
     ) => Promise<Pick<Response, "status" | "json">>;
+    tryOpen: (input: Readonly<{ activationId: string; epoch: string }>) => Promise<unknown>;
     facts: () => Promise<unknown>;
     bootstrapRefusal: () => Promise<unknown>;
     activateFixture: () => Promise<Pick<Response, "status">>;
@@ -90,6 +91,10 @@ export const nativeSqliteImport: Effect.Effect<
     activateFixture: () => worker.fetch("https://import/activate-fixture"),
     bootstrapRefusal: () =>
       worker.fetch("https://import/bootstrap-refusal").then((response) => response.json()),
+    tryOpen: (input) =>
+      worker
+        .fetch("https://import/open", { method: "POST", body: encode(input) })
+        .then((response) => response.json()),
     facts: () => worker.fetch("https://import/facts").then((response) => response.json()),
   };
 });

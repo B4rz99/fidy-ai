@@ -1,3 +1,4 @@
+import { retireArtifacts } from "./internal/retirement";
 import { advance } from "./internal/builder";
 import { artifactRead } from "./internal/artifact";
 import { Effect } from "effect";
@@ -6,6 +7,8 @@ import {
   type ClosedSnapshotSource,
   type SnapshotArtifact,
   type SnapshotArtifactRead,
+  type SnapshotArtifactRetirementInput,
+  type SnapshotArtifactRetirementStatus,
   type SnapshotBuildStatus,
   type SnapshotPageReceipt,
   SnapshotUnavailable,
@@ -26,3 +29,8 @@ export const advanceClosedSnapshot = (
 export const readSnapshotArtifact = (
   input: SnapshotArtifactRead
 ): Effect.Effect<SnapshotArtifact, SnapshotUnavailable> => artifactRead(input);
+
+/** Bounded temporary-artifact retirement after independently earned disposition; repeated invocations observe empty prefixes without trusting a deletion reply as qualification. */
+export const retireSnapshotArtifacts = (
+  input: SnapshotArtifactRetirementInput
+): Effect.Effect<SnapshotArtifactRetirementStatus, SnapshotUnavailable> => retireArtifacts(input);

@@ -1,10 +1,18 @@
 import { Effect, Option, Schema } from "effect";
 import { readRecoveryBootstrapAuthorization } from "../../recovery-activation/operations";
-import { RecoveryBootstrapAuthorization, RecoveryTarget } from "../../recovery-activation/contract";
+import {
+  RecoveryBootstrapAuthorization,
+  type RecoveryClosedSourceEvidence,
+  RecoveryTarget,
+} from "../../recovery-activation/contract";
 import { readSnapshotArtifact } from "../../sqlite-snapshot/operations";
 import { SnapshotDigest, SnapshotUnavailable } from "../../sqlite-snapshot/contract";
-import { verifyImportedErasureCheckpoint } from "../../erasure/operations";
-import type { SqliteStoreEnvironment } from "../contract";
+import {
+  prepareClosedSourceGenerationFence,
+  verifyImportedErasureCheckpoint,
+} from "../../erasure/operations";
+import { sqliteDatabaseUnit } from "./database";
+import type { SqliteBootstrapTarget, SqliteStoreEnvironment } from "../contract";
 import { bootstrapTarget } from "./bootstrap-target";
 import { advanceImport } from "./import";
 
@@ -63,7 +71,12 @@ export const bootstrapStep = (
       ...input,
       authorization,
       readArtifact: (digest) =>
-        readSnapshotArtifact({ artifacts, activationId: configuration.activationId, digest }),
+        readSnapshotArtifact({
+          artifacts,
+          target,
+          activationId: configuration.activationId,
+          digest,
+        }),
     });
     if (result.phase === "Importing") return true;
     const local = bootstrapTarget({ ...input, activationId: configuration.activationId });
@@ -73,18 +86,28 @@ export const bootstrapStep = (
       bucket,
     });
     if (imported.state !== "Verified") return true;
-    local.storage.transactionSync(() => {
-      local.assertInactive();
-      local.storage.kv.put("store-seal", {
-        manifest: local.target.manifest,
-        epoch: local.target.epoch,
-        status: "verified",
-        activationId: local.activationId,
-        artifactDigest: local.artifactDigest,
-        finalGeneration: authorization.evidence.finalGeneration,
-        finalCheckpointEtag: authorization.evidence.finalCheckpointEtag,
-      });
-    });
+    sealData({ local, evidence: authorization.evidence });
     // This local data seal leaves admission Closed and the external release barrier Unqualified.
     return false;
   }).pipe(Effect.catchCause(() => Effect.fail(new SnapshotUnavailable())));
+
+const sealData = ({
+  local,
+  evidence,
+}: Readonly<{ local: SqliteBootstrapTarget; evidence: RecoveryClosedSourceEvidence }>): void =>
+  local.storage.transactionSync(() => {
+    local.assertInactive();
+    const { database, run } = sqliteDatabaseUnit(local.storage);
+    run([
+      prepareClosedSourceGenerationFence({ db: database, generation: evidence.finalGeneration }),
+    ]);
+    local.storage.kv.put("store-seal", {
+      manifest: local.target.manifest,
+      epoch: local.target.epoch,
+      status: "verified",
+      activationId: local.activationId,
+      artifactDigest: local.artifactDigest,
+      finalGeneration: evidence.finalGeneration,
+      finalCheckpointEtag: evidence.finalCheckpointEtag,
+    });
+  });

@@ -13,6 +13,7 @@ import {
   advanceClosedSnapshot,
   exportClosedSnapshotTable,
   readSnapshotArtifact,
+  retireSnapshotArtifacts,
 } from "./operations";
 import { SnapshotTablePage } from "./contract";
 
@@ -298,9 +299,22 @@ it.live(
       const digest = Option.getOrThrow(artifactDigest);
       const manifest = yield* readSnapshotArtifact({
         artifacts: fixture.artifacts,
+        target,
         activationId,
         digest,
       });
+      expect(
+        Exit.isFailure(
+          yield* Effect.exit(
+            readSnapshotArtifact({
+              artifacts: fixture.artifacts,
+              activationId,
+              target: { ...target, epoch: "another-candidate" },
+              digest,
+            })
+          )
+        )
+      ).toBe(true);
       expect(manifest.kind).toBe("manifest");
       if (manifest.kind !== "manifest") return yield* Effect.die(new Error("Missing manifest"));
       expect(manifest.schemaObjects).toBeGreaterThan(100);
@@ -310,6 +324,7 @@ it.live(
       while (Option.isSome(head)) {
         const page = yield* readSnapshotArtifact({
           artifacts: fixture.artifacts,
+          target,
           activationId,
           digest: head.value,
         });
@@ -362,4 +377,31 @@ it.live("resumes an applied snapshot checkpoint after its storage reply is lost"
       schemaObjects: 2,
     });
   }).pipe(Effect.scoped)
+);
+
+it.live(
+  "refuses artifact retirement without independently earned disposition and preserves the private snapshot objects",
+  () =>
+    Effect.gen(function* () {
+      const native = yield* io(() => platform.acquire());
+      const keys = [
+        `recovery/sqlite-snapshots/pages/${activationId}/retained`,
+        `recovery/sqlite-snapshots/objects/${activationId}/retained`,
+        `recovery/sqlite-snapshots/jobs/${activationId}/retained`,
+        "outside-retirement-scope",
+      ];
+      for (const key of keys) yield* io(() => native.bucket.put(key, "retained"));
+      const result = yield* Effect.exit(
+        retireSnapshotArtifacts({
+          artifacts: native.bucket,
+          activationId,
+          target,
+          artifactDigest: "f".repeat(64),
+        })
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(
+        (yield* io(() => native.bucket.list())).objects.map((object) => object.key).sort()
+      ).toEqual(keys.toSorted());
+    })
 );

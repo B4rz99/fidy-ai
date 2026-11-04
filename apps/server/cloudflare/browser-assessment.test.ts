@@ -1,3 +1,4 @@
+import { defaultAssessmentDashboard } from "./browser-assessment-layout.test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { DateTime, Effect, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
@@ -130,5 +131,45 @@ it("prepares dense distinct amounts inside the measured period and preserves wid
           expect(amount).toBe("90071992547409931234567890123456789012345678901234567890.15");
         }
       }
+    })
+  ));
+
+it("prepares assessment history without replacing a Dashboard retained by another feature journey", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
+      const user = "98000000-0000-4000-8000-000000000211";
+      yield* Effect.tryPromise(() => seedUsers(db, [user]));
+      const document = yield* Schema.encodeEffect(Schema.fromJsonString(DashboardDocument))({
+        ...defaultAssessmentDashboard(),
+        title: "Retained feature journey",
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO user_documents(kind,user_id,document_json,revision) VALUES ('dashboard',?,?,7)"
+          )
+          .bind(user, document)
+          .run()
+      );
+      yield* seedAssessment({
+        db,
+        dataset: "small",
+        now: current,
+        users: [user],
+        history: "routine",
+        layout: "default",
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT document_json AS document,revision FROM user_documents WHERE kind='dashboard' AND user_id=?"
+            )
+            .bind(user)
+            .first()
+        )
+      ).toEqual({ document, revision: 7 });
     })
   ));

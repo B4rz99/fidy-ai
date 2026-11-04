@@ -432,3 +432,11 @@ object, activation, old source generation, distinct final generation/checkpoint 
 digests for provider and ledger evidence. `readClosedRecoverySource` currently always refuses;
 preliminary R2 progress cannot issue export/bootstrap authority while provider qualification and
 final reconciliation remain incomplete.
+
+The Erasure-owned frozen-import verifier consumes the Store's native inactive bootstrap
+capability, so a D1 source cannot be passed as its target. It checks bounded sealed ledger pages
+against the copied native disposition and pins its progress in independent R2 to the actual
+object, artifact and closed-source evidence digest. Only a complete matching ledger and native
+absence/writer proof advances the target's generation. The source's generation, custody events
+and provider claims are preserved. This inactive copy observation remains `Unqualified`; it
+cannot issue closed-source authority or open serving admission.

@@ -1,7 +1,10 @@
+import type { SqliteBootstrapTarget } from "../sqlite-store/contract";
 import { ErasureGeneration } from "../erasure-store/contract";
-import type {
-  RecoveryActivationEnvironment,
-  RecoveryAdmissionEnvironment,
+import {
+  type RecoveryActivationEnvironment,
+  type RecoveryAdmissionEnvironment,
+  type RecoveryClosedSourceEvidence,
+  RecoveryTarget,
 } from "../recovery-activation/contract";
 import type { ErasureOriginals, ErasureStore, ErasureUnavailable } from "../erasure-store/contract";
 import type { Effect } from "effect";
@@ -112,3 +115,24 @@ export const ErasureCandidateConfiguration = Schema.Struct({
 });
 export type ErasureCandidateEnvironment = ErasureOperatorEnvironment &
   typeof ErasureCandidateConfiguration.Type;
+
+const importDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
+const maximumImportCursorLength = 2048;
+const maximumLedgerKeyLength = 256;
+export const ErasureImportedCheckpoint = Schema.Struct({
+  artifactDigest: importDigest,
+  target: RecoveryTarget,
+  evidenceDigest: importDigest,
+  cursor: Schema.String.check(Schema.isMaxLength(maximumImportCursorLength)),
+  lastKey: Schema.String.check(Schema.isMaxLength(maximumLedgerKeyLength)),
+  checkedCases: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  digest: importDigest,
+  state: Schema.Literals(["Verifying", "Verified"]),
+  providerIsolation: Schema.Literal("Unqualified"),
+});
+export type ErasureImportedCheckpoint = typeof ErasureImportedCheckpoint.Type;
+export type ErasureImportedInput = Readonly<{
+  target: SqliteBootstrapTarget;
+  evidence: RecoveryClosedSourceEvidence;
+  bucket: R2Bucket;
+}>;

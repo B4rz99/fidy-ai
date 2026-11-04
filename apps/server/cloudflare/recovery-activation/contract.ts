@@ -1,4 +1,4 @@
-import { type Option, Schema } from "effect";
+import { Schema } from "effect";
 
 const maximumIdentityLength = 128;
 const activationName = Schema.String.check(Schema.isBetweenLength(1, maximumIdentityLength));
@@ -34,7 +34,6 @@ export type RecoveryActivationEnvironment = Readonly<{
   admission: RecoveryAdmissionBinding;
   serving: RecoveryStoreControl;
   sourceDb: D1Database;
-  providerDrain: Option.Option<(db: D1Database) => Promise<unknown>>;
   sourceTarget: RecoverySourceTarget;
   servingTarget: RecoveryTarget;
 }>;

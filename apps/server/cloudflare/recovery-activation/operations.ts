@@ -1,6 +1,7 @@
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import { RecoveryDrainObservation } from "../recovery-lifecycle/contract";
+import { observeRecoveryDrain } from "../recovery-lifecycle/operations";
 import { reconcileErasureAdmissions } from "../erasure/operations";
 import {
   type RecoveryActivationEnvironment,
@@ -55,13 +56,10 @@ const awaitOwnerDrain = (
   record: ActivationRecord
 ): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
   Effect.gen(function* () {
-    const observeDrain = input.configuration.providerDrain;
-    if (Option.isNone(observeDrain)) {
-      return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
-    }
-    const drain = yield* Schema.decodeUnknownEffect(RecoveryDrainObservation, {
+    const observation = yield* observeRecoveryDrain({ db: input.configuration.sourceDb });
+    const drain = yield* Schema.decodeEffect(RecoveryDrainObservation, {
       onExcessProperty: "error",
-    })(yield* activationIo(() => observeDrain.value(input.configuration.sourceDb)));
+    })(observation);
     const owners = Object.values(drain.owners);
     const pending = owners.reduce((total, owner) => total + owner.pending, 0);
     const ambiguous = owners.reduce((total, owner) => total + owner.ambiguous, 0);

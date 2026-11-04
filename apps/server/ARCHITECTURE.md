@@ -398,8 +398,10 @@ pending-intent reconciliation and frozen export. A different identity
 or target cannot resume that record. Before any final qualification it preserves live DB-first
 pending erasure admissions as independent unsealed cases, including admissions absent from an
 older candidate snapshot. It never manufactures sealing evidence or repeats provider effects.
-Missing source evidence fails closed. Missing owner drain observation retains `AwaitingOwnerDrain` while native continuations remain
-admissible. The operator requires the closed nine-owner coverage observation and consistent
+Missing source or owner evidence fails closed. The operator invokes the fixed published owner
+drain observer, including pre-User Consent notifications, without a configurable zero-count
+callback. Unfinished owner work retains `AwaitingOwnerDrain` while native continuations remain
+admissible. The operator requires the closed ten-owner coverage observation and consistent
 owner totals; a bare zero count cannot advance. Zero owner work still leaves admission paused
 at `AwaitingProvider` until independent provider inventory and historical caller fencing permit
 final closure. The current operator always

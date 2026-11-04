@@ -91,7 +91,6 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           )
         ).toBe(true);
         let sourceTarget = target;
-        let providerDrain: Option.Option<(db: D1Database) => Promise<unknown>> = Option.none();
         const control = {
           inspect: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
           close: (): Promise<unknown> => Promise.reject(new Error("No Store control configured")),
@@ -119,7 +118,6 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
                   admission: selectedAdmission,
                   serving: control,
                   sourceDb: native.db,
-                  providerDrain,
                   sourceTarget,
                   servingTarget,
                 },
@@ -185,8 +183,13 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         const resumed = yield* send();
         expect(resumed.status).toBe(202);
         expect(yield* Effect.tryPromise(() => resumed.json())).toMatchObject({
-          phase: "AwaitingOwnerDrain",
+          phase: "AwaitingProvider",
           providerIsolation: "Unqualified",
+        });
+        expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
+          closed: false,
+          paused: true,
+          leases: 0,
         });
         const cases = yield* Effect.tryPromise(() =>
           native.registry.list({ prefix: "recovery/cases/" })
@@ -200,14 +203,43 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           )
         );
         expect(intent).toMatchObject({ userId, sealed: false });
-        providerDrain = Option.some(() => Promise.resolve({ pending: 0, ambiguous: 0 }));
+        yield* Effect.tryPromise(() =>
+          native.db
+            .prepare(`INSERT INTO pending_consent_exchanges(
+          id,portfolio_id,bsuid,phone_number_id,initiating_message_id,initiating_body_sha256,
+          correlation_token,disclosure_json,created_at_ms,expires_at_ms,state
+        ) VALUES('pre-user','portfolio','scoped','phone','message',?,
+          '18500000-0000-4000-8000-000000000004','{}',0,86400000,'awaiting_delivery')`)
+            .bind("0".repeat(64))
+            .run()
+        );
+        const retainedPreUser = yield* send();
+        expect(retainedPreUser.status).toBe(202);
+        expect(yield* Effect.tryPromise(() => retainedPreUser.json())).toMatchObject({
+          phase: "AwaitingOwnerDrain",
+          providerIsolation: "Unqualified",
+        });
+
+        yield* Effect.tryPromise(() =>
+          native.db
+            .prepare(
+              "ALTER TABLE pending_consent_exchanges RENAME TO unavailable_consent_exchanges"
+            )
+            .run()
+        );
         expect((yield* send()).status).toBe(503);
         expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
           closed: false,
           paused: true,
           leases: 0,
         });
-        providerDrain = Option.none();
+        yield* Effect.tryPromise(() =>
+          native.db
+            .prepare(
+              "ALTER TABLE unavailable_consent_exchanges RENAME TO pending_consent_exchanges"
+            )
+            .run()
+        );
         const repeated = yield* send();
         expect(repeated.status).toBe(202);
         expect(

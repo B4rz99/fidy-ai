@@ -1,4 +1,6 @@
 import { DateTime, Effect, Schema } from "effect";
+import { maximumAssessmentDashboard } from "./browser-assessment-layout.test-fixture";
+import { DashboardDocument } from "../src/core/dashboard/contract";
 
 const sizes = {
   small: { transactions: 500, plans: 10, revisions: 1, review: 50, currencies: 1 },
@@ -7,7 +9,7 @@ const sizes = {
   breaking: { transactions: 1_000_000, plans: 100, revisions: 100, review: 5000, currencies: 8 },
 };
 type DatasetSize = typeof sizes.small;
-type SeedUser = Readonly<{ user: string; slot: number }>;
+type SeedUser = Readonly<{ user: string; slot: number; history: "routine" | "reconciled" }>;
 const userIdentityStride = 2_000_000;
 const uuidWidth = 12;
 const categoryCount = 16;
@@ -22,6 +24,42 @@ const json = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const uuid = (prefix: string, index: number): string =>
   `${prefix}-0000-4000-8000-${String(index).padStart(uuidWidth, "0")}`;
 type SeedContext = Readonly<{ db: D1Database; size: DatasetSize; now: number; subject: SeedUser }>;
+const reconcileRows = Effect.fn(function* ({
+  db,
+  rows,
+  user,
+  now,
+}: Readonly<{
+  db: D1Database;
+  rows: ReadonlyArray<{ id: string }>;
+  user: string;
+  now: number;
+}>) {
+  const pairs: Array<{ first: string; second: string }> = [];
+  for (let index = 0; index < rows.length; index += 2) {
+    const first = rows[index];
+    const second = rows[index + 1];
+    if (first === undefined || second === undefined) {
+      throw new Error("Assessment Reconciliation requires complete pairs");
+    }
+    pairs.push({ first: first.id, second: second.id });
+  }
+  const encoded = json(pairs);
+  yield* Effect.tryPromise(() =>
+    db.batch([
+      db
+        .prepare(
+          "INSERT INTO transaction_reconciliation_decisions(user_id,first_transaction_id,second_transaction_id,state,visible_transaction_id,decided_at_ms) SELECT ?,json_extract(value,'$.first'),json_extract(value,'$.second'),'linked',json_extract(value,'$.first'),? FROM json_each(?)"
+        )
+        .bind(user, now, encoded),
+      db
+        .prepare(
+          "UPDATE transactions SET reconciliation_first_id=json_extract(pair.value,'$.first'),reconciliation_second_id=json_extract(pair.value,'$.second') FROM json_each(?) pair WHERE transactions.user_id=? AND transactions.id IN (json_extract(pair.value,'$.first'),json_extract(pair.value,'$.second'))"
+        )
+        .bind(encoded, user),
+    ])
+  );
+});
 const seedTransactions = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
   const { user, slot } = subject;
   for (let offset = 0; offset < size.transactions; offset += batchSize) {
@@ -45,6 +83,7 @@ const seedTransactions = Effect.fn(function* ({ db, size, now, subject }: SeedCo
         .bind(user, json(rows))
         .run()
     );
+    if (subject.history === "reconciled") yield* reconcileRows({ db, rows, user, now });
   }
 });
 const seedBudgets = Effect.fn(function* ({ db, size, now, subject }: SeedContext) {
@@ -170,8 +209,8 @@ export const seedAssessment = Effect.fn(function* ({
   dataset: string;
   now: number;
   users: ReadonlyArray<string>;
-  history: "routine";
-  layout: "default";
+  history: "routine" | "reconciled";
+  layout: "default" | "maximum";
 }) {
   if (
     !(dataset === "small" || dataset === "heavy" || dataset === "extreme" || dataset === "breaking")
@@ -181,12 +220,25 @@ export const seedAssessment = Effect.fn(function* ({
   const size = sizes[dataset];
   const start = performance.now();
   for (const [slot, user] of users.entries()) {
-    const subject = { slot, user };
+    const subject = { slot, user, history };
     const context = { db, size, now, subject };
     yield* seedTransactions(context);
     yield* seedBudgets(context);
     yield* seedRecurring(db, size, subject);
     yield* seedReview(context);
+    if (layout === "maximum") {
+      const document = yield* Schema.encodeEffect(Schema.fromJsonString(DashboardDocument))(
+        maximumAssessmentDashboard()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES (?,'dashboard',?,1)"
+          )
+          .bind(user, document)
+          .run()
+      );
+    }
   }
   process.stdout.write(
     `ASSESSMENT_SEED ${json({ dataset, users: users.length, history, layout, ...size, milliseconds: performance.now() - start })}\n`

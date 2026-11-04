@@ -1,4 +1,5 @@
-import type { NativeDashboardReader } from "../dashboard/contract";
+import type { NativeDashboardBinding, NativeDashboardReader } from "../dashboard/contract";
+import type { SqliteStoreBinding } from "./contract";
 import { makeNativeDashboardReader } from "../dashboard/operations";
 import { Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
@@ -21,7 +22,28 @@ const moduleText = (): Promise<string> => {
   return result;
 };
 const poolSize = 16;
-const runtime = (sequence: number, isolation: "Live" | "Isolated" = "Live"): Promise<Miniflare> =>
+type NativeFixtureConfiguration = Readonly<{
+  browserOrigin: string;
+  clockOffset: Option.Option<number>;
+}>;
+const defaultNativeConfiguration: NativeFixtureConfiguration = {
+  browserOrigin: "https://app.fidy.test",
+  clockOffset: Option.none(),
+};
+const nativeClockBindings = (
+  configuration: NativeFixtureConfiguration
+): Readonly<Record<string, { type: "text"; value: string }>> => ({
+  BROWSER_ORIGIN: { type: "text", value: configuration.browserOrigin },
+  FIDY_TEST_CLOCK_OFFSET: {
+    type: "text",
+    value: Option.match(configuration.clockOffset, { onNone: () => "", onSome: String }),
+  },
+});
+const runtime = (
+  sequence: number,
+  isolation: "Live" | "Isolated" = "Live",
+  configuration: NativeFixtureConfiguration = defaultNativeConfiguration
+): Promise<Miniflare> =>
   moduleText().then((module) => {
     const buckets: Record<string, { type: "r2"; name: string }> = {};
     for (let index = 0; index < poolSize; index++) {
@@ -51,9 +73,9 @@ const runtime = (sequence: number, isolation: "Live" | "Isolated" = "Live"): Pro
               DOCUMENTS: {
                 type: "worker",
                 worker: "sqlite-owner-fixture",
-                exportName: "DashboardDocumentService",
+                exportName: "AssessmentDocumentService",
               },
-              BROWSER_ORIGIN: { type: "text", value: "https://app.fidy.test" },
+              ...nativeClockBindings(configuration),
               SQLITE_STORE_EPOCH: { type: "text", value: "fixture" },
               SQLITE_STORE_NAMESPACE_ID: { type: "text", value: "native-fixture" },
               SQLITE_STORE_MANIFEST: { type: "text", value: "fixture" },
@@ -98,6 +120,12 @@ type TestStore = Readonly<{
   document: (request: Request) => Promise<unknown>;
   snapshot: (input: Readonly<{ request: Request; mode: "bound" | "document" }>) => Promise<unknown>;
 }>;
+type NativeTestStore = TestStore &
+  Readonly<{
+    namespace: Readonly<{
+      getByName: (name: string) => SqliteStoreBinding & NativeDashboardBinding;
+    }>;
+  }>;
 const snapshot = (input: Readonly<{ runtime: Miniflare; name: string }>): NativeDashboardReader =>
   makeNativeDashboardReader({
     manifest: "fixture",
@@ -123,7 +151,10 @@ const snapshot = (input: Readonly<{ runtime: Miniflare; name: string }>): Native
 /** Test-only transport selection reuses the existing canonical suites against real native Store objects. */
 export const sqliteTestStorage = (): Readonly<{
   acquire: () => Promise<TestStore>;
-  acquireDocument: (isolation: "Live" | "Isolated") => Promise<TestStore>;
+  acquireDocument: (
+    isolation: "Live" | "Isolated",
+    configuration?: NativeFixtureConfiguration
+  ) => Promise<NativeTestStore>;
   dispose: () => Promise<void>;
 }> => {
   const runtimes: Promise<Miniflare>[] = [];
@@ -147,16 +178,24 @@ export const sqliteTestStorage = (): Readonly<{
   };
   return {
     acquire,
-    acquireDocument: (isolation) => {
-      const next = runtime(runtimes.length, isolation);
+    acquireDocument: (isolation, configuration = defaultNativeConfiguration) => {
+      const next = runtime(runtimes.length, isolation, configuration);
       runtimes.push(next);
       return next.then((runtime) =>
-        runtime.getBindings<{ BUCKET_0: R2Bucket }>().then((bindings) => ({
-          db: database({ runtime, name: "authoritative-v1" }),
-          snapshot: snapshot({ runtime, name: "authoritative-v1" }),
-          bucket: bindings.BUCKET_0,
-          document: (request: Request) => documentRead(runtime, request),
-        }))
+        runtime
+          .getBindings<{
+            BUCKET_0: R2Bucket;
+            SQLITE_STORE: NativeTestStore["namespace"];
+            DOCUMENTS: Readonly<{ readDashboardDocument: (request: Request) => Promise<unknown> }>;
+          }>()
+          .then((bindings) => ({
+            db: database({ runtime, name: "authoritative-v1" }),
+            snapshot: snapshot({ runtime, name: "authoritative-v1" }),
+            bucket: bindings.BUCKET_0,
+            namespace: bindings.SQLITE_STORE,
+            document: (request: Request) =>
+              Promise.resolve(bindings.DOCUMENTS.readDashboardDocument(request)),
+          }))
       );
     },
     dispose: () =>

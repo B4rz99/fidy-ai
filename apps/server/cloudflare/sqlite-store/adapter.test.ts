@@ -332,3 +332,21 @@ it.live(
       ).toMatchObject({ kind: "batch", results: [{ results: [{ retained: 42 }] }] });
     })
 );
+
+it.live(
+  "binds inactive bootstrap control to the actual native target and rejects a changed checkpoint or serving seal",
+  () =>
+    Effect.gen(function* () {
+      const runtime = yield* setup;
+      const response = yield* Effect.tryPromise(() =>
+        runtime.dispatchFetch("https://proof.internal/bootstrap-target")
+      );
+      const body = yield* Effect.tryPromise(() => response.json());
+      expect(body).toMatchObject({
+        inactive: true,
+        checkpointRefused: true,
+        servingRefused: true,
+        target: { namespaceId: "native-fixture", manifest: "fixture", epoch: "fixture" },
+      });
+    })
+);

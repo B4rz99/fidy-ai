@@ -1,18 +1,35 @@
 import { Effect, Option, Schema } from "effect";
-import { ErasureUnavailable } from "../../erasure-store/contract";
-import { RecoveryAdmissionState, RecoveryTarget } from "../contract";
+import { ErasureGeneration, ErasureUnavailable } from "../../erasure-store/contract";
+import { RecoveryAdmissionState, RecoverySourceTarget, RecoveryTarget } from "../contract";
 
+const maximumCheckpointBytes = 64;
+const maximumCheckpointEtagBytes = 128;
+const SourceFence = Schema.Union([
+  Schema.Struct({ state: Schema.Literal("Unplanned") }),
+  Schema.Struct({
+    state: Schema.Literal("Prepared"),
+    from: ErasureGeneration,
+    retired: Schema.String.check(Schema.isUUID()),
+    registryCheckpoint: Schema.Struct({
+      value: Schema.String.check(Schema.isMaxLength(maximumCheckpointBytes)),
+      etag: Schema.String.check(Schema.isBetweenLength(1, maximumCheckpointEtagBytes)),
+    }),
+  }),
+]);
 export const ActivationRecord = Schema.Struct({
   activationId: Schema.String,
   admissionObjectId: RecoveryAdmissionState.fields.objectId,
-  source: RecoveryTarget,
+  source: RecoverySourceTarget,
   serving: RecoveryTarget,
   cursor: Schema.String,
+  sourceFence: SourceFence,
   phase: Schema.Literals([
     "AwaitingDrain",
     "ReconcilingAdmissions",
     "AwaitingOwnerDrain",
     "AwaitingProvider",
+    "RetiringSource",
+    "SourceRetired",
   ]),
   providerIsolation: Schema.Literal("Unqualified"),
 });
@@ -29,6 +46,17 @@ export const sameTarget = ({
   left.objectId === right.objectId &&
   left.manifest === right.manifest &&
   left.epoch === right.epoch;
+export const sameSource = ({
+  left,
+  right,
+}: Readonly<{ left: RecoverySourceTarget; right: RecoverySourceTarget }>): boolean => {
+  if (left.kind === "D1") {
+    return (
+      right.kind === "D1" && left.databaseId === right.databaseId && left.epoch === right.epoch
+    );
+  }
+  return right.kind === "SQLite" && sameTarget({ left, right });
+};
 export const loadActivation = (
   bucket: R2Bucket
 ): Effect.Effect<

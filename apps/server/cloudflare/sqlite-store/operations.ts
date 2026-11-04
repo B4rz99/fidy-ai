@@ -1,6 +1,9 @@
+import { bootstrapTarget } from "./internal/bootstrap-target";
 import { resolveDatabase } from "./internal/target";
 import type {
   AuthoritativeStoreEnvironment,
+  SqliteBootstrapTarget,
+  SqliteBootstrapTargetInput,
   SqliteStoreBinding,
   SqliteStoreControlBinding,
 } from "./contract";
@@ -55,3 +58,8 @@ export const makeRecoverySqliteDatabase = (
         input.store.controlQuery({ activationId: input.activationId, epoch: input.epoch, query }),
     },
   });
+
+/** Capture fixed deployment and actual object identity while refusing active or incompletely imported targets. */
+export const makeSqliteBootstrapTarget = (
+  input: SqliteBootstrapTargetInput
+): SqliteBootstrapTarget => bootstrapTarget(input);

@@ -1,5 +1,5 @@
 import { type Effect, Schema } from "effect";
-import { ErasureGeneration } from "../erasure/contract";
+import { ErasureGeneration } from "../erasure-store/contract";
 import type { ErasureUnavailable } from "../erasure-store/contract";
 
 const maximumIdentityLength = 128;

@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect";
-import { ErasureGeneration, type ErasureRecoveryConfiguration } from "../contract";
-import { ErasureUnavailable } from "../../erasure-store/contract";
+import type { ErasureRecoveryConfiguration } from "../contract";
+import { ErasureGeneration, ErasureUnavailable } from "../../erasure-store/contract";
 
 export const generationKey = "recovery/generation";
 const maximumGenerationBytes = 64;

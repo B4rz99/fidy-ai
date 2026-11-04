@@ -136,3 +136,15 @@ export type ErasureImportedInput = Readonly<{
   evidence: RecoveryClosedSourceEvidence;
   bucket: R2Bucket;
 }>;
+
+export const ErasureRecoveryDrain = Schema.Struct({
+  pending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  externalPending: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export type ErasureRecoveryDrain = typeof ErasureRecoveryDrain.Type;
+
+export const ErasureSourceRetirement = Schema.Struct({
+  from: ErasureGeneration,
+  retired: ErasureReference,
+});
+export type ErasureSourceRetirement = typeof ErasureSourceRetirement.Type;

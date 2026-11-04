@@ -8,7 +8,11 @@ import { fixtureNativeHttpClient } from "../core-worker.test-fixture";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { nativeErasurePlatform, seedPersonalClasses } from "./native.test-fixture";
 import { executeErasureAdmission } from "./operations";
-import { handleErasureCandidateOperator, handleErasureOperator } from "./runtime";
+import {
+  handleErasureCandidateOperator,
+  handleErasureOperator,
+  withErasureRecovery,
+} from "./runtime";
 import { nativeRecoveryAdmissions } from "../recovery-activation/native.test-fixture";
 
 const issuer = "https://erasure-test.cloudflareaccess.com";
@@ -70,6 +74,48 @@ const readActivationRecord = (
     );
     return record;
   });
+
+const delayedDatabase = (
+  database: D1Database,
+  entered: PromiseWithResolvers<void>,
+  proceed: PromiseWithResolvers<void>
+): D1Database =>
+  new Proxy(database, {
+    get: (db, property): unknown => {
+      if (property === "batch") {
+        return (
+          statements: Parameters<D1Database["batch"]>[0]
+        ): ReturnType<D1Database["batch"]> => {
+          entered.resolve();
+          return proceed.promise.then(() => db.batch(statements));
+        };
+      }
+      const value: unknown = Reflect.get(db, property, db);
+      return typeof value === "function" ? value.bind(db) : value;
+    },
+  });
+const unavailableProgress = (registry: R2Bucket): R2Bucket =>
+  new Proxy(registry, {
+    get: (bucket, property): unknown => {
+      if (property === "put") {
+        return (...args: Parameters<R2Bucket["put"]>): ReturnType<R2Bucket["put"]> =>
+          args[0] === "recovery/activation"
+            ? Promise.reject(Error("Progress reply unavailable after D1 commit"))
+            : bucket.put(...args);
+      }
+      const value: unknown = Reflect.get(bucket, property, bucket);
+      return typeof value === "function" ? value.bind(bucket) : value;
+    },
+  });
+
+const releaseDelayedRead = (
+  proceed: PromiseWithResolvers<void>,
+  lateRead: Promise<boolean>
+): Effect.Effect<void> =>
+  Effect.sync(() => proceed.resolve()).pipe(
+    Effect.andThen(Effect.tryPromise(() => lateRead)),
+    Effect.ignore
+  );
 
 effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
   it.effect(
@@ -211,7 +257,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         const resumed = yield* send();
         expect(resumed.status).toBe(202);
         expect(yield* Effect.tryPromise(() => resumed.json())).toMatchObject({
-          phase: "AwaitingProvider",
+          phase: "AwaitingOwnerDrain",
           providerIsolation: "Unqualified",
         });
         expect(yield* Effect.tryPromise(() => admission.inspect())).toMatchObject({
@@ -277,6 +323,125 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         ).toHaveLength(1);
         yield* Effect.tryPromise(() => admission.close({ activationId, epoch: target.epoch }));
         expect((yield* send(operationSignal, "Initialize")).status).toBe(503);
+      }).pipe(Effect.scoped)
+  );
+});
+
+effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
+  it.effect(
+    "persists a source-only retirement plan before its atomic D1 fence and resumes a lost progress reply",
+    () =>
+      Effect.gen(function* () {
+        const platform = yield* nativeErasurePlatform;
+        const native = yield* Effect.tryPromise(() => platform.acquire());
+        yield* Effect.tryPromise(() => installRetentionTestSchema(native.db));
+        const gates = yield* nativeRecoveryAdmissions;
+        const admission = gates.source;
+        const token = yield* operatorToken(yield* Clock.currentTimeMillis);
+        const http = yield* fixtureNativeHttpClient;
+        let registry = native.registry;
+        const send = (): Effect.Effect<Response> =>
+          handleErasureOperator({
+            request: new Request("https://operator/internal/titular-erasure", {
+              method: "POST",
+              headers: { "content-type": "application/json", "cf-access-jwt-assertion": token },
+              body: Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))({
+                action: "Activation",
+                activationId,
+              }),
+            }),
+            environment: {
+              DB: native.db,
+              ERASURE_BUCKET: registry,
+              ERASURE_ACTIVATION: {
+                admission,
+                serving: control,
+                sourceDb: native.db,
+                sourceTarget: target,
+                servingTarget,
+              },
+              CLOUDFLARE_ACCESS_ISSUER: issuer,
+              CLOUDFLARE_ACCESS_AUDIENCE: "recovery-only",
+              ERASURE_SUPPORT_AUDIENCE: audience,
+              USER_TRANSACTION_COORDINATOR: native.coordinator,
+            },
+          }).pipe(Effect.provideService(HttpClient.HttpClient, http));
+        const waiting = yield* send();
+        expect(yield* Effect.tryPromise(() => waiting.json())).toMatchObject({
+          phase: "AwaitingProvider",
+          providerIsolation: "Unqualified",
+        });
+        const entered = Promise.withResolvers<void>();
+        const proceed = Promise.withResolvers<void>();
+        const delayed = delayedDatabase(native.db, entered, proceed);
+        const guarded = withErasureRecovery({
+          DB: delayed,
+          ERASURE_BUCKET: native.registry,
+          ERASURE_REQUIRED: "true",
+        });
+        const lateRead = guarded.DB.prepare("SELECT count(*) AS count FROM users")
+          .all()
+          .then(
+            () => false,
+            () => true
+          );
+        yield* Effect.addFinalizer(() => releaseDelayedRead(proceed, lateRead));
+        yield* Effect.tryPromise(() => entered.promise);
+        yield* Effect.tryPromise(() => admission.close({ activationId, epoch: target.epoch }));
+        const planned = yield* send();
+        const plan = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            phase: Schema.Literal("RetiringSource"),
+            sourceFence: Schema.Struct({
+              state: Schema.Literal("Prepared"),
+              from: Schema.Literal("initial"),
+              retired: Schema.String.check(Schema.isUUID()),
+            }),
+          })
+        )(yield* Effect.tryPromise(() => planned.json()));
+        expect(
+          yield* Effect.tryPromise(() =>
+            native.db
+              .prepare("SELECT generation FROM erasure_control WHERE kind='published'")
+              .first("generation")
+          )
+        ).toBe("initial");
+        registry = unavailableProgress(native.registry);
+        expect((yield* send()).status).toBe(503);
+        expect(
+          yield* Effect.tryPromise(() =>
+            native.db
+              .prepare("SELECT generation FROM erasure_control WHERE kind='published'")
+              .first("generation")
+          )
+        ).toBe(plan.sourceFence.retired);
+        proceed.resolve();
+        expect(yield* Effect.tryPromise(() => lateRead)).toBe(true);
+        registry = native.registry;
+        const resumed = yield* send();
+        expect(yield* Effect.tryPromise(() => resumed.json())).toMatchObject({
+          phase: "SourceRetired",
+          sourceFence: { retired: plan.sourceFence.retired },
+          providerIsolation: "Unqualified",
+        });
+        const published = yield* Effect.tryPromise(() =>
+          native.registry.get("recovery/generation")
+        );
+        expect(published).not.toBeNull();
+        expect(
+          yield* Effect.tryPromise(() =>
+            published === null ? Promise.resolve("") : published.text()
+          )
+        ).toBe("initial");
+        expect(
+          yield* Effect.tryPromise(() =>
+            native.db
+              .prepare("SELECT generation FROM erasure_control WHERE kind='published'")
+              .first("generation")
+          )
+        ).toBe(plan.sourceFence.retired);
+        expect(plan.sourceFence.retired).not.toBe("initial");
+        expect((yield* send()).status).toBe(202);
       }).pipe(Effect.scoped)
   );
 });

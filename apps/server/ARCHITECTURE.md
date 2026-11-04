@@ -411,9 +411,16 @@ Missing source or owner evidence fails closed. The operator invokes the fixed pu
 drain observer, including pre-User Consent notifications, without a configurable zero-count
 callback. Unfinished owner work retains `AwaitingOwnerDrain` while native continuations remain
 admissible. The operator requires the closed ten-owner coverage observation and consistent
-owner totals; a bare zero count cannot advance. Zero owner work still leaves admission paused
+owner totals; a bare zero count cannot advance. It also requires the separate Erasure-owned drain
+observation: unfinished financial deletion blocks final closure, while `ExternalPending` custody
+remains explicitly preserved. Zero owner work still leaves admission paused
 at `AwaitingProvider` until independent provider inventory and historical caller fencing permit
-final closure. The current operator always
+final closure. For a closed, drained initial D1 source, a resumable R2 plan records the observed
+source marker and a distinct source-only retired marker before a native compare-and-set. The
+readiness predicate and retirement share one source transaction. Retrying an interrupted progress
+write reuses the same retired marker; the source is never stamped with the serving generation.
+This fence rejects delayed SQL that captured the old R2 generation, but cannot revoke historical
+restore or raw administration authority, so independent provider fencing remains required. The current operator always
 reports `Unqualified`; this progress cannot open a Store, publish a serving generation, remove the
 R2 guard, or qualify an activation. Provider-verified namespace/version history, complete operation
 and provider drain, final ledger replay and fresh serving bootstrap remain required before that
@@ -428,7 +435,7 @@ a control operation and must separately serialize its own interrupted native wri
 final barrier can qualify.
 
 `RecoveryClosedSourceEvidence` declares the artifact handoff: source identity, actual admission
-object, activation, old source generation, distinct final generation/checkpoint ETag and content
+object, activation, frozen source generation (the retired marker for initial D1), distinct final generation/checkpoint ETag and content
 digests for provider and ledger evidence. `readClosedRecoverySource` currently always refuses;
 preliminary R2 progress cannot issue export/bootstrap authority while provider qualification and
 final reconciliation remain incomplete.

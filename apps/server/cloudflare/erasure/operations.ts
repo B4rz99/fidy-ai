@@ -1,5 +1,12 @@
+import { retireSource, sourceGeneration } from "./internal/source-retirement";
+import { observe as observeRecoveryDrain } from "./internal/recovery-drain";
 import { verifyImported } from "./internal/imported-checkpoint";
-import type { ErasureImportedCheckpoint, ErasureImportedInput } from "./contract";
+import type {
+  ErasureImportedCheckpoint,
+  ErasureImportedInput,
+  ErasureRecoveryDrain,
+  ErasureSourceRetirement,
+} from "./contract";
 import { preservePendingAdmissions } from "./internal/pending-admissions";
 import { initializeRegistryStorage } from "./internal/registry-initialization";
 import { sweepControlObjects } from "./internal/control-objects";
@@ -19,7 +26,7 @@ import {
   type ErasureRegistryInitialization,
 } from "./contract";
 import { progress } from "./internal/progress";
-import { ErasureUnavailable } from "../erasure-store/contract";
+import { type ErasureGeneration, ErasureUnavailable } from "../erasure-store/contract";
 import type { ErasureStore } from "../erasure-store/contract";
 import { admitDeletion } from "./internal/admission";
 
@@ -297,3 +304,17 @@ export const reconcileErasureAdmissions = (
 export const verifyImportedErasureCheckpoint = (
   input: ErasureImportedInput
 ): Effect.Effect<ErasureImportedCheckpoint, ErasureUnavailable> => verifyImported(input);
+
+/** Refuse final source closure while financial deletion is unfinished; preserve independent external custody. */
+export const observeErasureRecoveryDrain = (
+  input: Readonly<{ db: D1Database }>
+): Effect.Effect<ErasureRecoveryDrain, ErasureUnavailable> => observeRecoveryDrain(input);
+
+/** Private frozen-source metadata; it does not authorize serving reads. */
+export const readErasureSourceGeneration = (
+  input: Readonly<{ db: D1Database }>
+): Effect.Effect<ErasureGeneration, ErasureUnavailable> => sourceGeneration(input);
+/** Retire only the exact observed source marker in one native unit, refusing unfinished financial deletion. */
+export const retireErasureSource = (
+  input: Readonly<{ db: D1Database; fence: ErasureSourceRetirement }>
+): Effect.Effect<void, ErasureUnavailable> => retireSource(input);

@@ -1,8 +1,9 @@
+import { planSourceRetirement, resumeSourceRetirement } from "./internal/source-retirement";
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import { RecoveryDrainObservation } from "../recovery-lifecycle/contract";
 import { observeRecoveryDrain } from "../recovery-lifecycle/operations";
-import { reconcileErasureAdmissions } from "../erasure/operations";
+import { observeErasureRecoveryDrain, reconcileErasureAdmissions } from "../erasure/operations";
 import {
   type RecoveryActivationEnvironment,
   RecoveryAdmissionState,
@@ -54,7 +55,8 @@ const requireTargets = (
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 const awaitOwnerDrain = (
   input: ActivationInput,
-  record: ActivationRecord
+  record: ActivationRecord,
+  state: RecoveryAdmissionState
 ): Effect.Effect<ActivationRecord, ErasureUnavailable> =>
   Effect.gen(function* () {
     const observation = yield* observeRecoveryDrain({ db: input.configuration.sourceDb });
@@ -67,8 +69,17 @@ const awaitOwnerDrain = (
     if (pending !== drain.pending || ambiguous !== drain.ambiguous) {
       return yield* new ErasureUnavailable();
     }
-    if (drain.pending !== 0 || drain.ambiguous !== 0) {
+    const erasure = yield* observeErasureRecoveryDrain({ db: input.configuration.sourceDb });
+    if (drain.pending !== 0 || drain.ambiguous !== 0 || erasure.pending !== 0) {
       return { ...record, cursor: "", phase: "AwaitingOwnerDrain" as const };
+    }
+    if (state.closed && record.source.kind === "D1") {
+      return yield* planSourceRetirement({
+        record,
+        state,
+        configuration: input.configuration,
+        bucket: input.bucket,
+      });
     }
     // Owner rows cannot prove identity-free Queue/Workflow inventory or historical caller fencing.
     // Keep native continuations admissible until the independent provider barrier is established.
@@ -96,6 +107,14 @@ const advancePhase = (
       return yield* new ErasureUnavailable();
     }
     if (state.leases > 0) return { ...record, phase: "AwaitingDrain" as const, cursor: "" };
+    if (record.phase === "RetiringSource" || record.phase === "SourceRetired") {
+      return yield* resumeSourceRetirement({
+        record,
+        state,
+        configuration: input.configuration,
+        bucket: input.bucket,
+      });
+    }
     const pending = yield* reconcileErasureAdmissions({
       db: input.configuration.sourceDb,
       bucket: input.bucket,
@@ -104,7 +123,7 @@ const advancePhase = (
     if (!pending.complete) {
       return { ...record, cursor: pending.cursor, phase: "ReconcilingAdmissions" as const };
     }
-    return yield* awaitOwnerDrain(input, record);
+    return yield* awaitOwnerDrain(input, record, state);
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 
 /** Advances only fixed binding-selected targets. Local observations never qualify provider isolation or open serving admission. */
@@ -133,6 +152,7 @@ export const advanceRecoveryActivation = (
         admissionObjectId: admission.objectId,
         ...targets,
         cursor: "",
+        sourceFence: { state: "Unplanned" },
         phase: "AwaitingDrain",
         providerIsolation: "Unqualified",
       }),

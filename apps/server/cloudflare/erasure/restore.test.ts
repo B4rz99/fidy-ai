@@ -10,7 +10,11 @@ import { installRetentionTestSchema } from "../d1-test-fixture";
 import { nativeErasurePlatform, seedPersonalClasses } from "./native.test-fixture";
 import type { ErasureUnavailable } from "../erasure-store/contract";
 import { resumeErasureCases } from "./operations";
-import { handleErasureOperator, withErasureRecovery } from "./runtime";
+import {
+  handleErasureCandidateOperator,
+  handleErasureOperator,
+  withErasureRecovery,
+} from "./runtime";
 import { makePublicWorker } from "../public-worker";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 
@@ -264,6 +268,186 @@ const admitNativeDeletion = (
     )).reference;
   });
 
+type Send = (
+  command: unknown,
+  assertion?: string,
+  route?: "owner" | "candidate" | "isolated" | "aborted"
+) => Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError>;
+const verifyCandidateRefusals = (
+  input: Readonly<{ send: Send; token: string; setTarget: (target: string) => void }>
+): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    input.setTarget("serving-native");
+    expect((yield* input.send({ action: "Restore" }, input.token, "isolated")).status).toBe(503);
+    input.setTarget("");
+    expect((yield* input.send({ action: "Restore" }, input.token, "isolated")).status).toBe(503);
+    input.setTarget("candidate-native");
+    expect((yield* input.send({ action: "ReleaseRestore" }, input.token, "isolated")).status).toBe(
+      400
+    );
+    expect((yield* input.send({ action: "VerifyCandidate" }, input.token, "isolated")).status).toBe(
+      202
+    );
+  });
+const verifyCandidateCheckpoint = (
+  input: Readonly<{
+    send: Send;
+    token: string;
+    servingDb: D1Database;
+    guarded: D1Database;
+    registry: R2Bucket;
+  }>
+): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const verified = yield* input.send({ action: "VerifyCandidate" }, input.token, "isolated");
+    expect(verified.status).toBe(200);
+    expect(yield* Effect.tryPromise(() => verified.json())).toMatchObject({
+      state: "Verified",
+      providerIsolation: "Unqualified",
+      targetId: "candidate-native",
+    });
+    expect(
+      yield* Effect.tryPromise(() => input.registry.head("recovery/candidates/candidate-native"))
+    ).not.toBeNull();
+    expect(
+      (yield* Effect.result(
+        Effect.tryPromise(() => input.guarded.prepare("SELECT * FROM users").all())
+      ))._tag
+    ).toBe("Failure");
+    expect((yield* input.send({ action: "VerifyCandidate" })).status).toBe(400);
+    const markerKey = `recovery/cases/${reference}`;
+    const marker = yield* Effect.tryPromise(() =>
+      input.registry.get(markerKey).then((object) => object?.text())
+    );
+    expect(marker).toBeDefined();
+    yield* Effect.tryPromise(() => input.registry.delete(markerKey));
+    expect((yield* input.send({ action: "VerifyCandidate" }, input.token, "isolated")).status).toBe(
+      202
+    );
+    yield* Effect.tryPromise(() => input.registry.put(markerKey, marker ?? ""));
+    const generation = yield* Effect.tryPromise(() =>
+      input.registry.get("recovery/generation").then((object) => object?.text())
+    );
+    yield* Effect.tryPromise(() => input.registry.delete("recovery/generation"));
+    expect((yield* input.send({ action: "VerifyCandidate" }, input.token, "isolated")).status).toBe(
+      503
+    );
+    yield* Effect.tryPromise(() => input.registry.put("recovery/generation", generation ?? ""));
+    expect(
+      yield* Effect.tryPromise(() =>
+        input.servingDb
+          .prepare("SELECT count(*) AS count FROM users WHERE id=?")
+          .bind(foreignUser)
+          .first("count")
+      )
+    ).toBe(1);
+    expect(
+      yield* Effect.tryPromise(() =>
+        input.servingDb
+          .prepare("SELECT generation FROM erasure_control WHERE kind='published'")
+          .first("generation")
+      )
+    ).toBe(
+      yield* Effect.tryPromise(() =>
+        input.registry.get("recovery/generation").then((object) => object?.text())
+      )
+    );
+  });
+const verifyRemainingUsers = (guarded: D1Database): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    expect(
+      yield* Effect.tryPromise(() =>
+        guarded.prepare("SELECT count(*) FROM users WHERE id=?").bind(userId).first("count(*)")
+      )
+    ).toBe(0);
+    expect(
+      yield* Effect.tryPromise(() =>
+        guarded
+          .prepare("SELECT count(*) FROM web_sessions WHERE user_id=?")
+          .bind(userId)
+          .first("count(*)")
+      )
+    ).toBe(0);
+    expect(
+      yield* Effect.tryPromise(() =>
+        guarded.prepare("SELECT count(*) FROM users WHERE id=?").bind(foreignUser).first("count(*)")
+      )
+    ).toBe(1);
+    expect(
+      yield* Effect.tryPromise(() =>
+        guarded
+          .prepare("SELECT count(*) FROM web_sessions WHERE user_id=?")
+          .bind(foreignUser)
+          .first("count(*)")
+      )
+    ).toBe(1);
+  });
+
+const verifyCheckpointResume = (
+  input: Readonly<{ send: Send; token: string; db: D1Database; registry: R2Bucket }>
+): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const generation = yield* Effect.tryPromise(() =>
+      input.registry.get("recovery/generation").then((object) => object?.text())
+    );
+    const entries = Array.from({ length: 5 }, (_, index) => ({
+      reference: `12740000-0000-4000-8000-00000000020${index}`,
+      userId: `12740000-0000-4000-8000-00000000030${index}`,
+      requestedAtMs: 0,
+      sealed: true,
+    }));
+    for (const entry of entries) {
+      yield* Effect.tryPromise(() =>
+        input.db.batch([
+          input.db
+            .prepare(
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state,restoring,restore_generation,marker_written,coordinator_cleared) VALUES(?,?,0,'ExternalPending',1,?,1,1)"
+            )
+            .bind(entry.reference, entry.userId, generation),
+          input.db.prepare("INSERT INTO erasure_steps VALUES(?,'users',1)").bind(entry.reference),
+          input.db
+            .prepare("INSERT INTO erasure_restore_members VALUES(?,?,?)")
+            .bind(generation, entry.reference, entry.userId),
+        ])
+      );
+      const encoded = yield* Schema.encodeEffect(json)(entry);
+      yield* Effect.tryPromise(() =>
+        input.registry.put(`recovery/cases/${entry.reference}`, encoded)
+      );
+    }
+    expect((yield* input.send({ action: "VerifyCandidate" }, input.token, "isolated")).status).toBe(
+      202
+    );
+    const checkpoint = yield* Effect.tryPromise(() =>
+      input.registry.head("recovery/candidates/candidate-native")
+    );
+    expect(
+      (yield* input.send({ action: "VerifyCandidate" }, input.token, "aborted")).status
+    ).toBeGreaterThanOrEqual(400);
+    const afterAbort = yield* Effect.tryPromise(() =>
+      input.registry.head("recovery/candidates/candidate-native")
+    );
+    expect(afterAbort?.etag).toBe(checkpoint?.etag);
+    const resumed = yield* input.send({ action: "VerifyCandidate" }, input.token, "isolated");
+    expect(resumed.status).toBe(200);
+    expect(yield* Effect.tryPromise(() => resumed.json())).toMatchObject({
+      state: "Verified",
+      checkedCases: 6,
+    });
+    for (const entry of entries) {
+      yield* Effect.tryPromise(() => input.registry.delete(`recovery/cases/${entry.reference}`));
+      yield* Effect.tryPromise(() =>
+        input.db.batch([
+          input.db
+            .prepare("DELETE FROM erasure_restore_members WHERE request_id=?")
+            .bind(entry.reference),
+          input.db.prepare("DELETE FROM erasure_steps WHERE request_id=?").bind(entry.reference),
+          input.db.prepare("DELETE FROM erasure_requests WHERE id=?").bind(entry.reference),
+        ])
+      );
+    }
+  });
+
 const verifyRestore = Effect.gen(function* () {
   const platform = yield* nativeErasurePlatform;
   let native = yield* Effect.tryPromise(() => platform.acquire());
@@ -342,20 +526,25 @@ const verifyRestore = Effect.gen(function* () {
       .setExpirationTime(Math.floor(current / 1000) + 300)
       .sign(privateKey)
   );
+  let candidateTarget = "candidate-native";
   const send = (
     command: unknown,
     assertion: string = token,
-    route: "owner" | "candidate" = "owner"
+    route: "owner" | "candidate" | "isolated" | "aborted" = "owner"
   ): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
     Effect.gen(function* () {
       const body = yield* Schema.encodeEffect(json)(command);
       const run = Effect.runPromiseWith(yield* Effect.context<never>());
       const dispatch = (request: Request): Promise<Response> =>
         run(
-          handleErasureOperator({
+          (route === "isolated" || route === "aborted"
+            ? handleErasureCandidateOperator
+            : handleErasureOperator)({
             request,
             environment: {
               DB: native.db,
+              ERASURE_CANDIDATE_DATABASE_ID: candidateTarget,
+              ERASURE_SERVING_DATABASE_ID: "serving-native",
               ERASURE_BUCKET: native.registry,
               ERASURE_REQUIRED: "true",
               CLOUDFLARE_ACCESS_ISSUER: issuer,
@@ -373,8 +562,11 @@ const verifyRestore = Effect.gen(function* () {
           "cloudflare-workers-version-overrides": override,
         },
         body,
+        signal: route === "aborted" ? AbortSignal.abort() : undefined,
       });
-      if (route === "owner") return yield* Effect.tryPromise(() => dispatch(request));
+      if (route === "owner" || route === "isolated" || route === "aborted") {
+        return yield* Effect.tryPromise(() => dispatch(request));
+      }
       return yield* Effect.tryPromise(() =>
         ingress.fetch(request, {
           BROWSER_ORIGIN: "https://app.fidyapp.com",
@@ -527,7 +719,8 @@ const verifyRestore = Effect.gen(function* () {
     )).objects.length
   ).toBe(0);
   yield* verifyProcessorEvidence(send);
-  native = yield* Effect.tryPromise(() => platform.restoreSnapshot());
+  const servingDb = native.db;
+  native = { ...native, db: native.snapshot, coordinator: native.candidateCoordinator };
   const guarded = withErasureRecovery({
     DB: native.db,
     ERASURE_BUCKET: native.registry,
@@ -537,15 +730,24 @@ const verifyRestore = Effect.gen(function* () {
     (yield* Effect.result(Effect.tryPromise(() => guarded.prepare("SELECT * FROM users").all())))
       ._tag
   ).toBe("Failure");
+  yield* verifyCandidateRefusals({
+    send,
+    token,
+    setTarget: (target) => {
+      candidateTarget = target;
+    },
+  });
   expect((yield* send({ action: "ReleaseRestore" })).status).toBe(202);
-  expect((yield* send({ action: "Restore" })).status).toBe(202);
-  expect((yield* send({ action: "Restore" })).status).toBe(202);
+  expect((yield* send({ action: "Restore" }, token, "isolated")).status).toBe(202);
+  expect((yield* send({ action: "Restore" }, token, "isolated")).status).toBe(202);
   expect((yield* send({ action: "ReleaseRestore" })).status).toBe(202);
   expect(
     (yield* Effect.result(Effect.tryPromise(() => guarded.prepare("SELECT * FROM users").all())))
       ._tag
   ).toBe("Failure");
   yield* advanceToExternal({ db: () => native.db, send });
+  yield* verifyCandidateCheckpoint({ send, token, servingDb, guarded, registry: native.registry });
+  yield* verifyCheckpointResume({ send, token, db: native.db, registry: native.registry });
   yield* verifyExpiredMetadata({ db: native.db, guarded, send, current, erasedAt });
   expect(
     yield* Effect.tryPromise(() =>
@@ -557,32 +759,7 @@ const verifyRestore = Effect.gen(function* () {
   ).toEqual([{ id: "other-User-attempt" }]);
   expect(yield* Effect.tryPromise(() => native.originals.head(staleKey))).toBeNull();
 
-  expect(
-    yield* Effect.tryPromise(() =>
-      guarded.prepare("SELECT count(*) FROM users WHERE id=?").bind(userId).first("count(*)")
-    )
-  ).toBe(0);
-  expect(
-    yield* Effect.tryPromise(() =>
-      guarded
-        .prepare("SELECT count(*) FROM web_sessions WHERE user_id=?")
-        .bind(userId)
-        .first("count(*)")
-    )
-  ).toBe(0);
-  expect(
-    yield* Effect.tryPromise(() =>
-      guarded.prepare("SELECT count(*) FROM users WHERE id=?").bind(foreignUser).first("count(*)")
-    )
-  ).toBe(1);
-  expect(
-    yield* Effect.tryPromise(() =>
-      guarded
-        .prepare("SELECT count(*) FROM web_sessions WHERE user_id=?")
-        .bind(foreignUser)
-        .first("count(*)")
-    )
-  ).toBe(1);
+  yield* verifyRemainingUsers(guarded);
   const receipt = yield* send({ action: "Receipt", userId, reference });
   expect(receipt.status).toBe(200);
   expect(yield* Effect.tryPromise(() => receipt.json())).toMatchObject({

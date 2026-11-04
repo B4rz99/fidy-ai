@@ -1,3 +1,4 @@
+import { verifyCandidate } from "./candidate";
 import { initializeRegistry } from "./initialize";
 import { releaseRestore, restoreNext } from "./restore";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -27,6 +28,7 @@ export const operatorRequest = (
     request: Request;
     environment: ErasureOperatorEnvironment;
     http: OutboundHttpService;
+    candidateTargetId: Option.Option<string>;
   }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
@@ -44,25 +46,9 @@ export const operatorRequest = (
     if (Option.isNone(action)) return reply(invalidStatus);
     const current = yield* Clock.currentTimeMillis;
     if (operator.value.expiresAtMs <= current) return reply(unauthorizedStatus);
-    const command = action.value;
-    if (command.action === "Initialize") return yield* initializeRegistry(input.environment);
-    if (command.action === "Restore") {
-      return yield* restoreNext({
-        ...input,
-        operator: operator.value,
-        signal: input.request.signal,
-      });
-    }
-    if (command.action === "ReleaseRestore") {
-      return yield* releaseRestore({
-        ...input,
-        operator: operator.value,
-        signal: input.request.signal,
-      });
-    }
-    return yield* forwardCommand({
+    return yield* executeCommand({
       ...input,
-      command,
+      command: action.value,
       operator: operator.value,
       current,
     });
@@ -70,7 +56,7 @@ export const operatorRequest = (
 
 type UserCommand = Exclude<
   typeof ErasureOperatorAction.Type,
-  { action: "Restore" | "ReleaseRestore" | "Initialize" }
+  { action: "Restore" | "ReleaseRestore" | "Initialize" | "VerifyCandidate" }
 >;
 const forwardCommand = (
   input: Readonly<{
@@ -108,7 +94,7 @@ const forwardCommand = (
 const commandPath = (
   command: Exclude<
     typeof ErasureOperatorAction.Type,
-    { action: "Restore" | "ReleaseRestore" | "Initialize" }
+    { action: "Restore" | "ReleaseRestore" | "Initialize" | "VerifyCandidate" }
   >
 ): string => {
   switch (command.action) {
@@ -123,7 +109,7 @@ const commandPath = (
 const commandBody = (
   command: Exclude<
     typeof ErasureOperatorAction.Type,
-    { action: "Restore" | "ReleaseRestore" | "Initialize" }
+    { action: "Restore" | "ReleaseRestore" | "Initialize" | "VerifyCandidate" }
   >,
   admission: Readonly<{
     userId: string;
@@ -148,3 +134,68 @@ const operatorConfiguration = (
 
 const validRequest = (request: Request): boolean =>
   request.method === "POST" && new URL(request.url).search === "" && !request.headers.has("origin");
+
+const candidateCommand = (
+  input: Readonly<{
+    candidateTargetId: Option.Option<string>;
+    environment: ErasureOperatorEnvironment;
+    request: Request;
+    command: typeof ErasureOperatorAction.Type;
+    expiresAtMs: number;
+  }>
+): Effect.Effect<Option.Option<Response>, ErasureUnavailable> => {
+  if (Option.isNone(input.candidateTargetId)) return Effect.succeedNone;
+  const action = input.command.action;
+  if (action === "Initialize" || action === "ReleaseRestore" || action === "CustodyEvidence") {
+    return Effect.succeedSome(reply(invalidStatus));
+  }
+  if (action !== "VerifyCandidate") return Effect.succeedNone;
+  return verifyCandidate({
+    environment: input.environment,
+    targetId: input.candidateTargetId.value,
+    signal: input.request.signal,
+    expiresAtMs: input.expiresAtMs,
+  }).pipe(Effect.asSome);
+};
+
+const executeCommand = (
+  input: Readonly<{
+    request: Request;
+    environment: ErasureOperatorEnvironment;
+    candidateTargetId: Option.Option<string>;
+    operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;
+    command: typeof ErasureOperatorAction.Type;
+    current: number;
+  }>
+): Effect.Effect<Response, ErasureUnavailable | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const command = input.command;
+    const candidate = yield* candidateCommand({
+      ...input,
+      command,
+      expiresAtMs: input.operator.expiresAtMs,
+    });
+    if (Option.isSome(candidate)) return candidate.value;
+    if (command.action === "VerifyCandidate") return reply(invalidStatus);
+    if (command.action === "Initialize") return yield* initializeRegistry(input.environment);
+    if (command.action === "Restore") {
+      return yield* restoreNext({
+        ...input,
+        operator: input.operator,
+        signal: input.request.signal,
+      });
+    }
+    if (command.action === "ReleaseRestore") {
+      return yield* releaseRestore({
+        ...input,
+        operator: input.operator,
+        signal: input.request.signal,
+      });
+    }
+    return yield* forwardCommand({
+      ...input,
+      command,
+      operator: input.operator,
+      current: input.current,
+    });
+  });

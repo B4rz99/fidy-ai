@@ -40,7 +40,12 @@ import {
   transactionUnavailable,
 } from "../canonical-work/operations";
 import { recordBudgetCall } from "./internal/budget-audit";
-import { decodePlannedCaps, preparePlannedCaps, readPlannedCaps } from "./internal/planned-caps";
+import {
+  decodePlannedCaps,
+  readSqlitePlannedCaps as ownerReadSqlitePlannedCaps,
+  preparePlannedCaps,
+  readPlannedCaps,
+} from "./internal/planned-caps";
 import { readBudgetWorkspace } from "./internal/workspace-read";
 import { assembleBudgetReport } from "./internal/budget-report";
 import {
@@ -833,3 +838,7 @@ export const evaluateBudgetAlerts = ({
     );
     return remaining === null;
   }).pipe(Effect.orElseSucceed(() => false));
+
+/** Read the same month-versioned cap projection in an isolated native SQLite snapshot. */
+export const readSqliteBudgetCaps: typeof ownerReadSqlitePlannedCaps = (input) =>
+  ownerReadSqlitePlannedCaps(input);

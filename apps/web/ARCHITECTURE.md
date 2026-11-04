@@ -705,3 +705,11 @@ Review suggestions convert canonical decimal points to decimal commas when opene
 editing drafts retain their entered text. Review confirmation uses the same positive Money and
 Currency precision policy as registration. Input validation retains other fields and remains separate
 from service refusal and uncertain-write recovery.
+
+Dashboard title, Widget title and Budget-configuration drafts retain the document revision observed
+when opened. Background refreshes can replace server display data without rebasing an unsaved draft.
+Each submission carries its captured revision; a stale edit surfaces a conflict and requires an
+explicit reread before another submission. Placement gestures use their currently observed revision.
+The mounted edit owner tracks callbacks and pending geometry without a foreground edit queue;
+independent tabs rely on the server's atomic revision comparison. A failed refresh disables decisions
+while preserving mounted draft inputs.

@@ -240,7 +240,7 @@ it("initializes a Dashboard, changes its title and reads both canonical projecti
       yield* successfulCapability({
         db,
         operation: "dashboard.applyDashboardEdit",
-        input: { payload: { op: "set-title", title: "QA WhatsApp" } },
+        input: { payload: { op: "set-title", title: "QA WhatsApp", expectedRevision: 1 } },
       });
       expect(
         yield* successfulCapability({ db, operation: "dashboard.getDashboard", input: {} })

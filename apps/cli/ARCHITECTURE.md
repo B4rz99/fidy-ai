@@ -36,10 +36,14 @@ bun run cli transactions createTransaction --input transaction.json --json
 bun run cli dashboard initializeDashboard --json
 bun run cli dashboard applyDashboardEdit --input edit.json --json
 bun run cli operations executeAtomicBatch --input batch.json --json
-# edit.json: {"payload":{"op":"set-title","title":"Mi tablero"}}
+# edit.json: {"payload":{"op":"set-title","title":"Mi tablero","expectedRevision":1}}
 # batch.json: {"payload":{"calls":[{"callId":"01900000-0000-4000-8000-000000000001",
-#   "operation":"dashboard.applyDashboardEdit","input":{"payload":{"op":"set-title","title":"Mi tablero"}}}]}}
+#   "operation":"dashboard.applyDashboardEdit","input":{"payload":{"op":"set-title","title":"Mi tablero","expectedRevision":1}}}]}}
 ```
+
+Dashboard edits send the `revision` observed in the document as `expectedRevision`. Read the
+document again after a conflict before deliberately retrying an edit; the examples above each
+assume an observed revision of 1.
 
 The CLI refuses another runtime revision before accessing credentials. The installer uses the
 versioned upstream stable release and reviewed SHA-256 digests for every platform; it never trusts

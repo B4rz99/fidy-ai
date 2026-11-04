@@ -109,7 +109,9 @@ const otherOwnerJourneyArgs = (
     if (name === "dashboard.applyDashboardEdit") {
       const initialized = yield* wait(ordinary("dashboard.initializeDashboard", {}));
       expect(yield* wait(initialized.json())).toMatchObject({ result: { isError: false } });
-      return ownerArgs({ payload: { op: "set-title", title: "Revisión nativa" } });
+      return ownerArgs({
+        payload: { op: "set-title", title: "Revisión nativa", expectedRevision: 1 },
+      });
     }
     if (name.startsWith("transactions.")) {
       const created = yield* wait(ordinary("transactions.createTransaction", transactionArguments));

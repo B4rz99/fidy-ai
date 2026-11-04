@@ -1,7 +1,6 @@
 import { Result, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { DashboardEdit, WidgetId } from "@/transport/client";
-import type { CanonicalInput } from "@/transport/client";
 import {
   type DashboardCatalogEntry,
   type DashboardGesture,
@@ -24,9 +23,7 @@ const catalogEntry = {
   },
 } satisfies DashboardCatalogEntry;
 
-const compile = (
-  gesture: DashboardGesture
-): CanonicalInput<"dashboard.applyDashboardEdit">["payload"] => {
+const compile = (gesture: DashboardGesture): DashboardEdit => {
   const result = compileDashboardGesture(gesture);
   expect(Result.isSuccess(result)).toBe(true);
   if (Result.isFailure(result)) throw result.failure;
@@ -99,6 +96,7 @@ describe("Dashboard gesture compilation", () => {
     expect(
       compile({
         kind: "configure-budget",
+        expectedRevision: 1,
         widget: widget.widget,
         target: {
           categoryId: widget.widget.categoryId,

@@ -32,6 +32,7 @@ const categories = labels.map((label, index) => ({
   label,
 }));
 const spendingView = {
+  revision: 1,
   title: "Tablero de categorías",
   context: {
     serviceMarket: "CO",

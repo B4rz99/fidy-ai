@@ -1,6 +1,11 @@
 import { HttpClient } from "effect/http";
 import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
-import type { ErasureOperatorEnvironment } from "./contract";
+import {
+  ErasureBrowserAdmission,
+  ErasureCandidateConfiguration,
+  type ErasureCandidateEnvironment,
+  type ErasureOperatorEnvironment,
+} from "./contract";
 import { operatorRequest } from "./internal/operator-request";
 import type { AuthenticatedWebSession } from "../web-session/contract";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -9,7 +14,6 @@ import { authenticateWebSession } from "../web-session/operations";
 import { boundedJsonBody } from "../http/operations";
 import { RequestBodyPolicy } from "../http/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
-import { ErasureBrowserAdmission } from "./contract";
 import { guardedDatabase } from "./internal/database";
 import { type RecoveryMeasurement, makeRecoveryMeasurement } from "./internal/measurement";
 
@@ -138,5 +142,23 @@ export const handleErasureOperator = (
       issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
       httpClient: yield* HttpClient.HttpClient,
     });
-    return yield* operatorRequest({ ...input, http });
+    return yield* operatorRequest({ ...input, http, candidateTargetId: Option.none() });
+  });
+
+/** Only an isolated operator Worker may construct this environment. Its DB and coordinator bindings belong to the candidate; neither may target serving resources. Verification never activates a database. */
+export const handleErasureCandidateOperator = (
+  input: Readonly<{ request: Request; environment: ErasureCandidateEnvironment }>
+): Effect.Effect<Response, never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const configuration = Schema.decodeOption(ErasureCandidateConfiguration)(input.environment);
+    if (Option.isNone(configuration)) return reply(unavailableStatus);
+    const targetId = configuration.value.ERASURE_CANDIDATE_DATABASE_ID;
+    if (targetId === configuration.value.ERASURE_SERVING_DATABASE_ID) {
+      return reply(unavailableStatus);
+    }
+    const http = makeAccessSigningKeysOutboundHttp({
+      issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
+      httpClient: yield* HttpClient.HttpClient,
+    });
+    return yield* operatorRequest({ ...input, http, candidateTargetId: Option.some(targetId) });
   });

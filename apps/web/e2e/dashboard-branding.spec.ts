@@ -83,6 +83,7 @@ const installRecentTransactions = Effect.fnUntraced(function* (page: Page) {
       route.fulfill({
         contentType: "application/json",
         body: response({
+          revision: 1,
           title: "Tablero de prueba",
           context: {
             serviceMarket: "CO",
@@ -275,6 +276,7 @@ test("recent Transactions retain ten canonical entries grouped by local date wit
 
 const personalizedBudgetTitle = "Mi presupuesto personal de gastos mensuales";
 const personalizedBudgetView = {
+  revision: 1,
   title: "Tablero de prueba",
   context: {
     serviceMarket: "CO",

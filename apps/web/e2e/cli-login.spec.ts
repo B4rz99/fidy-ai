@@ -140,7 +140,7 @@ const mutationJourney = Effect.fn(function* (
   expect(yield* complete(["dashboard", "initializeDashboard"])).toContain('"title":"Tablero"');
   expect(
     yield* invoke("dashboard", "applyDashboardEdit", {
-      payload: { op: "set-title", title: "CLI edit" },
+      payload: { op: "set-title", title: "CLI edit", expectedRevision: 1 },
     })
   ).toContain('"title":"CLI edit"');
 });
@@ -163,7 +163,7 @@ const batchJourney = Effect.fn(function* (complete: Complete, invoke: Invoke, ca
           callId: callIds[1],
           operation: "dashboard.applyDashboardEdit",
           input: {
-            payload: { op: "set-title", title: "CLI batch edit" },
+            payload: { op: "set-title", title: "CLI batch edit", expectedRevision: 2 },
           },
         },
       ],

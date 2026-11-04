@@ -78,7 +78,7 @@ type Sample = DashboardObservation &
   }>;
 const measuredPaint = (page: Page): Promise<typeof paint.Type> =>
   page
-    .evaluate(() => {
+    .evaluate((): unknown => {
       const entry = performance.getEntriesByName("dashboard-fresh-paint").at(-1);
       return entry instanceof PerformanceMark ? entry.detail : undefined;
     })

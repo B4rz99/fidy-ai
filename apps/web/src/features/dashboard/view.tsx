@@ -491,9 +491,10 @@ const maximumTitleLength = 80;
 type TitleEditorProps = Readonly<{
   disabled: boolean;
   initialTitle: string;
+  revision: number;
   target: "tablero" | "Widget";
   onCancel: () => void;
-  onSave: (title: string) => void;
+  onSave: (title: string, expectedRevision: number) => void;
 }>;
 
 const focusTitleInput: RefCallback<HTMLInputElement> = (input) => {
@@ -504,15 +505,17 @@ const focusTitleInput: RefCallback<HTMLInputElement> = (input) => {
 const TitleEditor = ({
   disabled,
   initialTitle,
+  revision,
   target,
   onCancel,
   onSave,
 }: TitleEditorProps): JSX.Element => {
-  const [title, setTitle] = useState(initialTitle);
+  const [draft, setDraft] = useState({ title: initialTitle, revision });
+  const title = draft.title;
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const trimmedTitle = title.trim();
-    if (!disabled && trimmedTitle.length > 0) onSave(trimmedTitle);
+    if (!disabled && trimmedTitle.length > 0) onSave(trimmedTitle, draft.revision);
   };
   return (
     <form className="flex min-w-0 items-center gap-1" onSubmit={submit}>
@@ -521,7 +524,7 @@ const TitleEditor = ({
         disabled={disabled}
         maxLength={maximumTitleLength}
         ref={focusTitleInput}
-        onChange={(event) => setTitle(event.currentTarget.value)}
+        onChange={(event) => setDraft({ ...draft, title: event.currentTarget.value })}
         onKeyDown={(event) => {
           if (event.key === "Escape") onCancel();
         }}
@@ -593,8 +596,8 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
   const { widget } = layout.widget;
   const label = titleFor(widget);
   const [renaming, setRenaming] = useState(false);
-  const saveTitle = (title: string): void => {
-    editor.onGesture({ kind: "retitle-widget", title, widget });
+  const saveTitle = (title: string, expectedRevision: number): void => {
+    editor.onGesture({ kind: "retitle-widget", title, widget, expectedRevision });
     setRenaming(false);
   };
   return (
@@ -629,6 +632,7 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
                   <TitleEditor
                     disabled={editor.disabled}
                     initialTitle={label}
+                    revision={editor.revision}
                     target="Widget"
                     onCancel={() => setRenaming(false)}
                     onSave={saveTitle}
@@ -875,6 +879,7 @@ const ResponsiveLayout = ({
 };
 
 export type DashboardEditor = Readonly<{
+  revision: number;
   catalog: ReadonlyArray<DashboardCatalogEntry>;
   error: Option.Option<DashboardEditorError>;
   onGesture: (gesture: DashboardGesture) => void;
@@ -1037,11 +1042,12 @@ const EditableDashboardTitle = ({
         <TitleEditor
           disabled={editor.disabled}
           initialTitle={title}
+          revision={editor.revision}
           target="tablero"
           onCancel={cancel}
-          onSave={(nextTitle) => {
+          onSave={(nextTitle, expectedRevision) => {
             if (nextTitle !== title) {
-              editor.onGesture({ kind: "retitle-dashboard", title: nextTitle });
+              editor.onGesture({ kind: "retitle-dashboard", title: nextTitle, expectedRevision });
             }
             setRenaming(false);
           }}

@@ -18,7 +18,11 @@ import { DashboardDocument } from "../../../src/core/dashboard/contract";
 import { UserContext } from "../../../src/core/identity/contract";
 import { collectLayoutWidgets } from "../../../src/core/dashboard/operations";
 import { renderDashboardView } from "../../../src/shell/dashboard/operations";
-import { DashboardUnavailable, DashboardView } from "../../../src/shell/dashboard/contract";
+import {
+  DashboardUnavailable,
+  type DashboardView,
+  DashboardViewSnapshot,
+} from "../../../src/shell/dashboard/contract";
 
 const DocumentRow = Schema.Struct({
   encoded: Schema.fromJsonString(Schema.toCodecJson(DashboardDocument)),
@@ -83,7 +87,10 @@ const present = (sources: Sources, results: ReadonlyArray<D1Result>): Effect.Eff
     const retained = rows[0];
     if (retained === undefined) return uninitialized();
     const view = yield* decodeView(sources, results, retained);
-    const data = yield* Schema.encodeEffect(Schema.toCodecJson(DashboardView))(view);
+    const data = yield* Schema.encodeEffect(Schema.toCodecJson(DashboardViewSnapshot))({
+      ...view,
+      revision: retained.revision,
+    });
     return Response.json(
       { data, next: [] },
       { headers: { ...transactionNoStore, etag: `"${retained.revision}"` } }

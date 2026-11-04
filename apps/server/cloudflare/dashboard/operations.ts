@@ -1,3 +1,5 @@
+import { prepareBoundDashboardRead as ownerPrepareBoundDashboardRead } from "./internal/bound-read";
+import type { CanonicalBrowserRead } from "../canonical-admission/contract";
 import { makeDashboardTiming } from "./internal/dashboard-timing";
 import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
@@ -353,3 +355,7 @@ const queryDashboard = ({
     ),
     Effect.orElseSucceed(transactionUnavailable)
   );
+
+/** Prepare the isolated one-snapshot browser Dashboard candidate; production routing remains guarded. */
+export const prepareBoundDashboardRead: CanonicalBrowserRead = (input) =>
+  ownerPrepareBoundDashboardRead(input);

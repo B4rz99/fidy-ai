@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { type Cause, Data, Effect, Option, Schema } from "effect";
 import {
   type QueryCaller,
@@ -151,3 +152,33 @@ export const prepareUserDocumentWrite = (
           ...authority.bindings
         );
 };
+
+/** Compose one live User's retained document into a peer-owned native snapshot. */
+export const prepareSelectedUserDocument = ({
+  db,
+  userSelection,
+  kind,
+}: Readonly<{
+  db: D1Database;
+  userSelection: OwnedStatement;
+  kind: Kind;
+}>): D1PreparedStatement =>
+  db
+    .prepare(`SELECT document_json AS encoded, revision FROM user_documents
+  WHERE kind = ? AND user_id = (SELECT userId FROM (${userSelection.sql}))`)
+    .bind(kind, ...userSelection.params);
+
+/** Compose a document-owned query over the selected document, with live userId, encoded and revision columns. */
+export const selectedUserDocumentProjection = ({
+  userSelection,
+  kind,
+  statement,
+}: Readonly<{
+  userSelection: OwnedStatement;
+  kind: Kind;
+  statement: OwnedStatement;
+}>): OwnedStatement => ({
+  sql: `WITH selected_user_document AS (SELECT user_id AS userId, document_json AS encoded, revision FROM user_documents
+    WHERE kind = ? AND user_id = (SELECT userId FROM (${userSelection.sql}))) ${statement.sql}`,
+  params: [kind, ...userSelection.params, ...statement.params],
+});

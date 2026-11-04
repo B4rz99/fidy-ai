@@ -1,0 +1,42 @@
+apps/web/cloudflare/dashboard-route.test.ts
+  s_bae391f7738986::t_5993cfb927bf11 1-34,37-38,40-49,51-66,69-70,72-75,77,81-88,91-92,94-97,99,103-111
+  s_bae391f7738986::t_6675e7d26bdb81 35-36,39,50,67-68,71,76,78-80,89-90,93,98,100-102
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_bae391f7738986::t_ebbff05fdc8762 2-3,16,737-781
+  s_bae391f7738986::t_c8db92b2ad9474 782-816
+apps/web/cloudflare/dashboard-route.ts
+  s_bae391f7738986::t_2b830eaa91fd7c 2-12,15-26,28-29,32,34,37-45,47,49-51,54-59,61-63,66-67,69,71,75,85-86,88-89
+  s_bae391f7738986::t_e1208891c818fa 1,13-14,27,30-31,33,35-36,46,48,52-53,60,64-65,68,70,72-74,76-84,87,90-93
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_bae391f7738986::t_b586045ae924a9 28,853-854,859,918-925
+apps/server/cloudflare/core-http/internal/http.ts
+  s_bae391f7738986::t_8029cce1231105 36,1548-1572
+apps/server/cloudflare/core-http/runtime.ts
+  s_bae391f7738986::t_3d48d37703a799 19-20,95-129
+apps/server/cloudflare/core-worker.ts
+  s_bae391f7738986::t_7e3e199ec29423 1,9,362-367
+apps/server/cloudflare/web-session/operations.ts
+  s_bae391f7738986::t_ebebaba08df061 38-48
+apps/server/cloudflare/workflow-test-runtime.ts
+  s_bae391f7738986::t_1764be6d45420f 7-8
+apps/web/cloudflare/dashboard-fragment.test.ts
+  s_bae391f7738986::t_ea90610eff6a94 137-138,170,204-205
+apps/web/cloudflare/dashboard-fragment.ts
+  s_bae391f7738986::t_e51e7684a221ef 4,18,50-70,90-91,94,99,102-105,107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2889ca660709b1a4993da6adc1acad5d5ed7e2e3",
+  "prompts": {},
+  "sessions": {
+    "s_bae391f7738986": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1a703-4384-77a0-a094-cc7cfc536399",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

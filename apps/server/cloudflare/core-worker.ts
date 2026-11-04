@@ -1,4 +1,4 @@
-import type { AuthoritativeStoreEnvironment } from "./sqlite-store/contract";
+import type { DashboardDocumentEnvironment } from "./dashboard/contract";
 import type { RecoveryLifecycleEnvironment } from "./recovery-lifecycle/contract";
 import {
   runRecoveryContinuation,
@@ -111,7 +111,7 @@ type CoreOwnerEnvironment = ProviderEnvironment &
   >;
 
 type CoreEnvironment = Omit<CoreOwnerEnvironment, "DB"> &
-  AuthoritativeStoreEnvironment &
+  DashboardDocumentEnvironment &
   RecoveryLifecycleEnvironment;
 
 type CoreWorker = Readonly<{

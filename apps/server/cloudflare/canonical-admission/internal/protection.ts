@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import {
   prepareChangedRowAssertion,
   prepareReservedChangeCheck,
@@ -18,37 +19,47 @@ type BoundBrowserRequest = Readonly<{
  * D1 serializes the transaction: count existing live leases plus this read against the same cap.
  * A transient lease inserted/deleted in this batch would never be visible to another transaction.
  */
-export const prepareBoundBrowserSnapshot = ({
+export const prepareSnapshotProtection = ({
   db,
-  lookup,
+  statement,
   current,
-}: Omit<BoundBrowserRequest, "id">): Array<D1PreparedStatement> => {
-  const { statement } = lookup;
-  return [
-    db
-      .prepare(`DELETE FROM canonical_request_leases WHERE expires_at_ms <= ?
+}: Readonly<{
+  db: D1Database;
+  statement: OwnedStatement;
+  current: number;
+}>): Array<D1PreparedStatement> => [
+  db
+    .prepare(`DELETE FROM canonical_request_leases WHERE expires_at_ms <= ?
       AND user_id IN (SELECT userId FROM (${statement.sql}))`)
-      .bind(current, ...statement.params),
-    db
-      .prepare(`INSERT INTO canonical_request_buckets(subject,virtual_at_ms)
+    .bind(current, ...statement.params),
+  db
+    .prepare(`INSERT INTO canonical_request_buckets(subject,virtual_at_ms)
       SELECT 'user:' || caller.userId, ? FROM (${statement.sql}) AS caller
       WHERE (SELECT count(*) FROM canonical_request_leases
         WHERE user_id = caller.userId AND expires_at_ms > ?) < ?
       ON CONFLICT(subject) DO UPDATE SET virtual_at_ms = max(virtual_at_ms,?) + ?
         WHERE virtual_at_ms <= ?`)
-      .bind(
-        current + policy.intervalMs,
-        ...statement.params,
-        current,
-        policy.concurrency,
-        current,
-        policy.intervalMs,
-        current + (policy.burst - 1) * policy.intervalMs
-      ),
-    prepareReservedChangeCheck({ db, scope: "canonical_request", reservation: statement }),
-    db.prepare(statement.sql).bind(...statement.params),
-  ];
-};
+    .bind(
+      current + policy.intervalMs,
+      ...statement.params,
+      current,
+      policy.concurrency,
+      current,
+      policy.intervalMs,
+      current + (policy.burst - 1) * policy.intervalMs
+    ),
+  prepareReservedChangeCheck({ db, scope: "canonical_request", reservation: statement }),
+  db.prepare(statement.sql).bind(...statement.params),
+];
+
+export const prepareBoundBrowserSnapshot = (
+  input: Omit<BoundBrowserRequest, "id">
+): Array<D1PreparedStatement> =>
+  prepareSnapshotProtection({
+    db: input.db,
+    statement: input.lookup.statement,
+    current: input.current,
+  });
 
 const prepareBoundBrowserRequest = ({
   db,
@@ -192,21 +203,26 @@ export const admitUnresolvedSource = ({
   "accepted" | "rate_limited" | "unavailable"
 > =>
   Effect.tryPromise({
-    try: () =>
-      db
-        .prepare(
-          `INSERT INTO canonical_request_buckets VALUES (?,?) ON CONFLICT(subject) DO UPDATE SET virtual_at_ms = max(virtual_at_ms,?) + ? WHERE virtual_at_ms <= ? RETURNING subject`
-        )
-        .bind(
-          `source:${source}`,
-          current + policy.intervalMs,
-          current,
-          policy.intervalMs,
-          current + (policy.burst - 1) * policy.intervalMs
-        )
-        .first(),
+    try: () => sourceAdmissionStatement({ db, source, current }).first(),
     catch: () => undefined,
   }).pipe(
     Effect.map((row) => (row === null ? ("rate_limited" as const) : ("accepted" as const))),
     Effect.orElseSucceed(() => "unavailable" as const)
   );
+
+export const sourceAdmissionStatement = ({
+  db,
+  source,
+  current,
+}: Readonly<{ db: D1Database; source: string; current: number }>): D1PreparedStatement =>
+  db
+    .prepare(
+      `INSERT INTO canonical_request_buckets VALUES (?,?) ON CONFLICT(subject) DO UPDATE SET virtual_at_ms = max(virtual_at_ms,?) + ? WHERE virtual_at_ms <= ? RETURNING subject`
+    )
+    .bind(
+      `source:${source}`,
+      current + policy.intervalMs,
+      current,
+      policy.intervalMs,
+      current + (policy.burst - 1) * policy.intervalMs
+    );

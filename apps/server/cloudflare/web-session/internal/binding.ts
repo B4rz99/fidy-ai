@@ -1,3 +1,5 @@
+import { sessionCookie, sessionDigest } from "./credentials";
+import { WebSessionId } from "../../../src/core/web-session/contract";
 import {
   browserSessionBindingHeader,
   browserSessionBindingPath,
@@ -9,9 +11,13 @@ import {
 } from "../../../src/shell/provider-authentication/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { BrowserSessionBinding } from "../../../src/shell/web-session/contract";
-import { authenticate } from "./authentication";
+import { authenticate, currentSessionLookup, decodeSessionLookup } from "./authentication";
 import { noSession, unavailable } from "./support";
-import type { WebSessionRequest } from "../contract";
+import type {
+  CanonicalBrowserBinding,
+  WebSessionRequest,
+  WebSessionSnapshotContext,
+} from "../contract";
 import { connectionCallbackPath } from "../../connections/contract";
 
 const independentProofPaths = new Set<string>([
@@ -28,6 +34,39 @@ const hasSessionCookie = (request: Request): boolean =>
   (request.headers.get("cookie") ?? "")
     .split(";")
     .some((value) => value.trim().startsWith("__Host-fidy_session="));
+
+export const snapshotBinding = (request: Request): Promise<CanonicalBrowserBinding> => {
+  if (!hasSessionCookie(request)) return Promise.resolve({ kind: "independent" });
+  const binding = Schema.decodeUnknownOption(WebSessionId)(
+    request.headers.get(browserSessionBindingHeader)
+  );
+  const token = sessionCookie(request);
+  if (Option.isNone(binding) || Option.isNone(token)) {
+    return Promise.resolve({ kind: "cookie", material: Option.none() });
+  }
+  return sessionDigest(token.value).then((digest) => ({
+    kind: "cookie",
+    material: Option.some({ digest, binding }),
+  }));
+};
+
+export const acceptsSnapshotBinding = (
+  input: Pick<WebSessionSnapshotContext, "db" | "current" | "execute"> &
+    Readonly<{ binding: CanonicalBrowserBinding }>
+): boolean => {
+  if (input.binding.kind === "independent") return true;
+  if (Option.isNone(input.binding.material)) return false;
+  const lookup = currentSessionLookup({
+    ...input.binding.material.value,
+    current: input.current,
+    freshness: "live",
+    requireConsent: false,
+  });
+  const statement = input.db.prepare(lookup.statement.sql).bind(...lookup.statement.params);
+  return Option.isSome(
+    decodeSessionLookup({ lookup, row: input.execute([statement])[0]?.results[0] })
+  );
+};
 
 const bindingMatches = (session: Option.Option<{ id: string }>, request: Request): boolean =>
   Option.isSome(session) && request.headers.get(browserSessionBindingHeader) === session.value.id;

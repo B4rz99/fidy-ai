@@ -1,3 +1,4 @@
+import type { NativeDashboardReader } from "../../dashboard/contract";
 import { DashboardView } from "../../../src/shell/dashboard/contract";
 import { renderDashboardHtml } from "../../../src/shell/dashboard/operations";
 import { browserSessionBindingResponse } from "../../web-session/operations";
@@ -1626,6 +1627,7 @@ const canonicalOrHealthResponse = (
 };
 
 type RequestExecution = Readonly<{
+  dashboard: Option.Option<NativeDashboardReader>;
   bankAuthentication: Effect.Effect<void, BancolombiaAuthenticationFailed>;
   request: Request;
   environment: CoreHttpEnvironment;
@@ -1821,8 +1823,35 @@ const dispatchCoreHttp = ({
 /** Each owner validates browser binding before dispatch; canonical admission combines it with pressure. */
 export const executeCoreHttp = (
   input: RequestExecution
-): Effect.Effect<Response, never, HttpClient.HttpClient> =>
-  initialBrowserSessionBindingResponse({
+): Effect.Effect<Response, never, HttpClient.HttpClient> => {
+  if (
+    Option.isSome(input.dashboard) &&
+    input.request.method === "GET" &&
+    new URL(input.request.url).pathname === "/dashboard/view"
+  ) {
+    const dashboard = input.dashboard.value;
+    return Effect.tryPromise(() => dashboard({ request: input.request, mode: "bound" })).pipe(
+      Effect.map((result) => {
+        const { response } = result;
+        if (result.html === undefined) {
+          return Response.json(response.body, {
+            status: response.status,
+            headers: response.headers,
+          });
+        }
+        const headers = new Headers(response.headers);
+        headers.set("content-type", "text/html; charset=utf-8");
+        headers.set("cache-control", "no-store");
+        headers.set("vary", "Accept");
+        for (const name of ["content-length", "etag", "content-encoding", "last-modified"]) {
+          headers.delete(name);
+        }
+        return new Response(result.html, { status: response.status, headers });
+      }),
+      Effect.orElseSucceed(unavailable)
+    );
+  }
+  return initialBrowserSessionBindingResponse({
     request: input.request,
     db: input.environment.DB,
     browserOrigin: input.environment.BROWSER_ORIGIN,
@@ -1830,6 +1859,7 @@ export const executeCoreHttp = (
     Effect.flatMap(Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed })),
     Effect.flatMap((response) => dashboardHtmlResponse(input.request, response))
   );
+};
 
 const dashboardHtmlResponse = (request: Request, response: Response): Effect.Effect<Response> => {
   if (

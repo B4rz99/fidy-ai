@@ -112,6 +112,10 @@
         },
         "overrides": [
           {
+            "include": ["./apps/server/cloudflare/recovery-lifecycle/internal/context.ts"],
+            "options": { "diagnosticSeverity": { "nodeBuiltinImport": "off" } }
+          },
+          {
             "include": [
               "./scripts/mcp/production-checks.ts",
               "./scripts/mcp/native-confirmation-hosts.ts",

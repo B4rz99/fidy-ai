@@ -30,7 +30,7 @@ it.live("refuses a candidate whose protected-read dependencies are absent from e
           new URL("../../apps/server/cloudflare/release-smoke-worker.ts", import.meta.url).pathname,
         ],
         target: "browser",
-        external: ["cloudflare:workers"],
+        external: ["cloudflare:workers", "node:*"],
       })
     );
     const output = bundle.outputs[0];

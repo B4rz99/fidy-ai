@@ -9,7 +9,7 @@ const moduleText = (): Promise<string> => {
   const result = Bun.build({
     entrypoints: [new URL("./adapter-worker.test-fixture.ts", import.meta.url).pathname],
     target: "browser",
-    external: ["cloudflare:workers"],
+    external: ["cloudflare:workers", "node:*"],
   }).then((result) => {
     const output = result.outputs[0];
     if (!result.success || output === undefined) throw new Error("SQLite fixture build failed");

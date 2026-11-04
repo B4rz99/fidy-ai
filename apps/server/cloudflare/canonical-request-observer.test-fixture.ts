@@ -1,3 +1,4 @@
+import { withAuthoritativeStore } from "./sqlite-store/operations";
 import { Effect, Option, Schema } from "effect";
 import { beforeEach, vi } from "vitest";
 import coreWorker, { type makeCoreWorker } from "./core-worker";
@@ -10,7 +11,7 @@ import * as insights from "./insights/operations";
 import * as browserLogin from "./browser-login/operations";
 
 type Worker = ReturnType<typeof makeCoreWorker>;
-type Database = Parameters<Worker["fetch"]>[1]["DB"];
+type Database = D1Database;
 const recordCodec = Schema.fromJsonString(
   Schema.Struct({
     operation: Schema.String,
@@ -38,7 +39,7 @@ const wrap =
       if (operation === undefined) {
         return yield* Effect.tryPromise(() => fetch(request, environment, context));
       }
-      const observed = observeBrowserCost(environment.DB);
+      const observed = observeBrowserCost(withAuthoritativeStore(environment).DB);
       let coordinatorCalls = 0;
       const coordinator = environment.USER_TRANSACTION_COORDINATOR;
       const started = performance.now();

@@ -1,3 +1,16 @@
+import type { AuthoritativeStoreEnvironment } from "./sqlite-store/contract";
+import type { RecoveryLifecycleEnvironment } from "./recovery-lifecycle/contract";
+import {
+  runRecoveryContinuation,
+  runRecoveryOperation,
+  runRecoveryQueue,
+} from "./recovery-lifecycle/operations";
+import {
+  runRecoveryContinuationFetch,
+  runRecoveryControl,
+  withRecoveryDispatch,
+  withRecoveryNativeEnvironment,
+} from "./recovery-lifecycle/runtime";
 import { withAuthoritativeStore } from "./sqlite-store/operations";
 import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { resumeErasureCases, sweepErasureControlObjects } from "./erasure/operations";
@@ -34,7 +47,7 @@ export {
 export { ProactivityDeliveryWorkflow } from "./insights/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
-type CoreEnvironment = ProviderEnvironment &
+type CoreOwnerEnvironment = ProviderEnvironment &
   WorkerTelemetryEnvironment &
   ProactivityEnvironment &
   Readonly<{ CONTRACT_DIGEST: string; RELEASE_GIT_SHA: string }> & {
@@ -97,6 +110,10 @@ type CoreEnvironment = ProviderEnvironment &
     >
   >;
 
+type CoreEnvironment = Omit<CoreOwnerEnvironment, "DB"> &
+  AuthoritativeStoreEnvironment &
+  RecoveryLifecycleEnvironment;
+
 type CoreWorker = Readonly<{
   fetch: (
     request: Request,
@@ -108,7 +125,7 @@ type CoreWorker = Readonly<{
 }>;
 
 const proactivityMaintenanceInput = (
-  environment: CoreEnvironment
+  environment: CoreOwnerEnvironment
 ): Pick<
   CoreMaintenanceInput,
   | "WEEKLY_DELIVERY_QUEUE"
@@ -144,7 +161,7 @@ const proactivityMaintenanceInput = (
     : { PROACTIVITY_PAUSE_AFTER: environment.PROACTIVITY_PAUSE_AFTER }),
 });
 
-const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput => ({
+const maintenanceInput = (environment: CoreOwnerEnvironment): CoreMaintenanceInput => ({
   ...(environment.BANCOLOMBIA_SANDBOX_CLIENT_ID === undefined
     ? {}
     : { BANCOLOMBIA_SANDBOX_CLIENT_ID: environment.BANCOLOMBIA_SANDBOX_CLIENT_ID }),
@@ -199,15 +216,17 @@ const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput =>
 class CoreMaintenanceCoordinator {
   private active: Option.Option<Promise<void>> = Option.none();
   private readonly state: Readonly<{ id: Pick<DurableObjectId, "name"> }>;
-  private readonly environment: CoreEnvironment;
-  private readonly erasureEnvironment: CoreEnvironment;
+  private readonly environment: CoreOwnerEnvironment;
+  private readonly erasureEnvironment: CoreOwnerEnvironment;
 
   constructor(
     state: Readonly<{ id: Pick<DurableObjectId, "name"> }>,
     environment: CoreEnvironment
   ) {
     this.state = state;
-    this.erasureEnvironment = withAuthoritativeStore(environment);
+    this.erasureEnvironment = withRecoveryNativeEnvironment(
+      withAuthoritativeStore(withRecoveryDispatch(environment))
+    );
     this.environment = withErasureRecovery(this.erasureEnvironment);
   }
 
@@ -297,16 +316,19 @@ class CoreMaintenanceCoordinator {
 /** Preserve the deployed native class identity; reserved maintenance never constructs User work. */
 export class UserTransactionCoordinator {
   private readonly delegate: CoreMaintenanceCoordinator | UserCoordinatorRuntime;
+  private readonly lifecycle: RecoveryLifecycleEnvironment;
 
   constructor(
     state: ConstructorParameters<typeof UserCoordinatorRuntime>[0],
     environment: CoreEnvironment,
     configuration?: ConstructorParameters<typeof UserCoordinatorRuntime>[2]
   ) {
+    this.lifecycle = environment;
+    const bindings = withRecoveryDispatch(environment);
     this.delegate =
       state.id.name === "core-maintenance-v1"
-        ? new CoreMaintenanceCoordinator(state, environment)
-        : new UserCoordinatorRuntime(state, environment, configuration);
+        ? new CoreMaintenanceCoordinator(state, bindings)
+        : new UserCoordinatorRuntime(state, bindings, configuration);
   }
 
   fetch(request: Request): Promise<Response> {
@@ -316,13 +338,44 @@ export class UserTransactionCoordinator {
     ) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
-    return this.delegate.fetch(request);
+    const delegate = this.delegate;
+    const url = new URL(request.url);
+    if (
+      delegate instanceof UserCoordinatorRuntime &&
+      request.method === "POST" &&
+      url.origin === "https://coordinator.internal" &&
+      url.search === "" &&
+      [
+        "/erasure-admit",
+        "/erasure-continue",
+        "/erasure-receipt",
+        "/erasure-custody-evidence",
+        "/erasure-restore",
+      ].includes(url.pathname)
+    ) {
+      return runRecoveryControl(() => delegate.fetch(request));
+    }
+    return runRecoveryContinuationFetch({
+      environment: this.lifecycle,
+      context: Option.some({
+        waitUntil: (work: Promise<unknown>): void => {
+          work.catch(() => undefined);
+        },
+      }),
+      work: (context) =>
+        delegate instanceof UserCoordinatorRuntime
+          ? delegate.fetchWithContext({ request, context })
+          : delegate.fetch(request),
+    });
   }
 
   alarm(): Promise<void> {
-    return this.delegate instanceof UserCoordinatorRuntime
-      ? this.delegate.alarm()
-      : Promise.resolve();
+    const delegate = this.delegate;
+    return runRecoveryContinuation({
+      environment: this.lifecycle,
+      work: () =>
+        delegate instanceof UserCoordinatorRuntime ? delegate.alarm() : Promise.resolve(),
+    });
   }
 }
 
@@ -332,32 +385,46 @@ export const makeCoreWorker = ({
 }: Parameters<typeof makeCoreHttp>[0]): CoreWorker => ({
   fetch: makeCoreHttp({ telemetry, institutions }),
   queue: (batch, environment) =>
-    makeCoreQueue(telemetry)(batch, withErasureRecovery(withAuthoritativeStore(environment))),
+    runRecoveryQueue({
+      environment,
+      batch,
+      work: () =>
+        makeCoreQueue(telemetry)(
+          batch,
+          withErasureRecovery(
+            withRecoveryNativeEnvironment(withAuthoritativeStore(withRecoveryDispatch(environment)))
+          )
+        ),
+    }),
   scheduled: (controller, environment) =>
-    Effect.gen(function* () {
-      const executor = environment.USER_TRANSACTION_COORDINATOR;
-      const response = yield* Effect.tryPromise({
-        try: (signal) =>
-          executor.getByName("core-maintenance-v1").fetch(
-            new Request("https://maintenance.invalid/tick", {
-              method: "POST",
-              headers: { "x-maintenance-scheduled-at": String(controller.scheduledTime) },
-              signal,
-            })
-          ),
-        catch: () => new ScheduledWorkFailed(),
-      });
-      const succeededStatus = 204;
-      if (response.status !== succeededStatus) return yield* new ScheduledWorkFailed();
-    }).pipe(
-      (work) =>
-        observeWorkerExecution(work, {
-          environment,
-          telemetry,
-          operation: "worker.core.scheduled",
-        }),
-      Effect.runPromise
-    ),
+    runRecoveryOperation({
+      environment,
+      work: () =>
+        Effect.gen(function* () {
+          const executor = environment.USER_TRANSACTION_COORDINATOR;
+          const response = yield* Effect.tryPromise({
+            try: (signal) =>
+              executor.getByName("core-maintenance-v1").fetch(
+                new Request("https://maintenance.invalid/tick", {
+                  method: "POST",
+                  headers: { "x-maintenance-scheduled-at": String(controller.scheduledTime) },
+                  signal,
+                })
+              ),
+            catch: () => new ScheduledWorkFailed(),
+          });
+          const succeededStatus = 204;
+          if (response.status !== succeededStatus) return yield* new ScheduledWorkFailed();
+        }).pipe(
+          (work) =>
+            observeWorkerExecution(work, {
+              environment,
+              telemetry,
+              operation: "worker.core.scheduled",
+            }),
+          Effect.runPromise
+        ),
+    }),
 });
 
 export default makeCoreWorker({

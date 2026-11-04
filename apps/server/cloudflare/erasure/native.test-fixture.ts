@@ -22,7 +22,7 @@ const build = (): Effect.Effect<string> =>
       Bun.build({
         entrypoints: [new URL("../coordinator-test-harness.ts", import.meta.url).pathname],
         target: "browser",
-        external: ["cloudflare:workers"],
+        external: ["cloudflare:workers", "node:*"],
       })
     );
     const output = result.outputs[0];

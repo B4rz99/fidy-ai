@@ -1,3 +1,5 @@
+import { runRecoveryJob } from "../recovery-lifecycle/operations";
+import type { RecoveryLifecycleEnvironment } from "../recovery-lifecycle/contract";
 import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -100,24 +102,30 @@ type StatementCoordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher
 
 /** Cloudflare stores only the bounded work identity and the named activity outcome. */
 export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
-  Readonly<{ USER_TRANSACTION_COORDINATOR: StatementCoordinator; DB: D1Database }>,
+  Readonly<{ USER_TRANSACTION_COORDINATOR: StatementCoordinator; DB: D1Database }> &
+    RecoveryLifecycleEnvironment,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return observeWorkerPromise(
-      () =>
-        runStatementExtractionWorkflow({
-          payload: event.payload,
-          coordinator: this.env.USER_TRANSACTION_COORDINATOR,
-          activity: (name, options, run) => step.do(name, options, run),
-        }),
-      {
-        environment: workerRelease(this.env),
-        telemetry: cloudflareWorkerTelemetry,
-        operation: "workflow.statementExtraction",
-        parent: workTraceParent(event.payload),
-      }
-    );
+    return runRecoveryJob({
+      environment: this.env,
+      payload: event.payload,
+      work: () =>
+        observeWorkerPromise(
+          () =>
+            runStatementExtractionWorkflow({
+              payload: event.payload,
+              coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+              activity: (name, options, run) => step.do(name, options, run),
+            }),
+          {
+            environment: workerRelease(this.env),
+            telemetry: cloudflareWorkerTelemetry,
+            operation: "workflow.statementExtraction",
+            parent: workTraceParent(event.payload),
+          }
+        ),
+    });
   }
 }
 

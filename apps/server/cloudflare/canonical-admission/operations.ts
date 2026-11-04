@@ -988,7 +988,8 @@ type BrowserSnapshotRequest = Readonly<{
   operation:
     | "categories.listCategories"
     | "transactions.listTransactions"
-    | "budgets.getBudgetStatus";
+    | "budgets.getBudgetStatus"
+    | "dashboard.getDashboardView";
   read: CanonicalBrowserRead;
 }>;
 

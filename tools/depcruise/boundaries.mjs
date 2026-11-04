@@ -48,6 +48,7 @@ const compositionRoots = new Set([
   "cloudflare/consent/browser.test.ts",
   "cloudflare/categories/keyword-rules.test.ts",
   "cloudflare/dashboard/dashboard.test.ts",
+  "cloudflare/dashboard/bound-read.test.ts",
   "cloudflare/email-authentication/retention.test.ts",
   "cloudflare/ingestion/forwarded-email.test.ts",
   "cloudflare/ingestion/statement-ingestion.test.ts",

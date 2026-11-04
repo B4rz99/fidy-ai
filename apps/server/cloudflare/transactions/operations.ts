@@ -1,3 +1,4 @@
+import { prepareSelectedDashboardLists as ownerPrepareSelectedDashboardLists } from "./internal/selected-dashboard-lists";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
 import { prepareBoundTransactionRead as ownerPrepareBoundRead } from "./internal/bound-history";
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
@@ -263,3 +264,7 @@ export const prepareReviewedCapture: typeof ownerPrepareReviewedCapture = (input
 export const readBrowserTransactionPage = (
   input: Parameters<typeof ownerReadBrowserTransactionPage>[0]
 ): ReturnType<typeof ownerReadBrowserTransactionPage> => ownerReadBrowserTransactionPage(input);
+
+/** Compose layout-selected bounded lists from authoritative effective Transactions. */
+export const prepareSelectedDashboardLists: typeof ownerPrepareSelectedDashboardLists = (input) =>
+  ownerPrepareSelectedDashboardLists(input);

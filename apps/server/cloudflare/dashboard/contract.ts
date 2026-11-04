@@ -1,3 +1,5 @@
+import type { RecoveryAdmissionEnvironment } from "../recovery-activation/contract";
+import type { AuthoritativeStoreEnvironment, SqliteStoreBinding } from "../sqlite-store/contract";
 import { CanonicalSnapshotResponse } from "../canonical-admission/contract";
 import { SqliteStoreRequest } from "../sqlite-store/contract";
 import { BrowserSessionBinding } from "../../src/shell/web-session/contract";
@@ -70,6 +72,7 @@ export const NativeDashboardResult = Schema.Union([
     binding: WebSessionId,
     bootstrap: Bootstrap,
     measurement: Measurement,
+    html: Schema.optionalKey(Schema.String),
   }),
   Schema.Struct({
     kind: Schema.Literal("response"),
@@ -92,3 +95,22 @@ export type NativeDashboardBinding = Readonly<{
 export type NativeDashboardReader = (
   input: Pick<NativeDashboardRequest, "request" | "mode">
 ) => Promise<NativeDashboardResult>;
+
+/** Trusted Core bindings select one fixed target; browser callers never provide a target or mode. */
+export type DashboardDocumentEnvironment = Omit<AuthoritativeStoreEnvironment, "SQLITE_STORE"> &
+  RecoveryAdmissionEnvironment &
+  Readonly<{ BROWSER_ORIGIN: string }> &
+  Partial<
+    Readonly<{
+      SQLITE_STORE: Readonly<{
+        getByName: (name: string) => SqliteStoreBinding & NativeDashboardBinding;
+      }>;
+    }>
+  >;
+
+export type NativeDashboardReaderConfiguration = Readonly<{
+  store: NativeDashboardBinding;
+  manifest: string;
+  epoch: string;
+  nativeCall: (execute: () => Promise<unknown>) => Promise<unknown>;
+}>;

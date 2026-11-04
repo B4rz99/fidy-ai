@@ -2,6 +2,7 @@ import { BrowserSessionBinding } from "@fidy/server/browser-bootstrap";
 import { Option, Schema } from "effect";
 
 export type InitialDashboardHtml = Readonly<{ status: number; html: string }>;
+let bootstrap = Option.none<typeof BrowserSessionBinding.Type>();
 let initial = Option.none<InitialDashboardHtml & Readonly<{ binding: string }>>();
 const Status = Schema.NumberFromString.check(
   Schema.isInt(),
@@ -10,6 +11,13 @@ const Status = Schema.NumberFromString.check(
 
 /** Capture the document's one-use transfer before React replaces the entry markup. */
 export const captureInitialDashboardHtml = (): void => {
+  const context = document.getElementById("dashboard-bootstrap");
+  if (context !== null) {
+    bootstrap = Schema.decodeOption(Schema.fromJsonString(BrowserSessionBinding))(
+      context.textContent
+    );
+    context.remove();
+  }
   const element = document.getElementById("dashboard-initial");
   if (element === null) return;
   const binding = Schema.decodeUnknownOption(BrowserSessionBinding.fields.binding)(
@@ -25,4 +33,13 @@ export const takeInitialDashboardHtml = (binding: string): Option.Option<Initial
   const available = initial;
   initial = Option.none();
   return Option.filter(available, (entry) => entry.binding === binding);
+};
+
+/** One document's live observation seeds only its first authentication lifetime. */
+export const takeInitialDocumentBootstrap = (): Option.Option<
+  typeof BrowserSessionBinding.Type
+> => {
+  const available = bootstrap;
+  bootstrap = Option.none();
+  return available;
 };

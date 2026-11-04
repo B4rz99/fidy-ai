@@ -713,3 +713,15 @@ explicit reread before another submission. Placement gestures use their currentl
 The mounted edit owner tracks callbacks and pending geometry without a foreground edit queue;
 independent tabs rely on the server's atomic revision comparison. A failed refresh disables decisions
 while preserving mounted draft inputs.
+
+### Native Dashboard document transfer
+
+The Web Worker binds only the named Core `DashboardDocumentService` for direct Dashboard documents.
+The fixed private method returns one complete audited snapshot and the matching encoded
+`BrowserSessionBinding`; its document authority is unavailable through public HTTP mode flags.
+The HTML renderer receives the native reader's decoded financial view before commit. Web escapes
+JSON `<` characters in a non-executable bootstrap script and embeds the bounded HTML into no-store
+assets. Browser startup consumes that document bootstrap once through the ordinary typed session
+client, without another binding or application-context HTTP request. Later authentication lifetimes
+and ordinary fragments retain their current-cookie checks and mounted binding. Default D1 serving
+continues through the existing Ingress composition while native target qualification is incomplete.

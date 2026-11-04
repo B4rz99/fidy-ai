@@ -1,3 +1,4 @@
+import { BrowserSessionBinding } from "~/shell/web-session/contract";
 import { Category, type CategoryId } from "~/core/categories/contract";
 import {
   AppliedDashboardPeriod,
@@ -320,3 +321,17 @@ export const DashboardHtmlApi = HttpApi.make("dashboardHtml").add(
 );
 export type DashboardHtmlApiGroups =
   typeof DashboardHtmlApi extends HttpApi.HttpApi<infer _Id, infer Groups> ? Groups : never;
+
+/** Private Web-to-Core document transfer; no HTTP endpoint accepts a document mode selector. */
+export const DashboardDocumentReply = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("legacy") }),
+  Schema.Struct({ kind: Schema.Literal("refused"), status: Schema.Int }),
+  Schema.Struct({
+    kind: Schema.Literal("snapshot"),
+    status: Schema.Int,
+    html: Schema.String,
+    headers: Schema.Record(Schema.String, Schema.String),
+    bootstrap: Schema.toEncoded(BrowserSessionBinding),
+  }),
+]);
+export type DashboardDocumentReply = typeof DashboardDocumentReply.Type;

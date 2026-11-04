@@ -4,6 +4,7 @@ import { WebSessionId } from "../../../src/core/web-session/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { DashboardDocument } from "../../../src/core/dashboard/contract";
 import { UserContext } from "../../../src/core/identity/contract";
+import { renderDashboardHtml } from "../../../src/shell/dashboard/operations";
 import { DashboardViewSnapshot } from "../../../src/shell/dashboard/contract";
 import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
 import { prepareReservedChangeCheck } from "../../../src/shell/sql-assertions/operations";
@@ -164,7 +165,11 @@ const admitSnapshot = (work: Work): Admission => {
     return recoverAdmission(work, cause);
   }
 };
-const financialSnapshot = (work: Work, subject: AuthenticatedWebSession): NativeDashboardResult => {
+const financialSnapshot = (
+  work: Work,
+  subject: AuthenticatedWebSession,
+  mode: NativeDashboardRead["input"]["mode"]
+): NativeDashboardResult => {
   const { current, sql } = work;
   const retained = retainedDashboard(work);
   const document = Option.isSome(retained) ? retained.value.document : undefined;
@@ -213,6 +218,7 @@ const financialSnapshot = (work: Work, subject: AuthenticatedWebSession): Native
     response,
     binding: Schema.decodeSync(WebSessionId)(subject.id),
     measurement: facts.measurement,
+    ...(mode === "document" ? { html: renderDashboardHtml(facts.view) } : {}),
   };
 };
 const snapshot = (
@@ -238,7 +244,10 @@ const snapshot = (
           ),
         })
       : undefined;
-  return { ...financialSnapshot(work, subject), ...(bootstrap === undefined ? {} : { bootstrap }) };
+  return {
+    ...financialSnapshot(work, subject, mode),
+    ...(bootstrap === undefined ? {} : { bootstrap }),
+  };
 };
 const validate = (result: NativeDashboardResult): NativeDashboardResult => {
   if (new TextEncoder().encode(encodeResult(result)).byteLength > maximumResultBytes) {

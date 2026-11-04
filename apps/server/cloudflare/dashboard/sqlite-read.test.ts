@@ -12,45 +12,55 @@ const userId = "10000000-0000-4000-8000-000000000001";
 const sessionId = "60000000-0000-4000-8000-000000000001";
 const io = <A>(work: () => Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(work);
-const setup = Effect.gen(function* () {
-  const fixture = yield* io(() => storage.acquire());
-  const { db, bucket } = fixture;
-  yield* io(() => installTestSchema({ db }));
-  yield* io(() => bucket.put("recovery/generation", "initial"));
-  const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
-  const digest = new Uint8Array(
-    yield* io(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode("c".repeat(43))))
-  );
-  yield* io(() =>
-    db.batch([
-      db
-        .prepare(
-          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
-        )
-        .bind(userId, current),
-      db
-        .prepare(
-          "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?,'BCDF-GHJK',?,?,'consumed',?,?)"
-        )
-        .bind(sessionId, digest, userId, current, current + 600000),
-      db
-        .prepare(
-          "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)"
-        )
-        .bind(
-          sessionId,
-          sessionId,
-          userId,
-          digest,
-          current,
-          current + 600000,
-          current + 3600000,
-          current + 7776000000
-        ),
-    ])
-  );
-  return { ...fixture, current };
-});
+const setupOn = (
+  acquire: () => ReturnType<typeof storage.acquire>
+): ReturnType<typeof setupEffect> => setupEffect(acquire);
+const setupEffect = (
+  acquire: () => ReturnType<typeof storage.acquire>
+): Effect.Effect<
+  Awaited<ReturnType<typeof storage.acquire>> & Readonly<{ current: number }>,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    const fixture = yield* io(acquire);
+    const { db, bucket } = fixture;
+    yield* io(() => installTestSchema({ db }));
+    yield* io(() => bucket.put("recovery/generation", "initial"));
+    const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
+    const digest = new Uint8Array(
+      yield* io(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode("c".repeat(43))))
+    );
+    yield* io(() =>
+      db.batch([
+        db
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+          )
+          .bind(userId, current),
+        db
+          .prepare(
+            "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?,'BCDF-GHJK',?,?,'consumed',?,?)"
+          )
+          .bind(sessionId, digest, userId, current, current + 600000),
+        db
+          .prepare(
+            "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+          )
+          .bind(
+            sessionId,
+            sessionId,
+            userId,
+            digest,
+            current,
+            current + 600000,
+            current + 3600000,
+            current + 7776000000
+          ),
+      ])
+    );
+    return { ...fixture, current };
+  });
+const setup = setupOn(() => storage.acquire());
 const request = (
   identity: Readonly<{ cookie: string; session: string }> = {
     cookie: "c".repeat(43),
@@ -769,5 +779,62 @@ it.live(
       expect(
         yield* io(() => fixture.db.prepare("SELECT count(*) AS count FROM audit_entries").first())
       ).toEqual({ count: 0 });
+    })
+);
+
+it.live(
+  "uses the named private document entry without granting document mode to fragments or alternate bearers",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* setupOn(() => storage.acquireDocument());
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "INSERT INTO user_documents(kind,user_id,document_json,revision) VALUES ('dashboard',?,?,23)"
+          )
+          .bind(
+            userId,
+            encodeJson({
+              title: "<Documento>",
+              layout: {
+                kind: "leaf",
+                widget: {
+                  id: "30000000-0000-4000-8000-000000000001",
+                  type: "custom-metric",
+                  label: "Gastos",
+                  period: "this-month",
+                  aggregation: "sum",
+                },
+              },
+            })
+          )
+          .run()
+      );
+      const headers = request().headers;
+      headers.set("authorization", "Bearer alternate-user");
+      headers.set(browserSessionBindingHeader, "60000000-0000-4000-8000-000000000099");
+      headers.set("origin", "https://foreign.test");
+      const incoming = new Request("https://app.fidy.test/app/dashboard", { headers });
+      const transfer = yield* io(() => fixture.document(incoming));
+      expect(transfer).toMatchObject({
+        kind: "snapshot",
+        status: 200,
+        bootstrap: { binding: sessionId, initial: { status: "Missing" } },
+      });
+      const rendered = yield* Schema.decodeUnknownEffect(Schema.Struct({ html: Schema.String }))(
+        transfer
+      );
+      expect(rendered.html).toContain("&lt;Documento&gt;");
+      expect(
+        yield* io(() =>
+          fixture.snapshot({
+            request: request({
+              cookie: "c".repeat(43),
+              session: "60000000-0000-4000-8000-000000000099",
+            }),
+            mode: "bound",
+          })
+        )
+      ).toMatchObject({ kind: "response", response: { status: 401 } });
     })
 );

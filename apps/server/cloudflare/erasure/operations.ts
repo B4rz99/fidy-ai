@@ -1,3 +1,5 @@
+import { verifyImported } from "./internal/imported-checkpoint";
+import type { ErasureImportedCheckpoint, ErasureImportedInput } from "./contract";
 import { preservePendingAdmissions } from "./internal/pending-admissions";
 import { initializeRegistryStorage } from "./internal/registry-initialization";
 import { sweepControlObjects } from "./internal/control-objects";
@@ -295,3 +297,7 @@ export const reconcileErasureAdmissions = (
 export const prepareClosedSourceGenerationFence = (
   input: Readonly<{ db: D1Database; generation: typeof ErasureGeneration.Type }>
 ): D1PreparedStatement => generationAssertion(input);
+/** Target-only frozen import verification; source generation and provider claims remain unchanged. */
+export const verifyImportedErasureCheckpoint = (
+  input: ErasureImportedInput
+): Effect.Effect<ErasureImportedCheckpoint, ErasureUnavailable> => verifyImported(input);

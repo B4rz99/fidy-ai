@@ -101,3 +101,35 @@ does not prove that a namespace never had restore capabilities. Fresh serving na
 and reviewed historical code provenance, disabled version URLs, staged drain and the final external
 checkpoint remain independent requirements. Never treat retirement alone as permission to close
 continuation admission or open serving admission.
+
+## Verifying a frozen import's erasure checkpoint
+
+`verifyImportedErasureCheckpoint` is an Erasure-owned private composition seam for the fresh
+inactive SQLite target. It accepts the native bootstrap capability from
+`makeSqliteBootstrapTarget`, the closed-source evidence and the fixed independent registry. The
+capability derives its actual object identity from the native state and rechecks the deployment
+manifest/epoch, absent seal, closed admission and completed import phase before each native SQL
+unit. A D1 source handle cannot be supplied as this native storage target. Equal source/target
+objects, namespaces or epochs refuse verification, including an equal actual object with a
+conflicting namespace label.
+
+Each invocation reads at most four sealed ledger cases, checks their same-User request identity,
+completed financial deletion steps, absent User and absent writer records, and records bounded progress
+with R2 compare-and-swap outside the imported database. The checkpoint binds the actual target,
+artifact digest and digest of the complete closed-source evidence. Lost replies resume from
+independently read progress; completing a checkpoint starts a fresh pass on repetition. Existing
+custody events, provider claims and external-pending dispositions remain unchanged. Unsealed
+cases, missing ledger membership, incomplete deletion or changed independent generation/ETag
+remain blocked.
+
+The ledger digest starts with SHA-256 of the UTF-8 string `fidy-erasure-ledger-v1`. In strictly
+increasing key order, each next digest is SHA-256 of the compact JSON string array containing
+`[previousDigest, key, objectEtag, SHA256(rawCaseBody)]`. The final source controller must bind this
+exact digest and the stable final generation/ETag into its evidence. After the complete native
+verification matches that evidence, only the inactive target's published generation advances;
+the retired source retains its old generation and recovery fence.
+
+The result remains `providerIsolation: Unqualified`. This seam neither produces the independent
+closed-source proof nor opens a Store. The production closed-source accessor currently refuses
+all requests while the complete provider floor, final source reconciliation and activation
+producer remain unfinished. Local verification cannot replace those requirements.

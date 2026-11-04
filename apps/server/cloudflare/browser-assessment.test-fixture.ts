@@ -268,7 +268,7 @@ export const seedAssessment = Effect.fn(function* ({
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES (?,'dashboard',?,1)"
+            "INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES (?,'dashboard',?,1) ON CONFLICT(user_id,kind) DO NOTHING"
           )
           .bind(user, document)
           .run()

@@ -36,16 +36,47 @@ export const openDashboardThroughCore = (page: Page): Promise<void> =>
       });
   });
 
-/** Existing feature journeys explicitly create an absent Dashboard through its visible action. */
-export const createDashboardIfAbsent = (page: Page): Promise<void> => {
-  const create = page.getByRole("button", { name: "Crear tablero", exact: true });
+const dashboardSetupAttempts = 3;
+const dashboardSetupReadTimeoutMilliseconds = 15_000;
+const recoverDashboardRead = Effect.fn(function* (page: Page, allowCreate: boolean) {
   const customize = page.getByRole("button", { name: "Personalizar", exact: true });
-  return expect(create.or(customize))
-    .toBeVisible()
-    .then(() => create.isVisible())
-    .then((absent) => (absent ? create.click() : undefined))
-    .then(() => expect(customize).toBeEnabled());
-};
+  const ready = allowCreate
+    ? customize.or(page.getByRole("button", { name: "Crear tablero", exact: true }))
+    : customize;
+  const retry = page.getByRole("button", { name: "Reintentar carga del tablero", exact: true });
+  const failedCreation = page
+    .getByRole("alert")
+    .filter({ hasText: "No pudimos crear tu tablero." });
+  for (let attempt = 0; attempt < dashboardSetupAttempts; attempt++) {
+    yield* Effect.tryPromise(() =>
+      expect(ready.or(retry).or(failedCreation)).toBeVisible({
+        timeout: dashboardSetupReadTimeoutMilliseconds,
+      })
+    );
+    expect(yield* Effect.tryPromise(() => failedCreation.count())).toBe(0);
+    if (!(yield* Effect.tryPromise(() => retry.isVisible()))) return;
+    yield* Effect.tryPromise(() => retry.click());
+  }
+  yield* Effect.tryPromise(() => expect(ready).toBeVisible());
+});
+
+/** Create once; let the typed client own non-admission pacing and recover only reads through visible controls. */
+export const createDashboardIfAbsent = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* recoverDashboardRead(page, true);
+      const create = page.getByRole("button", { name: "Crear tablero", exact: true });
+      if (yield* Effect.tryPromise(() => create.isVisible())) {
+        yield* Effect.tryPromise(() => create.click());
+        yield* recoverDashboardRead(page, false);
+      }
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Personalizar", exact: true })).toBeEnabled({
+          timeout: dashboardSetupReadTimeoutMilliseconds,
+        })
+      );
+    })
+  );
 
 /** The browser obtains a WebSession only from real Core redemption, never from a route mock. */
 export const visiblePairingCode = (page: Page): Promise<string> =>

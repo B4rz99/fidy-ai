@@ -2,12 +2,17 @@ import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { playwright } from "./playwright-runtime";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
-import { signInDashboardPerformanceThroughCore } from "./real-core-fixture";
+import {
+  createDashboardIfAbsent,
+  openDashboardThroughCore,
+  signInDashboardPerformanceThroughCore,
+} from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const { operator } = browserAcceptanceTopology();
 const successStatus = 200;
 const noContentStatus = 204;
+const resourceLimitedStatus = 429;
 
 const refuseDashboard = (route: Route): Promise<void> =>
   route.fulfill({
@@ -225,5 +230,114 @@ test("a superseded Dashboard transfer cannot replace a later mounted visit", ({ 
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("heading", { name: "Visita obsoleta", exact: true })).toHaveCount(0)
       );
+    })
+  ));
+
+const refuseFirstRead =
+  (state: { reads: number }): ((route: Route) => Promise<void>) =>
+  (route) => {
+    state.reads++;
+    return state.reads === 1 ? refuseDashboard(route) : route.continue();
+  };
+const refuseFirstInitialization =
+  (state: { attempts: number; committed: number }): ((route: Route) => Promise<void>) =>
+  (route) => {
+    state.attempts++;
+    if (state.attempts === 1) {
+      return route.fulfill({
+        status: resourceLimitedStatus,
+        headers: { "retry-after": "1" },
+        json: {
+          _tag: "ResourceLimited",
+          error: { code: "rate_limited", message: "Try again later.", retryAfterSeconds: 1 },
+          next: [],
+        },
+      });
+    }
+    return route.fetch({ maxRetries: 0 }).then((response) => {
+      if (response.status() === successStatus) state.committed++;
+      else expect(response.status()).toBe(resourceLimitedStatus);
+      return route.fulfill({ response });
+    });
+  };
+const unavailableInitialization =
+  (state: { attempts: number }): ((route: Route) => Promise<void>) =>
+  (route) => {
+    state.attempts++;
+    return refuseDashboard(route);
+  };
+
+test("recovers a refused post-creation Dashboard read without repeating initialization", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(
+        (yield* Effect.tryPromise(() =>
+          request.post(`${operator}/dashboard/reset?dashboard=true`)
+        )).status()
+      ).toBe(noContentStatus);
+      yield* Effect.tryPromise(() => signInDashboardPerformanceThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+      let initializations = 0;
+      const state = { reads: 0 };
+      page.on("response", (response) => {
+        if (
+          new URL(response.url()).pathname === "/dashboard/initialize" &&
+          response.status() === successStatus
+        ) {
+          initializations++;
+        }
+      });
+      yield* Effect.tryPromise(() => page.route("**/dashboard/view", refuseFirstRead(state)));
+      yield* Effect.tryPromise(() => createDashboardIfAbsent(page));
+      expect(initializations).toBe(1);
+      expect(state.reads).toBeGreaterThanOrEqual(2);
+    })
+  ));
+
+test("handles a decoded non-admission during creation without duplicating committed work", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(
+        (yield* Effect.tryPromise(() =>
+          request.post(`${operator}/dashboard/reset?dashboard=true`)
+        )).status()
+      ).toBe(noContentStatus);
+      yield* Effect.tryPromise(() => signInDashboardPerformanceThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+      const state = { attempts: 0, committed: 0 };
+      yield* Effect.tryPromise(() =>
+        page.route("**/dashboard/initialize", refuseFirstInitialization(state))
+      );
+      yield* Effect.tryPromise(() => createDashboardIfAbsent(page));
+      expect(state.attempts).toBeGreaterThanOrEqual(2);
+      expect(state.committed).toBe(1);
+    })
+  ));
+
+test("does not replay an unavailable Dashboard creation while recovering setup", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(
+        (yield* Effect.tryPromise(() =>
+          request.post(`${operator}/dashboard/reset?dashboard=true`)
+        )).status()
+      ).toBe(noContentStatus);
+      yield* Effect.tryPromise(() => signInDashboardPerformanceThroughCore({ page, request }));
+      yield* Effect.tryPromise(() => openDashboardThroughCore(page));
+      const state = { attempts: 0 };
+      yield* Effect.tryPromise(() =>
+        page.route("**/dashboard/initialize", unavailableInitialization(state))
+      );
+      yield* Effect.tryPromise(() => expect(createDashboardIfAbsent(page)).rejects.toThrow());
+      expect(state.attempts).toBe(1);
     })
   ));

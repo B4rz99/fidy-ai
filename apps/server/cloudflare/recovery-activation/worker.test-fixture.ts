@@ -5,7 +5,11 @@ export { RecoveryAdmissionGate } from "./runtime";
 
 const Command = Schema.Union([
   Schema.Struct({ action: Schema.Literal("inspect") }),
-  Schema.Struct({ action: Schema.Literals(["enter", "complete"]), input: RecoveryLease }),
+  Schema.Struct({
+    action: Schema.Literals(["enter", "complete", "enterContinuation"]),
+    input: RecoveryLease,
+  }),
+  Schema.Struct({ action: Schema.Literal("pause"), input: RecoveryClose }),
   Schema.Struct({ action: Schema.Literal("close"), input: RecoveryClose }),
 ]);
 export default {
@@ -22,8 +26,8 @@ export default {
         if (command.action === "inspect") {
           return Response.json(yield* Effect.tryPromise(() => gate.inspect()));
         }
-        if (command.action === "close") {
-          return Response.json(yield* Effect.tryPromise(() => gate.close(command.input)));
+        if (command.action === "pause" || command.action === "close") {
+          return Response.json(yield* Effect.tryPromise(() => gate[command.action](command.input)));
         }
         return Response.json(yield* Effect.tryPromise(() => gate[command.action](command.input)));
       })

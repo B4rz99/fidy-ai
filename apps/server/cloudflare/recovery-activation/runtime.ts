@@ -6,15 +6,23 @@ const State = Schema.Struct({
   epoch: Schema.String,
   activationId: Schema.String,
   closed: Schema.Boolean,
+  paused: Schema.Boolean,
 });
 type GateEnvironment = Readonly<{ RECOVERY_SOURCE_EPOCH: string }>;
 
 /** Independent of every recoverable database. Unknown crashed leases never expire into permission. */
 export class RecoveryAdmissionGate extends DurableObject<GateEnvironment> {
   #state(): typeof State.Type {
-    const stored = Schema.decodeUnknownOption(State)(this.ctx.storage.kv.get("admission"));
-    if (Option.isSome(stored)) return stored.value;
-    const initial = { epoch: this.env.RECOVERY_SOURCE_EPOCH, activationId: "", closed: false };
+    const stored = this.ctx.storage.kv.get("admission");
+    if (stored !== undefined) {
+      return Schema.decodeUnknownSync(State, { onExcessProperty: "error" })(stored);
+    }
+    const initial = Schema.decodeSync(State)({
+      epoch: this.env.RECOVERY_SOURCE_EPOCH,
+      activationId: "",
+      closed: false,
+      paused: false,
+    });
     this.ctx.storage.kv.put("admission", initial);
     return initial;
   }
@@ -34,6 +42,15 @@ export class RecoveryAdmissionGate extends DurableObject<GateEnvironment> {
   }
 
   enter(candidate: unknown): boolean {
+    return this.#enter(candidate, false);
+  }
+
+  /** Native Queue, Workflow and private coordinator entries still require their owning job authority; this only admits their captured epoch while publishers are paused. */
+  enterContinuation(candidate: unknown): boolean {
+    return this.#enter(candidate, true);
+  }
+
+  #enter(candidate: unknown, continuation: boolean): boolean {
     return this.ctx.storage.transactionSync(() => {
       const request = Schema.decodeUnknownOption(RecoveryLease, { onExcessProperty: "error" })(
         candidate
@@ -42,6 +59,7 @@ export class RecoveryAdmissionGate extends DurableObject<GateEnvironment> {
       if (
         Option.isNone(request) ||
         state.closed ||
+        (!continuation && state.paused) ||
         request.value.epoch !== state.epoch ||
         state.epoch !== this.env.RECOVERY_SOURCE_EPOCH
       ) {
@@ -76,7 +94,15 @@ export class RecoveryAdmissionGate extends DurableObject<GateEnvironment> {
     });
   }
 
+  pause(candidate: unknown): RecoveryAdmissionState {
+    return this.#transition(candidate, false);
+  }
+
   close(candidate: unknown): RecoveryAdmissionState {
+    return this.#transition(candidate, true);
+  }
+
+  #transition(candidate: unknown, close: boolean): RecoveryAdmissionState {
     return this.ctx.storage.transactionSync(() => {
       const request = Schema.decodeUnknownSync(RecoveryClose, { onExcessProperty: "error" })(
         candidate
@@ -84,14 +110,15 @@ export class RecoveryAdmissionGate extends DurableObject<GateEnvironment> {
       const state = this.inspect();
       if (
         request.epoch !== state.epoch ||
-        (state.closed && request.activationId !== state.activationId)
+        (state.activationId !== "" && request.activationId !== state.activationId)
       ) {
         throw new Error("Recovery admission refused");
       }
       this.ctx.storage.kv.put("admission", {
         epoch: state.epoch,
         activationId: request.activationId,
-        closed: true,
+        paused: true,
+        closed: state.closed || close,
       });
       return this.inspect();
     });

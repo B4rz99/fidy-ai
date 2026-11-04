@@ -42,11 +42,14 @@ export const RecoveryAdmissionState = Schema.Struct({
   epoch: Schema.String,
   activationId: Schema.String,
   closed: Schema.Boolean,
+  paused: Schema.Boolean,
   leases: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 export type RecoveryAdmissionState = typeof RecoveryAdmissionState.Type;
 export type RecoveryAdmissionBinding = Readonly<{
   inspect: () => Promise<unknown>;
+  pause: (input: typeof RecoveryClose.Type) => Promise<unknown>;
+  enterContinuation: (input: typeof RecoveryLease.Type) => Promise<boolean>;
   enter: (input: typeof RecoveryLease.Type) => Promise<boolean>;
   complete: (input: typeof RecoveryLease.Type) => Promise<boolean>;
   close: (input: typeof RecoveryClose.Type) => Promise<unknown>;

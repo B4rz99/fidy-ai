@@ -36,3 +36,48 @@ it.effect(
       });
     }).pipe(Effect.scoped)
 );
+
+it.effect(
+  "pauses publishers while an earlier native queued job can still settle before final closure",
+  () =>
+    Effect.gen(function* () {
+      const gate = yield* nativeRecoveryAdmission;
+      const queuedJob = { epoch: "source-epoch", leaseId: "accepted-before-pause" };
+      yield* Effect.tryPromise(() =>
+        gate.pause({ epoch: queuedJob.epoch, activationId: "activation" })
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          gate.enter({ epoch: queuedJob.epoch, leaseId: "new-publisher" })
+        )
+      ).toBe(false);
+      expect(
+        yield* Effect.tryPromise(() => gate.enterContinuation({ ...queuedJob, epoch: "stale" }))
+      ).toBe(false);
+      expect(yield* Effect.tryPromise(() => gate.enterContinuation(queuedJob))).toBe(true);
+      expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({
+        paused: true,
+        closed: false,
+        leases: 1,
+      });
+      expect(yield* Effect.tryPromise(() => gate.complete(queuedJob))).toBe(true);
+      expect(yield* Effect.tryPromise(() => gate.inspect())).toMatchObject({
+        paused: true,
+        closed: false,
+        leases: 0,
+      });
+      yield* Effect.tryPromise(() =>
+        gate.close({ epoch: queuedJob.epoch, activationId: "activation" })
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          gate.enterContinuation({ ...queuedJob, leaseId: "late-job" })
+        )
+      ).toBe(false);
+      expect(
+        yield* Effect.tryPromise(() =>
+          gate.enter({ epoch: queuedJob.epoch, leaseId: "late-publisher" })
+        )
+      ).toBe(false);
+    }).pipe(Effect.scoped)
+);

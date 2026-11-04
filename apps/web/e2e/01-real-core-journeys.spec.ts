@@ -8,6 +8,7 @@ import { playwright } from "./playwright-runtime";
 import {
   boundSessionRequests,
   browserSessionHeaders,
+  openDashboardThroughCore,
   openUpgradeThroughCore,
   probeCanonicalRequest,
   reloadTransactionsThroughCore,
@@ -20,7 +21,7 @@ import {
 
 const { expect, test } = playwright;
 
-const { api, app: appOrigin, operator } = browserAcceptanceTopology();
+const { api: coreOrigin, app: api, app: appOrigin, operator } = browserAcceptanceTopology();
 const ok = 200;
 const created = 201;
 const forbidden = 403;
@@ -208,6 +209,11 @@ const assertUnderScopedBrowser = (
       );
     })
   );
+const expectUninitializedDashboard = (page: Page): Promise<void> =>
+  expect(page.getByRole("heading", { name: "Tu tablero", exact: true })).toBeVisible({
+    timeout: canonicalRecoveryMilliseconds,
+  });
+
 test("fresh and concurrent Dashboard first use explicitly initializes through authoritative Core queries", ({
   page,
   request,
@@ -232,6 +238,16 @@ test("fresh and concurrent Dashboard first use explicitly initializes through au
         Promise.all([page.goto("/app/dashboard"), other.goto("/app/dashboard")])
       );
       yield* fromPlaywright(
+        Promise.all([expectUninitializedDashboard(page), expectUninitializedDashboard(other)])
+      );
+      expect(initializeCalls).toHaveLength(0);
+      yield* fromPlaywright(
+        Promise.all([
+          page.getByRole("button", { name: "Crear tablero", exact: true }).click(),
+          other.getByRole("button", { name: "Crear tablero", exact: true }).click(),
+        ])
+      );
+      yield* fromPlaywright(
         expect(page.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible({
           timeout: canonicalRecoveryMilliseconds,
         })
@@ -246,7 +262,7 @@ test("fresh and concurrent Dashboard first use explicitly initializes through au
       const before = yield* inspectCanonicalSnapshot(page, `${api}/dashboard`);
       expect(before.status).toBe(ok);
       const countBefore = initializeCalls.length;
-      yield* fromPlaywright(page.reload());
+      yield* fromPlaywright(openDashboardThroughCore(page));
       yield* fromPlaywright(
         expect(page.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible()
       );
@@ -266,7 +282,7 @@ const startPatPairing = Effect.fnUntraced(function* (page: Page, request: APIReq
     })
   );
   const started = yield* fromPlaywright(
-    request.post(`${api}/pat-pairings`, {
+    request.post(`${coreOrigin}/pat-pairings`, {
       data: {
         recipientLabel: "Agente emparejado",
         scopes: ["write"],
@@ -320,7 +336,7 @@ test("reviews a real PATPairing and presents its under-scoped Core refusal witho
         privateDeviceCode
       );
       const claimed = yield* fromPlaywright(
-        request.post(`${api}/pat-pairings/claim`, {
+        request.post(`${coreOrigin}/pat-pairings/claim`, {
           data: {
             pairingId,
             privateDeviceCode,

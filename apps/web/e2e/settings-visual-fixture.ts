@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { Effect } from "effect";
-import { apiOrigin, installUser, response } from "./http-fixtures";
+import { apiOrigin, installUser, response, routeBrowserApi } from "./http-fixtures";
 
 const successStatus = 200;
 const refusalStatus = 405;
@@ -46,7 +46,7 @@ export const installSettingsReads = Effect.fnUntraced(function* (page: Page) {
   const mutations: Array<string> = [];
   const missingReads: Array<string> = [];
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/**`, (route) => {
+    routeBrowserApi(page, `${apiOrigin}/**`, (route) => {
       const path = new URL(route.request().url()).pathname;
       const body = reads.get(path);
       if (body === undefined) missingReads.push(path);
@@ -59,7 +59,7 @@ export const installSettingsReads = Effect.fnUntraced(function* (page: Page) {
   );
   yield* Effect.tryPromise(() => installUser(page));
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/**`, (route) => {
+    routeBrowserApi(page, `${apiOrigin}/**`, (route) => {
       const method = route.request().method();
       if (method === "GET" || method === "HEAD" || method === "OPTIONS") return route.fallback();
       mutations.push(`${method} ${new URL(route.request().url()).pathname}`);

@@ -213,6 +213,7 @@ export class ActiveStoreProof extends AuthoritativeSqliteStore {
   }
 }
 export { AuthoritativeSqliteStore };
+export { DashboardDocumentService } from "../dashboard/runtime";
 const targetProof = (configuration: AuthoritativeStoreEnvironment): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -233,6 +234,7 @@ const targetProof = (configuration: AuthoritativeStoreEnvironment): Promise<Resp
 
 type AdapterEnvironment = {
   DB: D1Database;
+  DOCUMENTS: Readonly<{ readDashboardDocument: (request: Request) => Promise<unknown> }>;
   PROOF: DurableObjectNamespace;
   STORE: DurableObjectNamespace<ActiveStoreProof>;
   INACTIVE: DurableObjectNamespace<AuthoritativeSqliteStore>;
@@ -299,11 +301,28 @@ const dashboardRequest = (request: Request, env: AdapterEnvironment): Promise<Re
       })
     )
     .then((value) => Response.json(value));
+const snapshotPaths = new Set(["/dashboard-snapshot", "/document-entry"]);
+const snapshotRequest = ({
+  request,
+  env,
+  path,
+}: Readonly<{ request: Request; env: AdapterEnvironment; path: string }>): Promise<Response> => {
+  if (path === "/dashboard-snapshot") return dashboardRequest(request, env);
+  return request
+    .json()
+    .then(Schema.decodeUnknownSync(SnapshotFixture))
+    .then((input) =>
+      env.DOCUMENTS.readDashboardDocument(
+        new Request(input.url, { method: input.method, headers: input.headers })
+      )
+    )
+    .then((result) => Response.json(result));
+};
 const queryPaths = new Set(["/rpc", "/inactive"]);
 export default {
   fetch: (request: Request, env: AdapterEnvironment): Promise<Response> => {
     const path = new URL(request.url).pathname;
-    if (path === "/dashboard-snapshot") return dashboardRequest(request, env);
+    if (snapshotPaths.has(path)) return snapshotRequest({ request, env, path });
     if (path.startsWith("/control/")) return controlRequest({ env, request, path });
     if (path.startsWith("/target/")) return targetRequest({ env, path });
     if (path === "/inspect-d1") {

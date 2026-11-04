@@ -353,8 +353,13 @@ guarded DashboardView. Rendering happens after authorization, recovery admission
 composition and Audit; refusals keep their existing structured status. No partial financial view is
 released. All four Widget types retain exact Money text, Currency grouping, periods and local-time
 links. Dimensionless chart/progress geometry alone uses bounded numeric ratios. The browser Web
-Worker composes this representation into direct documents through public Ingress; it has no private
-Core capability. The full guarded reader remains until a separately qualified native reader covers
+Worker also has a named `DashboardDocumentService` binding whose fixed document method strips
+alternate bearer and mounted binding headers, derives raw cookie authority and returns matching
+initial browser context. Public default fetch cannot select this mode. The isolated SQLite target
+composes current Consent, User display metadata, categories, session renewal, financial projection
+and both Audits in the same native transaction. Its fresh R2 generation fence remains required.
+The default D1 target reports legacy composition without reading the database at this entry;
+ordinary Ingress still provides its guarded representation. The full guarded reader remains until a separately qualified native reader covers
 all financial semantics.
 
 The recovery activation operator owns an independent `RecoveryAdmissionGate` SQLite Durable

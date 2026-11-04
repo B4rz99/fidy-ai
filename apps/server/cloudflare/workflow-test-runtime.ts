@@ -4,3 +4,12 @@ export class WorkflowEntrypoint<Environment, _Parameters> {
     this.env = env;
   }
 }
+
+export class WorkerEntrypoint<Environment> {
+  readonly env: Environment;
+  readonly ctx: unknown;
+  constructor(context: unknown, env: Environment) {
+    this.ctx = context;
+    this.env = env;
+  }
+}

@@ -15,6 +15,7 @@ const bootstrapModules = [
   "/apps/server/src/shell/browser-transport/operations.ts",
   "/apps/web/src/transport/origin.ts",
   "/apps/web/src/transport/initial-request.ts",
+  "/apps/web/src/transport/initial-dashboard-document.ts",
   "/apps/web/src/session/initial-request.ts",
   "/apps/web/src/session/authentication-channel.ts",
 ];

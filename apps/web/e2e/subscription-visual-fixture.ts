@@ -7,7 +7,7 @@ import {
   type SubscriptionOffers,
   type SubscriptionStatus,
 } from "@fidy/server/client";
-import { apiOrigin, installUser, makeUser, response } from "./http-fixtures";
+import { apiOrigin, installUser, makeUser, response, routeBrowserApi } from "./http-fixtures";
 
 const successStatus = 200;
 const missingStatus = 404;
@@ -271,7 +271,7 @@ const apiMutation = (route: Route, fixture: Fixture): Promise<void> => {
 const installApiFixture = Effect.fnUntraced(function* (page: Page, fixture: Fixture) {
   const reads = fixtureReads(fixture);
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/**`, (route) => {
+    routeBrowserApi(page, `${apiOrigin}/**`, (route) => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (request.method() !== "GET") return apiMutation(route, fixture);

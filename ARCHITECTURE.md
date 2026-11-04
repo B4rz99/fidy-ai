@@ -90,7 +90,9 @@ Domain terms belong in [GLOSSARY.md](GLOSSARY.md), coding and storage convention
 The Web Worker owns app documents and static assets. It forwards only declared browser/public
 method/path pairs through a fixed Ingress service binding. App-host session bootstrap and redemption
 retain the host-only `__Host-fidy_session` cookie; no cookie Domain or cross-origin bearer bridge is
-introduced. Direct Dashboard documents compose the guarded public HTML representation into assets;
-in-app visits request the same representation as a fragment. External canonical API clients retain
+introduced. Direct Dashboard documents can use a named private Core service binding to receive an audited
+HTML snapshot with its same-transaction browser bootstrap. Public Core fetch cannot select document
+mode. The default D1 topology retains the guarded public HTML composition until native storage is
+qualified; in-app visits retain their mounted-session fragment request. External canonical API clients retain
 Ingress access and the structured contract. See the application architecture documents for lifecycle,
 output bounds, explicit initialization and editor draft ownership.

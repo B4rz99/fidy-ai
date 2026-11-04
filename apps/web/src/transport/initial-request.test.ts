@@ -1,5 +1,6 @@
+import { captureInitialDashboardHtml, takeInitialDashboardHtml } from "./initial-dashboard";
 import { afterEach, expect, it, vi } from "vitest";
-import { Effect, Exit, Option } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import { beginInitialBrowserRequest, initialRequestFetch } from "./initial-request";
 import { loadBrowserSessionEntry } from "./session-binding";
 
@@ -78,6 +79,84 @@ it("still rejects malformed prepared responses through the ordinary declared res
       );
       expect(Exit.isFailure(result)).toBe(true);
       expect(network).toHaveBeenCalledTimes(1);
+      request.cancel();
+    })
+  ));
+
+it("consumes the audited document bootstrap once without another HTTP binding or context request", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const binding = "10000000-0000-4000-8000-000000000061";
+      const network = vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValue(Response.json({ binding: null }));
+      vi.stubGlobal("fetch", network);
+      vi.stubGlobal("document", {
+        getElementById: (id: string) =>
+          id === "dashboard-bootstrap"
+            ? {
+                remove: (): void => undefined,
+                textContent: Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json))({
+                  binding,
+                  initial: { status: "Missing", withdrawal: null },
+                }),
+              }
+            : { dataset: { binding, status: "200" }, innerHTML: "<main>native view</main>" },
+      });
+      captureInitialDashboardHtml();
+      const request = beginInitialBrowserRequest({
+        apiOrigin: origin,
+        context: true,
+        transactions: false,
+      });
+      const result = yield* loadBrowserSessionEntry({
+        apiOrigin: origin,
+        context: true,
+        request: Option.some(request),
+      });
+      expect(result).toMatchObject({
+        binding,
+        initial: Option.some({ status: "Missing", withdrawal: null }),
+      });
+      expect(network).toHaveBeenCalledTimes(0);
+      expect(takeInitialDashboardHtml(binding)).toEqual(
+        Option.some({ binding, status: 200, html: "<main>native view</main>" })
+      );
+      request.cancel();
+      beginInitialBrowserRequest({
+        apiOrigin: origin,
+        context: false,
+        transactions: false,
+      }).cancel();
+      expect(network).toHaveBeenCalledTimes(1);
+    })
+  ));
+
+it("refuses malformed document bootstrap through the ordinary response codec before granting a session", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const network = vi.fn<typeof globalThis.fetch>();
+      vi.stubGlobal("fetch", network);
+      vi.stubGlobal("document", {
+        getElementById: (id: string) =>
+          id === "dashboard-bootstrap"
+            ? {
+                remove: (): void => undefined,
+                textContent: '{"binding":"forged-session"}',
+              }
+            : null,
+      });
+      captureInitialDashboardHtml();
+      const request = beginInitialBrowserRequest({
+        apiOrigin: origin,
+        context: true,
+        transactions: false,
+      });
+      const result = yield* Effect.exit(
+        loadBrowserSessionEntry({ apiOrigin: origin, context: true, request: Option.some(request) })
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(network).toHaveBeenCalledTimes(0);
       request.cancel();
     })
   ));

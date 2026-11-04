@@ -1,4 +1,10 @@
-import { FidyApi, HostedTurnApi, SubscriptionEnrollmentApi, WebAuthApi } from "@fidy/server/client";
+import {
+  DashboardDocumentReply,
+  FidyApi,
+  HostedTurnApi,
+  SubscriptionEnrollmentApi,
+  WebAuthApi,
+} from "@fidy/server/client";
 import { HttpApi, type HttpApiGroup } from "effect/http-api";
 import { BrowserSessionBinding } from "@fidy/server/browser-bootstrap";
 import {
@@ -11,7 +17,14 @@ type Environment = Readonly<{
   ASSETS: Readonly<{ fetch: (request: Request) => Promise<Response> }>;
   API: Readonly<{ fetch: (request: Request) => Promise<Response> }>;
   BROWSER_ORIGIN: string;
-}>;
+}> &
+  Partial<
+    Readonly<{
+      DASHBOARD_DOCUMENTS: Readonly<{
+        readDashboardDocument: (request: Request) => Promise<unknown>;
+      }>;
+    }>
+  >;
 const unavailable = (): Response =>
   new Response("No pudimos cargar tu tablero. Reintenta la carga.", {
     status: 503,
@@ -19,6 +32,7 @@ const unavailable = (): Response =>
   });
 const successfulStatus = 200;
 const missingStatus = 404;
+const unauthenticatedStatus = 401;
 const applicationDocuments = new Set([
   "/",
   "/app",
@@ -39,6 +53,9 @@ const isApplication = (path: string): boolean =>
   applicationDocuments.has(path) ||
   applicationPrefixes.some((prefix) => path.startsWith(prefix)) ||
   path.includes(".");
+const isDocumentRequest = (request: Request): boolean =>
+  request.method === "GET" &&
+  (request.mode === "navigate" || request.headers.get("sec-fetch-dest") === "document");
 // Reflect the same public contracts used by the browser. No private routes or arbitrary
 // destinations acquire app-host cookies merely because they share a path prefix.
 const publicRoutes: Array<Readonly<{ method: string; segments: ReadonlyArray<string> }>> = [];
@@ -124,7 +141,7 @@ const financialContent = Effect.fnUntraced(function* (response: Response) {
     cancelBody
   );
 });
-const directDashboard = Effect.fnUntraced(function* (request: Request, environment: Environment) {
+const legacyDashboard = Effect.fnUntraced(function* (request: Request, environment: Environment) {
   const headers = new Headers(request.headers);
   headers.delete(browserSessionBindingHeader);
   headers.delete("authorization");
@@ -162,6 +179,46 @@ const directDashboard = Effect.fnUntraced(function* (request: Request, environme
   resultHeaders.set("content-type", "text/html; charset=utf-8");
   return new Response(output, { headers: resultHeaders });
 });
+const documentResponse = (asset: Response, output: string, status: number): Response => {
+  const headers = new Headers(asset.headers);
+  for (const name of ["content-length", "etag", "last-modified", "content-encoding"]) {
+    headers.delete(name);
+  }
+  headers.set("fidy-dashboard-status", String(status));
+  headers.set("cache-control", "no-store");
+  headers.set("content-type", "text/html; charset=utf-8");
+  return new Response(output, { headers });
+};
+const directDashboard = Effect.fnUntraced(function* (request: Request, environment: Environment) {
+  const service = environment.DASHBOARD_DOCUMENTS;
+  if (service === undefined) return yield* legacyDashboard(request, environment);
+  const headers = new Headers(request.headers);
+  headers.delete("authorization");
+  headers.delete(browserSessionBindingHeader);
+  headers.set("origin", environment.BROWSER_ORIGIN);
+  const result = yield* Schema.decodeUnknownEffect(DashboardDocumentReply)(
+    yield* Effect.tryPromise(() => service.readDashboardDocument(new Request(request, { headers })))
+  );
+  if (result.kind === "legacy") return yield* legacyDashboard(request, environment);
+  if (result.kind === "refused") {
+    return result.status === unauthenticatedStatus
+      ? yield* Effect.tryPromise(() => environment.ASSETS.fetch(request))
+      : unavailable();
+  }
+  if (new TextEncoder().encode(result.html).byteLength > maximumPrivateBytes) return unavailable();
+  const binding = result.bootstrap.binding;
+  if (binding === null) return yield* Effect.tryPromise(() => environment.ASSETS.fetch(request));
+  const asset = yield* Effect.tryPromise(() => environment.ASSETS.fetch(request));
+  const document = yield* Effect.tryPromise(() => asset.text());
+  if (!document.includes('<div id="root"></div>')) return unavailable();
+  const encodedBootstrap = yield* Schema.encodeEffect(
+    Schema.fromJsonString(Schema.toEncoded(BrowserSessionBinding))
+  )(result.bootstrap);
+  const bootstrap = encodedBootstrap.replaceAll("<", "\\u003c");
+  const markup = `<script id="dashboard-bootstrap" type="application/json">${bootstrap}</script><div id="dashboard-initial" data-binding="${binding}" data-status="${result.status}">${initialMarkup(result.status, result.html)}</div>`;
+  const output = document.replace('<div id="root"></div>', `<div id="root">${markup}</div>`);
+  return documentResponse(asset, output, result.status);
+});
 export default {
   fetch(request: Request, environment: Environment): Promise<Response> {
     const url = new URL(request.url);
@@ -177,7 +234,9 @@ export default {
         directDashboard(request, environment).pipe(Effect.orElseSucceed(unavailable))
       );
     }
-    if (isApplication(url.pathname)) return environment.ASSETS.fetch(request);
+    if (isApplication(url.pathname) || isDocumentRequest(request)) {
+      return environment.ASSETS.fetch(request);
+    }
     if (!isPublicRequest(request, url.pathname)) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }

@@ -16,6 +16,28 @@ const assets = {
 };
 
 describe("same-origin Dashboard document transport", () => {
+  it("serves application and unknown documents without forwarding their paths to Core", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        for (const path of ["/insights/recurring/example", "/UPGRADE", "/ruta-inexistente"]) {
+          const response = yield* Effect.tryPromise(() =>
+            webWorker.fetch(
+              new Request(`${appOrigin}${path}`, {
+                headers: { accept: "text/html", "sec-fetch-dest": "document" },
+              }),
+              {
+                ASSETS: assets,
+                BROWSER_ORIGIN: appOrigin,
+                API: { fetch: () => Promise.reject(new Error("Unexpected API forwarding")) },
+              }
+            )
+          );
+          expect(response.status).toBe(200);
+          expect(yield* Effect.tryPromise(() => response.text())).toContain('id="root"');
+        }
+      })
+    ));
+
   it("derives the current cookie binding and releases one complete private document without using a supplied binding", () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -97,7 +119,7 @@ describe("same-origin Dashboard document transport", () => {
         yield* Effect.tryPromise(() =>
           webWorker.fetch(
             new Request(`${appOrigin}/dashboard/view`, {
-              headers: { authorization: "Bearer explicit-pat", cookie },
+              headers: { authorization: "Bearer explicit-pat", cookie, accept: "text/html" },
             }),
             {
               ASSETS: assets,
@@ -189,3 +211,46 @@ describe("same-origin Dashboard document transport", () => {
       })
     ));
 });
+
+it("uses one private document capability and transfers its bootstrap without a binding API pre-read", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let reads = 0;
+      const response = yield* Effect.tryPromise(() =>
+        webWorker.fetch(
+          new Request(`${appOrigin}/app/dashboard`, {
+            headers: { cookie, authorization: "Bearer ignored", "Fidy-Session-Binding": "ignored" },
+          }),
+          {
+            ASSETS: assets,
+            BROWSER_ORIGIN: appOrigin,
+            API: {
+              fetch: (): Promise<Response> => Promise.reject(new Error("Unexpected API pre-read")),
+            },
+            DASHBOARD_DOCUMENTS: {
+              readDashboardDocument: (request: Request): Promise<unknown> => {
+                reads++;
+                expect(request.headers.has("authorization")).toBe(false);
+                expect(request.headers.has("Fidy-Session-Binding")).toBe(false);
+                expect(request.headers.get("cookie")).toBe(cookie);
+                return Promise.resolve({
+                  kind: "snapshot",
+                  status: 200,
+                  html,
+                  headers: { "cache-control": "no-store" },
+                  bootstrap: { binding, initial: { status: "Missing", withdrawal: null } },
+                });
+              },
+            },
+          }
+        )
+      );
+      expect(response.status).toBe(200);
+      expect(reads).toBe(1);
+      const document = yield* Effect.tryPromise(() => response.text());
+      expect(document).toContain(html);
+      expect(document).toContain('id="dashboard-bootstrap"');
+      expect(document).toContain('"status":"Missing"');
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    })
+  ));

@@ -24,7 +24,7 @@ import {
 import { Transaction } from "../../src/core/transactions/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { resolveDashboardPeriod } from "../../src/core/dashboard/operations";
-import { DashboardView } from "../../src/shell/dashboard/contract";
+import { DashboardEditRequest, DashboardView } from "../../src/shell/dashboard/contract";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
@@ -141,10 +141,83 @@ beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
 const coordinatorObservers = new WeakMap<D1Database, (operation: string) => void>();
+const observedFixtureEdit = (
+  db: D1Database,
+  credential: number | string,
+  body: object
+): Effect.Effect<object, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const selected = Schema.decodeUnknownOption(DashboardEdit)(body);
+    const expected = Schema.decodeUnknownOption(Schema.Struct({ expectedRevision: Schema.Int }))(
+      body
+    );
+    if (Option.isNone(selected) || Option.isSome(expected)) return body;
+    const revision = yield* Effect.tryPromise(() =>
+      db
+        .prepare("SELECT revision FROM user_documents WHERE kind='dashboard' AND user_id=?")
+        .bind(users[typeof credential === "number" ? credential : 0])
+        .first<number>("revision")
+    );
+    return { ...body, expectedRevision: revision ?? 0 };
+  });
+type DashboardRequestFixture =
+  | string
+  | Readonly<{ path: string; method: "POST" | "PUT"; body: object }>;
+const observedFixtureRequest = (
+  db: D1Database,
+  credential: number | string,
+  input: DashboardRequestFixture
+): Effect.Effect<DashboardRequestFixture, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    if (typeof input === "string") return input;
+    if (input.path === "/dashboard/edits") {
+      return { ...input, body: yield* observedFixtureEdit(db, credential, input.body) };
+    }
+    if (input.path !== "/operations/atomic-batch") return input;
+    const parsed = Schema.decodeUnknownOption(
+      Schema.Struct({
+        calls: Schema.Array(
+          Schema.Struct({ callId: Schema.String, operation: Schema.String, input: Schema.Unknown })
+        ),
+      })
+    )(input.body);
+    if (Option.isNone(parsed)) return input;
+    const calls = yield* Effect.forEach(parsed.value.calls, (call) =>
+      Effect.gen(function* () {
+        if (call.operation !== "dashboard.applyDashboardEdit") return call;
+        const payload = Schema.decodeUnknownOption(Schema.Struct({ payload: Schema.Unknown }))(
+          call.input
+        );
+        const edit = Option.flatMap(payload, (value) =>
+          Schema.decodeUnknownOption(DashboardEdit)(value.payload)
+        );
+        if (Option.isNone(edit) || Option.isNone(payload)) return call;
+        const supplied = Schema.decodeUnknownOption(
+          Schema.Struct({ payload: Schema.Struct({ expectedRevision: Schema.Int }) })
+        )(call.input);
+        return Option.isSome(supplied)
+          ? call
+          : { ...call, input: { payload: yield* observedFixtureEdit(db, credential, edit.value) } };
+      })
+    );
+    return { ...input, body: { calls } };
+  });
 const send = (
   db: D1Database,
   credential: number | string,
-  pathAndBody: string | Readonly<{ path: string; method: "POST" | "PUT"; body: object }>
+  fixture: DashboardRequestFixture
+): Promise<Response> =>
+  Effect.runPromise(
+    observedFixtureRequest(db, credential, fixture).pipe(
+      Effect.flatMap((request) =>
+        Effect.tryPromise(() => dispatchDashboard(db, credential, request))
+      )
+    )
+  );
+const dispatchDashboard = (
+  db: D1Database,
+  credential: number | string,
+  pathAndBody: DashboardRequestFixture
 ): Promise<Response> => {
   vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
   return publicWorker.fetch(
@@ -939,8 +1012,10 @@ it(
             )
           )
         );
-        expect(edits.map((reply) => reply.status)).toEqual([200, 200]);
-        expect(yield* Effect.tryPromise(stored)).toMatchObject({ revision: 4 });
+        expect(edits.map((reply) => reply.status).sort((left, right) => left - right)).toEqual([
+          200, 409,
+        ]);
+        expect(yield* Effect.tryPromise(stored)).toMatchObject({ revision: 3 });
         expect((yield* Effect.tryPromise(retainedPlanning)).results).toEqual(planningBefore);
       })
     ),
@@ -3145,7 +3220,12 @@ it.each(disclosureEdits)(
         const prepared = yield* prepareDashboard({
           work: { db, subject, current: DateTime.nowUnsafe().epochMilliseconds },
           operation: "dashboard.applyDashboardEdit",
-          edit: Option.some(yield* Schema.decodeUnknownEffect(DashboardEdit)(edit)),
+          edit: Option.some(
+            yield* Schema.decodeUnknownEffect(DashboardEditRequest)({
+              ...edit,
+              expectedRevision: 4,
+            })
+          ),
         });
         expect(prepared._tag).toBe("Prepared");
         if (prepared._tag !== "Prepared") throw new Error("Expected Dashboard preparation");
@@ -3208,7 +3288,11 @@ it(
             work: { db, subject, current: DateTime.nowUnsafe().epochMilliseconds + elapsed },
             operation: "dashboard.applyDashboardEdit",
             edit: Option.some(
-              yield* Schema.decodeEffect(DashboardEdit)({ op: "set-title", title: "Primer cambio" })
+              yield* Schema.decodeEffect(DashboardEditRequest)({
+                op: "set-title",
+                title: "Primer cambio",
+                expectedRevision: 0,
+              })
             ),
           });
           if (prepared._tag !== "Prepared") throw new Error("Expected Dashboard preparation");
@@ -3228,6 +3312,52 @@ it(
           },
         ]);
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+      })
+    ),
+  30_000
+);
+
+it(
+  "rejects a stale Dashboard edit from another tab without overwriting the winning User's document",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* initializedSetup();
+        expect((yield* Effect.tryPromise(() => initialize(db, 1))).status).toBe(200);
+        const before = yield* Effect.tryPromise(() =>
+          send(db, 0, "/dashboard").then((response) => response.json())
+        );
+        const observed = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Struct({ revision: Schema.Int }) })
+        )(before);
+        expect(observed.data.revision).toBe(1);
+        const edits = yield* Effect.tryPromise(() =>
+          Promise.all(
+            ["Primera pestaña", "Segunda pestaña"].map((title) =>
+              send(db, 0, {
+                path: "/dashboard/edits",
+                method: "POST",
+                body: { op: "set-title", title, expectedRevision: observed.data.revision },
+              })
+            )
+          )
+        );
+        expect(
+          edits.map((response) => response.status).sort((left, right) => left - right)
+        ).toEqual([200, 409]);
+        const winner = edits.findIndex((response) => response.status === 200);
+        const current = yield* Effect.tryPromise(() =>
+          send(db, 0, "/dashboard").then((response) => response.json())
+        );
+        expect(current).toMatchObject({
+          data: { title: winner === 0 ? "Primera pestaña" : "Segunda pestaña", revision: 2 },
+        });
+        const foreign = yield* Effect.tryPromise(() =>
+          send(db, 1, "/dashboard").then((response) => response.json())
+        );
+        expect(foreign).toMatchObject({ data: { revision: 1 } });
+        expect(foreign).not.toMatchObject({ data: { title: "Primera pestaña" } });
+        expect(foreign).not.toMatchObject({ data: { title: "Segunda pestaña" } });
       })
     ),
   30_000

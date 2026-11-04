@@ -19,7 +19,10 @@ import {
 } from "../../../src/core/dashboard/operations";
 import { categoryIds } from "../../../src/core/categories/contract";
 import { DashboardDocument, WidgetId } from "../../../src/core/dashboard/contract";
-import { DashboardView } from "../../../src/shell/dashboard/contract";
+import {
+  DashboardDocumentSnapshot,
+  DashboardViewSnapshot,
+} from "../../../src/shell/dashboard/contract";
 import { type DashboardReadContext, loadDashboardFacts } from "./dashboard-view";
 import { renderDashboardView } from "../../../src/shell/dashboard/operations";
 import {
@@ -36,7 +39,7 @@ import {
 } from "../../canonical-operations/contract";
 
 const DocumentJson = Schema.fromJsonString(Schema.toCodecJson(DashboardDocument));
-const encodeDashboardView = Schema.encodeEffect(Schema.toCodecJson(DashboardView));
+const encodeDashboardView = Schema.encodeEffect(Schema.toCodecJson(DashboardViewSnapshot));
 type MutationContext = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
@@ -302,6 +305,7 @@ export const findDashboardValue = ({
       userId,
       operation,
       document: document.value.document,
+      revision: document.value.revision,
       viewContext: Option.none(),
     });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
@@ -312,20 +316,26 @@ export const projectDashboardValue = ({
   userId,
   operation,
   document,
+  revision,
   viewContext,
 }: Readonly<{
   db: D1Database;
   userId: string;
   operation: DashboardOperation;
   document: DashboardDocument;
+  revision: number;
   viewContext: Option.Option<DashboardReadContext>;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   Effect.gen(function* () {
     if (operation !== "dashboard.getDashboardView") {
       return Option.some({
         _tag: "Owner" as const,
-        payload: document,
-        encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document),
+        payload: { ...document, revision },
+        encode: () =>
+          Schema.encodeEffect(Schema.toCodecJson(DashboardDocumentSnapshot))({
+            ...document,
+            revision,
+          }),
       });
     }
     if (Option.isNone(viewContext)) return Option.none();
@@ -345,7 +355,7 @@ export const projectDashboardValue = ({
     });
     return Option.some({
       _tag: "Owner" as const,
-      payload: view,
-      encode: () => encodeDashboardView(view),
+      payload: { ...view, revision },
+      encode: () => encodeDashboardView({ ...view, revision }),
     });
   }).pipe(Effect.orElseSucceed(() => Option.none()));

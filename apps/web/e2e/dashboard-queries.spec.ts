@@ -8,6 +8,7 @@ test.describe.configure({ mode: "parallel" });
 const ok = 200;
 const absentStatus = 404;
 const view = {
+  revision: 1,
   title: "Tablero inicializado",
   context: {
     serviceMarket: "CO",
@@ -141,6 +142,7 @@ const runScenario = Effect.fnUntraced(function* (page: Page, scenario: Scenario)
       const body =
         scenario.initialize === ok
           ? response({
+              revision: 1,
               title: view.title,
               layout: { kind: "leaf", widget: view.layout.widget.widget },
             })

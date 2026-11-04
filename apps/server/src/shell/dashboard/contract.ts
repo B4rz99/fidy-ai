@@ -17,7 +17,7 @@ import {
 import { type Budget, BudgetProgress } from "~/core/budgets/contract";
 import type { UserContext } from "~/core/identity/contract";
 
-import { type Brand, Data, Schema } from "effect";
+import { type Brand, Data, Schema, Tuple } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { Currency, MoneyGroups } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
@@ -121,7 +121,36 @@ export const DashboardView = Schema.Struct({
 }).annotate({ identifier: "DashboardView" });
 export type DashboardView = typeof DashboardView.Type;
 
-const DashboardEditFailures = [NotFound, ValidationFailed] as const;
+export const DashboardRevision = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+export const DashboardDocumentSnapshot = DashboardDocument.mapFields(
+  (fields) => ({ ...fields, revision: DashboardRevision }),
+  { unsafePreserveChecks: true }
+).annotate({ identifier: "DashboardDocumentSnapshot" });
+export const DashboardViewSnapshot = DashboardView.mapFields((fields) => ({
+  ...fields,
+  revision: DashboardRevision,
+})).annotate({ identifier: "DashboardViewSnapshot" });
+export const DashboardEditRequest = DashboardEdit.mapMembers(
+  Tuple.map(Schema.fieldsAssign({ expectedRevision: DashboardRevision }))
+)
+  .pipe(Schema.toTaggedUnion("op"))
+  .annotate({ identifier: "DashboardEditRequest" });
+export type DashboardEditRequest = typeof DashboardEditRequest.Type;
+export class DashboardRevisionConflict extends Schema.Error<
+  DashboardRevisionConflict,
+  Brand.Brand<"DashboardRevisionConflict">
+>("DashboardRevisionConflict")(
+  {
+    _tag: Schema.tagDefaultOmit("DashboardRevisionConflict"),
+    error: Schema.Struct({
+      code: Schema.Literal("validation_failed"),
+      message: Schema.NonEmptyString,
+    }),
+    next: NextOperations,
+  },
+  { httpApiStatus: 409 }
+) {}
+const DashboardEditFailures = [NotFound, ValidationFailed, DashboardRevisionConflict] as const;
 
 export const InitializeDashboardCanonicalInput = Schema.Struct({});
 
@@ -144,12 +173,12 @@ export class DashboardUninitialized extends Schema.Error<
 export const GetDashboardCanonicalInput = Schema.Struct({});
 export const GetDashboardViewCanonicalInput = Schema.Struct({});
 /** Canonical call shape for a Dashboard edit, shared by individual and batch execution. */
-export const ApplyDashboardEditCanonicalInput = Schema.Struct({ payload: DashboardEdit });
+export const ApplyDashboardEditCanonicalInput = Schema.Struct({ payload: DashboardEditRequest });
 
 export const DashboardGroup = HttpApiGroup.make("dashboard")
   .add(
     HttpApiEndpoint.post("initializeDashboard", "/dashboard/initialize", {
-      success: OperationResponse(DashboardDocument),
+      success: OperationResponse(DashboardDocumentSnapshot),
     })
       .annotate(
         OpenApi.Description,
@@ -167,7 +196,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
   )
   .add(
     HttpApiEndpoint.get("getDashboard", "/dashboard", {
-      success: OperationResponse(DashboardDocument),
+      success: OperationResponse(DashboardDocumentSnapshot),
       error: DashboardUninitialized,
     })
       .annotate(
@@ -186,7 +215,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
   )
   .add(
     HttpApiEndpoint.get("getDashboardView", "/dashboard/view", {
-      success: OperationResponse(DashboardView),
+      success: OperationResponse(DashboardViewSnapshot),
       error: DashboardUninitialized,
     })
       .annotate(
@@ -224,13 +253,13 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
   )
   .add(
     HttpApiEndpoint.post("applyDashboardEdit", "/dashboard/edits", {
-      payload: DashboardEdit,
-      success: OperationResponse(DashboardDocument),
+      payload: DashboardEditRequest,
+      success: OperationResponse(DashboardDocumentSnapshot),
       error: DashboardEditFailures,
     })
       .annotate(
         OpenApi.Description,
-        "Apply one DashboardEdit to the caller's latest locked document. Invalid edits and invalid " +
+        "Apply one DashboardEdit only to the observed expectedRevision returned by Dashboard reads. A stale revision returns a conflict; reread and explicitly reapply your intended change. Invalid edits and invalid " +
           "resulting documents leave the stored Dashboard unchanged."
       )
       .annotateMerge(

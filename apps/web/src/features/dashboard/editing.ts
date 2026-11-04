@@ -2,7 +2,7 @@ import { useAtomSet } from "@effect/atom-react";
 import { Cause, Effect, Exit, Option, Predicate, Result } from "effect";
 import { type Dispatch, type RefCallback, type SetStateAction, useState } from "react";
 import type { CanonicalQueryState } from "@/transport/canonical-query";
-import type { DashboardEdit, FidyClient } from "@/transport/client";
+import type { CanonicalInput, DashboardEdit, FidyClient } from "@/transport/client";
 import { type DashboardGesture, compileDashboardGesture } from "./editor-model";
 import type { DashboardView } from "./presentation";
 import { type PlacementLayout, previewDashboardPlacement } from "./placement-preview";
@@ -27,7 +27,7 @@ const uncertainEditError: DashboardEditorError = {
     "El cambio podría haberse guardado. Actualiza el tablero y revísalo antes de intentar otro cambio.",
   onRefresh: Option.none(),
 };
-type CanonicalDashboardEdit = DashboardEdit;
+type CanonicalDashboardEdit = CanonicalInput<"dashboard.applyDashboardEdit">["payload"];
 
 const canonicalEditEffect = Effect.fn("dashboard.applyCanonicalEdit")(function* (
   apiClient: FidyClient,
@@ -57,12 +57,21 @@ const editOutcomeError = (
   onRefresh: () => void
 ): Option.Option<DashboardEditorError> => {
   if (Exit.isSuccess(outcome)) return Option.none();
-  const missing =
-    !Cause.hasDies(outcome.cause) &&
-    !Cause.hasInterrupts(outcome.cause) &&
-    Option.exists(Cause.findErrorOption(outcome.cause), (failure) =>
-      Predicate.isTagged(failure, "NotFound")
-    );
+  const failure =
+    Cause.hasDies(outcome.cause) || Cause.hasInterrupts(outcome.cause)
+      ? Option.none()
+      : Cause.findErrorOption(outcome.cause);
+  const missing = Option.exists(failure, (error) => Predicate.isTagged(error, "NotFound"));
+  const stale = Option.exists(failure, (error) =>
+    Predicate.isTagged(error, "DashboardRevisionConflict")
+  );
+  if (stale) {
+    return Option.some({
+      title: "El tablero cambió en otra pestaña",
+      message: "Actualiza el tablero y revisa tus cambios antes de volver a guardarlos.",
+      onRefresh: Option.some(onRefresh),
+    });
+  }
   if (missing) {
     return Option.some({
       title: "Actualiza el tablero",
@@ -71,14 +80,11 @@ const editOutcomeError = (
       onRefresh: Option.some(onRefresh),
     });
   }
-  const refused =
-    !Cause.hasDies(outcome.cause) &&
-    !Cause.hasInterrupts(outcome.cause) &&
-    Option.exists(
-      Cause.findErrorOption(outcome.cause),
-      (failure) =>
-        Predicate.isTagged(failure, "NotFound") || Predicate.isTagged(failure, "ValidationFailed")
-    );
+  const refused = Option.exists(
+    failure,
+    (error) =>
+      Predicate.isTagged(error, "NotFound") || Predicate.isTagged(error, "ValidationFailed")
+  );
   return Option.some(
     refused ? rejectedEditError : { ...uncertainEditError, onRefresh: Option.some(onRefresh) }
   );
@@ -91,12 +97,12 @@ const awaitingCanonicalRead = (
   dashboard._tag !== "Ready" ||
   (dashboard.value.data === baseline && Option.isNone(dashboard.refreshFailure));
 
-type EditQueue = Readonly<{
-  owner: { active: boolean; generation: number; halted: boolean; tail: Promise<void> };
+type EditLifetime = Readonly<{
+  owner: { active: boolean; generation: number; halted: boolean };
   lifecycleRef: RefCallback<HTMLDivElement>;
 }>;
-const makeEditQueue = (): EditQueue => {
-  const owner = { active: false, generation: 0, halted: false, tail: Promise.resolve() };
+const makeEditLifetime = (): EditLifetime => {
+  const owner = { active: false, generation: 0, halted: false };
   return {
     owner,
     lifecycleRef: (node) => {
@@ -110,7 +116,7 @@ const makeEditQueue = (): EditQueue => {
   };
 };
 type Submission = Readonly<{
-  queue: EditQueue;
+  lifetime: EditLifetime;
   recovered: boolean;
   dashboard: DashboardState;
   setRecovery: Dispatch<SetStateAction<Option.Option<Recovery>>>;
@@ -118,11 +124,11 @@ type Submission = Readonly<{
   setPendingPlacement: Dispatch<SetStateAction<Option.Option<PendingPlacement>>>;
   setPendingEdits: Dispatch<SetStateAction<number>>;
   refresh: () => void;
-  applyEdit: (edit: DashboardEdit) => Promise<Exit.Exit<unknown, unknown>>;
+  applyEdit: (edit: CanonicalDashboardEdit) => Promise<Exit.Exit<unknown, unknown>>;
 }>;
 const submitGesture = (
   {
-    queue,
+    lifetime,
     recovered,
     dashboard,
     setRecovery,
@@ -134,7 +140,7 @@ const submitGesture = (
   }: Submission,
   gesture: DashboardGesture
 ): void => {
-  const owner = queue.owner;
+  const owner = lifetime.owner;
   if (!owner.active || (owner.halted && !recovered) || dashboard._tag !== "Ready") return;
   if (recovered) {
     owner.halted = false;
@@ -162,17 +168,18 @@ const submitGesture = (
       setRecovery(Option.some({ baseline, requested: false }));
     }
   };
-  owner.tail = owner.tail.then(() => {
-    if (!current()) return;
-    setEditError(Option.none());
-    return applyEdit(compiled.success)
-      .then(complete, () => complete(Exit.die("Dashboard edit acknowledgment unavailable")))
-      .finally(() => {
-        if (current()) setPendingEdits((pending) => pending - 1);
-      });
-  });
+  setEditError(Option.none());
+  applyEdit({
+    ...compiled.success,
+    expectedRevision: "expectedRevision" in gesture ? gesture.expectedRevision : baseline.revision,
+  })
+    .then(complete, () => complete(Exit.die("Dashboard edit acknowledgment unavailable")))
+    .finally(() => {
+      if (current()) setPendingEdits((pending) => pending - 1);
+    });
 };
 type DashboardEditing = Readonly<{
+  revision: number;
   lifecycleRef: RefCallback<HTMLDivElement>;
   editError: Option.Option<DashboardEditorError>;
   onGesture: (gesture: DashboardGesture) => void;
@@ -190,9 +197,9 @@ const hasRecovered = (recovery: Option.Option<Recovery>, dashboard: DashboardSta
       Option.isNone(dashboard.refreshFailure) &&
       dashboard.value.data !== baseline
   );
-/** Owns edit ordering, provisional geometry and recovery for one mounted Dashboard.
- * Uncertain outcomes discard unsent edits and require an explicit successful reread.
- * Unmount discards unsent work; an already-sent mutation may still have committed.
+/** Owns edit lifetimes, provisional geometry and recovery for one mounted Dashboard.
+ * Uncertain outcomes require an explicit successful reread.
+ * Unmount retires callbacks; an already-sent mutation may still have committed.
  */
 export const useDashboardEditing = ({
   apiClient,
@@ -205,7 +212,7 @@ export const useDashboardEditing = ({
 }>): DashboardEditing => {
   const [editAtom] = useState(() =>
     apiClient.runtime.fn<CanonicalDashboardEdit>()((edit) => canonicalEditEffect(apiClient, edit), {
-      concurrent: false,
+      concurrent: true,
       reactivityKeys: ["dashboard"],
     })
   );
@@ -214,7 +221,7 @@ export const useDashboardEditing = ({
   const [editError, setEditError] = useState(() => Option.none<DashboardEditorError>());
   const [pendingPlacement, setPendingPlacement] = useState(() => Option.none<PendingPlacement>());
   const [recovery, setRecovery] = useState(() => Option.none<Recovery>());
-  const [queue] = useState(makeEditQueue);
+  const [lifetime] = useState(makeEditLifetime);
   const recovered = hasRecovered(recovery, dashboard);
   const refresh = (): void => {
     if (dashboard._tag === "Ready") {
@@ -225,7 +232,7 @@ export const useDashboardEditing = ({
   const onGesture = (gesture: DashboardGesture): void =>
     submitGesture(
       {
-        queue,
+        lifetime,
         recovered,
         dashboard,
         setRecovery,
@@ -244,7 +251,7 @@ export const useDashboardEditing = ({
     pendingEdits,
     recovery,
     recovered,
-    lifecycleRef: queue.lifecycleRef,
+    lifecycleRef: lifetime.lifecycleRef,
     onGesture,
     refresh,
   });
@@ -277,6 +284,7 @@ const projectEditing = ({
   const submitting = pendingEdits > 0 || Option.isSome(pending);
   const blocked = Option.isSome(recovery) && !recovered;
   return {
+    revision: dashboard._tag === "Ready" ? dashboard.value.data.revision : 0,
     lifecycleRef,
     editError: recovered
       ? Option.none()

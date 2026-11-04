@@ -90,6 +90,7 @@ test("a pointer resize submits the canonical edit and retains its weight after r
       if (weight === null) throw new Error("Missing persisted resize weight");
       expect(committed).toEqual([
         expect.objectContaining({
+          expectedRevision: 1,
           op: "resize-region",
           size: { kind: "weight", weight: Number(weight) },
         }),

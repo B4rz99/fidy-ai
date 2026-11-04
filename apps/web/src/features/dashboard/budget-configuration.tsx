@@ -21,7 +21,7 @@ import { Label } from "@/ui/components/label";
 
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import type { BudgetTarget, BudgetWidget, DashboardGesture } from "./editor-model";
-import type { DashboardLayout, DashboardView } from "./presentation";
+import type { DashboardView } from "./presentation";
 
 type Configuration = Readonly<{
   disabled: boolean;
@@ -53,16 +53,6 @@ export const ConfigureBudgetButton = ({
   );
 };
 
-const findBudgetWidget = (layout: DashboardLayout, id: string): Option.Option<BudgetWidget> => {
-  if (layout.kind === "leaf") {
-    const { widget } = layout.widget;
-    return widget.id === id && widget.type === "budget-bar" ? Option.some(widget) : Option.none();
-  }
-  return Option.fromUndefinedOr(
-    layout.children.flatMap(({ node }) => Option.toArray(findBudgetWidget(node, id)))[0]
-  );
-};
-
 type ConfigurationProps = Readonly<{
   apiClient: FidyClient;
   children: ReactNode;
@@ -77,15 +67,17 @@ export const DashboardBudgetConfiguration = ({
   view,
   onGesture,
 }: ConfigurationProps): JSX.Element => {
-  const [selectedId, setSelectedId] = useState(() => Option.none<BudgetWidget["id"]>());
-  const widget = Option.flatMap(selectedId, (id) => findBudgetWidget(view.layout, id));
-  const close = (): void => setSelectedId(Option.none());
+  const [selection, setSelection] = useState(() =>
+    Option.none<Readonly<{ widget: BudgetWidget; revision: number }>>()
+  );
+  const widget = Option.map(selection, (value) => value.widget);
+  const close = (): void => setSelection(Option.none());
   return (
     <BudgetConfiguration
       value={Option.some({
         disabled,
         open: (target) => {
-          setSelectedId(Option.some(target.id));
+          setSelection(Option.some({ widget: target, revision: view.revision }));
         },
       })}
     >
@@ -100,8 +92,13 @@ export const DashboardBudgetConfiguration = ({
             disabled={disabled}
             onClose={close}
             onSave={(target) => {
-              if (disabled) return;
-              onGesture({ kind: "configure-budget", widget: widget.value, target });
+              if (disabled || Option.isNone(selection)) return;
+              onGesture({
+                kind: "configure-budget",
+                widget: widget.value,
+                target,
+                expectedRevision: selection.value.revision,
+              });
               close();
             }}
           />

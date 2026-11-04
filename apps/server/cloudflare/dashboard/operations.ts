@@ -7,12 +7,12 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { boundedJsonBody } from "../http/operations";
 import { applyDashboardEdit, makeDashboardCatalog } from "../../src/core/dashboard/operations";
 import { categoryIds } from "../../src/core/categories/contract";
+import { DashboardCatalog, type DashboardDocument } from "../../src/core/dashboard/contract";
 import {
-  DashboardCatalog,
-  type DashboardDocument,
-  DashboardEdit,
-} from "../../src/core/dashboard/contract";
-import { DashboardUninitialized } from "../../src/shell/dashboard/contract";
+  DashboardEditRequest,
+  DashboardRevisionConflict,
+  DashboardUninitialized,
+} from "../../src/shell/dashboard/contract";
 
 import {
   type QueryCaller,
@@ -92,7 +92,7 @@ const decideDocument = ({
 }: Readonly<{
   work: MutationContext;
   operation: DashboardMutationOperation;
-  edit: Option.Option<DashboardEdit>;
+  edit: Option.Option<DashboardEditRequest>;
   base: DashboardDocument;
 }>): Effect.Effect<Result.Result<DashboardDocument, CanonicalMutationPreparation>> =>
   Effect.gen(function* () {
@@ -122,12 +122,14 @@ const preparedDashboard = ({
   initial,
   write,
   oauthReview,
+  expectedRevision,
 }: Readonly<{
   work: MutationContext;
   operation: DashboardMutationOperation;
   initial: Option.Option<D1PreparedStatement>;
   write: ReadonlyArray<D1PreparedStatement>;
   oauthReview: Option.Option<OAuthMutationReview>;
+  expectedRevision: Option.Option<number>;
 }>): CanonicalMutationPreparation => ({
   _tag: "Prepared",
   mutation: {
@@ -136,13 +138,7 @@ const preparedDashboard = ({
 
     commitGuards: Option.none(),
     guardRefusal: ({ db, subject, current }) =>
-      Effect.succeed(
-        dashboardRefusal({
-          work: { db, subject, current },
-          operation,
-          code: "validation_failed",
-        })
-      ),
+      classifyDashboardConflict({ work: { db, subject, current }, operation, expectedRevision }),
     statements: [
       ...credentialUse(work),
       ...(Option.isSome(initial) ? [initial.value] : []),
@@ -166,7 +162,7 @@ const dashboardAccess = ({
 }: Readonly<{
   work: MutationContext;
   operation: DashboardMutationOperation;
-  edit: Option.Option<DashboardEdit>;
+  edit: Option.Option<DashboardEditRequest>;
 }>): Effect.Effect<Option.Option<CanonicalMutationPreparation>> =>
   Effect.tryPromise(() => liveTransactionAuthority(work)).pipe(
     Effect.option,
@@ -195,7 +191,7 @@ export const prepareDashboard = ({
 }: Readonly<{
   work: MutationContext;
   operation: DashboardMutationOperation;
-  edit: Option.Option<DashboardEdit>;
+  edit: Option.Option<DashboardEditRequest>;
 }>): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     const access = yield* dashboardAccess({ work, operation, edit });
@@ -204,6 +200,13 @@ export const prepareDashboard = ({
       db: work.db,
       userId: work.subject.userId,
     });
+    if (
+      Option.isSome(edit) &&
+      edit.value.expectedRevision !==
+        Option.match(existing, { onNone: () => 0, onSome: (stored) => stored.revision })
+    ) {
+      return refusedPreparation(dashboardRevisionRefusal({ work, operation }));
+    }
     const base = Option.getOrElse(
       Option.map(existing, (stored) => stored.document),
       () => (isOAuthCaller(work.subject) ? oauthDefaultDashboard() : defaultDocument())
@@ -227,7 +230,14 @@ export const prepareDashboard = ({
       document,
       edit,
     });
-    return preparedDashboard({ work, operation, initial, write, oauthReview });
+    return preparedDashboard({
+      work,
+      operation,
+      initial,
+      write,
+      oauthReview,
+      expectedRevision: Option.map(edit, (value) => value.expectedRevision),
+    });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
 export const presentDashboard = (
@@ -265,9 +275,9 @@ export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response
         ? yield* boundedJsonBody({
             request,
             policy: editBodyPolicy,
-            schema: Schema.toCodecJson(DashboardEdit),
+            schema: Schema.toCodecJson(DashboardEditRequest),
           }).pipe(Effect.orElseSucceed(() => Option.none()))
-        : Option.none<DashboardEdit>();
+        : Option.none<DashboardEditRequest>();
     return input.operation === "dashboard.applyDashboardEdit"
       ? yield* input.runMutation({
           operation: input.operation,
@@ -336,6 +346,7 @@ const queryDashboard = ({
         userId: subject.userId,
         operation,
         document: source.document.value.document,
+        revision: source.document.value.revision,
         viewContext: source.viewContext,
       })
     );
@@ -359,3 +370,44 @@ const queryDashboard = ({
 /** Prepare the isolated one-snapshot browser Dashboard candidate; production routing remains guarded. */
 export const prepareBoundDashboardRead: CanonicalBrowserRead = (input) =>
   ownerPrepareBoundDashboardRead(input);
+
+const dashboardRevisionRefusal = (
+  input: Readonly<{ work: MutationContext; operation: DashboardMutationOperation }>
+): CanonicalMutationRefusal => ({
+  ...dashboardRefusal({ ...input, code: "validation_failed" }),
+  message: "Dashboard revision changed. Read the latest Dashboard before reapplying an edit.",
+  respond: (disposition) =>
+    disposition !== "recorded"
+      ? Effect.succeed(transactionUnavailable())
+      : Schema.encodeEffect(Schema.toCodecJson(DashboardRevisionConflict))(
+          DashboardRevisionConflict.make({
+            error: {
+              code: "validation_failed",
+              message:
+                "Dashboard revision changed. Read the latest Dashboard before reapplying an edit.",
+            },
+            next: [],
+          })
+        ).pipe(
+          Effect.map((body) => Response.json(body, { status: 409, headers: transactionNoStore })),
+          Effect.orElseSucceed(transactionUnavailable)
+        ),
+});
+
+const classifyDashboardConflict = (
+  input: Readonly<{
+    work: MutationContext;
+    operation: DashboardMutationOperation;
+    expectedRevision: Option.Option<number>;
+  }>
+): Effect.Effect<CanonicalMutationRefusal> =>
+  Effect.gen(function* () {
+    const stored = yield* findDashboardDocument({
+      db: input.work.db,
+      userId: input.work.subject.userId,
+    });
+    const revision = Option.match(stored, { onNone: () => 0, onSome: (value) => value.revision });
+    return Option.exists(input.expectedRevision, (expected) => expected !== revision)
+      ? dashboardRevisionRefusal(input)
+      : dashboardRefusal({ ...input, code: "validation_failed" });
+  }).pipe(Effect.orElseSucceed(() => dashboardRefusal({ ...input, code: "validation_failed" })));

@@ -6,14 +6,21 @@ import { installUser } from "./http-fixtures";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import {
   boundSessionRequests,
+  createDashboardIfAbsent,
   openBrowserLogin,
+  openDashboardThroughCore,
   openUpgradeThroughCore,
   reloadTransactionsThroughCore,
   visiblePairingCode,
 } from "./real-core-fixture";
 
 const { expect, test } = playwright;
-const { app: apiOrigin, app: appOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
+const {
+  api: coreOrigin,
+  app: apiOrigin,
+  app: appOrigin,
+  operator: operatorOrigin,
+} = browserAcceptanceTopology();
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const json = (value: object): string => JSON.stringify(value);
@@ -419,8 +426,8 @@ const verifyRevokedBrowser = (
 const editAndCheckDashboard = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(page.goto("/app/dashboard"));
-      yield* wait(expect(page.getByRole("button", { name: "Personalizar" })).toBeVisible());
+      yield* wait(openDashboardThroughCore(page));
+      yield* wait(createDashboardIfAbsent(page));
       yield* wait(page.getByRole("button", { name: "Personalizar" }).click());
       yield* wait(
         page
@@ -557,7 +564,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       yield* wait(pending);
       const signed = yield* wait((yield* wait(request.get(`${operatorOrigin}/assertion`))).text());
       const decision = (): ReturnType<typeof request.post> =>
-        request.post(`${apiOrigin}/internal/support-recovery`, {
+        request.post(`${coreOrigin}/internal/support-recovery`, {
           headers: { "cf-access-jwt-assertion": signed },
           data: { pairingCode: code, backupRecoveryCode: "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2" },
         });

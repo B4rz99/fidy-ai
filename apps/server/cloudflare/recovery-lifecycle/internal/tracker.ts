@@ -1,6 +1,14 @@
 import type { RecoveryNativeTracker } from "../contract";
 import { RecoveryOperationUnavailable } from "../contract";
 
+const invoke = <A>(work: () => Promise<A>): Promise<A> => {
+  try {
+    return work();
+  } catch (failure) {
+    return Promise.reject(failure);
+  }
+};
+
 /** A rejected child is unknown settlement; removing its local Promise never clears its durable root. */
 export const tracker = (): RecoveryNativeTracker => {
   const pending = new Set<Promise<unknown>>();
@@ -14,7 +22,7 @@ export const tracker = (): RecoveryNativeTracker => {
   return {
     run: <A>(work: () => Promise<A>): Promise<A> => {
       if (!active) return Promise.reject(new RecoveryOperationUnavailable());
-      const child = Promise.resolve().then(work);
+      const child = invoke(work);
       pending.add(child);
       child.then(
         () => {

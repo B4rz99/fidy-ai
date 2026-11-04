@@ -1,4 +1,4 @@
-import { captureInitialDashboardHtml } from "@/transport/initial-dashboard";
+import { captureInitialDashboardHtml } from "@/transport/initial-dashboard-document";
 import { preloadWebRouteCode } from "./entry-code";
 import { tryMountProviderReturn } from "./provider-return";
 import { beginInitialBrowserRequest } from "@/transport/initial-request";

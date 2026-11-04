@@ -18,10 +18,15 @@ for (const provider of ["google", "microsoft"] as const) {
       Effect.gen(function* () {
         const reads: Array<string> = [];
         yield* wait(
-          context.route(`${topology.api}/**`, (route) => {
-            reads.push(new URL(route.request().url()).pathname);
-            return route.abort("blockedbyclient");
-          })
+          context.route(
+            (url) => url.origin === topology.app || url.origin === topology.api,
+            (route) => {
+              const resource = route.request().resourceType();
+              if (resource !== "fetch" && resource !== "xhr") return route.fallback();
+              reads.push(new URL(route.request().url()).pathname);
+              return route.abort("blockedbyclient");
+            }
+          )
         );
         yield* wait(
           context.route(
@@ -187,7 +192,7 @@ test("does not publish an OpenAPI document or source maps as static assets", ({ 
       ).toBe(true);
     })
   ));
-test("keeps API ownership and credentialed CORS on the real ingress, not the static host", ({
+test("proxies declared browser routes while retaining private controls and credentialed CORS on ingress", ({
   request,
 }) =>
   Effect.runPromise(
@@ -222,10 +227,11 @@ test("keeps API ownership and credentialed CORS on the real ingress, not the sta
       );
       expect(wrongMethod.status()).toBe(methodNotAllowed);
       expect(wrongMethod.headers().allow).toBe("POST");
-      expect((yield* wait(request.post("/web/pairings"))).status()).toBe(methodNotAllowed);
+      const proxied = yield* wait(request.post("/web/pairings"));
+      expect(proxied.status()).toBe(ok);
+      expect(proxied.headers()["cache-control"]).toBe("no-store");
       const staticAuth = yield* wait(request.get("/web/email/authentication/start"));
-      expect(staticAuth.status()).toBe(ok);
-      expect(staticAuth.headers()["content-type"]).toContain("text/html");
+      expect(staticAuth.status()).toBe(notFound);
       expect(staticAuth.headers()["set-cookie"]).toBeUndefined();
       expect((yield* wait(request.get(`${api}/openapi.json`))).status()).toBe(notFound);
     })

@@ -131,3 +131,32 @@ it("consumes the audited document bootstrap once without another HTTP binding or
       expect(network).toHaveBeenCalledTimes(1);
     })
   ));
+
+it("refuses malformed document bootstrap through the ordinary response codec before granting a session", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const network = vi.fn<typeof globalThis.fetch>();
+      vi.stubGlobal("fetch", network);
+      vi.stubGlobal("document", {
+        getElementById: (id: string) =>
+          id === "dashboard-bootstrap"
+            ? {
+                remove: (): void => undefined,
+                textContent: '{"binding":"forged-session"}',
+              }
+            : null,
+      });
+      captureInitialDashboardHtml();
+      const request = beginInitialBrowserRequest({
+        apiOrigin: origin,
+        context: true,
+        transactions: false,
+      });
+      const result = yield* Effect.exit(
+        loadBrowserSessionEntry({ apiOrigin: origin, context: true, request: Option.some(request) })
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(network).toHaveBeenCalledTimes(0);
+      request.cancel();
+    })
+  ));

@@ -1,4 +1,3 @@
-import type { ErasureGeneration } from "./contract";
 import { preservePendingAdmissions } from "./internal/pending-admissions";
 import { initializeRegistryStorage } from "./internal/registry-initialization";
 import { sweepControlObjects } from "./internal/control-objects";
@@ -18,7 +17,7 @@ import {
   type ErasureRegistryInitialization,
 } from "./contract";
 import { progress } from "./internal/progress";
-import { ErasureUnavailable } from "../erasure-store/contract";
+import { type ErasureGeneration, ErasureUnavailable } from "../erasure-store/contract";
 import type { ErasureStore } from "../erasure-store/contract";
 import { admitDeletion } from "./internal/admission";
 

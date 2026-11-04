@@ -109,9 +109,11 @@ export default {
   ): Promise<Response> {
     const path = new URL(request.url).pathname;
     const gate = env.RECOVERY_ADMISSION.getByName("source-admission-v1");
-    if (path === "/inspect") return gate.inspect().then(Response.json);
+    if (path === "/inspect") return gate.inspect().then((value) => Response.json(value));
     if (path === "/close") {
-      return gate.close({ epoch: "source-epoch", activationId: "cutover" }).then(Response.json);
+      return gate
+        .close({ epoch: "source-epoch", activationId: "cutover" })
+        .then((value) => Response.json(value));
     }
     return env.OWNER.getByName("resident-owner").fetch(request);
   },

@@ -11,6 +11,7 @@ import {
   type AgentServiceInput,
   AgentUnavailable,
   type HostedCommitFence,
+  HostedDashboardRead,
   HostedDeliveryAdmission,
   HostedProgressAdmission,
   HostedTurnAdmission,
@@ -562,6 +563,7 @@ const runWhatsAppWork = (
           }),
         });
       }).pipe(
+        Effect.provideService(HostedDashboardRead, owner.dashboard),
         (effect) => provideHostedKapsoFetch(effect, env),
         withStatementPublicationWake(owner.scheduleRecovery),
         Effect.withSpan("agent.whatsappTurn.resume"),
@@ -622,6 +624,7 @@ const runWhatsAppTurn = (
       onAdmitted: deadline.onAdmitted,
     });
   }).pipe(
+    Effect.provideService(HostedDashboardRead, owner.dashboard),
     (effect) => provideHostedKapsoFetch(effect, env),
     withStatementPublicationWake(owner.scheduleRecovery),
     Effect.withSpan("agent.whatsappTurn.execution"),
@@ -694,6 +697,7 @@ const runHostedTurn = (
         Effect.orElseSucceed(transactionUnavailable)
       );
     }).pipe(
+      Effect.provideService(HostedDashboardRead, owner.dashboard),
       Effect.provideService(ConnectionSandboxAdmission, owner.connectionAdmission),
       withStatementPublicationWake(owner.scheduleRecovery),
       (effect) => observeHostedExecution(effect, request, { trigger: "api", environment: env })

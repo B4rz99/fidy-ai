@@ -89,7 +89,7 @@ import { OAuthMcpAdmission } from "../mcp/contract";
 import { type McpResidency, makeMcpResidency } from "../mcp/runtime";
 import { OAuthRefreshAdmission, OAuthRevocationAdmission } from "../oauth-agents/contract";
 import { executeOAuthRefresh, executeOAuthRevocation } from "../oauth-agents/operations";
-import type { HostedCommitFence } from "../agent/contract";
+import type { HostedCommitFence, HostedDashboardExecutor } from "../agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 
 import {
@@ -732,6 +732,21 @@ const executeResidentOAuthActivity = (
     }
     return response;
   });
+const hostedDashboardReader =
+  (read: NativeDashboardReader): HostedDashboardExecutor =>
+  ({ admission, signal }) =>
+    Effect.tryPromise(() =>
+      read({
+        mode: "hosted",
+        admission,
+        request: new Request("https://core.internal/dashboard/view", { signal }),
+      })
+    ).pipe(
+      Effect.map(({ response }) =>
+        Response.json(response.body, { status: response.status, headers: response.headers })
+      ),
+      Effect.orElseSucceed(transactionUnavailable)
+    );
 export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
   private readonly state: Readonly<{
@@ -741,6 +756,7 @@ export class UserTransactionCoordinator {
   private readonly env: CoordinatorEnvironment;
   private readonly erasureEnvironment: CoordinatorEnvironment;
   private readonly mcp: McpResidency;
+  private readonly hostedDashboard: Option.Option<HostedDashboardExecutor>;
   private readonly institutions: typeof registeredConnectionInstitutionIds;
   private readonly bank: Option.Option<ConnectionBankPreparation>;
   private readonly activation: Option.Option<ConnectionBankActivation>;
@@ -774,6 +790,7 @@ export class UserTransactionCoordinator {
               nativeCall: (work) => trackRecoveryNative({ environment: bindings, work }),
             })
           );
+    this.hostedDashboard = Option.map(dashboard, hostedDashboardReader);
     this.state = state;
     this.recoveryAlarm = makeUserRecoveryAlarm(state.storage);
     this.institutions = configuration.institutions;
@@ -855,6 +872,7 @@ export class UserTransactionCoordinator {
       return executeMcpProtocolAdmission(mcp, request, { userId, environment });
     }
     const hosted = makeAgentService({
+      dashboard: this.hostedDashboard,
       environment,
       userId: UserId.make(userId),
       scheduleRecovery: this.recoveryAlarm.schedule,
@@ -992,6 +1010,7 @@ export class UserTransactionCoordinator {
     const agent = Effect.tryPromise({
       try: () =>
         makeAgentService({
+          dashboard: this.hostedDashboard,
           environment: this.env,
           userId: UserId.make(this.state.id.name),
           connectionAdmission: bancolombiaSandboxAdmission(this.env),

@@ -1,4 +1,6 @@
-import { type Context, Data, type Effect, type Option, Schema } from "effect";
+import { Context, Data, type Effect, Option, Schema } from "effect";
+import { WhatsAppHostedSubject } from "../whatsapp/contract";
+import { WebSessionId } from "../../src/core/web-session/contract";
 import type { ConnectionSandboxAdmission } from "../connections/contract";
 import {
   HostedTurnProgressRequest,
@@ -8,10 +10,11 @@ import {
 import type { ProactivityEnvironment } from "../insights/contract";
 import type { OpenAiEnvironment } from "../ai/contract";
 import {
+  AgentIteration,
   type ProactiveTranscriptEntry,
-  type ToolCallId,
+  ToolCallId,
   TranscriptText,
-  type TranscriptTurnId,
+  TranscriptTurnId,
 } from "../../src/core/agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 /** Same-User verified proactive Transcript context; never a fabricated requested Turn or session. */
@@ -24,6 +27,34 @@ export const hostedTranscriptRetentionMs = 2_592_000_000;
 
 /** One admitted Turn's exact canonical call identity; external callers cannot establish it. */
 export type HostedCommitFence = Readonly<{ turnId: TranscriptTurnId; toolCallId: ToolCallId }>;
+
+const credentialDigestBytes = 32;
+const NativeBrowserSubject = Schema.TaggedStruct("Browser", {
+  userId: UserId,
+  id: WebSessionId,
+  digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))).check(
+    Schema.isBetweenLength(credentialDigestBytes, credentialDigestBytes)
+  ),
+});
+/** Transported identities never carry SQL or authority; the Turn owner rechecks every fact natively. */
+export const HostedDashboardAdmission = Schema.Struct({
+  subject: Schema.Union([NativeBrowserSubject, WhatsAppHostedSubject]),
+  turnId: TranscriptTurnId,
+  toolCallId: ToolCallId,
+  iteration: AgentIteration,
+  input: Schema.Json,
+  deadlineMilliseconds: Schema.Int.check(Schema.isGreaterThan(0)),
+});
+export type HostedDashboardAdmission = typeof HostedDashboardAdmission.Type;
+export type HostedDashboardExecutor = (
+  input: Readonly<{ admission: HostedDashboardAdmission; signal: AbortSignal }>
+) => Effect.Effect<Response>;
+
+/** A request-scoped adapter selects the same audited native financial unit as other callers. */
+export const HostedDashboardRead = Context.Reference<Option.Option<HostedDashboardExecutor>>(
+  "@fidy/server/cloudflare/agent/HostedDashboardRead",
+  { defaultValue: () => Option.none() }
+);
 
 /** Decode a bounded User request; the authenticated channel owns its credential separately. */
 export const hostedTurnInput = HostedTurnRequest;
@@ -68,6 +99,7 @@ export type AgentEnvironment = Readonly<{ DB: D1Database }> &
 /** Construct a hosted workflow for one explicit User; scheduleRecovery sets the coordinator's durable alarm. */
 export type AgentServiceInput = Readonly<{
   environment: AgentEnvironment;
+  dashboard: Option.Option<HostedDashboardExecutor>;
   userId: UserId;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
   connectionAdmission: Context.Service.Shape<typeof ConnectionSandboxAdmission>;

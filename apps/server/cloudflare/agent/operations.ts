@@ -1,3 +1,5 @@
+import { prepareHostedDashboardTurn as nativeDashboardTurn } from "./internal/native-dashboard";
+import { dashboardLoadsSavedHistory as nativeDashboardHistory } from "./internal/history-allowance";
 import { preparePredicateAssertion } from "../../src/shell/sql-assertions/operations";
 import { Effect, type Option } from "effect";
 import { mintHostedStatementCaller as statementCaller } from "./internal/statement-authority";
@@ -139,3 +141,10 @@ export const prepareRecoveryDrain = (db: D1Database): D1PreparedStatement =>
     coalesce(sum(disposition=3),0) AS preservedBlocked FROM (
 SELECT CASE WHEN status='pending' THEN 1 WHEN status IN('completed','failed','interrupted') THEN 0 ELSE 2 END AS disposition FROM hosted_turns
   )`);
+
+/** Prepare the exact pending Turn/tool guard; compose with live channel authority in the same native unit. */
+export const prepareHostedDashboardTurn: typeof nativeDashboardTurn = (input) =>
+  nativeDashboardTurn(input);
+/** Only nonempty saved Transaction lists constitute Dashboard history exposure. */
+export const dashboardLoadsSavedHistory: typeof nativeDashboardHistory = (output) =>
+  nativeDashboardHistory(output);

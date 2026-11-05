@@ -19,7 +19,13 @@ import {
 } from "../../ingestion/operations";
 import { mintHostedStatementCaller } from "./statement-authority";
 import { confirmedOutcome, findConfirmedCall, findConfirmedOutcome } from "./confirmed-outcome";
-import { AgentUnavailable, type HostedCommitFence, pendingExecutionRecoveryMs } from "../contract";
+import {
+  AgentUnavailable,
+  type HostedCommitFence,
+  HostedDashboardAdmission,
+  HostedDashboardRead,
+  pendingExecutionRecoveryMs,
+} from "../contract";
 import {
   executeCanonicalQuery,
   installedCanonicalOperations,
@@ -1601,25 +1607,51 @@ const executeHostedTool = ({
         : Option.none();
     } else {
       const remainingMs = Math.max(0, deadlineMs - (yield* Clock.currentTimeMillis));
+      const dashboard = yield* HostedDashboardRead;
+      const native =
+        operation.id === "dashboard.getDashboardView" && Option.isSome(dashboard)
+          ? dashboard.value
+          : undefined;
+      let query: Effect.Effect<Option.Option<Response>, HostedWorkFailure> = isWhatsAppHosted(
+        subject
+      )
+        ? executeWhatsAppStatementQuery({
+            db,
+            subject,
+            bucket,
+            turnId,
+            operation: operation.id,
+            input: evidence.value,
+          })
+        : executeCanonicalQuery({
+            db,
+            subject,
+            bucket,
+            operation: operation.id,
+            input: evidence.value,
+          });
+      if (native !== undefined) {
+        query = Schema.decodeEffect(HostedDashboardAdmission)({
+          subject: isWhatsAppHosted(subject)
+            ? subject
+            : {
+                _tag: "Browser",
+                userId: subject.userId,
+                id: subject.id,
+                digest: Array.from(subject.digest),
+              },
+          turnId,
+          toolCallId: toolCallId.value,
+          iteration,
+          input: evidence.value,
+          deadlineMilliseconds: deadlineMs,
+        }).pipe(
+          Effect.flatMap((admission) => native({ admission, signal })),
+          Effect.asSome
+        );
+      }
       executed = Option.getOrElse(
-        yield* (
-          isWhatsAppHosted(subject)
-            ? executeWhatsAppStatementQuery({
-                db,
-                subject,
-                bucket,
-                turnId,
-                operation: operation.id,
-                input: evidence.value,
-              })
-            : executeCanonicalQuery({
-                db,
-                subject,
-                bucket,
-                operation: operation.id,
-                input: evidence.value,
-              })
-        ).pipe(Effect.timeoutOption(Duration.millis(remainingMs))),
+        yield* query.pipe(Effect.timeoutOption(Duration.millis(remainingMs))),
         Option.none
       );
     }

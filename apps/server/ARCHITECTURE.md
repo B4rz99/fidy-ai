@@ -340,9 +340,11 @@ Account set. The [Connections adapter](cloudflare/connections/) owns credential 
 ## Manual Pro operations
 
 The shell `pro-grants` owner retains ManualProGrant events and composes current grant standing into
-AccessTier and Subscription status. The native `bun run pro` operator tool uses database-scoped
-Cloudflare admin authority through Outbound HTTP; no Worker, PAT, browser or hosted-agent operation
-can mint that authority. Its grant/revoke statement resolves exactly one existing User atomically.
+AccessTier and Subscription status. The `bun run pro` operator uses Cloudflare operator credentials
+for a private Core `ProGrantService` binding with bounded grant, revoke and list commands. Core
+selects the authoritative D1 or SQLite store and holds recovery admission through native settlement;
+the CLI has no direct database-id fallback or SQL transport. PAT, browser and hosted-agent inputs
+cannot mint operator authority. Grant/revoke resolves exactly one existing User atomically.
 See [operator procedure](../../docs/operations/manual-pro-grants.md).
 
 ### Dashboard browser representation
@@ -361,6 +363,17 @@ and both Audits in the same native transaction. Its fresh R2 generation fence re
 The default D1 target reports legacy composition without reading the database at this entry;
 ordinary Ingress still provides its guarded representation. The full guarded reader remains until a separately qualified native reader covers
 all financial semantics.
+
+The native Dashboard unit also serves PAT, OAuth/MCP and Hosted queries. Credential, scope,
+Consent, canonical admission, allowance and Audit checks commit with the financial read; Hosted
+queries additionally recheck the exact pending Turn and recorded tool call. Agent publishes its
+Turn guard and history policy without transporting SQL authority. Aggregate-only and empty-list
+Hosted results consume no commercial unit; exposing saved Transaction rows reserves one
+`hosted_history_turn` unit per User and Turn before Audit and disclosure. Transcript publication
+reuses that identity without charging again. Hosted browser Audit retains the WebSession identity,
+and WhatsApp Audit retains the admitted Turn identity. Expired handoff or Audit failure rolls back
+the entire native unit. These paths retain the fresh R2 fence until recovery qualification permits
+its removal.
 
 The recovery activation operator owns an independent `RecoveryAdmissionGate` SQLite Durable
 Object outside every recoverable financial snapshot. Source operation leases have no automatic

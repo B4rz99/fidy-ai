@@ -1,3 +1,17 @@
+import type { HostedDashboardAdmission } from "../../agent/contract";
+import { allowancePeriod } from "../../../src/core/quotas/operations";
+import { dashboardLoadsSavedHistory, prepareHostedDashboardTurn } from "../../agent/operations";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import {
+  protectConsentAuthority,
+  protectConsentStatement,
+} from "../../../src/shell/consent/operations";
+import { whatsAppIdentityQuery } from "../../identity/operations";
+import {
+  prepareConsumption,
+  quotaFailure,
+  quotaStatusForUserSelection,
+} from "../../quotas/operations";
 import { liveOAuthAuthority } from "../../../src/shell/oauth-agents/operations";
 import { resolveCanonicalOAuthSnapshot } from "../../oauth-agents/operations";
 import type { OAuthCaller } from "../../../src/shell/oauth-agents/contract";
@@ -13,7 +27,7 @@ import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/c
 import { BrowserSessionBinding } from "../../../src/shell/web-session/contract";
 import type { Category } from "../../../src/core/categories/contract";
 import { WebSessionId } from "../../../src/core/web-session/contract";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { DashboardDocument } from "../../../src/core/dashboard/contract";
 import { UserContext } from "../../../src/core/identity/contract";
 import { renderDashboardHtml } from "../../../src/shell/dashboard/operations";
@@ -35,7 +49,7 @@ import { makeSqliteDatabaseUnit } from "../../sqlite-store/operations";
 import { prepareSelectedUserDocument } from "../../user-documents/operations";
 import { prepareSelectedUserContext } from "../../identity/user-context/operations";
 import { prepareCategorySnapshot } from "../../categories/operations";
-import { quotaStatusForUserSelection } from "../../quotas/operations";
+
 import {
   acceptsCanonicalBrowserBinding,
   currentBrowserSessionLookup,
@@ -77,6 +91,7 @@ type Work = Readonly<{
   activity: Option.Option<AuthorizedPAT>;
   current: number;
   sql: SqlStorage;
+  hosted: Option.Option<HostedDashboardAdmission>;
 }>;
 type BrowserWork = Work & Readonly<{ lookup: BoundWebSessionLookup }>;
 const standingStatement = ({ unit, lookup, current }: Work): D1PreparedStatement =>
@@ -99,8 +114,30 @@ const absent = (): NativeDashboardResult => ({
     headers: transactionNoStore,
   },
 });
-const audited = (work: Work): unknown => {
+class HostedHistoryExhausted extends Data.TaggedError("HostedHistoryExhausted") {}
+const accountHostedHistory = (work: Work, output: unknown): void => {
   const { unit, lookup, current } = work;
+  if (Option.isSome(work.hosted) && dashboardLoadsSavedHistory(output)) {
+    try {
+      unit.run(
+        prepareConsumption({
+          db: unit.database,
+          userId: work.hosted.value.subject.userId,
+          allowance: "hosted_history_turn",
+          identity: work.hosted.value.turnId,
+          current,
+          authority: lookup.statement,
+        })
+      );
+    } catch (cause) {
+      if (quotaFailure(cause) === "exhausted") throw new HostedHistoryExhausted();
+      throw cause;
+    }
+  }
+};
+const audited = (work: Work, output?: unknown): unknown => {
+  const { unit, lookup, current } = work;
+  accountHostedHistory(work, output);
   const activity = Option.map(work.activity, (subject) => recordLivePATUse({ subject, current }));
   const rows = unit.run([
     ...Option.toArray(
@@ -233,12 +270,13 @@ const financialProjection = (
     context: peers.context,
     categories: peers.categories,
   });
+  const body = { data: encodeView({ ...facts.view, revision: document.revision }), next: [] };
   const response = attachCanonicalSnapshotStanding({
     current,
-    row: audited(work),
+    row: audited(work, body),
     response: {
       status: 200,
-      body: { data: encodeView({ ...facts.view, revision: document.revision }), next: [] },
+      body,
       headers: { ...transactionNoStore, etag: `"${document.revision}"`, ...headers },
     },
   });
@@ -339,6 +377,7 @@ const credentialWork = (
     current: input.current,
     sql: input.read.storage.sql,
     activity: input.activity,
+    hosted: Option.none(),
     lookup: {
       authority,
       statement: {
@@ -529,6 +568,125 @@ const readOAuthSnapshot = (read: NativeDashboardRead): Effect.Effect<NativeDashb
     );
   }).pipe(Effect.orElseSucceed(unavailable));
 
+const hostedAuthority = (admission: HostedDashboardAdmission, current: number): AuditAuthority => {
+  const subject = admission.subject;
+  const turn = prepareHostedDashboardTurn({ admission, current });
+  if (subject._tag === "Browser") {
+    const credential = protectConsentAuthority({
+      authority: liveWebSessionAuthority({
+        subject: { userId: subject.userId, id: subject.id, digest: new Uint8Array(subject.digest) },
+        current,
+      }),
+      subject: { _tag: "Owner", column: "web_sessions.user_id" },
+      requirement: "active",
+    });
+    return {
+      ...credential,
+      predicate: `(${credential.predicate}) AND EXISTS (${turn.sql})`,
+      bindings: [...credential.bindings, ...turn.params],
+    };
+  }
+  const live = protectConsentStatement({
+    statement: whatsAppIdentityQuery(subject),
+    subject: { _tag: "User", userId: subject.userId },
+    requirement: "active",
+  });
+  return {
+    table: "hosted_turns",
+    predicate: `id=? AND user_id=? AND id IN (${turn.sql}) AND EXISTS (${live.sql})`,
+    bindings: [admission.turnId, subject.userId, ...turn.params, ...live.params],
+  };
+};
+const hostedHistoryRefusal = ({ unit, lookup, current }: Work): NativeDashboardResult => {
+  const rows = unit.run([
+    prepareAuthorizedAuditCall({
+      db: unit.database,
+      authority: lookup.authority,
+      id: transactionId(),
+      current,
+      operation: "dashboard.getDashboardView",
+      outcome: "rejected",
+      afterOwnerWrite: false,
+    }),
+  ]);
+  if (rows[0]?.meta.changes !== 1) throw new Error("Dashboard Audit refused");
+  return {
+    kind: "response",
+    response: {
+      status: 429,
+      body: {
+        error: {
+          code: "quota_exhausted",
+          allowance: "hosted_history_turn",
+          resetsAt: DateTime.formatIso(allowancePeriod(DateTime.makeUnsafe(current)).resetsAt),
+        },
+        next: [],
+      },
+      headers: transactionNoStore,
+    },
+  };
+};
+const hostedSnapshot = (
+  input: Readonly<{
+    read: NativeDashboardRead;
+    unit: Unit;
+    current: number;
+    admission: HostedDashboardAdmission;
+  }>
+): NativeDashboardResult => {
+  const { read, unit, current, admission } = input;
+  const work: Work = {
+    ...credentialWork({
+      read,
+      unit,
+      current,
+      authority: hostedAuthority(admission, current),
+      activity: Option.none(),
+    }),
+    hosted: Option.some(admission),
+  };
+  if (
+    unit.run([
+      unit.database.prepare(work.lookup.statement.sql).bind(...work.lookup.statement.params),
+    ])[0]?.results.length !== 1
+  ) {
+    return failure("unauthenticated");
+  }
+  try {
+    return validate({
+      kind: "response",
+      response: financialProjection(work, admission.subject.userId, Option.none()).response,
+    });
+  } catch (cause) {
+    if (!(cause instanceof HostedHistoryExhausted)) throw cause;
+    return hostedHistoryRefusal(work);
+  }
+};
+const readHostedSnapshot = (read: NativeDashboardRead): Effect.Effect<NativeDashboardResult> =>
+  Effect.gen(function* () {
+    const input = read.input;
+    if (input.mode !== "hosted") return unavailable();
+    const unit = makeSqliteDatabaseUnit(read.storage);
+    const fence = yield* prepareRecoveryGenerationFence({ db: unit.database, bucket: read.bucket });
+    const services = yield* Effect.context<never>();
+    return yield* Effect.try(() =>
+      read.storage.transactionSync(() => {
+        if (!read.admitted()) throw new Error("Dashboard admission closed");
+        const current = Effect.runSyncWith(services)(Clock.currentTimeMillis);
+        if (current >= input.admission.deadlineMilliseconds) return unavailable();
+        unit.run([fence]);
+        const result = hostedSnapshot({ read, unit, current, admission: input.admission });
+        if (
+          Effect.runSyncWith(services)(Clock.currentTimeMillis) >=
+          input.admission.deadlineMilliseconds
+        ) {
+          throw new Error("Dashboard handoff expired before commit");
+        }
+        return result;
+      })
+    );
+  }).pipe(Effect.orElseSucceed(unavailable));
+
 const browserSnapshotRequest = (request: Request, browserOrigin: string): boolean =>
   request.method === "GET" &&
   new URL(request.url).pathname === "/dashboard/view" &&
@@ -542,6 +700,7 @@ export const readAuditedSqliteDashboard = (
   Effect.gen(function* () {
     const request = read.input.request;
     const mode = read.input.mode;
+    if (mode === "hosted") return yield* readHostedSnapshot(read);
     if (mode === "oauth") return yield* readOAuthSnapshot(read);
     if (mode !== "document" && request.headers.has("authorization")) {
       return yield* readPATSnapshot(read);
@@ -563,7 +722,17 @@ export const readAuditedSqliteDashboard = (
         const lookup = currentBrowserSessionLookup({ ...material.value, current });
         unit.run([fence]);
         return formatted(
-          snapshot({ unit, lookup, current, sql: read.storage.sql, activity: Option.none() }, mode),
+          snapshot(
+            {
+              unit,
+              lookup,
+              current,
+              sql: read.storage.sql,
+              activity: Option.none(),
+              hosted: Option.none(),
+            },
+            mode
+          ),
           request
         );
       })

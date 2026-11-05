@@ -1,3 +1,9 @@
+import { makeAgentService } from "../agent/runtime";
+import { openAiTestKey } from "../openai.test-fixture";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
+import { UserId } from "../../src/core/identity/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
+import { HostedDashboardAdmission } from "../agent/contract";
 import { makeMcpResidency } from "../mcp/runtime";
 import { OAuthMcpAdmission } from "../mcp/contract";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
@@ -1701,4 +1707,504 @@ it.live("applies a trusted logical clock offset only inside its isolated native 
     );
     expect(observed.fixtureCounters.nativeClock).toBeLessThanOrEqual(after - oneDayMilliseconds);
   })
+);
+
+const hostedSnapshotFixture = Effect.gen(function* () {
+  const fixture = yield* patSnapshotFixture;
+  const turnId = "80000000-0000-4000-8000-000000000001";
+  const hostedSession = "80000000-0000-4000-8000-000000000002";
+  const digest = new Uint8Array(
+    yield* io(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode("c".repeat(43))))
+  );
+  yield* io(() =>
+    fixture.db.batch([
+      fixture.db.prepare(
+        "UPDATE transactions SET id='90000000-0000-4000-8000-000000000001' WHERE id='pat-wide'"
+      ),
+      fixture.db
+        .prepare(
+          "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','hosted-processing',?,'{}','disclosed','accepted',?,?)"
+        )
+        .bind(userId, fixture.current, fixture.current),
+      fixture.db
+        .prepare(
+          "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,status) VALUES (?,?,'{}',?,'active')"
+        )
+        .bind(hostedSession, userId, fixture.current),
+      fixture.db
+        .prepare(
+          "INSERT INTO hosted_turns(id,user_id,hosted_session_id,started_at_ms,status) VALUES (?,?,?,?,'pending')"
+        )
+        .bind(turnId, userId, hostedSession, fixture.current),
+      fixture.db
+        .prepare(
+          "INSERT INTO transcript_entries(id,user_id,hosted_session_id,turn_id,kind,occurred_at_ms,iteration,tool_call_id,operation,input_json) VALUES ('hosted-tool-entry',?,?,?,'tool_call',?,1,'native-hosted-call','dashboard.getDashboardView','{}')"
+        )
+        .bind(userId, hostedSession, turnId, fixture.current),
+    ])
+  );
+  const admission = yield* Schema.decodeEffect(HostedDashboardAdmission)({
+    subject: { _tag: "Browser", userId, id: sessionId, digest: Array.from(digest) },
+    turnId,
+    toolCallId: "native-hosted-call",
+    iteration: 1,
+    input: {},
+    deadlineMilliseconds: fixture.current + 30000,
+  });
+  return { ...fixture, admission };
+});
+
+it.live(
+  "reads an exact Hosted aggregate under the current pending Turn without spending a history or canonical unit",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* hostedSnapshotFixture;
+      const result = yield* io(() =>
+        fixture.snapshot({ mode: "hosted", admission: fixture.admission, request: request() })
+      );
+      expect(result).toMatchObject({
+        response: {
+          status: 200,
+          body: {
+            data: {
+              revision: 7,
+              layout: {
+                widget: {
+                  result: {
+                    moneyGroups: [
+                      {
+                        currency: "COP",
+                        outflow: { amount: "123456789012345678901234567890.01", currency: "COP" },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT operation,outcome,session_id FROM audit_entries").all()
+        )
+      ).toMatchObject({
+        results: [
+          { operation: "dashboard.getDashboardView", outcome: "accepted", session_id: sessionId },
+        ],
+      });
+    })
+);
+
+it.live("charges saved Hosted Dashboard rows once per Turn and never spends a canonical call", () =>
+  Effect.gen(function* () {
+    const fixture = yield* hostedSnapshotFixture;
+    yield* io(() =>
+      fixture.db
+        .prepare("UPDATE user_documents SET document_json=? WHERE user_id=? AND kind='dashboard'")
+        .bind(
+          encodeJson({
+            title: "Historia",
+            layout: {
+              kind: "leaf",
+              widget: {
+                id: "30000000-0000-4000-8000-000000000001",
+                type: "transaction-list",
+                limit: 1,
+              },
+            },
+          }),
+          userId
+        )
+        .run()
+    );
+    for (let index = 0; index < 2; index++) {
+      expect(
+        yield* io(() =>
+          fixture.snapshot({ mode: "hosted", admission: fixture.admission, request: request() })
+        )
+      ).toMatchObject({
+        response: {
+          status: 200,
+          body: {
+            data: {
+              layout: {
+                widget: {
+                  result: {
+                    transactions: [
+                      { money: { amount: "123456789012345678901234567890.01", currency: "COP" } },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT allowance,identity,units FROM commercial_allowance_consumptions")
+          .all()
+      )
+    ).toMatchObject({
+      results: [{ allowance: "hosted_history_turn", identity: fixture.admission.turnId, units: 1 }],
+    });
+  })
+);
+
+it.live(
+  "withholds Hosted rows when the history allowance is exhausted while keeping aggregates free",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* hostedSnapshotFixture;
+      const period = DateTime.toEpochMillis(
+        allowancePeriod(DateTime.makeUnsafe(fixture.current)).startsAt
+      );
+      yield* io(() =>
+        fixture.db.batch(
+          Array.from({ length: freeAllowanceLimits.hosted_history_turn }, (_, index) =>
+            fixture.db
+              .prepare(
+                "INSERT INTO commercial_allowance_consumptions(user_id,allowance,identity,period_start_ms,accepted_at_ms,units) VALUES (?,'hosted_history_turn',?,?,?,1)"
+              )
+              .bind(userId, `prior-${index}`, period, fixture.current)
+          )
+        )
+      );
+      expect(
+        yield* io(() =>
+          fixture.snapshot({ mode: "hosted", admission: fixture.admission, request: request() })
+        )
+      ).toMatchObject({ response: { status: 200 } });
+      yield* io(() =>
+        fixture.db
+          .prepare("UPDATE user_documents SET document_json=? WHERE user_id=? AND kind='dashboard'")
+          .bind(
+            encodeJson({
+              title: "Historia",
+              layout: {
+                kind: "leaf",
+                widget: {
+                  id: "30000000-0000-4000-8000-000000000001",
+                  type: "transaction-list",
+                  limit: 1,
+                },
+              },
+            }),
+            userId
+          )
+          .run()
+      );
+      const result = yield* io(() =>
+        fixture.snapshot({ mode: "hosted", admission: fixture.admission, request: request() })
+      );
+      expect(result).toMatchObject({
+        response: {
+          status: 429,
+          body: { error: { code: "quota_exhausted", allowance: "hosted_history_turn" } },
+        },
+      });
+      expect(encodeJson(result)).not.toContain("123456789012345678901234567890.01");
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT outcome FROM audit_entries ORDER BY rowid").all()
+        )
+      ).toMatchObject({ results: [{ outcome: "accepted" }, { outcome: "rejected" }] });
+    })
+);
+
+it.live(
+  "refuses forged Hosted credential or tool identity and rolls back history consumption if Audit fails",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* hostedSnapshotFixture;
+      for (const admission of [
+        {
+          ...fixture.admission,
+          subject: { ...fixture.admission.subject, digest: Array.from(new Uint8Array(32)) },
+        },
+        {
+          ...fixture.admission,
+          toolCallId: yield* Schema.decodeEffect(HostedDashboardAdmission.fields.toolCallId)(
+            "foreign-tool"
+          ),
+        },
+        { ...fixture.admission, deadlineMilliseconds: 1 },
+      ]) {
+        expect(
+          (yield* io(() => fixture.snapshot({ mode: "hosted", admission, request: request() })))
+            .response.status
+        ).not.toBe(200);
+      }
+      expect(
+        yield* io(() => fixture.db.prepare("SELECT count(*) AS count FROM audit_entries").first())
+      ).toEqual({ count: 0 });
+      yield* io(() =>
+        fixture.db.batch([
+          fixture.db
+            .prepare(
+              "UPDATE user_documents SET document_json=? WHERE user_id=? AND kind='dashboard'"
+            )
+            .bind(
+              encodeJson({
+                title: "Historia",
+                layout: {
+                  kind: "leaf",
+                  widget: {
+                    id: "30000000-0000-4000-8000-000000000001",
+                    type: "transaction-list",
+                    limit: 1,
+                  },
+                },
+              }),
+              userId
+            ),
+          fixture.db.prepare(
+            "CREATE TRIGGER fail_hosted_audit BEFORE INSERT ON audit_entries BEGIN SELECT RAISE(ABORT,'commercial_quota_exhausted: SQLITE_CONSTRAINT'); END"
+          ),
+        ])
+      );
+      expect(
+        yield* io(() =>
+          fixture.snapshot({ mode: "hosted", admission: fixture.admission, request: request() })
+        )
+      ).toMatchObject({ response: { status: 503 } });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ count: 0 });
+    })
+);
+
+it.live(
+  "executes a Hosted Dashboard tool through the real native Store before publishing the result to inference",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* patSnapshotFixture;
+      const digest = new Uint8Array(
+        yield* io(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode("c".repeat(43))))
+      );
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant','a0000000-0000-4000-8000-000000000001',?,?,'disclosed','accepted',?,?)"
+          )
+          .bind(userId, encodeJson(currentDisclosureFor()), fixture.current, fixture.current)
+          .run()
+      );
+      let nativeCalls = 0;
+      const modelInputs: unknown[] = [];
+      const service = makeAgentService({
+        environment: {
+          DB: fixture.db,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({
+            run: (_model, input) => {
+              modelInputs.push(input);
+              return Promise.resolve(
+                Response.json({
+                  choices: [
+                    {
+                      message:
+                        modelInputs.length === 1
+                          ? {
+                              role: "assistant",
+                              content: null,
+                              tool_calls: [
+                                {
+                                  id: "hosted-dashboard-live",
+                                  type: "function",
+                                  function: {
+                                    name: "dashboard__getDashboardView",
+                                    arguments: "{}",
+                                  },
+                                },
+                              ],
+                            }
+                          : { role: "assistant", content: "Tu resumen está listo." },
+                      finish_reason: modelInputs.length === 1 ? "tool_calls" : "stop",
+                    },
+                  ],
+                  usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+                })
+              );
+            },
+          }),
+        },
+        userId: UserId.make(userId),
+        connectionAdmission: Option.none(),
+        scheduleRecovery: () => Promise.resolve(),
+        dashboard: Option.some(({ admission, signal }) =>
+          io(() => {
+            nativeCalls++;
+            return fixture.snapshot({
+              mode: "hosted",
+              admission,
+              request: new Request("https://core.internal/dashboard/view", { signal }),
+            });
+          }).pipe(
+            Effect.map(({ response }) =>
+              Response.json(response.body, { status: response.status, headers: response.headers })
+            ),
+            Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+          )
+        ),
+      });
+      const accepted = service.accept({
+        preceding: Promise.resolve(),
+        request: new Request("https://coordinator.internal/hosted-turn", {
+          method: "POST",
+          body: encodeJson({
+            userId,
+            sessionId,
+            digest: Array.from(digest),
+            text: "Muéstrame el resumen de gastos",
+          }),
+        }),
+      });
+      if (Option.isNone(accepted)) return yield* Effect.die("missing hosted request");
+      const response = yield* io(() => accepted.value.response);
+      yield* io(() => accepted.value.settled);
+      expect(response.status).toBe(202);
+      expect(nativeCalls).toBe(1);
+      expect(modelInputs).toHaveLength(2);
+      expect(encodeJson(modelInputs[1])).toContain("123456789012345678901234567890.01");
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare(
+              "SELECT operation,outcome,session_id FROM audit_entries WHERE operation='dashboard.getDashboardView'"
+            )
+            .all()
+        )
+      ).toMatchObject({
+        results: [
+          { operation: "dashboard.getDashboardView", outcome: "accepted", session_id: sessionId },
+        ],
+      });
+    })
+);
+
+it.live("keeps an empty Hosted list free and withholds later reads after Consent withdrawal", () =>
+  Effect.gen(function* () {
+    const fixture = yield* hostedSnapshotFixture;
+    yield* io(() =>
+      fixture.db.batch([
+        fixture.db.prepare("DELETE FROM transactions WHERE user_id=?").bind(userId),
+        fixture.db
+          .prepare("UPDATE user_documents SET document_json=? WHERE user_id=? AND kind='dashboard'")
+          .bind(
+            encodeJson({
+              title: "Sin movimientos",
+              layout: {
+                kind: "leaf",
+                widget: {
+                  id: "30000000-0000-4000-8000-000000000001",
+                  type: "transaction-list",
+                  limit: 1,
+                },
+              },
+            }),
+            userId
+          ),
+      ])
+    );
+    expect(
+      yield* io(() =>
+        fixture.snapshot({ mode: "hosted", admission: fixture.admission, request: request() })
+      )
+    ).toMatchObject({
+      response: {
+        status: 200,
+        body: { data: { layout: { widget: { result: { transactions: [] } } } } },
+      },
+    });
+    expect(
+      yield* io(() =>
+        fixture.db
+          .prepare("SELECT count(*) AS count FROM commercial_allowance_consumptions")
+          .first()
+      )
+    ).toEqual({ count: 0 });
+    yield* io(() =>
+      fixture.db
+        .prepare(
+          "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal','hosted-withdrawal',?,'hosted-processing',?,?)"
+        )
+        .bind(userId, sessionId, fixture.current + 1)
+        .run()
+    );
+    expect(
+      (yield* io(() =>
+        fixture.snapshot({ mode: "hosted", admission: fixture.admission, request: request() })
+      )).response.status
+    ).not.toBe(200);
+  })
+);
+
+it.live(
+  "rechecks the WhatsApp association and exact channel Turn while retaining Hosted Audit attribution",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* hostedSnapshotFixture;
+      yield* io(() =>
+        fixture.db.batch([
+          fixture.db
+            .prepare(
+              "UPDATE users SET whatsapp_portfolio_id='portfolio-1',whatsapp_bsuid='CO.Native1',whatsapp_verified_at_ms=1 WHERE id=?"
+            )
+            .bind(userId),
+          fixture.db
+            .prepare(
+              "UPDATE hosted_turns SET inbound_portfolio_id='portfolio-1',inbound_bsuid='CO.Native1',inbound_message_id='wamid.native',inbound_business_phone_number_id='phone-1',inbound_occurred_at_ms=?,inbound_received_at_ms=? WHERE id=?"
+            )
+            .bind(fixture.current, fixture.current, fixture.admission.turnId),
+        ])
+      );
+      const admission = yield* Schema.decodeEffect(HostedDashboardAdmission)({
+        ...fixture.admission,
+        subject: {
+          _tag: "WhatsAppHosted",
+          userId,
+          portfolioId: "portfolio-1",
+          bsuid: "CO.Native1",
+        },
+      });
+      expect(
+        yield* io(() => fixture.snapshot({ mode: "hosted", admission, request: request() }))
+      ).toMatchObject({ response: { status: 200 } });
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT session_id,hosted_turn_id,outcome FROM audit_entries").all()
+        )
+      ).toMatchObject({
+        results: [{ session_id: null, hosted_turn_id: admission.turnId, outcome: "accepted" }],
+      });
+      yield* io(() =>
+        fixture.db
+          .prepare("UPDATE users SET whatsapp_bsuid='CO.Native2' WHERE id=?")
+          .bind(userId)
+          .run()
+      );
+      expect(
+        yield* io(() => fixture.snapshot({ mode: "hosted", admission, request: request() }))
+      ).toMatchObject({ response: { status: 401 } });
+      expect(
+        yield* io(() =>
+          fixture.snapshot({ mode: "hosted", admission: fixture.admission, request: request() })
+        )
+      ).toMatchObject({ response: { status: 401 } });
+    })
 );

@@ -16,6 +16,12 @@ const containsTransactions = (node: DashboardView["layout"]): boolean => {
   );
 };
 
+/** Dashboard aggregates and empty lists do not expose saved Transaction history. */
+export const dashboardLoadsSavedHistory = (output: unknown): boolean =>
+  Option.exists(Schema.decodeUnknownOption(dashboard)(output), (result) =>
+    containsTransactions(result.data.layout)
+  );
+
 /** Only newly loaded saved Transaction rows count. Creation, aggregates, empty/failed reads, and prior conversation do not. */
 export const loadsSavedHistory = (entry: CanonicalToolResultEntry): boolean => {
   if (entry.outcome._tag !== "Succeeded") return false;
@@ -29,9 +35,7 @@ export const loadsSavedHistory = (entry: CanonicalToolResultEntry): boolean => {
         (result) => result.data.length > 0
       );
     case "dashboard.getDashboardView":
-      return Option.exists(Schema.decodeOption(dashboard)(entry.outcome.output), (result) =>
-        containsTransactions(result.data.layout)
-      );
+      return dashboardLoadsSavedHistory(entry.outcome.output);
     default:
       return false;
   }

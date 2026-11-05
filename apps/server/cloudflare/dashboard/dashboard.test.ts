@@ -2504,20 +2504,18 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
-        const responses = yield* Effect.tryPromise(() =>
-          Promise.all(
-            [0, 1].map(() =>
-              send(db, 0, {
-                path: "/transactions",
-                method: "POST",
-                body: {
-                  money: { amount: "9007199254740993.01", currency: "COP" },
-                  categoryId: "10000000-0000-4000-8000-000000000001",
-                  direction: "outflow",
-                  occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-                },
-              })
-            )
+        const responses = yield* Effect.forEach([0, 1], () =>
+          Effect.tryPromise(() =>
+            send(db, 0, {
+              path: "/transactions",
+              method: "POST",
+              body: {
+                money: { amount: "9007199254740993.01", currency: "COP" },
+                categoryId: "10000000-0000-4000-8000-000000000001",
+                direction: "outflow",
+                occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+              },
+            })
           )
         );
         expect(responses.map((response) => response.status)).toEqual([201, 201]);

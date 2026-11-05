@@ -518,6 +518,7 @@ it("valid PAT callers behind a saturated unresolved-bearer source keep their own
         requestId: "40000000-0000-4000-8000-000000000005",
         grant: manualGrant(),
       });
+      vi.useFakeTimers({ toFake: ["Date"] });
       let denied: Response = Response.json({});
       for (let attempt = 0; attempt < 11; attempt += 1) {
         denied = yield* awaitPromise(

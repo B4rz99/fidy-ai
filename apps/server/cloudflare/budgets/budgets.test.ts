@@ -2851,6 +2851,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
         expect(http.status).toBe(200);
         expect(yield* Effect.tryPromise(snapshot)).toEqual(before);
         const hosted = yield* executeCanonicalWork({
+          completion: Option.none(),
           db,
           subject,
           current: DateTime.nowUnsafe().epochMilliseconds,
@@ -2885,6 +2886,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
         503
       );
       const failure = yield* executeCanonicalWork({
+        completion: Option.none(),
         db,
         subject,
         current: DateTime.nowUnsafe().epochMilliseconds,

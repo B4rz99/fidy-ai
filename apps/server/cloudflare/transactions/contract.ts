@@ -1,3 +1,4 @@
+import type { CanonicalReadFinalization } from "../canonical-admission/contract";
 import type { CapturedInterpretationContext } from "../../src/core/interpretation-evidence/contract";
 import type { IanaTimeZone } from "../../src/core/_shared/context";
 import {
@@ -53,6 +54,7 @@ export type PlanningTransactionRead<A> = Readonly<{
   db: D1Database;
   userId: string;
   ranges: ReadonlyArray<PlanningTransactionRange>;
+  finalization: Option.Option<CanonicalReadFinalization>;
   /** At most 4096 references, read in independently bounded 128-ID selections. */
   ids: ReadonlyArray<string>;
   snapshot: Readonly<{
@@ -166,6 +168,7 @@ export type DashboardTransactionRead<A> = Readonly<{
   ranges: ReadonlyArray<Readonly<{ from: number; toExclusive: number }>>;
   categories: ReadonlyArray<Category>;
   snapshot: DashboardSnapshotRead<A>;
+  finalization: Option.Option<CanonicalReadFinalization>;
 }>;
 
 /** How one Transaction mutation presents the records its response reads back. */

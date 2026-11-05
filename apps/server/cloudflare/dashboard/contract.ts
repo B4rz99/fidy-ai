@@ -1,3 +1,4 @@
+import type { CanonicalReadCompletion } from "../canonical-admission/contract";
 import type { Effect, Option } from "effect";
 import type {
   ApplyDashboardEditCanonicalInput,
@@ -34,6 +35,7 @@ export type DashboardMutationCall = {
 export type DashboardRequest = Readonly<{
   db: D1Database;
   request: Request;
+  completion: Option.Option<CanonicalReadCompletion>;
 }> &
   (
     | Readonly<{ operation: DashboardQueryOperation; subject: QueryCaller }>

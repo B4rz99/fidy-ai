@@ -6,7 +6,7 @@ import { BrowserSessionBinding } from "../../src/shell/web-session/contract";
 
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { initialBrowserSessionBindingResponse } from "./internal/browser-entry";
 
 const databases = isolatedTestDatabases();
@@ -141,10 +141,17 @@ for (const context of ["application", "transactions"] as const) {
       Effect.gen(function* () {
         const db = yield* setup();
         for (const identity of identities) {
+          const observed = observeRetentionCost(db);
           const response = Option.getOrThrow(
-            yield* entry({ db, context, token: identity.token, binding: Option.none() })
+            yield* entry({
+              db: observed.database,
+              context,
+              token: identity.token,
+              binding: Option.none(),
+            })
           );
           expect(response.status).toBe(200);
+          expect(observed.roundTrips()).toBe(context === "application" ? 1 : 2);
           expect(response.headers.get("cache-control")).toBe("no-store");
           const body = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(BrowserSessionBinding))(
             yield* Effect.tryPromise(() => response.json())

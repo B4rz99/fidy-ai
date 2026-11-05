@@ -1,3 +1,4 @@
+import type { OAuthRecentActivity } from "../../../src/core/audit/contract";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { OAuthRevocationAdmission } from "../contract";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -15,7 +16,7 @@ import {
   oauthPaths,
 } from "../../../src/shell/oauth-agents/contract";
 import type { AuditUnavailable } from "../../../src/shell/audit/contract";
-import { readOAuthActivity } from "../../../src/shell/audit/operations";
+import { prepareOAuthActivity } from "../../../src/shell/audit/operations";
 import { liveSessionConditions } from "../../../src/shell/web-session/operations";
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
 import { browserSession } from "../../web-session/operations";
@@ -53,16 +54,11 @@ const connectionState = (
 };
 const projectConnection = (
   input: AuthorizedInput,
-  row: typeof ConnectionRow.Type
+  row: typeof ConnectionRow.Type,
+  recentActivity: OAuthRecentActivity
 ): Effect.Effect<OAuthConnectionMetadata, AuditUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
     const scopes = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(row.scopes_json);
-    const recentActivity = yield* readOAuthActivity({
-      db: input.db,
-      userId: input.session.user_id,
-      connectionId: row.id,
-      guard: liveSessionConditions(input),
-    });
     return yield* Schema.decodeUnknownEffect(Schema.toType(OAuthConnectionMetadata))({
       connectionId: row.id,
       claimedClientName: row.claimed_client_name,
@@ -71,6 +67,39 @@ const projectConnection = (
       expiresAt: row.expires_at_ms,
       state: connectionState(row, input.current),
       recentActivity,
+    });
+  });
+const projectConnections = (
+  input: AuthorizedInput,
+  page: ReadonlyArray<typeof ConnectionRow.Type>
+): Effect.Effect<
+  ReadonlyArray<OAuthConnectionMetadata>,
+  BootstrapUnavailable | AuditUnavailable | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const guard = liveSessionConditions(input);
+    const activities = page.map((row) => ({
+      row,
+      prepared: prepareOAuthActivity({
+        db: input.db,
+        userId: input.session.user_id,
+        connectionId: row.id,
+        guard,
+      }),
+    }));
+    const evidence =
+      activities.length === 0
+        ? []
+        : yield* dbWork(() =>
+            input.db.batch(activities.flatMap(({ prepared }) => prepared.statements))
+          );
+    let offset = 0;
+    return yield* Effect.forEach(activities, ({ row, prepared }) => {
+      const rows = evidence.slice(offset, offset + prepared.statements.length);
+      offset += prepared.statements.length;
+      return prepared
+        .decode(rows)
+        .pipe(Effect.flatMap((activity) => projectConnection(input, row, activity)));
     });
   });
 const listConnections = (
@@ -105,7 +134,7 @@ const listConnections = (
       Schema.Array(ConnectionRow).check(Schema.isMaxLength(oauthConnectionPageSize + 1))
     )(results[1]?.results).pipe(Effect.mapError(() => new BootstrapUnavailable()));
     const page = rows.slice(0, oauthConnectionPageSize);
-    const connections = yield* Effect.forEach(page, (row) => projectConnection(input, row));
+    const connections = yield* projectConnections(input, page);
     const body = yield* Schema.decodeEffect(Schema.toType(OAuthConnectionList))({
       connections,
       nextCursor:

@@ -1,5 +1,31 @@
+import { prepareAuthorizedAuditCall } from "../../src/shell/audit/operations";
+import {
+  prepareChangedRowAssertion,
+  prepareReservedChangeCheck,
+} from "../../src/shell/sql-assertions/operations";
+import {
+  type CanonicalBrowserQueryFinalizer,
+  type CanonicalBrowserRead,
+  type CanonicalReadCompletion,
+} from "../canonical-admission/contract";
+import {
+  type QueryCaller,
+  type TransactionCaller,
+  callerScope,
+  credentialRefusedPreparation,
+  failedPreparation,
+  isOAuthCaller,
+  liveTransactionAuthority,
+  refusedPreparation,
+  transactionFailure,
+  transactionId,
+  transactionNoStore,
+  transactionUnavailable,
+} from "../canonical-work/operations";
+
+import { prepareCanonicalBrowserQueryFinalization } from "../canonical-admission/operations";
 import { makeDashboardTiming } from "./internal/dashboard-timing";
-import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
+
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 
 import { boundedJsonBody } from "../http/operations";
@@ -12,19 +38,6 @@ import {
 } from "../../src/core/dashboard/contract";
 import { DashboardUninitialized } from "../../src/shell/dashboard/contract";
 
-import {
-  type QueryCaller,
-  type TransactionCaller,
-  callerScope,
-  credentialRefusedPreparation,
-  failedPreparation,
-  isOAuthCaller,
-  liveTransactionAuthority,
-  refusedPreparation,
-  transactionFailure,
-  transactionNoStore,
-  transactionUnavailable,
-} from "../canonical-work/operations";
 import {
   audit,
   credentialUse,
@@ -51,7 +64,7 @@ import {
 } from "../canonical-operations/contract";
 import { dashboardOAuthReview, oauthDefaultDashboard } from "./internal/oauth-review";
 import { type OAuthMutationReview } from "../oauth-confirmation/contract";
-import { accountQuery, editBodyPolicy } from "./internal/dashboard";
+import { accountQuery, editBodyPolicy, prepareQueryAccounting } from "./internal/dashboard";
 
 type MutationContext = Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;
 
@@ -256,7 +269,12 @@ export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response
       });
     }
     if (!("runMutation" in input)) {
-      return yield* queryDashboard({ db, subject, operation: input.operation });
+      return yield* queryDashboard({
+        db,
+        subject,
+        operation: input.operation,
+        completion: input.completion,
+      });
     }
     const edit =
       operation === "dashboard.applyDashboardEdit"
@@ -295,16 +313,82 @@ const refusedDashboardCaller = (): Response =>
     message: "Present a valid credential and retry.",
   });
 
-const queryDashboard = ({
+const dashboardFinalization = ({
   db,
   subject,
+  completion,
   operation,
 }: Readonly<{
   db: D1Database;
   subject: QueryCaller;
+  completion: Option.Option<CanonicalReadCompletion>;
+  operation: DashboardQueryOperation;
+}>): Option.Option<CanonicalBrowserQueryFinalizer> =>
+  Option.isSome(completion) && "id" in subject
+    ? Option.some(
+        prepareCanonicalBrowserQueryFinalization({
+          db,
+          subject,
+          completion: completion.value,
+          accounting: (current) => prepareQueryAccounting({ db, subject, current, operation }),
+        })
+      )
+    : Option.none();
+
+const limitedDashboardResponse = (): Effect.Effect<Response> =>
+  Effect.succeed(
+    transactionFailure({
+      code: "rate_limited",
+      status: 429,
+      message: "Daily audit budget exhausted.",
+    })
+  );
+
+const presentDashboardCatalog = (): Effect.Effect<Response, Schema.SchemaError> =>
+  Schema.encodeEffect(Schema.toCodecJson(DashboardCatalog))(
+    makeDashboardCatalog({ restaurantCategoryId: categoryIds.restaurantes })
+  ).pipe(Effect.map((data) => Response.json({ data, next: [] }, { headers: transactionNoStore })));
+
+const readDashboardCatalog = (
+  input: Parameters<typeof accountQuery>[0]
+): Effect.Effect<Response, Effect.Error<ReturnType<typeof accountQuery>> | Schema.SchemaError> =>
+  accountQuery(input).pipe(Effect.andThen(presentDashboardCatalog()));
+
+/** The static catalog needs only one complete browser authority, pressure and accounting unit. */
+export const prepareBoundDashboardCatalog: CanonicalBrowserRead = ({
+  db,
+  authority,
+  reservation,
+  current,
+}) => ({
+  statements: [
+    prepareAuthorizedAuditCall({
+      db,
+      authority,
+      id: transactionId(),
+      current,
+      operation: "dashboard.listDashboardCatalog",
+      outcome: "accepted",
+      afterOwnerWrite: false,
+    }),
+    prepareReservedChangeCheck({ db, scope: "dashboard", reservation }),
+  ],
+  present: () => presentDashboardCatalog().pipe(Effect.orElseSucceed(transactionUnavailable)),
+});
+
+const queryDashboard = ({
+  db,
+  subject,
+  operation,
+  completion,
+}: Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+  completion: Option.Option<CanonicalReadCompletion>;
   operation: DashboardQueryOperation;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
+    const final = dashboardFinalization({ db, subject, completion, operation });
     const measured = makeDashboardTiming(operation === "dashboard.getDashboardView");
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const live =
@@ -312,11 +396,7 @@ const queryDashboard = ({
       (yield* Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current })));
     if (!live) return refusedDashboardCaller();
     if (operation === "dashboard.listDashboardCatalog") {
-      yield* accountQuery({ db, subject, current, operation });
-      const data = yield* Schema.encodeEffect(Schema.toCodecJson(DashboardCatalog))(
-        makeDashboardCatalog({ restaurantCategoryId: categoryIds.restaurantes })
-      );
-      return Response.json({ data, next: [] }, { headers: transactionNoStore });
+      return yield* readDashboardCatalog({ db, subject, current, operation });
     }
     const source = yield* measured.measure(
       "source",
@@ -335,21 +415,22 @@ const queryDashboard = ({
         operation,
         document: source.document.value.document,
         viewContext: source.viewContext,
+        finalization: Option.map(final, (value) => value.finalization),
       })
     );
     if (Option.isNone(value) || value.value._tag !== "Owner") return transactionUnavailable();
-    yield* measured.measure("audit", accountQuery({ db, subject, current, operation }));
+    yield* measured.measure(
+      "audit",
+      Option.match(final, {
+        onNone: () => accountQuery({ db, subject, current, operation }),
+        onSome: () => Effect.void,
+      })
+    );
     const response = yield* presentDashboard(value.value);
-    return measured.respond(response);
+    return measured.respond(
+      Option.match(final, { onNone: () => response, onSome: (value) => value.present(response) })
+    );
   }).pipe(
-    Effect.catchTag("DashboardQueryLimited", () =>
-      Effect.succeed(
-        transactionFailure({
-          code: "rate_limited",
-          status: 429,
-          message: "Daily audit budget exhausted.",
-        })
-      )
-    ),
+    Effect.catchTag("DashboardQueryLimited", limitedDashboardResponse),
     Effect.orElseSucceed(transactionUnavailable)
   );

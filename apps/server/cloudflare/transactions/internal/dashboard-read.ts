@@ -1,3 +1,5 @@
+import type { TransactionBoundaryFailure } from "../../canonical-work/contract";
+import { readFinalizedSnapshot } from "./read-finalization";
 import { type Cause, Effect, Option, Schema } from "effect";
 import type {
   DashboardTransactionFact,
@@ -131,20 +133,36 @@ const findRangePlan = <A>(
         });
   });
 
+const validChunkRows = ({
+  rows,
+  expectedCount,
+  aggregateCount,
+  accepts,
+}: Readonly<{
+  rows: ReadonlyArray<D1Result>;
+  expectedCount: number;
+  aggregateCount: number;
+  accepts: (rows: ReadonlyArray<unknown>) => boolean;
+}>): boolean => rows.length === expectedCount && accepts(rows[aggregateCount]?.results ?? []);
+
 const readChunk = <A>({
   input,
   ranges,
   first,
+  last,
 }: Readonly<{
   input: DashboardTransactionRead<A>;
   ranges: ReadonlyArray<PreparedRange>;
   first: boolean;
-}>): Effect.Effect<Option.Option<Chunk>, Cause.UnknownError> =>
+  last: boolean;
+}>): Effect.Effect<Option.Option<Chunk>, Cause.UnknownError | TransactionBoundaryFailure> =>
   Effect.gen(function* () {
     const { db, userId, snapshot, lists } = input;
     const peers = first ? snapshot.statements : snapshot.statements.slice(0, 1);
-    const rows = yield* Effect.tryPromise(() =>
-      db.batch([
+    const rows = yield* readFinalizedSnapshot({
+      db,
+      finalization: last ? input.finalization : Option.none(),
+      statements: [
         prepareConsentAction({
           db,
           subject: { _tag: "User", userId: UserId.make(userId) },
@@ -154,11 +172,11 @@ const readChunk = <A>({
         ...ranges.flatMap((range) => projectionQueries({ db, userId, range })),
         ...peers,
         ...(first ? dashboardTransactionQueries({ db, userId, lists }) : []),
-      ])
-    );
+      ],
+    });
     const aggregateCount = 1 + ranges.length * 2;
     const expectedCount = aggregateCount + peers.length + (first ? lists.length : 0);
-    if (rows.length !== expectedCount || !snapshot.accepts(rows[aggregateCount]?.results ?? [])) {
+    if (!validChunkRows({ rows, expectedCount, aggregateCount, accepts: snapshot.accepts })) {
       return Option.none();
     }
     const aggregate = decodeAggregateSnapshot({
@@ -215,6 +233,7 @@ export const readDashboardTransactions = <A>(
         input,
         ranges,
         first: index === 0,
+        last: index === plan.value.groups.length - 1,
       });
       if (
         Option.isNone(chunk) ||

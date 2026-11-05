@@ -1,3 +1,18 @@
+import { prepareBoundRecurringWorkspace } from "../../recurring-plans/operations";
+import {
+  prepareBoundReviewItem,
+  prepareBoundReviewMaterial,
+  prepareBoundReviewPageContext,
+  prepareBoundReviewWorkspace,
+  validationFailed,
+} from "../../ingestion/operations";
+import { browseDashboard, prepareBoundDashboardCatalog } from "../../dashboard/operations";
+import {
+  type CanonicalBrowserRead,
+  type CanonicalBrowserSnapshotOperation,
+  type CanonicalReadCompletion,
+} from "../../canonical-admission/contract";
+
 import { browserSessionBindingResponse } from "../../web-session/operations";
 import type { BancolombiaAuthenticationFailed } from "../../bancolombia-authentication/contract";
 import { ReviewCommand } from "../../../src/core/ingestion/contract";
@@ -29,6 +44,7 @@ import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
 
 import {
+  protectCanonicalBrowserMaterial,
   protectCanonicalBrowserRequest,
   protectCanonicalBrowserSnapshot,
   protectCanonicalRequest,
@@ -66,7 +82,7 @@ import {
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
 import { budgetRefusal, prepareBoundBudgetWorkspace } from "../../budgets/operations";
-import { browseDashboard } from "../../dashboard/operations";
+
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 import {
   type TransactionCaller as CanonicalCaller,
@@ -83,7 +99,7 @@ import {
   handleWebAuthentication,
   ownsWebAuthenticationPath,
 } from "../../web-authentication/operations";
-import { refundSupportRoute } from "../../subscription/operations";
+import { prepareBoundSubscriptionRead, refundSupportRoute } from "../../subscription/operations";
 import { paymentEnrollmentTransport } from "../../../src/shell/subscription/runtime";
 import {
   dispatchBillingCollection,
@@ -92,7 +108,7 @@ import {
   receiveWompiBillingEvent,
 } from "../../subscription/runtime";
 
-import { resolveCanonicalPATCredential } from "../../tokens/operations";
+import { prepareBoundPATList, resolveCanonicalPATCredential } from "../../tokens/operations";
 import { rejectMemoryMutation } from "../../memory/operations";
 import { executeCanonicalHttpQuery } from "../../canonical-operations/operations";
 import { canonicalOperation, canonicalRoute } from "../../routing/operations";
@@ -129,7 +145,6 @@ import {
   ResolveNeedsReviewItemInput,
   statementStagingPath,
 } from "../../../src/shell/ingestion/contract";
-import { validationFailed } from "../../ingestion/operations";
 
 import {
   type WhatsAppDocumentAdmission,
@@ -387,16 +402,26 @@ const sendToCoordinator = ({
   environment,
   subject,
   work,
+  completion,
 }: Readonly<{
   environment: CoreHttpEnvironment;
   subject: TransactionCaller;
   work: CanonicalWork;
+  completion: Option.Option<CanonicalReadCompletion>;
 }>): Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError> =>
   Effect.gen(function* () {
     const traceHeaders = yield* captureTraceHeaders;
     const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.userId);
+    const admission = coordinatorAdmission(subject, work);
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalWorkAdmission))(
-      coordinatorAdmission(subject, work)
+      Option.isSome(completion) &&
+        work._tag === "Query" &&
+        ["dashboard.getDashboardView", "recurringPlans.getRecurringWorkspace"].includes(
+          work.operation
+        ) &&
+        admission._tag === "WebSessionWork"
+        ? { ...admission, _tag: "WebSessionQueryWork", leaseId: completion.value.leaseId }
+        : coordinatorAdmission(subject, work)
     );
     const [duration, response] = yield* Effect.timed(
       Effect.tryPromise(() =>
@@ -445,6 +470,7 @@ const dispatchCanonicalBatch = (
       );
     }
     return yield* sendToCoordinator({
+      completion: Option.none(),
       environment,
       subject,
       work: { _tag: "Batch", calls: parsed.value.calls },
@@ -470,6 +496,7 @@ const dispatchCanonicalCapture = (
       );
     }
     return yield* sendToCoordinator({
+      completion: Option.none(),
       environment,
       subject,
       work: canonicalCall(CanonicalOperationId.make("transactions.createTransaction"), {
@@ -497,6 +524,7 @@ const dispatchCanonicalCorrection = (
       );
     }
     return yield* sendToCoordinator({
+      completion: Option.none(),
       environment,
       subject,
       work: canonicalCall(CanonicalOperationId.make("transactions.updateTransaction"), {
@@ -524,6 +552,7 @@ const dispatchCanonicalPair = (
       );
     }
     return yield* sendToCoordinator({
+      completion: Option.none(),
       environment,
       subject,
       work: canonicalCall(CanonicalOperationId.make(operation), { payload: pair.value }),
@@ -613,6 +642,7 @@ const keywordRuleMutationResponse = (
       return Option.isNone(payload)
         ? keywordRuleInvalidInput()
         : yield* sendToCoordinator({
+            completion: Option.none(),
             environment,
             subject,
             work: ownerCall(operation, { payload: payload.value }),
@@ -622,6 +652,7 @@ const keywordRuleMutationResponse = (
     if (Option.isNone(id)) return keywordRuleUnknownId();
     if (operation === "categories.deleteKeywordRule") {
       return yield* sendToCoordinator({
+        completion: Option.none(),
         environment,
         subject,
         work: ownerCall(operation, { params: { id: id.value } }),
@@ -632,6 +663,7 @@ const keywordRuleMutationResponse = (
     return Option.isNone(payload)
       ? keywordRuleInvalidInput()
       : yield* sendToCoordinator({
+          completion: Option.none(),
           environment,
           subject,
           work: ownerCall(operation, {
@@ -708,6 +740,7 @@ const dispatchMemoryMutation = <Input>({
       return yield* rejectInvalidMemory({ environment, subject, operation });
     }
     return yield* sendToCoordinator({
+      completion: Option.none(),
       environment,
       subject,
       work: ownerCall(operation, decoded.value),
@@ -781,6 +814,7 @@ const memoryMutationResponse = (
     environment: CoreHttpEnvironment;
     operation: MemoryMutationId;
     subject: TransactionCaller;
+    completion: Option.Option<CanonicalReadCompletion>;
   }>
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
@@ -862,12 +896,14 @@ const budgetMutationResponse = ({
           }).pipe(Effect.orElseSucceed(() => Option.none<CreateBudgetInput>()));
     if (operation !== "budgets.deleteBudget" && Option.isNone(payload)) {
       return yield* sendToCoordinator({
+        completion: Option.none(),
         environment,
         subject,
         work: ownerCall(CanonicalOperationId.make(operation), invalidBudgetInput(id)),
       });
     }
     return yield* sendToCoordinator({
+      completion: Option.none(),
       environment,
       subject,
       work: ownerCall(
@@ -937,9 +973,13 @@ const memoryResponse = (
 ): Option.Option<Effect.Effect<Response>> => {
   const { request, environment, operation, subject } = input;
   return Option.map(memoryMutationOperation(operation.id), (owned) =>
-    memoryMutationResponse({ request, environment, subject, operation: owned }).pipe(
-      Effect.withSpan(owned)
-    )
+    memoryMutationResponse({
+      completion: Option.none(),
+      request,
+      environment,
+      subject,
+      operation: owned,
+    }).pipe(Effect.withSpan(owned))
   );
 };
 /** Statement bytes enter only through verified WhatsApp document admission. */
@@ -1120,6 +1160,7 @@ const forwardingCanonicalResponse = ({
   if (operation.id === "ingestion.enableEmailForwarding") {
     return Option.some(
       sendToCoordinator({
+        completion: Option.none(),
         environment,
         subject,
         work: canonicalCall(operation.id, {}),
@@ -1161,12 +1202,14 @@ const clarificationCanonicalResponse = ({
           return validationFailed("Invalid statement clarification input.");
         }
         return yield* sendToCoordinator({
+          completion: Option.none(),
           environment,
           subject,
           work: ownerCall(operation.id, { params: { id }, payload: payload.value }),
         });
       }
       return yield* sendToCoordinator({
+        completion: Option.none(),
         environment,
         subject,
         work: ownerCall(operation.id, { params: { id } }),
@@ -1220,6 +1263,7 @@ const transactionResponse = (
   if (operation.id === "transactions.deleteTransaction") {
     return Option.some(
       sendToCoordinator({
+        completion: Option.none(),
         environment,
         subject,
         work: canonicalCall(operation.id, { params: { id: rawPathId({ request }) } }),
@@ -1271,6 +1315,7 @@ const insightResponse = (
       const id = Schema.decodeOption(InsightEventId)(insightPathId);
       if (Option.isNone(id)) {
         return yield* sendToCoordinator({
+          completion: Option.none(),
           environment,
           subject,
           work: ownerCall(operation.id, { params: { id: insightPathId } }),
@@ -1283,6 +1328,7 @@ const insightResponse = (
           schema: Schema.toCodecJson(DeliveryEvidenceInput),
         });
         return yield* sendToCoordinator({
+          completion: Option.none(),
           environment,
           subject,
           work: ownerCall(operation.id, {
@@ -1292,6 +1338,7 @@ const insightResponse = (
         });
       }
       return yield* sendToCoordinator({
+        completion: Option.none(),
         environment,
         subject,
         work: ownerCall(operation.id, { params: { id: id.value } }),
@@ -1316,10 +1363,12 @@ const dashboardResponse = (
   Option.map(Schema.decodeUnknownOption(DashboardOperation)(input.operation.id), (operation) => {
     const request = { db: input.environment.DB, subject: input.subject, request: input.request };
     return browseDashboard({
+      completion: Option.none(),
       ...request,
       operation,
       runMutation: (call) =>
         sendToCoordinator({
+          completion: Option.none(),
           environment: input.environment,
           subject: input.subject,
           work: ownerCall(CanonicalOperationId.make(call.operation), Option.getOrNull(call.input)),
@@ -1346,6 +1395,7 @@ const connectInstitutionResponse = (
       schema: Schema.toCodecJson(ConnectInstitutionInput),
     }).pipe(Effect.orElseSucceed(() => Option.none()));
     return yield* sendToCoordinator({
+      completion: Option.none(),
       environment: input.environment,
       subject: input.subject,
       work: ownerCall(CanonicalOperationId.make("connections.connectInstitution"), {
@@ -1371,6 +1421,7 @@ const recurringEditResponse = (
       ? yield* Schema.encodeEffect(Schema.toCodecJson(RecurringCommand))(payload.value)
       : {};
     return yield* sendToCoordinator({
+      completion: Option.none(),
       environment: input.environment,
       subject: input.subject,
       work: ownerCall(CanonicalOperationId.make("recurringPlans.applyRecurringEdit"), {
@@ -1392,6 +1443,7 @@ const reviewEditResponse = (
       ? yield* Schema.encodeEffect(Schema.toCodecJson(ReviewCommand))(payload.value)
       : {};
     return yield* sendToCoordinator({
+      completion: Option.none(),
       environment: input.environment,
       subject: input.subject,
       work: ownerCall(CanonicalOperationId.make("ingestion.applyReviewEdit"), { payload: wire }),
@@ -1423,6 +1475,7 @@ const executeCanonicalWork = (
     environment: CoreHttpEnvironment;
     operation: CatalogOperation;
     subject: TransactionCaller;
+    completion: Option.Option<CanonicalReadCompletion>;
   }>
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
@@ -1435,7 +1488,9 @@ const executeCanonicalWork = (
       bucket: reviewQueryBucket(environment, operation.id),
       browserOrigin: environment.BROWSER_ORIGIN,
       coordinate: (work) =>
-        sendToCoordinator({ environment, subject, work }).pipe(Effect.orElseSucceed(unavailable)),
+        sendToCoordinator({ environment, subject, work, completion: input.completion }).pipe(
+          Effect.orElseSucceed(unavailable)
+        ),
     });
   }
   const workspaceEdit = workspaceEditResponse(input);
@@ -1443,6 +1498,7 @@ const executeCanonicalWork = (
   if (operation.id === "connections.connectInstitution") return connectInstitutionResponse(input);
   if (operation.id === "subscription.cancelSubscription") {
     return sendToCoordinator({
+      completion: Option.none(),
       environment,
       subject,
       work: canonicalCall(operation.id, {}),
@@ -1484,17 +1540,89 @@ const withBrowserBinding = <E, R>(
     Effect.flatMap(Option.match({ onNone: () => work, onSome: Effect.succeed }))
   );
 
-const supportsBoundHistory = (operation: CatalogOperation): boolean =>
-  operation.id === "transactions.listTransactions" &&
-  operation.policy.requiredTier === "free" &&
-  operation.policy.kind === "query" &&
-  operation.policy.access._tag === "UserOwnedAgentScoped";
+const browserSnapshotReads: ReadonlyArray<
+  Readonly<{
+    operation: CanonicalBrowserSnapshotOperation;
+    prepare: (request: Request) => CanonicalBrowserRead;
+  }>
+> = [
+  { operation: "pats.listPATs", prepare: (): CanonicalBrowserRead => prepareBoundPATList },
+  {
+    operation: "subscription.listSubscriptionOffers",
+    prepare: (): CanonicalBrowserRead =>
+      prepareBoundSubscriptionRead("subscription.listSubscriptionOffers"),
+  },
+  {
+    operation: "subscription.getSubscriptionStatus",
+    prepare: (): CanonicalBrowserRead =>
+      prepareBoundSubscriptionRead("subscription.getSubscriptionStatus"),
+  },
+  { operation: "transactions.listTransactions", prepare: prepareBoundTransactionRead },
+  { operation: "recurringPlans.getRecurringWorkspace", prepare: prepareBoundRecurringWorkspace },
+  {
+    operation: "dashboard.listDashboardCatalog",
+    prepare: (): CanonicalBrowserRead => prepareBoundDashboardCatalog,
+  },
+  { operation: "budgets.getBudgetStatus", prepare: prepareBoundBudgetWorkspace },
+  { operation: "ingestion.getReviewWorkspace", prepare: prepareBoundReviewWorkspace },
+  { operation: "ingestion.getReviewItem", prepare: prepareBoundReviewItem },
+  { operation: "ingestion.getReviewPageContext", prepare: prepareBoundReviewPageContext },
+  {
+    operation: "categories.listCategories",
+    prepare: (): CanonicalBrowserRead => prepareBoundCategoryRead,
+  },
+];
 
-const supportsBoundBudgetWorkspace = (operation: CatalogOperation): boolean =>
-  operation.id === "budgets.getBudgetStatus" &&
+const browserReadAccess = (
+  operation: CanonicalBrowserSnapshotOperation
+): "WebOrHosted" | "WebSessionOnly" | "UserOwnedAgentScoped" => {
+  if (operation === "pats.listPATs") return "WebOrHosted";
+  return operation === "ingestion.getReviewPageContext" ? "WebSessionOnly" : "UserOwnedAgentScoped";
+};
+
+const preparedBrowserRead = (
+  operation: CatalogOperation,
+  request: Request
+): Option.Option<
+  Readonly<{
+    operation: CanonicalBrowserSnapshotOperation;
+    read: CanonicalBrowserRead;
+  }>
+> => {
+  if (
+    request.method !== "GET" ||
+    operation.policy.kind !== "query" ||
+    operation.policy.requiredTier !== "free"
+  ) {
+    return Option.none();
+  }
+  if (
+    [
+      "categories.listCategories",
+      "dashboard.listDashboardCatalog",
+      "pats.listPATs",
+      "subscription.listSubscriptionOffers",
+      "subscription.getSubscriptionStatus",
+    ].includes(operation.id) &&
+    new URL(request.url).search !== ""
+  ) {
+    return Option.none();
+  }
+  return Option.map(
+    Option.fromUndefinedOr(
+      browserSnapshotReads.find((entry) => entry.operation === operation.id)
+    ).pipe(
+      Option.filter((entry) => operation.policy.access._tag === browserReadAccess(entry.operation))
+    ),
+    (entry) => ({ operation: entry.operation, read: entry.prepare(request) })
+  );
+};
+const supportsBrowserMaterial = (operation: CatalogOperation, request: Request): boolean =>
+  operation.id === "ingestion.getReviewMaterial" &&
+  request.method === "GET" &&
   operation.policy.requiredTier === "free" &&
   operation.policy.kind === "query" &&
-  operation.policy.access._tag === "UserOwnedAgentScoped";
+  operation.policy.access._tag === "WebSessionOnly";
 
 const browserCanonicalResponse = (
   request: Request,
@@ -1503,43 +1631,40 @@ const browserCanonicalResponse = (
 ): Effect.Effect<Response> =>
   Clock.currentTimeMillis.pipe(
     Effect.flatMap((current) => {
-      if (supportsBoundBudgetWorkspace(operation) && request.method === "GET") {
-        return protectCanonicalBrowserSnapshot({
+      if (supportsBrowserMaterial(operation, request)) {
+        return protectCanonicalBrowserMaterial({
           request,
           db: environment.DB,
           current,
-          operation: "budgets.getBudgetStatus",
-          read: prepareBoundBudgetWorkspace(request),
+          operation,
+          read: prepareBoundReviewMaterial({
+            request,
+            bucket: reviewQueryBucket(environment, operation.id),
+          }),
         }).pipe(observeCanonicalResponse(operation.id));
       }
-      if (supportsBoundHistory(operation) && request.method === "GET") {
+      const prepared = preparedBrowserRead(operation, request);
+      if (Option.isSome(prepared)) {
         return protectCanonicalBrowserSnapshot({
           request,
           db: environment.DB,
           current,
-          operation: "transactions.listTransactions",
-          read: prepareBoundTransactionRead(request),
+          ...prepared.value,
         }).pipe(observeCanonicalResponse(operation.id));
-      }
-      if (
-        operation.id === "categories.listCategories" &&
-        request.method === "GET" &&
-        new URL(request.url).search === ""
-      ) {
-        return protectCanonicalBrowserSnapshot({
-          request,
-          db: environment.DB,
-          current,
-          operation: "categories.listCategories",
-          read: prepareBoundCategoryRead,
-        });
       }
       return protectCanonicalBrowserRequest({
         request,
         db: environment.DB,
         operation,
         current,
-        work: (subject) => executeCanonicalWork({ request, environment, operation, subject }),
+        work: (subject, completion) =>
+          executeCanonicalWork({
+            request,
+            environment,
+            operation,
+            subject,
+            completion: Option.some(completion),
+          }),
       });
     })
   );
@@ -1576,7 +1701,14 @@ const authorizedCanonicalResponse = (
         Effect.filterOrElse(
           (result): result is Response => result instanceof Response,
           (subject) =>
-            executeProtectedCanonicalWork({ request, environment, operation, current, subject })
+            executeProtectedCanonicalWork({
+              completion: Option.none(),
+              request,
+              environment,
+              operation,
+              current,
+              subject,
+            })
         ),
         Effect.filterOrElse(
           (response) => response.status !== HTTP_UNAUTHORIZED,

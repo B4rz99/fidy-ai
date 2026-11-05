@@ -458,6 +458,7 @@ const executeHostedMutation = (
           })
         : Option.none();
       return yield* executeCanonicalWork({
+        completion: Option.none(),
         db: env.DB,
         work,
         subject: {

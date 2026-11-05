@@ -1,3 +1,4 @@
+import type { CanonicalReadFinalization } from "../../canonical-admission/contract";
 import {
   findUserDocument,
   prepareUserDocumentWrite,
@@ -298,6 +299,7 @@ export const findDashboardValue = ({
     const document = yield* findDashboardDocument({ db, userId });
     if (Option.isNone(document)) return Option.none();
     return yield* projectDashboardValue({
+      finalization: Option.none(),
       db,
       userId,
       operation,
@@ -313,12 +315,14 @@ export const projectDashboardValue = ({
   operation,
   document,
   viewContext,
+  finalization,
 }: Readonly<{
   db: D1Database;
   userId: string;
   operation: DashboardOperation;
   document: DashboardDocument;
   viewContext: Option.Option<DashboardReadContext>;
+  finalization: Option.Option<CanonicalReadFinalization>;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   Effect.gen(function* () {
     if (operation !== "dashboard.getDashboardView") {
@@ -331,6 +335,7 @@ export const projectDashboardValue = ({
     if (Option.isNone(viewContext)) return Option.none();
     const now = yield* DateTime.now;
     const facts = yield* loadDashboardFacts({
+      finalization,
       db,
       userId,
       document,

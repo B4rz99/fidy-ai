@@ -1,3 +1,4 @@
+import type { CanonicalReadFinalization } from "../../canonical-admission/contract";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { prepareUserContext } from "../../identity/user-context/operations";
@@ -76,6 +77,7 @@ const findFinancialSnapshot = ({
   db,
   userId,
   initial,
+  finalization,
   lists,
   plan,
   now,
@@ -86,6 +88,7 @@ const findFinancialSnapshot = ({
   lists: ListQueries;
   plan: RangePlan;
   now: DateTime.Utc;
+  finalization: Option.Option<CanonicalReadFinalization>;
 }>): Effect.Effect<Option.Option<FinancialSnapshot>> => {
   const { context, categories } = initial;
   const month = DateTime.formatIsoDate(
@@ -94,6 +97,7 @@ const findFinancialSnapshot = ({
   const caps = prepareBudgetCaps({ db, userId, month });
   if (Option.isNone(caps)) return Effect.succeedNone;
   return readDashboardTransactions({
+    finalization,
     db,
     userId,
     categories,
@@ -148,18 +152,21 @@ export const loadDashboardFacts = ({
   document,
   now,
   initial,
+  finalization,
 }: Readonly<{
   db: D1Database;
   userId: string;
   document: DashboardDocument;
   now: DateTime.Utc;
   initial: DashboardReadContext;
+  finalization: Option.Option<CanonicalReadFinalization>;
 }>): Effect.Effect<Option.Option<DashboardFacts>> =>
   Effect.gen(function* () {
     const widgets = collectLayoutWidgets(document.layout);
     const plan = planRanges(widgets, now, initial.context);
     const lists = planLists(widgets);
     const selected = yield* findFinancialSnapshot({
+      finalization,
       db,
       userId,
       initial,

@@ -1140,6 +1140,7 @@ it(
             },
           ]) {
             const response = yield* executeCanonicalWork({
+              completion: Option.none(),
               db,
               bucket: Option.none(),
               subject,
@@ -1837,7 +1838,7 @@ it(
   30_000
 );
 
-it("keeps the complete browser Dashboard journey within five fresh recovery-fenced native units", () =>
+it("keeps the complete browser Dashboard journey within three fresh recovery-fenced native units", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const raw = yield* initializedSetup();
@@ -1864,6 +1865,7 @@ it("keeps the complete browser Dashboard journey within five fresh recovery-fenc
       }).DB;
       const reply = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
       expect(reply.status).toBe(200);
+      expect(reply.headers.has("fidy-internal-read-completion")).toBe(false);
       yield* Schema.decodeUnknownEffect(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
         yield* Effect.tryPromise(() => reply.json())
       );
@@ -1876,8 +1878,8 @@ it("keeps the complete browser Dashboard journey within five fresh recovery-fenc
         const duration = Number(field?.split(";dur=")[1]);
         expect(Number.isFinite(duration) && duration >= 0).toBe(true);
       }
-      expect(observed.roundTrips()).toBe(5);
-      expect(generationReads).toBe(5);
+      expect(observed.roundTrips()).toBe(3);
+      expect(generationReads).toBe(3);
       expect(observed.cost().rowsWritten).toBeLessThanOrEqual(19);
     })
   ));

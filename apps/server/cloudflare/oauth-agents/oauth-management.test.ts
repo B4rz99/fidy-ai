@@ -1,3 +1,4 @@
+import { observeRetentionCost } from "../d1-test-fixture";
 import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { deepStrictEqual } from "node:assert";
 import { afterEach, expect, it, vi } from "vitest";
@@ -790,5 +791,34 @@ it("pages retained connections and refuses oversized revoke-all atomically rathe
             .first<number>("count(*)")
         )
       ).toBe(0);
+    })
+  ));
+
+it("batches recent activity for an entire connection page", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      for (let index = 0; index < 3; index++) yield* approveAgain(fixture);
+      const observed = observeRetentionCost(fixture.db);
+      const response = yield* manageConnections({
+        db: observed.database,
+        request: new Request("https://api.fidyapp.com/web/oauth/connections", {
+          headers: fixture.headers,
+        }),
+        browserOrigin: "https://app.fidyapp.com",
+        current: DateTime.nowUnsafe().epochMilliseconds,
+        admitUser: () => Effect.void,
+        coordinator: {
+          getByName: () => {
+            throw new Error("Listing must not revoke");
+          },
+        },
+      });
+      expect(response.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ connections: Schema.Array(Schema.Unknown) })
+      )(yield* wait(response.json()));
+      expect(body.connections).toHaveLength(4);
+      expect(observed.roundTrips()).toBeLessThanOrEqual(3);
     })
   ));

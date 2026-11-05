@@ -1,3 +1,5 @@
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
+import { browserSessionBindingHeader } from "../../../src/shell/browser-transport/contract";
 import type { ProcessingConsentStatus } from "../../../src/shell/processing-consent/contract";
 import {
   decodeProcessingConsentStatusRead,
@@ -126,3 +128,53 @@ export const observeEntry = (
       status: value,
     }));
   });
+/** Credential-only preparation for bootstrap and privacy status; withdrawn Consent stays readable. */
+export const prepareBrowserSessionLookup = (
+  input: Readonly<{ request: Request; current: number; mounted: boolean }>
+): Promise<Option.Option<BoundWebSessionLookup>> => {
+  const raw = input.request.headers.get(browserSessionBindingHeader);
+  const binding = Schema.decodeUnknownOption(WebSessionId)(raw);
+  if ((input.mounted || raw !== null) && Option.isNone(binding)) {
+    return Promise.resolve(Option.none());
+  }
+  return prepareSessionLookup({ ...input, binding, freshness: "live", requireConsent: false });
+};
+
+/** Preserve signed-out entry while refusing a live cookie paired with another mounted identity. */
+export const prepareBrowserEntryLookup = (
+  input: Readonly<{ request: Request; current: number }>
+): Promise<
+  Option.Option<
+    Readonly<{
+      lookup: BoundWebSessionLookup;
+      presented: OwnedStatement;
+    }>
+  >
+> =>
+  prepareSessionLookup({
+    ...input,
+    freshness: "live",
+    requireConsent: false,
+    binding: Option.none(),
+  }).then(
+    Option.map((presented) => {
+      const expected = input.request.headers.get(browserSessionBindingHeader);
+      if (expected === null) return { lookup: presented, presented: presented.statement };
+      const authority = {
+        ...presented.authority,
+        predicate: `${presented.authority.predicate} AND id = ?`,
+        bindings: [...presented.authority.bindings, expected],
+      };
+      return {
+        lookup: {
+          ...presented,
+          authority,
+          statement: {
+            sql: `SELECT id,user_id AS userId FROM web_sessions WHERE ${authority.predicate}`,
+            params: authority.bindings,
+          },
+        },
+        presented: presented.statement,
+      };
+    })
+  );

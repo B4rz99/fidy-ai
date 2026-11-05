@@ -6,6 +6,7 @@ import {
 } from "~/shell/subscription/internal/queries";
 
 const trial = {
+  has_pro_grant: 0,
   started_at_ms: Date.parse("2026-09-01T12:00:00Z"),
   trial_ends_at_ms: Date.parse("2026-09-08T12:00:00Z"),
   price_id: null,

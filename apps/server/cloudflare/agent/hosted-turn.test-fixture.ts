@@ -1086,6 +1086,7 @@ export const seedRecurringReview = ({
   Effect.gen(function* () {
     const credential = yield* Effect.tryPromise(() => subject(0));
     const response = yield* executeCanonicalWork({
+      completion: Option.none(),
       db,
       subject: credential,
       current: now(),

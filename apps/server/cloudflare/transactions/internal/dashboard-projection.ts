@@ -75,15 +75,41 @@ export const projectionRange = ({
   });
 };
 
-const selectedBuckets = `FROM transaction_projection_bucket
-  WHERE user_id = ? AND (
-    (size_seconds = 86400 AND bucket >= ? AND bucket < ?)
-    OR (size_seconds = 60 AND bucket >= ? AND bucket < ?
-      AND (bucket < ? OR bucket >= ?)))`;
-const selectedDigits = selectedBuckets.replaceAll(
-  "transaction_projection_bucket",
-  "transaction_projection_digit"
-);
+type ProjectionRange = Readonly<{
+  firstDay: number;
+  lastDay: number;
+  firstMinute: number;
+  lastMinute: number;
+}>;
+type ProjectionSpan = Readonly<{ size: number; from: number; toExclusive: number }>;
+const projectionSpans = (range: ProjectionRange): ReadonlyArray<ProjectionSpan> => [
+  { size: 86400, from: range.firstDay, toExclusive: range.lastDay },
+  {
+    size: 60,
+    from: range.firstMinute,
+    toExclusive: Math.min(range.lastMinute, range.firstDay * minutesPerDay),
+  },
+  {
+    size: 60,
+    from: Math.max(
+      range.firstMinute,
+      range.firstDay * minutesPerDay,
+      range.lastDay * minutesPerDay
+    ),
+    toExclusive: range.lastMinute,
+  },
+];
+const selectedSpans = (
+  table: "transaction_projection_bucket" | "transaction_projection_digit",
+  columns: string,
+  spans: ReadonlyArray<ProjectionSpan>
+): string =>
+  spans
+    .map(
+      ({ size }) =>
+        `SELECT ${columns} FROM ${table} WHERE user_id = (SELECT userId FROM owner) AND size_seconds = ${size} AND bucket >= ? AND bucket < ?`
+    )
+    .join(" UNION ALL ");
 
 export const projectionQueries = (
   input: Readonly<{
@@ -100,22 +126,16 @@ export const projectionQueries = (
   const { db, range } = input;
   const selection =
     "userId" in input ? { sql: "SELECT ? AS userId", params: [input.userId] } : input.userSelection;
-  const predicate =
-    "userId" in input ? "user_id = ?" : `user_id = (SELECT userId FROM (${selection.sql}))`;
-  const buckets = selectedBuckets.replace("user_id = ?", predicate);
-  const digits = selectedDigits.replace("user_id = ?", predicate);
+  const spans = projectionSpans(range);
+  const buckets = `FROM (${selectedSpans("transaction_projection_bucket", "currency,direction,category_id,count,max_minor", spans)})`;
+  const digits = `FROM (${selectedSpans("transaction_projection_digit", "currency,direction,category_id,position,digit_sum", spans)})`;
   const params = [
     ...selection.params,
-    range.firstDay,
-    range.lastDay,
-    range.firstMinute,
-    range.lastMinute,
-    range.firstDay * minutesPerDay,
-    range.lastDay * minutesPerDay,
-  ] as const;
+    ...spans.flatMap(({ from, toExclusive }) => [from, toExclusive]),
+  ];
   return [
     db
-      .prepare(`WITH chosen AS (SELECT currency, direction, category_id, count, max_minor,
+      .prepare(`WITH owner AS MATERIALIZED (${selection.sql}), chosen AS (SELECT currency, direction, category_id, count, max_minor,
       ROW_NUMBER() OVER (PARTITION BY currency, direction, category_id
         ORDER BY length(max_minor) DESC, max_minor DESC) AS rank ${buckets})
       SELECT currency, direction, category_id, SUM(count) AS count,
@@ -123,7 +143,7 @@ export const projectionQueries = (
       FROM chosen GROUP BY currency, direction, category_id ORDER BY currency, direction, category_id`)
       .bind(...params),
     db
-      .prepare(`SELECT currency, direction, category_id, position,
+      .prepare(`WITH owner AS MATERIALIZED (${selection.sql}) SELECT currency, direction, category_id, position,
       SUM(digit_sum) AS digit_sum ${digits}
       GROUP BY currency, direction, category_id, position`)
       .bind(...params),
@@ -145,25 +165,7 @@ export const projectionSizeQuery = ({
     lastMinute: number;
   }>;
 }>): D1PreparedStatement => {
-  // Disjoint day and edge-minute spans preserve the selected relation while giving
-  // SQLite a contiguous (User, size, bucket) index range for each count.
-  const spans = [
-    { size: 86400, from: range.firstDay, toExclusive: range.lastDay },
-    {
-      size: 60,
-      from: range.firstMinute,
-      toExclusive: Math.min(range.lastMinute, range.firstDay * minutesPerDay),
-    },
-    {
-      size: 60,
-      from: Math.max(
-        range.firstMinute,
-        range.firstDay * minutesPerDay,
-        range.lastDay * minutesPerDay
-      ),
-      toExclusive: range.lastMinute,
-    },
-  ];
+  const spans = projectionSpans(range);
   const counts = ["transaction_projection_bucket", "transaction_projection_digit"].flatMap(
     (table) =>
       spans.map(

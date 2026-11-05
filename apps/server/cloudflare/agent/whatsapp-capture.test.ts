@@ -283,6 +283,7 @@ it("commits a WhatsApp capture once, confirms its stored local date, and retriev
       });
       yield* finishLatestWhatsAppFixture({ db, subject: caller });
       const web = yield* executeCanonicalWork({
+        completion: Option.none(),
         db,
         subject: yield* Effect.tryPromise(() => webSubject(0)),
         current: yield* Clock.currentTimeMillis,

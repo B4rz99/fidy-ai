@@ -17,11 +17,14 @@ import { readReviewDetail } from "./review-store";
 const materialIdPosition = -2;
 const maximumMaterialCharacters = 100_000;
 const maximumEmailBytes = 1_048_576;
-const MaterialRow = Schema.Struct({
+export const MaterialRow = Schema.Struct({
   text: Schema.OptionFromNullOr(Schema.String),
   object_key: Schema.OptionFromNullOr(Schema.String),
 });
-const unavailable = { available: false, reason: "unavailable" } as const;
+export const unavailable = { available: false, reason: "unavailable" } as const;
+export const materialSelection = `SELECT original_evidence AS text,NULL AS object_key FROM statement_review_context WHERE user_id=? AND id=?
+    UNION ALL SELECT NULL,s.object_key FROM ingestion_review_items r JOIN forwarded_email_receipts s ON s.user_id=r.user_id AND s.id=r.email_receipt_id WHERE r.source_kind='email' AND r.user_id=? AND r.id=?
+    UNION ALL SELECT s.caption,NULL FROM ingestion_review_items r JOIN media_submissions s ON s.user_id=r.user_id AND s.id=r.media_submission_id WHERE r.source_kind='media' AND r.user_id=? AND r.id=?`;
 const findMaterial = ({
   db,
   userId,
@@ -31,12 +34,7 @@ const findMaterial = ({
   ReviewUnavailable
 > =>
   Effect.tryPromise(() =>
-    db
-      .prepare(`SELECT original_evidence AS text,NULL AS object_key FROM statement_review_context WHERE user_id=? AND id=?
-    UNION ALL SELECT NULL,s.object_key FROM ingestion_review_items r JOIN forwarded_email_receipts s ON s.user_id=r.user_id AND s.id=r.email_receipt_id WHERE r.source_kind='email' AND r.user_id=? AND r.id=?
-    UNION ALL SELECT s.caption,NULL FROM ingestion_review_items r JOIN media_submissions s ON s.user_id=r.user_id AND s.id=r.media_submission_id WHERE r.source_kind='media' AND r.user_id=? AND r.id=?`)
-      .bind(userId, id, userId, id, userId, id)
-      .first()
+    db.prepare(materialSelection).bind(userId, id, userId, id, userId, id).first()
   ).pipe(
     Effect.flatMap((raw) =>
       raw === null
@@ -45,10 +43,13 @@ const findMaterial = ({
     ),
     Effect.mapError(() => new ReviewUnavailable())
   );
-const materialText = (
-  row: typeof MaterialRow.Type,
-  bucket: Option.Option<R2Bucket>
-): Effect.Effect<Option.Option<string>, ReviewUnavailable> =>
+export const materialText = ({
+  row,
+  bucket,
+}: Readonly<{ row: typeof MaterialRow.Type; bucket: Option.Option<R2Bucket> }>): Effect.Effect<
+  Option.Option<string>,
+  ReviewUnavailable
+> =>
   Effect.gen(function* () {
     if (Option.isSome(row.text)) return row.text;
     if (Option.isNone(row.object_key) || Option.isNone(bucket)) return Option.none();
@@ -112,7 +113,7 @@ export const browseReviewMaterial = ({
         ? Option.none()
         : yield* findMaterial({ db, userId: subject.userId, id });
     const text = Option.isSome(original)
-      ? yield* materialText(original.value, bucket)
+      ? yield* materialText({ row: original.value, bucket })
       : Option.none();
     if (!(yield* liveMaterialCaller({ db, subject }))) return transactionUnavailable();
     yield* Effect.tryPromise(() =>

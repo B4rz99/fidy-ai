@@ -1,6 +1,6 @@
 import { prepareAssessmentFixture } from "./assessment-fixture";
-import type { CDPSession, Page } from "@playwright/test";
-import { type Cause, Config, Effect, Schema } from "effect";
+import type { CDPSession, Page, Response } from "@playwright/test";
+import { type Cause, Clock, Config, Effect, Option, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 import { boundSessionRequests, signInNavigationPerformanceThroughCore } from "./real-core-fixture";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
@@ -13,8 +13,8 @@ const networkProfile = Schema.decodeUnknownSync(Schema.Literals(["normal", "poor
 const poorConnection = {
   offline: false,
   latency: 400,
-  downloadThroughput: 51_200,
-  uploadThroughput: 25_600,
+  downloadThroughput: 125_000,
+  uploadThroughput: 125_000,
 };
 const { api: apiOrigin } = browserAcceptanceTopology();
 test.beforeAll(prepareAssessmentFixture);
@@ -28,12 +28,16 @@ const coldRepeats = Effect.runSync(
 const coldWorkspace = Effect.runSync(
   Config.String("FIDY_ASSESSMENT_COLD_WORKSPACE").pipe(Config.withDefault(""))
 );
+const coldWorkspaces = coldWorkspace === "" ? [] : coldWorkspace.split(",");
 const maximumColdRepeats = 5;
 if (coldRepeats < 1 || coldRepeats > maximumColdRepeats) {
   throw new Error("Cold repeats must be between one and five");
 }
 const coldInteractions = Effect.runSync(
   Config.Boolean("FIDY_ASSESSMENT_COLD_INTERACTIONS").pipe(Config.withDefault(false))
+);
+const inAppHeadersOnly = Effect.runSync(
+  Config.Boolean("FIDY_ASSESSMENT_HEADERS_ONLY").pipe(Config.withDefault(false))
 );
 const resourceDeadline = 500;
 const previewCompression = Effect.runSync(
@@ -52,11 +56,86 @@ const routes = [
   { name: "privacy", path: "/settings/privacy", ready: "" },
 ] as const;
 type Workspace = (typeof routes)[number];
+if (coldWorkspaces.some((name) => !routes.some((route) => route.name === name))) {
+  throw new Error("Unknown cold workspace");
+}
+const timingNames = [
+  "bootstrap",
+  "bootstrap-entry",
+  "bootstrap-source",
+  "bootstrap-disclosure",
+  "bootstrap-metadata",
+  "bootstrap-history",
+  "bootstrap-authority",
+  "bootstrap-encoding",
+  "bootstrap-admission",
+  "bootstrap-other",
+  "canonical-total",
+  "canonical-admission",
+  "canonical-owner",
+  "canonical-standing",
+  "canonical-other",
+  "canonical-storage",
+  "canonical-present",
+  "canonical-sql",
+  "dashboard-hop",
+  "dashboard-queue",
+  "dashboard-execute",
+  "dashboard-source",
+  "dashboard-projection",
+  "dashboard-audit",
+  "dashboard-recovery-r2",
+  "dashboard-recovery-d1",
+  "dashboard-recovery-sql",
+  "recovery-r2",
+  "recovery-d1",
+  "recovery-sql",
+] as const;
+type TimingName = (typeof timingNames)[number];
+const decodeTimingName = Schema.decodeUnknownOption(Schema.Literals(timingNames));
+const decodeDuration = Schema.decodeUnknownOption(
+  Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 600_000 }))
+);
+const decodeBatchCount = Schema.decodeUnknownOption(
+  Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }))
+);
+const maximumTimingHeaderLength = 8192;
+const maximumObservedRequests = 200;
+const serverTimings = (
+  header: Option.Option<string>
+): Array<{ name: TimingName; durationMs: number }> => {
+  if (Option.isNone(header) || header.value.length > maximumTimingHeaderLength) return [];
+  return header.value
+    .split(",")
+    .slice(0, timingNames.length)
+    .flatMap((field) => {
+      const match = /^\s*([a-z0-9-]+);dur=([0-9]+(?:\.[0-9]+)?)\s*$/u.exec(field);
+      if (match === null) return [];
+      const name = decodeTimingName(match[1]);
+      const duration = decodeDuration(Number(match[2]));
+      return Option.isSome(name) && Option.isSome(duration)
+        ? [{ name: name.value, durationMs: duration.value }]
+        : [];
+    });
+};
+const recoveryBatchCount = (header: Option.Option<string>): Option.Option<number> =>
+  Option.flatMap(header, (value) =>
+    /^[0-9]{1,4}$/u.test(value) ? decodeBatchCount(Number(value)) : Option.none()
+  );
 type Sample = {
   journey: string;
   elapsedMs: number;
   outcome: string;
-  requests: Array<{ path: string; status: number; durationMs: number; bytes: number }>;
+  requests: Array<{
+    path: string;
+    status: number;
+    durationMs: number;
+    startOffsetMs: number;
+    endOffsetMs: number;
+    bytes: number;
+    serverTimings: Array<{ name: TimingName; durationMs: number }>;
+    recoveryBatches: Array<{ scope: "core" | "dashboard"; count: number }>;
+  }>;
   loadingObservations: number;
   longTasks: number[];
   resourceCount: number;
@@ -73,6 +152,7 @@ type Sample = {
     transferredBytes: number;
   }>;
   nativeControlReadyMs: number;
+  navigationStartOffsetMs: number;
   navigation: {
     responseStart: number;
     responseEnd: number;
@@ -85,38 +165,93 @@ type Measure = (
   journey: string,
   action: () => Promise<unknown>,
   ready: () => Promise<unknown>
-) => Effect.Effect<void, Cause.UnknownError>;
+) => Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError>;
 type Journey = { page: Page; measure: Measure; samples: Sample[] };
 const pause = (milliseconds: number): Promise<void> =>
   Effect.runPromise(Effect.sleep(milliseconds));
+const observeResponseHeaders = (
+  response: Response,
+  entry: Sample["requests"][number]
+): Promise<void> =>
+  Promise.all([
+    response.headerValue("server-timing"),
+    response.headerValue("fidy-recovery-batches"),
+    response.headerValue("fidy-dashboard-recovery-batches"),
+  ]).then(([timings, recovery, dashboardRecovery]) => {
+    entry.serverTimings = serverTimings(Option.fromNullishOr(timings));
+    entry.recoveryBatches = [
+      ...Option.toArray(
+        Option.map(recoveryBatchCount(Option.fromNullishOr(recovery)), (count) => ({
+          scope: "core" as const,
+          count,
+        }))
+      ),
+      ...Option.toArray(
+        Option.map(recoveryBatchCount(Option.fromNullishOr(dashboardRecovery)), (count) => ({
+          scope: "dashboard" as const,
+          count,
+        }))
+      ),
+    ];
+  });
+const completeRequestObservation = (
+  response: Response,
+  entry: Sample["requests"][number],
+  requestOrigin: number
+): Promise<void> => {
+  const timing = response.request().timing();
+  entry.durationMs = timing.responseEnd;
+  entry.startOffsetMs = timing.startTime - requestOrigin;
+  entry.endOffsetMs = entry.startOffsetMs + timing.responseEnd;
+  return response
+    .request()
+    .sizes()
+    .then((sizes) => {
+      entry.bytes = sizes.responseBodySize;
+    });
+};
 const observeRequests = (
   page: Page
-): { requests: Sample["requests"]; pending: Set<Promise<void>> } => {
+): {
+  requests: Sample["requests"];
+  pending: Set<Promise<void>>;
+  start: (epochMilliseconds: number) => void;
+} => {
   const requests: Sample["requests"] = [];
   const pending = new Set<Promise<void>>();
+  let startedAt = 0;
   page.on("response", (response) => {
     if (!response.url().startsWith(`${apiOrigin}/`)) return;
-    const entry = {
+    if (requests.length >= maximumObservedRequests) return;
+    const requestOrigin = startedAt;
+    const entry: Sample["requests"][number] = {
       path: new URL(response.url()).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gu, ":id"),
       status: response.status(),
       durationMs: -1,
+      startOffsetMs: response.request().timing().startTime - requestOrigin,
+      endOffsetMs: -1,
       bytes: -1,
+      serverTimings: [],
+      recoveryBatches: [],
     };
     requests.push(entry);
-    const work = response
-      .finished()
-      .then(() => {
-        entry.durationMs = response.request().timing().responseEnd;
-        return response.request().sizes();
-      })
-      .then((sizes) => {
-        entry.bytes = sizes.responseBodySize;
-      })
+    const work = Promise.all([
+      observeResponseHeaders(response, entry),
+      response.finished().then(() => completeRequestObservation(response, entry, requestOrigin)),
+    ])
+      .then(() => undefined)
       .catch(() => undefined);
     pending.add(work);
     work.finally(() => pending.delete(work)).catch(() => undefined);
   });
-  return { requests, pending };
+  return {
+    requests,
+    pending,
+    start: (epochMilliseconds) => {
+      startedAt = epochMilliseconds;
+      requests.length = 0;
+    },
+  };
 };
 const hasVisibleLoading = (elements: Element[]): boolean =>
   elements.some((element) => element.closest(".sr-only") === null);
@@ -143,7 +278,8 @@ const paintOpportunity = (): Promise<void> => {
   return completion.promise;
 };
 const browserMetrics = (
-  page: Page
+  page: Page,
+  actionEpoch: number
 ): Promise<
   Pick<
     Sample,
@@ -153,11 +289,12 @@ const browserMetrics = (
     | "transferredBytes"
     | "resources"
     | "nativeControlReadyMs"
+    | "navigationStartOffsetMs"
     | "navigation"
     | "domNodes"
   >
 > =>
-  page.evaluate(() => {
+  page.evaluate((actionEpoch) => {
     const entries = performance
       .getEntriesByType("resource")
       .filter((entry) => entry instanceof PerformanceResourceTiming);
@@ -167,24 +304,22 @@ const browserMetrics = (
     const navigation = performance
       .getEntriesByType("navigation")
       .find((entry) => entry instanceof PerformanceNavigationTiming);
-    const timing =
-      navigation === undefined
-        ? {
-            responseStart: -1,
-            responseEnd: -1,
-            domInteractive: -1,
-            domContentLoaded: -1,
-          }
-        : {
-            responseStart: navigation.responseStart,
-            responseEnd: navigation.responseEnd,
-            domInteractive: navigation.domInteractive,
-            domContentLoaded: navigation.domContentLoadedEventEnd,
-          };
+    const timing = navigation ?? {
+      responseStart: -1,
+      responseEnd: -1,
+      domInteractive: -1,
+      domContentLoadedEventEnd: -1,
+    };
     return {
+      navigationStartOffsetMs: performance.timeOrigin - actionEpoch,
       nativeControlReadyMs:
         performance.getEntriesByName("assessment-control-ready")[0]?.startTime ?? -1,
-      navigation: timing,
+      navigation: {
+        responseStart: timing.responseStart,
+        responseEnd: timing.responseEnd,
+        domInteractive: timing.domInteractive,
+        domContentLoaded: timing.domContentLoadedEventEnd,
+      },
       longTasks: tasks.map((entry) => Number(entry.detail)),
       resourceCount: entries.length,
       resourceBytes: entries.reduce((sum, entry) => sum + entry.encodedBodySize, 0),
@@ -201,15 +336,21 @@ const browserMetrics = (
       })),
       domNodes: document.querySelectorAll("*").length,
     };
-  });
-const measureAction = Effect.fn(function* (
-  page: Page,
-  action: () => Promise<unknown>,
-  ready: () => Promise<unknown>
-) {
+  }, actionEpoch);
+const measureAction = Effect.fn(function* ({
+  page,
+  action,
+  ready,
+  waitForPaint,
+}: Readonly<{
+  page: Page;
+  action: () => Promise<unknown>;
+  ready: () => Promise<unknown>;
+  waitForPaint: boolean;
+}>) {
   yield* Effect.tryPromise(action);
   const loadingObservations = yield* waitForReady(page, ready);
-  yield* Effect.tryPromise(() => page.evaluate(paintOpportunity));
+  if (waitForPaint) yield* Effect.tryPromise(() => page.evaluate(paintOpportunity));
   return { outcome: "ready", loadingObservations };
 });
 const immediateColdJourneys = new Set([
@@ -217,17 +358,24 @@ const immediateColdJourneys = new Set([
   "transactions:cold-open-capture",
 ]);
 const makeMeasure = (page: Page, samples: Sample[], profile: string): Measure => {
-  const { requests, pending } = observeRequests(page);
+  const { requests, pending, start: startRequests } = observeRequests(page);
   return Effect.fn(function* (journey, action, ready) {
-    requests.length = 0;
     yield* Effect.tryPromise(() =>
       page.evaluate(() => {
         performance.clearMarks("assessment-longtask");
         performance.clearResourceTimings();
       })
-    );
+    ).pipe(Effect.timeout("5 seconds"));
+    const actionEpoch = yield* Clock.currentTimeMillis;
+    startRequests(actionEpoch);
     const start = performance.now();
-    const result = yield* measureAction(page, action, ready).pipe(
+    const result = yield* measureAction({
+      page,
+      action,
+      ready,
+      waitForPaint: !journey.includes(":fresh-in-app-"),
+    }).pipe(
+      Effect.timeout(journey.includes(":fresh-in-app-") ? "30 seconds" : "70 seconds"),
       Effect.match({
         onSuccess: (value) => value,
         onFailure: () => ({ outcome: "unavailable-or-timeout", loadingObservations: -1 }),
@@ -237,7 +385,9 @@ const makeMeasure = (page: Page, samples: Sample[], profile: string): Measure =>
     if (!coldInteractions || !immediateColdJourneys.has(journey)) {
       yield* Effect.tryPromise(() => Promise.race([Promise.all(pending), pause(resourceDeadline)]));
     }
-    const metrics = yield* Effect.tryPromise(() => browserMetrics(page));
+    const metrics = yield* Effect.tryPromise(() => browserMetrics(page, actionEpoch)).pipe(
+      Effect.timeout("5 seconds")
+    );
     samples.push({ journey, elapsedMs, ...result, requests: requests.slice(), ...metrics });
     process.stdout.write(
       `ASSESSMENT ${profile} ${journey} ${result.outcome} ${Math.round(elapsedMs)}ms\n`
@@ -361,6 +511,84 @@ const monthAction = Effect.fn(function* ({ page, measure }: Journey, route: Work
     `${route.name}:previous-month`,
     () => previous.click(),
     () => readyWorkspace(page, route)
+  );
+});
+const freshReadPaths = new Map([
+  ["dashboard", "/dashboard/view"],
+  ["transactions", "/transactions"],
+  ["budgets", "/budget-status"],
+  ["recurring", "/recurring-plans"],
+  ["review", "/ingestion/review-workspace"],
+]);
+const freshReadButtons = new Map([["review", "Actualizar"]]);
+const successfulReadStatus = 200;
+const waitForResourceCompletion = (page: Page, url: string): Promise<void> =>
+  page
+    .waitForFunction(
+      (selected) =>
+        performance
+          .getEntriesByType("resource")
+          .some(
+            (entry) =>
+              entry instanceof PerformanceResourceTiming &&
+              entry.name === selected &&
+              entry.responseEnd > 0
+          ),
+      url,
+      { timeout: readinessTimeout, polling: sampleInterval }
+    )
+    .then((handle) => handle.dispose());
+const measureFreshRead = Effect.fn(function* (journey: Journey, route: Workspace) {
+  const { page, measure } = journey;
+  const path = freshReadPaths.get(route.name);
+  if (path === undefined) throw new Error("Unsupported fresh-read workspace");
+  const observed = page
+    .waitForResponse(
+      (response) => {
+        const url = new URL(response.url());
+        return (
+          url.origin === apiOrigin &&
+          url.pathname === path &&
+          response.request().method() === "GET" &&
+          url.searchParams.get("limit") !== "0"
+        );
+      },
+      { timeout: readinessTimeout }
+    )
+    .then((response) => {
+      process.stdout.write(`ASSESSMENT_READ ${route.name} response\n`);
+      expect(response.status()).toBe(successfulReadStatus);
+      if (inAppHeadersOnly) return;
+      return waitForResourceCompletion(page, response.url())
+        .then(() => {
+          process.stdout.write(`ASSESSMENT_READ ${route.name} resource\n`);
+        })
+        .then(() => readyWorkspace(page, route))
+        .then(() => {
+          process.stdout.write(`ASSESSMENT_READ ${route.name} controls\n`);
+        });
+    });
+  const completed = Promise.race([
+    observed,
+    pause(readinessTimeout).then(() => {
+      throw new Error("Fresh read completion timed out.");
+    }),
+  ]);
+  completed.catch(() => undefined);
+  const button = page.getByRole("button", {
+    name: freshReadButtons.get(route.name) ?? "Mes anterior",
+    exact: true,
+  });
+  yield* measure(
+    `${route.name}:fresh-in-app-${inAppHeadersOnly ? "headers" : "read"}`,
+    () => {
+      process.stdout.write(`ASSESSMENT_READ ${route.name} trigger\n`);
+      if (route.name === "dashboard") {
+        return page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
+      }
+      return button.click({ timeout: actionTimeout });
+    },
+    () => completed
   );
 });
 const reviewActions = Effect.fn(function* ({ page, measure }: Journey) {
@@ -623,7 +851,7 @@ for (const profile of ["desktop"] as const) {
         yield* prepareBrowser(page, cdp);
         const measure = makeMeasure(page, samples, profile);
         const coldRoutes = routes.filter(
-          (route) => coldWorkspace === "" || route.name === coldWorkspace
+          (route) => coldWorkspaces.length === 0 || coldWorkspaces.includes(route.name)
         );
         if (coldRoutes.length === 0) throw new Error("Unknown cold workspace");
         for (const route of Array.from({ length: coldRepeats }, () => coldRoutes).flat()) {
@@ -647,10 +875,92 @@ for (const profile of ["desktop"] as const) {
               body: json({
                 dataset,
                 networkProfile,
+                networkEmulation: networkProfile === "poor" ? poorConnection : "unthrottled",
                 previewCompression,
                 nativeReadiness: "all-workspaces",
                 coldInteractions,
                 profile,
+                browser: context.browser()?.version(),
+                samples,
+              }),
+              contentType: "application/json",
+            })
+          ).pipe(Effect.orDie)
+        )
+      )
+    );
+  });
+}
+
+const prepareFreshWorkspace = Effect.fn(function* (page: Page, cdp: CDPSession, route: Workspace) {
+  process.stdout.write(`ASSESSMENT_SETUP ${route.name} network\n`);
+  yield* Effect.tryPromise(() => cdp.send("Network.enable")).pipe(Effect.timeout("10 seconds"));
+  yield* Effect.tryPromise(() =>
+    cdp.send("Network.emulateNetworkConditions", {
+      offline: false,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    })
+  ).pipe(Effect.timeout("10 seconds"));
+  process.stdout.write(`ASSESSMENT_SETUP ${route.name} document\n`);
+  yield* Effect.tryPromise(() => page.goto(route.path, { timeout: navigationTimeout }));
+  process.stdout.write(`ASSESSMENT_SETUP ${route.name} readiness\n`);
+  yield* Effect.tryPromise(() => readyWorkspace(page, route));
+  process.stdout.write(`ASSESSMENT_SETUP ${route.name} idle\n`);
+  yield* Effect.tryPromise(() =>
+    page.waitForLoadState("networkidle", { timeout: readinessTimeout })
+  );
+});
+
+for (const route of routes.filter(
+  (route) =>
+    freshReadPaths.has(route.name) &&
+    (coldWorkspaces.length === 0 || coldWorkspaces.includes(route.name))
+)) {
+  test(`assesses read-only in-app queries with destination code loaded: ${route.name}`, ({
+    page,
+    request,
+    context,
+  }) => {
+    const samples: Sample[] = [];
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const cdp = yield* Effect.tryPromise(() => context.newCDPSession(page));
+        yield* Effect.tryPromise(() =>
+          signInNavigationPerformanceThroughCore({
+            page,
+            request,
+            identity: "navigationDashboard",
+          })
+        );
+        yield* prepareBrowser(page, cdp);
+        const journey = { page, measure: makeMeasure(page, samples, "desktop"), samples };
+        yield* prepareFreshWorkspace(page, cdp, route);
+        for (const _ of Array.from({ length: coldRepeats })) {
+          yield* Effect.sleep("12 seconds");
+          if (networkProfile === "poor") {
+            yield* Effect.tryPromise(() =>
+              cdp.send("Network.emulateNetworkConditions", poorConnection)
+            );
+          }
+          yield* measureFreshRead(journey, route);
+          if (samples.at(-1)?.outcome !== "ready") break;
+        }
+      }).pipe(
+        Effect.ensuring(
+          Effect.tryPromise(() =>
+            test.info().attach("assessment-samples", {
+              body: json({
+                dataset,
+                networkProfile,
+                networkEmulation: networkProfile === "poor" ? poorConnection : "unthrottled",
+                previewCompression,
+                nativeReadiness: inAppHeadersOnly
+                  ? "response-headers"
+                  : "browser-resource-completion-and-controls",
+                setupNetwork: "unthrottled",
+                profile: "desktop",
                 browser: context.browser()?.version(),
                 samples,
               }),

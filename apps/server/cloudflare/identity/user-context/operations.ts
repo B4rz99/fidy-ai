@@ -43,14 +43,18 @@ export const readUserContext = ({
  * Commit the prepared action in the caller's existing D1 unit. Context is observed at execution,
  * so a previously read preference cannot replace the context current when the action commits.
  */
-export const prepareUserContext = ({
-  db,
-  userId,
-  statement,
-}: UserContextStatement): D1PreparedStatement =>
-  db
+export const prepareUserContext = (input: UserContextStatement): D1PreparedStatement => {
+  const predicate =
+    "userId" in input
+      ? { sql: "id = ?", params: [input.userId] }
+      : {
+          sql: `id IN (SELECT userId FROM (${input.userSelection.sql}))`,
+          params: input.userSelection.params,
+        };
+  return input.db
     .prepare(`WITH identity_user_context AS (
     SELECT id AS userId, service_market AS serviceMarket, locale, time_zone AS timeZone
-    FROM users WHERE id = ?
-  ) ${statement.sql}`)
-    .bind(userId, ...statement.params);
+    FROM users WHERE ${predicate.sql}
+  ) ${input.statement.sql}`)
+    .bind(...predicate.params, ...input.statement.params);
+};

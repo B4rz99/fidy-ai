@@ -25,6 +25,7 @@ it("an authenticated reminder request creates a contextual offer without inferen
       const db = yield* proactivityDatabase;
       const now = yield* DateTime.now;
       const service = makeAgentService({
+        dashboard: Option.none(),
         connectionAdmission: Option.none(),
         userId: proactivityTestUsers[0],
         environment: {
@@ -100,6 +101,7 @@ it.each(["budget-threshold", "manual-entry-reminder", "new-recurring-series"] as
           disclosureMessageId: "offer-disclosed",
         });
         const service = makeAgentService({
+          dashboard: Option.none(),
           connectionAdmission: Option.none(),
           userId: context.userId,
           environment: {

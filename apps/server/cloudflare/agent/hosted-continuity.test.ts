@@ -1884,6 +1884,7 @@ it("refuses another User's complete live proof at the Agent service before model
       const credentials = yield* Effect.tryPromise(() => subject(1));
       const model = vi.fn(() => Promise.resolve(reply("Never disclosed")));
       const service = makeAgentService({
+        dashboard: Option.none(),
         connectionAdmission: Option.none(),
         environment: {
           DB: db,
@@ -1931,6 +1932,7 @@ it("stops unavailable alarm retries when the hosted owner settles and preserves 
       let unavailable = true;
       let settled = false;
       const service = makeAgentService({
+        dashboard: Option.none(),
         connectionAdmission: Option.none(),
         environment: {
           DB: db,
@@ -2075,6 +2077,7 @@ it("does not retry a recovery defect or release queued work before its hosted ow
         },
       });
       const service = makeAgentService({
+        dashboard: Option.none(),
         connectionAdmission: Option.none(),
         environment: {
           DB: delayedDb,
@@ -2155,6 +2158,7 @@ it("cannot release queued hosted work before its ordinary predecessor settles", 
       const db = yield* Effect.tryPromise(() => setup());
       const predecessor = Promise.withResolvers<void>();
       const service = makeAgentService({
+        dashboard: Option.none(),
         connectionAdmission: Option.none(),
         environment: {
           DB: db,
@@ -2525,6 +2529,7 @@ it.each(continuityCorruptions)(
         }
         const model = vi.fn(() => Promise.resolve(reply("Must not run")));
         const service = makeAgentService({
+          dashboard: Option.none(),
           connectionAdmission: Option.none(),
           environment: {
             DB: db,
@@ -2671,6 +2676,7 @@ it("admits a web-provider onboarding grant through the native Agent service and 
       const credentials = yield* Effect.tryPromise(() => subject(0));
       const model = vi.fn(() => Promise.resolve(reply("Conexión verificada")));
       const service = makeAgentService({
+        dashboard: Option.none(),
         connectionAdmission: Option.none(),
         environment: {
           DB: db,
@@ -2721,6 +2727,7 @@ it("returns safe quota feedback and retains a terminal failure without an assist
         )
       );
       const service = makeAgentService({
+        dashboard: Option.none(),
         connectionAdmission: Option.none(),
         environment: {
           DB: db,

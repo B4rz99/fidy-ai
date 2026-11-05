@@ -5,6 +5,7 @@ import { SqliteStoreRequest } from "../sqlite-store/contract";
 import { BrowserSessionBinding } from "../../src/shell/web-session/contract";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
+import { HostedDashboardAdmission } from "../agent/contract";
 import { type Effect, type Option, Schema } from "effect";
 import type {
   ApplyDashboardEditCanonicalInput,
@@ -62,14 +63,21 @@ const NativeOAuthDashboardRequest = Schema.Struct({
   mode: Schema.Literal("oauth"),
   admission: OAuthCanonicalAdmission,
 });
+const NativeHostedDashboardRequest = Schema.Struct({
+  ...NativeBrowserDashboardRequest.fields,
+  mode: Schema.Literal("hosted"),
+  admission: HostedDashboardAdmission,
+});
 export const NativeDashboardRequest = Schema.Union([
   NativeBrowserDashboardRequest,
   NativeOAuthDashboardRequest,
+  NativeHostedDashboardRequest,
 ]);
 export type NativeDashboardRequest = typeof NativeDashboardRequest.Type;
 export type NativeDashboardInvocation =
   | Pick<typeof NativeBrowserDashboardRequest.Type, "request" | "mode">
-  | Pick<typeof NativeOAuthDashboardRequest.Type, "request" | "mode" | "admission">;
+  | Pick<typeof NativeOAuthDashboardRequest.Type, "request" | "mode" | "admission">
+  | Pick<typeof NativeHostedDashboardRequest.Type, "request" | "mode" | "admission">;
 const Bootstrap = Schema.optionalKey(Schema.toEncoded(BrowserSessionBinding));
 const Measurement = Schema.Struct({
   scans: Schema.Int,

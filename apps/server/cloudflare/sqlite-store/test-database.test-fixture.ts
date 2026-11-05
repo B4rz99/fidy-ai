@@ -133,7 +133,7 @@ const snapshot = (input: Readonly<{ runtime: Miniflare; name: string }>): Native
     nativeCall: (execute) => execute(),
     store: {
       dashboard: (call) =>
-        call.mode === "oauth"
+        call.mode === "oauth" || call.mode === "hosted"
           ? input.runtime
               .getBindings<{ SQLITE_STORE: NativeTestStore["namespace"] }>()
               .then(({ SQLITE_STORE }) => SQLITE_STORE.getByName(input.name).dashboard(call))

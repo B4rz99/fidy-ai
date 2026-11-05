@@ -1,5 +1,5 @@
 import { type Effect, Schema } from "effect";
-import { ErasureGeneration } from "../erasure-store/contract";
+import { ErasureGeneration, ErasureSourceFreezeDescriptor } from "../erasure-store/contract";
 import type { ErasureUnavailable } from "../erasure-store/contract";
 
 const maximumIdentityLength = 128;
@@ -26,6 +26,7 @@ export const RecoveryClosedSourceEvidence = Schema.Struct({
   admissionObjectId: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
   source: RecoverySourceTarget,
   sourceGeneration: ErasureGeneration,
+  sourceFreeze: ErasureSourceFreezeDescriptor,
   finalGeneration: Schema.String.check(Schema.isUUID()),
   finalCheckpointEtag: activationName,
   providerEvidenceDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),

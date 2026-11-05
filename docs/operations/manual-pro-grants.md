@@ -9,24 +9,31 @@ bun run pro list
 bun run pro revoke tester@example.com
 ```
 
-Commands use existing Cloudflare D1 administrator authority, outside the public API, canonical
-catalog, User-facing CLI and PATs. Before use, deploy migration `0007_pro_grants.sql` and the
-matching application revision through the ordinary release process.
+Commands use existing Cloudflare administrator authority through the deployed Core Worker's private
+`ProGrantService` binding. The service exposes only grant, revoke and list commands, outside the
+public API, canonical catalog, User-facing CLI and PATs. Deploy the matching Core revision and
+schema through the ordinary release process before use.
 
 Configure these environment variables in the operator's secure local environment:
 
-| Variable                | Value                                                            |
-| ----------------------- | ---------------------------------------------------------------- |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account containing the target database                |
-| `CLOUDFLARE_API_TOKEN`  | Operator token with D1 Edit permission for that account          |
-| `FIDY_DATABASE_ID`      | Exact target D1 database UUID from deployed infrastructure state |
-| `FIDY_PRO_OPERATOR`     | Stable operator label, such as your work email                   |
+| Variable                | Value                                          |
+| ----------------------- | ---------------------------------------------- |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account containing Core             |
+| `FIDY_CORE_WORKER_NAME` | Exact deployed Core Worker name                |
+| `FIDY_PRO_OPERATOR`     | Stable operator label, such as your work email |
 
-The operator label records accountability; the Cloudflare token authorizes database access.
-Keep the token out of arguments, source files and committed configuration. The command fixes the
-Cloudflare API origin, validates database identifiers, bounds requests/responses and applies a
-15-second request deadline. It sends no trace context and never retries automatically. Existing
-metadata-only outbound policy applies; no extra telemetry exporter is needed for this short tool.
+Authenticate Wrangler using its existing OAuth profile or a genuine `CLOUDFLARE_API_TOKEN` with
+permission to access the Worker remote binding. The operator label records accountability; it
+supplies no User authority. Keep credentials out of arguments, source files and committed
+configuration. `FIDY_DATABASE_ID` must be unset: the command refuses this old direct-database
+configuration. Core selects its single authoritative target; missing, mixed, inactive or retired
+targets refuse without a database fallback. Its recovery and Erasure admission guards still apply.
+
+The launcher builds the operator entry and runs it under Node, as Wrangler remote bindings require
+Node's dispatcher. It creates a scoped, secret-free binding configuration and disposes the proxy
+on completion. The command fixes the Cloudflare API origin, validates bounded commands and
+responses, and applies a 15-second RPC deadline. It never retries a command automatically. A
+request that loses its response may already have committed; run `list` before repeating a change.
 
 Email lookup uses independently verified email credentials, normalized to lowercase. Provider
 contact emails do not prove mailbox ownership and cannot select a User for a grant or revocation.

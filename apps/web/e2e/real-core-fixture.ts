@@ -3,7 +3,10 @@ import type { APIRequestContext, APIResponse, Page, Response, Route } from "@pla
 import type { Cause } from "effect";
 import { Clock, Effect, Option, Redacted, Schema } from "effect";
 import { StartedBrowserLoginPairing } from "@fidy/server/client";
-import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
+import {
+  browserAcceptanceTopology,
+  dashboardAssessmentApiOrigin,
+} from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
 import { advanceRefusedRequest, installAcceptanceClock } from "./acceptance-clock";
 
@@ -15,7 +18,8 @@ const resourceLimitedStatus = 429;
 const noContentStatus = 204;
 const pairingTimeoutMilliseconds = 15_000;
 const firstPollMilliseconds = 5_000;
-const { app: apiOrigin, operator: operatorOrigin } = browserAcceptanceTopology();
+const { operator: operatorOrigin } = browserAcceptanceTopology();
+const apiOrigin = dashboardAssessmentApiOrigin();
 
 /** A declared document-read refusal is recovered through the public fragment retry. */
 export const openDashboardThroughCore = (page: Page): Promise<void> =>
@@ -119,7 +123,9 @@ const observeConsentRead = (page: Page): Promise<ConsentRead> => {
       if (isConsentRead(response)) consentReads.set(page, { status: response.status() });
     });
   }
-  return page.waitForResponse(isConsentRead).then((response) => ({ status: response.status() }));
+  return page
+    .waitForResponse(isConsentRead, { timeout: pairingTimeoutMilliseconds })
+    .then((response) => ({ status: response.status() }));
 };
 export const confirmConsentRead = ({
   page,

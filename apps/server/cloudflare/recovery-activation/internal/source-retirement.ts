@@ -1,6 +1,10 @@
 import { Effect, Schema } from "effect";
 import { ErasureUnavailable } from "../../erasure-store/contract";
-import { readErasureSourceGeneration, retireErasureSource } from "../../erasure/operations";
+import {
+  prepareErasureSourceFreeze,
+  readErasureSourceGeneration,
+  retireErasureSource,
+} from "../../erasure/operations";
 import { newId } from "../../secret-material/operations";
 import type { RecoveryActivationEnvironment, RecoveryAdmissionState } from "../contract";
 import { type ActivationRecord, activationIo } from "./record";
@@ -55,10 +59,20 @@ export const planSourceRetirement = (
     const registry = yield* registryCheckpoint(input.bucket);
     const retired = yield* Effect.sync(newId);
     if (retired === from || retired === registry.value) return yield* new ErasureUnavailable();
+    const freeze = yield* prepareErasureSourceFreeze({
+      db: input.configuration.sourceDb,
+      generation: retired,
+    });
     return {
       ...input.record,
       phase: "RetiringSource" as const,
-      sourceFence: { state: "Prepared" as const, from, retired, registryCheckpoint: registry },
+      sourceFence: {
+        state: "Prepared" as const,
+        from,
+        retired,
+        freeze,
+        registryCheckpoint: registry,
+      },
     };
   });
 /** An interrupted native commit resumes from the same durable retired marker, never from serving NEW. */
@@ -70,9 +84,17 @@ export const resumeSourceRetirement = (
     const fence = input.record.sourceFence;
     if (fence.state !== "Prepared") return yield* new ErasureUnavailable();
     yield* registryCheckpoint(input.bucket);
-    yield* retireErasureSource({
+    const actual = yield* retireErasureSource({
       db: input.configuration.sourceDb,
       fence: { from: fence.from, retired: fence.retired },
     });
+    if (
+      actual.tablesDigest !== fence.freeze.tablesDigest ||
+      actual.triggersDigest !== fence.freeze.triggersDigest ||
+      actual.tableCount !== fence.freeze.tableCount ||
+      actual.generation !== fence.retired
+    ) {
+      return yield* new ErasureUnavailable();
+    }
     return { ...input.record, phase: "SourceRetired" as const };
   });

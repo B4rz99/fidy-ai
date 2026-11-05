@@ -14,6 +14,8 @@ const compositionRoots = new Set([
   "cloudflare/core-worker.ts",
   "cloudflare/sqlite-store/adapter-worker.test-fixture.ts",
   "cloudflare/sqlite-store/import-worker.test-fixture.ts",
+  "cloudflare/pro-grants/worker.test-fixture.ts",
+  "cloudflare/pro-grants/native.test-fixture.ts",
   "cloudflare/sqlite-store/import.test-fixture.ts",
   "cloudflare/erasure/candidate-worker.ts",
   "cloudflare/erasure/imported-worker.test-fixture.ts",
@@ -124,6 +126,8 @@ const sharedTestSupport = new Set([
   "cloudflare/browser-assessment.test-fixture.ts",
   // Default and maximum layouts are shared pure inputs for native/browser assessment harnesses.
   "cloudflare/browser-assessment-layout.test-fixture.ts",
+  // Both historical and current browser hosts seed identical logical facts through this closed helper.
+  "cloudflare/browser-assessment-prepare.test-fixture.ts",
   "cloudflare/bancolombia-activation.test-fixture.ts",
   "cloudflare/browser-acceptance-clock.test-fixture.ts",
   "src/shell/testing/credential-evidence-harness.ts",

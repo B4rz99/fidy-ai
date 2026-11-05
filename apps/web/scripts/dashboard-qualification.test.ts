@@ -5,6 +5,11 @@ const cohort = {
   dataset: "small",
   revision: "baseline",
   browserDigest: "browser-a",
+  adapterDigest: "adapter-a",
+  surface: "legacy-cross-origin",
+  trafficSource: "shared-loopback",
+  backendRequested: "legacy-d1",
+  nativeCountersObserved: false,
   runtime: "Bun pinned",
   compression: "identity",
   build: "production",
@@ -33,6 +38,37 @@ const cohort = {
 } as const;
 
 describe("matched Dashboard qualification", () => {
+  it("pins implementation adapters separately while matching the exact observer and logical fixtures", () => {
+    expect(
+      compareDashboardCohorts(cohort, {
+        ...cohort,
+        revision: "candidate",
+        adapterDigest: "adapter-b",
+        surface: "same-origin",
+      })
+    ).toMatchObject({ status: "measured" });
+  });
+  it("rejects changed logical facts even when implementation adapters intentionally differ", () => {
+    expect(
+      compareDashboardCohorts(cohort, {
+        ...cohort,
+        revision: "candidate",
+        adapterDigest: "adapter-b",
+        surface: "same-origin",
+        fixtureDigest: "different-financial-history",
+      })
+    ).toMatchObject({ status: "unmatched", differences: ["fixtureDigest"] });
+  });
+  it("refuses a native comparison without actual private-call observations", () => {
+    expect(
+      compareDashboardCohorts(cohort, {
+        ...cohort,
+        revision: "candidate",
+        backendRequested: "audited-native-guarded",
+        nativeCountersObserved: false,
+      })
+    ).toMatchObject({ status: "unmatched", differences: ["candidate.nativeCountersObserved"] });
+  });
   it("refuses a faster candidate measured with a different browser", () => {
     expect(
       compareDashboardCohorts(cohort, { ...cohort, revision: "candidate", browser: "other" })

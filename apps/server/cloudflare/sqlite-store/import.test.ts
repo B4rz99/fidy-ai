@@ -34,8 +34,16 @@ it.live(
           ),
         ])
       );
+      const domainGuards = yield* io(() =>
+        native.db
+          .prepare("SELECT count(*) AS count FROM sqlite_schema WHERE type='trigger'")
+          .first<{ count: number }>()
+      );
       const retired = "18460000-0000-4000-8000-000000000005";
-      yield* retireErasureSource({ db: native.db, fence: { from: "initial", retired } });
+      const sourceFreeze = yield* retireErasureSource({
+        db: native.db,
+        fence: { from: "initial", retired },
+      });
       const target = yield* Schema.decodeUnknownEffect(RecoveryTarget)(yield* io(native.identity));
       // Component copy evidence only; never production provider or serving qualification.
       const evidence: RecoveryClosedSourceEvidence = {
@@ -43,6 +51,7 @@ it.live(
         admissionObjectId: "1".repeat(64),
         source: { kind: "D1", databaseId: "18460000-0000-4000-8000-000000000001", epoch: "source" },
         sourceGeneration: retired,
+        sourceFreeze: { kind: "NativeDmlFreeze", plan: sourceFreeze },
         finalGeneration: "18460000-0000-4000-8000-000000000004",
         finalCheckpointEtag: "native-final",
         providerEvidenceDigest: "0".repeat(64),
@@ -95,6 +104,8 @@ it.live(
       expect(rowReplyLost).toBe(true);
       expect(yield* readErasureSourceGeneration({ db: native.db })).toBe(retired);
       expect(yield* io(native.facts)).toMatchObject({
+        sourceControls: [{ count: 0 }],
+        domainGuards: [domainGuards],
         rows: [{ sequence: "9007199254740993" }],
         money: [{ amount: "123456789012345678901234567890.01" }],
         foreignKeys: [{ foreign_keys: 1 }],

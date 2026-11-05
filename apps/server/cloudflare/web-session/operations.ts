@@ -1,5 +1,5 @@
 import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
-import { readMetadata } from "./internal/metadata";
+import { prepareBrowserMetadata as prepareMetadata, readMetadata } from "./internal/metadata";
 import { bindingResponse } from "./internal/binding";
 import { type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
@@ -20,6 +20,8 @@ import {
   authenticate,
   decodeSessionLookup,
   observeEntry,
+  prepareBrowserSessionLookup as prepareBrowserLookup,
+  prepareBrowserEntryLookup as prepareEntryLookup,
   prepareSessionLookup,
 } from "./internal/authentication";
 
@@ -139,3 +141,14 @@ export const browserSessionBindingResponse = (
 export const readWebSessionEntry = (
   input: Parameters<typeof observeEntry>[0]
 ): ReturnType<typeof observeEntry> => observeEntry(input);
+
+/** Compose canonical browser metadata in bootstrap or profile's native transaction. */
+export const prepareBrowserMetadata: typeof prepareMetadata = (input) => prepareMetadata(input);
+
+/** Exact credential-only preparation for bootstrap and privacy observations. */
+export const prepareBrowserSessionLookup: typeof prepareBrowserLookup = (input) =>
+  prepareBrowserLookup(input);
+
+/** Prepare exact entry binding and credential-only signed-out classification in one snapshot. */
+export const prepareBrowserEntryLookup: typeof prepareEntryLookup = (input) =>
+  prepareEntryLookup(input);

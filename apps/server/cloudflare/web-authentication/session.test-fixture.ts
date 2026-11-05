@@ -43,24 +43,33 @@ const runHeldCallback = <A>({
   released,
   settled,
   state,
+  before,
 }: Readonly<{
   run: () => PromiseLike<A>;
   entered: Deferred.Deferred<void>;
   released: Deferred.Deferred<void>;
   settled: Deferred.Deferred<void>;
   state: { held: boolean };
+  before: boolean;
 }>): Promise<A> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const result = yield* Effect.tryPromise({
+      const execute = Effect.tryPromise({
         try: run,
         catch: (cause) => new SessionCallbackFailed({ cause }),
       });
-      if (!state.held) {
+      const hold = Effect.gen(function* () {
+        if (state.held) return;
         state.held = true;
         yield* Deferred.succeed(entered, undefined);
         yield* Deferred.await(released);
+      });
+      if (before) {
+        yield* hold;
+        return yield* execute;
       }
+      const result = yield* execute;
+      yield* hold;
       return result;
     }).pipe(Effect.ensuring(Deferred.succeed(settled, undefined)))
   );
@@ -109,10 +118,12 @@ export const holdSessionCallback = ({
   db,
   sqlPrefix,
   method,
+  before,
 }: Readonly<{
   db: D1Database;
   sqlPrefix: string;
-  method: "first" | "run" | "all";
+  method: "first" | "run" | "all" | "batch";
+  before: boolean;
 }>): Effect.Effect<
   Readonly<{
     db: D1Database;
@@ -127,18 +138,25 @@ export const holdSessionCallback = ({
     const settled = yield* Deferred.make<void>();
     const state = { held: false };
     const complete = <A>(run: () => PromiseLike<A>): Promise<A> =>
-      runHeldCallback({ run, entered, released, settled, state });
+      runHeldCallback({ run, entered, released, settled, state, before });
     const binding = new Proxy(db, {
       get(target, key): unknown {
         if (key === "prepare") {
           return (sql: string): D1PreparedStatement => {
             const statement = target.prepare(sql);
-            return sql.startsWith(sqlPrefix)
+            return method !== "batch" && sql.startsWith(sqlPrefix)
               ? heldStatement({ statement, method, complete })
               : statement;
           };
         }
-        if (key === "batch") return target.batch.bind(target);
+        if (key === "batch") {
+          return <Row = Record<string, unknown>>(
+            statements: D1PreparedStatement[]
+          ): Promise<D1Result<Row>[]> =>
+            method === "batch"
+              ? complete(() => target.batch<Row>(statements))
+              : target.batch<Row>(statements);
+        }
         if (key === "exec") return target.exec.bind(target);
         if (key === "dump") return target.dump.bind(target);
         if (key === "withSession") return target.withSession.bind(target);

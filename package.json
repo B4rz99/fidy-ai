@@ -61,9 +61,9 @@
     "docs:verify:built": "bun run docs:test && DOCS_BROWSER_PREBUILT=true bun run --cwd apps/docs test:browser"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.8",
-    "@babel/traverse": "8.0.7",
-    "@babel/types": "8.0.8",
+    "@babel/parser": "8.0.10",
+    "@babel/traverse": "8.0.10",
+    "@babel/types": "8.0.10",
     "@effect/platform-bun": "4.0.6",
     "@effect/tsgo": "0.56.1",
     "@playwright/test": "1.64.1",

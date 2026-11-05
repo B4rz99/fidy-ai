@@ -3,6 +3,8 @@ import { Atom } from "effect/reactivity";
 import type { FidyClient } from "@/transport/client";
 import type { ReviewWorkspaceQuery } from "./decisions";
 import { reviewCountKey } from "./query-keys";
+import { reviewWorkspaceQueries } from "./query";
+import type { Filter } from "./view-navigation";
 import { observeReviewQuery } from "./query-observation";
 
 /** Count-only freshness never mounts an editor or reads item rows. */
@@ -16,3 +18,15 @@ export const reviewPendingCountQuery: (client: FidyClient) => ReviewWorkspaceQue
     return observeReviewQuery(source);
   }
 );
+
+export const reviewNavigationQuery = ({
+  client,
+  selection,
+}: Readonly<{
+  client: FidyClient;
+  selection: Option.Option<Readonly<{ filter: Filter; page: number }>>;
+}>): ReviewWorkspaceQuery =>
+  Option.match(selection, {
+    onNone: () => reviewPendingCountQuery(client),
+    onSome: (selected) => reviewWorkspaceQueries({ client, ...selected }).active,
+  });

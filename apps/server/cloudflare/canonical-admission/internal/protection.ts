@@ -50,7 +50,7 @@ export const prepareBoundBrowserSnapshot = ({
   ];
 };
 
-const prepareBoundBrowserRequest = ({
+export const prepareBoundBrowserRequest = ({
   db,
   lookup,
   id,

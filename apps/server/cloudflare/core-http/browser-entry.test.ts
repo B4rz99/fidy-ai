@@ -22,7 +22,7 @@ const holdInitialMetadata = Effect.fn(function* (db: D1Database) {
     get(target, key): unknown {
       if (key === "prepare") {
         return (sql: string) => {
-          if (sql.startsWith("SELECT * FROM (SELECT u.id")) metadataPrepared = true;
+          if (sql.startsWith("SELECT u.id")) metadataPrepared = true;
           return target.prepare(sql);
         };
       }
@@ -55,8 +55,8 @@ const sessionId = "20000000-0000-4000-8000-000000000001";
 const token = "d".repeat(43);
 const current = 1_000_000;
 const duration = 604800000;
-const request = (): Request =>
-  new Request("https://api.fidyapp.com/web/session/binding?context=application", {
+const request = (context: "application" | "transactions" = "application"): Request =>
+  new Request(`https://api.fidyapp.com/web/session/binding?context=${context}`, {
     headers: { cookie: `__Host-fidy_session=${token}`, origin: "https://app.fidyapp.com" },
   });
 const setup = (granted: boolean): Effect.Effect<D1Database, Cause.UnknownError> =>
@@ -95,7 +95,19 @@ const setup = (granted: boolean): Effect.Effect<D1Database, Cause.UnknownError> 
     yield* Effect.tryPromise(() =>
       installCurrentTestObjects({
         db,
-        tables: ["categories", "canonical_request_buckets", "canonical_request_leases"],
+        tables: [
+          "categories",
+          "canonical_request_buckets",
+          "canonical_request_leases",
+          "transactions",
+          "transaction_projection_leaf",
+          "transaction_projection_state",
+          "transaction_reconciliation_decisions",
+          "transaction_corrections",
+          "source_attestations",
+          "reconciled_transactions",
+          "transaction_effective_source",
+        ],
       })
     );
     if (granted) {
@@ -220,7 +232,7 @@ it.effect(
       const held = yield* holdInitialMetadata(db);
       const running = yield* Effect.forkChild(
         browserSessionBindingResponse({
-          request: request(),
+          request: request("transactions"),
           db: held.db,
           browserOrigin: "https://app.fidyapp.com",
         })
@@ -249,7 +261,7 @@ it.effect("late credential revocation releases no initial User metadata", () =>
     const held = yield* holdInitialMetadata(db);
     const running = yield* Effect.forkChild(
       browserSessionBindingResponse({
-        request: request(),
+        request: request("transactions"),
         db: held.db,
         browserOrigin: "https://app.fidyapp.com",
       })
@@ -287,3 +299,63 @@ it.effect("rejects a mounted binding that does not match the current cookie", ()
     ).toEqual({ count: 0 });
   })
 );
+
+it.effect("refuses a captured profile when User context changes before final disclosure", () =>
+  Effect.gen(function* () {
+    const db = yield* setup(true);
+    const held = yield* holdInitialMetadata(db);
+    const running = yield* Effect.forkChild(
+      browserSessionBindingResponse({
+        request: request("transactions"),
+        db: held.db,
+        browserOrigin: "https://app.fidyapp.com",
+      })
+    );
+    yield* Deferred.await(held.entered);
+    yield* Effect.tryPromise(() =>
+      db.prepare("UPDATE users SET time_zone='UTC' WHERE id=?").bind(userId).run()
+    );
+    yield* held.release;
+    const response = Option.getOrThrow(yield* Fiber.join(running));
+    expect(response.status).toBe(503);
+    expect(
+      yield* Effect.tryPromise(() =>
+        db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+      )
+    ).toEqual({ total: 0 });
+  })
+);
+
+for (const retirement of ["absent", "expired", "revoked"] as const) {
+  it.effect(`reports signed out for an ${retirement} cookie with a retained binding`, () =>
+    Effect.gen(function* () {
+      const db = yield* setup(true);
+      const incoming = request();
+      incoming.headers.set(browserSessionBindingHeader, sessionId);
+      if (retirement === "absent") incoming.headers.delete("cookie");
+      else {
+        const column = retirement === "expired" ? "idle_expires_at_ms" : "revoked_at_ms";
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`UPDATE web_sessions SET ${column}=? WHERE id=?`)
+            .bind(current, sessionId)
+            .run()
+        );
+      }
+      const response = Option.getOrThrow(
+        yield* browserSessionBindingResponse({
+          request: incoming,
+          db,
+          browserOrigin: "https://app.fidyapp.com",
+        })
+      );
+      expect(response.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({ binding: null });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS total FROM audit_entries").first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  );
+}

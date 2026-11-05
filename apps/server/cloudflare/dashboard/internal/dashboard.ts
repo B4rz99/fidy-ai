@@ -34,42 +34,55 @@ export const accountQuery = ({
   operation: DashboardQueryOperation;
 }>): Effect.Effect<void, DashboardQueryLimited | DashboardUnavailable> =>
   Effect.tryPromise({
-    try: () => {
-      const authority = callerAuthority({ subject, current });
-      let audit: D1PreparedStatement;
-      if (isPATCaller(subject)) {
-        const auditStatement = recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: {
-            id: transactionId(),
-            current,
-            operation,
-            outcome: "accepted",
-            afterOwnerWrite: false,
-          },
-        });
-        audit = db.prepare(auditStatement.sql).bind(...auditStatement.params);
-      } else {
-        audit = prepareAuthorizedAuditCall({
-          db,
-          authority,
-          id: transactionId(),
-          operation,
-          outcome: "accepted",
-          current,
-          afterOwnerWrite: false,
-        });
-      }
-      return db.batch([
-        ...(isPATCaller(subject)
-          ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
-              db.prepare(sql).bind(...params)
-            )
-          : []),
-        audit,
-        // Abort the batch on a missing Audit without writing a persistent assertion slot.
-        db.prepare("SELECT json(CASE WHEN changes() = 1 THEN 'true' ELSE '' END) AS accepted"),
-      ]);
-    },
+    try: () => db.batch([...prepareQueryAccounting({ db, subject, current, operation })]),
     catch: () => new DashboardUnavailable(),
   }).pipe(Effect.asVoid);
+
+/** Owner accounting prepared for composition with its final financial snapshot. */
+export const prepareQueryAccounting = ({
+  db,
+  subject,
+  current,
+  operation,
+}: Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+  current: number;
+  operation: DashboardQueryOperation;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  const authority = callerAuthority({ subject, current });
+  let audit: D1PreparedStatement;
+  if (isPATCaller(subject)) {
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: {
+        id: transactionId(),
+        current,
+        operation,
+        outcome: "accepted",
+        afterOwnerWrite: false,
+      },
+    });
+    audit = db.prepare(auditStatement.sql).bind(...auditStatement.params);
+  } else {
+    audit = prepareAuthorizedAuditCall({
+      db,
+      authority,
+      id: transactionId(),
+      operation,
+      outcome: "accepted",
+      current,
+      afterOwnerWrite: false,
+    });
+  }
+  return [
+    ...(isPATCaller(subject)
+      ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+          db.prepare(sql).bind(...params)
+        )
+      : []),
+    audit,
+    // Abort the batch on a missing Audit without writing a persistent assertion slot.
+    db.prepare("SELECT json(CASE WHEN changes() = 1 THEN 'true' ELSE '' END) AS accepted"),
+  ];
+};

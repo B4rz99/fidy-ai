@@ -199,6 +199,7 @@ it.each([
           vi.setSystemTime(after);
           const facts = Option.getOrThrow(
             yield* loadDashboardFacts({
+              finalization: Option.none(),
               db,
               userId,
               initial,
@@ -297,6 +298,7 @@ it.each(["context", "revision", "consent"] as const)(
         expect(
           Option.isNone(
             yield* loadDashboardFacts({
+              finalization: Option.none(),
               db: changing,
               userId,
               initial,
@@ -320,6 +322,7 @@ it("refuses changed context before releasing even a default-sized financial snap
       expect(
         Option.isNone(
           yield* loadDashboardFacts({
+            finalization: Option.none(),
             db,
             userId,
             initial,
@@ -363,6 +366,7 @@ it("withholds the entire financial snapshot for malformed inherited cap precisio
       expect(
         Option.isNone(
           yield* loadDashboardFacts({
+            finalization: Option.none(),
             db,
             userId,
             initial,
@@ -409,6 +413,7 @@ it("retains native Budget capacity enforcement and reads the complete maximum se
       yield* Effect.tryPromise(() => db.batch(statements.slice(0, 128)));
       const facts = Option.getOrThrow(
         yield* loadDashboardFacts({
+          finalization: Option.none(),
           db,
           userId,
           initial,

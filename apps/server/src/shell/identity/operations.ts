@@ -7,7 +7,11 @@ import { Unavailable } from "~/shell/public-http/contract";
 import { protectConsentAuthority } from "~/shell/consent/operations";
 import type { WebSessionAuthority, WebSessionSubject } from "~/shell/web-session/contract";
 import { webSessionCredentialAuthority } from "~/shell/web-session/operations";
-import { currentUserQuery, decodeUser } from "~/shell/identity/internal/user-query";
+import {
+  currentUserQuery,
+  decodeUser,
+  selectedCurrentUserQuery,
+} from "~/shell/identity/internal/user-query";
 import type { CurrentUserResponse, PreparedCurrentUserRead } from "./contract";
 
 /** Commit-time same-User WhatsAppIdentity predicate; a pre-coordination lookup grants no authority. */
@@ -79,10 +83,13 @@ export const liveWebSessionAuthority = (
  * The bounded projection exposes startedAtMs and endsAtMs as UTC epoch milliseconds;
  * absent state produces no row. The caller retains responsibility for its access authority.
  */
-export const userTrialPeriodQuery = (userId: UserId): OwnedStatement => ({
+export const userTrialPeriodQuery = (userId: UserId): OwnedStatement =>
+  selectedUserTrialPeriodQuery({ sql: "SELECT ? AS userId", params: [userId] });
+
+export const selectedUserTrialPeriodQuery = (users: OwnedStatement): OwnedStatement => ({
   sql: `SELECT trial_started_at_ms AS startedAtMs, trial_ends_at_ms AS endsAtMs
-    FROM users WHERE id = ? AND trial_started_at_ms IS NOT NULL LIMIT 1`,
-  params: [userId],
+    FROM users WHERE id = (SELECT userId FROM (${users.sql})) AND trial_started_at_ms IS NOT NULL LIMIT 1`,
+  params: users.params,
 });
 
 /**
@@ -112,4 +119,14 @@ export const activeTrialPeriodForUserSelection = ({
 export const existingUserSelection = (userId: string): OwnedStatement => ({
   sql: "SELECT id AS userId FROM users WHERE id = ?",
   params: [userId],
+});
+
+/** Canonical metadata selected from an exact caller-owned live User relation. */
+export const prepareSelectedCurrentUser = (users: OwnedStatement): PreparedCurrentUserRead => ({
+  statement: selectedCurrentUserQuery(users),
+  decode: (rows) =>
+    decodeUser(rows[0]).pipe(
+      Effect.map((data) => ({ data, next: [] as const })),
+      Effect.mapError(userUnavailable)
+    ),
 });

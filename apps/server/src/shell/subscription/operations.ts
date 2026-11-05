@@ -73,14 +73,14 @@ export const prepareSubscriptionOffers = (
 /** Prepare one User's safe standing and attempts at the same decision instant as its protected read. */
 export const prepareSubscriptionStatus = (
   input: Readonly<{
-    userId: UserId;
     authority: SubscriptionReadAuthority;
     current: number;
-  }>
+  }> &
+    (Readonly<{ userId: UserId }> | Readonly<{ users: OwnedStatement }>)
 ): PreparedSubscriptionRead => ({
   statements: [
-    subscriptionStandingQuery({ userId: input.userId, authority: Option.some(input.authority) }),
-    subscriptionAttemptsQuery({ userId: input.userId, authority: Option.some(input.authority) }),
+    subscriptionStandingQuery({ ...input, authority: Option.some(input.authority) }),
+    subscriptionAttemptsQuery({ ...input, authority: Option.some(input.authority) }),
   ],
   decode: (rows) =>
     Schema.encodeSync(Schema.toCodecJson(SubscriptionStatus))(

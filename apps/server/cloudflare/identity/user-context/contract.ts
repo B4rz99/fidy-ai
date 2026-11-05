@@ -15,6 +15,6 @@ export type UserContextRead = Readonly<{
 /** Caller-owned context interpretation or snapshot action; no statement executes during preparation. */
 export type UserContextStatement = Readonly<{
   db: D1Database;
-  userId: UserId;
   statement: OwnedStatement;
-}>;
+}> &
+  (Readonly<{ userId: UserId }> | Readonly<{ userSelection: OwnedStatement }>);

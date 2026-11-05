@@ -9,6 +9,7 @@ import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "
 import { TransactionAggregatesUnavailable } from "./contract";
 import {
   findRecurringSnapshot,
+  prepareBoundPlanningTransactions,
   preparePeriodAggregateGuard,
   prepareRecurringFactGuard,
   readCompletePeriodAggregates,
@@ -71,6 +72,7 @@ it("projects only one User's recurring facts and rolls back a stale revision com
         yield* findRecurringSnapshot({ db, userId: UserId.make(userId) })
       );
       const query = {
+        finalization: Option.none(),
         db,
         userId: UserId.make(userId),
         revision: snapshot.revision,
@@ -148,6 +150,7 @@ it("rolls back stale aggregate publication and distinguishes authorized empty hi
     Effect.gen(function* () {
       const db = yield* setup();
       const query = {
+        finalization: Option.none(),
         db,
         userId: UserId.make(userId),
         periods: [
@@ -263,6 +266,7 @@ it("returns ready owned Dashboard pages with caller context and refuses incomple
       );
       const categories = yield* listCategories({ db });
       const query = {
+        finalization: Option.none(),
         db,
         userId,
         categories,
@@ -346,6 +350,7 @@ it("reads more than 128 explicit references without borrowing foreign or range c
         transactionId(998),
       ];
       const query = {
+        finalization: Option.none(),
         db: observed.database,
         userId,
         ids,
@@ -389,3 +394,60 @@ it("reads more than 128 explicit references without borrowing foreign or range c
       expect(Option.isNone(yield* readPlanningTransactionSnapshot(query))).toBe(true);
     })
   ));
+
+it(
+  "preserves 4096 linked facts and their group order in ready and repair snapshots",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<4095)
+      INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
+      SELECT printf('20000000-0000-4000-8000-%012d',x),?,'9007199254740993.01','COP','outflow',?,1791644400000+x,1791644400000+x FROM n`)
+            .bind(userId, categoryId)
+            .run()
+        );
+        const ids = Array.from({ length: 4096 }, (_, index) => transactionId(index));
+        const encodedIds = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.Array(Schema.String))
+        )(ids);
+        const prepared = Option.getOrThrow(
+          prepareBoundPlanningTransactions({
+            db,
+            userSelection: { sql: "SELECT ? AS userId", params: [userId] },
+            references: {
+              sql: "SELECT value AS transactionId FROM json_each(?)",
+              params: [encodedIds],
+            },
+            ranges: [],
+          })
+        );
+        for (const readiness of ["ready", "dirty"]) {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("UPDATE transaction_projection_state SET readiness=? WHERE user_id=?")
+              .bind(readiness, userId)
+              .run()
+          );
+          const expected = Option.getOrThrow(
+            yield* readPlanningTransactionSnapshot({
+              db,
+              userId,
+              ids,
+              ranges: [],
+              finalization: Option.none(),
+              snapshot: { statement: db.prepare("SELECT 1"), decode: () => Option.some(true) },
+            })
+          );
+          const actual = Option.getOrThrow(
+            prepared.decode(yield* Effect.tryPromise(() => db.batch([...prepared.statements])), ids)
+          );
+          expect(actual.selected).toHaveLength(4096);
+          expect(actual.selected).toEqual(expected.selected);
+        }
+      })
+    ),
+  30000
+);

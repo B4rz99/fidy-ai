@@ -1,10 +1,26 @@
-import { browseReviewPageContext as browseContext } from "./internal/review-page-context";
-import { browseReviewWorkspace as browseInbox } from "./internal/review-workspace";
-import { browseReviewItem as browseItem } from "./internal/review-detail";
+import {
+  browseReviewPageContext as browseContext,
+  prepareBoundReviewPageContext as prepareContext,
+} from "./internal/review-page-context";
+import {
+  browseReviewWorkspace as browseInbox,
+  prepareBoundReviewWorkspace as prepareInbox,
+} from "./internal/review-workspace";
+import {
+  browseReviewItem as browseItem,
+  prepareBoundReviewItem as prepareItem,
+} from "./internal/review-detail";
 import { browseReviewMaterial as browseMaterial } from "./internal/review-material";
+import { prepareBoundReviewMaterial as prepareMaterial } from "./internal/bound-review-material";
 import { prepareReviewEdit as prepareEdit } from "./internal/review-edit";
 import { reviewRefusal as refuseReview } from "./internal/review-audit";
-import type { ReviewAuditWork, ReviewEditWork, ReviewQueryWork } from "./contract";
+import {
+  type MediaAdmissionInput,
+  type ReviewAuditWork,
+  type ReviewEditWork,
+  type ReviewQueryWork,
+  StatementDocumentUnavailable,
+} from "./contract";
 import type {
   CanonicalMutationPreparation,
   CanonicalMutationRefusal,
@@ -13,7 +29,7 @@ import type { OutboundHttpService } from "../../src/shell/outbound-http/operatio
 import type { WhatsAppBusinessPhoneNumberId } from "../../src/shell/channels/whatsapp/contract";
 import type { HostedCanonicalCaller } from "../canonical-work/contract";
 import { admitMedia } from "./internal/media-submissions";
-import { type MediaAdmissionInput, StatementDocumentUnavailable } from "./contract";
+
 import type { StagedStatementBytes } from "../../src/shell/ingestion/contract";
 import { Effect, Option } from "effect";
 
@@ -218,3 +234,16 @@ export const prepareReviewEdit = (
 ): Effect.Effect<CanonicalMutationPreparation> => prepareEdit(input);
 export const reviewRefusal = (input: ReviewAuditWork): CanonicalMutationRefusal =>
   refuseReview(input);
+
+/** Prepare the existing inbox observation in the browser admission snapshot. */
+export const prepareBoundReviewWorkspace: typeof prepareInbox = (request) => prepareInbox(request);
+
+/** Prepare browser-only source excerpts in the existing native observation. */
+export const prepareBoundReviewPageContext: typeof prepareContext = (request) =>
+  prepareContext(request);
+
+/** Original selection composes with admission; bytes remain outside the native transaction. */
+export const prepareBoundReviewMaterial: typeof prepareMaterial = (input) => prepareMaterial(input);
+
+/** Compose the existing detail observation with native browser admission. */
+export const prepareBoundReviewItem: typeof prepareItem = (request) => prepareItem(request);

@@ -58,3 +58,7 @@ export const decodeProcessingConsentStatusRead = (
     });
     return Option.some(result);
   });
+
+/** Observe the legal receipt for an exact live browser credential selected in this transaction. */
+export const prepareSelectedProcessingConsentRead = (users: OwnedStatement): OwnedStatement =>
+  receiptRead({ sql: `w.id IN (SELECT id FROM (${users.sql}))`, params: users.params });

@@ -881,7 +881,41 @@ export const browseTransactions = ({
     return yield* Effect.tryPromise(() => readAuthorizedHistory(db, { selection, query, current }));
   }).pipe(Effect.orElseSucceed(() => failedAudit()));
 
-/** The same browser query and atomic Audit, before HTTP encoding; no authority or row decoder is bypassed. */
+/** Prepare the initial page and its authority-bound Audit for bootstrap's final native unit. */
+export const prepareBrowserTransactionPage = (
+  input: Readonly<{
+    db: D1Database;
+    request: Request;
+    subject: BrowserSelection["subject"];
+    current: number;
+  }>
+): Option.Option<
+  Readonly<{
+    statements: ReadonlyArray<D1PreparedStatement>;
+    decode: (
+      results: ReadonlyArray<D1Result>
+    ) => Option.Option<typeof TransactionListResponse.Type>;
+  }>
+> => {
+  const selection: BrowserSelection = {
+    request: input.request,
+    subject: input.subject,
+    search: false,
+    id: Option.none(),
+  };
+  const query = parseQuery(selection);
+  return Option.map(query, (query) => ({
+    statements: browserHistoryStatements(input.db, { selection, query, current: input.current }),
+    decode: (
+      results: ReadonlyArray<D1Result>
+    ): Option.Option<typeof TransactionListResponse.Type> =>
+      results[1]?.meta.changes === 1 && results[0] !== undefined
+        ? decodedHistoryPage(results[0], selection, query)
+        : Option.none(),
+  }));
+};
+
+/** The same browser query and atomic Audit, before HTTP encoding. */
 export const readBrowserTransactionPage = (
   input: Readonly<{
     db: D1Database;
@@ -890,24 +924,13 @@ export const readBrowserTransactionPage = (
   }>
 ): Effect.Effect<Option.Option<typeof TransactionListResponse.Type>> =>
   Effect.gen(function* () {
-    const selection: BrowserSelection = {
-      request: input.request,
-      subject: input.subject,
-      search: false,
-      id: Option.none(),
-    };
-    const query = parseQuery(selection);
-    if (Option.isNone(query)) return Option.none();
-    const current = DateTime.toEpochMillis(yield* DateTime.now);
-    const [rows, audit] = yield* Effect.tryPromise(() =>
-      input.db.batch(
-        browserHistoryStatements(input.db, {
-          selection,
-          query: query.value,
-          current,
-        })
-      )
+    const prepared = prepareBrowserTransactionPage({
+      ...input,
+      current: DateTime.toEpochMillis(yield* DateTime.now),
+    });
+    if (Option.isNone(prepared)) return Option.none();
+    const results = yield* Effect.tryPromise(() =>
+      input.db.batch([...prepared.value.statements])
     ).pipe(Effect.uninterruptible);
-    if (audit?.meta.changes !== 1 || rows === undefined) return Option.none();
-    return decodedHistoryPage(rows, selection, query.value);
+    return prepared.value.decode(results);
   }).pipe(Effect.orElseSucceed(() => Option.none()));

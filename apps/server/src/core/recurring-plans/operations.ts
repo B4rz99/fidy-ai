@@ -12,6 +12,7 @@ import {
   type RecurringOccurrence,
   type RecurringPlan,
   type RecurringPlanInput,
+  type RecurringSchedule,
   type RecurringSummary,
 } from "./contract";
 
@@ -129,7 +130,7 @@ const occurrenceAt = ({
   date,
   today,
 }: Readonly<{
-  document: RecurringDocument;
+  document: RecurringSchedule;
   plan: RecurringPlan;
   date: string;
   today: (plan: RecurringPlanInput) => string;
@@ -242,7 +243,7 @@ export const projectRecurringMonth = ({
   month,
   now,
 }: Readonly<{
-  document: RecurringDocument;
+  document: RecurringSchedule;
   month: string;
   now: DateTime.Utc;
 }>): ReadonlyArray<RecurringOccurrence> => {
@@ -297,7 +298,7 @@ export const readRecurringOccurrence = ({
   planId,
   date,
 }: Readonly<{
-  document: RecurringDocument;
+  document: RecurringSchedule;
   planId: string;
   date: string;
 }>): Option.Option<RecurringOccurrence> => {
@@ -366,7 +367,7 @@ export const recurringMatchCandidates = ({
   items,
   facts,
 }: Readonly<{
-  document: RecurringDocument;
+  document: RecurringSchedule;
   items: ReadonlyArray<RecurringOccurrence>;
   facts: ReadonlyArray<RecurringMatchFact>;
 }>): ReadonlyArray<Readonly<{ item: RecurringOccurrence; fact: RecurringMatchFact }>> => {

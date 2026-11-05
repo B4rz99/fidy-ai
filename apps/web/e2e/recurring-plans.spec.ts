@@ -1546,6 +1546,7 @@ test("capturing recurring income preserves its Currency and direction", ({ page,
         expectPayment(capture.getByRole("combobox", { name: "Moneda", exact: true })).toHaveCount(0)
       );
       yield* checkMobileCaptureText(page);
+      yield* Effect.tryPromise(() => chooseDate(page, "Fecha", "2026-10-31"));
       yield* Effect.tryPromise(() =>
         expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("20,5")
       );

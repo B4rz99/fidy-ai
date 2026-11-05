@@ -165,7 +165,8 @@ export type AuditQueryCall = Readonly<{
     | "transactions.getTransaction"
     | "transactions.listTransactions"
     | "transactions.searchTransactions"
-    | "ingestion.getStatementSubmission";
+    | "ingestion.getStatementSubmission"
+    | "ingestion.getReviewItem";
   current: number;
   missingWhen: OwnedStatement;
 }>;

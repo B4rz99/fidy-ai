@@ -297,6 +297,34 @@ for (const invalid of [
     ));
 }
 
+it("admits sustained interactive requests at 100ms intervals without spending the burst", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, current } = yield* setup;
+      const live = yield* Clock.Clock;
+      let now = current;
+      const clock: Clock.Clock = {
+        currentTimeMillis: Effect.sync(() => now),
+        currentTimeMillisUnsafe: () => now,
+        currentTimeNanos: live.currentTimeNanos,
+        currentTimeNanosUnsafe: () => live.currentTimeNanosUnsafe(),
+        monotonicTimeNanos: live.monotonicTimeNanos,
+        monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+        sleep: (duration) => live.sleep(duration),
+      };
+      for (let index = 0; index < 30; index++) {
+        now = current + index * 100;
+        const response = yield* protectCanonicalPressure({
+          db,
+          userId,
+          work: Effect.succeed(new Response(null, { status: 200 })),
+          refused: Effect.succeed,
+        }).pipe(Effect.provideService(Clock.Clock, clock));
+        expect(response.status).toBe(200);
+      }
+    })
+  ));
+
 it("enforces the shared browser burst and rolls back a refused lease", () =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -36,6 +36,13 @@ export const keywordRulesQuery = ({ userId }: Readonly<{ userId: string }>): Own
   params: [userId],
 });
 
+/** Compose bounded instructions with a caller-owned live User selection. */
+export const selectedKeywordRulesQuery = (users: OwnedStatement): OwnedStatement => ({
+  sql: `SELECT ${ruleColumns} FROM keyword_rules WHERE user_id IN (SELECT userId FROM (${users.sql}))
+    ORDER BY created_at_ms, id LIMIT ${boundedRuleCount}`,
+  params: users.params,
+});
+
 /** The same owned rules, re-checking a live caller inside the reading statement. */
 export const protectedKeywordRulesQuery = ({
   userId,

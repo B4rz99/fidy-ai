@@ -1,3 +1,4 @@
+import type { CanonicalReadCompletion } from "../canonical-admission/contract";
 import { requestFor } from "./internal/canonical-request";
 import { observeCanonicalResponse } from "../runtime/application-observation/operations";
 import {
@@ -247,6 +248,7 @@ const executeOAuthMutation = ({
   Effect.gen(function* () {
     const work = yield* oauthMutationWork(operation, input.input);
     const response = yield* executeCanonicalWork({
+      completion: Option.none(),
       db: input.db,
       subject,
       current,
@@ -324,6 +326,7 @@ type WorkInput = Readonly<{
   current: number;
   hostedFence: Option.Option<HostedCommitFence>;
   oauthConfirmation: Option.Option<OAuthConfirmationWork>;
+  completion: Option.Option<CanonicalReadCompletion>;
 }>;
 
 const executeCall = (
@@ -582,6 +585,7 @@ const invokeQueryOwner = ({
   request,
   bucket,
   browserOrigin,
+  completion,
 }: Readonly<{
   db: D1Database;
   subject: QueryCaller;
@@ -589,6 +593,7 @@ const invokeQueryOwner = ({
   request: Request;
   bucket: Option.Option<R2Bucket>;
   browserOrigin: Option.Option<string>;
+  completion: Option.Option<CanonicalReadCompletion>;
 }>): Effect.Effect<Option.Option<Response>, Cause.UnknownError> =>
   Effect.gen(function* () {
     const owner = canonicalQueryOwner(operation.id);
@@ -604,6 +609,7 @@ const invokeQueryOwner = ({
           request,
           bucket,
           browserOrigin,
+          completion,
         })
       ).pipe((effect) => observeCanonicalResponse(effect, operation.id))
     );
@@ -666,6 +672,7 @@ export const executeCanonicalHttpQuery = ({
     }
     return Option.getOrElse(
       yield* invokeQueryOwner({
+        completion: Option.none(),
         ...input,
         operation: operation.value,
         browserOrigin: Option.some(input.browserOrigin),
@@ -698,6 +705,7 @@ export const executeCanonicalQuery = ({
     const request = requestFor({ operation: operation.value, input });
     if (Option.isNone(request)) return Option.none();
     return yield* invokeQueryOwner({
+      completion: Option.none(),
       db,
       subject,
       operation: operation.value,

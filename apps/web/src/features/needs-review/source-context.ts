@@ -1,8 +1,9 @@
+import type { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
-import type { CanonicalSuccess, FidyClient } from "@/transport/client";
+import type { CanonicalSuccess, FidyApiGroups, FidyClient } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { useReviewPageExpiry } from "./expiry";
 import { reviewContextKey } from "./query-keys";
@@ -13,8 +14,15 @@ export type SourceContext =
   CanonicalSuccess<"ingestion.getReviewPageContext">["data"]["items"][number];
 export type PageContexts = ReadonlyMap<string, SourceContext>;
 
+type ContextEndpoint = HttpApiEndpoint.WithIdentifier<
+  HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<FidyApiGroups, "ingestion">>,
+  "getReviewPageContext"
+>;
 type ContextQuery = Atom.Atom<
-  AsyncResult.AsyncResult<CanonicalSuccess<"ingestion.getReviewPageContext">, unknown>
+  AsyncResult.AsyncResult<
+    CanonicalSuccess<"ingestion.getReviewPageContext">,
+    HttpApiEndpoint.Errors<ContextEndpoint>
+  >
 >;
 const emptyContext: ContextQuery = Atom.make(
   AsyncResult.success<CanonicalSuccess<"ingestion.getReviewPageContext">>({

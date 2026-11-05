@@ -28,6 +28,7 @@ import { type BrowserHttpBoundary, browserHttpClientLayer } from "./browser-http
 import { observeBrowserDecode } from "./browser-defects";
 
 export type {
+  FidyApiGroups,
   LayoutNodeFor,
   AuthenticationProvider,
   CanonicalInput,

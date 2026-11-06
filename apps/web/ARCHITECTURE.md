@@ -66,10 +66,9 @@ access checks remain with the actual route.
 Feature implementation files stay private, and session, transport and UI modules cannot import
 the code-preparation entry.
 
-The production bundle groups common runtime code separately from controls, grouping controls by
-the entries that use them and merging small groups. Strict execution order preserves initialization
-across shared chunks. A smaller named runtime alone is not evidence of improvement: measure the
-complete entry dependency set, request waves and populated-content readiness.
+The production bundle retains deliberate shared grouping to bound request waves. A smaller named
+runtime alone is not evidence of improvement: compare the complete entry dependency set, request
+waves and populated-content readiness before adopting a different split.
 
 After the application boundary latches the browser session, the initial Budgets
 and Recurring routes may mount the same session-registry profile query before presentation loads.

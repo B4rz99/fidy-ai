@@ -183,9 +183,10 @@ const findBrowserEntry = (outputs: BuildOutputs): Option.Option<string> =>
 const assertNoDashboardInInitialInputs = (inputs: ReadonlyArray<string>): void => {
   const leaked = inputs.filter(
     (input) =>
-      input.includes("/features/dashboard/") ||
+      (input.includes("/features/dashboard/") && !input.endsWith("/features/dashboard/code.ts")) ||
       input.includes("node_modules/recharts/") ||
-      input.includes("/features/needs-review/")
+      (input.includes("/features/needs-review/") &&
+        !input.endsWith("/features/needs-review/code.ts"))
   );
   if (leaked.length > 0) {
     throw new Error(

@@ -1895,6 +1895,22 @@ const reservedBindingResponse = <E, R>(
     ? work
     : withBrowserBinding(request, environment, work);
 
+/** OAuth listing owns its exact mounted-cookie lookup; other OAuth paths keep ingress binding. */
+const dispatchOAuthRequest = (
+  request: Request,
+  environment: CoreHttpEnvironment
+): Effect.Effect<Response> => {
+  const work = handleOAuthRequest({
+    request,
+    db: environment.DB,
+    browserOrigin: environment.BROWSER_ORIGIN,
+    coordinator: environment.USER_TRANSACTION_COORDINATOR,
+  });
+  return request.method === "GET" && new URL(request.url).pathname === oauthPaths.connections
+    ? work
+    : withBrowserBinding(request, environment, work);
+};
+
 const dispatchCoreHttp = ({
   bankAuthentication,
   request,
@@ -1906,14 +1922,7 @@ const dispatchCoreHttp = ({
   const bound = <R>(work: Effect.Effect<Response, never, R>): Effect.Effect<Response, never, R> =>
     withBrowserBinding(request, environment, work);
   if (Object.values(oauthPaths).some((path) => path === url.pathname)) {
-    return bound(
-      handleOAuthRequest({
-        request,
-        db: environment.DB,
-        browserOrigin: environment.BROWSER_ORIGIN,
-        coordinator: environment.USER_TRANSACTION_COORDINATOR,
-      })
-    );
+    return dispatchOAuthRequest(request, environment);
   }
   const reserved = reservedCoreResponse({ request, environment, bankAuthentication }, url.pathname);
   if (Option.isSome(reserved)) return reservedBindingResponse(request, environment, reserved.value);

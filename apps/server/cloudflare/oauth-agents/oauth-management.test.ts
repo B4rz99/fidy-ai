@@ -819,6 +819,65 @@ it("batches recent activity for an entire connection page", () =>
         Schema.Struct({ connections: Schema.Array(Schema.Unknown) })
       )(yield* wait(response.json()));
       expect(body.connections).toHaveLength(4);
-      expect(observed.roundTrips()).toBeLessThanOrEqual(3);
+      expect(observed.roundTrips()).toBe(2);
+    })
+  ));
+
+it.each(["missing", "different"] as const)("refuses a %s mounted binding before listing", (kind) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const headers = new Headers(fixture.headers);
+      if (kind === "missing") headers.delete("Fidy-Session-Binding");
+      else headers.set("Fidy-Session-Binding", "20000000-0000-4000-8000-000000000003");
+      let admitted = false;
+      const response = yield* manageConnections({
+        db: fixture.db,
+        request: new Request("https://api.fidyapp.com/web/oauth/connections", { headers }),
+        browserOrigin: "https://app.fidyapp.com",
+        current: yield* Clock.currentTimeMillis,
+        admitUser: () =>
+          Effect.sync(() => {
+            admitted = true;
+          }),
+        coordinator: {
+          getByName: () => {
+            throw new Error("Listing must not revoke");
+          },
+        },
+      });
+      expect(response.status).toBe(401);
+      expect(admitted).toBe(false);
+    })
+  )
+);
+
+it("withholds the connection page if the resolved browser session is revoked before its snapshot", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const current = yield* Clock.currentTimeMillis;
+      const response = yield* manageConnections({
+        db: fixture.db,
+        request: new Request("https://api.fidyapp.com/web/oauth/connections", {
+          headers: fixture.headers,
+        }),
+        browserOrigin: "https://app.fidyapp.com",
+        current,
+        admitUser: () =>
+          wait(
+            fixture.db.prepare("UPDATE web_sessions SET revoked_at_ms=?").bind(current).run()
+          ).pipe(
+            Effect.asVoid,
+            Effect.mapError(() => new BootstrapUnavailable())
+          ),
+        coordinator: {
+          getByName: () => {
+            throw new Error("Listing must not revoke");
+          },
+        },
+      });
+      expect(response.status).toBe(401);
+      expect(yield* wait(response.json())).toEqual({ error: "unauthenticated" });
     })
   ));

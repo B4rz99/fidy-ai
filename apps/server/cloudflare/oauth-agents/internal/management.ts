@@ -15,11 +15,11 @@ import {
   oauthConnectionPageSize,
   oauthPaths,
 } from "../../../src/shell/oauth-agents/contract";
-import type { AuditUnavailable } from "../../../src/shell/audit/contract";
-import { prepareOAuthActivity } from "../../../src/shell/audit/operations";
+import { AuditUnavailable } from "../../../src/shell/audit/contract";
+import { prepareOAuthActivityPage } from "../../../src/shell/audit/operations";
 import { liveSessionConditions } from "../../../src/shell/web-session/operations";
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
-import { browserSession } from "../../web-session/operations";
+import { authenticateBoundWebSession, browserSession } from "../../web-session/operations";
 import { type BootstrapInvalid, BootstrapUnavailable, dbWork, decodePayload } from "./bootstrap";
 import { oauthResponse } from "./response";
 
@@ -69,39 +69,6 @@ const projectConnection = (
       recentActivity,
     });
   });
-const projectConnections = (
-  input: AuthorizedInput,
-  page: ReadonlyArray<typeof ConnectionRow.Type>
-): Effect.Effect<
-  ReadonlyArray<OAuthConnectionMetadata>,
-  BootstrapUnavailable | AuditUnavailable | Schema.SchemaError
-> =>
-  Effect.gen(function* () {
-    const guard = liveSessionConditions(input);
-    const activities = page.map((row) => ({
-      row,
-      prepared: prepareOAuthActivity({
-        db: input.db,
-        userId: input.session.user_id,
-        connectionId: row.id,
-        guard,
-      }),
-    }));
-    const evidence =
-      activities.length === 0
-        ? []
-        : yield* dbWork(() =>
-            input.db.batch(activities.flatMap(({ prepared }) => prepared.statements))
-          );
-    let offset = 0;
-    return yield* Effect.forEach(activities, ({ row, prepared }) => {
-      const rows = evidence.slice(offset, offset + prepared.statements.length);
-      offset += prepared.statements.length;
-      return prepared
-        .decode(rows)
-        .pipe(Effect.flatMap((activity) => projectConnection(input, row, activity)));
-    });
-  });
 const listConnections = (
   input: AuthorizedInput
 ): Effect.Effect<Response, BootstrapUnavailable | AuditUnavailable | Schema.SchemaError> =>
@@ -114,17 +81,22 @@ const listConnections = (
       onExcessProperty: "error",
     })(Object.fromEntries(query));
     const guard = liveSessionConditions(input);
+    const after = Option.getOrElse(decoded.after, () => "");
+    const activity = prepareOAuthActivityPage({
+      connections: {
+        sql: "SELECT id,user_id FROM oauth_connections WHERE user_id=? AND id>? ORDER BY id LIMIT 25",
+        params: [input.session.user_id, after],
+      },
+      guard,
+    });
     const results = yield* dbWork(() =>
       input.db.batch([
         input.db.prepare(`SELECT 1 AS live WHERE ${guard.sql}`).bind(...guard.params),
         input.db
           .prepare(`SELECT id,claimed_client_name,scopes_json,expires_at_ms,revoked_at_ms FROM oauth_connections
       WHERE user_id = ? AND id > ? AND ${guard.sql} ORDER BY id LIMIT 26`)
-          .bind(
-            input.session.user_id,
-            Option.getOrElse(decoded.after, () => ""),
-            ...guard.params
-          ),
+          .bind(input.session.user_id, after, ...guard.params),
+        input.db.prepare(activity.statement.sql).bind(...activity.statement.params),
       ])
     );
     if (results[0]?.results.length !== 1) {
@@ -134,7 +106,13 @@ const listConnections = (
       Schema.Array(ConnectionRow).check(Schema.isMaxLength(oauthConnectionPageSize + 1))
     )(results[1]?.results).pipe(Effect.mapError(() => new BootstrapUnavailable()));
     const page = rows.slice(0, oauthConnectionPageSize);
-    const connections = yield* projectConnections(input, page);
+    const activities = yield* activity.decode(results[2]?.results);
+    const connections = yield* Effect.forEach(page, (row) => {
+      const recent = activities.get(row.id);
+      return recent === undefined
+        ? Effect.fail(new AuditUnavailable())
+        : projectConnection(input, row, recent);
+    });
     const body = yield* Schema.decodeEffect(Schema.toType(OAuthConnectionList))({
       connections,
       nextCursor:
@@ -201,10 +179,11 @@ export const manageConnections = (
       input.request.method === "GET" &&
       new URL(input.request.url).pathname === oauthPaths.connections;
     const session = yield* dbWork(() =>
-      browserSession({
-        ...input,
-        input: { current: input.current, fresh: !listing },
-      })
+      listing
+        ? authenticateBoundWebSession({ ...input, freshness: "live" }).then(
+            Option.map((subject) => ({ id: subject.id, user_id: subject.userId }))
+          )
+        : browserSession({ ...input, input: { current: input.current, fresh: true } })
     );
     if (Option.isNone(session)) {
       if (!listing) {

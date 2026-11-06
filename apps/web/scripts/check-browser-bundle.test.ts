@@ -7,6 +7,51 @@ import { checkBrowserBundle } from "./check-browser-bundle";
 const webRoot = process.cwd();
 const workspaceRoot = join(webRoot, "..", "..");
 
+it.effect.each(["dynamic", "static"] as const)(
+  "checks transitive workspace isolation through a %s code-preparation entry",
+  (kind) =>
+    Effect.acquireUseRelease(
+      Effect.tryPromise(() => mkdtemp(join(webRoot, ".bundle-test-"))),
+      (fixtureRoot) =>
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() =>
+            Bun.write(
+              join(fixtureRoot, "src/main.tsx"),
+              'export { prepare } from "./features/dashboard/code";\n'
+            )
+          );
+          yield* Effect.tryPromise(() =>
+            Bun.write(
+              join(fixtureRoot, "src/features/dashboard/code.ts"),
+              kind === "dynamic"
+                ? 'export const prepare = () => import("./fixture");\n'
+                : 'export { LineChart as prepare } from "./fixture";\n'
+            )
+          );
+          yield* Effect.tryPromise(() =>
+            Bun.write(
+              join(fixtureRoot, "src/features/dashboard/fixture.ts"),
+              'export { LineChart } from "recharts";\n'
+            )
+          );
+          const checked = checkBrowserBundle({
+            entrypoint: "src/main.tsx",
+            outdir: join(fixtureRoot, "bundle"),
+            webRoot: fixtureRoot,
+            workspaceRoot,
+          });
+          yield* Effect.tryPromise(() =>
+            kind === "static"
+              ? expect(checked).rejects.toThrow(
+                  /Workspace modules entered the public\/auth initial chunk/u
+                )
+              : checked
+          );
+        }),
+      (fixtureRoot) => Effect.tryPromise(() => rm(fixtureRoot, { recursive: true, force: true }))
+    )
+);
+
 it.effect("rejects Effect SQL runtime modules from the current published distribution", () =>
   Effect.acquireUseRelease(
     Effect.tryPromise(() => mkdtemp(join(webRoot, ".bundle-test-"))),

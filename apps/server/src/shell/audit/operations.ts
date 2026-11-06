@@ -35,56 +35,62 @@ import * as patEvidence from "~/shell/audit/internal/pat-evidence";
 
 export { utcDayMilliseconds } from "./contract";
 
-/** Reads at most three attributable canonical outcomes under the caller's same-User live browser guard. Unreadable or malformed evidence is unavailable, not empty activity. */
-export const prepareOAuthActivity = (
-  input: Readonly<{ db: D1Database; userId: string; connectionId: string; guard: OwnedStatement }>
+/** A bounded connection page and its latest outcomes share the caller's native snapshot. */
+export const prepareOAuthActivityPage = (
+  input: Readonly<{ connections: OwnedStatement; guard: OwnedStatement }>
 ): Readonly<{
-  statements: ReadonlyArray<D1PreparedStatement>;
+  statement: OwnedStatement;
   decode: (
-    results: ReadonlyArray<D1Result>
-  ) => Effect.Effect<OAuthRecentActivity, AuditUnavailable>;
+    rows: unknown
+  ) => Effect.Effect<ReadonlyMap<string, OAuthRecentActivity>, AuditUnavailable>;
 }> => ({
-  statements: [
-    input.db.prepare(`SELECT 1 AS live WHERE ${input.guard.sql}`).bind(...input.guard.params),
-    input.db
-      .prepare(
-        `SELECT id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call' AND user_id = ? AND oauth_connection_id = ? AND oauth_credential_id IS NOT NULL AND ${input.guard.sql} ORDER BY occurred_at_ms DESC,id DESC LIMIT 3`
-      )
-      .bind(input.userId, input.connectionId, ...input.guard.params),
-  ],
-  decode: (results) =>
+  statement: {
+    sql: `SELECT connections.id AS connectionId,
+      (SELECT json_group_array(json_object('id',id,'operation',operation,'outcome',outcome,'occurred_at_ms',occurred_at_ms))
+       FROM (SELECT id,operation,outcome,occurred_at_ms FROM audit_entries INDEXED BY audit_entries_oauth_activity
+         WHERE record_type='credential_call' AND user_id=connections.user_id
+           AND oauth_connection_id=connections.id AND oauth_credential_id IS NOT NULL
+         ORDER BY occurred_at_ms DESC,id DESC LIMIT 3)) AS activity
+      FROM (${input.connections.sql}) AS connections WHERE ${input.guard.sql}`,
+    params: [...input.connections.params, ...input.guard.params],
+  },
+  decode: (raw) =>
     Effect.gen(function* () {
-      if (results[0]?.results.length !== 1) return yield* new AuditUnavailable();
       const rows = yield* Schema.decodeUnknownEffect(
         Schema.Array(
           Schema.Struct({
-            id: Schema.String,
-            operation: Schema.String,
-            outcome: Schema.Literals(["accepted", "rejected"]),
-            occurred_at_ms: Schema.Int,
+            connectionId: Schema.String,
+            activity: Schema.fromJsonString(
+              Schema.Array(
+                Schema.Struct({
+                  id: Schema.String,
+                  operation: Schema.String,
+                  outcome: Schema.Literals(["accepted", "rejected"]),
+                  occurred_at_ms: Schema.Int,
+                })
+              )
+            ),
           })
         )
-      )(results[1]?.results);
-      return yield* Schema.decodeUnknownEffect(Schema.toType(OAuthRecentActivity))(
-        rows.map((row) => ({
-          id: row.id,
-          operation: row.operation,
-          outcome: row.outcome === "accepted" ? "succeeded" : "rejected",
-          occurredAt: DateTime.makeUnsafe(row.occurred_at_ms),
-        }))
+      )(raw);
+      const entries = yield* Effect.forEach(rows, (row) =>
+        Schema.decodeUnknownEffect(Schema.toType(OAuthRecentActivity))(
+          row.activity.map((entry) => ({
+            id: entry.id,
+            operation: entry.operation,
+            outcome: entry.outcome === "accepted" ? "succeeded" : "rejected",
+            occurredAt: DateTime.makeUnsafe(entry.occurred_at_ms),
+          }))
+        ).pipe(
+          Effect.map((activity): readonly [string, OAuthRecentActivity] => [
+            row.connectionId,
+            activity,
+          ])
+        )
       );
+      return new Map(entries);
     }).pipe(Effect.catchCause(() => Effect.fail(new AuditUnavailable()))),
 });
-
-export const readOAuthActivity = (
-  input: Parameters<typeof prepareOAuthActivity>[0]
-): Effect.Effect<OAuthRecentActivity, AuditUnavailable> => {
-  const prepared = prepareOAuthActivity(input);
-  return Effect.tryPromise(() => input.db.batch([...prepared.statements])).pipe(
-    Effect.flatMap(prepared.decode),
-    Effect.catchCause(() => Effect.fail(new AuditUnavailable()))
-  );
-};
 /** Append canonical metadata under the exact OAuth-owned live authority in the same protected query unit. */
 export const recordOAuthCall = (
   input: Readonly<{

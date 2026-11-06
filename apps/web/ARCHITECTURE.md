@@ -59,11 +59,16 @@ with destination code. Other entries do not need Transaction presentation to int
 hydrate their session registry.
 
 An optional feature-owned `code.ts` entry lets application composition start code preparation
-without evaluating the feature's React, transport or query declarations first. Transactions uses
-this entry alongside its page import so list and workspace discovery do not wait for the shared
-runtime. It prepares code only; clients, data reads and access checks remain with the actual route.
+without evaluating the feature's React, transport or query declarations first. Transactions,
+Dashboard, Budgets and Needs Review use this entry alongside their route imports so presentation
+discovery does not wait for the shared runtime. It prepares code only; clients, data reads and
+access checks remain with the actual route.
 Feature implementation files stay private, and session, transport and UI modules cannot import
 the code-preparation entry.
+
+The production bundle retains deliberate shared grouping to bound request waves. A smaller named
+runtime alone is not evidence of improvement: compare the complete entry dependency set, request
+waves and populated-content readiness before adopting a different split.
 
 After the application boundary latches the browser session, the initial Budgets
 and Recurring routes may mount the same session-registry profile query before presentation loads.

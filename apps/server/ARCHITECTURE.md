@@ -193,8 +193,12 @@ Dashboard deduplicates requested chart intervals before calling Transactions' bo
 reader. Wider selections first count bounded projection rows at one fact revision. Compatible ranges
 expand native batches beyond four intervals only within a raw-result budget; larger working sets
 retain four-interval chunks. Every group retains current Consent, projection readiness and fresh
-recovery fencing; revision disagreement refuses the complete read. The same User coordinator turn,
-admission lease and final authority/Audit checks still cover the whole view.
+recovery fencing. HTTP document/view reads execute directly in Core, retaining the admission lease
+and final live authority/Audit checks. Every financial snapshot asserts the exact source document
+and captured calendar context; later snapshots also assert the planned financial revision inside
+the native transaction. A conflict aborts that unit and withholds the complete view without a retry
+or accepted final accounting. A concurrent Correction can commit without waiting for the view.
+Mutations and held hosted execution retain User coordination.
 
 Erasure composes each owner's bounded deletion and SQL authorization under User coordination.
 An independent registry fences ordinary activity after database restoration until reconciliation.
@@ -286,11 +290,11 @@ independently, retains phase-specific operational evidence and reports aggregate
 remaining phase has run. Interruption stops progression. Durable grant claims and cleanup checkpoints
 remain separate from provider I/O, and unknown authorization outcomes do not authorize replay.
 
-Dashboard view timing headers carry request-local numeric metadata only. The Core coordinator hop
-contains the coordinator queue and execution; execution contains source/context selection,
-financial projection and final owner Audit/accounting phases. Coordinator recovery R2/D1/SQL
-measurements use a distinct Dashboard prefix, so they do not overwrite outer Core measurements.
-These spans overlap hierarchically. Workers production clocks advance at I/O boundaries; CPU-only
+Dashboard view timing headers carry request-local numeric metadata only. Direct HTTP reads report
+source/context selection, financial projection and owner Audit/accounting inside Core's canonical
+path and recovery R2/D1/SQL spans. Held coordinator reads additionally report hop, queue and execution;
+their recovery measurements use a distinct Dashboard prefix. These spans overlap hierarchically.
+Workers production clocks advance at I/O boundaries; CPU-only
 decoding, aggregation and encoding require a separate native CPU profile, not zero-duration claims.
 
 ## 8. Evidence and test boundaries

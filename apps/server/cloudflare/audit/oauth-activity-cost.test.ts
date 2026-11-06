@@ -1,6 +1,6 @@
 import { Clock, Effect, Schema } from "effect";
 import { expect, it } from "vitest";
-import { prepareOAuthActivity, prepareOAuthActivityPage } from "../../src/shell/audit/operations";
+import { prepareOAuthActivityPage } from "../../src/shell/audit/operations";
 import { liveSessionConditions } from "../../src/shell/web-session/operations";
 import { observeRetentionCost } from "../d1-test-fixture";
 import { approvedFixture, exchangeFixture, wait } from "../oauth-agents/oauth-ingress.test-fixture";
@@ -52,22 +52,6 @@ it("reads the latest three OAuth outcomes without scanning unrelated User histor
           )
         )
       );
-      const observed = observeRetentionCost(fixture.db);
-      const prepared = prepareOAuthActivity({
-        db: observed.database,
-        userId: session.user_id,
-        connectionId: fixture.connectionId,
-        guard: liveSessionConditions({ session, current }),
-      });
-      const rows = yield* wait(observed.database.batch([...prepared.statements]));
-      const activity = yield* prepared.decode(rows);
-      expect(activity.map((entry) => entry.id)).toEqual([
-        "30000000-0000-4000-8000-000000000003",
-        "30000000-0000-4000-8000-000000000002",
-        "30000000-0000-4000-8000-000000000001",
-      ]);
-      expect(observed.cost().rowsRead).toBeLessThan(50);
-      expect(observed.cost().rowsWritten).toBe(0);
       const pageCost = observeRetentionCost(fixture.db);
       const page = prepareOAuthActivityPage({
         connections: {
@@ -83,7 +67,11 @@ it("reads the latest three OAuth outcomes without scanning unrelated User histor
           .all()
       );
       const activities = yield* page.decode(pageRows.results);
-      expect(activities.get(fixture.connectionId)).toEqual(activity);
+      expect(activities.get(fixture.connectionId)?.map((entry) => entry.id)).toEqual([
+        "30000000-0000-4000-8000-000000000003",
+        "30000000-0000-4000-8000-000000000002",
+        "30000000-0000-4000-8000-000000000001",
+      ]);
       expect(pageCost.cost().rowsRead).toBeLessThan(50);
       expect(pageCost.cost().rowsWritten).toBe(0);
     })

@@ -35,57 +35,6 @@ import * as patEvidence from "~/shell/audit/internal/pat-evidence";
 
 export { utcDayMilliseconds } from "./contract";
 
-/** Reads at most three attributable canonical outcomes under the caller's same-User live browser guard. Unreadable or malformed evidence is unavailable, not empty activity. */
-export const prepareOAuthActivity = (
-  input: Readonly<{ db: D1Database; userId: string; connectionId: string; guard: OwnedStatement }>
-): Readonly<{
-  statements: ReadonlyArray<D1PreparedStatement>;
-  decode: (
-    results: ReadonlyArray<D1Result>
-  ) => Effect.Effect<OAuthRecentActivity, AuditUnavailable>;
-}> => ({
-  statements: [
-    input.db.prepare(`SELECT 1 AS live WHERE ${input.guard.sql}`).bind(...input.guard.params),
-    input.db
-      .prepare(
-        `SELECT id,operation,outcome,occurred_at_ms FROM audit_entries INDEXED BY audit_entries_oauth_activity WHERE record_type='credential_call' AND user_id = ? AND oauth_connection_id = ? AND oauth_credential_id IS NOT NULL AND ${input.guard.sql} ORDER BY occurred_at_ms DESC,id DESC LIMIT 3`
-      )
-      .bind(input.userId, input.connectionId, ...input.guard.params),
-  ],
-  decode: (results) =>
-    Effect.gen(function* () {
-      if (results[0]?.results.length !== 1) return yield* new AuditUnavailable();
-      const rows = yield* Schema.decodeUnknownEffect(
-        Schema.Array(
-          Schema.Struct({
-            id: Schema.String,
-            operation: Schema.String,
-            outcome: Schema.Literals(["accepted", "rejected"]),
-            occurred_at_ms: Schema.Int,
-          })
-        )
-      )(results[1]?.results);
-      return yield* Schema.decodeUnknownEffect(Schema.toType(OAuthRecentActivity))(
-        rows.map((row) => ({
-          id: row.id,
-          operation: row.operation,
-          outcome: row.outcome === "accepted" ? "succeeded" : "rejected",
-          occurredAt: DateTime.makeUnsafe(row.occurred_at_ms),
-        }))
-      );
-    }).pipe(Effect.catchCause(() => Effect.fail(new AuditUnavailable()))),
-});
-
-export const readOAuthActivity = (
-  input: Parameters<typeof prepareOAuthActivity>[0]
-): Effect.Effect<OAuthRecentActivity, AuditUnavailable> => {
-  const prepared = prepareOAuthActivity(input);
-  return Effect.tryPromise(() => input.db.batch([...prepared.statements])).pipe(
-    Effect.flatMap(prepared.decode),
-    Effect.catchCause(() => Effect.fail(new AuditUnavailable()))
-  );
-};
-
 /** A bounded connection page and its latest outcomes share the caller's native snapshot. */
 export const prepareOAuthActivityPage = (
   input: Readonly<{ connections: OwnedStatement; guard: OwnedStatement }>

@@ -9,12 +9,9 @@ const main = Effect.gen(function* () {
     throw new Error("Expected only --check for telemetry metadata generation");
   }
   const file = Bun.file(
-    new URL(
-      "../../src/shell/observability/internal/canonical-metadata.generated.json",
-      import.meta.url
-    )
+    new URL("../../src/shell/observability/canonical-metadata.generated.json", import.meta.url)
   );
-  const parameters = yield* Schema.decodeUnknownEffect(Schema.Json)(
+  const parameters = yield* Schema.decodeEffect(Schema.Json)(
     operationCatalog.operations.map(({ id, method, route }) => ({ id, method, route }))
   );
   const text = `${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json, { space: 2 }))(parameters)}\n`;

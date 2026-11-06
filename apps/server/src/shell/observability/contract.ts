@@ -2,7 +2,7 @@ import * as Arr from "effect/Array";
 import { type Effect, type Exit, Option, Schema } from "effect";
 import { ErrorCode } from "~/shell/public-http/contract";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import canonicalMetadata from "~/shell/observability/internal/canonical-metadata.generated.json";
+import canonicalMetadata from "./canonical-metadata.generated.json";
 
 type RequireNonEmpty = <Value>(
   values: ReadonlyArray<Value>

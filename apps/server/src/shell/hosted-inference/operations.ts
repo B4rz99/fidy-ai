@@ -1,7 +1,7 @@
 import { Context, Effect, type JsonSchema, Layer } from "effect";
 import { operationCatalog } from "~/shell/api";
 import { hostedOperationBindings } from "~/shell/canonical-operations/operations";
-import { openAiProviderSchema } from "./internal/provider-schema";
+import { openAiProviderSchema } from "~/shell/hosted-inference/internal/provider-schema";
 import type {
   HostedConformanceCheck,
   HostedConformanceFailure,

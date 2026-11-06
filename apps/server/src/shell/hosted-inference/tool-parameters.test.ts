@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { makeHostedToolParameters } from "./operations";
-import generated from "./internal/tool-parameters.generated.json";
+import generated from "~/shell/hosted-inference/internal/tool-parameters.generated.json";
 
 it("ships the exact current provider parameters for every hosted operation", () => {
   expect(generated).toEqual(makeHostedToolParameters());

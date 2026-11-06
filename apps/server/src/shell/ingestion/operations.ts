@@ -67,7 +67,9 @@ export const parseStatementFile = (
       catch: statementParseFailure,
     });
     // Bundled local code: ordinary API reads never initialize the CSV/XLSX engines.
-    const parser = yield* Effect.tryPromise(() => import("./internal/parser")).pipe(Effect.orDie);
+    const parser = yield* Effect.tryPromise(() => import("~/shell/ingestion/internal/parser")).pipe(
+      Effect.orDie
+    );
     return yield* Effect.try({
       try: () => {
         const parsed =

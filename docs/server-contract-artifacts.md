@@ -14,7 +14,7 @@ writes:
 - `apps/server/contracts/pat-pairing-openapi.json` from the separate proof-bearing direct API.
 - `apps/server/src/shell/hosted-inference/internal/tool-parameters.generated.json` from the hosted
   operations' input schemas, using the inference owner's provider projection;
-- `apps/server/src/shell/observability/internal/canonical-metadata.generated.json` from every
+- `apps/server/src/shell/observability/canonical-metadata.generated.json` from every
   canonical operation's id, HTTP method and route template.
 
 These files are deterministic review evidence, not declarations. The canonical OpenAPI and operation

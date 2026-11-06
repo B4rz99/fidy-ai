@@ -4,7 +4,7 @@ import { HttpApi } from "effect/http-api";
 
 import { FidyApi, operationCatalog } from "~/shell/api";
 import { TelemetryRegistry } from "./contract";
-import canonicalMetadata from "./internal/canonical-metadata.generated.json";
+import canonicalMetadata from "./canonical-metadata.generated.json";
 
 it("attaches the Telemetry seam to every canonical operation", () => {
   const observed: Array<string> = [];

@@ -15,9 +15,7 @@ const safeSource = [
   /^src\/(?:browser-bootstrap|browser-transport)\.ts$/u,
   /^src\/shell\/(?:browser-transport|processing-consent|identity|categories|transactions|subscription|tokens|budgets|dashboard|insights|recurring|recurring-plans|connections|public-http|schema-codecs|browser-login|recovery|ingestion|web-session|web-authentication|provider-authentication|oauth-agents|memory|quotas)\/contract\.ts$/u,
   /^src\/shell\/agent\/contract\.ts$/u,
-  /^src\/shell\/observability\/contract\.ts$/u,
-  // Pure canonical diagnostic labels, checked exactly against API declarations.
-  /^src\/shell\/observability\/canonical-metadata\.generated\.json$/u,
+  /^src\/shell\/observability\/trace\/contract\.ts$/u,
   /^src\/core\//u,
   /^src\/shell\/api\.ts$/u,
   /^src\/shell\/(?:canonical-catalog|canonical-policy|authorization|operations)\/contract\.ts$/u,

@@ -145,6 +145,12 @@ exceed the existing 64KiB web-auth response limit. Omission falls back to the or
 page read. This is one bounded document-entry request; burst, concurrency, lease duration, refusal
 responses and later canonical authorization checks remain unchanged.
 
+OAuthConnection listing composes its User resource admission, bounded connection/activity selection
+and outstanding-work completion in the final native batch. The ingress source grant and mounted
+cookie resolution retain their own units. Cleanup remains idempotent when the final reply is lost;
+no recovery generation, credential or page result is reused across transactions. Invalid listing
+queries retain their User attempt charge. Mutations keep their separate admission and coordination.
+
 ## 4. Subject, proof, and provider boundaries
 
 Every protected path carries a stable User and rechecks applicable authority at the action's atomic

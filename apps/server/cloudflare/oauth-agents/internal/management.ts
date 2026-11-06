@@ -30,6 +30,10 @@ type ManagementInput = Readonly<{
   current: number;
   coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
   admitUser: (userId: string) => Effect.Effect<void, BootstrapUnavailable>;
+  readForUser: (
+    userId: string,
+    statements: D1PreparedStatement[]
+  ) => Effect.Effect<ReadonlyArray<D1Result>, BootstrapUnavailable>;
 }>;
 type AuthorizedInput = ManagementInput & Readonly<{ session: FreshSessionSubject }>;
 const ConnectionRow = Schema.Struct({
@@ -75,11 +79,14 @@ const listConnections = (
   Effect.gen(function* () {
     const query = new URL(input.request.url).searchParams;
     if (new Set(query.keys()).size !== Array.from(query.keys()).length) {
+      yield* input.admitUser(input.session.user_id);
       return oauthResponse({ body: { error: "invalid_request" }, status: 400 });
     }
     const decoded = yield* Schema.decodeEffect(OAuthConnectionListQuery, {
       onExcessProperty: "error",
-    })(Object.fromEntries(query));
+    })(Object.fromEntries(query)).pipe(
+      Effect.tapError(() => input.admitUser(input.session.user_id))
+    );
     const guard = liveSessionConditions(input);
     const after = Option.getOrElse(decoded.after, () => "");
     const activity = prepareOAuthActivityPage({
@@ -89,16 +96,14 @@ const listConnections = (
       },
       guard,
     });
-    const results = yield* dbWork(() =>
-      input.db.batch([
-        input.db.prepare(`SELECT 1 AS live WHERE ${guard.sql}`).bind(...guard.params),
-        input.db
-          .prepare(`SELECT id,claimed_client_name,scopes_json,expires_at_ms,revoked_at_ms FROM oauth_connections
+    const results = yield* input.readForUser(input.session.user_id, [
+      input.db.prepare(`SELECT 1 AS live WHERE ${guard.sql}`).bind(...guard.params),
+      input.db
+        .prepare(`SELECT id,claimed_client_name,scopes_json,expires_at_ms,revoked_at_ms FROM oauth_connections
       WHERE user_id = ? AND id > ? AND ${guard.sql} ORDER BY id LIMIT 26`)
-          .bind(input.session.user_id, after, ...guard.params),
-        input.db.prepare(activity.statement.sql).bind(...activity.statement.params),
-      ])
-    );
+        .bind(input.session.user_id, after, ...guard.params),
+      input.db.prepare(activity.statement.sql).bind(...activity.statement.params),
+    ]);
     if (results[0]?.results.length !== 1) {
       return oauthResponse({ body: { error: "unauthenticated" }, status: 401 });
     }
@@ -197,8 +202,8 @@ export const manageConnections = (
       }
       return oauthResponse({ body: { error: "unauthenticated" }, status: 401 });
     }
-    yield* input.admitUser(session.value.user_id);
     if (!listing) {
+      yield* input.admitUser(session.value.user_id);
       return yield* requestRevocation({ ...input, session: session.value }).pipe(
         Effect.catchTag("BootstrapInvalid", () =>
           Effect.succeed(oauthResponse({ body: { error: "invalid_request" }, status: 400 }))

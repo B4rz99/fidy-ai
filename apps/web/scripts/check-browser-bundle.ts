@@ -4,6 +4,7 @@ import { Data, Effect, Option } from "effect";
 import { decodeBuildMetafile } from "./build-metafile";
 
 const forbiddenDependencies = [
+  /apps\/server\/src\/shell\/observability\/(?:contract\.ts|canonical-metadata\.generated\.json)$/u,
   /(^|\/)node_modules\/@effect\/ai(?:-|\/)/u,
   /(^|\/)node_modules\/@effect\/platform(?:-|\/)/u,
   /(^|\/)node_modules\/@kapso\//u,

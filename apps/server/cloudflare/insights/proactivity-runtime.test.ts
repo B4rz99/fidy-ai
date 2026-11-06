@@ -65,7 +65,12 @@ const configuration = (db: D1Database): ProactivityEnvironment => ({
   KAPSO_API_KEY: "test-only",
   PROACTIVITY_TEMPLATE_JSON: Schema.encodeSync(
     Schema.fromJsonString(ProactivityTemplateConfiguration)
-  )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
+  )({
+    name: "fidy_proactivity",
+    language: "es",
+    approval: "approved",
+    body: "Fidy te avisa: {{1}} Más en Fidy.",
+  }),
 });
 const workRequest = (work: ProactivityActivity): Request =>
   new Request("https://coordinator/proactivity-work", {
@@ -571,7 +576,9 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
           now: now.epochMilliseconds,
         })
       );
-      expect(transcript.text).toBe("Fidy: Recuerda registrar tus movimientos manuales en Fidy.");
+      expect(transcript.text).toBe(
+        "Fidy te avisa: Recuerda registrar tus movimientos manuales en Fidy. Más en Fidy."
+      );
       expect(DateTime.isUtc(transcript.occurredAt)).toBe(true);
       expect(
         Option.isNone(
@@ -599,7 +606,9 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         }),
       });
       expect(prompt).toContain("ProactiveInsightTranscriptEntry");
-      expect(prompt).toContain("Fidy: Recuerda registrar tus movimientos manuales en Fidy.");
+      expect(prompt).toContain(
+        "Fidy te avisa: Recuerda registrar tus movimientos manuales en Fidy. Más en Fidy."
+      );
       expect(
         Option.getOrThrow(yield* findReminderGovernor({ db, userId: proactivityTestUsers[0] }))
       ).toEqual({ _tag: "Attentive", unanswered: 0 });
@@ -653,7 +662,7 @@ it("refuses approved-template drift between a deferred staging and the irreversi
         environment: {
           ...configuration(db),
           PROACTIVITY_TEMPLATE_JSON:
-            '{"name":"changed_template","language":"es","body":"Fidy: {{1}}","approval":"approved"}',
+            '{"name":"changed_template","language":"es","body":"Fidy te avisa: {{1}} Más en Fidy.","approval":"approved"}',
         },
         userId: proactivityTestUsers[0],
       });
@@ -747,7 +756,7 @@ const revokeScenarioCategory = (
       ...input,
       userId: proactivityTestUsers[0],
       kind: "manual-entry-reminder",
-      choice: `proactivity:manual-entry-reminder:${grant.offer_id}:revoke`,
+      choice: `p:manual-entry-reminder:${grant.offer_id}:revoke`,
       decisionMessageId: "revoke-queued-category",
     });
   });
@@ -922,7 +931,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           work: { kind: "proactivity-generate", version: 1, userId },
         });
         const offer = Option.getOrThrow(yield* findCurrentProactivityOffer(context));
-        const exact = `Fidy: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`;
+        const exact = `Fidy te avisa: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice} Más en Fidy.`;
         const provider = vi.fn(() =>
           Promise.resolve(
             Response.json({
@@ -1777,7 +1786,7 @@ it.each(["paused", "stopped"] as const)(
                   .first()
               )
             ).toEqual({
-              text: `Fidy: Has recibido tres recordatorios sin responder. ¿Quieres continuar?\nreminder:${replacement.delivery_id}:continue\nreminder:${replacement.delivery_id}:stop`,
+              text: `Fidy te avisa: Has recibido tres recordatorios sin responder. ¿Quieres continuar?\nreminder:${replacement.delivery_id}:continue\nreminder:${replacement.delivery_id}:stop Más en Fidy.`,
             });
             expect(Option.getOrThrow(yield* findReminderGovernor({ db, userId }))).toEqual({
               _tag: "QuestionDelivered",

@@ -283,7 +283,7 @@ export const handleWeeklyChoice = (
       });
       return Option.some(new Response(null, { status: saved ? success : refused }));
     }
-    if (choice.startsWith("proactivity:")) {
+    if (choice.startsWith("p:")) {
       return Option.some(
         yield* handleProactivityChoice({ context, choice, decisionMessageId: proof.messageId })
       );

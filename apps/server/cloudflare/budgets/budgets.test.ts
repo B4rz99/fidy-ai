@@ -742,7 +742,7 @@ it.each([
             name: "fidy_proactivity",
             language: "es",
             approval: "approved",
-            body: "Fidy: {{1}}",
+            body: "Fidy te avisa: {{1}} Más en Fidy.",
           }),
         };
         const harness = proactivityWorkflowHarness({
@@ -861,7 +861,9 @@ it.each([
               now: morning.epochMilliseconds,
             })
           ).text
-        ).toBe(`Fidy: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`);
+        ).toBe(
+          `Fidy te avisa: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice} Más en Fidy.`
+        );
         expect(provider).toHaveBeenCalledOnce();
       })
     )
@@ -2020,7 +2022,7 @@ it("installed category generation atomically materializes two Budget events and 
           KAPSO_API_KEY: "test-key",
           WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
           PROACTIVITY_TEMPLATE_JSON:
-            '{"name":"fidy_proactivity","language":"es","body":"Fidy: {{1}}","approval":"approved"}',
+            '{"name":"fidy_proactivity","language":"es","body":"Fidy te avisa: {{1}} Más en Fidy.","approval":"approved"}',
         };
         yield* executeProactivityWork({
           environment,
@@ -2224,7 +2226,12 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
         WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
         PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
           Schema.fromJsonString(ProactivityTemplateConfiguration)
-        )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
+        )({
+          name: "fidy_proactivity",
+          language: "es",
+          approval: "approved",
+          body: "Fidy te avisa: {{1}} Más en Fidy.",
+        }),
       };
       yield* executeProactivityWork({
         environment,

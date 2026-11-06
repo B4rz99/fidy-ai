@@ -246,6 +246,10 @@ copied or invented command cannot be presented as approval for a new operation.
 WhatsApp may repair one invalid model output after successful queries, retaining their tool results
 and remaining call budget. Repair is unavailable once a mutation has started; it cannot replay
 owner effects or replace host confirmation.
+Proactivity uses an exact reviewed Spanish body with enough fixed provider text. Frozen delivery
+evidence includes that complete body; its length budget includes the wrapper. Native category
+Consent choices use the compact `p:` prefix while retaining the category, exact offer identity,
+decision, authenticated originating chat and verified disclosure checks.
 When inference is refused by provider quota or availability, or its single invalid-output repair
 is exhausted before any mutation attempt, WhatsApp
 stages one fixed failure reply through its ordinary delivery evidence. It makes no result or commit

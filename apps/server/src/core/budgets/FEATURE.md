@@ -48,14 +48,17 @@ Dashboard projection were verified afterward; browser reload restored all four e
 Widgets. No browser warnings or errors were observed. Local QA credentials were removed.
 
 The Widget belongs to [Dashboard](../../../../web/src/features/dashboard/FEATURE.md).
-Live proactive WhatsApp alerts and opt-in remain unverified. The available Kapso number is a
-sandbox endpoint; [Kapso explicitly excludes template sends from its sandbox](https://kapso.com/whatsapp-api-sandbox).
-The alert sender uses approved templates and BSUID addressing. Production composition previously
-omitted `PROACTIVITY_ENABLED` and `PROACTIVITY_TEMPLATE_JSON`; this change wires both through
-the protected deployment, defaulting to disabled/empty. This is configuration preparation,
-not Production enablement or provider approval.
+Proactive delivery requires a connected number; [Kapso excludes template sends from its
+sandbox](https://kapso.com/whatsapp-api-sandbox). The sender uses approved templates and BSUID
+addressing. Configure `PROACTIVITY_ENABLED` and `PROACTIVITY_TEMPLATE_JSON` through the protected
+deployment; the defaults are disabled and empty. Configuration is separate from provider approval
+and each User's category Consent.
 
-Remaining live checks require a connected number, its approved `Fidy: {{1}}` template and
-matching language, a linked test recipient, and an open 09:00–19:00 local delivery window.
+Use the exact Spanish body `Fidy te avisa: {{1}} Más en Fidy.` with one complete text parameter.
+Its fixed prefix and suffix satisfy provider template shape constraints. Compact `p:` choice
+commands retain the category, offer identity and explicit decision so the complete disclosure
+fits the rendered length limit. The disclosure itself is never clipped or abbreviated.
+Live checks require the approved matching template, a linked test recipient, and an open
+09:00–19:00 local delivery window.
 Verify the disclosed opt-in/decline/revoke journey, fresh 80% and 100% crossings, exactly one
 visible alert each, and authenticated delivery settlement. Restore only disposable fixtures.

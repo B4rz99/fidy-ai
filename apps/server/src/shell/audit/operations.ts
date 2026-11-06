@@ -48,7 +48,7 @@ export const prepareOAuthActivity = (
     input.db.prepare(`SELECT 1 AS live WHERE ${input.guard.sql}`).bind(...input.guard.params),
     input.db
       .prepare(
-        `SELECT id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call' AND user_id = ? AND oauth_connection_id = ? AND oauth_credential_id IS NOT NULL AND ${input.guard.sql} ORDER BY occurred_at_ms DESC,id DESC LIMIT 3`
+        `SELECT id,operation,outcome,occurred_at_ms FROM audit_entries INDEXED BY audit_entries_oauth_activity WHERE record_type='credential_call' AND user_id = ? AND oauth_connection_id = ? AND oauth_credential_id IS NOT NULL AND ${input.guard.sql} ORDER BY occurred_at_ms DESC,id DESC LIMIT 3`
       )
       .bind(input.userId, input.connectionId, ...input.guard.params),
   ],
@@ -85,6 +85,63 @@ export const readOAuthActivity = (
     Effect.catchCause(() => Effect.fail(new AuditUnavailable()))
   );
 };
+
+/** A bounded connection page and its latest outcomes share the caller's native snapshot. */
+export const prepareOAuthActivityPage = (
+  input: Readonly<{ connections: OwnedStatement; guard: OwnedStatement }>
+): Readonly<{
+  statement: OwnedStatement;
+  decode: (
+    rows: unknown
+  ) => Effect.Effect<ReadonlyMap<string, OAuthRecentActivity>, AuditUnavailable>;
+}> => ({
+  statement: {
+    sql: `SELECT connections.id AS connectionId,
+      (SELECT json_group_array(json_object('id',id,'operation',operation,'outcome',outcome,'occurred_at_ms',occurred_at_ms))
+       FROM (SELECT id,operation,outcome,occurred_at_ms FROM audit_entries INDEXED BY audit_entries_oauth_activity
+         WHERE record_type='credential_call' AND user_id=connections.user_id
+           AND oauth_connection_id=connections.id AND oauth_credential_id IS NOT NULL
+         ORDER BY occurred_at_ms DESC,id DESC LIMIT 3)) AS activity
+      FROM (${input.connections.sql}) AS connections WHERE ${input.guard.sql}`,
+    params: [...input.connections.params, ...input.guard.params],
+  },
+  decode: (raw) =>
+    Effect.gen(function* () {
+      const rows = yield* Schema.decodeUnknownEffect(
+        Schema.Array(
+          Schema.Struct({
+            connectionId: Schema.String,
+            activity: Schema.fromJsonString(
+              Schema.Array(
+                Schema.Struct({
+                  id: Schema.String,
+                  operation: Schema.String,
+                  outcome: Schema.Literals(["accepted", "rejected"]),
+                  occurred_at_ms: Schema.Int,
+                })
+              )
+            ),
+          })
+        )
+      )(raw);
+      const entries = yield* Effect.forEach(rows, (row) =>
+        Schema.decodeUnknownEffect(Schema.toType(OAuthRecentActivity))(
+          row.activity.map((entry) => ({
+            id: entry.id,
+            operation: entry.operation,
+            outcome: entry.outcome === "accepted" ? "succeeded" : "rejected",
+            occurredAt: DateTime.makeUnsafe(entry.occurred_at_ms),
+          }))
+        ).pipe(
+          Effect.map((activity): readonly [string, OAuthRecentActivity] => [
+            row.connectionId,
+            activity,
+          ])
+        )
+      );
+      return new Map(entries);
+    }).pipe(Effect.catchCause(() => Effect.fail(new AuditUnavailable()))),
+});
 /** Append canonical metadata under the exact OAuth-owned live authority in the same protected query unit. */
 export const recordOAuthCall = (
   input: Readonly<{

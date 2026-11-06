@@ -17,6 +17,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { Navigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
 import { type JSX, type ReactNode, type RefCallback, useState } from "react";
+import { Toaster, toast } from "sonner";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
@@ -26,7 +27,6 @@ import { type Workspace, sources } from "./model";
 import { type Filter, ReviewNavigation } from "./view-navigation";
 import { reviewWorkspaceQueries } from "./query";
 
-const { Toaster, toast } = await import("sonner");
 /** The active route owns pagination repair; application composition retains the workspace. */
 export const NeedsReviewRoute = (): JSX.Element => {
   const search = useSearch({ from: "/authenticated/app/needs-review" });

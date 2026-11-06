@@ -113,6 +113,12 @@ See [ADR 0029](../../docs/adr/0029-atomic-batch-accountability-boundaries.md).
 
 ### Hosted MCP and OAuth development authority
 
+Browser OAuthConnection listing resolves the exact mounted cookie once and rechecks that live
+session in a bounded native snapshot containing the connection page and its latest three outcomes
+per connection. Audit selection requires the existing User/connection/time index rather than a
+broad User-history scan. Identity-only listing remains available after Processing Consent withdrawal;
+request pressure and fresh-session requirements for revocation remain independent.
+
 MCP projects canonical capabilities under a separately identifiable OAuthConnection. It uses the
 same owner behavior, User coordination, Consent, accounting and Audit boundaries as other clients.
 OAuth approval, refresh, revocation and sensitive-operation confirmation remain distinct from PAT

@@ -1,13 +1,15 @@
 import { preloadTransactionList } from "@/features/transactions/code";
+import { preloadDashboardView } from "@/features/dashboard/code";
+import { preloadBudgetScreen } from "@/features/budgets/code";
+import { preloadReviewWorkspaceCode } from "@/features/needs-review/code";
 
 const entryCode: Readonly<Record<string, () => Promise<unknown>>> = {
   "/login": () => import("./login-page"),
   "/app/transactions": () => Promise.all([import("./transactions-page"), preloadTransactionList()]),
-  "/app/dashboard": () => import("./dashboard-page"),
+  "/app/dashboard": () => Promise.all([import("./dashboard-page"), preloadDashboardView()]),
   "/app/needs-review": () =>
-    import("@/features/needs-review/feature").then((module) => module.NeedsReviewFeature.preload()),
-  "/app/budgets": () =>
-    import("@/features/budgets/feature").then((module) => module.BudgetsFeature.preload()),
+    Promise.all([import("@/features/needs-review/feature"), preloadReviewWorkspaceCode()]),
+  "/app/budgets": () => Promise.all([import("@/features/budgets/feature"), preloadBudgetScreen()]),
   "/app/recurring": () => import("@/features/recurring/feature"),
   "/settings/account": () => import("./account-page"),
   "/settings/access": () => import("./access-page"),

@@ -22,12 +22,11 @@ const sharedRuntimeModule = (id: string): boolean => {
   const path = id.replaceAll("\\", "/").replace(/\?.*$/u, "");
   if (bootstrapModules.some((suffix) => path.endsWith(suffix))) return false;
   return (
-    /\/apps\/server\/src\/|node_modules\/(?:effect|@effect|react|react-dom|scheduler|@tanstack|@base-ui|@hugeicons|@floating-ui|sonner|clsx|class-variance-authority|tailwind-merge|use-sync-external-store|use-stick-to-bottom)\//u.test(
+    /\/apps\/server\/src\/|node_modules\/(?:effect|@effect|react|react-dom|scheduler|@tanstack|@hugeicons|clsx|class-variance-authority|tailwind-merge|use-sync-external-store)\//u.test(
       path
     ) ||
     path.endsWith("/apps/web/src/ui/class-names.ts") ||
-    (/\/apps\/web\/src\/(?:ui\/components|transport|session|browser)\//u.test(path) &&
-      !path.includes("/calendar"))
+    (/\/apps\/web\/src\/(?:transport|session|browser)\//u.test(path) && !path.includes("/calendar"))
   );
 };
 
@@ -38,8 +37,16 @@ export default defineConfig(({ mode }) => ({
     rolldownOptions: {
       preserveEntrySignatures: false,
       output: {
+        strictExecutionOrder: true,
         codeSplitting: {
           groups: [
+            {
+              name: "shared-controls",
+              test: /node_modules\/(?:@base-ui|@floating-ui|sonner|use-stick-to-bottom)\//u,
+              entriesAware: true,
+              entriesAwareMergeThreshold: 65536,
+              includeDependenciesRecursively: false,
+            },
             {
               name: "shared-runtime",
               minShareCount: 2,

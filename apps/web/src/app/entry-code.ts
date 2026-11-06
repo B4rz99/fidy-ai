@@ -1,6 +1,8 @@
+import { preloadTransactionList } from "@/features/transactions/code";
+
 const entryCode: Readonly<Record<string, () => Promise<unknown>>> = {
   "/login": () => import("./login-page"),
-  "/app/transactions": () => import("./transactions-page"),
+  "/app/transactions": () => Promise.all([import("./transactions-page"), preloadTransactionList()]),
   "/app/dashboard": () => import("./dashboard-page"),
   "/app/needs-review": () =>
     import("@/features/needs-review/feature").then((module) => module.NeedsReviewFeature.preload()),

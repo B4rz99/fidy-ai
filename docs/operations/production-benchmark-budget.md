@@ -77,6 +77,16 @@ of a new Worker isolate. Local timings distinguish processing from request water
 establish Cloudflare placement, production network latency or deployed cold-start performance.
 Keep generated profiles and measurements in ignored results and attach findings to the relevant PR.
 
+For fresh documents, the assessment records enabled controls, visible populated content and the
+first Transaction registration interaction independently of response completion. `nativeContentDomMs`
+marks the DOM predicate; `nativeContentReadyMs` follows two animation callbacks, which provide a
+paint opportunity rather than a compositor paint timestamp. `nativeInteractionStartMs` and
+`nativeInteractionReadyMs` bracket the first registration click and its visible form when cold
+interactions are enabled. These are document-relative observations, not timings of each later
+navigation. Unobserved milestones are `-1`, not zero. Compare them with the separately recorded
+request/body timings; neither the final API response nor an early enabled button establishes
+populated-content readiness.
+
 ## Recovery verification
 
 After fresh quota headroom is confirmed, verify public OAuth discovery and actual signed-in

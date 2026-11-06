@@ -58,6 +58,13 @@ presentation component used at render; Recurring likewise prepares its injected 
 with destination code. Other entries do not need Transaction presentation to interpret a route or
 hydrate their session registry.
 
+An optional feature-owned `code.ts` entry lets application composition start code preparation
+without evaluating the feature's React, transport or query declarations first. Transactions uses
+this entry alongside its page import so list and workspace discovery do not wait for the shared
+runtime. It prepares code only; clients, data reads and access checks remain with the actual route.
+Feature implementation files stay private, and session, transport and UI modules cannot import
+the code-preparation entry.
+
 After the application boundary latches the browser session, the initial Budgets
 and Recurring routes may mount the same session-registry profile query before presentation loads.
 Transactions starts ordinary reads only after its fresh Consent gate, preserving Privacy-only

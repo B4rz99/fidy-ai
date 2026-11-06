@@ -6,7 +6,7 @@ export default {
       severity: "error",
       comment:
         "A feature imported another feature. Features are vertical modules with one public " +
-        "feature.tsx interface; compose them in app/routes.tsx instead.",
+        "feature.tsx interface and optional code-only preparation; compose them in app instead.",
       from: { path: "^src/features/([^/]+)/" },
       to: {
         path: "^src/features/[^/]+/",
@@ -27,11 +27,12 @@ export default {
       severity: "error",
       comment:
         "Application composition reached a feature private module. Import only that feature's " +
-        "feature.tsx interface; its atoms, views, policies, and transport remain private.",
+        "feature.tsx interface or code.ts preparation entry; its atoms, views, policies, and " +
+        "transport remain private.",
       from: { path: "^src/(app|main\\.tsx$)" },
       to: {
         path: "^src/features/",
-        pathNot: "^src/features/[^/]+/feature\\.tsx$",
+        pathNot: "^src/features/[^/]+/(?:feature\\.tsx|code\\.ts)$",
       },
     },
     {

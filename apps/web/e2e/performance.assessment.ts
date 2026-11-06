@@ -152,6 +152,10 @@ type Sample = {
     transferredBytes: number;
   }>;
   nativeControlReadyMs: number;
+  nativeContentDomMs: number;
+  nativeContentReadyMs: number;
+  nativeInteractionStartMs: number;
+  nativeInteractionReadyMs: number;
   navigationStartOffsetMs: number;
   navigation: {
     responseStart: number;
@@ -277,50 +281,14 @@ const paintOpportunity = (): Promise<void> => {
   requestAnimationFrame(() => requestAnimationFrame(() => completion.resolve()));
   return completion.promise;
 };
-const browserMetrics = (
-  page: Page,
-  actionEpoch: number
-): Promise<
-  Pick<
-    Sample,
-    | "longTasks"
-    | "resourceCount"
-    | "resourceBytes"
-    | "transferredBytes"
-    | "resources"
-    | "nativeControlReadyMs"
-    | "navigationStartOffsetMs"
-    | "navigation"
-    | "domNodes"
-  >
-> =>
-  page.evaluate((actionEpoch) => {
+const browserResourceMetrics = (
+  page: Page
+): Promise<Pick<Sample, "resourceCount" | "resourceBytes" | "transferredBytes" | "resources">> =>
+  page.evaluate(() => {
     const entries = performance
       .getEntriesByType("resource")
       .filter((entry) => entry instanceof PerformanceResourceTiming);
-    const tasks = performance
-      .getEntriesByName("assessment-longtask")
-      .filter((entry) => entry instanceof PerformanceMark);
-    const navigation = performance
-      .getEntriesByType("navigation")
-      .find((entry) => entry instanceof PerformanceNavigationTiming);
-    const timing = navigation ?? {
-      responseStart: -1,
-      responseEnd: -1,
-      domInteractive: -1,
-      domContentLoadedEventEnd: -1,
-    };
     return {
-      navigationStartOffsetMs: performance.timeOrigin - actionEpoch,
-      nativeControlReadyMs:
-        performance.getEntriesByName("assessment-control-ready")[0]?.startTime ?? -1,
-      navigation: {
-        responseStart: timing.responseStart,
-        responseEnd: timing.responseEnd,
-        domInteractive: timing.domInteractive,
-        domContentLoaded: timing.domContentLoadedEventEnd,
-      },
-      longTasks: tasks.map((entry) => Number(entry.detail)),
       resourceCount: entries.length,
       resourceBytes: entries.reduce((sum, entry) => sum + entry.encodedBodySize, 0),
       transferredBytes: entries.reduce((sum, entry) => sum + entry.transferSize, 0),
@@ -334,9 +302,63 @@ const browserMetrics = (
         decodedBytes: entry.decodedBodySize,
         transferredBytes: entry.transferSize,
       })),
-      domNodes: document.querySelectorAll("*").length,
     };
-  }, actionEpoch);
+  });
+const browserMetrics = (
+  page: Page,
+  actionEpoch: number
+): Promise<
+  Pick<
+    Sample,
+    | "longTasks"
+    | "resourceCount"
+    | "resourceBytes"
+    | "transferredBytes"
+    | "resources"
+    | "nativeControlReadyMs"
+    | "nativeContentDomMs"
+    | "nativeContentReadyMs"
+    | "nativeInteractionStartMs"
+    | "nativeInteractionReadyMs"
+    | "navigationStartOffsetMs"
+    | "navigation"
+    | "domNodes"
+  >
+> =>
+  Promise.all([
+    page.evaluate((actionEpoch) => {
+      const mark = (name: string): number => performance.getEntriesByName(name)[0]?.startTime ?? -1;
+      const tasks = performance
+        .getEntriesByName("assessment-longtask")
+        .filter((entry) => entry instanceof PerformanceMark);
+      const navigation = performance
+        .getEntriesByType("navigation")
+        .find((entry) => entry instanceof PerformanceNavigationTiming);
+      const timing = navigation ?? {
+        responseStart: -1,
+        responseEnd: -1,
+        domInteractive: -1,
+        domContentLoadedEventEnd: -1,
+      };
+      return {
+        navigationStartOffsetMs: performance.timeOrigin - actionEpoch,
+        nativeControlReadyMs: mark("assessment-control-ready"),
+        nativeContentDomMs: mark("assessment-content-dom"),
+        nativeContentReadyMs: mark("assessment-content-ready"),
+        nativeInteractionStartMs: mark("assessment-interaction-start"),
+        nativeInteractionReadyMs: mark("assessment-interaction-ready"),
+        navigation: {
+          responseStart: timing.responseStart,
+          responseEnd: timing.responseEnd,
+          domInteractive: timing.domInteractive,
+          domContentLoaded: timing.domContentLoadedEventEnd,
+        },
+        longTasks: tasks.map((entry) => Number(entry.detail)),
+        domNodes: document.querySelectorAll("*").length,
+      };
+    }, actionEpoch),
+    browserResourceMetrics(page),
+  ]).then(([document, resources]) => ({ ...document, ...resources }));
 const measureAction = Effect.fn(function* ({
   page,
   action,
@@ -718,6 +740,59 @@ const installWorkspaceReadiness = (): void => {
   });
   observer.observe(document, { subtree: true, childList: true, attributes: true });
 };
+const installContentReadiness = (): void => {
+  const observationDeadlineMs = 60_000;
+  const selector = new Map([
+    ["/app/transactions", '[aria-label="Tabla de transacciones"] tbody tr'],
+    ["/app/budgets", '[aria-label^="Resumen "]'],
+    ["/app/recurring", '[aria-label="Resumen mensual"]'],
+    ["/app/dashboard", '[aria-label="Resumen COP"] dd'],
+    ["/app/needs-review", '[data-review="original-body"] pre'],
+    ["/settings/account", 'input[type="email"]'],
+    ["/settings/privacy", '[aria-label="Tu autorización está vigente."]'],
+    ["/settings/access", '[data-slot="empty-title"]'],
+  ]).get(location.pathname);
+  const visible = (element: Element): boolean => element.getClientRects().length > 0;
+  const hasVisible = (query: string): boolean =>
+    Array.from(document.querySelectorAll(query)).some(visible);
+  const contentReady = (): boolean =>
+    selector !== undefined
+      ? hasVisible(selector)
+      : location.pathname === "/upgrade" &&
+        Array.from(document.querySelectorAll("button")).some(
+          (element) => /^mensual\b/iu.test(element.textContent.trim()) && visible(element)
+        );
+  const observer = new MutationObserver(() => {
+    if (performance.now() > observationDeadlineMs) {
+      observer.disconnect();
+      return;
+    }
+    if (!contentReady()) return;
+    observer.disconnect();
+    performance.mark("assessment-content-dom");
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => performance.mark("assessment-content-ready"))
+    );
+  });
+  observer.observe(document, { subtree: true, childList: true, attributes: true });
+  const observeCapture = (): void => {
+    if (hasVisible('form[aria-label="Registrar transacción"]')) {
+      performance.mark("assessment-interaction-ready");
+    } else if (performance.now() < observationDeadlineMs) requestAnimationFrame(observeCapture);
+  };
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) return;
+    const control = event.target.closest("button");
+    if (
+      location.pathname === "/app/transactions" &&
+      control?.textContent.trim() === "+ Registrar" &&
+      performance.getEntriesByName("assessment-interaction-start").length === 0
+    ) {
+      performance.mark("assessment-interaction-start");
+      requestAnimationFrame(observeCapture);
+    }
+  });
+};
 const installBrowserObservers = (): void => {
   new PerformanceObserver((list) => {
     for (const entry of list.getEntries()) {
@@ -732,6 +807,7 @@ const prepareBrowser = Effect.fn(function* (page: Page, cdp: CDPSession) {
   page.setDefaultTimeout(actionTimeout);
   yield* Effect.tryPromise(() => page.addInitScript(installBrowserObservers));
   yield* Effect.tryPromise(() => page.addInitScript(installWorkspaceReadiness));
+  yield* Effect.tryPromise(() => page.addInitScript(installContentReadiness));
   yield* Effect.tryPromise(() => cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 }));
   if (networkProfile === "poor") {
     yield* Effect.tryPromise(() => cdp.send("Network.enable"));

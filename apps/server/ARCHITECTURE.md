@@ -25,6 +25,19 @@ narrow Ingestion and maintenance capabilities. Infrastructure owns bindings, not
 Production Core uses default execution near the incoming request. Staging requires the exact
 Core version to omit placement metadata; live settings cannot establish a candidate's configuration.
 
+Core consumes build-generated hosted tool parameters instead of converting every operation to a
+provider schema at startup. Statement parsing loads its bundled CSV/XLSX implementation only after
+bounded source admission; ordinary API reads do not initialize those engines. Runtime authority,
+input validation and parser resource limits remain with their existing owners.
+
+Canonical catalog reflection reads operation identity and policy eagerly, while input, response
+and partial-suggestion codec derivation is suspended until use. Typed input helpers resolve the
+bound catalog at codec use rather than module initialization. Shared suggestion helpers do not
+import the API assembly. Telemetry uses build-generated canonical ids, methods and routes with
+exact catalog freshness checks; those labels confer no request authority. The full Core composition
+still imports its dispatcher and background implementations; these changes do not make Core load
+only the requested feature.
+
 ## 2. Ownership and publication
 
 An owner exposes declarations through `contract.ts`, behavior through `operations.ts`, and

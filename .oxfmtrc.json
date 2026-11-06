@@ -17,6 +17,8 @@
     "**/build",
     "**/coverage",
     "apps/server/contracts",
+    "apps/server/src/shell/hosted-inference/internal/tool-parameters.generated.json",
+    "apps/server/src/shell/observability/internal/canonical-metadata.generated.json",
     "apps/server/evaluation-results",
     ".claude",
     ".repos",

@@ -12,9 +12,24 @@ writes:
 - `apps/server/contracts/operation-policy.json` from every catalog operation's identity and reflected
   policy;
 - `apps/server/contracts/pat-pairing-openapi.json` from the separate proof-bearing direct API.
+- `apps/server/src/shell/hosted-inference/internal/tool-parameters.generated.json` from the hosted
+  operations' input schemas, using the inference owner's provider projection;
+- `apps/server/src/shell/observability/internal/canonical-metadata.generated.json` from every
+  canonical operation's id, HTTP method and route template.
 
 These files are deterministic review evidence, not declarations. The canonical OpenAPI and operation
 policy together produce the digest used by Production health and release metadata. `bun run contracts:check:freshness` fails if any committed artifact is stale.
+
+Hosted tool parameters are static build output, so Core does not convert every operation to provider
+JSON Schema at startup. They contain no User data or credential authority. Canonical input decoding
+and runtime tool availability still use the current operation declarations and policy. Structured
+outputs with a caller-supplied schema retain their runtime conversion. The generated parameter file
+is excluded from formatting; the owner's generator and freshness check define its exact bytes.
+
+Telemetry imports its small generated metadata projection rather than the assembled API. The
+projection contains only closed diagnostic labels, never request values or authorization policy.
+The registry test and artifact freshness check require exact parity with the canonical catalog.
+Its generator also defines the exact bytes, excluding the generated file from formatting.
 
 ## Prelaunch verification
 

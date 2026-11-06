@@ -4,6 +4,7 @@ import { HttpApi } from "effect/http-api";
 
 import { FidyApi, operationCatalog } from "~/shell/api";
 import { TelemetryRegistry } from "./contract";
+import canonicalMetadata from "./internal/canonical-metadata.generated.json";
 
 it("attaches the Telemetry seam to every canonical operation", () => {
   const observed: Array<string> = [];
@@ -22,5 +23,16 @@ it("attaches the Telemetry seam to every canonical operation", () => {
 it("contains no duplicate diagnostic codes", () => {
   for (const values of Object.values(TelemetryRegistry)) {
     expect(new Set(values).size).toBe(values.length);
+  }
+});
+
+it("keeps the lightweight telemetry allowlist identical to the assembled canonical API", () => {
+  expect(canonicalMetadata).toEqual(
+    operationCatalog.operations.map(({ id, method, route }) => ({ id, method, route }))
+  );
+  for (const { id, method, route } of canonicalMetadata) {
+    expect(TelemetryRegistry.operation).toContain(id);
+    expect(TelemetryRegistry.httpRoute).toContain(route);
+    expect(TelemetryRegistry.httpRequest).toContain(`${method} ${route}`);
   }
 });

@@ -1,0 +1,382 @@
+[
+  {
+    "id": "browserLogin.approvePairing",
+    "method": "POST",
+    "route": "/browser-login/pairings/approve"
+  },
+  {
+    "id": "identity.getCurrentUser",
+    "method": "GET",
+    "route": "/user"
+  },
+  {
+    "id": "identity.updateUserPreferences",
+    "method": "PATCH",
+    "route": "/user/preferences"
+  },
+  {
+    "id": "categories.listCategories",
+    "method": "GET",
+    "route": "/categories"
+  },
+  {
+    "id": "categories.listKeywordRules",
+    "method": "GET",
+    "route": "/category-keyword-rules"
+  },
+  {
+    "id": "categories.createKeywordRule",
+    "method": "POST",
+    "route": "/category-keyword-rules"
+  },
+  {
+    "id": "categories.updateKeywordRule",
+    "method": "PUT",
+    "route": "/category-keyword-rules/:id"
+  },
+  {
+    "id": "categories.deleteKeywordRule",
+    "method": "DELETE",
+    "route": "/category-keyword-rules/:id"
+  },
+  {
+    "id": "budgets.createBudget",
+    "method": "POST",
+    "route": "/budgets"
+  },
+  {
+    "id": "budgets.listBudgets",
+    "method": "GET",
+    "route": "/budgets"
+  },
+  {
+    "id": "budgets.getBudget",
+    "method": "GET",
+    "route": "/budgets/:id"
+  },
+  {
+    "id": "budgets.updateBudget",
+    "method": "PUT",
+    "route": "/budgets/:id"
+  },
+  {
+    "id": "budgets.deleteBudget",
+    "method": "DELETE",
+    "route": "/budgets/:id"
+  },
+  {
+    "id": "budgets.getBudgetStatus",
+    "method": "GET",
+    "route": "/budget-status"
+  },
+  {
+    "id": "connections.listInstitutions",
+    "method": "GET",
+    "route": "/institutions"
+  },
+  {
+    "id": "connections.connectInstitution",
+    "method": "POST",
+    "route": "/connections"
+  },
+  {
+    "id": "connections.listConnections",
+    "method": "GET",
+    "route": "/connections"
+  },
+  {
+    "id": "connections.getConnection",
+    "method": "GET",
+    "route": "/connections/:id"
+  },
+  {
+    "id": "connections.listAccounts",
+    "method": "GET",
+    "route": "/connections/:id/accounts"
+  },
+  {
+    "id": "dashboard.initializeDashboard",
+    "method": "POST",
+    "route": "/dashboard/initialize"
+  },
+  {
+    "id": "dashboard.getDashboard",
+    "method": "GET",
+    "route": "/dashboard"
+  },
+  {
+    "id": "dashboard.getDashboardView",
+    "method": "GET",
+    "route": "/dashboard/view"
+  },
+  {
+    "id": "dashboard.listDashboardCatalog",
+    "method": "GET",
+    "route": "/dashboard/catalog"
+  },
+  {
+    "id": "dashboard.applyDashboardEdit",
+    "method": "POST",
+    "route": "/dashboard/edits"
+  },
+  {
+    "id": "emailAuthentication.requestEmailReplacement",
+    "method": "POST",
+    "route": "/email/replacement"
+  },
+  {
+    "id": "emailAuthentication.completeEmailReplacement",
+    "method": "POST",
+    "route": "/web/email/replacement/verify"
+  },
+  {
+    "id": "transactions.createTransaction",
+    "method": "POST",
+    "route": "/transactions"
+  },
+  {
+    "id": "transactions.listTransactions",
+    "method": "GET",
+    "route": "/transactions"
+  },
+  {
+    "id": "transactions.searchTransactions",
+    "method": "GET",
+    "route": "/transactions/search"
+  },
+  {
+    "id": "transactions.getTransaction",
+    "method": "GET",
+    "route": "/transactions/:id"
+  },
+  {
+    "id": "transactions.linkTransactions",
+    "method": "POST",
+    "route": "/transactions/link"
+  },
+  {
+    "id": "transactions.unlinkTransactions",
+    "method": "POST",
+    "route": "/transactions/unlink"
+  },
+  {
+    "id": "transactions.updateTransaction",
+    "method": "PUT",
+    "route": "/transactions/:id"
+  },
+  {
+    "id": "transactions.deleteTransaction",
+    "method": "DELETE",
+    "route": "/transactions/:id"
+  },
+  {
+    "id": "transactions.listSourceAttestations",
+    "method": "GET",
+    "route": "/transactions/:id/source-attestations"
+  },
+  {
+    "id": "ingestion.getReviewPageContext",
+    "method": "GET",
+    "route": "/ingestion/review-workspace/context"
+  },
+  {
+    "id": "ingestion.getReviewMaterial",
+    "method": "GET",
+    "route": "/ingestion/review-workspace/:id/material"
+  },
+  {
+    "id": "ingestion.getReviewItem",
+    "method": "GET",
+    "route": "/ingestion/review-workspace/:id"
+  },
+  {
+    "id": "ingestion.applyReviewEdit",
+    "method": "POST",
+    "route": "/ingestion/review-workspace/edits"
+  },
+  {
+    "id": "ingestion.getReviewWorkspace",
+    "method": "GET",
+    "route": "/ingestion/review-workspace"
+  },
+  {
+    "id": "ingestion.enableEmailForwarding",
+    "method": "POST",
+    "route": "/ingestion/email-forwarding"
+  },
+  {
+    "id": "ingestion.getEmailForwarding",
+    "method": "GET",
+    "route": "/ingestion/email-forwarding"
+  },
+  {
+    "id": "ingestion.submitForExtraction",
+    "method": "POST",
+    "route": "/ingestion/statements"
+  },
+  {
+    "id": "ingestion.getStatementSubmission",
+    "method": "GET",
+    "route": "/ingestion/statements/:id"
+  },
+  {
+    "id": "ingestion.listNeedsReviewItems",
+    "method": "GET",
+    "route": "/ingestion/needs-review"
+  },
+  {
+    "id": "ingestion.resolveNeedsReviewItem",
+    "method": "POST",
+    "route": "/ingestion/needs-review/:id/resolve"
+  },
+  {
+    "id": "ingestion.skipNeedsReviewItem",
+    "method": "POST",
+    "route": "/ingestion/needs-review/:id/skip"
+  },
+  {
+    "id": "ingestion.abandonStatementSubmission",
+    "method": "POST",
+    "route": "/ingestion/statements/:id/abandon"
+  },
+  {
+    "id": "insights.getRecurringDigestReport",
+    "method": "GET",
+    "route": "/insights/recurring/:id"
+  },
+  {
+    "id": "insights.getReminderSchedule",
+    "method": "GET",
+    "route": "/insights/reminder"
+  },
+  {
+    "id": "insights.updateReminderSchedule",
+    "method": "POST",
+    "route": "/insights/reminder"
+  },
+  {
+    "id": "insights.listPendingInsights",
+    "method": "GET",
+    "route": "/insights/pending"
+  },
+  {
+    "id": "insights.markInsightDelivered",
+    "method": "POST",
+    "route": "/insights/:id/delivered"
+  },
+  {
+    "id": "insights.markInsightRead",
+    "method": "POST",
+    "route": "/insights/:id/read"
+  },
+  {
+    "id": "insights.dismissInsight",
+    "method": "POST",
+    "route": "/insights/:id/dismissed"
+  },
+  {
+    "id": "recurring.listRecurringSeries",
+    "method": "GET",
+    "route": "/recurring-series"
+  },
+  {
+    "id": "recurringPlans.getRecurringWorkspace",
+    "method": "GET",
+    "route": "/recurring-plans"
+  },
+  {
+    "id": "recurringPlans.applyRecurringEdit",
+    "method": "POST",
+    "route": "/recurring-plans/edits"
+  },
+  {
+    "id": "memory.remember",
+    "method": "POST",
+    "route": "/memories"
+  },
+  {
+    "id": "memory.revise",
+    "method": "PUT",
+    "route": "/memories/:id"
+  },
+  {
+    "id": "memory.forget",
+    "method": "DELETE",
+    "route": "/memories/:id"
+  },
+  {
+    "id": "memory.recall",
+    "method": "GET",
+    "route": "/memories"
+  },
+  {
+    "id": "subscription.getUpgradeUrl",
+    "method": "GET",
+    "route": "/subscription/upgrade-url"
+  },
+  {
+    "id": "subscription.listSubscriptionOffers",
+    "method": "GET",
+    "route": "/subscription/offers"
+  },
+  {
+    "id": "subscription.getSubscriptionStatus",
+    "method": "GET",
+    "route": "/subscription/status"
+  },
+  {
+    "id": "subscription.cancelSubscription",
+    "method": "POST",
+    "route": "/subscription/cancellation"
+  },
+  {
+    "id": "quota.getQuota",
+    "method": "GET",
+    "route": "/quota"
+  },
+  {
+    "id": "pats.listPATs",
+    "method": "GET",
+    "route": "/pats"
+  },
+  {
+    "id": "pats.getPATActivity",
+    "method": "GET",
+    "route": "/pats/:shortId/activity"
+  },
+  {
+    "id": "pats.revokePAT",
+    "method": "DELETE",
+    "route": "/pats/:shortId"
+  },
+  {
+    "id": "pats.revokeAllPATs",
+    "method": "DELETE",
+    "route": "/pats"
+  },
+  {
+    "id": "pats.createManualPAT",
+    "method": "POST",
+    "route": "/pats"
+  },
+  {
+    "id": "pats.inspectPATPairing",
+    "method": "POST",
+    "route": "/pats/pairings/inspect"
+  },
+  {
+    "id": "pats.approvePATPairing",
+    "method": "POST",
+    "route": "/pats/pairings/approve"
+  },
+  {
+    "id": "recovery.rotateBackupRecoveryCode",
+    "method": "POST",
+    "route": "/recovery/backup-code/rotate"
+  },
+  {
+    "id": "operations.executeAtomicBatch",
+    "method": "POST",
+    "route": "/operations/atomic-batch"
+  }
+]

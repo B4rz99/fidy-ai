@@ -278,6 +278,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "contracts:generate": "bun tools/contracts/generate.ts",
+    "telemetry:generate": "bun tools/telemetry/generate.ts",
+    "hosted-tools:generate": "bun tools/hosted-inference/generate.ts",
     "email-formats:generate": "bun tools/email-formats/generate-runtime.ts",
     "email-formats:check": "bun tools/email-formats/generate-runtime.ts --check",
     "contracts:digest": "bun tools/contracts/digest-artifacts.ts contracts/openapi.json contracts/operation-policy.json",

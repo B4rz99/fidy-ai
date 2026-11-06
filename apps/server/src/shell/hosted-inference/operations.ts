@@ -1,4 +1,7 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, type JsonSchema, Layer } from "effect";
+import { operationCatalog } from "~/shell/api";
+import { hostedOperationBindings } from "~/shell/canonical-operations/operations";
+import { openAiProviderSchema } from "./internal/provider-schema";
 import type {
   HostedConformanceCheck,
   HostedConformanceFailure,
@@ -20,6 +23,15 @@ import {
   verifyTransactionDeletion,
 } from "~/shell/hosted-inference/internal/conformance";
 import { makeHostedInferenceStubInternal } from "~/shell/hosted-inference/internal/stub";
+
+/** Static build projection; live tool availability and input decoding retain canonical authority. */
+export const makeHostedToolParameters = (): ReadonlyArray<
+  Readonly<{ wireName: string; parameters: JsonSchema.JsonSchema }>
+> =>
+  hostedOperationBindings(operationCatalog).map(({ operation, wireName }) => ({
+    wireName,
+    parameters: openAiProviderSchema(operation.input),
+  }));
 
 /** Hosted inference authority supplied by the Cloudflare OpenAI adapter. */
 export class HostedInference extends Context.Service<HostedInference, HostedInferenceService>()(

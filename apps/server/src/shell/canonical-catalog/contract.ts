@@ -108,6 +108,8 @@ const httpFields = (endpoint: HttpApiEndpoint.Top): CatalogOperation["httpFields
  * Reflects canonical ids, partial target inputs, and callability policy from the
  * same assembled HttpApi used by the server and generators. Duplicate ids fail
  * here rather than letting one operation silently replace another in the map.
+ * Codec derivation stays suspended until a consumer validates or encodes that operation;
+ * routing and policy inspection do not derive every feature’s input and response codecs.
  */
 export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGroup.Constraint>(
   api: HttpApi.HttpApi<Id, Groups>
@@ -140,17 +142,20 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
         description: description.value,
         method: endpoint.method,
         route: endpoint.path,
-        input: canonicalInput(endpoint),
-        httpInput: canonicalInput(endpoint, true),
+        input: Schema.suspend(() => canonicalInput(endpoint)),
+        httpInput: Schema.suspend(() => canonicalInput(endpoint, true)),
         httpFields: httpFields(endpoint),
-        success: asOperationSchema(unionSchema(Array.from(endpoint.success))),
-        failure: asOperationSchema(
-          unionSchema([...errors.values()].flatMap((schemas) => [...schemas]))
+        success: Schema.suspend(() => asOperationSchema(unionSchema(Array.from(endpoint.success)))),
+        failure: Schema.suspend(() =>
+          asOperationSchema(unionSchema([...errors.values()].flatMap((schemas) => [...schemas])))
         ),
         // Access policy must be explicit on each canonical operation.
         policy: getOperationPolicy(endpoint),
         atomicBatchEligible: Context.get(mergedAnnotations, AtomicBatchEligible),
-        partialInput: requestInput(endpoint),
+        partialInput:
+          httpFields(endpoint).length === 0
+            ? Option.none()
+            : Option.some(Schema.suspend(() => Option.getOrThrow(requestInput(endpoint)))),
       };
       operations.push(operation);
       byId.set(id, operation);

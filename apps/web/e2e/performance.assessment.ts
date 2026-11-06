@@ -763,6 +763,10 @@ const installContentReadiness = (): void => {
           (element) => /^mensual\b/iu.test(element.textContent.trim()) && visible(element)
         );
   const observer = new MutationObserver(() => {
+    if (performance.now() > observationDeadlineMs) {
+      observer.disconnect();
+      return;
+    }
     if (!contentReady()) return;
     observer.disconnect();
     performance.mark("assessment-content-dom");
@@ -788,7 +792,6 @@ const installContentReadiness = (): void => {
       requestAnimationFrame(observeCapture);
     }
   });
-  setTimeout(() => observer.disconnect(), observationDeadlineMs);
 };
 const installBrowserObservers = (): void => {
   new PerformanceObserver((list) => {

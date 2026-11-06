@@ -4,6 +4,7 @@ import {
   InsightTemplateUnavailable,
   type WeeklyQuestionSender,
   WeeklyQuestionTemplateConfiguration,
+  proactivityTemplateBody,
 } from "~/shell/channels/whatsapp/contract";
 import { type OutboundHttpService } from "~/shell/outbound-http/operations";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
@@ -22,7 +23,7 @@ export const buildWeeklyQuestionSender = (
     Effect.gen(function* () {
       if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
       const parameter = `¿quieres que te siga enviando esto?\n${offer.disclosure.text}\nAceptar o continuar: ${offer.acceptChoice}\nRechazar: ${offer.declineChoice}`;
-      const text = `Fidy: ${parameter}`;
+      const text = proactivityTemplateBody.replace("{{1}}", () => parameter);
       if (
         text.length > maximumQuestionLength ||
         new TextEncoder().encode(text).byteLength > maximumQuestionBytes

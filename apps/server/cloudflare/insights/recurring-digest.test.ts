@@ -552,7 +552,12 @@ const setupDigestCoordinator = (
         KAPSO_API_KEY: "test-only",
         PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
           Schema.fromJsonString(ProactivityTemplateConfiguration)
-        )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
+        )({
+          name: "fidy_proactivity",
+          language: "es",
+          approval: "approved",
+          body: "Fidy te avisa: {{1}} Más en Fidy.",
+        }),
       },
     });
     return { coordinator, phone };
@@ -1021,7 +1026,12 @@ it("recovers recurring work independently through Maintenance, identity-only Que
         KAPSO_API_KEY: "test-only",
         PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
           Schema.fromJsonString(ProactivityTemplateConfiguration)
-        )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
+        )({
+          name: "fidy_proactivity",
+          language: "es",
+          approval: "approved",
+          body: "Fidy te avisa: {{1}} Más en Fidy.",
+        }),
         WEEKLY_DELIVERY_QUEUE: {
           send: (message: ProactivityDeliveryWork): Promise<QueueSendResponse> => {
             published.push(message);

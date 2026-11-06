@@ -110,7 +110,7 @@ it.live("rejects a corrupt retained question origin without staging or sending w
               name: "fidy_weekly_question",
               language: "es",
               approval: "approved",
-              body: "Fidy: {{1}}",
+              body: "Fidy te avisa: {{1}} Más en Fidy.",
             }),
           },
         })

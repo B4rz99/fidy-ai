@@ -123,7 +123,7 @@ it.each(["budget-threshold", "manual-entry-reminder", "new-recurring-series"] as
           text: offer.acceptChoice,
         });
         for (const rejected of [
-          { ...admission, text: "proactivity:malformed", messageId: "malformed-choice" },
+          { ...admission, text: "p:malformed", messageId: "malformed-choice" },
           {
             ...admission,
             bsuid: proactivityTestCallers[1].businessScopedUserId,

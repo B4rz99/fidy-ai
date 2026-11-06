@@ -95,6 +95,7 @@ effectIt.effect(
       const subject = { id: sessionA, userId: userA, digest: token };
       const operation = CanonicalOperationId.make("subscription.getUpgradeUrl");
       const http = yield* executeCanonicalHttpQuery({
+        completion: Option.none(),
         db,
         subject,
         operation,

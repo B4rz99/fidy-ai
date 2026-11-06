@@ -254,8 +254,9 @@ export const presentDashboard = (
  * Only explicit initialization and edits use the canonical mutation unit; queries never create or
  * repair domain state and return DashboardUninitialized for genuine absence. Views expose complete,
  * validated projections from the Categories, Transactions and Budgets published operations.
- * The caller applies canonical scope policy and dispatches document queries and mutations through the same User's
- * coordinator. Its turn covers every projection read, so a Correction cannot split a chart snapshot.
+ * The caller applies canonical scope policy. Mutations retain the same User's coordinator;
+ * views assert their exact document, calendar interpretation and financial revision in native
+ * snapshots. Concurrent changes withhold the whole view without replaying its work.
  * A subject identity is never a reusable authorization grant.
  */
 export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response> =>
@@ -324,7 +325,7 @@ const dashboardFinalization = ({
   completion: Option.Option<CanonicalReadCompletion>;
   operation: DashboardQueryOperation;
 }>): Option.Option<CanonicalBrowserQueryFinalizer> =>
-  Option.isSome(completion) && "id" in subject
+  operation === "dashboard.getDashboardView" && Option.isSome(completion) && "id" in subject
     ? Option.some(
         prepareCanonicalBrowserQueryFinalization({
           db,

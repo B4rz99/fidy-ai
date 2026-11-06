@@ -621,9 +621,9 @@ const invokeQueryOwner = ({
 
 /**
  * Execute an admitted HTTP query through the installed owner dispatch. Document/view assembly
- * and accounting stay inside the same User coordinator, including rejected query strings. The
- * HTTP adapter retains transport admission; owners retain validation, live authority and Audit.
- * The coordinator receives a catalog-bound target only, never cookies or bearer plaintext.
+ * and accounting use the owner's native consistency guards. The HTTP adapter retains transport
+ * admission; owners retain validation, live authority and Audit. Recurring's phased non-browser
+ * reader still requires the same User's coordinator.
  */
 export const executeCanonicalHttpQuery = ({
   operation: operationId,
@@ -636,6 +636,7 @@ export const executeCanonicalHttpQuery = ({
   request: Request;
   bucket: Option.Option<R2Bucket>;
   browserOrigin: string;
+  completion: Option.Option<CanonicalReadCompletion>;
   coordinate: (work: CanonicalWork) => Effect.Effect<Response>;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
@@ -659,11 +660,7 @@ export const executeCanonicalHttpQuery = ({
     ) {
       return transactionUnavailable();
     }
-    if (
-      operationId === "dashboard.getDashboard" ||
-      operationId === "dashboard.getDashboardView" ||
-      operationId === "recurringPlans.getRecurringWorkspace"
-    ) {
+    if (operationId === "recurringPlans.getRecurringWorkspace") {
       return yield* coordinate({
         _tag: "Query",
         operation: operationId,
@@ -672,7 +669,6 @@ export const executeCanonicalHttpQuery = ({
     }
     return Option.getOrElse(
       yield* invokeQueryOwner({
-        completion: Option.none(),
         ...input,
         operation: operation.value,
         browserOrigin: Option.some(input.browserOrigin),

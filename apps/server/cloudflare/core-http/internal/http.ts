@@ -1481,6 +1481,7 @@ const executeCanonicalWork = (
   const { request, environment, operation, subject } = input;
   if (operation.policy.kind === "query") {
     return executeCanonicalHttpQuery({
+      completion: input.completion,
       db: environment.DB,
       subject,
       operation: operation.id,

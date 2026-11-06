@@ -152,6 +152,26 @@ export const findUserDocument = (
     Effect.map((snapshot) => snapshot.document)
   );
 
+/** Assert the exact document observation inside a later native unit; disagreement aborts that unit. */
+export const unchangedUserDocument = ({
+  userId,
+  kind,
+  observed,
+}: Readonly<{
+  userId: string;
+  kind: Kind;
+  observed: Option.Option<Readonly<{ encoded: string; revision: number }>>;
+}>): OwnedStatement => ({
+  sql: `SELECT json(CASE WHEN ${Option.isSome(observed) ? "EXISTS" : "NOT EXISTS"}
+    (SELECT 1 FROM user_documents WHERE user_id=? AND kind=?${Option.isSome(observed) ? " AND revision=? AND document_json=?" : ""})
+    THEN 'true' ELSE '' END) AS accepted`,
+  params: [
+    userId,
+    kind,
+    ...(Option.isSome(observed) ? [observed.value.revision, observed.value.encoded] : []),
+  ],
+});
+
 export const prepareUserDocumentWrite = (
   input: Readonly<{
     work: Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;

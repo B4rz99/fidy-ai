@@ -22,8 +22,10 @@ list pages and peer facts accompany the first financial snapshot. Each interval 
 count/maximum and positional-digit statements; one batch is one protected trip, not one statement.
 Every snapshot checks current Consent, readiness, captured calendar interpretation and the same
 projection revision; disagreement with the plan or a later snapshot withholds the complete result.
-The encompassing coordinated query retains final live caller and required Audit accounting before
-disclosure. The general multi-period aggregate reader keeps its four-interval chunk protocol.
+The encompassing query retains final live caller and required Audit accounting before disclosure.
+Later financial snapshots assert the retained revision inside their native unit, so a mismatch or
+missing ready revision rolls back final accounting rather than committing it before decoding.
+The general multi-period aggregate reader keeps its four-interval chunk protocol.
 Identical list selections (limit, Category sequence and search text) share one selected page within
 the request. Dashboard restores every Widget identity and position from that page; distinct
 selections remain separate. These working structures and decoded facts do not survive the request.

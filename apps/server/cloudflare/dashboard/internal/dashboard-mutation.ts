@@ -179,7 +179,11 @@ const readViewSource = ({
       document,
       viewContext:
         Option.isSome(context) && Option.isSome(categories)
-          ? Option.some({ context: context.value, categories: categories.value })
+          ? Option.some({
+              context: context.value,
+              categories: categories.value,
+              document: retained.document,
+            })
           : Option.none(),
     };
   }).pipe(Effect.mapError(() => new InvalidStoredDashboard()));

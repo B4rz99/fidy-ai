@@ -98,6 +98,10 @@ retry delays; it does not reduce the storage latency of an admitted request.
 Every remaining D1 batch obtains its own fresh recovery generation from R2 and asserts it inside
 the native transaction. These are not application locks. Combining statements reduces R2 checks
 and D1 submissions; reusing a generation across separate transactions is not part of this proposal.
+Pinning that generation in a Worker release is not equivalent: deletion checkpoints advance it
+between releases, and restoring an older D1 snapshot can make an older running Worker's proof match
+again. The native recovery tests retain this counterexample; the fresh independent check remains
+required until a replacement protocol can exclude both stale traffic and restored state.
 An atomic batch may contain several SQL statements. Counts below describe successful ordinary
 browser paths, not every failure cleanup or unusually wide Dashboard layout.
 

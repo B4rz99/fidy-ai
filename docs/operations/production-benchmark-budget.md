@@ -31,6 +31,52 @@ The preflight is a conservative check, not an atomic account reservation. The CL
 `test:ci-tools`; temporary hosted runners must explicitly invoke it and enforce its returned
 ceiling. A separate Cloudflare account is the way to isolate test allowance from production.
 
+Historical hosted runners under ignored `reports/performance/` are retired. In particular, the
+shared-path and locality runners must stop before provisioning: they cannot account for all
+coordinator work, migrations, retries and cleanup. A successful preflight alone does not make them
+safe to reuse. A replacement must demonstrate runtime budget enforcement before hosted execution.
+
+## Local investigation while hosted work is unavailable
+
+Use native integration tests with the existing observer from the repository root:
+
+```sh
+bun node_modules/vitest/vitest.mjs run --root apps/server \
+  --config ../../scripts/infra-performance/vitest.config.ts \
+  cloudflare/public-worker-browser-entry.test.ts \
+  cloudflare/transactions/transactions.test.ts \
+  cloudflare/budgets/budgets.test.ts \
+  cloudflare/recurring-plans/recurring-plans.test.ts \
+  cloudflare/dashboard/dashboard.test.ts \
+  cloudflare/ingestion/statement-review-budget.test.ts \
+  cloudflare/tokens/pats.test.ts \
+  cloudflare/oauth-agents/oauth-management.test.ts \
+  cloudflare/subscription/subscription-queries.test.ts \
+  cloudflare/consent/browser.test.ts --silent=false
+```
+
+`INFRA_REQUEST` covers Core fetch, including bootstrap and other non-canonical transports.
+`INFRA_OWNER` covers the held owner only. The records include response stage timings when present.
+Direct Core D1 counts exclude coordinator work; host-process CPU excludes workerd. Missing stage
+timings are unavailable evidence, not zero cost. Do not combine owner and request records as though
+they were independent requests or sum nested stage durations.
+
+For complete screen readiness, use the local browser assessment on the isolated CLI topology after
+checking ports 4183–4185 are unused (see `.patterns/testing.md`):
+
+```sh
+cd apps/web
+CLI_ACCEPTANCE_MODE=cli FIDY_ASSESSMENT=small FIDY_ASSESSMENT_NETWORK=normal \
+  FIDY_ASSESSMENT_COLD_REPEATS=1 PREVIEW_COMPRESSION=gzip \
+  bun --bun playwright test --config playwright.assessment.config.ts \
+  --grep 'assesses isolated cold documents'
+```
+
+This uses local storage and synthetic records. Cold documents are new browser documents, not proof
+of a new Worker isolate. Local timings distinguish processing from request waterfalls; they cannot
+establish Cloudflare placement, production network latency or deployed cold-start performance.
+Keep generated profiles and measurements in ignored results and attach findings to the relevant PR.
+
 ## Recovery verification
 
 After fresh quota headroom is confirmed, verify public OAuth discovery and actual signed-in

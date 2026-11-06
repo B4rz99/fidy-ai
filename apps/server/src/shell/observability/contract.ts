@@ -1,7 +1,8 @@
 import * as Arr from "effect/Array";
 import { type Effect, type Exit, Option, Schema } from "effect";
 import { ErrorCode } from "~/shell/public-http/contract";
-import { operationCatalog } from "~/shell/api";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import canonicalMetadata from "./canonical-metadata.generated.json";
 
 type RequireNonEmpty = <Value>(
   values: ReadonlyArray<Value>
@@ -14,12 +15,12 @@ const requireNonEmpty: RequireNonEmpty = function (values) {
   );
 };
 
-const canonicalOperationCodes = operationCatalog.operations.map(({ id }) => id);
+const canonicalOperationCodes = canonicalMetadata.map(({ id }) => CanonicalOperationId.make(id));
 const canonicalHttpRoutes = requireNonEmpty(
-  Array.from(new Set(operationCatalog.operations.map(({ route }) => route)))
+  Array.from(new Set(canonicalMetadata.map(({ route }) => route)))
 );
 const canonicalHttpRequests = requireNonEmpty(
-  operationCatalog.operations.map(({ method, route }) => `${method} ${route}`)
+  canonicalMetadata.map(({ method, route }) => `${method} ${route}`)
 );
 
 export const TelemetryWorkKindGroup = {

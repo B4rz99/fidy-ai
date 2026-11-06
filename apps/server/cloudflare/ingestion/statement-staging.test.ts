@@ -1,3 +1,4 @@
+import "../../src/shell/api";
 import {
   type StagedStatementBytes,
   StatementContentDigest,

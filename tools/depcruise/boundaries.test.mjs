@@ -179,3 +179,22 @@ await test("shared acceptance fixtures remain unavailable to production", () => 
     assert.equal(inspect(source, fixture).length, 0);
   }
 });
+
+await test("only the telemetry declaration admits its exact generated diagnostic metadata", () => {
+  const contract = "src/shell/observability/contract.ts";
+  const metadata = "src/shell/observability/canonical-metadata.generated.json";
+  assert.deepEqual(inspect(contract, metadata), []);
+  for (const target of [
+    "src/shell/observability/operations.ts",
+    "src/shell/observability/other.generated.json",
+  ]) {
+    assert.ok(
+      inspect(contract, target).some(({ name }) => name === "contract-imports-implementation")
+    );
+  }
+  assert.ok(
+    inspect("src/shell/example/contract.ts", metadata).some(
+      ({ name }) => name === "contract-imports-implementation"
+    )
+  );
+});

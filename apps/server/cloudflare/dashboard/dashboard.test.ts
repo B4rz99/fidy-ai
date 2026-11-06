@@ -141,13 +141,12 @@ beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
 const coordinatorObservers = new WeakMap<D1Database, (operation: string) => void>();
-const send = (
+const sendAtCurrentTime = (
   db: D1Database,
   credential: number | string,
   pathAndBody: string | Readonly<{ path: string; method: "POST" | "PUT"; body: object }>
-): Promise<Response> => {
-  vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
-  return publicWorker.fetch(
+): Promise<Response> =>
+  publicWorker.fetch(
     new Request(
       `https://api.fidyapp.com${typeof pathAndBody === "string" ? pathAndBody : pathAndBody.path}`,
       {
@@ -244,6 +243,10 @@ const send = (
       },
     }
   );
+
+const send = (...input: Parameters<typeof sendAtCurrentTime>): Promise<Response> => {
+  vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
+  return sendAtCurrentTime(...input);
 };
 
 const BatchFailure = Schema.Struct({
@@ -876,8 +879,9 @@ it(
             )
             .all();
         const planningBefore = (yield* Effect.tryPromise(retainedPlanning)).results;
+        // Concurrent requests share one instant; advancing Date per send can reverse admission time.
         const initialize = (): Promise<Response> =>
-          send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} });
+          sendAtCurrentTime(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} });
         const replies = yield* Effect.tryPromise(() => Promise.all([initialize(), initialize()]));
         expect(replies.map((reply) => reply.status)).toEqual([200, 200]);
         const documents = yield* Effect.forEach(replies, (reply) =>
@@ -931,7 +935,7 @@ it(
         const edits = yield* Effect.tryPromise(() =>
           Promise.all(
             ["Concurrent first", "Concurrent second"].map((title) =>
-              send(db, 0, {
+              sendAtCurrentTime(db, 0, {
                 path: "/dashboard/edits",
                 method: "POST",
                 body: { op: "set-title", title },

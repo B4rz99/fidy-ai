@@ -208,7 +208,11 @@ const directionRules = [
       to !== "cloudflare:workers" &&
       to !== "src/shell/api.ts" &&
       !sharedKernel.test(to) &&
-      !to.endsWith("/contract.ts"),
+      !to.endsWith("/contract.ts") &&
+      !(
+        from === "src/shell/observability/contract.ts" &&
+        to === "src/shell/observability/canonical-metadata.generated.json"
+      ),
   },
 ];
 

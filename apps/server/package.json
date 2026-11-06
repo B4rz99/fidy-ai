@@ -278,6 +278,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "contracts:generate": "bun tools/contracts/generate.ts",
+    "telemetry:generate": "bun tools/telemetry/generate.ts",
+    "hosted-tools:generate": "bun tools/hosted-inference/generate.ts",
     "email-formats:generate": "bun tools/email-formats/generate-runtime.ts",
     "email-formats:check": "bun tools/email-formats/generate-runtime.ts --check",
     "contracts:digest": "bun tools/contracts/digest-artifacts.ts contracts/openapi.json contracts/operation-policy.json",
@@ -307,7 +309,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261029.1",
+    "@cloudflare/workers-types": "5.20261030.1",
     "@effect/platform-bun": "4.0.6",
     "@effect/platform-node": "4.0.6",
     "@effect/vitest": "4.0.6",

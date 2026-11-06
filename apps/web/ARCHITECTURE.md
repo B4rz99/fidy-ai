@@ -699,3 +699,7 @@ Review suggestions convert canonical decimal points to decimal commas when opene
 editing drafts retain their entered text. Review confirmation uses the same positive Money and
 Currency precision policy as registration. Input validation retains other fields and remains separate
 from service refusal and uncertain-write recovery.
+
+Browser trace receipt validation imports only the shared opaque TraceId schema. Server telemetry
+registries, generated canonical telemetry metadata and trace export schemas stay outside the browser
+graph; the bundle gate refuses those modules. The server and browser share the same TraceId codec.

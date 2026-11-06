@@ -18,7 +18,12 @@ import {
   type ResourceAdmissionRefused,
   type ResourceAdmissionUnavailable,
 } from "../resource-admission/contract";
-import { admitResource, releaseOutstandingResource } from "../resource-admission/operations";
+import {
+  admitResource,
+  prepareOutstandingResourceRelease,
+  prepareResourceAdmission,
+  releaseOutstandingResource,
+} from "../resource-admission/operations";
 import { awaitRequestAbort } from "../http/operations";
 import { newId } from "../secret-material/operations";
 import { oauthResponse as response } from "./internal/response";
@@ -164,13 +169,45 @@ const discoveryResponse = (path: string): Response => {
   }
   return response({ body: { error: "temporarily_unavailable" }, status: unavailableStatus });
 };
+type ListingCompletion = Readonly<{ grantId: ResourceAdmissionGrantId; committed: () => void }>;
 const executeManagement = (
   input: BootstrapInput,
-  current: number
+  current: number,
+  completion: Option.Option<ListingCompletion>
 ): Effect.Effect<Response, BootstrapUnavailable> =>
   manageConnections({
     ...input,
     current,
+    readForUser: (userId, statements) =>
+      Effect.gen(function* () {
+        const clock = yield* Clock.Clock;
+        const prepared = prepareResourceAdmission(authority(input.db, clock), {
+          grantId: ResourceAdmissionGrantId.make(newId()),
+          charges: yield* Schema.decodeEffect(ResourceAdmissionCharges)([
+            { policyKey: "oauth.user.v1", scopeKey: userId, units: 1 },
+          ]),
+        });
+        const release = Option.match(completion, {
+          onNone: () => [],
+          onSome: (value) =>
+            prepareOutstandingResourceRelease(authority(input.db, clock), {
+              grantId: value.grantId,
+              statements: [],
+            }),
+        });
+        const rows = yield* Effect.tryPromise({
+          try: () => input.db.batch([...prepared.statements, ...statements, ...release]),
+          catch: () => new BootstrapUnavailable(),
+        });
+        if (Option.isSome(completion)) completion.value.committed();
+        return rows.slice(
+          prepared.statements.length,
+          prepared.statements.length + statements.length
+        );
+      }).pipe(
+        Effect.uninterruptible,
+        Effect.mapError(() => new BootstrapUnavailable())
+      ),
     admitUser: (userId) =>
       charge({ db: input.db, source: userId, kind: "user" }).pipe(
         Effect.asVoid,
@@ -185,7 +222,7 @@ const executeManagement = (
     Effect.mapError(() => new BootstrapUnavailable())
   );
 const executeBootstrap = (
-  input: BootstrapInput & Readonly<{ source: string }>
+  input: BootstrapInput & Readonly<{ source: string; completion: Option.Option<ListingCompletion> }>
 ): Effect.Effect<Response, BootstrapFailure> =>
   Effect.gen(function* () {
     const path = new URL(input.request.url).pathname;
@@ -209,7 +246,7 @@ const executeBootstrap = (
         (owned) => owned === path
       )
     ) {
-      return yield* executeManagement(input, current);
+      return yield* executeManagement(input, current, input.completion);
     }
     if (path === oauthPaths.authorize) return yield* startAuthorization({ ...input, current });
     if (path === oauthPaths.token) {
@@ -247,14 +284,32 @@ export const handleOAuthRequest = (input: BootstrapInput): Effect.Effect<Respons
       return response({ body: { error: "temporarily_unavailable" }, status: unavailableStatus });
     }
     const clock = yield* Clock.Clock;
+    let listingCompleted = false;
+    const listing =
+      input.request.method === "GET" &&
+      new URL(input.request.url).pathname === oauthPaths.connections;
     return yield* Effect.acquireUseRelease(
       charge({ db: input.db, source: source.value, kind: "bootstrap" }),
-      () => executeBootstrap({ ...input, source: source.value }),
       (grant) =>
-        releaseOutstandingResource(authority(input.db, clock), {
-          grantId: grant.grantId,
-          statements: [],
-        }).pipe(Effect.ignore)
+        executeBootstrap({
+          ...input,
+          source: source.value,
+          completion: listing
+            ? Option.some({
+                grantId: grant.grantId,
+                committed: () => {
+                  listingCompleted = true;
+                },
+              })
+            : Option.none(),
+        }),
+      (grant) =>
+        listingCompleted
+          ? Effect.void
+          : releaseOutstandingResource(authority(input.db, clock), {
+              grantId: grant.grantId,
+              statements: [],
+            }).pipe(Effect.ignore)
     );
   }).pipe(
     Effect.catchTags({

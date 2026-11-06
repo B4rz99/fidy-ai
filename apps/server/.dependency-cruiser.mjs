@@ -40,7 +40,7 @@ export default {
           "^src/core/_shared/money\\.ts$",
           "^src/core/_shared/context\\.ts$",
           "^src/shell/api\\.ts$",
-          "^src/shell/observability/contract\\.ts$",
+          "^src/shell/observability/trace/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/(agent|canonical-operations|processing-consent|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication|web-session|browser-transport)/contract\\.ts$",
           "^src/shell/canonical-policy/operations\\.ts$",

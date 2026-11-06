@@ -1,8 +1,11 @@
+import { TelemetryTraceId } from "~/shell/observability/trace/contract";
 import * as Arr from "effect/Array";
 import { type Effect, type Exit, Option, Schema } from "effect";
 import { ErrorCode } from "~/shell/public-http/contract";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import canonicalMetadata from "./canonical-metadata.generated.json";
+
+export { TelemetryTraceId } from "~/shell/observability/trace/contract";
 
 type RequireNonEmpty = <Value>(
   values: ReadonlyArray<Value>
@@ -270,10 +273,6 @@ export type TelemetryHttpStatus = typeof TelemetryHttpStatus.Type;
 export const TelemetryHttpStatusClass = Schema.Literals(["1xx", "2xx", "3xx", "4xx", "5xx"]);
 export type TelemetryHttpStatusClass = typeof TelemetryHttpStatusClass.Type;
 
-/** A lowercase 32-hex trace identifier; callers obtain it from Telemetry, never application data. */
-export const TelemetryTraceId = Schema.String.check(
-  Schema.isPattern(/^(?!0{32}$)[0-9a-f]{32}$/u)
-).pipe(Schema.brand("TelemetryTraceId"));
 /** A lowercase 16-hex span identifier; callers obtain it from Telemetry, never application data. */
 export const TelemetrySpanId = Schema.String.check(
   Schema.isPattern(/^(?!0{16}$)[0-9a-f]{16}$/u)

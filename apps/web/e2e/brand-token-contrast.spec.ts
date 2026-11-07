@@ -412,19 +412,33 @@ const checkTransactionForm = Effect.fnUntraced(function* (page: Page, theme: The
   yield* contrast(notes, "outlineColor", minimumControlContrast);
   yield* capture(page, `transactions-notes-focus-${theme}`);
   yield* Effect.tryPromise((signal) => submit.click({ signal }));
+  yield* checkCaptureRecovery(page, theme);
+});
+const checkCaptureRecovery = Effect.fnUntraced(function* (page: Page, theme: Theme) {
   yield* Effect.tryPromise((signal) =>
     expect(page.getByRole("alert")).toContainText(
       "No pudimos confirmar si la transacción se guardó",
       { signal }
     )
   );
-  for (const input of [amount, notes, category, submit]) {
-    yield* Effect.tryPromise((signal) => expect(input).toBeDisabled({ signal }));
-    yield* Effect.tryPromise((signal) =>
-      expect(input).toHaveCSS("border-left-color", colors.control, { signal })
-    );
-  }
-  yield* contrast(submit, "color", minimumTextContrast);
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByLabel("Monto", { exact: true })).toBeHidden({ signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("region", { name: "Datos del intento", exact: true })).toContainText(
+      "13.500",
+      { signal }
+    )
+  );
+  const resume = page.getByRole("button", {
+    name: "No la encontré · editar borrador",
+    exact: true,
+  });
+  yield* Effect.tryPromise((signal) => expect(resume).toBeDisabled({ signal }));
+  yield* Effect.tryPromise((signal) =>
+    expect(resume).toHaveCSS("border-left-color", palette[theme].control, { signal })
+  );
+  yield* contrast(resume, "color", minimumTextContrast);
   yield* capture(page, `transactions-disabled-${theme}`);
 });
 const checkTransactions = Effect.fnUntraced(function* (page: Page, theme: Theme) {
@@ -433,7 +447,7 @@ const checkTransactions = Effect.fnUntraced(function* (page: Page, theme: Theme)
     installCategories({ page, categories: [{ id: transaction.categoryId, label: "Vivienda" }] })
   );
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/web/session/binding`, (route) =>
+    page.route(`${apiOrigin}/web/session/binding{,?*}`, (route) =>
       route.fulfill({ json: { binding: null } })
     )
   );

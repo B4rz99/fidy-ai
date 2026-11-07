@@ -38,11 +38,23 @@ const row = (index: number, currency = "COP"): typeof first => ({
   counterparty: `Prueba ${index}`,
   revision: index,
 });
-const installWorkspace = (page: Page, rows = [row(1)]): Journey =>
+// Preserve native Date subclass construction for the calendar's configured time zone.
+const fixedDateNow = (): void => {
+  Date.now = (): number => Date.parse("2026-10-24T12:00:00.000Z");
+};
+const installWorkspace = (
+  page: Page,
+  rows = [row(1)],
+  clock: "fixed" | "native-date" = "fixed"
+): Journey =>
   Effect.gen(function* () {
-    yield* wait(() =>
-      page.clock.setFixedTime(DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-24T12:00:00.000Z")))
-    );
+    if (clock === "native-date") {
+      yield* wait(() => page.addInitScript(fixedDateNow));
+    } else {
+      yield* wait(() =>
+        page.clock.setFixedTime(DateTime.toDateUtc(DateTime.makeUnsafe("2026-10-24T12:00:00.000Z")))
+      );
+    }
     yield* wait(() => installUser(page));
     yield* wait(() => installCategories({ page, categories }));
     yield* wait(() =>
@@ -348,7 +360,7 @@ for (const committed of [false, true]) {
 }
 const foreignCaptureJourney = (page: Page): Journey =>
   Effect.gen(function* () {
-    yield* installWorkspace(page);
+    yield* installWorkspace(page, [row(1)], "native-date");
     const requests: Array<unknown> = [];
     yield* recordMutation(page, "/transactions", { requests, outcome: "uncertain" });
     yield* openCapture(page);
@@ -406,9 +418,12 @@ const foreignCaptureJourney = (page: Page): Journey =>
       occurredAt: "2026-10-23T05:00:00.000Z",
     });
   });
-test("an uncertain manual capture retains currency, direction and chosen date while edits leave the original attempt unchanged", ({
-  page,
-}) => Effect.runPromise(foreignCaptureJourney(page)));
+test.describe("capture with browser and User time zones differing", () => {
+  test.use({ timezoneId: "UTC" });
+  test("an uncertain manual capture retains currency, direction and chosen date while edits leave the original attempt unchanged", ({
+    page,
+  }) => Effect.runPromise(foreignCaptureJourney(page)));
+});
 const correctionJourney = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* installWorkspace(page);

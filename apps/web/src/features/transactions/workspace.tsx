@@ -620,6 +620,12 @@ const refreshLocked = (
       owner.status === "refreshing" ||
       (panelEditing(panel) && !owner.locked),
   });
+const correctionPending = (corrections: Option.Option<TransactionCorrections>): boolean =>
+  Option.exists(
+    corrections,
+    (owner) =>
+      owner.status === "saving" || owner.status === "recovering" || owner.status === "refreshing"
+  );
 const WorkspaceContent = ({
   props,
   panel,
@@ -632,11 +638,7 @@ const WorkspaceContent = ({
   onTool,
 }: WorkspaceContentProps): JSX.Element => {
   const corrections = use(TransactionCorrectionContext);
-  const correctionBusy = Option.exists(
-    corrections,
-    (owner) =>
-      owner.status === "saving" || owner.status === "recovering" || owner.status === "refreshing"
-  );
+  const correctionBusy = correctionPending(corrections);
   const locked = panelLocked(panel) || correctionBusy;
   const closePanel = (): void => closeTransactionPanel(panel, onPanel, props.onRefresh);
   return (

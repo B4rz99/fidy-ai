@@ -39,11 +39,16 @@ const row = (index: number, currency = "COP"): typeof first => ({
   counterparty: `Prueba ${index}`,
   revision: index,
 });
-const installInspections = (page: Page, rows: ReadonlyArray<typeof first>): Promise<void> =>
+const installInspections = (
+  page: Page,
+  rows: ReadonlyArray<typeof first> | (() => ReadonlyArray<typeof first>)
+): Promise<void> =>
   page
     .route(`${apiOrigin}/transactions/*`, (route) => {
       if (route.request().method() !== "GET") return route.fallback();
-      const transaction = rows.find((item) => route.request().url().endsWith(`/${item.id}`));
+      const transaction = (typeof rows === "function" ? rows() : rows).find((item) =>
+        route.request().url().endsWith(`/${item.id}`)
+      );
       if (transaction === undefined) return route.fulfill({ status: 404 });
       return route.fulfill({
         contentType: "application/json",
@@ -1136,6 +1141,7 @@ const installRejectedCorrection = (
     );
     yield* wait(() =>
       page.route(`${apiOrigin}/transactions/${first.id}`, (route) => {
+        if (route.request().method() === "GET") return route.fallback();
         requests.push(route.request().postDataJSON());
         state.rejected = true;
         return route.fulfill({
@@ -1230,6 +1236,7 @@ const installRejectedBulk = (
     const { requests } = state;
     const currentRows = (): ReadonlyArray<typeof first> =>
       rows.map((record) => ({ ...record, revision: record.revision + (state.rejected ? 1 : 0) }));
+    yield* wait(() => installInspections(page, currentRows));
     yield* wait(() =>
       page.route(`${apiOrigin}/transactions?*`, (route) =>
         route.fulfill({

@@ -42,6 +42,7 @@ type InspectedProps = DetailProps &
     pair: Option.Option<LinkedPair>;
     sources: CaptureSources;
     selectedId: Transaction["id"];
+    historyTransaction: Transaction;
     correctionReady: boolean;
     inspectionChanged: boolean;
     inspectionWaiting: boolean;
@@ -272,7 +273,17 @@ const DeletionPanel = ({
       />
     </DetailFrame>
   );
+// Admission uses the inspected revision; the mounted Correction then owns its draft and
+// canonical history recovery, including revisions newer than that inspection snapshot.
+const useEditingAdmission = (input: InspectedProps): boolean => {
+  const [admitted, setAdmitted] = useState(false);
+  const editing = input.mode._tag === "Editing";
+  if (editing && input.correctionReady && !admitted) setAdmitted(true);
+  if (!editing && admitted) setAdmitted(false);
+  return editing && (input.correctionReady || admitted);
+};
 const InspectedDetail = (input: InspectedProps): JSX.Element => {
+  const editing = useEditingAdmission(input);
   const props =
     input.mode._tag === "Deleting" && Option.isSome(input.mode.original)
       ? { ...input, transaction: input.mode.original.value }
@@ -283,12 +294,12 @@ const InspectedDetail = (input: InspectedProps): JSX.Element => {
   if (props.mode._tag === "Deleting") {
     return <DeletionPanel props={{ ...props, mode: props.mode }} />;
   }
-  if (props.mode._tag === "Editing" && props.correctionReady) {
+  if (editing) {
     return (
       <TransactionCorrection
         key={props.transaction.id}
         renderForm={(form) => props.renderPanel(<DetailFrame props={props}>{form}</DetailFrame>)}
-        transaction={props.transaction}
+        transaction={props.historyTransaction}
         categories={props.categories}
         timeZone={props.timeZone}
         onCancel={props.onClose}
@@ -342,6 +353,7 @@ const InspectableDetail = (props: DetailProps): JSX.Element => {
       {...props}
       transaction={transaction}
       selectedId={props.transaction.id}
+      historyTransaction={props.transaction}
       editable={props.editable && fresh}
       correctionReady={fresh && !changed}
       inspectionChanged={fresh && changed}
@@ -362,6 +374,7 @@ export const TransactionDetail = (props: DetailProps): JSX.Element =>
       pair={Option.none()}
       sources={[]}
       selectedId={props.transaction.id}
+      historyTransaction={props.transaction}
       correctionReady={props.editable}
       inspectionChanged={false}
       inspectionWaiting={false}

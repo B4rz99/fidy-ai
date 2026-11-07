@@ -14,5 +14,5 @@ export {
 export { isHttpOrigin } from "~/shell/browser-transport/operations";
 export { ResourceLimited } from "~/shell/public-http/contract";
 export { TelemetryTraceId } from "~/shell/observability/trace/contract";
-export { connectionBrowserPaths } from "~/shell/connections/contract";
+export { connectionBrowserPaths } from "~/shell/browser-transport/contract";
 export const BrowserBootstrapApi = HttpApi.make("BrowserBootstrapApi").add(BrowserSessionGroup);

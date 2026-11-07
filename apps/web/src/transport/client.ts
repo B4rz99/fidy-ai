@@ -1,19 +1,7 @@
-import {
-  type BrowserSessionLifetime,
-  bindBrowserSession,
-  coordinateBrowserRequests,
-} from "./session-binding";
+import { type BrowserClientOptions, browserClientLayer } from "./browser-client-layer";
 import {
   FidyApi,
   type FidyApiGroups,
-  HostedTurnApi,
-  type HostedTurnApiGroups,
-  HostedTurnProcessing,
-  HostedTurnProgressRequest,
-  HostedTurnProposal,
-  HostedTurnQuotaExceeded,
-  HostedTurnReceipt,
-  HostedTurnRequest,
   SubscriptionEnrollmentApi,
   type SubscriptionEnrollmentApiGroups,
   TokenAuthorizationClientAnonymousLive,
@@ -21,10 +9,9 @@ import {
   type WebAuthApiGroups,
 } from "@fidy/server/client";
 import { Context, Data, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
-import { FetchHttpClient, type HttpClient } from "effect/http";
+import type { HttpClient } from "effect/http";
 import { HttpApiClient, type HttpApiEndpoint, type HttpApiGroup } from "effect/http-api";
 import { AtomHttpApi } from "effect/reactivity";
-import { type BrowserHttpBoundary, browserHttpClientLayer } from "./browser-http-policy";
 import { observeBrowserDecode } from "./browser-defects";
 
 export type {
@@ -140,54 +127,9 @@ const observeAuthenticationExpiration =
         : Effect.void
     );
 
-export {
-  HostedTurnRequest,
-  HostedTurnQuotaExceeded,
-  HostedTurnReceipt,
-  HostedTurnProposal,
-  HostedTurnProcessing,
-  HostedTurnProgressRequest,
-};
-
-/** Browser-only reply/receipt channel; unavailable as a canonical tool operation. */
-export type HostedTurnClient = AtomHttpApi.AtomHttpApiClient<
-  never,
-  "@fidy/web/HostedTurnClient",
-  HostedTurnApiGroups
->;
-
-type BrowserClientOptions = Readonly<{
-  apiOrigin: string;
-}> &
-  (Readonly<{ session: BrowserSessionLifetime }> | Readonly<Record<never, never>>) &
-  (Readonly<{ httpClient: FidyClientLayer }> | Readonly<Record<never, never>>);
-
 type FidyClientOptions =
   | BrowserClientOptions
   | (BrowserClientOptions & Readonly<{ observer: CanonicalAuthenticationObserver }>);
-
-const browserClientLayer = (
-  options: BrowserClientOptions,
-  boundary: BrowserHttpBoundary
-): FidyClientLayer => {
-  const underlying = "httpClient" in options ? options.httpClient : FetchHttpClient.layer;
-  const coordinated =
-    "session" in options
-      ? coordinateBrowserRequests({ transport: underlying, signal: options.session.signal })
-      : underlying;
-  const transport = coordinated.pipe(browserHttpClientLayer(boundary, options.apiOrigin));
-  return !("session" in options)
-    ? transport
-    : bindBrowserSession({ transport, lifetime: options.session });
-};
-
-export const makeHostedTurnClient = (options: BrowserClientOptions): HostedTurnClient =>
-  AtomHttpApi.Service<never>()("@fidy/web/HostedTurnClient", {
-    api: HostedTurnApi,
-    baseUrl: options.apiOrigin,
-    httpClient: browserClientLayer(options, "hosted-turn"),
-    transformResponse: observeBrowserDecode,
-  });
 
 export type FidyClient = AtomHttpApi.AtomHttpApiClient<
   never,
@@ -209,7 +151,7 @@ export const makeFidyClient = (options: FidyClientOptions): FidyClient =>
     api: FidyApi,
     baseUrl: options.apiOrigin,
     httpClient: Layer.merge(
-      browserClientLayer(options, "canonical"),
+      browserClientLayer({ ...options, boundary: "canonical" }),
       TokenAuthorizationClientAnonymousLive
     ),
     transformResponse: observeAuthenticationExpiration(
@@ -246,7 +188,7 @@ export const makeWebAuthClient = (options: BrowserClientOptions): WebAuthClient 
   AtomHttpApi.Service<never>()("@fidy/web/WebAuthClient", {
     api: WebAuthApi,
     baseUrl: options.apiOrigin,
-    httpClient: browserClientLayer(options, "web-auth"),
+    httpClient: browserClientLayer({ ...options, boundary: "web-auth" }),
     transformResponse: observeBrowserDecode,
   });
 
@@ -290,7 +232,7 @@ export const makeSubscriptionEnrollmentClient = (
       baseUrl: options.apiOrigin,
       transformResponse: observeBrowserDecode,
     })
-  ).pipe(Layer.provide(browserClientLayer(options, "enrollment")));
+  ).pipe(Layer.provide(browserClientLayer({ ...options, boundary: "enrollment" })));
   const runtime = ManagedRuntime.make(live);
   const lifetime = new AbortController();
   let available = true;

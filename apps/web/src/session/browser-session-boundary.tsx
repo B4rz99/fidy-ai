@@ -1,12 +1,12 @@
 import type { InitialBrowserSession } from "@/transport/initial-session";
 import { type Cause, Effect, Option } from "effect";
 import { type ReactNode, useCallback, useState } from "react";
+import { type BrowserSessionLifetime } from "@/transport/session-binding";
 import {
   type BrowserSessionEntryFailure,
-  type BrowserSessionLifetime,
   type BrowserSessionObservation,
   loadBrowserSessionEntry,
-} from "@/transport/session-binding";
+} from "@/transport/session-entry";
 import { authenticationEndedEvent } from "./authentication-events";
 import { useSession } from "./session-context";
 

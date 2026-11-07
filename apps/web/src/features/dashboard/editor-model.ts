@@ -1,6 +1,6 @@
 import { type Result, Schema } from "effect";
 import { Hex } from "effect/encoding";
-import { DashboardEdit, WidgetId as WidgetIdSchema } from "@/transport/client";
+import { DashboardEdit, WidgetId as WidgetIdSchema } from "@/transport/dashboard-contract";
 import type { CanonicalSuccess } from "@/transport/client";
 import type { DashboardDropTarget } from "./drag-data";
 

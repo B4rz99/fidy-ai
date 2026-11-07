@@ -209,9 +209,8 @@ export const DashboardRouteContent = ({
   }
 
   const catalogState = presentCanonicalQuery(catalogResult);
-  const catalogFailed = catalogUnavailable(catalogState);
   const dashboardFailed = Option.isSome(dashboardState.refreshFailure);
-  const error = resolveEditorError(editError, catalogFailed, dashboardFailed);
+  const error = resolveEditorError(editError, catalogUnavailable(catalogState), dashboardFailed);
 
   return (
     <DashboardBudgetConfiguration
@@ -228,6 +227,7 @@ export const DashboardRouteContent = ({
           refreshCatalog={refreshCatalog}
         />
         <DashboardViewComponent
+          initialEditing={false}
           editor={Option.some({
             catalog: catalogState._tag === "Ready" ? catalogState.value.data : [],
             error,

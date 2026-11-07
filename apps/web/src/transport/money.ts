@@ -1,4 +1,4 @@
-import { Currency, currencyMetadata } from "@fidy/server/client";
+import { Currency, currencyMetadata } from "@fidy/server/money";
 import { BigDecimal, Schema } from "effect";
 
 const ExactDecimal = Schema.NonEmptyString.pipe(Schema.decodeTo(Schema.BigDecimalFromString));

@@ -1,6 +1,7 @@
+import { DashboardSpendingPresentation } from "./chart-renderer";
+import { dashboardResizePreview } from "./resize-presentation";
 import { PendingRead } from "@/ui/components/pending-read";
-import { dashboardCategoryVisual } from "@/ui/components/dashboard-category";
-import { Link } from "@tanstack/react-router";
+import { Link, lazyRouteComponent } from "@tanstack/react-router";
 import { ConfigureBudgetButton } from "./budget-configuration";
 import type { BudgetWidget } from "./editor-model";
 import { formatMoneyWithCode } from "@/transport/money";
@@ -8,7 +9,7 @@ import { RefreshButton } from "@/ui/components/refresh-button";
 import type { DashboardEditorError } from "./editing";
 import { PencilIcon, Settings01Icon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BigDecimal, DateTime, Option } from "effect";
+import { DateTime, Option } from "effect";
 import type { AsyncResult } from "effect/reactivity";
 import {
   type FormEvent,
@@ -16,43 +17,29 @@ import {
   type JSX,
   type PointerEvent,
   type RefCallback,
+  Suspense,
+  useContext,
   useMemo,
   useRef,
   useState,
 } from "react";
-// react-doctor-disable-next-line prefer-dynamic-import
-import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 import {
-  DashboardAxisTick,
   DashboardBudget,
   DashboardCard,
-  DashboardChart,
-  DashboardCurrency,
   DashboardCustomizeAction,
   DashboardFigures,
   DashboardPeriod,
   type DashboardRecentGroup,
   DashboardRecentList,
-  DashboardTooltip,
 } from "@/ui/components/dashboard";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Input } from "@/ui/components/input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
-
+import { maximumSplitWeight, minimumSplitWeight } from "@/transport/dashboard-contract";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
-import {
-  exactChartAmount,
-  formatCurrencyAmount,
-  formatMoney,
-  moneyDecimalText,
-  moneyProgressGeometry,
-  moneySeriesGeometry,
-  moneyUtilizationLabel,
-} from "./money-presentation";
-import { DashboardDragHandle, DashboardDragProvider, DashboardDropZone } from "./drag-adapter";
+import { formatMoney, moneyProgressGeometry, moneyUtilizationLabel } from "./money-presentation";
 import { type DashboardCatalogEntry, type DashboardGesture } from "./editor-model";
 import {
   type DashboardLayout,
@@ -62,11 +49,22 @@ import {
   responsiveSplitClass,
   weightedChildStyle,
 } from "./presentation";
-
 import { type PlacementLayout } from "./placement-preview";
 
-type SpendingResult = Extract<DashboardWidgetView["result"], { readonly buckets: unknown }>;
-type SpendingCurrency = SpendingResult["buckets"][number]["moneyGroups"][number]["currency"];
+import { periodLabel } from "./period-presentation";
+
+const SpendingChart = lazyRouteComponent(() => import("./spending-chart"), "SpendingChart");
+
+const DashboardDragHandle = lazyRouteComponent(
+  () => import("./drag-adapter"),
+  "DashboardDragHandle"
+);
+const DashboardDragProvider = lazyRouteComponent(
+  () => import("./drag-adapter"),
+  "DashboardDragProvider"
+);
+const DashboardDropZone = lazyRouteComponent(() => import("./drag-adapter"), "DashboardDropZone");
+
 type BudgetResult = Extract<DashboardWidgetView["result"], { readonly availability: unknown }>;
 type ListResult = Extract<DashboardWidgetView["result"], { readonly transactions: unknown }>;
 type MetricResult = Extract<DashboardWidgetView["result"], { readonly moneyGroups: unknown }>;
@@ -111,159 +109,6 @@ const WidgetFrame = ({
     {children}
   </DashboardCard>
 );
-
-const periodLabel = (period: SpendingResult["appliedPeriod"], locale: string): string => {
-  const month = period.requested === "this-month" || period.requested === "last-month";
-  const format = new Intl.DateTimeFormat(locale, {
-    month: month ? "long" : "short",
-    year: "numeric",
-    ...(month ? {} : { day: "numeric" }),
-    timeZone: period.timeZone,
-  });
-  const start = format.format(period.from.epochMilliseconds);
-  return month ? start : `${start} – ${format.format(period.toExclusive.epochMilliseconds - 1)}`;
-};
-
-const bucketLabel = (key: SpendingResult["buckets"][number]["key"]): string => {
-  switch (key.kind) {
-    case "category":
-      return key.category.label;
-    case "day":
-      return key.date;
-    case "month":
-      return key.month;
-  }
-};
-
-const presentBucket = (
-  key: SpendingResult["buckets"][number]["key"]
-): Readonly<{ key: string; label: string; fill: string }> => {
-  const label = bucketLabel(key);
-  return key.kind === "category"
-    ? { key: key.category.id, label, fill: dashboardCategoryVisual(key.category.id).fill }
-    : { key: label, label, fill: "var(--dashboard-chart-fill)" };
-};
-
-type CurrencyChartDatum = Readonly<{
-  key: string;
-  label: string;
-  fill: string;
-  outflowExact: string;
-  outflow: number;
-}>;
-
-const currencyChartData = (
-  data: SpendingResult,
-  currency: string
-): ReadonlyArray<CurrencyChartDatum> => {
-  const zero = BigDecimal.make(0n, 0);
-  const values = data.buckets.flatMap((bucket) => {
-    const group = bucket.moneyGroups.find((candidate) => candidate.currency === currency);
-    if (
-      bucket.key.kind === "category" &&
-      (group === undefined || !BigDecimal.isPositive(group.outflow.amount))
-    ) {
-      return [];
-    }
-    return [
-      {
-        ...presentBucket(bucket.key),
-        outflowExact: group === undefined ? "0" : moneyDecimalText(group.outflow),
-        outflowAmount: group?.outflow.amount ?? zero,
-      },
-    ];
-  });
-  const geometry = moneySeriesGeometry(values.map(({ outflowAmount }) => outflowAmount));
-  return values.map(({ outflowAmount: _outflow, ...value }, index) => ({
-    ...value,
-    outflow: geometry[index] ?? 0,
-  }));
-};
-
-const categoryAxisHeight = 80;
-const calendarAxisHeight = 30;
-
-const CurrencySpendingChart = ({
-  data,
-  currency,
-  locale,
-}: Readonly<{
-  data: SpendingResult;
-  currency: SpendingCurrency;
-  locale: DashboardLocale;
-}>): JSX.Element => {
-  const chartData = currencyChartData(data, currency);
-  const category = data.buckets.some((bucket) => bucket.key.kind === "category");
-  return (
-    <section className="dashboard-chart-series" key={currency} aria-label={`Serie ${currency}`}>
-      <span className="dashboard-chart-currency">
-        <DashboardCurrency>{currency}</DashboardCurrency>
-      </span>
-      <span className="dashboard-chart-legend">Gastos</span>
-      <DashboardChart categoryCount={category ? chartData.length : 0}>
-        <BarChart responsive width="100%" height="100%" accessibilityLayer data={chartData}>
-          <CartesianGrid vertical={false} stroke="var(--application-line)" />
-          <XAxis
-            dataKey="key"
-            interval={0}
-            axisLine={false}
-            tickLine={false}
-            tickMargin={16}
-            height={category ? categoryAxisHeight : calendarAxisHeight}
-            tick={<DashboardAxisTick category={category} labels={chartData} />}
-          />
-          <DashboardTooltip
-            labelFormatter={(key) => chartData.find((row) => row.key === key)?.label ?? ""}
-            formatter={(_value: unknown, _name: unknown, item) => {
-              const amount = exactChartAmount({
-                payload: item.payload,
-                series: "outflow",
-              }).pipe(
-                Option.map((exact) => formatCurrencyAmount({ amount: exact, currency, locale })),
-                Option.getOrElse(() => "No disponible")
-              );
-              return [amount, "Gastos"];
-            }}
-          />
-          <Bar dataKey="outflow" fill="var(--dashboard-chart-fill)" radius={4} maxBarSize={52} />
-        </BarChart>
-      </DashboardChart>
-      <div className="dashboard-chart-footer">
-        {periodLabel(data.appliedPeriod, locale)} · {currency}
-      </div>
-    </section>
-  );
-};
-
-const SpendingChart = ({
-  data,
-  locale,
-}: Readonly<{ data: SpendingResult; locale: DashboardLocale }>): JSX.Element => {
-  const currencySet = new Set<SpendingCurrency>();
-  for (const { moneyGroups } of data.buckets) {
-    for (const { currency, outflow } of moneyGroups) {
-      if (BigDecimal.isPositive(outflow.amount)) currencySet.add(currency);
-    }
-  }
-  const currencies = Array.from(currencySet).sort();
-  if (currencies.length === 0) {
-    return (
-      <Empty className="border">
-        <EmptyHeader>
-          <EmptyTitle>No hay transacciones en este periodo</EmptyTitle>
-          <EmptyDescription>El gráfico aparecerá cuando existan datos.</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-5">
-      {currencies.map((currency) => (
-        <CurrencySpendingChart key={currency} data={data} currency={currency} locale={locale} />
-      ))}
-    </div>
-  );
-};
 
 const budgetStatusText = (data: AvailableBudgetResult, locale: DashboardLocale): string => {
   switch (data.status.type) {
@@ -312,7 +157,7 @@ const BudgetBar = ({
         status={budgetStatusText(data, locale)}
         over={data.status.type === "over"}
       />
-      <DashboardPeriod>{periodLabel(data.appliedPeriod, locale)}</DashboardPeriod>
+      <DashboardPeriod>{periodLabel({ period: data.appliedPeriod, locale })}</DashboardPeriod>
     </>
   );
 };
@@ -385,7 +230,7 @@ const CustomMetric = ({
           outflow={formatMoney({ money: group.outflow, locale })}
         />
       ))}
-      <DashboardPeriod>{periodLabel(data.appliedPeriod, locale)}</DashboardPeriod>
+      <DashboardPeriod>{periodLabel({ period: data.appliedPeriod, locale })}</DashboardPeriod>
     </div>
   );
 
@@ -400,9 +245,17 @@ const RenderWidget = ({
   editing: boolean;
   titleEditor: Option.Option<JSX.Element>;
 }>): JSX.Element => {
+  const ChartPresentation = useContext(DashboardSpendingPresentation);
   let content: JSX.Element;
   if ("buckets" in result) {
-    content = <SpendingChart data={result} locale={context.locale} />;
+    content = Option.match(ChartPresentation, {
+      onSome: (render) => render({ data: result, locale: context.locale }),
+      onNone: () => (
+        <Suspense fallback={<PendingRead label="Cargando gráfico" />}>
+          <SpendingChart data={result} locale={context.locale} />
+        </Suspense>
+      ),
+    });
   } else if ("availability" in result) {
     content =
       widget.type === "budget-bar" ? (
@@ -465,6 +318,7 @@ const WidgetActions = ({
     {widget.type === "budget-bar" ? <ConfigureBudgetButton widget={widget} compact /> : null}
     <Button
       aria-label={`Renombrar ${label}`}
+      data-dashboard-rename={widget.id}
       disabled={editor.disabled}
       onClick={onRename}
       size="icon"
@@ -475,6 +329,7 @@ const WidgetActions = ({
     </Button>
     <Button
       aria-label={`Eliminar ${label}`}
+      data-dashboard-remove={widget.id}
       disabled={editor.disabled}
       onClick={() => editor.onGesture({ kind: "remove-widget", widgetId: widget.id })}
       size="icon"
@@ -501,7 +356,7 @@ const focusTitleInput: RefCallback<HTMLInputElement> = (input) => {
   input?.select();
 };
 
-const TitleEditor = ({
+export const TitleEditor = ({
   disabled,
   initialTitle,
   target,
@@ -598,7 +453,10 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
     setRenaming(false);
   };
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+    <div
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+      data-dashboard-widget-id={widget.id}
+    >
       <div className="absolute top-3 left-3 z-30">
         <DashboardDragHandle
           disabled={editor.disabled}
@@ -642,24 +500,6 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
   );
 };
 
-const minimumRegionPixels = 32;
-const maximumMinimumShare = 0.49;
-const resizeWeightPrecision = 1000;
-
-const clampResizeWeight = (weight: number): number =>
-  Math.round(
-    Math.min(maximumSplitWeight, Math.max(minimumSplitWeight, weight)) * resizeWeightPrecision
-  ) / resizeWeightPrecision;
-
-const clampResizePairWeight = (weight: number, pairWeight: number): number =>
-  clampResizeWeight(
-    Math.min(
-      maximumSplitWeight,
-      pairWeight - minimumSplitWeight,
-      Math.max(minimumSplitWeight, pairWeight - maximumSplitWeight, weight)
-    )
-  );
-
 type ResizeBoundaryProps = Readonly<{
   axis: "row" | "column";
   childIndex: number;
@@ -696,14 +536,17 @@ const previewResizeWeight = (
   const adjacentBounds = elements.value.adjacent.getBoundingClientRect();
   const start = axis === "row" ? childBounds.left : childBounds.top;
   const end = axis === "row" ? adjacentBounds.right : adjacentBounds.bottom;
-  const extent = end - start;
-  if (extent <= 0) return Option.none();
-  const coordinate = axis === "row" ? event.clientX - start : event.clientY - start;
-  const minimumShare = Math.min(maximumMinimumShare, minimumRegionPixels / extent);
-  const boundaryShare = Math.min(1 - minimumShare, Math.max(minimumShare, coordinate / extent));
-  const pairWeight = current.value.weight + following.value.weight;
-  const nextWeight = clampResizePairWeight(pairWeight * boundaryShare, pairWeight);
-  const adjacentWeight = clampResizeWeight(pairWeight - nextWeight);
+  const preview = dashboardResizePreview({
+    coordinate: axis === "row" ? event.clientX : event.clientY,
+    start,
+    end,
+    weight: current.value.weight,
+    adjacentWeight: following.value.weight,
+    minimumWeight: minimumSplitWeight,
+    maximumWeight: maximumSplitWeight,
+  });
+  if (preview._tag === "Unavailable") return Option.none();
+  const { weight: nextWeight, adjacentWeight } = preview;
   elements.value.child.style.setProperty("--dashboard-weight", String(nextWeight));
   elements.value.adjacent.style.setProperty("--dashboard-weight", String(adjacentWeight));
   return Option.some({ adjacentWeight, weight: nextWeight });
@@ -800,6 +643,16 @@ const DashboardResizeBoundary = (props: ResizeBoundaryProps): JSX.Element => {
   return (
     <hr
       {...interactionProps}
+      data-dashboard-resize={JSON.stringify({
+        axis,
+        weight: handlers.weight,
+        adjacentWeight: resizeWeightAt(props, props.childIndex + 1),
+        widgetIds: regionWidgetIds(
+          Option.getOrThrow(Option.fromUndefinedOr(props.siblings[props.childIndex])).node
+        ),
+        minimumWeight: minimumSplitWeight,
+        maximumWeight: maximumSplitWeight,
+      })}
       aria-disabled={disabled}
       aria-label={`Redimensionar límite después de ${label}`}
       aria-orientation={axis === "row" ? "vertical" : "horizontal"}
@@ -1068,11 +921,13 @@ const EditableDashboardTitle = ({
 export const DashboardViewComponent = ({
   editor,
   view,
+  initialEditing,
 }: Readonly<{
   editor: Option.Option<DashboardEditor>;
   view: DashboardView;
+  initialEditing: boolean;
 }>): JSX.Element => {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing);
   const activeEditor = Option.filter(editor, () => editing);
   const pending = Option.flatMap(activeEditor, (current) => current.pendingPlacement);
   const editorError = Option.flatMap(editor, (current) => current.error);
@@ -1111,9 +966,11 @@ export const DashboardViewComponent = ({
   return Option.isNone(activeEditor) ? (
     content
   ) : (
-    <DashboardDragProvider onGesture={activeEditor.value.onGesture}>
-      {content}
-    </DashboardDragProvider>
+    <Suspense fallback={<PendingRead label="Cargando personalización" />}>
+      <DashboardDragProvider onGesture={activeEditor.value.onGesture}>
+        {content}
+      </DashboardDragProvider>
+    </Suspense>
   );
 };
 
@@ -1158,6 +1015,22 @@ export const DashboardRouteContent = ({
         />
       );
     case "Ready":
-      return <DashboardViewComponent editor={Option.none()} view={state.value.data} />;
+      return (
+        <DashboardViewComponent
+          initialEditing={false}
+          editor={Option.none()}
+          view={state.value.data}
+        />
+      );
   }
 };
+
+DashboardViewComponent.preloadInteractions = (): Promise<void> =>
+  Promise.all([
+    DashboardDragHandle.preload?.(),
+    DashboardDragProvider.preload?.(),
+    DashboardDropZone.preload?.(),
+  ]).then(() => undefined);
+
+DashboardViewComponent.preloadPresentation = (): Promise<void> =>
+  Promise.resolve(SpendingChart.preload?.()).then(() => undefined);

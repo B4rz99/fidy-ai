@@ -10,11 +10,8 @@ import {
 import { expect, it } from "@effect/vitest";
 import { vi } from "vitest";
 import { TestClock } from "effect/testing";
-import {
-  bindBrowserSession,
-  coordinateBrowserRequests,
-  loadBrowserSessionBinding,
-} from "./session-binding";
+import { bindBrowserSession, coordinateBrowserRequests } from "./session-binding";
+import { loadBrowserSessionBinding } from "./session-entry";
 import { browserHttpClientLayer } from "./browser-http-policy";
 
 for (const interrupted of [false, true]) {

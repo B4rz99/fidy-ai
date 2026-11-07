@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "bun --bun vite",
     "shadcn": "shadcn",
-    "build": "tsc --noEmit && bun --bun vite build",
+    "build": "bun run typecheck && bun --bun vite build",
     "build:production": "bun scripts/build-production.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --build tsconfig.app.json",
     "test": "bun --bun vitest run",
     "test:coverage": "bun --bun vitest run --coverage",
     "check:bundle": "bun scripts/check-browser-bundle.ts",

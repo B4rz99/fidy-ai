@@ -1,5 +1,5 @@
 import { useNavigationPreparation } from "./navigation-preparation";
-import { Outlet, useRouterState } from "@tanstack/react-router";
+import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import { type JSX, Suspense, lazy } from "react";
 import { AccessRefused, ApplicationShell } from "@/features/signed-in/feature";
 import { useSession } from "@/session/session-context";
@@ -7,8 +7,6 @@ import { HostedAgentProvider } from "@/features/agent/feature";
 import { OAuthAgent } from "./oauth-agent";
 import { RetainedRecurringWorkspace } from "./recurring-workspace";
 import { RetainedReviewWorkspace } from "./review-workspace";
-import { DestinationPreloadContext } from "./destination-preload-context";
-import { destinationCodePreloads } from "./destination-components";
 
 const ReviewPendingCount = lazy(() =>
   import("@/features/needs-review/feature").then((module) => ({
@@ -16,14 +14,15 @@ const ReviewPendingCount = lazy(() =>
   }))
 );
 
-/** One application shell survives navigation across independently authorized product routes. */
-export const ApplicationFrame = (): JSX.Element => (
-  <DestinationPreloadContext value={{ code: destinationCodePreloads }}>
-    <ApplicationContent />
-  </DestinationPreloadContext>
-);
+const independentControlRoutes: ReadonlySet<string> = new Set([
+  "/independent-application/settings/privacy",
+  "/independent-application/connections/result",
+  "/independent-application/upgrade",
+  "/independent-application/oauth/review/$requestId",
+]);
 
-const ApplicationContent = (): JSX.Element => {
+export const ApplicationFrame = (): JSX.Element => {
+  const client = useRouter().options.context.hostedTurnClient;
   const { authentication } = useSession();
   const prepareNavigation = useNavigationPreparation();
   const frame = useRouterState({
@@ -44,14 +43,7 @@ const ApplicationContent = (): JSX.Element => {
       ),
   });
   const independentControls = useRouterState({
-    select: (state) =>
-      state.matches.some(
-        (match) =>
-          match.routeId === "/independent-application/settings/privacy" ||
-          match.routeId === "/independent-application/connections/result" ||
-          match.routeId === "/independent-application/upgrade" ||
-          match.routeId === "/independent-application/oauth/review/$requestId"
-      ),
+    select: (state) => state.matches.some((match) => independentControlRoutes.has(match.routeId)),
   });
   if (frame === "refused") return <AccessRefused />;
   if (frame === "standalone") return <Outlet />;
@@ -80,6 +72,6 @@ const ApplicationContent = (): JSX.Element => {
   return independentControls || authentication === "expired" ? (
     shell
   ) : (
-    <HostedAgentProvider>{shell}</HostedAgentProvider>
+    <HostedAgentProvider client={client}>{shell}</HostedAgentProvider>
   );
 };

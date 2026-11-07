@@ -273,6 +273,21 @@
       "types": "./src/browser-transport.ts",
       "import": "./src/browser-transport.ts",
       "default": "./src/browser-transport.ts"
+    },
+    "./browser-http": {
+      "types": "./src/browser-http.ts",
+      "import": "./src/browser-http.ts",
+      "default": "./src/browser-http.ts"
+    },
+    "./dashboard-contract": {
+      "types": "./src/core/dashboard/contract.ts",
+      "import": "./src/core/dashboard/contract.ts",
+      "default": "./src/core/dashboard/contract.ts"
+    },
+    "./hosted-turn-api": {
+      "types": "./src/shell/agent/contract.ts",
+      "import": "./src/shell/agent/contract.ts",
+      "default": "./src/shell/agent/contract.ts"
     }
   },
   "scripts": {

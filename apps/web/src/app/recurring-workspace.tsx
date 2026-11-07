@@ -8,7 +8,6 @@ import { Option } from "effect";
 import { type JSX, Suspense, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { useWorkspaceResume } from "./workspace-resume";
-import { DestinationPreload } from "./destination-preload";
 
 /** Preserve the visited planning display only inside its current authentication lifetime. */
 export const RetainedRecurringWorkspace = (): JSX.Element => {
@@ -49,7 +48,7 @@ const VisitedRecurringWorkspace = (): JSX.Element => {
           month={Option.fromUndefinedOr(current.value.month)}
           captureEditor={RecurringTransactionCapture}
         >
-          {active ? <DestinationPreload /> : null}
+          {null}
         </RecurringWorkspace>
       </Suspense>
     </div>

@@ -4,12 +4,12 @@ import { type Context, Effect, Option, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import { useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { HostedTurnQuotaExceeded, HostedTurnRequest } from "@/transport/client";
+import { HostedTurnQuotaExceeded, HostedTurnRequest } from "@/transport/hosted-turn-client";
 import type {
   HostedTurnClient,
   HostedTurnProcessing,
   HostedTurnProposal,
-} from "@/transport/client";
+} from "@/transport/hosted-turn-client";
 
 type Proposal = typeof HostedTurnProposal.Type;
 type Processing = typeof HostedTurnProcessing.Type;

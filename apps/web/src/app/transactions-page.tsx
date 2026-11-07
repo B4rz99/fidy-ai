@@ -1,7 +1,6 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
 import { transactionEntryConsent } from "@/session/transaction-entry";
-import { DestinationPreload } from "./destination-preload";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
@@ -37,9 +36,7 @@ export const TransactionsPage = (): JSX.Element => {
     if (consent.value.status === "Granted") {
       return (
         <SignedInContent>
-          <TransactionListFeature>
-            <DestinationPreload />
-          </TransactionListFeature>
+          <TransactionListFeature>{null}</TransactionListFeature>
           <HostedAgentFeature />
         </SignedInContent>
       );

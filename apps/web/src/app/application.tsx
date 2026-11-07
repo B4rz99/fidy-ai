@@ -8,10 +8,8 @@ import { AsyncResult, Atom } from "effect/reactivity";
 import { type JSX } from "react";
 import { SessionRegistryProvider } from "@/session/session";
 import { parseApiOrigin } from "@/transport/origin";
-import type {
-  BrowserSessionLifetime,
-  BrowserSessionObservation,
-} from "@/transport/session-binding";
+import type { BrowserSessionLifetime } from "@/transport/session-binding";
+import type { BrowserSessionObservation } from "@/transport/session-entry";
 
 // Code loading overlaps discovery; authenticated clients still mount inside the binding boundary.
 const applicationModule = import("./bound-application").then(Result.succeed, (cause: unknown) =>

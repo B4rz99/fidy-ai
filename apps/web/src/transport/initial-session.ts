@@ -1,6 +1,6 @@
 import type { InitialBrowserRequest } from "./initial-request";
 import { type Cause, Effect, Exit, Option } from "effect";
-import { type BrowserSessionObservation, loadBrowserSessionEntry } from "./session-binding";
+import { type BrowserSessionObservation, loadBrowserSessionEntry } from "./session-entry";
 
 export type InitialSessionWork = Readonly<{
   result: Effect.Effect<

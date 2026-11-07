@@ -1,10 +1,11 @@
+import { lazyRouteComponent } from "@tanstack/react-router";
 import { formatMoneyWithCode } from "@/transport/money";
 import { type CaptureHistoryVersion, ManualCaptureContext } from "./manual-capture-context";
-import { ManualCapturePanel } from "./manual-capture-panel";
 import { TransactionPeriodControls } from "./period-controls";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
-import { use, useState } from "react";
+import { Suspense, use, useState } from "react";
+import { PendingRead } from "@/ui/components/pending-read";
 import type { TransactionCorrections } from "./corrections";
 import { TransactionCorrectionContext } from "./correction-context";
 import type { JSX, ReactNode, RefCallback } from "react";
@@ -21,8 +22,6 @@ import { TransactionContextPanel, TransactionSurface } from "@/ui/components/tra
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { TransactionDateFilter } from "./date-filter";
 import { type FidyClient, maximumAtomicBatchCalls } from "@/transport/client";
-import { BulkTransactionCorrection } from "./bulk-correction";
-import { TransactionDetail } from "./detail";
 import { TransactionSummary } from "./summary";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
@@ -35,6 +34,16 @@ import {
   formatOccurrence,
   presentTransactionRows,
 } from "./presentation";
+
+const BulkTransactionCorrection = lazyRouteComponent(
+  () => import("./bulk-correction"),
+  "BulkTransactionCorrection"
+);
+const TransactionDetail = lazyRouteComponent(() => import("./detail"), "TransactionDetail");
+const ManualCapturePanel = lazyRouteComponent(
+  () => import("./manual-capture-panel"),
+  "ManualCapturePanel"
+);
 
 type WorkspaceProps = Readonly<{
   locate: Option.Option<string>;
@@ -316,9 +325,27 @@ const scopeLabel = (props: WorkspaceProps): string => {
   return props.readOnly ? "en el historial guardado" : `en ${props.period.monthLabel}`;
 };
 const WorkspacePanel = (props: PanelProps): JSX.Element => {
-  if (props.panel._tag === "Bulk") return <BulkPanel {...props} panel={props.panel} />;
-  if (props.panel._tag === "Capture") return <CapturePanel {...props} />;
-  if (props.panel._tag === "Detail") return <DetailPanel {...props} panel={props.panel} />;
+  if (props.panel._tag === "Bulk") {
+    return (
+      <Suspense fallback={<PendingRead label="Cargando edición" />}>
+        <BulkPanel {...props} panel={props.panel} />
+      </Suspense>
+    );
+  }
+  if (props.panel._tag === "Capture") {
+    return (
+      <Suspense fallback={<PendingRead label="Cargando formulario" />}>
+        <CapturePanel {...props} />
+      </Suspense>
+    );
+  }
+  if (props.panel._tag === "Detail") {
+    return (
+      <Suspense fallback={<PendingRead label="Cargando detalle" />}>
+        <DetailPanel {...props} panel={props.panel} />
+      </Suspense>
+    );
+  }
   return props.renderPanel(
     <TransactionSummary
       scope={scopeLabel(props)}
@@ -796,3 +823,10 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
     </>
   );
 };
+
+TransactionWorkspace.preloadInteractions = (): Promise<void> =>
+  Promise.all([
+    BulkTransactionCorrection.preload?.(),
+    TransactionDetail.preload?.(),
+    ManualCapturePanel.preload?.(),
+  ]).then(() => undefined);

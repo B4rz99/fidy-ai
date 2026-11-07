@@ -154,11 +154,11 @@ export default {
       name: "server-client-imported-outside-transport",
       severity: "error",
       comment:
-        "Only src/transport may import @fidy/server/client. This keeps the server-owned canonical " +
+        "Only src/transport may import published server declarations. This keeps the server-owned canonical " +
         "API behind one browser transport seam and prevents alternate product clients.",
       from: { path: "^src/", pathNot: "^src/transport/" },
       to: {
-        path: "^(?:@fidy/server/client|(?:\\.\\./)?(?:apps/)?server/src/client\\.ts|(?:^|.*/)node_modules/@fidy/server/src/client\\.ts)$",
+        path: "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/",
       },
     },
     {
@@ -171,7 +171,9 @@ export default {
       to: {
         path: "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/",
         pathNot:
-          "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/src/(?:client|browser-bootstrap|browser-transport)\\.ts$",
+          "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/src/(?:" +
+          "(?:client|browser-bootstrap|browser-transport|browser-http)\\.ts|" +
+          "core/(?:dashboard/contract|_shared/(?:money|context))\\.ts|shell/agent/contract\\.ts)$",
       },
     },
     {

@@ -1,4 +1,5 @@
 import { UtcTimestamp } from "~/core/_shared/time";
+import { connectionBrowserPaths } from "~/shell/browser-transport/contract";
 import { Context, Schema } from "effect";
 import type { InstitutionId } from "~/core/connections/contract";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
@@ -138,10 +139,7 @@ export const ConnectionContinuationReview = Schema.Union([
   )
 );
 
-export const connectionBrowserPaths = {
-  review: "/web/connections/review",
-  begin: "/web/connections/begin",
-} as const;
+export { connectionBrowserPaths };
 
 /** Bounded failure envelope: no locator, credential, or provider detail is reflected. */
 export const ConnectionContinuationFailure = Schema.Struct({

@@ -1,7 +1,7 @@
 import { TransactionListFeature } from "@/features/transactions/feature";
 import { AsyncResult, type Atom } from "effect/reactivity";
 import { Option } from "effect";
-import type { BrowserSessionObservation } from "@/transport/session-binding";
+import type { BrowserSessionObservation } from "@/transport/session-entry";
 import type { FidyClient, ProcessingConsentStatus, WebAuthClient } from "@/transport/client";
 import { workspaceMetadataInitialValue } from "@/transport/workspace-query";
 import { initialConsentObservation, initialTransactionConsent } from "@/session/transaction-entry";

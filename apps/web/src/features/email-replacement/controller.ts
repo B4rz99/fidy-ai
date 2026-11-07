@@ -1,3 +1,4 @@
+import type { EmailReplacementViewState } from "./view";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Option, Predicate, Result, Schema } from "effect";
@@ -11,16 +12,6 @@ import {
   EmailVerificationCode,
   type FidyClient,
 } from "@/transport/client";
-
-export type EmailReplacementViewState =
-  | Readonly<{ _tag: "Editing" }>
-  | Readonly<{ _tag: "Requesting" }>
-  | Readonly<{ _tag: "AwaitingCode"; candidateEmail: EmailAddressType }>
-  | Readonly<{ _tag: "Completing"; candidateEmail: EmailAddressType }>
-  | Readonly<{ _tag: "Invalid"; candidateEmail: EmailAddressType }>
-  | Readonly<{ _tag: "FreshPairingRequired" }>
-  | Readonly<{ _tag: "Replaced" }>
-  | Readonly<{ _tag: "Unavailable" }>;
 
 type StateCommand = Readonly<{
   onStateChange: (state: EmailReplacementViewState) => void;

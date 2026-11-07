@@ -1,6 +1,14 @@
-import { useRouterState } from "@tanstack/react-router";
+import { PendingRead } from "@/ui/components/pending-read";
+import { lazyRouteComponent, useRouterState } from "@tanstack/react-router";
 import { Array, Option } from "effect";
-import { type Dispatch, type JSX, type ReactNode, type SetStateAction, useState } from "react";
+import {
+  type Dispatch,
+  type JSX,
+  type ReactNode,
+  type SetStateAction,
+  Suspense,
+  useState,
+} from "react";
 import { Button } from "@/ui/components/button";
 import {
   RecurringColumns,
@@ -10,17 +18,11 @@ import {
 } from "@/ui/components/recurring";
 import { useTheme } from "@/ui/components/theme";
 import { MonthlyOverview, RecurringToolbar } from "./controls";
-import { OccurrenceDetails } from "./details";
-import { PlanLifecycle } from "./lifecycle";
 import { FiltersForm } from "./filters";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { MonthCalendar } from "./month";
 import { OccurrenceList } from "./occurrence-list";
-import { TransactionLink } from "./transaction-link";
-import { CreatePlan } from "./create-plan";
-import { CreationResult } from "./creation-result";
-import { PlanForm } from "./plan-form";
 import { PlanManagement, Suggestions } from "./management";
 import {
   type Category,
@@ -34,6 +36,13 @@ import {
   type WorkspaceReadState,
   type planStatus,
 } from "./model";
+
+const OccurrenceDetails = lazyRouteComponent(() => import("./details"), "OccurrenceDetails");
+const PlanLifecycle = lazyRouteComponent(() => import("./lifecycle"), "PlanLifecycle");
+const TransactionLink = lazyRouteComponent(() => import("./transaction-link"), "TransactionLink");
+const CreatePlan = lazyRouteComponent(() => import("./create-plan"), "CreatePlan");
+const CreationResult = lazyRouteComponent(() => import("./creation-result"), "CreationResult");
+const PlanForm = lazyRouteComponent(() => import("./plan-form"), "PlanForm");
 
 type Panel =
   | Readonly<{
@@ -394,14 +403,16 @@ const LinkWorkspace = ({
   }>): JSX.Element => {
   const item = selectedOccurrence(props.view, selection);
   return Option.isSome(item) ? (
-    <TransactionLink
-      key={`${item.value.planId}:${item.value.date}`}
-      item={item.value}
-      disabled={props.disabled}
-      save={props.save}
-      notice={props.notice}
-      close={close}
-    />
+    <Suspense fallback={<PendingRead label="Cargando vinculación" />}>
+      <TransactionLink
+        key={`${item.value.planId}:${item.value.date}`}
+        item={item.value}
+        disabled={props.disabled}
+        save={props.save}
+        notice={props.notice}
+        close={close}
+      />
+    </Suspense>
   ) : (
     <main className="grid gap-4 p-5">
       <p>La ocurrencia ya no está en esta vista.</p>
@@ -527,22 +538,24 @@ const EditorSheet = ({
     >
       {notice}
       {Option.isSome(panel) ? (
-        <Editor
-          key={JSON.stringify(panel.value)}
-          panel={panel.value}
-          link={link}
-          created={(receipt) =>
-            setPanel((current) =>
-              current === panel ? Option.some({ kind: "created", ...receipt }) : current
-            )
-          }
-          close={() => setPanel(Option.none())}
-          view={view}
-          categories={categories}
-          disabled={disabled}
-          save={save}
-          statusFor={statusFor}
-        />
+        <Suspense fallback={<PendingRead label="Cargando edición" />}>
+          <Editor
+            key={JSON.stringify(panel.value)}
+            panel={panel.value}
+            link={link}
+            created={(receipt) =>
+              setPanel((current) =>
+                current === panel ? Option.some({ kind: "created", ...receipt }) : current
+              )
+            }
+            close={() => setPanel(Option.none())}
+            view={view}
+            categories={categories}
+            disabled={disabled}
+            save={save}
+            statusFor={statusFor}
+          />
+        </Suspense>
       ) : null}
       {Option.isSome(panel) &&
       panel.value.kind !== "occurrence" &&
@@ -676,3 +689,13 @@ const EmptyMonth = ({
     ) : null}
   </div>
 );
+
+RecurringWorkspace.preloadInteractions = (): Promise<void> =>
+  Promise.all([
+    OccurrenceDetails.preload?.(),
+    PlanLifecycle.preload?.(),
+    TransactionLink.preload?.(),
+    CreatePlan.preload?.(),
+    CreationResult.preload?.(),
+    PlanForm.preload?.(),
+  ]).then(() => undefined);

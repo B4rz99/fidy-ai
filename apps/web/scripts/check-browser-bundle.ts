@@ -261,7 +261,12 @@ const findForbiddenServerImport = (
           ![
             "@fidy/server/client",
             "@fidy/server/browser-bootstrap",
+            "@fidy/server/browser-http",
             "@fidy/server/browser-transport",
+            "@fidy/server/dashboard-contract",
+            "@fidy/server/hosted-turn-api",
+            "@fidy/server/money",
+            "@fidy/server/product-context",
           ].includes(importPath) || !sourceFile.startsWith("src/transport/")
         );
       }

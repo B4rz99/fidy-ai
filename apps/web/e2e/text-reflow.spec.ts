@@ -1,3 +1,4 @@
+import { expectFinancialLabels } from "./financial-form-text";
 import type { Locator, Page } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { playwright } from "./playwright-runtime";
@@ -113,5 +114,41 @@ test("the recurring create action grows around its label and opens the editor wi
       yield* wait(() =>
         expect(page.getByRole("dialog", { name: "Nuevo recurrente", exact: true })).toBeVisible()
       );
+    })
+  ));
+
+const resetTextSize = (): void => {
+  document.documentElement.style.fontSize = "";
+};
+test("Recurring financial labels and guidance scale and reflow with larger text", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() =>
+        signInRecurringThroughCore({ page, deferFreshEntry: true, request, identity: "recurring" })
+      );
+      yield* wait(() => page.setViewportSize(narrowViewport));
+      yield* wait(() => page.goto("/app/recurring?month=2026-10"));
+      yield* wait(() =>
+        page.getByRole("button", { name: "Nuevo recurrente", exact: true }).click()
+      );
+      const editor = page.getByRole("dialog", { name: "Nuevo recurrente", exact: true });
+      const form = editor.locator("form");
+      yield* expectFinancialLabels(form, "14px");
+      yield* enlargeText(page);
+      yield* expectFinancialLabels(form, "28px");
+      yield* expectReflow(page);
+      const guidance = form.getByText("Cuenta: sin cuentas disponibles.", { exact: false });
+      yield* wait(() => expect(guidance).toHaveCSS("font-size", "28px"));
+      yield* wait(() =>
+        page.screenshot({ path: test.info().outputPath("recurring-enlarged.png"), fullPage: true })
+      );
+      yield* wait(() => page.setViewportSize({ width: 900, height: 800 }));
+      yield* expectFinancialLabels(form, "28px");
+      yield* expectReflow(page);
+      yield* wait(() => page.evaluate(resetTextSize));
+      yield* expectFinancialLabels(form, "14px");
     })
   ));

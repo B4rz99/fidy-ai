@@ -112,7 +112,7 @@ const CaptureInputs = ({
   <>
     <div className="flex flex-col gap-2">
       {Option.match(onCurrency, {
-        onNone: () => <p>Moneda · {currency}</p>,
+        onNone: () => <p className="text-sm">Moneda · {currency}</p>,
         onSome: (change) => (
           <>
             <Label htmlFor="transaction-currency">Moneda</Label>

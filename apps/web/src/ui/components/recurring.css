@@ -315,7 +315,7 @@
   border-bottom: 1px solid var(--application-line);
 }
 :is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"]) [data-slot="button"] {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 400;
   border-radius: 10px;
   min-height: 42px;
@@ -323,7 +323,7 @@
 :is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"]) [data-slot="input"] {
   min-height: 44px;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 @media (max-width: 900px) {
   :is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"]) [data-slot="input"],
@@ -332,8 +332,8 @@
   }
 }
 :is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"]) [data-slot="label"] {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 0.875rem;
+  font-weight: 600;
   line-height: 1.5;
 }
 [data-recurring-slot="occurrence-detail"] > p:first-child {
@@ -355,6 +355,10 @@
 }
 [data-recurring-slot="plan-form"] {
   padding: 0;
+  container: recurring-form / inline-size;
+}
+[data-recurring-slot="plan-form"] p {
+  font-size: 0.875rem;
 }
 [data-recurring-slot="plan-form"] fieldset {
   gap: 20px;
@@ -450,7 +454,7 @@
 :is([data-recurring-slot="workspace"], [data-recurring-slot="mobile-panel"])
   [data-recurring-slot="field"]
   button {
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 400;
   border-radius: 10px;
   min-height: 44px;
@@ -474,7 +478,7 @@
 [data-recurring-slot="date-fields"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-@media (max-width: 400px) {
+@container recurring-form (width < 24rem) {
   [data-recurring-slot="plan-form"] fieldset,
   [data-recurring-slot="date-fields"] {
     grid-template-columns: 1fr;

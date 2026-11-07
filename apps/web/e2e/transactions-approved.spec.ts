@@ -1,3 +1,4 @@
+import { expectFinancialLabels } from "./financial-form-text";
 import type { Page } from "@playwright/test";
 import { type Cause, DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
@@ -821,6 +822,7 @@ test("120-character Counterparty stays fully readable in the desktop detail rail
 const enlargeCaptureText = (): void => {
   document.documentElement.style.fontSize = "32px";
 };
+const captureTextWidths = { narrow: 320, intermediate: 900, mobile: 390 };
 const captureOverflows = (): boolean => document.documentElement.scrollWidth > window.innerWidth;
 const captureLayoutJourney = (page: Page): Journey =>
   Effect.gen(function* () {
@@ -831,10 +833,16 @@ const captureLayoutJourney = (page: Page): Journey =>
     const amount = page.getByLabel("Monto", { exact: true });
     const fields = [amount, page.getByLabel("Contraparte (opcional)", { exact: true }), notes];
     yield* wait(() => expect(amount).toHaveAttribute("inputmode", "decimal"));
+    const form = page.getByRole("form", { name: "Registrar transacción" });
+    yield* expectFinancialLabels(form, "14px");
     for (const field of fields) {
       yield* wait(() => expect(field).toHaveCSS("font-size", "16px"));
     }
     yield* wait(() => page.evaluate(enlargeCaptureText));
+    yield* expectFinancialLabels(form, "28px");
+    for (const name of [/^Categoría:/u, /^Fecha:/u]) {
+      yield* wait(() => expect(form.getByRole("button", { name })).toHaveCSS("font-size", "26px"));
+    }
     for (const field of fields) {
       yield* wait(() => expect(field).toHaveCSS("font-size", "32px"));
     }
@@ -845,6 +853,14 @@ const captureLayoutJourney = (page: Page): Journey =>
     for (const field of fields) {
       yield* wait(() => expect(field).toHaveCSS("font-size", "32px"));
     }
+    for (const width of Object.values(captureTextWidths)) {
+      yield* wait(() => page.setViewportSize({ width, height: 844 }));
+      yield* expectFinancialLabels(form, "28px");
+      expect(yield* wait(() => page.evaluate(captureOverflows))).toBe(false);
+    }
+    yield* wait(() =>
+      page.screenshot({ path: test.info().outputPath("capture-enlarged-dark.png"), fullPage: true })
+    );
     yield* wait(() => notes.fill("Primera línea\nSegunda línea\nTercera línea\nCuarta línea"));
     yield* wait(() => notes.focus());
     yield* wait(() => notes.scrollIntoViewIfNeeded());

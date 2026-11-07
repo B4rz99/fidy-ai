@@ -7,6 +7,7 @@ import {
   PaymentEnrollment,
   PaymentRequestId,
   PaymentSubmission,
+  SubscriptionStatus,
 } from "../../src/core/subscription/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { Cause, Clock, Config, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
@@ -25,7 +26,9 @@ import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery } from "./operations";
 import { makeCoreHttp } from "../core-http/runtime";
 import { SubscriptionEnrollmentGroup } from "../../src/shell/subscription/contract";
-import { consentHistoryTestSchema } from "../d1-test-fixture";
+import { consentHistoryTestSchema, installCurrentTestObjects } from "../d1-test-fixture";
+import { executeCanonicalWork } from "../canonical-operations/operations";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import {
   loadWompiIntegritySecret,
   loadWompiPrivateKey,
@@ -1824,6 +1827,8 @@ it.each([
         let approved = false;
         let sourceCreations = 0;
         let chargeCreations = 0;
+        let sourceVoided = false;
+        let sourceVoids = 0;
         const chargeFacts = Schema.Struct({
           reference: Schema.String,
           amount_in_cents: Schema.Int,
@@ -1837,7 +1842,7 @@ it.each([
             data: {
               id: 8276,
               type: "DAVIPLATA",
-              status: "AVAILABLE",
+              status: sourceVoided ? "VOIDED" : "AVAILABLE",
               customer_email: "payer@example.com",
               token: "daviplata_devtest_once",
               public_data: { number_document: "document-canary", phone_number: "product-canary" },
@@ -1905,6 +1910,11 @@ it.each([
               });
             }
             if (url.pathname.startsWith("/v1/payment_sources/")) {
+              if (new Request(input, init).method === "PUT") {
+                expect(url.pathname).toBe("/v1/payment_sources/8276/void");
+                sourceVoids++;
+                sourceVoided = true;
+              }
               return Promise.resolve(available());
             }
             return respondTransaction(input, init);
@@ -2031,6 +2041,13 @@ it.each([
         for (const secretValue of ["daviplata_devtest_once", "document-canary", "product-canary"]) {
           expect(retainedText).not.toContain(secretValue);
         }
+        yield* proveSandboxCancellation({
+          environment,
+          subject: fixture.subject,
+          outcome: "approved",
+        });
+        expect(sourceVoids).toBe(1);
+        expect(chargeCreations).toBe(1);
       })
     )
 );
@@ -2409,6 +2426,100 @@ it.each([
   )
 );
 
+const proveSandboxCancellation = (
+  input: Readonly<{
+    environment: Awaited<ReturnType<typeof setup>>["environment"];
+    subject: TransactionSubject;
+    outcome: "approved" | "declined";
+  }>
+): Effect.Effect<void, TestPromiseFailure> =>
+  Effect.gen(function* () {
+    const { environment, subject } = input;
+    const db = environment.DB;
+    yield* fromTestPromise(() =>
+      installCurrentTestObjects({ db, tables: ["canonical_child_guard"] })
+    );
+    const standing = Effect.fnUntraced(function* () {
+      return yield* executeProtectedSubscriptionQuery({
+        db,
+        subject,
+        operation: "subscription.getSubscriptionStatus",
+      }).pipe(
+        Effect.flatMap((response) => fromTestPromise(() => response.json())),
+        Effect.flatMap(
+          Schema.decodeUnknownEffect(
+            Schema.Struct({ data: Schema.toCodecJson(SubscriptionStatus) })
+          )
+        )
+      );
+    });
+    const cancel = Effect.fnUntraced(function* () {
+      return yield* executeCanonicalWork({
+        completion: Option.none(),
+        db,
+        subject,
+        current: DateTime.nowUnsafe().epochMilliseconds,
+        bucket: Option.none(),
+        hostedFence: Option.none(),
+        inference: Option.none(),
+        oauthConfirmation: Option.none(),
+        work: {
+          _tag: "Call",
+          operation: CanonicalOperationId.make("subscription.cancelSubscription"),
+          input: {},
+        },
+      });
+    });
+    const before = yield* standing();
+    const first = yield* cancel();
+    if (input.outcome === "declined") {
+      expect(first.status).toBe(404);
+      expect(before.data.paidSubscription).toEqual(Option.none());
+      return;
+    }
+    expect(before.data.accessTier).toBe("pro");
+    expect(Option.isSome(before.data.paidSubscription)).toBe(true);
+    expect(first.status).toBe(200);
+    const receipt = yield* fromTestPromise(() => first.json());
+    const repeated = yield* cancel();
+    expect(repeated.status).toBe(200);
+    expect(yield* fromTestPromise(() => repeated.json())).toEqual(receipt);
+    const runEffect = Effect.runPromiseWith(yield* Effect.context<never>());
+    yield* fromTestPromise(() =>
+      runBillingCollectionWorkflow({
+        environment,
+        payload: { version: 2, kind: "source-cancellation", userId: subject.userId },
+        sleep: (_name, duration) =>
+          runEffect(
+            fromTestPromise(() =>
+              db
+                .prepare(
+                  "SELECT source_cancellation FROM subscription_cancellation_context WHERE user_id=?"
+                )
+                .bind(subject.userId)
+                .first<string>("source_cancellation")
+            ).pipe(
+              Effect.flatMap((pending) =>
+                pending === "void-pending" ? Effect.sleep(duration) : Effect.void
+              )
+            )
+          ),
+        activity: (_name, _options, work) => work(),
+      })
+    );
+    const after = yield* standing();
+    expect(after.data.accessTier).toBe("pro");
+    expect(after.data.paidSubscription).toEqual(before.data.paidSubscription);
+    expect(after.data.recentAttempts).toEqual(before.data.recentAttempts);
+    const cancellation = Option.getOrThrow(after.data.cancellation);
+    expect(["detached", "voided"]).toContain(cancellation.sourceCancellation);
+    expect(
+      yield* fromTestPromise(() =>
+        db.prepare("SELECT count(*) AS total FROM subscription_cancellations").first()
+      )
+    ).toEqual({ total: 1 });
+  }).pipe(Effect.mapError(() => new TestPromiseFailure()));
+
 const proveSandboxSettlement = (
   input: Readonly<{
     environment: Awaited<ReturnType<typeof setup>>["environment"];
@@ -2474,7 +2585,7 @@ const sandboxCases = [
 it
   .runIf(Effect.runSync(Config.String("FIDY_NEQUI_SANDBOX").pipe(Config.withDefault("0"))) === "1")
   .each(sandboxCases)(
-  "proves Sandbox Nequi $period first payment with $outcome outcome",
+  "proves Sandbox Nequi $period settlement and cancellation with $outcome outcome",
   (scenario) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -2593,6 +2704,11 @@ it
           attemptId: submitted.billingAttempt.id,
           outcome: scenario.outcome,
         });
+        yield* proveSandboxCancellation({
+          environment,
+          subject: fixture.subject,
+          outcome: scenario.outcome,
+        });
       })
     ),
   600_000
@@ -2603,7 +2719,7 @@ it
     Effect.runSync(Config.String("FIDY_DAVIPLATA_SANDBOX").pipe(Config.withDefault("0"))) === "1"
   )
   .each(sandboxCases)(
-  "proves Sandbox DaviPlata $period first payment with $outcome outcome",
+  "proves Sandbox DaviPlata $period settlement and cancellation with $outcome outcome",
   (scenario) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -2711,6 +2827,11 @@ it
           attemptId: submitted.billingAttempt.id,
           outcome: scenario.outcome,
         }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "settlement" })));
+        yield* proveSandboxCancellation({
+          environment,
+          subject: fixture.subject,
+          outcome: scenario.outcome,
+        }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "cancellation" })));
       }).pipe(
         Effect.catchCauseIf(
           (cause) => !Cause.hasInterrupts(cause),

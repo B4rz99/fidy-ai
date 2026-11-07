@@ -24,7 +24,7 @@ jobs:
         with:
           bun-version: "1.4.1"
       - run: bash scripts/install-workspace.sh
-      - name: Verify reusable sources and matching first-payment settlement
+      - name: Verify reusable sources, first-payment settlement and cancellation
         env:
           FIDY_NEQUI_SANDBOX: "1"
           WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}
@@ -40,5 +40,7 @@ jobs:
             '- Reusable NEQUI source availability and approval were authenticated.' \
             '- Weekly, monthly and yearly first payments reached verified success.' \
             '- Declined weekly first payment reached the existing bounded failure decision.' \
+            '- Successful periods were cancelled canonically; retry retained the receipt and paid history.' \
+            '- The reusable source was detached; declined settlement had no paid Subscription to cancel.' \
             '- Evidence contains no numbers, tokens, provider identities or response bodies.' \
             '- Local D1/activity harness plus real Sandbox provider, not Production or native-platform launch approval.' >> "$GITHUB_STEP_SUMMARY"

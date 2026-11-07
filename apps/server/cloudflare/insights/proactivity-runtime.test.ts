@@ -97,7 +97,11 @@ it("strips untrusted diagnostic fields before persisting proactivity Workflow pa
       };
       const create = vi
         .fn<Workflow<ProactivityDeliveryWork>["create"]>()
-        .mockResolvedValue(instance);
+        .mockImplementation((options) =>
+          options?.id === undefined || options.id.length > 100
+            ? Promise.reject(new Error("Workflow instance ID exceeds provider limit"))
+            : Promise.resolve(instance)
+        );
       const workflow: Workflow<ProactivityDeliveryWork> = {
         create,
         get: unexpected,
@@ -105,7 +109,7 @@ it("strips untrusted diagnostic fields before persisting proactivity Workflow pa
         deleteBatch: unexpected,
       };
       const work = {
-        kind: "weekly-question" as const,
+        kind: "proactivity-delivery" as const,
         version: 1 as const,
         userId: proactivityTestUsers[0],
         id: "85000000-0000-4000-8000-000000000099",

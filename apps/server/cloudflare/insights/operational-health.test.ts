@@ -43,7 +43,12 @@ it.each(["weekly-summary", "weekly-question", "proactivity-delivery"] as const)(
           insightEventId: deliveryId,
         });
         const id = yield* proactivityWorkflowId(work);
-        expect(id).toBe(`weekly-${userId}-${kind}-${deliveryId}`);
+        expect(id.length).toBeLessThanOrEqual(100);
+        expect(id).toBe(
+          kind === "proactivity-delivery"
+            ? `proactivity-${userId}-${deliveryId}`
+            : `weekly-${userId}-${kind}-${deliveryId}`
+        );
         expect(Schema.is(ProactivityWorkflowId)(id)).toBe(true);
         for (const invalid of [
           `other-${userId}-${kind}-${deliveryId}`,
@@ -51,6 +56,7 @@ it.each(["weekly-summary", "weekly-question", "proactivity-delivery"] as const)(
           `weekly-${"-".repeat(36)}-${kind}-${deliveryId}`,
           `weekly-${userId}-${kind}-${"f".repeat(36)}`,
           `${id}-extra`,
+          `weekly-${userId}-proactivity-delivery-${deliveryId}`,
         ]) {
           expect(Schema.is(ProactivityWorkflowId)(invalid)).toBe(false);
         }
@@ -123,7 +129,7 @@ it("observes only enabled Proactivity work and its real Workflow identities with
       expect(inspected).toEqual([
         `weekly-${userId}-weekly-summary-${generated.id}`,
         `weekly-${weeklySummaryOtherUser}-weekly-question-${questionId}`,
-        `weekly-${userId}-proactivity-delivery-${deliveryId}`,
+        `proactivity-${userId}-${deliveryId}`,
       ]);
       const observed = yield* observeProactivityWork({
         db,

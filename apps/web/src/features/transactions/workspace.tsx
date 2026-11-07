@@ -294,7 +294,10 @@ const BulkPanel = (
   return (
     <BulkTransactionCorrection
       renderForm={props.renderPanel}
-      transactions={panel.transactions}
+      transactions={Array.map(
+        panel.transactions,
+        (selected) => props.transactions.find((record) => record.id === selected.id) ?? selected
+      )}
       categories={props.categories}
       timeZone={props.currentUser.timeZone}
       onCancel={close}
@@ -568,7 +571,8 @@ const refreshLocked = (
     onSome: (owner) =>
       owner.status === "saving" ||
       owner.status === "recovering" ||
-      (panelEditing(panel) && owner.status === "idle"),
+      owner.status === "refreshing" ||
+      (panelEditing(panel) && !owner.locked),
   });
 const WorkspaceContent = ({
   props,
@@ -584,7 +588,8 @@ const WorkspaceContent = ({
   const corrections = use(TransactionCorrectionContext);
   const correctionBusy = Option.exists(
     corrections,
-    (owner) => owner.status === "saving" || owner.status === "recovering"
+    (owner) =>
+      owner.status === "saving" || owner.status === "recovering" || owner.status === "refreshing"
   );
   const locked = panelLocked(panel) || correctionBusy;
   return (

@@ -1,6 +1,6 @@
 import { MoneyField } from "./money-field";
 import { parseMoneyInput } from "@/transport/money-input";
-import { RefreshButton } from "@/ui/components/refresh-button";
+import { CorrectionRecoveryFeedback } from "./correction-feedback";
 import { useTransactionCorrections } from "./correction-context";
 
 import { useState } from "react";
@@ -197,23 +197,8 @@ const BulkTextFields = ({
     </div>
   </>
 );
-const BulkFeedback = ({
-  status,
-  recover,
-}: Readonly<{ status: CorrectionStatus; recover: () => void }>): JSX.Element => (
-  <>
-    {status === "invalid" ? <p role="alert">Revisa los campos que quieres cambiar.</p> : null}
-    {status === "rejected" || status === "uncertain" ? (
-      <div role="alert">
-        <p>
-          {status === "rejected"
-            ? "No se guardó ningún cambio. Actualiza el historial y revisa la selección."
-            : "No pudimos confirmar los cambios. Actualiza el historial antes de volver a editar."}
-        </p>
-        <RefreshButton variant="outline" onClick={recover} label="Actualizar historial" />
-      </div>
-    ) : null}
-  </>
+const BulkFeedback = ({ status }: Readonly<{ status: CorrectionStatus }>): JSX.Element => (
+  <>{status === "invalid" ? <p role="alert">Revisa los campos que quieres cambiar.</p> : null}</>
 );
 const BulkHeading = ({ count }: Readonly<{ count: number }>): JSX.Element => (
   <header>
@@ -232,19 +217,20 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
     date: "",
   });
   const corrections = useTransactionCorrections();
-  const [invalid, setInvalid] = useState(false);
+  const [submission, setSubmission] = useState<"pristine" | "invalid" | "submitted">("pristine");
   const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
-  const status: CorrectionStatus = feedback === "idle" && invalid ? "invalid" : feedback;
+  const status: CorrectionStatus =
+    !corrections.locked && submission === "invalid" ? "invalid" : feedback;
   const locked = corrections.locked;
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     if (locked) return;
     const changes = draftChanges(draft, props);
     if (Option.isNone(changes) || Object.keys(changes.value).length === 0) {
-      setInvalid(true);
+      setSubmission("invalid");
       return;
     }
-    setInvalid(false);
+    setSubmission("submitted");
     corrections.submit({ kind: "bulk", transactions: props.transactions, changes: changes.value });
   };
   return props.renderForm(
@@ -258,7 +244,10 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
       <p className="text-sm text-muted-foreground">
         Los campos vacíos o sin cambiar conservan su valor en cada transacción.
       </p>
-      <BulkFeedback status={status} recover={corrections.recover} />
+      <BulkFeedback status={status} />
+      {submission === "submitted" || corrections.status !== "recovered" ? (
+        <CorrectionRecoveryFeedback kind="bulk" />
+      ) : null}
       <div data-transaction-slot="transaction-form-actions">
         <Button variant="outline" disabled={status === "saving"} onClick={props.onCancel}>
           Cancelar

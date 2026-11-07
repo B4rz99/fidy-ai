@@ -121,7 +121,10 @@ const DetailFrame = ({
           (props.mode._tag === "Deleting" && props.mode.status === "saving") ||
           Option.exists(
             use(TransactionCorrectionContext),
-            (owner) => owner.status === "saving" || owner.status === "recovering"
+            (owner) =>
+              owner.status === "saving" ||
+              owner.status === "recovering" ||
+              owner.status === "refreshing"
           )
         }
       >
@@ -156,7 +159,7 @@ export const TransactionDetail = (props: DetailProps): JSX.Element => {
   if (props.mode._tag === "Editing") {
     return (
       <TransactionCorrection
-        key={`${props.transaction.id}:${props.transaction.revision}`}
+        key={props.transaction.id}
         renderForm={(form) => props.renderPanel(<DetailFrame props={props}>{form}</DetailFrame>)}
         transaction={props.transaction}
         categories={props.categories}

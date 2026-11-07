@@ -14,27 +14,37 @@ type CategoryProps = Readonly<{
   categories: ReadonlyArray<Category>;
   disabled: boolean;
 }>;
-type SaveStatus = "idle" | "saving" | "rejected" | "uncertain";
+type SaveStatus = "idle" | "saving" | "rejected" | "uncertain" | "refreshing" | "recovered";
+const feedbackCopy: Readonly<Record<SaveStatus, string>> = {
+  idle: "",
+  saving: "Guardando categoría…",
+  refreshing: "No se guardó la categoría. Actualizando el historial automáticamente.",
+  recovered: "No se guardó la categoría. Ya actualizamos el historial. Puedes volver a elegirla.",
+  rejected: "No se guardó la categoría. No pudimos actualizar el historial.",
+  uncertain: "No pudimos confirmar el cambio. Actualiza el historial antes de volver a editar.",
+};
 const CategoryFeedback = ({
   status,
   onRefresh,
-}: Readonly<{ status: SaveStatus; onRefresh: () => void }>): JSX.Element => (
-  <>
-    {status === "saving" ? (
-      <output className="text-xs text-muted-foreground">Guardando categoría…</output>
-    ) : null}
-    {status === "rejected" || status === "uncertain" ? (
+}: Readonly<{ status: SaveStatus; onRefresh: () => void }>): JSX.Element => {
+  if (status === "rejected" || status === "uncertain") {
+    return (
       <div className="text-xs">
-        <p role="alert">
-          {status === "rejected"
-            ? "No se guardó la categoría. Actualiza el historial."
-            : "No pudimos confirmar el cambio. Actualiza el historial antes de volver a editar."}
-        </p>
-        <RefreshButton variant="ghost" onClick={onRefresh} label="Actualizar historial" />
+        <p role="alert">{feedbackCopy[status]}</p>
+        <RefreshButton
+          variant="ghost"
+          onClick={onRefresh}
+          label={status === "rejected" ? "Reintentar" : "Actualizar historial"}
+        />
       </div>
-    ) : null}
-  </>
-);
+    );
+  }
+  return status === "idle" ? (
+    <></>
+  ) : (
+    <output className="text-xs text-muted-foreground">{feedbackCopy[status]}</output>
+  );
+};
 const CategoryCorrection = (props: CategoryProps): JSX.Element => {
   const corrections = useTransactionCorrections();
   const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
@@ -42,7 +52,7 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
     ? feedback
     : "idle";
   const change = (categoryId: string): void => {
-    if (props.disabled || status !== "idle" || categoryId === props.transaction.categoryId) return;
+    if (props.disabled || corrections.locked || categoryId === props.transaction.categoryId) return;
     const category = Option.fromNullishOr(props.categories.find((item) => item.id === categoryId));
     if (Option.isNone(category)) return;
     corrections.submit({
@@ -56,7 +66,7 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
     <div className="min-w-0">
       <InlineChoiceDropdown
         label={`Cambiar categoría de ${props.row.counterpartyLabel}`}
-        disabled={props.disabled || status !== "idle"}
+        disabled={props.disabled || corrections.locked}
         leading={<CategoryVisual label={props.row.categoryLabel} bubble large={false} />}
         value={props.transaction.categoryId}
         options={props.categories.map((category) => ({

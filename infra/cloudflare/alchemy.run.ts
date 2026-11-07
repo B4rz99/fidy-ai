@@ -73,6 +73,7 @@ const initializeLocalErasureRegistry = Effect.fn(function* (
 });
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
+const releaseAttemptId = Config.String("RELEASE_ATTEMPT_ID").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));
 const hostedAiModel = Config.schema(ApprovedOpenAiModel, "HOSTED_AI_MODEL");
 const openAiApiKey = Config.Redacted("OPENAI_API_KEY");
@@ -272,6 +273,7 @@ export default Alchemy.Stack(
         contractDigest: development ? "" : yield* contractDigest,
         development,
         gitRevision: development ? "" : yield* releaseGitRevision,
+        releaseAttemptId: development ? "" : yield* releaseAttemptId,
         stage,
       })
     ).pipe(Effect.mapError(deploymentConfigError));
@@ -370,7 +372,7 @@ export default Alchemy.Stack(
       version: production
         ? {
             traffic: 0,
-            tag: releaseMetadata.gitRevision,
+            tag: releaseMetadata.versionTag,
             message: isolation === "isolated" ? "isolated" : "release",
           }
         : undefined,
@@ -598,7 +600,7 @@ export default Alchemy.Stack(
 
     const ingress = yield* Cloudflare.Worker("Ingress", {
       main: "../../apps/server/cloudflare/public-worker.ts",
-      version: production ? { traffic: 0, tag: releaseMetadata.gitRevision } : undefined,
+      version: production ? { traffic: 0, tag: releaseMetadata.versionTag } : undefined,
       observability: freeTierWorkerObservability,
       compatibility: { date: "2026-09-08" },
       dev: {

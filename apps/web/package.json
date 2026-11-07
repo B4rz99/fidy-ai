@@ -21,8 +21,8 @@
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",
-    "@dnd-kit/dom": "0.5.1",
-    "@dnd-kit/react": "0.5.1",
+    "@dnd-kit/dom": "0.5.3",
+    "@dnd-kit/react": "0.5.3",
     "@effect/atom-react": "4.0.6",
     "@effect/platform-browser": "4.0.6",
     "@fidy/server": "workspace:0.0.0",

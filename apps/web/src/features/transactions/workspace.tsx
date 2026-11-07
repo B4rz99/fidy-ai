@@ -1,4 +1,6 @@
 import { formatMoneyWithCode } from "@/transport/money";
+import { type CaptureHistoryVersion, ManualCaptureContext } from "./manual-capture-context";
+import { ManualCapturePanel } from "./manual-capture-panel";
 import { TransactionPeriodControls } from "./period-controls";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
@@ -24,7 +26,6 @@ import { TransactionDetail } from "./detail";
 import { TransactionSummary } from "./summary";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
-import { TransactionCapture } from "./capture";
 import type { TransactionPanel } from "./panel-state";
 import type { HistoryState } from "./history";
 import {
@@ -37,6 +38,7 @@ import {
 
 type WorkspaceProps = Readonly<{
   locate: Option.Option<string>;
+  captureHistoryVersion: Option.Option<CaptureHistoryVersion>;
   apiClient: FidyClient;
   categories: ReadonlyArray<Category>;
   currentUser: Pick<CurrentUser, "locale" | "timeZone">;
@@ -167,55 +169,26 @@ type PanelProps = WorkspaceProps &
     onPanel: (panel: TransactionPanel) => void;
     renderPanel: (content: JSX.Element) => JSX.Element;
   }>;
-const CapturePanel = ({
-  panel,
-  onPanel,
-  renderPanel,
-  ...props
-}: PanelProps &
-  Readonly<{
-    panel: Extract<TransactionPanel, { _tag: "Capture" }>;
-  }>): JSX.Element => (
-  <TransactionCapture
-    currency={Option.none()}
-    initial={{}}
-    direction={Option.none()}
-    disabled={false}
-    categories={props.categories}
-    onCancel={Option.some(() => onPanel({ _tag: "Summary" }))}
-    renderForm={(form) =>
-      renderPanel(
-        <section className="flex flex-col gap-6">
-          <header className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Registrar transacción</h2>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={panel.status === "saving"}
-              onClick={() => onPanel({ _tag: "Summary" })}
-              aria-label="Cerrar registro"
-            >
-              ×
-            </Button>
-          </header>
-          {form}
-        </section>
-      )
-    }
-    apiClient={props.apiClient}
-    timeZone={props.currentUser.timeZone}
-    status={panel.status}
-    onStatus={(status) => onPanel({ _tag: "Capture", status })}
-    onCheckHistory={props.onRefresh}
-    onCreated={(transaction) => {
-      toast.success("Transacción registrada", {
-        description: `${formatMoneyWithCode({ money: transaction.money, locale: props.currentUser.locale })} · ${Option.getOrElse(transaction.counterparty, () => "Contraparte no identificada")} · ${formatOccurrence({ locale: props.currentUser.locale, timeZone: props.currentUser.timeZone, occurredAt: transaction.occurredAt })}`,
-      });
-      onPanel({ _tag: "Summary" });
-      props.onRefresh();
-    }}
-  />
-);
+const CapturePanel = ({ onPanel, renderPanel, ...props }: PanelProps): JSX.Element => {
+  const corrections = use(TransactionCorrectionContext);
+  return renderPanel(
+    <ManualCapturePanel
+      apiClient={props.apiClient}
+      categories={props.categories}
+      currentUser={props.currentUser}
+      version={Option.getOrElse(props.captureHistoryVersion, () => ({ month: "", generation: 0 }))}
+      editable={props.editable}
+      waiting={Option.exists(corrections, (owner) => owner.status === "recovering")}
+      onClose={() => onPanel({ _tag: "Summary" })}
+      onRefresh={props.onRefresh}
+      onCreated={(transaction) => {
+        toast.success("Transacción registrada", {
+          description: `${formatMoneyWithCode({ money: transaction.money, locale: props.currentUser.locale })} · ${Option.getOrElse(transaction.counterparty, () => "Contraparte no identificada")} · ${formatOccurrence({ locale: props.currentUser.locale, timeZone: props.currentUser.timeZone, occurredAt: transaction.occurredAt })}`,
+        });
+      }}
+    />
+  );
+};
 const DetailPanel = ({
   panel,
   onPanel,
@@ -341,7 +314,7 @@ const scopeLabel = (props: WorkspaceProps): string => {
 };
 const WorkspacePanel = (props: PanelProps): JSX.Element => {
   if (props.panel._tag === "Bulk") return <BulkPanel {...props} panel={props.panel} />;
-  if (props.panel._tag === "Capture") return <CapturePanel {...props} panel={props.panel} />;
+  if (props.panel._tag === "Capture") return <CapturePanel {...props} />;
   if (props.panel._tag === "Detail") return <DetailPanel {...props} panel={props.panel} />;
   return props.renderPanel(
     <TransactionSummary
@@ -732,9 +705,43 @@ const WorkspacePeriod = ({
     </p>
   </>
 );
+const CaptureNotice = ({
+  panel,
+  onPanel,
+}: Pick<WorkspaceContentProps, "panel" | "onPanel">): JSX.Element => {
+  const capture = use(ManualCaptureContext);
+  if (
+    panel._tag === "Capture" ||
+    !Option.exists(capture, (owner) => Option.isSome(owner.attempt))
+  ) {
+    return <></>;
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-3 px-4 py-2">
+      <p>Hay un borrador por revisar. El guardado original sigue sin confirmar.</p>
+      <Button variant="outline" onClick={() => onPanel({ _tag: "Capture", status: "uncertain" })}>
+        Ver borrador
+      </Button>
+    </div>
+  );
+};
+const capturePanelStatus = (
+  panel: TransactionPanel,
+  capture: React.ContextType<typeof ManualCaptureContext>
+): TransactionPanel =>
+  panel._tag === "Capture" && Option.isSome(capture)
+    ? { _tag: "Capture", status: capture.value.status }
+    : panel;
 export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
-  const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
+  const capture = use(ManualCaptureContext);
+  const [panel, setPanel] = useState<TransactionPanel>(() =>
+    Option.exists(capture, (owner) => owner.status === "uncertain")
+      ? { _tag: "Capture", status: "uncertain" }
+      : { _tag: "Summary" }
+  );
+  const onPanel = setPanel;
+  const activePanel = capturePanelStatus(panel, capture);
   const [localFilters, setFilters] = useState(emptyLocalFilters);
   const filters = {
     ...localFilters,
@@ -743,7 +750,7 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const onFilters = (next: WorkspaceFilters): void => {
     setFilters({ search: next.search, direction: next.direction, categoryId: next.categoryId });
     props.dateFilter.onChange(next.date);
-    if (panel._tag === "Bulk") onPanel({ _tag: "Summary" });
+    if (activePanel._tag === "Bulk") onPanel({ _tag: "Summary" });
   };
   const visible = props.transactions.filter((transaction) =>
     matchesFilters(transaction, filters, props.currentUser.timeZone)
@@ -755,11 +762,11 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
     timeZone: props.currentUser.timeZone,
     counterpartyFallback: "Contraparte no identificada",
   });
-  const editing = panelEditing(panel);
+  const editing = panelEditing(activePanel);
   return (
     <>
       <Toaster position="bottom-right" richColors />
-      <TransactionSurface panelOpen={panelEditing(panel) || panel._tag === "Detail"}>
+      <TransactionSurface panelOpen={panelEditing(activePanel) || activePanel._tag === "Detail"}>
         <WorkspaceHeader
           disabled={editing || (!props.editable && !props.readOnly)}
           readOnly={props.readOnly}
@@ -767,12 +774,13 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
         />
         <WorkspacePeriod props={props} disabled={editing || (!props.editable && !props.readOnly)} />
         {props.queryNotice}
+        <CaptureNotice panel={activePanel} onPanel={onPanel} />
         <ContinuationNotice {...props} />
         <WorkspaceContent
           onTool={() => setTool(tool === "closed" ? "category" : "closed")}
           tool={tool}
           props={props}
-          panel={panel}
+          panel={activePanel}
           onPanel={onPanel}
           filters={filters}
           onFilters={onFilters}

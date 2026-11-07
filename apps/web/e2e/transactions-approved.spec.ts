@@ -46,7 +46,7 @@ const installWorkspace = (page: Page, rows = [row(1)]): Journey =>
     yield* wait(() => installUser(page));
     yield* wait(() => installCategories({ page, categories }));
     yield* wait(() =>
-      page.route(`${apiOrigin}/web/session/binding`, (route) =>
+      page.route(`${apiOrigin}/web/session/binding{,?*}`, (route) =>
         route.fulfill({
           contentType: "application/json",
           body: JSON.stringify({ binding: null }),
@@ -144,37 +144,271 @@ for (const explicit of [false, true]) {
     page,
   }) => Effect.runPromise(captureJourney(page, explicit)));
 }
+const expectRecoveredCapture = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("12345,67"));
+    yield* wait(() =>
+      expect(page.getByLabel("Contraparte (opcional)")).toHaveValue("Tienda La Esquina")
+    );
+    yield* wait(() =>
+      expect(page.getByLabel("Notas (opcional)")).toHaveValue("n".repeat(maximumNotes))
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Categoría: Transporte", exact: true })).toBeVisible()
+    );
+  });
 const uncertainCaptureJourney = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* installWorkspace(page);
     const requests: Array<unknown> = [];
     yield* recordMutation(page, "/transactions", { requests, outcome: "uncertain" });
     yield* openCapture(page);
+    yield* wait(() => page.getByLabel("Contraparte (opcional)").fill("Tienda La Esquina"));
+    yield* captureCategoryNotes(page);
     yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    yield* wait(() => expect(page.getByRole("alert")).toContainText("Guardado sin confirmar"));
     yield* wait(() =>
-      expect(page.getByRole("alert")).toContainText(
-        "No pudimos confirmar si la transacción se guardó"
-      )
-    );
-    yield* wait(() =>
-      expect(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
-    );
-    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toBeDisabled());
-    yield* wait(() =>
-      expect(page.getByRole("combobox", { name: "Moneda", exact: true })).toBeDisabled()
+      expect(
+        page.getByRole("button", { name: "No la encontré · editar borrador", exact: true })
+      ).toBeDisabled()
     );
     expect(requests).toHaveLength(1);
     yield* wait(() =>
       page.getByRole("button", { name: "Actualizar historial", exact: true }).click()
     );
+    const resume = page.getByRole("button", {
+      name: "No la encontré · editar borrador",
+      exact: true,
+    });
+    yield* wait(() => expect(resume).toBeEnabled());
     yield* wait(() =>
-      expect(page.getByRole("region", { name: "Resumen de transacciones" })).toBeVisible()
+      expect(page.getByRole("region", { name: "Datos del intento", exact: true })).toContainText(
+        "COP 12.345,67"
+      )
     );
+    yield* wait(() =>
+      expect(page.getByRole("region", { name: "Datos del intento", exact: true })).toContainText(
+        "24-10-2026"
+      )
+    );
+    yield* wait(() => resume.click());
+    yield* expectRecoveredCapture(page);
     expect(requests).toHaveLength(1);
+    yield* recordMutation(page, "/transactions", { requests, outcome: "capture" });
+    yield* wait(() =>
+      page.getByRole("button", { name: "Registrar como nueva transacción", exact: true }).click()
+    );
+    yield* wait(() =>
+      expect(page.getByText("Transacción registrada", { exact: true })).toBeVisible()
+    );
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toMatchObject({
+      money: { amount: "12345.67", currency: "COP" },
+      counterparty: "Tienda La Esquina",
+      notes: "n".repeat(maximumNotes),
+      categoryId: categories[1]?.id,
+      direction: "outflow",
+      occurredAt: "2026-10-24T05:00:00.000Z",
+    });
   });
-test("an uncertain manual capture remains locked without repeating the POST and refresh resolves it", ({
+test("an uncertain manual capture retains every field after checking history and requires an explicit new submission", ({
   page,
 }) => Effect.runPromise(uncertainCaptureJourney(page)));
+const captureRecoveryFixture = (
+  page: Page,
+  committed: boolean,
+  requests: Array<unknown>
+): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() =>
+      page.setViewportSize(committed ? { width: 390, height: 844 } : { width: 1440, height: 1000 })
+    );
+    yield* wait(() => page.emulateMedia({ colorScheme: committed ? "dark" : "light" }));
+    const rows = [row(1)];
+    yield* installWorkspace(page, rows);
+    yield* recordMutation(page, "/transactions", { requests, outcome: "uncertain" });
+    yield* openCapture(page);
+    yield* wait(() => page.getByLabel("Contraparte (opcional)").fill("Tienda La Esquina"));
+    yield* captureCategoryNotes(page);
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    yield* wait(() =>
+      expect(page.getByText("Guardado sin confirmar", { exact: true })).toBeVisible()
+    );
+    if (committed) {
+      rows.push({
+        ...row(2),
+        counterparty: "Tienda La Esquina",
+        money: { amount: "12345.67", currency: "COP" },
+        categoryId: categories[1]?.id ?? "",
+        notes: "n".repeat(maximumNotes),
+        occurredAt: "2026-10-24T05:00:00.000Z",
+      });
+    }
+  });
+const discardRecoveredCapture = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() =>
+      page.getByRole("button", { name: "Descartar borrador…", exact: true }).click()
+    );
+    const confirmation = page.getByRole("region", {
+      name: "Confirmar descarte del borrador",
+      exact: true,
+    });
+    yield* wait(() => expect(confirmation).toContainText("no elimina ninguna transacción"));
+    yield* wait(() =>
+      confirmation.getByRole("button", { name: "Conservar borrador", exact: true }).click()
+    );
+    yield* wait(() =>
+      expect(page.getByRole("region", { name: "Datos del intento", exact: true })).toContainText(
+        "Tienda La Esquina"
+      )
+    );
+    yield* wait(() =>
+      page.getByRole("button", { name: "Descartar borrador…", exact: true }).click()
+    );
+    yield* wait(() =>
+      confirmation.getByRole("button", { name: "Descartar borrador", exact: true }).click()
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Ver borrador", exact: true })).toBeHidden()
+    );
+  });
+const expectOriginalCapture = (page: Page, committed: boolean): Journey =>
+  Effect.gen(function* () {
+    const original = page.getByRole("button", {
+      name: "Ver transacción Tienda La Esquina",
+      exact: true,
+    });
+    if (committed) yield* wait(() => expect(original).toBeVisible());
+    else yield* wait(() => expect(original).toBeHidden());
+  });
+const failedCaptureRecoveryJourney = (page: Page, committed: boolean): Journey =>
+  Effect.gen(function* () {
+    const requests: Array<unknown> = [];
+    yield* captureRecoveryFixture(page, committed, requests);
+    let failRead = true;
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions?*`, (route) =>
+        failRead
+          ? route.fulfill({
+              status: unavailableStatus,
+              contentType: "application/json",
+              body: JSON.stringify({ error: "unavailable" }),
+            })
+          : route.fallback()
+      )
+    );
+    yield* wait(() =>
+      page.getByRole("button", { name: "Actualizar historial", exact: true }).click()
+    );
+    yield* wait(() =>
+      expect(
+        page.getByText("No pudimos actualizar las transacciones", { exact: true })
+      ).toBeVisible()
+    );
+    const resume = page.getByRole("button", {
+      name: "No la encontré · editar borrador",
+      exact: true,
+    });
+    yield* wait(() => expect(resume).toBeDisabled());
+    yield* wait(() =>
+      page.getByRole("button", { name: "Ver historial · conservar borrador", exact: true }).click()
+    );
+    yield* wait(() => page.getByRole("button", { name: "Ver borrador", exact: true }).click());
+    yield* wait(() =>
+      expect(page.getByRole("region", { name: "Datos del intento", exact: true })).toContainText(
+        "Tienda La Esquina"
+      )
+    );
+    yield* wait(() => expect(resume).toBeDisabled());
+    expect(requests).toHaveLength(1);
+    failRead = false;
+    yield* wait(() =>
+      page.getByRole("button", { name: "Actualizar historial", exact: true }).click()
+    );
+    yield* wait(() => expect(resume).toBeEnabled());
+    expect(
+      yield* wait(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
+    ).toBe(false);
+    yield* wait(() =>
+      page.getByRole("button", { name: "Ver historial · conservar borrador", exact: true }).click()
+    );
+    yield* expectOriginalCapture(page, committed);
+    yield* wait(() => page.getByRole("button", { name: "Ver borrador", exact: true }).click());
+    yield* discardRecoveredCapture(page);
+    yield* expectOriginalCapture(page, committed);
+    yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue(""));
+    expect(requests).toHaveLength(1);
+  });
+for (const committed of [false, true]) {
+  test(`uncertain manual capture retains its ${committed ? "committed original on a narrow Grafito screen" : "uncommitted original on desktop"} through failed refresh, close, reread and discard without replay`, ({
+    page,
+  }) => Effect.runPromise(failedCaptureRecoveryJourney(page, committed)));
+}
+const foreignCaptureJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* installWorkspace(page);
+    const requests: Array<unknown> = [];
+    yield* recordMutation(page, "/transactions", { requests, outcome: "uncertain" });
+    yield* openCapture(page);
+    yield* wait(() => page.getByRole("combobox", { name: "Moneda", exact: true }).click());
+    yield* wait(() => page.getByLabel("Buscar: Moneda", { exact: true }).fill("USD"));
+    yield* wait(() => page.getByRole("option", { name: "USD", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: "Ingreso", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: "Fecha: 24-10-2026", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: /23 de octubre de 2026/u }).click());
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    yield* wait(() =>
+      page.getByRole("button", { name: "Actualizar historial", exact: true }).click()
+    );
+    const resume = page.getByRole("button", {
+      name: "No la encontré · editar borrador",
+      exact: true,
+    });
+    yield* wait(() => expect(resume).toBeEnabled());
+    yield* wait(() => resume.click());
+    yield* wait(() =>
+      expect(page.getByRole("combobox", { name: "Moneda", exact: true })).toHaveText("USD")
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Ingreso", exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "true"
+      )
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Fecha: 23-10-2026", exact: true })).toBeVisible()
+    );
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("999,01"));
+    const original = page.getByRole("region", { name: "Datos del intento original", exact: true });
+    yield* wait(() => expect(original).toContainText("USD 12.345,67"));
+    yield* wait(() => expect(original).toContainText("23-10-2026"));
+    yield* wait(() => expect(original).toContainText("Ingreso"));
+    yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: "Mes anterior", exact: true }).click());
+    yield* wait(() => expect(page).toHaveURL(/month=2026-09/u));
+    yield* wait(() => page.getByRole("button", { name: "Ver borrador", exact: true }).click());
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("999,01"));
+    yield* wait(() => expect(original).toContainText("USD 12.345,67"));
+    expect(requests).toHaveLength(1);
+    yield* recordMutation(page, "/transactions", { requests, outcome: "capture" });
+    yield* wait(() =>
+      page.getByRole("button", { name: "Registrar como nueva transacción", exact: true }).click()
+    );
+    yield* wait(() =>
+      expect(page.getByText("Transacción registrada", { exact: true })).toBeVisible()
+    );
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toMatchObject({
+      money: { amount: "999.01", currency: "USD" },
+      direction: "inflow",
+      occurredAt: "2026-10-23T05:00:00.000Z",
+    });
+  });
+test("an uncertain manual capture retains currency, direction and chosen date while edits leave the original attempt unchanged", ({
+  page,
+}) => Effect.runPromise(foreignCaptureJourney(page)));
 const correctionJourney = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* installWorkspace(page);

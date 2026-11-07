@@ -19,7 +19,7 @@ import { AuditUnavailable } from "../../../src/shell/audit/contract";
 import { prepareOAuthActivityPage } from "../../../src/shell/audit/operations";
 import { liveSessionConditions } from "../../../src/shell/web-session/operations";
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
-import { authenticateBoundWebSession, browserSession } from "../../web-session/operations";
+import { browserSession } from "../../web-session/operations";
 import { type BootstrapInvalid, BootstrapUnavailable, dbWork, decodePayload } from "./bootstrap";
 import { oauthResponse } from "./response";
 
@@ -28,6 +28,7 @@ type ManagementInput = Readonly<{
   db: D1Database;
   browserOrigin: string;
   current: number;
+  listingSession: Option.Option<FreshSessionSubject>;
   coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
   admitUser: (userId: string) => Effect.Effect<void, BootstrapUnavailable>;
   readForUser: (
@@ -183,13 +184,11 @@ export const manageConnections = (
     const listing =
       input.request.method === "GET" &&
       new URL(input.request.url).pathname === oauthPaths.connections;
-    const session = yield* dbWork(() =>
-      listing
-        ? authenticateBoundWebSession({ ...input, freshness: "live" }).then(
-            Option.map((subject) => ({ id: subject.id, user_id: subject.userId }))
-          )
-        : browserSession({ ...input, input: { current: input.current, fresh: true } })
-    );
+    const session = listing
+      ? input.listingSession
+      : yield* dbWork(() =>
+          browserSession({ ...input, input: { current: input.current, fresh: true } })
+        );
     if (Option.isNone(session)) {
       if (!listing) {
         const live = yield* dbWork(() =>

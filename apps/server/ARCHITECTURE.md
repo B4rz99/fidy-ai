@@ -145,9 +145,14 @@ exceed the existing 64KiB web-auth response limit. Omission falls back to the or
 page read. This is one bounded document-entry request; burst, concurrency, lease duration, refusal
 responses and later canonical authorization checks remain unchanged.
 
+Payment enrollment availability composes its exact mounted cookie, session freshness, active
+Consent and User context in one native read. Core delegates binding verification to that read;
+availability does not fetch a mailbox credential. Other enrollment operations retain their existing
+ingress and commit checks. The available-method response remains uncached.
+
 OAuthConnection listing composes its User resource admission, bounded connection/activity selection
-and outstanding-work completion in the final native batch. The ingress source grant and mounted
-cookie resolution retain their own units. Cleanup remains idempotent when the final reply is lost;
+and outstanding-work completion in the final native batch. The ingress source grant and exact
+mounted-cookie lookup share the preceding native unit. Cleanup remains idempotent when the final reply is lost;
 no recovery generation, credential or page result is reused across transactions. Invalid listing
 queries retain their User attempt charge. Mutations keep their separate admission and coordination.
 

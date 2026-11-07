@@ -1,3 +1,5 @@
+import { authenticateBoundWebSession } from "../web-session/operations";
+import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { observeRetentionCost } from "../d1-test-fixture";
 import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { deepStrictEqual } from "node:assert";
@@ -21,6 +23,20 @@ import {
 } from "./oauth-ingress.test-fixture";
 
 afterEach(() => vi.restoreAllMocks());
+
+const listingSession = (
+  input: Readonly<{ db: D1Database; headers: HeadersInit; current: number }>
+): Effect.Effect<Option.Option<FreshSessionSubject>, Effect.Error<ReturnType<typeof wait>>> =>
+  wait(
+    authenticateBoundWebSession({
+      db: input.db,
+      request: new Request("https://api.fidyapp.com/web/oauth/connections", {
+        headers: input.headers,
+      }),
+      current: input.current,
+      freshness: "live",
+    })
+  ).pipe(Effect.map(Option.map((subject) => ({ id: subject.id, user_id: subject.userId }))));
 
 it("lists distinct owned agent connections with canonical activity and no credential material", () =>
   Effect.runPromise(
@@ -535,6 +551,11 @@ it("keeps corrupt retained OAuth review and connection dates in the typed failur
         deepStrictEqual(
           yield* Effect.exit(
             manageConnections({
+              listingSession: yield* listingSession({
+                db: approved.db,
+                headers: approved.headers,
+                current: DateTime.nowUnsafe().epochMilliseconds,
+              }),
               db: approved.db,
               readForUser: (_, statements) =>
                 Effect.tryPromise({
@@ -807,6 +828,11 @@ it("batches recent activity for an entire connection page", () =>
       for (let index = 0; index < 3; index++) yield* approveAgain(fixture);
       const observed = observeRetentionCost(fixture.db);
       const response = yield* manageConnections({
+        listingSession: yield* listingSession({
+          db: observed.database,
+          headers: fixture.headers,
+          current: DateTime.nowUnsafe().epochMilliseconds,
+        }),
         db: observed.database,
         readForUser: (_, statements) =>
           Effect.tryPromise({
@@ -843,6 +869,11 @@ it.each(["missing", "different"] as const)("refuses a %s mounted binding before 
       else headers.set("Fidy-Session-Binding", "20000000-0000-4000-8000-000000000003");
       let admitted = false;
       const response = yield* manageConnections({
+        listingSession: yield* listingSession({
+          db: fixture.db,
+          headers,
+          current: DateTime.nowUnsafe().epochMilliseconds,
+        }),
         db: fixture.db,
         readForUser: (_, statements) =>
           Effect.tryPromise({
@@ -874,6 +905,11 @@ it("withholds the connection page if the resolved browser session is revoked bef
       const fixture = yield* approvedFixture();
       const current = yield* Clock.currentTimeMillis;
       const response = yield* manageConnections({
+        listingSession: yield* listingSession({
+          db: fixture.db,
+          headers: fixture.headers,
+          current,
+        }),
         db: fixture.db,
         readForUser: (_, statements) =>
           wait(
@@ -910,7 +946,7 @@ it("withholds the connection page if the resolved browser session is revoked bef
     })
   ));
 
-it("commits listing User pressure with the page instead of another protected trip", () =>
+it("combines listing source pressure and exact binding before the User page unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* approvedFixture();
@@ -928,11 +964,57 @@ it("commits listing User pressure with the page instead of another protected tri
         },
       });
       expect(response.status).toBe(200);
-      expect(observed.roundTrips()).toBe(3);
+      expect(observed.roundTrips()).toBe(2);
       const body = yield* wait(response.json());
       expect(body).toMatchObject({ connections: [expect.anything()] });
     })
   ));
+
+it.each(["missing-binding", "wrong-cookie"] as const)(
+  "charges source pressure and releases work after listing rejects %s",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* approvedFixture();
+        const headers = new Headers(fixture.headers);
+        const source = "e".repeat(64);
+        headers.set("x-oauth-source", source);
+        if (failure === "missing-binding") headers.delete("Fidy-Session-Binding");
+        else headers.set("cookie", `__Host-fidy_session=${"Z".repeat(43)}`);
+        const response = yield* handleOAuthRequest({
+          db: fixture.db,
+          request: new Request("https://api.fidyapp.com/web/oauth/connections", { headers }),
+          browserOrigin: "https://app.fidyapp.com",
+          coordinator: {
+            getByName: () => {
+              throw new Error("Rejected listing must not reach the coordinator");
+            },
+          },
+        });
+        expect(response.status).toBe(401);
+        expect(yield* wait(response.json())).toEqual({ error: "unauthenticated" });
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare(
+                "SELECT sum(units) AS used FROM resource_admission_events WHERE policy_key='oauth.source.v1' AND scope_key=?"
+              )
+              .bind(source)
+              .first<number>("used")
+          )
+        ).toBe(1);
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare(
+                "SELECT count(*) AS active FROM resource_admission_events WHERE dimension='outstanding_work' AND released_at_epoch_ms IS NULL"
+              )
+              .first<number>("active")
+          )
+        ).toBe(0);
+      })
+    )
+);
 
 it.each(["refused", "lost-reply"] as const)(
   "settles listing pressure safely after a %s page batch",

@@ -17,6 +17,7 @@ import {
   type ResourceAdmissionPolicyKey,
   ResourceAdmissionRefused,
   type ResourceAdmissionRequest,
+  type ResourceAdmissionResult,
   type ResourceAdmissionScopeKey,
   type ResourceAdmissionTransition,
   ResourceAdmissionUnavailable,
@@ -244,21 +245,24 @@ export const admitResource = dual<
   ) => (
     config: ResourceAdmissionAuthorityConfig
   ) => Effect.Effect<
-    ResourceAdmissionGrant,
+    ResourceAdmissionResult,
     ResourceAdmissionRefused | ResourceAdmissionUnavailable
   >,
   (
     config: ResourceAdmissionAuthorityConfig,
     request: ResourceAdmissionRequest
   ) => Effect.Effect<
-    ResourceAdmissionGrant,
+    ResourceAdmissionResult,
     ResourceAdmissionRefused | ResourceAdmissionUnavailable
   >
 >(2, (config, request) =>
   Effect.suspend(() => {
     const prepared = prepareResourceAdmission(config, request);
     return executeBatch(config.database, [...prepared.statements, ...request.statements]).pipe(
-      Effect.as({ grantId: prepared.grantId })
+      Effect.map((rows) => ({
+        grantId: prepared.grantId,
+        results: rows.slice(prepared.statements.length),
+      }))
     );
   })
 );

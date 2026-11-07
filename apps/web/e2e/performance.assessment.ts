@@ -501,20 +501,16 @@ const transactionActions = Effect.fn(function* (
   yield* measure(
     "transactions:open-editor",
     () => rows.first().click(),
-    () => expect(page.getByLabel("Monto · COP", { exact: true })).toBeVisible()
+    () => expect(page.getByLabel("Monto", { exact: true })).toBeVisible()
   );
-  if (
-    !(yield* Effect.tryPromise(() => page.getByLabel("Monto · COP", { exact: true }).isVisible()))
-  ) {
+  if (!(yield* Effect.tryPromise(() => page.getByLabel("Monto", { exact: true }).isVisible()))) {
     return;
   }
   const previousAmount = yield* Effect.tryPromise(() =>
-    page.getByLabel("Monto · COP", { exact: true }).inputValue()
+    page.getByLabel("Monto", { exact: true }).inputValue()
   );
   yield* Effect.tryPromise(() =>
-    page
-      .getByLabel("Monto · COP", { exact: true })
-      .fill(previousAmount === "2000" ? "3000" : "2000")
+    page.getByLabel("Monto", { exact: true }).fill(previousAmount === "2000" ? "3000" : "2000")
   );
   yield* measure(
     "transactions:save",

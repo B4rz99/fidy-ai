@@ -32,7 +32,7 @@ test("real Core/D1 history persists correction and confirmed deletion on the nex
         exact: true,
       });
       yield* Effect.tryPromise(() => laterRecord.click());
-      yield* Effect.tryPromise(() => page.getByLabel("Monto · COP", { exact: true }).fill("2000"));
+      yield* Effect.tryPromise(() => page.getByLabel("Monto", { exact: true }).fill("2000"));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Guardar", exact: true }).click()
       );
@@ -45,7 +45,7 @@ test("real Core/D1 history persists correction and confirmed deletion on the nex
       yield* expectHistoryCount(page, retainedRecords);
       yield* Effect.tryPromise(() => laterRecord.click());
       yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Monto · COP", { exact: true })).toHaveValue("2000")
+        expect(page.getByLabel("Monto", { exact: true })).toHaveValue("2000")
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Eliminar transacción", exact: true }).click()

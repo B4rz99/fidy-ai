@@ -14,6 +14,7 @@ const maximumNotes = 500;
 const maximumSelection = 12;
 const identifierWidth = 12;
 const maximumSingleLineHeight = 24;
+const maximumControlAlignmentDifference = 1;
 const actionHitInset = 12;
 const categories = [
   { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" },
@@ -189,6 +190,11 @@ const correctionJourney = (page: Page): Journey =>
     yield* wait(() =>
       expect(page.getByRole("form", { name: "Corregir transacción" })).toBeVisible()
     );
+    yield* wait(() => page.getByRole("combobox", { name: "Moneda", exact: true }).click());
+    yield* wait(() =>
+      page.getByRole("combobox", { name: "Buscar: Moneda", exact: true }).fill("USD")
+    );
+    yield* wait(() => page.getByRole("option", { name: "USD", exact: true }).click());
     yield* wait(() => page.getByLabel("Notas (opcional)", { exact: true }).fill("borrador"));
     yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
     yield* wait(() => expect(trigger).toBeFocused());
@@ -196,6 +202,9 @@ const correctionJourney = (page: Page): Journey =>
     yield* wait(() => trigger.press("Enter"));
     yield* wait(() =>
       expect(page.getByLabel("Notas (opcional)", { exact: true })).toHaveValue("Nota anterior")
+    );
+    yield* wait(() =>
+      expect(page.getByRole("combobox", { name: "Moneda", exact: true })).toHaveText("COP")
     );
     yield* wait(() => page.getByLabel("Notas (opcional)", { exact: true }).fill(""));
     yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
@@ -229,6 +238,9 @@ const correctionRecoveryJourney = (page: Page): Journey =>
       expect(
         page.getByRole("form", { name: "Corregir transacción" }).getByRole("alert")
       ).toContainText("No pudimos confirmar")
+    );
+    yield* wait(() =>
+      expect(page.getByRole("combobox", { name: "Moneda", exact: true })).toBeDisabled()
     );
     yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
     yield* wait(() =>
@@ -477,8 +489,8 @@ const responsiveJourney = (page: Page): Journey =>
         page.getByRole("dialog", { name: "Detalle de transacción", exact: true })
       ).toBeVisible()
     );
-    yield* wait(() => expect(page.getByLabel("Monto · COP", { exact: true })).toBeVisible());
-    yield* wait(() => page.getByLabel("Monto · COP", { exact: true }).press("Escape"));
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toBeVisible());
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).press("Escape"));
     yield* wait(() => expect(trigger).toBeFocused());
   });
 test("mobile keeps income and expense figures side by side and returns keyboard focus after Escape", ({
@@ -590,6 +602,32 @@ const verifyMobileRegisterPosition = (page: Page): Journey =>
     }
   });
 
+const correctionLayout = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() =>
+      page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).click()
+    );
+    const amount = page.getByLabel("Monto", { exact: true });
+    const currency = page.getByRole("combobox", { name: "Moneda", exact: true });
+    yield* wait(() => expect(currency).toHaveText("COP"));
+    const amountBounds = yield* wait(() => amount.boundingBox());
+    const currencyBounds = yield* wait(() => currency.boundingBox());
+    expect(amountBounds).not.toBeNull();
+    expect(currencyBounds).not.toBeNull();
+    if (amountBounds !== null && currencyBounds !== null) {
+      expect(Math.abs(amountBounds.y - currencyBounds.y)).toBeLessThanOrEqual(
+        maximumControlAlignmentDifference
+      );
+      expect(amountBounds.x + amountBounds.width).toBeLessThan(currencyBounds.x);
+    }
+    expect(
+      yield* wait(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
+    ).toBe(false);
+    yield* wait(() =>
+      page.screenshot({ path: test.info().outputPath("currency-correction.png"), fullPage: true })
+    );
+    yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
+  });
 const flatWorkspaceJourney = (page: Page, mobile: boolean, dark: boolean): Journey =>
   Effect.gen(function* () {
     yield* wait(() =>
@@ -612,6 +650,7 @@ const flatWorkspaceJourney = (page: Page, mobile: boolean, dark: boolean): Journ
       )
     );
     if (mobile) yield* verifyMobileRegisterPosition(page);
+    yield* correctionLayout(page);
     const ledgerBounds = yield* wait(() => records.boundingBox());
     const panelBounds = yield* wait(() => panel.boundingBox());
     expect(ledgerBounds).not.toBeNull();

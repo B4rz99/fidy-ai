@@ -495,6 +495,11 @@ preserves the write lock. The command Atom and its HTTP runtime mount on the fir
 action, so viewing history does not initialize them. The privacy history remains read-only and mounts
 no Correction authority.
 
+Individual Correction retains Currency in the local draft alongside the amount. A Currency-only
+change submits complete canonical Money at the observed revision, with no conversion or rounding.
+The selected Currency drives amount validation and save admission; the shared searchable selector
+is explicitly disabled while the Correction owner is locked, including its portaled menu.
+
 ### Recurring workspace
 
 `features/recurring` mounts at `/app/recurring`, using authentication-scoped canonical query atoms

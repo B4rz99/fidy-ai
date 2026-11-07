@@ -17,7 +17,9 @@ to settle on interruption. `classifyResourceAdmissionFailure` distinguishes nati
 refusal from unavailable persistence without publishing raw SQL errors. Consent's disclosure exchange
 is the first owner-controlled commit using this interface.
 
-`admitResource` retains the complete-commit interface for standalone callers. Attempt pressure remains
+`admitResource` returns its grant and only the caller statements' native results, in order, after
+the complete admission batch commits. Callers decode those results using their owned schemas;
+admission's internal statement results are not exposed. Attempt pressure remains
 a distinct, deliberately committed charge before work admission: a refused work claim does not undo
 its attempt charge. Outstanding release still commits with the owner's completion statements.
 

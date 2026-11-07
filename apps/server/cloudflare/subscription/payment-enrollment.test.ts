@@ -879,6 +879,86 @@ it("shows enrollment availability to a signed-in User without an optional mailbo
     })
   ));
 
+const availabilityRefusals: ReadonlyArray<
+  Readonly<{
+    name: string;
+    change:
+      | Readonly<{ _tag: "RemoveHeader"; name: string }>
+      | Readonly<{ _tag: "SetHeader"; name: string; value: string }>
+      | Readonly<{ _tag: "Statement"; sql: string }>;
+  }>
+> = [
+  { name: "missing-binding", change: { _tag: "RemoveHeader", name: "Fidy-Session-Binding" } },
+  {
+    name: "wrong-binding",
+    change: {
+      _tag: "SetHeader",
+      name: "Fidy-Session-Binding",
+      value: "20000000-0000-4000-8000-000000000002",
+    },
+  },
+  {
+    name: "wrong-cookie",
+    change: { _tag: "SetHeader", name: "cookie", value: `__Host-fidy_session=${"B".repeat(43)}` },
+  },
+  {
+    name: "duplicate-cookie",
+    change: {
+      _tag: "SetHeader",
+      name: "cookie",
+      value: `__Host-fidy_session=${token}; __Host-fidy_session=${token}`,
+    },
+  },
+  {
+    name: "expired-freshness",
+    change: { _tag: "Statement", sql: "UPDATE web_sessions SET fresh_until_ms=0 WHERE user_id=?" },
+  },
+  {
+    name: "revoked-session",
+    change: { _tag: "Statement", sql: "UPDATE web_sessions SET revoked_at_ms=0 WHERE user_id=?" },
+  },
+  {
+    name: "withdrawn-consent",
+    change: {
+      _tag: "Statement",
+      sql: "INSERT INTO consent_history(record_type,user_id) VALUES('processing_withdrawal',?)",
+    },
+  },
+  {
+    name: "missing-consent",
+    change: { _tag: "Statement", sql: "DELETE FROM consent_history WHERE user_id=?" },
+  },
+];
+
+it.each(availabilityRefusals)("withholds enrollment availability with $name", (failure) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* fromTestPromise(setup);
+      const request = fixture.request("/web/subscription/payment-enrollments/availability");
+      switch (failure.change._tag) {
+        case "RemoveHeader":
+          request.headers.delete(failure.change.name);
+          break;
+        case "SetHeader":
+          request.headers.set(failure.change.name, failure.change.value);
+          break;
+        case "Statement": {
+          const statement = fixture.db.prepare(failure.change.sql).bind(userA);
+          yield* fromTestPromise(() => statement.run());
+        }
+      }
+      const provider = vi.fn();
+      vi.stubGlobal("fetch", provider);
+      const response = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({ environment: fixture.environment, request })
+      );
+      expect(response.status).toBe(401);
+      expect(yield* fromTestPromise(() => response.json())).not.toHaveProperty("enabledMethods");
+      expect(provider).not.toHaveBeenCalled();
+    })
+  )
+);
+
 it.each([false, true])(
   "enrolls with an explicitly supplied billing email (mailbox credential: %s)",
   (hasMailboxCredential) =>

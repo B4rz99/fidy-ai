@@ -1876,8 +1876,8 @@ const paymentEnrollmentResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
   publish: PublishAcceptedWork
-): Effect.Effect<Response> =>
-  Effect.tryPromise({
+): Effect.Effect<Response> => {
+  const work = Effect.tryPromise({
     try: () =>
       handlePaymentEnrollment({
         request,
@@ -1885,6 +1885,14 @@ const paymentEnrollmentResponse = (
       }),
     catch: () => undefined,
   }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.payment-enrollment"));
+  const transport = paymentEnrollmentTransport(new URL(request.url).pathname);
+  return Option.exists(
+    transport,
+    (value) => value.operation === "availability" && request.method === value.method
+  )
+    ? work
+    : withBrowserBinding(request, environment, work);
+};
 
 /** Consent combines expected binding with its live subject lookup; its protected work rechecks authority. */
 const reservedBindingResponse = <E, R>(
@@ -1931,7 +1939,7 @@ const dispatchCoreHttp = ({
     return bound(providerCallbackEffect(request, environment, publish));
   }
   if (enrollmentCorePath(url.pathname)) {
-    return bound(paymentEnrollmentResponse(request, environment, publish));
+    return paymentEnrollmentResponse(request, environment, publish);
   }
   const directPath = directPathResponse(request, environment);
   if (Option.isSome(directPath)) return bound(directPath.value);

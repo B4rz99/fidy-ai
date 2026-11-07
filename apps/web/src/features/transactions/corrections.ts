@@ -221,7 +221,7 @@ const submit = (owner: Owner, correction: Correction): void => {
   if (!currentRevisions(owner, correction) || Option.isNone(command)) {
     owner.status = "refreshing";
     notify(owner);
-    run(owner, reread(owner, owner.generation, true));
+    run(owner, reread(owner, owner.generation, "rejected"));
     return;
   }
   owner.status = "saving";
@@ -234,7 +234,7 @@ const submit = (owner: Owner, correction: Correction): void => {
       if (!live(owner, generation)) return;
       if (result._tag === "Failure") {
         if (rejected(result.cause, command.value.kind)) {
-          yield* reread(owner, generation, true);
+          yield* reread(owner, generation, "rejected");
         } else {
           owner.status = "uncertain";
           notify(owner);
@@ -242,7 +242,7 @@ const submit = (owner: Owner, correction: Correction): void => {
         return;
       }
       owner.saved(command.value.kind);
-      yield* reread(owner, generation);
+      yield* reread(owner, generation, "saved");
     })
   );
 };
@@ -277,8 +277,13 @@ const refreshedHistory = (owner: Owner): Effect.Effect<boolean> =>
     observe(owner.get.once(owner.history));
     return Effect.sync(unsubscribe);
   });
-const reread = (owner: Owner, generation: number, afterRejection = false): Work =>
+const reread = (
+  owner: Owner,
+  generation: number,
+  reason: "saved" | "rejected" | "recovery"
+): Work =>
   Effect.gen(function* () {
+    const afterRejection = reason === "rejected";
     const statuses = afterRejection
       ? ({ waiting: "refreshing", success: "recovered", failure: "rejected" } as const)
       : ({ waiting: "recovering", success: "idle", failure: "uncertain" } as const);
@@ -288,12 +293,12 @@ const reread = (owner: Owner, generation: number, afterRejection = false): Work 
     const categories = owner.get.once(owner.categories);
     const firstPage = owner.get.once(owner.firstPage);
     owner.get.refresh(owner.categories);
-    owner.get.set(owner.historyAction, afterRejection ? "refresh" : "reset");
+    owner.get.set(owner.historyAction, reason === "saved" ? "reset" : "refresh");
     const results = yield* Effect.all([
       nextResult(owner, owner.categories, categories),
       nextResult(owner, owner.firstPage, firstPage),
     ]);
-    if (afterRejection && results.every(Boolean)) results.push(yield* refreshedHistory(owner));
+    if (reason !== "saved" && results.every(Boolean)) results.push(yield* refreshedHistory(owner));
     if (!live(owner, generation)) return;
     owner.status = results.every(Boolean) ? statuses.success : statuses.failure;
     notify(owner);
@@ -310,5 +315,5 @@ const recover = (owner: Owner): void => {
   const afterRejection = owner.status === "rejected";
   owner.status = afterRejection ? "refreshing" : "recovering";
   notify(owner);
-  run(owner, reread(owner, owner.generation, afterRejection));
+  run(owner, reread(owner, owner.generation, afterRejection ? "rejected" : "recovery"));
 };

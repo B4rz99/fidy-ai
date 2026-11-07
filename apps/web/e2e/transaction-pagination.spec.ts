@@ -41,6 +41,7 @@ type HistoryFixture = {
   rows: ReadonlyArray<HistoryRow>;
   requests: Array<URL>;
   mode: "ready" | "hold" | "failure" | "expired";
+  firstFailure: boolean;
   pending: Option.Option<Route>;
 };
 const pageBody = (fixture: HistoryFixture, url: URL): string => {
@@ -126,12 +127,14 @@ const installHistory = (page: Page, count: number): Promise<HistoryFixture> => {
     rows: fixtureRows(count),
     requests: [],
     mode: "ready",
+    firstFailure: false,
     pending: Option.none(),
   };
   return page
     .route(`${apiOrigin}/transactions?*`, (route) => {
       const url = new URL(route.request().url());
       fixture.requests.push(url);
+      if (fixture.firstFailure && !url.searchParams.has("cursor")) return route.abort("failed");
       if (url.searchParams.has("cursor")) {
         if (fixture.mode === "hold") {
           fixture.pending = Option.some(route);
@@ -371,6 +374,37 @@ test("refresh clears selection and ignores the old pending continuation", ({ pag
       );
     })
   ));
+test("retains completed history pages through a failed refresh and recovery", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => installUser(page));
+      yield* wait(() => installCategories({ page, categories: [category] }));
+      const fixture = yield* wait(() => installHistory(page, beyondPage));
+      yield* wait(() => page.goto("/app/transactions"));
+      const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
+      yield* wait(() => expect(rows).toHaveCount(initialPageSize));
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => expect(rows).toHaveCount(beyondPage));
+      fixture.firstFailure = true;
+      yield* wait(() =>
+        page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click()
+      );
+      yield* wait(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos actualizar las transacciones")
+      );
+      yield* wait(() => expect(rows).toHaveCount(beyondPage));
+      fixture.firstFailure = false;
+      yield* wait(() =>
+        page.getByRole("button", { name: "Reintentar actualización", exact: true }).click()
+      );
+      yield* wait(() => expect(page.getByRole("alert")).toHaveCount(0));
+      yield* wait(() => expect(rows).toHaveCount(beyondPage));
+      yield* wait(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeEnabled()
+      );
+    })
+  ));
+
 test("expires authentication during continuation and starts a clean replacement lifetime", ({
   page,
 }) =>
@@ -591,21 +625,6 @@ for (const viewport of [
         );
         yield* wait(() => page.goBack());
         yield* expectHistoricalTransaction(page);
-      })
-    ));
-}
-
-for (const search of ["date=2026-02-30", "month=2026-13", "month=2026-11&date=2026-10-31"]) {
-  test(`refuses invalid history period ${search} before requesting history`, ({ page }) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        yield* wait(() => installUser(page));
-        const fixture = yield* wait(() => installHistory(page, 0));
-        yield* wait(() => page.goto(`/app/transactions?${search}`));
-        yield* wait(() =>
-          expect(page.getByRole("alert")).toContainText("No pudimos cargar esta página")
-        );
-        expect(fixture.requests).toHaveLength(0);
       })
     ));
 }

@@ -38,6 +38,11 @@ import {
   makeWebAuthClient,
 } from "./client";
 import { SubmitForExtractionInput } from "@fidy/server/client";
+import {
+  HostedTurnProgressRequest,
+  HostedTurnRequest,
+  makeHostedTurnClient,
+} from "./hosted-turn-client";
 
 const responseJson = (
   request: HttpClientRequestType.HttpClientRequest,
@@ -1321,6 +1326,85 @@ describe("canonical browser transport", () => {
 });
 
 describe("native browser response lifetime", () => {
+  it.effect("keeps the standalone hosted channel bound across propose, progress and delivery", () =>
+    Effect.gen(function* () {
+      const binding = "10000000-0000-4000-8000-000000000001";
+      const { turnId } = yield* Schema.decodeEffect(HostedTurnProgressRequest)({
+        turnId: "20000000-0000-4000-8000-000000000001",
+      });
+      const first = yield* Schema.decodeEffect(HostedTurnRequest)({ text: "Consulta local" });
+      const second = yield* Schema.decodeEffect(HostedTurnRequest)({ text: "Otra consulta" });
+      const signal = yield* Effect.abortSignal;
+      const receipt = "a".repeat(64);
+      const requests: Array<
+        Readonly<{ path: string; method: string; binding: string; body: unknown }>
+      > = [];
+      let refused = false;
+      let rechecks = 0;
+      const client = makeHostedTurnClient({
+        apiOrigin: policyTestOrigin,
+        session: {
+          binding,
+          signal,
+          recheck: () => {
+            rechecks++;
+          },
+        },
+        httpClient: Layer.succeed(
+          HttpClient.HttpClient,
+          makeHttpClient((request) => {
+            const path = new URL(request.url).pathname;
+            requests.push({
+              path,
+              method: request.method,
+              binding: request.headers["fidy-session-binding"] ?? "",
+              body: JSON.parse(requestBodyText(request)),
+            });
+            if (refused) {
+              return Effect.succeed(responseJson(request, { status: "unauthenticated" }, 401));
+            }
+            if (path.endsWith("/delivery")) {
+              return Effect.succeed(responseJson(request, { status: "completed" }, 200));
+            }
+            return Effect.succeed(responseJson(request, { status: "processing", turnId }, 202));
+          })
+        ),
+      });
+      const registry = AtomRegistry.make();
+      try {
+        const context = yield* Layer.build(registry.get(client.runtime.layer)).pipe(Effect.scoped);
+        const api = Context.get(context, client);
+        expect(yield* api.hostedTurn.propose({ payload: first })).toEqual({
+          status: "processing",
+          turnId,
+        });
+        expect(yield* api.hostedTurn.progress({ payload: { turnId } })).toEqual({
+          status: "processing",
+          turnId,
+        });
+        expect(yield* api.hostedTurn.acknowledge({ payload: { turnId, receipt } })).toEqual({
+          status: "completed",
+        });
+        refused = true;
+        const result = yield* api.hostedTurn.propose({ payload: second }).pipe(Effect.exit);
+        expect(Exit.isFailure(result)).toBe(true);
+        expect(requests).toEqual([
+          { path: "/web/hosted-turns", method: "POST", binding, body: { text: "Consulta local" } },
+          { path: "/web/hosted-turns/progress", method: "POST", binding, body: { turnId } },
+          {
+            path: "/web/hosted-turns/delivery",
+            method: "POST",
+            binding,
+            body: { turnId, receipt },
+          },
+          { path: "/web/hosted-turns", method: "POST", binding, body: { text: "Otra consulta" } },
+        ]);
+        expect(rechecks).toBe(1);
+      } finally {
+        registry.dispose();
+      }
+    })
+  );
   it.effect("owns response cleanup for each request's replacement native transport", () =>
     Effect.gen(function* () {
       let unexpectedRequests = 0;

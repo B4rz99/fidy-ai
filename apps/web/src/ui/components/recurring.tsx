@@ -1,3 +1,4 @@
+import { Dialog } from "@base-ui/react/dialog";
 import { Cancel01Icon, Moon02Icon, Sun03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -12,9 +13,6 @@ import { Option } from "effect";
 import { Button } from "./button";
 import { Badge } from "./badge";
 import "./recurring.css";
-
-// Base UI exposes an extensionless ESM entrypoint.
-const { Dialog } = await import("@base-ui/react/dialog");
 
 const desktopQuery = "(min-width: 1280px)";
 type PlanStatus = "active" | "paused" | "stopped";

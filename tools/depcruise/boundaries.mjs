@@ -9,6 +9,7 @@ const compositionRoots = new Set([
   "../../scripts/pro/runtime.ts",
   "src/client.ts",
   "src/browser-bootstrap.ts",
+  "src/browser-http.ts",
   "src/browser-transport.ts",
   "src/shell/memory/memory-policy.test.ts",
   "cloudflare/core-worker.ts",

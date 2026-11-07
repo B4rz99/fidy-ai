@@ -11,9 +11,18 @@ production topology, and browser-to-server ownership.
 `apps/web` is the `@fidy/web` React/Vite application package and produces a portable static artifact.
 It owns product browser routing, providers and styles. Public marketing and policy copy belong to
 `apps/site`, which renders the public website with Astro. Its server imports use the
-browser-safe `@fidy/server/client` declaration seam and the narrow `browser-bootstrap` and dependency-free
-`browser-transport` declarations; it never imports server implementations. The API
+browser-safe `@fidy/server/client` declaration seam and the narrow `browser-bootstrap`, `money`,
+`dashboard-contract`, `hosted-turn-api`, `browser-http` and dependency-free `browser-transport` declarations; it never imports server implementations. The API
 Workers do not serve web routes or static assets.
+
+`transport/session-entry.ts` owns the initial session observation and its bootstrap response codecs.
+`transport/session-binding.ts` owns immutable request binding, cancellation and shared transfer
+coordination. Ordinary channel clients and the shared HTTP policy do not import the bootstrap API
+to perform those duties. Dependency-free browser transport declarations supply header formats and
+continuation paths; `@fidy/server/browser-http` supplies the original complete refusal codec only
+when an eligible response could permit automatic replay. Loading that codec counts toward the
+original request deadline and Retry-After wait. A missing decoder fails closed without replay.
+The materializer checks native byte chunks directly and retains the same complete-transfer bounds.
 
 Effect Atom derives browser transport from the assembled `FidyApi` with
 `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. A shared browser HTTP policy
@@ -27,6 +36,10 @@ once. Canonical requests and safe web-auth reads may additionally retry a decode
 and enrollment refusals never gain automatic replay. Cancellation interrupts pacing as well as
 in-flight transport. Shared and server state belongs to Effect
 Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
+
+The hosted conversation derives its client directly from the existing `HostedTurnApi` declaration.
+It shares the same browser HTTP policy, transfer budget and immutable session binding as the other
+clients, without constructing the canonical API catalog when loaded independently.
 
 The browser emits one closed DevTools transport record per logical request: boundary, coarse outcome,
 status class, bounded attempt count and duration, a fixed failure category and, when available, the
@@ -60,9 +73,15 @@ hydrate their session registry.
 
 An optional feature-owned `code.ts` entry lets application composition start code preparation
 without evaluating the feature's React, transport or query declarations first. Transactions,
-Dashboard, Budgets and Needs Review use this entry alongside their route imports so presentation
-discovery does not wait for the shared runtime. It prepares code only; clients, data reads and
+Dashboard, Budgets, Needs Review, Recurring, Subscription and the conversation presentation use
+this entry alongside their route imports so presentation discovery does not wait for the shared runtime. It prepares code only; clients, data reads and
 access checks remain with the actual route.
+
+Production chunking keeps code-only bootstrap helpers together, shared runtime libraries together,
+and each feature's closed panels together. Common read presentation stays cohesive; payment
+protocol adapters and interaction-only controls do not enter that common group. Shared UI uses
+ordinary static package imports rather than top-level asynchronous imports that can wait on a
+chunk depending on the waiting parent. Code preparation never supplies an access decision.
 Feature implementation files stay private, and session, transport and UI modules cannot import
 the code-preparation entry.
 
@@ -599,11 +618,13 @@ Router intent preloading prepares destination code only. Pointer, keyboard focus
 start no API read or original-material fetch. Destination data reads belong to the actual route
 entry under its access checks and AbortSignal. Automatic Budget and Recurring loader preloads
 remain disabled so a speculative code match cannot satisfy the actual visit.
-After the foreground workspace is ready, idle preparation may load the remaining destination code,
-yielding between imports and stopping unstarted work on disposal. Composition supplies code loaders
-through context; features do not import application orchestration. Reported data-saving and slow
-connections skip broad code preparation. No idle display-data queue or session-lifetime preparation
-registry remains.
+A fresh entry prepares only its selected screen and the shared conversation presentation. Closed
+Transaction and Budget editors, Recurring panels, Dashboard drag controls and payment fields use
+separate code imports with local pending boundaries. Selected-screen preparation resolves their
+component loaders as well as downloading their modules, so an immediate first interaction can use
+already-prepared code without another lazy suspension. Query, command, session and draft owners
+remain mounted in their existing features. Settings forms and read charts remain immediately
+available. No blanket idle destination preparation or display-data queue runs after a read.
 Needs Review and Recurring route loaders preload the same presentation component used by their
 retained workspace, so resolving destination code does not introduce another lazy suspension. Retained panels activate
 only for successful route matches after destination code and mandatory access checks complete.
@@ -616,7 +637,7 @@ workspace as visited.
 Actual Transactions entries refresh the shared Consent source before revealing the destination.
 Its 400 ms idle retention bridges loader-to-React subscription only; every actual entry refreshes
 it, including Back and rapid re-entry. Transaction loader preloads are disabled, so an in-flight
-code-only speculative result cannot satisfy the actual entry; idle code preparation remains independent.
+code-only speculative result cannot satisfy the actual entry; code preparation remains independent.
 The route stores no copy of Consent or product data. Preparation observes the authentication
 registry's existing query and leaves failures there for the ordinary error view. Cached product
 information can remain visible during revalidation; waiting and failed refreshes still gate decisions.
@@ -659,7 +680,7 @@ A newer saved canonical draft replaces a clean local draft; outstanding local ed
 and require recovery if superseded. A completed autosave releases its draft barrier so subsequent
 bulk decisions use the fresh workspace revision.
 
-`/settings/account` composes independently mounted verified-email replacement and backup-recovery sections under one Account header. Each feature retains its own proof and disclosure lifetime. Fresh sign-in returns to the fixed Account destination without retaining email or recovery material in navigation. Removed settings aliases have no compatibility redirects.
+`/settings/account` composes independently mounted verified-email replacement and backup-recovery sections under one Account header. Their presentation modules accept state and action callbacks without importing the command controllers. Money presentation and Dashboard gesture declarations import their published domain contracts directly, so presentation does not initialize the complete API catalog. Each feature retains its own proof and disclosure lifetime. Fresh sign-in returns to the fixed Account destination without retaining email or recovery material in navigation. Removed settings aliases have no compatibility redirects.
 
 ## Review-return failure evidence
 

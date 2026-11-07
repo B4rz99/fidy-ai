@@ -1,6 +1,7 @@
 import { Schema } from "effect";
+import { telemetryTraceIdPatternSource } from "~/shell/browser-transport/contract";
 
 /** Opaque trace receipt shared with clients; no server telemetry registry is required. */
 export const TelemetryTraceId = Schema.String.check(
-  Schema.isPattern(/^(?!0{32}$)[0-9a-f]{32}$/u)
+  Schema.isPattern(new RegExp(telemetryTraceIdPatternSource, "u"))
 ).pipe(Schema.brand("TelemetryTraceId"));

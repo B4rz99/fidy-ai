@@ -224,6 +224,7 @@ const DetailPanel = ({
   Readonly<{
     panel: Extract<TransactionPanel, { _tag: "Detail" }>;
   }>): JSX.Element => {
+  const corrections = use(TransactionCorrectionContext);
   const transaction = Option.fromNullishOr(
     props.transactions.find((record) => record.id === panel.id)
   );
@@ -256,7 +257,10 @@ const DetailPanel = ({
       onDeleted={() => {
         toast.success("Transacción eliminada");
         close();
-        props.onRefresh();
+        Option.match(corrections, {
+          onNone: props.onRefresh,
+          onSome: (owner) => owner.refreshAfterMutation(),
+        });
       }}
     />
   );

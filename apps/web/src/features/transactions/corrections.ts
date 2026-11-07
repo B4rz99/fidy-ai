@@ -42,6 +42,7 @@ export type TransactionCorrections = Readonly<{
   workspaceGeneration: number;
   submit: (correction: Correction) => void;
   recover: () => void;
+  refreshAfterMutation: () => void;
   mount: () => () => void;
 }>;
 type Client = Context.Service.Shape<FidyClient>;
@@ -100,7 +101,8 @@ const present = (owner: Owner): TransactionCorrections => ({
   inlineTransaction: owner.inlineTransaction,
   workspaceGeneration: owner.workspaceGeneration,
   submit: (correction) => submit(owner, correction),
-  recover: () => recover(owner),
+  recover: () => recover(owner, "recovery"),
+  refreshAfterMutation: () => recover(owner, "saved"),
   mount: () => {
     owner.active = true;
     owner.stopped = Deferred.makeUnsafe<void>();
@@ -303,7 +305,7 @@ const reread = (
     owner.status = results.every(Boolean) ? statuses.success : statuses.failure;
     notify(owner);
   });
-const recover = (owner: Owner): void => {
+const recover = (owner: Owner, reason: "recovery" | "saved"): void => {
   if (
     !owner.active ||
     owner.status === "saving" ||
@@ -315,5 +317,5 @@ const recover = (owner: Owner): void => {
   const afterRejection = owner.status === "rejected";
   owner.status = afterRejection ? "refreshing" : "recovering";
   notify(owner);
-  run(owner, reread(owner, owner.generation, afterRejection ? "rejected" : "recovery"));
+  run(owner, reread(owner, owner.generation, afterRejection ? "rejected" : reason));
 };

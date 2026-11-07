@@ -1065,3 +1065,13 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   [data-slot="table-row"][data-state] {
   clip-path: none;
 }
+
+[data-transaction-slot~="transaction-reconciliation"] {
+  font-size: 16px;
+}
+[data-transaction-slot~="transaction-workspace"]
+  [data-transaction-slot~="transaction-reconciliation"]
+  [data-slot="button"] {
+  font-size: 14px;
+  font-weight: 600;
+}

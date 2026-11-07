@@ -18,6 +18,7 @@ const transaction = {
   revision: 1,
   presentation: { kind: "independent" },
 };
+const inspection = { ...transaction, reconciliation: { kind: "independent" }, sources: [] };
 const review = {
   id: reviewId,
   source: "statement",
@@ -50,7 +51,10 @@ const installHistory = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
     );
     yield* Effect.tryPromise(() =>
       page.route(`${apiOrigin}/transactions/${transactionId}`, (route) =>
-        route.fulfill({ contentType: "application/json", body: response(transaction) })
+        route.fulfill({
+          contentType: "application/json",
+          body: response(inspection),
+        })
       )
     );
     yield* Effect.tryPromise(() =>
@@ -217,7 +221,7 @@ const unavailableJourney = (
       yield* Effect.tryPromise(() => page.unroute(`${apiOrigin}/transactions/${transactionId}`));
       yield* Effect.tryPromise(() =>
         page.route(`${apiOrigin}/transactions/${transactionId}`, (route) =>
-          route.fulfill({ contentType: "application/json", body: response(transaction) })
+          route.fulfill({ contentType: "application/json", body: response(inspection) })
         )
       );
       yield* Effect.tryPromise(() =>
@@ -269,7 +273,18 @@ const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =
     };
     yield* Effect.tryPromise(() =>
       page.route(`${apiOrigin}/transactions/${transactionId}`, (route) =>
-        route.fulfill({ contentType: "application/json", body: response(visible) })
+        route.fulfill({
+          contentType: "application/json",
+          body: response({
+            ...visible,
+            reconciliation: {
+              kind: "linked",
+              firstTransaction: transaction,
+              secondTransaction: visible,
+            },
+            sources: [],
+          }),
+        })
       )
     );
     yield* Effect.tryPromise(() =>

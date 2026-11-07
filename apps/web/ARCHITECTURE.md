@@ -538,6 +538,24 @@ change submits complete canonical Money at the observed revision, with no conver
 The selected Currency drives amount validation and save admission; the shared searchable selector
 is explicitly disabled while the Correction owner is locked, including its portaled menu.
 
+### Transaction Reconciliation review
+
+Transaction detail reads the canonical inspection of the effective Transaction and both linked
+originals and their retained capture kinds in one server snapshot. Missing capture information
+is explicitly unavailable; notes never stand in for SourceAttestations. The browser never infers a pair from matching Money. Privacy
+history does not mount this ordinary processing query or unlink authority. Pair review retains
+the exact original identities and deletion intent through its confirmation. Fresh effective facts
+replace the detail display; a newer revision requires history recovery before Correction. Pending, refused and
+uncertain unlink outcomes lock dismissal and selection; only an explicit successful canonical
+reread permits a new review or a return to history. Failed recovery keeps the lock, and recovery
+never resubmits the mutation. A new detail mount performs a fresh inspection.
+Confirmed unlink retains the restored originals while offering a separate deletion confirmation
+for the originally selected identity. An independent recovery retains the freshly read original
+for that same separate confirmation without claiming unlink success. Explicit result dismissal
+refreshes history; Dashboard, Budget and
+Recurring projections are invalidated after confirmed or uncertain writes. The existing canonical
+transport owns authorization, Work observations and audit accounting.
+
 ### Recurring workspace
 
 `features/recurring` mounts at `/app/recurring`, using authentication-scoped canonical query atoms

@@ -206,6 +206,12 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+The canonical Transaction detail query returns linked originals alongside the effective facts in
+the same authorized, audited snapshot. Bounded SourceAttestation capture kinds explain
+how each original was obtained without returning retained source material. Original selection remains same-User and bounded to the
+exact pair even while the effective projection is being repaired; unlink uses the existing
+canonical mutation and returns both restored originals. Ordinary history remains effective-only.
+
 Dashboard deduplicates requested chart intervals before calling Transactions' bounded multi-interval
 reader. Wider selections first count bounded projection rows at one fact revision. Compatible ranges
 expand native batches beyond four intervals only within a raw-result budget; larger working sets

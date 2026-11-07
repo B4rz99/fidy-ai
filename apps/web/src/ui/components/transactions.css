@@ -208,6 +208,7 @@
 [data-transaction-slot~="transaction-detail-identity"] p:first-child {
   font-size: 17px;
   font-weight: 400;
+  overflow-wrap: anywhere;
 }
 [data-transaction-slot~="transaction-detail-identity"] p:last-child {
   font-size: 12px;

@@ -497,6 +497,78 @@ test("mobile keeps income and expense figures side by side and returns keyboard 
   page,
 }) => Effect.runPromise(responsiveJourney(page)));
 
+const reportedCounterpartyRepeats = 12;
+const maximumCounterpartyRepeats = 15;
+const fitsPage = (): boolean => document.documentElement.scrollWidth <= innerWidth;
+const textFitsBounds = (element: HTMLElement | SVGElement): boolean => {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const bounds = element.getBoundingClientRect();
+  return Array.from(range.getClientRects()).every(
+    (rect) =>
+      rect.left >= bounds.left &&
+      rect.right <= bounds.right &&
+      rect.top >= bounds.top &&
+      rect.bottom <= bounds.bottom
+  );
+};
+const longCounterpartyJourney = (
+  page: Page,
+  counterparty: string,
+  { dark, width }: Readonly<{ dark: boolean; width: number }>
+): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.emulateMedia({ colorScheme: dark ? "dark" : "light" }));
+    yield* wait(() => page.setViewportSize({ width, height: 800 }));
+    yield* installWorkspace(page, [{ ...first, counterparty }]);
+    yield* wait(() => page.goto("/app/transactions"));
+    const trigger = page.getByRole("button", {
+      name: `Ver transacción ${counterparty}`,
+      exact: true,
+    });
+    yield* wait(() => trigger.click());
+    const detail = page.getByRole("dialog", { name: "Detalle de transacción", exact: true });
+    yield* wait(() => expect(detail).toBeVisible());
+    yield* wait(() => waitForFonts(page));
+    const name = detail.getByText(counterparty, { exact: true });
+    yield* wait(() => expect(name).toBeVisible());
+    yield* wait(() => expect.poll(() => page.evaluate(fitsPage)).toBe(true));
+    expect(yield* wait(() => name.evaluate(textFitsBounds))).toBe(true);
+    yield* wait(() =>
+      expect(page.getByLabel("Contraparte", { exact: true })).toHaveValue(counterparty)
+    );
+    yield* wait(() =>
+      page.getByLabel("Notas (opcional)", { exact: true }).fill("Compra de prueba")
+    );
+    yield* wait(() =>
+      expect(detail.getByRole("button", { name: "Guardar", exact: true })).toBeEnabled()
+    );
+    yield* wait(() =>
+      detail.getByRole("button", { name: "Guardar", exact: true }).click({ trial: true })
+    );
+    yield* wait(() => detail.getByRole("button", { name: "Cancelar", exact: true }).click());
+    yield* wait(() => expect(trigger).toBeFocused());
+    yield* wait(() => expect.poll(() => page.evaluate(fitsPage)).toBe(true));
+  });
+for (const dark of [false, true]) {
+  for (const example of [
+    { label: "96-character unbroken", name: "FARMACIA".repeat(reportedCounterpartyRepeats) },
+    { label: "120-character unbroken", name: "FARMACIA".repeat(maximumCounterpartyRepeats) },
+    { label: "spaced", name: "Farmacia La Rebaja Sucursal Centro Servicio Farmacéutico Bogotá" },
+  ]) {
+    test(`${example.label} Counterparty stays fully readable with reachable correction controls at 320px in ${dark ? "Grafito" : "light"}`, ({
+      page,
+    }) => Effect.runPromise(longCounterpartyJourney(page, example.name, { dark, width: 320 })));
+  }
+}
+test("120-character Counterparty stays fully readable in the desktop detail rail", ({ page }) =>
+  Effect.runPromise(
+    longCounterpartyJourney(page, "FARMACIA".repeat(maximumCounterpartyRepeats), {
+      dark: false,
+      width: 1440,
+    })
+  ));
+
 const enlargeCaptureText = (): void => {
   document.documentElement.style.fontSize = "32px";
 };

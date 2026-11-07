@@ -9,6 +9,8 @@ import { UserId } from "../../src/core/identity/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { expect, it } from "vitest";
 import { setup as baseSetup, now, users } from "./hosted-turn.test-fixture";
+import { seedPaidCardSubscription } from "../subscription/refund-charge.test-fixture";
+import { SubscriptionStatus } from "../../src/core/subscription/contract";
 import {
   exerciseTurn,
   runCapability,
@@ -380,6 +382,73 @@ it.each([
       })
     )
 );
+
+it("cancels seeded paid access through exact WhatsApp confirmation and preserves its paid history on retry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => baseSetup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE users SET trial_started_at_ms=0,trial_ends_at_ms=604800000 WHERE id=?")
+          .bind(users[0])
+          .run()
+      );
+      yield* seedPaidCardSubscription({ db, userId: users[0] });
+      const standing = Effect.fnUntraced(function* () {
+        return yield* successfulCapability({
+          db,
+          operation: "subscription.getSubscriptionStatus",
+          input: {},
+        }).pipe(
+          Effect.flatMap(
+            Schema.decodeUnknownEffect(
+              Schema.Struct({ data: Schema.toCodecJson(SubscriptionStatus) })
+            )
+          )
+        );
+      });
+      const before = yield* standing();
+      expect(before.data.accessTier).toBe("pro");
+      expect(before.data.hasProGrant).toBe(false);
+      expect(Option.isSome(before.data.paidSubscription)).toBe(true);
+      expect(before.data.cancellation).toEqual(Option.none());
+      const cancellation = yield* successfulCapability({
+        db,
+        operation: "subscription.cancelSubscription",
+        input: {},
+      });
+      expect(cancellation).toMatchObject({ data: { sourceCancellation: "detached" } });
+      expect(
+        yield* successfulCapability({ db, operation: "subscription.cancelSubscription", input: {} })
+      ).toEqual(cancellation);
+      const after = yield* standing();
+      expect(after.data.accessTier).toBe("pro");
+      expect(after.data.hasProGrant).toBe(false);
+      expect(after.data.paidSubscription).toEqual(before.data.paidSubscription);
+      expect(after.data.recentAttempts).toEqual(before.data.recentAttempts);
+      expect(Option.isSome(after.data.cancellation)).toBe(true);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM subscription_cancellations c JOIN subscriptions s ON s.id=c.subscription_id WHERE s.user_id=?"
+            )
+            .bind(users[0])
+            .first()
+        )
+      ).toEqual({ total: 1 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM hosted_confirmations WHERE user_id=? AND operation='subscription.cancelSubscription' AND consumed_at_ms IS NOT NULL"
+            )
+            .bind(users[0])
+            .first()
+        )
+      ).toEqual({ total: 2 });
+    })
+  ));
 
 it("advances Insight delivery, read and dismissal through WhatsApp without sending an external message", () =>
   Effect.runPromise(

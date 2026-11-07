@@ -254,9 +254,9 @@ it.each(["context", "revision", "consent"] as const)(
               return <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
                 Effect.runPromiseWith(services)(
                   Effect.gen(function* () {
+                    const attempt = ++batches;
                     const result = yield* Effect.tryPromise(() => target.batch<Row>(statements));
-                    batches++;
-                    if (batches === 1) {
+                    if (attempt === 1) {
                       if (change === "context") {
                         yield* Effect.tryPromise(() =>
                           db

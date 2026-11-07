@@ -484,6 +484,19 @@ Category editors inherit their group Currency; only group settings or a new grou
 
 The Budget summary shows recorded monthly income and all effective expenses, including uncapped categories, using the canonical report’s currency-preserving cash flow. The table identifies its group figures as capped Category spending and shows uncapped Category/Currency outflows separately. Its monthly total reconciles both scopes against that same cash flow. Spending amounts open a read-only, paginated canonical Transaction query with the report’s exact period, Category and Currency; closing the sheet disposes its mounted reader. Its Summary, Income, and Expenses selectors change presentation only; income planning remains outside the expense-cap model.
 
+### Manual Transaction capture recovery
+
+The mounted Transactions period owner retains a manual capture draft and an immutable
+uncertain attempt above month/history-generation workspace remounts. Refreshing history
+never resubmits a capture. Recovery requires an explicit reread of the current month's
+history and Categories, with fresh successful observations before offering resume.
+The User compares the attempt with history; matching fields or an absent loaded row
+cannot prove a write outcome. Resuming edits the retained draft while the original
+attempt remains readable, and a separate submission creates a new Transaction.
+Discard removes only browser interaction state. The draft stays in mounted memory,
+never URLs, browser storage or telemetry, and disappears when Transactions access unmounts.
+Recurring capture retains its separate occurrence-owned editor and recovery contract.
+
 ### Transaction Correction
 
 One mounted Transaction Correction module coordinates inline Category edits, individual Corrections

@@ -1,3 +1,4 @@
+import { ManualCaptureProvider } from "./manual-capture";
 import { TransactionWorkspace } from "./workspace-component";
 import { PendingRead } from "@/ui/components/pending-read";
 import { TransactionLocationNotice } from "./location-notice";
@@ -357,22 +358,23 @@ const ReadyTransactionResources = ({
   const { categoryState, period, transactionState, history, corrections, onMore, onRetryMore } =
     queries;
   const retry = corrections.recover;
+  const activity = readyQueryActivity(categoryState, transactionState, retry);
   return (
     <Suspense fallback={<TransactionListView state={{ _tag: "Loading" }} />}>
       <TransactionWorkspace
         key={`${history.generation}:${Option.getOrElse(locate, () => "browse")}`}
         locate={locate}
+        captureHistoryVersion={Option.some({
+          month: dateFilter.month,
+          generation: history.generation,
+        })}
         readOnly={false}
         dateFilter={dateFilter}
         monthFilter={Option.some({ value: dateFilter.month, onChange: dateFilter.onMonth })}
         continuation={history.continuation}
         onMore={onMore}
         onRetryMore={onRetryMore}
-        editable={
-          profileCurrent &&
-          !corrections.locked &&
-          readyQueryActivity(categoryState, transactionState, retry)._tag === "Current"
-        }
+        editable={profileCurrent && !corrections.locked && activity._tag === "Current"}
         apiClient={router.options.context.apiClient}
         currentUser={currentUser}
         categories={categoryState.value.data}
@@ -380,9 +382,7 @@ const ReadyTransactionResources = ({
         period={presentPeriod({ locale: currentUser.locale, period })}
         queryNotice={
           <>
-            <QueryActivityNotice
-              query={readyQueryActivity(categoryState, transactionState, retry)}
-            />
+            <QueryActivityNotice query={activity} />
             <TransactionLocationNotice
               locate={locate}
               history={history}
@@ -393,10 +393,7 @@ const ReadyTransactionResources = ({
         }
         onRefresh={corrections.recover}
       />
-      {profileCurrent &&
-      readyQueryActivity(categoryState, transactionState, retry)._tag === "Current"
-        ? children
-        : null}
+      {profileCurrent && activity._tag === "Current" ? children : null}
     </Suspense>
   );
 };
@@ -449,20 +446,24 @@ const TransactionPeriod = (
   }>
 ): JSX.Element => {
   const search = useSearch({ from: "/independent-application/app/transactions" });
-  return search.transaction === undefined ? (
-    <TransactionPeriodView {...props} search={search} locate={Option.none()} />
-  ) : (
-    <TransactionDestination key={search.transaction} id={search.transaction}>
-      {(transaction) => (
-        <TransactionPeriodView
-          {...props}
-          search={{
-            month: destinationMonth({ transaction, timeZone: props.currentUser.timeZone }),
-          }}
-          locate={Option.some(transaction.id)}
-        />
+  return (
+    <ManualCaptureProvider timeZone={props.currentUser.timeZone}>
+      {search.transaction === undefined ? (
+        <TransactionPeriodView {...props} search={search} locate={Option.none()} />
+      ) : (
+        <TransactionDestination key={search.transaction} id={search.transaction}>
+          {(transaction) => (
+            <TransactionPeriodView
+              {...props}
+              search={{
+                month: destinationMonth({ transaction, timeZone: props.currentUser.timeZone }),
+              }}
+              locate={Option.some(transaction.id)}
+            />
+          )}
+        </TransactionDestination>
       )}
-    </TransactionDestination>
+    </ManualCaptureProvider>
   );
 };
 const profileCurrent = ({

@@ -2,6 +2,7 @@ import { Schema, Struct } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import {
   CreateTransactionInput,
+  TransactionInspection as FinancialInspection,
   RestoredTransactionPair,
   Transaction,
   TransactionId,
@@ -11,7 +12,7 @@ import {
   TransactionSearchQuery,
   UpdateTransactionInput,
 } from "~/core/transactions/contract";
-import { SourceAttestation } from "~/core/source-attestation/contract";
+import { SourceAttestation, SourceAttestationKind } from "~/core/source-attestation/contract";
 import {
   NotFound,
   OperationResponse,
@@ -20,6 +21,22 @@ import {
   createdStatus,
 } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
+
+const CaptureSource = Schema.Struct({
+  transactionId: TransactionId,
+  kinds: Schema.Array(SourceAttestationKind).check(
+    Schema.isMaxLength(SourceAttestation.members.length)
+  ),
+});
+/** Adds bounded capture kinds without exposing retained source material. */
+export const TransactionInspection = FinancialInspection.mapFields(
+  (fields) => ({
+    ...fields,
+    sources: Schema.Array(CaptureSource).check(Schema.isMaxLength(2)),
+  }),
+  { unsafePreserveChecks: true }
+).annotate({ identifier: "TransactionInspection" });
+export type TransactionInspection = typeof TransactionInspection.Type;
 
 const read = operationPolicy({
   access: userOwnedAgentScoped("read"),
@@ -92,12 +109,12 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
   .add(
     HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
       params: Schema.Struct({ id: TransactionId }),
-      success: OperationResponse(TransactionPresentation),
+      success: OperationResponse(TransactionInspection),
       error: [NotFound, ResourceLimited],
     })
       .annotate(
         OpenApi.Description,
-        "Fetch one owned Transaction by id. Independent records return directly; either member of a linked pair succeeds and explains the earliest-created visible Transaction. Unknown, deleted, and another user's ids all answer not_found."
+        "Fetch one owned Transaction by id. Independent records return directly; either member of a linked pair succeeds and explains the earliest-created visible Transaction. The reconciliation field exposes both retained originals for review before unlinking. Unknown, deleted, and another user's ids all answer not_found."
       )
       .annotateMerge(read)
   )

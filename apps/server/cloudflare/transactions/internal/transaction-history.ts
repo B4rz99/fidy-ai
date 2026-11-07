@@ -1,5 +1,9 @@
+import { SourceAttestationKind } from "../../../src/core/source-attestation/contract";
 import type { HostedCanonicalCaller } from "../../canonical-work/contract";
-import { TransactionListResponse } from "../../../src/shell/transactions/contract";
+import {
+  TransactionInspection,
+  TransactionListResponse,
+} from "../../../src/shell/transactions/contract";
 import {
   prepareAuditQueryCall,
   prepareAuthorizedAuditCall,
@@ -301,6 +305,21 @@ const presentationGuard = (
     }),
   });
 
+const originalProjection = (member: "first" | "second"): string => `(SELECT json_object(
+  'id', original.id, 'amount', original.amount, 'currency', original.currency,
+  'direction', original.direction, 'counterparty', original.counterparty,
+  'category_id', original.category_id, 'notes', original.notes,
+  'occurred_at', strftime('%Y-%m-%dT%H:%M:%fZ',original.occurred_at_ms/1000.0,'unixepoch'),
+  'created_at', strftime('%Y-%m-%dT%H:%M:%fZ',original.created_at_ms/1000.0,'unixepoch'),
+  'revision', original.revision,
+  'source_kinds', json((SELECT json_group_array(kind) FROM (
+    SELECT DISTINCT kind FROM source_attestations attestation
+    WHERE attestation.user_id = original.user_id AND attestation.transaction_id = original.id
+    ORDER BY kind LIMIT 4))))
+  FROM transactions original WHERE original.user_id = requested.user_id
+    AND original.id = requested.reconciliation_${member}_id
+    AND original.deleted_at_ms IS NULL) AS ${member}_original`;
+
 /**
  * One effective presentation by either original id, optionally gated on a live caller authority.
  * A linked member resolves to the effective Transaction and records which original id was requested.
@@ -323,7 +342,8 @@ const presentationStatement = ({
       SELECT effective.id, effective.amount, effective.currency,
         effective.direction, effective.counterparty, effective.category_id, effective.notes,
         effective.occurred_at, effective.created_at, requested.revision AS revision,
-        requested.id AS requested_id, (linked.id IS NOT NULL) AS linked
+        requested.id AS requested_id, (linked.id IS NOT NULL) AS linked,
+        ${originalProjection("first")}, ${originalProjection("second")}
       FROM transactions requested
       LEFT JOIN linked_member linked ON linked.id = requested.id
       LEFT JOIN linked_decision decision
@@ -338,7 +358,8 @@ const presentationStatement = ({
         strftime('%Y-%m-%dT%H:%M:%fZ',effective.occurred_at_ms/1000.0,'unixepoch') AS occurred_at,
         strftime('%Y-%m-%dT%H:%M:%fZ',effective.created_at_ms/1000.0,'unixepoch') AS created_at,
         requested.revision AS revision, requested.id AS requested_id,
-        (requested.reconciliation_first_id IS NOT NULL) AS linked
+        (requested.reconciliation_first_id IS NOT NULL) AS linked,
+        ${originalProjection("first")}, ${originalProjection("second")}
       FROM transactions requested
       LEFT JOIN transaction_reconciliation_decisions decision
         ON decision.user_id = requested.user_id
@@ -466,6 +487,43 @@ export const findTransactionPresentation = ({
     .first()
     .then(decodePresentationRow);
 
+const InspectionOriginal = Schema.Struct({
+  ...Row.fields,
+  source_kinds: Schema.Array(SourceAttestationKind).check(Schema.isMaxLength(3)),
+});
+const InspectionRow = Schema.Struct({
+  ...PresentationRow.fields,
+  first_original: Schema.NullOr(Schema.fromJsonString(InspectionOriginal)),
+  second_original: Schema.NullOr(Schema.fromJsonString(InspectionOriginal)),
+});
+const decodeInspectionRow = (raw: unknown): Option.Option<TransactionInspection> => {
+  const decoded = Schema.decodeUnknownOption(InspectionRow)(raw);
+  if (Option.isNone(decoded)) return Option.none();
+  const row = decoded.value;
+  const base = { ...storedFields(row), presentation: presentationMetadata(row) };
+  if (row.linked === 0) {
+    return Schema.decodeOption(TransactionInspection)({
+      ...base,
+      reconciliation: { kind: "independent" },
+      sources: [],
+    });
+  }
+  const { first_original: first, second_original: second } = row;
+  if (first === null || second === null || first.id === second.id) return Option.none();
+  return Schema.decodeOption(TransactionInspection)({
+    ...base,
+    sources: [
+      { transactionId: first.id, kinds: first.source_kinds },
+      { transactionId: second.id, kinds: second.source_kinds },
+    ],
+    reconciliation: {
+      kind: "linked",
+      firstTransaction: storedFields(first),
+      secondTransaction: storedFields(second),
+    },
+  });
+};
+
 const decodedHistoryPage = (
   rows: D1Result,
   selection: Pick<Selection, "request" | "search">,
@@ -513,14 +571,12 @@ export const presentHistory = ({
     if (first === undefined) {
       return notFound();
     }
-    const presentation = decodePresentationRow(first);
+    const presentation = decodeInspectionRow(first);
     return Option.isNone(presentation)
       ? unavailable()
       : Response.json(
           {
-            data: Schema.encodeSync(Schema.toCodecJson(TransactionPresentation))(
-              presentation.value
-            ),
+            data: Schema.encodeSync(Schema.toCodecJson(TransactionInspection))(presentation.value),
             next: [],
           },
           { headers: noStore }

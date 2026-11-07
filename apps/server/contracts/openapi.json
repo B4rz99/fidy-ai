@@ -69,7 +69,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lastUsedAt": {
-            "$ref": "#/components/schemas/Union_20"
+            "$ref": "#/components/schemas/Union_21"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
@@ -2737,7 +2737,7 @@
                 "$ref": "#/components/schemas/InterpretationRevision"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_16"
+                "$ref": "#/components/schemas/Union_17"
               },
               "receivedEmailId": {
                 "maxLength": 256,
@@ -2835,7 +2835,7 @@
                     "type": "string"
                   },
                   {
-                    "$ref": "#/components/schemas/Union_16"
+                    "$ref": "#/components/schemas/Union_17"
                   }
                 ]
               },
@@ -4482,7 +4482,7 @@
             "$ref": "#/components/schemas/Objects_32"
           },
           "item": {
-            "$ref": "#/components/schemas/Union_12"
+            "$ref": "#/components/schemas/Union_13"
           },
           "revision": {
             "maximum": 9007199254740991,
@@ -5084,10 +5084,10 @@
             "type": "string"
           },
           "frequency": {
-            "$ref": "#/components/schemas/Union_18"
+            "$ref": "#/components/schemas/Union_19"
           },
           "kind": {
-            "$ref": "#/components/schemas/Union_17"
+            "$ref": "#/components/schemas/Union_18"
           },
           "money": {
             "$ref": "#/components/schemas/Objects_53"
@@ -5829,7 +5829,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lastUsedAt": {
-            "$ref": "#/components/schemas/Union_20"
+            "$ref": "#/components/schemas/Union_21"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
@@ -7291,7 +7291,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "sourceProvider": {
                 "maxLength": 80,
@@ -7425,6 +7425,14 @@
       "SourceAttestationId": {
         "format": "uuid",
         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        "type": "string"
+      },
+      "SourceAttestationKind": {
+        "enum": [
+          "manual",
+          "statement-line",
+          "notification-email"
+        ],
         "type": "string"
       },
       "SpendingChartResult": {
@@ -7718,7 +7726,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_15"
+                "$ref": "#/components/schemas/Union_16"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -7735,7 +7743,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -7799,7 +7807,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_15"
+                "$ref": "#/components/schemas/Union_16"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -7816,7 +7824,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -8006,7 +8014,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_15"
+                "$ref": "#/components/schemas/Union_16"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -8023,7 +8031,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -8087,7 +8095,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_15"
+                "$ref": "#/components/schemas/Union_16"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -8104,7 +8112,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -8168,7 +8176,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_15"
+                "$ref": "#/components/schemas/Union_16"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -8188,7 +8196,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -8250,7 +8258,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "status": {
                 "enum": [
@@ -8282,7 +8290,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8321,7 +8329,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8364,7 +8372,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8408,7 +8416,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -8462,7 +8470,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_11"
+                "$ref": "#/components/schemas/Union_12"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -11619,7 +11627,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Union_14"
+                    "$ref": "#/components/schemas/Union_15"
                   }
                 },
                 "required": [
@@ -13062,6 +13070,129 @@
         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
+      "TransactionInspection": {
+        "additionalProperties": false,
+        "properties": {
+          "categoryId": {
+            "$ref": "#/components/schemas/CategoryId"
+          },
+          "counterparty": {
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/TransactionCreatedAt"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/Union_3"
+          },
+          "id": {
+            "$ref": "#/components/schemas/TransactionId"
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money_2"
+          },
+          "notes": {
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TransactionOccurredAt"
+          },
+          "presentation": {
+            "$ref": "#/components/schemas/Union_11"
+          },
+          "reconciliation": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "independent"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "firstTransaction": {
+                    "$ref": "#/components/schemas/Transaction"
+                  },
+                  "kind": {
+                    "enum": [
+                      "linked"
+                    ],
+                    "type": "string"
+                  },
+                  "secondTransaction": {
+                    "$ref": "#/components/schemas/Transaction"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "firstTransaction",
+                  "secondTransaction"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "kinds": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceAttestationKind"
+                  },
+                  "maxItems": 3,
+                  "type": "array"
+                },
+                "transactionId": {
+                  "$ref": "#/components/schemas/TransactionId"
+                }
+              },
+              "required": [
+                "transactionId",
+                "kinds"
+              ],
+              "type": "object"
+            },
+            "maxItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "money",
+          "direction",
+          "categoryId",
+          "occurredAt",
+          "createdAt",
+          "revision",
+          "presentation",
+          "reconciliation",
+          "sources"
+        ],
+        "type": "object"
+      },
       "TransactionListLimit": {
         "maximum": 50,
         "minimum": 1,
@@ -13256,45 +13387,7 @@
             "$ref": "#/components/schemas/TransactionOccurredAt"
           },
           "presentation": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Objects_21"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "enum": [
-                      "visible-member"
-                    ],
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "enum": [
-                      "suppressed-member"
-                    ],
-                    "type": "string"
-                  },
-                  "requestedId": {
-                    "$ref": "#/components/schemas/TransactionId"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "requestedId"
-                ],
-                "type": "object"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_11"
           },
           "revision": {
             "maximum": 9007199254740991,
@@ -13459,13 +13552,54 @@
         ]
       },
       "Union_11": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Objects_21"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "visible-member"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "suppressed-member"
+                ],
+                "type": "string"
+              },
+              "requestedId": {
+                "$ref": "#/components/schemas/TransactionId"
+              }
+            },
+            "required": [
+              "kind",
+              "requestedId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Union_12": {
         "enum": [
           "csv",
           "xlsx"
         ],
         "type": "string"
       },
-      "Union_12": {
+      "Union_13": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -13491,7 +13625,7 @@
                 "type": "integer"
               },
               "source": {
-                "$ref": "#/components/schemas/Union_13"
+                "$ref": "#/components/schemas/Union_14"
               },
               "status": {
                 "enum": [
@@ -13543,7 +13677,7 @@
                 "type": "integer"
               },
               "source": {
-                "$ref": "#/components/schemas/Union_13"
+                "$ref": "#/components/schemas/Union_14"
               },
               "status": {
                 "enum": [
@@ -13574,7 +13708,7 @@
           }
         ]
       },
-      "Union_13": {
+      "Union_14": {
         "enum": [
           "statement",
           "email",
@@ -13582,7 +13716,7 @@
         ],
         "type": "string"
       },
-      "Union_14": {
+      "Union_15": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -13685,7 +13819,7 @@
           }
         ]
       },
-      "Union_15": {
+      "Union_16": {
         "enum": [
           "malformed-source-row",
           "missing-required-fact",
@@ -13697,7 +13831,7 @@
         ],
         "type": "string"
       },
-      "Union_16": {
+      "Union_17": {
         "enum": [
           "provider-retrieval-failed",
           "processing-interrupted",
@@ -13705,7 +13839,7 @@
         ],
         "type": "string"
       },
-      "Union_17": {
+      "Union_18": {
         "enum": [
           "income",
           "expense",
@@ -13713,7 +13847,7 @@
         ],
         "type": "string"
       },
-      "Union_18": {
+      "Union_19": {
         "enum": [
           "weekly",
           "fortnightly",
@@ -13725,7 +13859,15 @@
         ],
         "type": "string"
       },
-      "Union_19": {
+      "Union_2": {
+        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+        "enum": [
+          "inflow",
+          "outflow"
+        ],
+        "type": "string"
+      },
+      "Union_20": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -13794,15 +13936,7 @@
           }
         ]
       },
-      "Union_2": {
-        "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
-        "enum": [
-          "inflow",
-          "outflow"
-        ],
-        "type": "string"
-      },
-      "Union_20": {
+      "Union_21": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/UtcTimestamp"
@@ -18233,7 +18367,7 @@
                       "properties": {
                         "items": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_12"
+                            "$ref": "#/components/schemas/Union_13"
                           },
                           "type": "array"
                         },
@@ -18915,7 +19049,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Union_14"
+                "$ref": "#/components/schemas/Union_15"
               }
             }
           },
@@ -22286,16 +22420,16 @@
                           "$ref": "#/components/schemas/AccessTier"
                         },
                         "canonicalCalls": {
-                          "$ref": "#/components/schemas/Union_19"
+                          "$ref": "#/components/schemas/Union_20"
                         },
                         "forwardedEmails": {
-                          "$ref": "#/components/schemas/Union_19"
+                          "$ref": "#/components/schemas/Union_20"
                         },
                         "hostedHistoryTurns": {
-                          "$ref": "#/components/schemas/Union_19"
+                          "$ref": "#/components/schemas/Union_20"
                         },
                         "mediaSubmissions": {
-                          "$ref": "#/components/schemas/Union_19"
+                          "$ref": "#/components/schemas/Union_20"
                         }
                       },
                       "required": [
@@ -22596,7 +22730,7 @@
             "name": "kind",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_17"
+              "$ref": "#/components/schemas/Union_18"
             }
           },
           {
@@ -22604,7 +22738,7 @@
             "name": "frequency",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_18"
+              "$ref": "#/components/schemas/Union_19"
             }
           },
           {
@@ -22801,7 +22935,7 @@
                                 "$ref": "#/components/schemas/Money_2"
                               },
                               "kind": {
-                                "$ref": "#/components/schemas/Union_17"
+                                "$ref": "#/components/schemas/Union_18"
                               },
                               "remaining": {
                                 "$ref": "#/components/schemas/Money_2"
@@ -24208,7 +24342,7 @@
         "x-fidy-required-tier": "free"
       },
       "get": {
-        "description": "Fetch one owned Transaction by id. Independent records return directly; either member of a linked pair succeeds and explains the earliest-created visible Transaction. Unknown, deleted, and another user's ids all answer not_found.",
+        "description": "Fetch one owned Transaction by id. Independent records return directly; either member of a linked pair succeeds and explains the earliest-created visible Transaction. The reconciliation field exposes both retained originals for review before unlinking. Unknown, deleted, and another user's ids all answer not_found.",
         "operationId": "transactions.getTransaction",
         "parameters": [
           {
@@ -24228,7 +24362,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/TransactionPresentation"
+                      "$ref": "#/components/schemas/TransactionInspection"
                     },
                     "next": {
                       "$ref": "#/components/schemas/Arrays_"

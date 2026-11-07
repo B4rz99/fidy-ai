@@ -1,16 +1,22 @@
 import { Option } from "effect";
-import { type JSX, use } from "react";
+import { type JSX, use, useState } from "react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
+import { PendingRead } from "@/ui/components/pending-read";
+import { TransactionReconciliation } from "./reconciliation";
 import { TransactionCorrectionContext } from "./correction-context";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
 import { CategoryVisual } from "@/ui/components/category-visual";
 import { Button } from "@/ui/components/button";
-import type { FidyClient } from "@/transport/client";
-import type { DetailMode } from "./panel-state";
+import type { CanonicalSuccess, FidyClient } from "@/transport/client";
+import { type DetailMode, reconciliationLocked } from "./panel-state";
 import { TransactionCorrection } from "./correction";
 import { TransactionDeletion } from "./deletion";
 import {
+  type CaptureSources,
   type Category,
+  type LinkedPair,
   type Transaction,
   type TransactionListRow,
   presentTransactionRows,
@@ -27,9 +33,73 @@ type DetailProps = Readonly<{
   onRefresh: () => void;
   onClose: () => void;
   editable: boolean;
+  inspectable: boolean;
   mode: DetailMode;
   onMode: (mode: DetailMode) => void;
 }>;
+type InspectedProps = DetailProps &
+  Readonly<{
+    pair: Option.Option<LinkedPair>;
+    sources: CaptureSources;
+    selectedId: Transaction["id"];
+    correctionReady: boolean;
+    inspectionChanged: boolean;
+    inspectionWaiting: boolean;
+    inspectionFailed: boolean;
+    refreshInspection: () => void;
+  }>;
+const relationshipLocked = (mode: DetailMode): boolean =>
+  mode._tag === "Reconciling" && reconciliationLocked(mode);
+const TransactionRelationship = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => {
+  if (props.mode._tag === "Reconciling" || !props.inspectable) {
+    return <></>;
+  }
+  if (props.inspectionWaiting && Option.isNone(props.pair)) {
+    return <PendingRead label="Consultando vínculo" />;
+  }
+  if (props.inspectionFailed) {
+    return (
+      <div className="mt-4 flex flex-col gap-2">
+        <output className="text-sm">No pudimos consultar el vínculo.</output>
+        <Button variant="outline" onClick={props.refreshInspection}>
+          Actualizar vínculo
+        </Button>
+      </div>
+    );
+  }
+  return Option.match(props.pair, {
+    onNone: () => <></>,
+    onSome: (pair) => (
+      <div className="my-4 flex flex-wrap items-center justify-between gap-3 border-y border-border py-4">
+        <div>
+          <p className="text-sm font-semibold">Vinculada</p>
+          <p className="text-sm text-muted-foreground">
+            Dos registros cuentan como una transacción.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          disabled={
+            props.inspectionWaiting ||
+            relationshipLocked(props.mode) ||
+            (props.mode._tag === "Deleting" && !["idle", "rejected"].includes(props.mode.status))
+          }
+          onClick={() =>
+            props.onMode({
+              _tag: "Reconciling",
+              pair,
+              sources: props.sources,
+              deleting: props.mode._tag === "Deleting",
+              status: "review",
+            })
+          }
+        >
+          {props.mode._tag === "Deleting" ? "Revisar vínculo" : "Ver vínculo"}
+        </Button>
+      </div>
+    ),
+  });
+};
 const detailRow = ({
   transaction,
   categories,
@@ -86,14 +156,14 @@ const DetailIdentity = ({
     </div>
   );
 };
-const DetailDeleteAction = ({ props }: Readonly<{ props: DetailProps }>): JSX.Element => (
+const DetailDeleteAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => (
   <>
-    {props.editable && props.mode._tag !== "Deleting" ? (
+    {props.editable && props.mode._tag !== "Deleting" && props.mode._tag !== "Reconciling" ? (
       <Button
         variant="outline"
         data-transaction-slot="transaction-danger"
 
-        onClick={() => props.onMode({ _tag: "Deleting", status: "idle" })}
+        onClick={() => props.onMode({ _tag: "Deleting", status: "idle", original: Option.none() })}
       >
         <HugeiconsIcon icon={Delete02Icon} size={20} aria-hidden="true" />
         Eliminar transacción
@@ -101,62 +171,119 @@ const DetailDeleteAction = ({ props }: Readonly<{ props: DetailProps }>): JSX.El
     ) : null}
   </>
 );
+const detailTitle = (mode: DetailMode): string => {
+  if (mode._tag === "Reconciling") return "Revisar vínculo";
+  return mode._tag === "Deleting" ? "Eliminar transacción" : "Detalle de transacción";
+};
+const DetailClose = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => {
+  const corrections = use(TransactionCorrectionContext);
+  const busy = Option.exists(
+    corrections,
+    (owner) =>
+      owner.status === "saving" || owner.status === "recovering" || owner.status === "refreshing"
+  );
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={
+        props.mode._tag === "Deleting" && props.mode.status !== "idle"
+          ? props.onRefresh
+          : props.onClose
+      }
+      aria-label="Cerrar detalle"
+      disabled={
+        relationshipLocked(props.mode) ||
+        (props.mode._tag === "Deleting" && props.mode.status === "saving") ||
+        busy
+      }
+    >
+      <HugeiconsIcon icon={Cancel01Icon} size={20} aria-hidden="true" />
+    </Button>
+  );
+};
 const DetailFrame = ({
   props,
   children,
-}: Readonly<{ props: DetailProps; children: JSX.Element }>): JSX.Element => (
+}: Readonly<{ props: InspectedProps; children: JSX.Element }>): JSX.Element => (
   <section aria-label="Detalle de transacción" className="flex flex-col gap-6">
     <header className="flex items-center justify-between gap-3">
-      <h2>{props.mode._tag === "Deleting" ? "Eliminar transacción" : "Detalle de transacción"}</h2>
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={
-          props.mode._tag === "Deleting" && props.mode.status !== "idle"
-            ? props.onRefresh
-            : props.onClose
-        }
-        aria-label="Cerrar detalle"
-        disabled={
-          (props.mode._tag === "Deleting" && props.mode.status === "saving") ||
-          Option.exists(
-            use(TransactionCorrectionContext),
-            (owner) =>
-              owner.status === "saving" ||
-              owner.status === "recovering" ||
-              owner.status === "refreshing"
-          )
-        }
-      >
-        <HugeiconsIcon icon={Cancel01Icon} size={20} aria-hidden="true" />
-      </Button>
+      <h2>{detailTitle(props.mode)}</h2>
+      <DetailClose props={props} />
     </header>
-    <DetailIdentity {...props} />
-    {props.mode._tag === "Deleting" || props.mode._tag === "Viewing" ? (
+    {props.mode._tag !== "Reconciling" ? <DetailIdentity {...props} /> : null}
+    {props.mode._tag === "Deleting" ||
+    props.mode._tag === "Viewing" ||
+    (props.mode._tag === "Editing" && !props.correctionReady) ? (
       <p data-transaction-slot="transaction-detail-value">{detailRow(props).moneyText}</p>
     ) : null}
+    <TransactionRelationship props={props} />
     {children}
     <DetailDeleteAction props={props} />
   </section>
 );
-export const TransactionDetail = (props: DetailProps): JSX.Element => {
-  if (props.mode._tag === "Deleting") {
-    return props.renderPanel(
-      <DetailFrame props={props}>
-        <TransactionDeletion
-          apiClient={props.apiClient}
-          transaction={props.transaction}
-          editable={props.editable}
-          status={props.mode.status}
-          onStatus={(status) => props.onMode({ _tag: "Deleting", status })}
-          onDeleted={props.onDeleted}
-          onCancel={() => props.onMode({ _tag: "Editing" })}
-          onRefresh={props.onRefresh}
-        />
-      </DetailFrame>
-    );
+const ReconciliationPanel = ({
+  props,
+}: Readonly<{
+  props: InspectedProps & { mode: Extract<DetailMode, { _tag: "Reconciling" }> };
+}>): JSX.Element =>
+  props.renderPanel(
+    <DetailFrame props={props}>
+      <TransactionReconciliation
+        {...props}
+        selectedId={props.selectedId}
+        onMode={props.onMode}
+        onCancel={() =>
+          props.onMode(
+            props.mode.deleting
+              ? { _tag: "Deleting", status: "idle", original: Option.none() }
+              : { _tag: "Editing" }
+          )
+        }
+        onHistory={props.onRefresh}
+        onDelete={(original) =>
+          props.onMode({ _tag: "Deleting", status: "idle", original: Option.some(original) })
+        }
+      />
+    </DetailFrame>
+  );
+const DeletionPanel = ({
+  props,
+}: Readonly<{
+  props: InspectedProps & { mode: Extract<DetailMode, { _tag: "Deleting" }> };
+}>): JSX.Element =>
+  props.renderPanel(
+    <DetailFrame props={props}>
+      <TransactionDeletion
+        apiClient={props.apiClient}
+        transaction={props.transaction}
+        editable={
+          props.editable &&
+          (Option.isSome(props.mode.original) ||
+            (Option.isNone(props.pair) && !props.inspectionWaiting))
+        }
+        status={props.mode.status}
+        onStatus={(status) => props.onMode({ ...props.mode, status })}
+        onDeleted={props.onDeleted}
+        onCancel={() =>
+          Option.isSome(props.mode.original) ? props.onRefresh() : props.onMode({ _tag: "Editing" })
+        }
+        onRefresh={props.onRefresh}
+      />
+    </DetailFrame>
+  );
+const InspectedDetail = (input: InspectedProps): JSX.Element => {
+  const props =
+    input.mode._tag === "Deleting" && Option.isSome(input.mode.original)
+      ? { ...input, transaction: input.mode.original.value }
+      : input;
+  if (props.mode._tag === "Reconciling") {
+    return <ReconciliationPanel props={{ ...props, mode: props.mode }} />;
   }
-  if (props.mode._tag === "Editing") {
+  if (props.mode._tag === "Deleting") {
+    return <DeletionPanel props={{ ...props, mode: props.mode }} />;
+  }
+  if (props.mode._tag === "Editing" && props.correctionReady) {
     return (
       <TransactionCorrection
         key={props.transaction.id}
@@ -172,7 +299,73 @@ export const TransactionDetail = (props: DetailProps): JSX.Element => {
     <DetailFrame props={props}>
       <>
         <DetailFacts {...props} />
+        {props.inspectionChanged ? (
+          <div className="mt-4 flex flex-col gap-3">
+            <output>La transacción cambió. Actualiza el historial antes de editar.</output>
+            <Button variant="outline" onClick={props.onRefresh}>
+              Actualizar historial
+            </Button>
+          </div>
+        ) : null}
       </>
     </DetailFrame>
   );
 };
+
+const inspectionFresh = (state: CanonicalQueryState<unknown, unknown>): boolean =>
+  state._tag === "Ready" && !state.waiting && Option.isNone(state.refreshFailure);
+const inspectionFailed = (state: CanonicalQueryState<unknown, unknown>): boolean =>
+  state._tag === "Failure" || (state._tag === "Ready" && Option.isSome(state.refreshFailure));
+const inspectionPair = (
+  state: CanonicalQueryState<CanonicalSuccess<"transactions.getTransaction">, unknown>
+): Option.Option<LinkedPair> =>
+  state._tag === "Ready" && state.value.data.reconciliation.kind === "linked"
+    ? Option.some(state.value.data.reconciliation)
+    : Option.none();
+const InspectableDetail = (props: DetailProps): JSX.Element => {
+  const [query] = useState(() =>
+    props.apiClient.query("transactions", "getTransaction", {
+      params: { id: props.transaction.id },
+      timeToLive: "0 millis",
+      reactivityKeys: ["transaction-detail"],
+    })
+  );
+  const state = useAtomValue(query).pipe(presentCanonicalQuery);
+  const refreshInspection = useAtomRefresh(query);
+  const fresh = inspectionFresh(state);
+  const transaction = state._tag === "Ready" ? state.value.data : props.transaction;
+  const changed =
+    transaction.id !== props.transaction.id || transaction.revision !== props.transaction.revision;
+  const pair = inspectionPair(state);
+  return (
+    <InspectedDetail
+      {...props}
+      transaction={transaction}
+      selectedId={props.transaction.id}
+      editable={props.editable && fresh}
+      correctionReady={fresh && !changed}
+      inspectionChanged={fresh && changed}
+      pair={pair}
+      sources={state._tag === "Ready" ? state.value.data.sources : []}
+      inspectionWaiting={state._tag === "Initial" || state.waiting}
+      inspectionFailed={inspectionFailed(state)}
+      refreshInspection={refreshInspection}
+    />
+  );
+};
+export const TransactionDetail = (props: DetailProps): JSX.Element =>
+  props.inspectable ? (
+    <InspectableDetail {...props} />
+  ) : (
+    <InspectedDetail
+      {...props}
+      pair={Option.none()}
+      sources={[]}
+      selectedId={props.transaction.id}
+      correctionReady={props.editable}
+      inspectionChanged={false}
+      inspectionWaiting={false}
+      inspectionFailed={false}
+      refreshInspection={props.onRefresh}
+    />
+  );

@@ -39,6 +39,23 @@ const row = (index: number, currency = "COP"): typeof first => ({
   counterparty: `Prueba ${index}`,
   revision: index,
 });
+const installInspections = (page: Page, rows: ReadonlyArray<typeof first>): Promise<void> =>
+  page
+    .route(`${apiOrigin}/transactions/*`, (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      const transaction = rows.find((item) => route.request().url().endsWith(`/${item.id}`));
+      if (transaction === undefined) return route.fulfill({ status: 404 });
+      return route.fulfill({
+        contentType: "application/json",
+        body: response({
+          ...transaction,
+          presentation: { kind: "independent" },
+          reconciliation: { kind: "independent" },
+          sources: [],
+        }),
+      });
+    })
+    .then(() => {});
 // Preserve native Date subclass construction for the calendar's configured time zone.
 const fixedDateNow = (): void => {
   Date.now = (): number => Date.parse("2026-10-24T12:00:00.000Z");
@@ -58,6 +75,7 @@ const installWorkspace = (
     }
     yield* wait(() => installUser(page));
     yield* wait(() => installCategories({ page, categories }));
+    yield* wait(() => installInspections(page, rows));
     yield* wait(() =>
       page.route(`${apiOrigin}/web/session/binding{,?*}`, (route) =>
         route.fulfill({
@@ -85,6 +103,17 @@ const recordMutation = (
 ): Journey =>
   wait(() =>
     page.route(`${apiOrigin}${path}`, (route) => {
+      if (route.request().method() === "GET") {
+        return route.fulfill({
+          contentType: "application/json",
+          body: response({
+            ...first,
+            presentation: { kind: "independent" },
+            reconciliation: { kind: "independent" },
+            sources: [],
+          }),
+        });
+      }
       requests.push(route.request().postDataJSON());
       if (outcome === "uncertain") return route.abort("failed");
       return route.fulfill({

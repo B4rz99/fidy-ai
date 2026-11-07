@@ -89,6 +89,23 @@ const completePending = (fixture: HistoryFixture): Promise<void> =>
 const installCorrection = (page: Page, fixture: HistoryFixture, last: HistoryRow): Promise<void> =>
   page
     .route(`${apiOrigin}/transactions/${last.id}`, (route) => {
+      if (route.request().method() === "GET") {
+        const current = Option.getOrThrow(
+          Option.fromUndefinedOr(fixture.rows.find((record) => record.id === last.id))
+        );
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              ...current,
+              presentation: { kind: "independent" },
+              reconciliation: { kind: "independent" },
+              sources: [],
+            },
+            next: [],
+          }),
+        });
+      }
       const corrected = { ...last, money: { amount: "0.02", currency: "USD" }, revision: 1 };
       fixture.rows = fixture.rows.map((row) => (row.id === last.id ? corrected : row));
       return route

@@ -25,7 +25,7 @@ import { type FidyClient, maximumAtomicBatchCalls } from "@/transport/client";
 import { TransactionSummary } from "./summary";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
-import type { TransactionPanel } from "./panel-state";
+import { type TransactionPanel, reconciliationFinished, reconciliationLocked } from "./panel-state";
 import type { HistoryState } from "./history";
 import {
   type Category,
@@ -167,6 +167,9 @@ const panelLocked = (panel: TransactionPanel): boolean => {
       return panel.status === "saving";
     case "Detail":
       if (panel.mode._tag === "Deleting") return panel.mode.status !== "idle";
+      if (panel.mode._tag === "Reconciling") {
+        return reconciliationLocked(panel.mode);
+      }
       return false;
     case "Summary":
       return false;
@@ -198,6 +201,20 @@ const CapturePanel = ({ onPanel, renderPanel, ...props }: PanelProps): JSX.Eleme
     />
   );
 };
+const closeTransactionPanel = (
+  panel: TransactionPanel,
+  onPanel: (panel: TransactionPanel) => void,
+  onRefresh: () => void
+): void => {
+  onPanel({ _tag: "Summary" });
+  if (
+    panel._tag === "Detail" &&
+    panel.mode._tag === "Reconciling" &&
+    reconciliationFinished(panel.mode)
+  ) {
+    onRefresh();
+  }
+};
 const DetailPanel = ({
   panel,
   onPanel,
@@ -210,7 +227,7 @@ const DetailPanel = ({
   const transaction = Option.fromNullishOr(
     props.transactions.find((record) => record.id === panel.id)
   );
-  const close = (): void => onPanel({ _tag: "Summary" });
+  const close = (): void => closeTransactionPanel(panel, onPanel, props.onRefresh);
   if (Option.isNone(transaction)) {
     return renderPanel(
       <div className="flex flex-col gap-3">
@@ -231,6 +248,7 @@ const DetailPanel = ({
       locale={props.currentUser.locale}
       timeZone={props.currentUser.timeZone}
       editable={props.editable}
+      inspectable={props.readOnly !== true}
       mode={panel.mode}
       onMode={(mode) => onPanel({ ...panel, mode })}
       onClose={close}
@@ -555,15 +573,16 @@ const renderCategoryCell = (
 const ledgerDisabled = (panel: TransactionPanel): boolean =>
   panelLocked(panel) ||
   (panelEditing(panel) && panel._tag !== "Detail") ||
-  (panel._tag === "Detail" && panel.mode._tag === "Deleting");
+  (panel._tag === "Detail" &&
+    (panel.mode._tag === "Deleting" || panel.mode._tag === "Reconciling"));
 const WorkspaceContext = ({
   panel,
-  onPanel,
+  onClose,
   children,
   busy,
 }: Readonly<{
   panel: TransactionPanel;
-  onPanel: (panel: TransactionPanel) => void;
+  onClose: () => void;
   children: JSX.Element;
   busy: boolean;
 }>): JSX.Element => (
@@ -571,7 +590,7 @@ const WorkspaceContext = ({
     active={panel._tag !== "Summary" && !(panel._tag === "Bulk" && panel.stage === "selecting")}
     identity={panel._tag === "Detail" ? `${panel.id}:${panel.mode._tag}` : panel._tag}
     locked={panelLocked(panel) || busy}
-    onClose={() => onPanel({ _tag: "Summary" })}
+    onClose={onClose}
     title={panelTitle(panel)}
   >
     {children}
@@ -619,6 +638,7 @@ const WorkspaceContent = ({
       owner.status === "saving" || owner.status === "recovering" || owner.status === "refreshing"
   );
   const locked = panelLocked(panel) || correctionBusy;
+  const closePanel = (): void => closeTransactionPanel(panel, onPanel, props.onRefresh);
   return (
     <div data-transaction-slot="transaction-columns">
       <div data-transaction-slot="transaction-records">
@@ -649,7 +669,7 @@ const WorkspaceContent = ({
         />
         <ContinuationControl {...props} editing={panelEditing(panel)} />
       </div>
-      <WorkspaceContext panel={panel} onPanel={onPanel} busy={correctionBusy}>
+      <WorkspaceContext panel={panel} onClose={closePanel} busy={correctionBusy}>
         <WorkspacePanel
           {...props}
           panel={panel}

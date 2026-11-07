@@ -238,6 +238,22 @@ export const TransactionPresentation = Schema.Struct({
   .annotate({ identifier: "TransactionPresentation" });
 export type TransactionPresentation = typeof TransactionPresentation.Type;
 
+/** The exact retained originals behind one effective Transaction, read in the same snapshot. */
+export const TransactionInspection = Schema.Struct({
+  ...TransactionPresentation.fields,
+  reconciliation: Schema.Union([
+    Schema.Struct({ kind: Schema.Literal("independent") }),
+    Schema.Struct({
+      kind: Schema.Literal("linked"),
+      firstTransaction: Transaction,
+      secondTransaction: Transaction,
+    }),
+  ]),
+})
+  .check(positiveTransactionMoney)
+  .annotate({ identifier: "TransactionInspection" });
+export type TransactionInspection = typeof TransactionInspection.Type;
+
 /** The canonically ordered independent originals restored by one successful unlink mutation. */
 export const RestoredTransactionPair = Schema.Struct({
   firstTransaction: IndependentTransactionPresentation,

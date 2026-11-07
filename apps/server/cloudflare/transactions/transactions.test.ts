@@ -1,3 +1,4 @@
+import { TransactionInspection } from "../../src/shell/transactions/contract";
 import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { UserId } from "../../src/core/identity/contract";
@@ -1725,6 +1726,58 @@ it("links one exact pair into one effective Transaction while retaining both ori
         )
       ).pipe(Effect.orDie)).data;
       expect(requestedVisible.presentation).toEqual({ kind: "visible-member" });
+      const inspection = (yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: TransactionInspection })
+      )(
+        yield* fromTestPromise(() =>
+          send(`/transactions/${visible}`).then((response) => response.json())
+        )
+      ).pipe(Effect.orDie)).data;
+      expect(inspection.reconciliation.kind).toBe("linked");
+      const provenance = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({
+            sources: Schema.Array(
+              Schema.Struct({ transactionId: Schema.String, kinds: Schema.Array(Schema.String) })
+            ),
+          }),
+        })
+      )(
+        yield* fromTestPromise(() =>
+          send(`/transactions/${visible}`).then((response) => response.json())
+        )
+      );
+      expect(provenance.data.sources).toEqual([
+        { transactionId: suppressed, kinds: ["manual"] },
+        { transactionId: visible, kinds: ["manual"] },
+      ]);
+
+      if (inspection.reconciliation.kind !== "linked") throw new Error("Missing linked originals");
+      expect(inspection.reconciliation.firstTransaction.id).toBe(suppressed);
+      expect(inspection.reconciliation.secondTransaction.id).toBe(visible);
+      expect(inspection.reconciliation.firstTransaction.counterparty).toEqual(
+        Option.some("Cafe Dos")
+      );
+      expect(inspection.reconciliation.secondTransaction.counterparty).toEqual(
+        Option.some("Cafe Uno")
+      );
+      expect(encodeMoneyAmount(inspection.reconciliation.firstTransaction.money.amount)).toBe(
+        "9007199254740993.01"
+      );
+      const foreignInspection = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request(`https://api.fidyapp.com/transactions/${visible}`, {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": sessions[1] ?? "invalid",
+              cookie: `__Host-fidy_session=${bearer(1)}`,
+            },
+          })
+        )
+      );
+      expect(foreignInspection.status).toBe(404);
+
       const searched = (yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() =>
           send(`/transactions/search?q=${encodeURIComponent("Cafe Uno")}`).then((response) =>
@@ -7440,7 +7493,11 @@ it("reads an addressed linked Transaction without work proportional to retained 
       const observed = observeRetentionCost(db);
       const response = yield* fromTestPromise(() => read(observed.database));
       expect(response.status).toBe(200);
-      const body = yield* Schema.decodeUnknownEffect(EffectiveTransaction)(
+      const InspectionResponse = Schema.Struct({
+        data: TransactionInspection,
+        next: Schema.Array(Schema.Unknown),
+      });
+      const body = yield* Schema.decodeUnknownEffect(InspectionResponse)(
         yield* fromTestPromise(() => response.json())
       ).pipe(Effect.orDie);
       expect(body.data.id).toBe("20000000-0000-4000-8000-000000000001");
@@ -7460,7 +7517,7 @@ it("reads an addressed linked Transaction without work proportional to retained 
         const repaired = yield* fromTestPromise(() => read(db));
         expect(repaired.status).toBe(200);
         expect(yield* fromTestPromise(() => repaired.json())).toEqual(
-          yield* Schema.encodeEffect(EffectiveTransaction)(body)
+          yield* Schema.encodeEffect(InspectionResponse)(body)
         );
       }
     })

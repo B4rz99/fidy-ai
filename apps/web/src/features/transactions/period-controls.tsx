@@ -1,9 +1,27 @@
-import { Schema } from "effect";
+import { DateTime, Schema } from "effect";
 import { type ComponentProps, type JSX, useId } from "react";
 import { cn } from "@/ui/class-names";
 import { Button } from "@/ui/components/button";
-import { Input } from "@/ui/components/input";
+import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
+import { Label } from "@/ui/components/label";
+import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select";
 import { TransactionMonth, shiftTransactionMonth } from "./period";
+
+const monthOffset = "YYYY-".length;
+const monthFormatter = new Intl.DateTimeFormat("es-CO", { month: "long", timeZone: "UTC" });
+const months = Array.from({ length: 12 }, (_, index) => {
+  const value = String(index + 1).padStart(2, "0");
+  return {
+    value,
+    label: monthFormatter.format(
+      DateTime.makeUnsafe(`2026-${value}-01T12:00:00Z`).epochMilliseconds
+    ),
+  };
+});
+const years = Array.from({ length: 9997 }, (_, index) => {
+  const year = String(index + 2).padStart(4, "0");
+  return { value: year, label: year };
+});
 
 type PeriodControlsProps = Readonly<{
   value: string;
@@ -19,50 +37,79 @@ export const TransactionPeriodControls = ({
   disabled,
   onChange,
   className,
-}: PeriodControlsProps): JSX.Element => {
-  const monthId = useId();
-  return (
-    <nav
-      aria-label="Periodo de transacciones"
-      className={cn("flex flex-wrap items-center gap-2 px-4 py-2", className)}
+}: PeriodControlsProps): JSX.Element => (
+  <nav
+    aria-label="Periodo de transacciones"
+    data-transaction-slot="transaction-period"
+    className={cn("p-4", className)}
+  >
+    <span className="text-sm first-letter:uppercase">{label}</span>
+    <Button
+      variant="outline"
+      aria-label="Mes anterior"
+      disabled={disabled || value === "0002-01"}
+      onClick={() => onChange(shiftTransactionMonth({ month: value, offset: -1 }))}
     >
-      <Button
-        variant="outline"
-        aria-label="Mes anterior"
-        disabled={disabled || value === "0002-01"}
-        onClick={() => onChange(shiftTransactionMonth({ month: value, offset: -1 }))}
-      >
-        ‹
-      </Button>
-      <span className="block flex-1 text-sm first-letter:uppercase sm:flex-none">{label}</span>
-      <Button
-        variant="outline"
-        aria-label="Mes siguiente"
-        disabled={disabled || value === "9998-12"}
-        onClick={() => onChange(shiftTransactionMonth({ month: value, offset: 1 }))}
-      >
-        ›
-      </Button>
-      <label
-        htmlFor={monthId}
-        className="flex w-full flex-wrap items-center justify-between gap-2 text-sm sm:w-auto"
-      >
-        Mes de transacciones
-        <Input
-          id={monthId}
-          type="month"
+      ‹
+    </Button>
+    <PeriodChoices value={value} disabled={disabled} onChange={onChange} />
+    <Button
+      variant="outline"
+      aria-label="Mes siguiente"
+      disabled={disabled || value === "9998-12"}
+      onClick={() => onChange(shiftTransactionMonth({ month: value, offset: 1 }))}
+    >
+      ›
+    </Button>
+  </nav>
+);
+
+const PeriodChoices = ({
+  value,
+  disabled,
+  onChange,
+}: Readonly<{
+  value: string;
+  disabled: boolean;
+  onChange: (month: string) => void;
+}>): JSX.Element => {
+  const id = useId();
+  const year = value.slice(0, 4);
+  const month = value.slice(monthOffset);
+  const changePeriod = (next: string): void => {
+    if (Schema.is(TransactionMonth)(next)) onChange(next);
+  };
+  return (
+    <>
+      <div data-period-field="month">
+        <Label htmlFor={`${id}-month`}>Mes</Label>
+        <NativeSelect
+          id={`${id}-month`}
+          size="default"
           aria-label="Mes de transacciones"
-          value={value}
-          min="0002-01"
-          max="9998-12"
-          className="w-auto"
+          value={month}
           disabled={disabled}
-          onChange={(event) => {
-            const month = event.target.value;
-            if (Schema.is(TransactionMonth)(month)) onChange(month);
-          }}
+          onChange={(event) => changePeriod(`${year}-${event.target.value}`)}
+        >
+          {months.map((option) => (
+            <NativeSelectOption key={option.value} value={option.value}>
+              {option.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </div>
+      <div data-period-field="year">
+        <Label htmlFor={`${id}-year`}>Año</Label>
+        <SearchableChoiceDropdown
+          id={`${id}-year`}
+          label="Año de transacciones"
+          value={year}
+          options={years}
+          disabled={disabled}
+          width="full"
+          onChange={(next) => changePeriod(`${next}-${month}`)}
         />
-      </label>
-    </nav>
+      </div>
+    </>
   );
 };

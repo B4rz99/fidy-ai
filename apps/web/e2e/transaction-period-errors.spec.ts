@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { Effect } from "effect";
-import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
+import { apiOrigin, installBoundUser, installCategories, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
@@ -19,7 +19,7 @@ const transaction = {
   revision: 1,
 };
 const installHistory = Effect.fn(function* (page: Page, failed: boolean) {
-  yield* wait(() => installUser(page));
+  yield* wait(() => installBoundUser(page));
   yield* wait(() => installCategories({ page, categories: [category] }));
   const fixture = { failed, requests: new Array<URL>() };
   yield* wait(() =>
@@ -40,7 +40,12 @@ const initialFailureJourney = Effect.fn(function* (page: Page) {
   yield* wait(() => page.goto("/app/transactions?month=2026-10"));
   yield* wait(() => expect(page.getByRole("alert")).toContainText("octubre de 2026"));
   yield* wait(() => expect(page.getByText("Movimientos del mes actual.")).toHaveCount(0));
-  yield* wait(() => expect(page.getByLabel("Mes de transacciones")).toHaveValue("2026-10"));
+  yield* wait(() => expect(page.getByLabel("Mes de transacciones")).toHaveValue("10"));
+  yield* wait(() =>
+    expect(page.getByRole("combobox", { name: "Año de transacciones", exact: true })).toHaveText(
+      "2026"
+    )
+  );
   yield* wait(() =>
     page.screenshot({ path: test.info().outputPath("initial-failure.png"), fullPage: true })
   );
@@ -60,7 +65,12 @@ const initialFailureJourney = Effect.fn(function* (page: Page) {
   yield* wait(() => page.getByRole("button", { name: "Mes anterior", exact: true }).click());
   yield* wait(() => expect(page.getByRole("alert")).toContainText("septiembre de 2026"));
   yield* wait(() => page.getByRole("button", { name: "Mes siguiente", exact: true }).click());
-  yield* wait(() => expect(page.getByLabel("Mes de transacciones")).toHaveValue("2026-10"));
+  yield* wait(() => expect(page.getByLabel("Mes de transacciones")).toHaveValue("10"));
+  yield* wait(() =>
+    expect(page.getByRole("combobox", { name: "Año de transacciones", exact: true })).toHaveText(
+      "2026"
+    )
+  );
 });
 const refreshFailureJourney = Effect.fn(function* (page: Page) {
   const fixture = yield* installHistory(page, false);
@@ -73,7 +83,12 @@ const refreshFailureJourney = Effect.fn(function* (page: Page) {
   );
   yield* wait(() => expect(page.getByRole("alert")).toContainText("octubre de 2026"));
   yield* wait(() => expect(row).toBeVisible());
-  yield* wait(() => expect(page.getByLabel("Mes de transacciones")).toHaveValue("2026-10"));
+  yield* wait(() => expect(page.getByLabel("Mes de transacciones")).toHaveValue("10"));
+  yield* wait(() =>
+    expect(page.getByRole("combobox", { name: "Año de transacciones", exact: true })).toHaveText(
+      "2026"
+    )
+  );
   yield* wait(() =>
     expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeDisabled()
   );

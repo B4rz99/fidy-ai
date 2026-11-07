@@ -59,3 +59,23 @@ export const installCategories = ({
       route.fulfill({ status: 200, contentType: "application/json", body: response(categories) })
     )
     .then(() => {});
+
+export const installBoundUser = (page: Page): Promise<void> =>
+  installUser(page).then(() =>
+    page
+      .route(`${apiOrigin}/web/session/binding**`, (route) =>
+        route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ binding: "24000000-0000-4000-8000-000000000243" }),
+        })
+      )
+      .then(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, (route) =>
+          route.fulfill({
+            contentType: "application/json",
+            body: response({ pendingCount: 0, total: 0, items: [] }),
+          })
+        )
+      )
+      .then(() => {})
+  );

@@ -84,7 +84,7 @@ test("created review history opens its Transaction in the local month list witho
         expect(page.getByRole("heading", { name: "Detalle de transacción" })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Monto · COP", { exact: true })).toHaveCount(0)
+        expect(page.getByLabel("Monto", { exact: true })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("2026-09")
@@ -163,9 +163,7 @@ const laterPageJourney = (page: Page, width: number): Effect.Effect<void, Cause.
       ).toBeAttached()
     );
     yield* Effect.tryPromise(() => record.click());
-    yield* Effect.tryPromise(() =>
-      expect(page.getByLabel("Monto · COP", { exact: true })).toBeVisible()
-    );
+    yield* Effect.tryPromise(() => expect(page.getByLabel("Monto", { exact: true })).toBeVisible());
   });
 for (const width of [desktopWidth, phoneWidth]) {
   test(`history reveals a later-page Transaction without opening it at ${width}px, even after original expiry`, ({

@@ -2,6 +2,7 @@ import { Effect, Option, Schema } from "effect";
 import { TranscriptText } from "~/core/agent/contract";
 import {
   InsightTemplateUnavailable,
+  ProactivityTemplateParameter,
   type WeeklyQuestionSender,
   WeeklyQuestionTemplateConfiguration,
   proactivityTemplateBody,
@@ -22,7 +23,9 @@ export const buildWeeklyQuestionSender = (
   const prepare: WeeklyQuestionSender["prepare"] = (offer) =>
     Effect.gen(function* () {
       if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
-      const parameter = `¿quieres que te siga enviando esto?\n${offer.disclosure.text}\nAceptar o continuar: ${offer.acceptChoice}\nRechazar: ${offer.declineChoice}`;
+      const parameter = yield* Schema.decodeEffect(ProactivityTemplateParameter)(
+        `¿quieres que te siga enviando esto? ${offer.disclosure.text} Aceptar o continuar: ${offer.acceptChoice} Rechazar: ${offer.declineChoice}`
+      );
       const text = proactivityTemplateBody.replace("{{1}}", () => parameter);
       if (
         text.length > maximumQuestionLength ||
@@ -31,7 +34,7 @@ export const buildWeeklyQuestionSender = (
         return yield* new InsightTemplateUnavailable();
       }
       return { parameter, text: TranscriptText.make(text) };
-    });
+    }).pipe(Effect.mapError(() => new InsightTemplateUnavailable()));
   return {
     prepare,
     send: (request) =>

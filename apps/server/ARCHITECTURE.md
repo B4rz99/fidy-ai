@@ -265,6 +265,9 @@ Proactivity uses an exact reviewed Spanish body with enough fixed provider text.
 evidence includes that complete body; its length budget includes the wrapper. Native category
 Consent choices use the compact `p:` prefix while retaining the category, exact offer identity,
 decision, authenticated originating chat and verified disclosure checks.
+Meta text parameters reject line breaks, tabs and five consecutive spaces. Disclosures and their
+fixed choices use single paragraphs; disclosure presentation changes receive new revisions and
+matching content hashes. Frozen evidence retains the exact transmitted text without transport rewriting.
 When inference is refused by provider quota or availability, or its single invalid-output repair
 is exhausted before any mutation attempt, WhatsApp
 stages one fixed failure reply through its ordinary delivery evidence. It makes no result or commit

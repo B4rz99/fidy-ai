@@ -356,7 +356,7 @@ it("requires every source page, recovers after revision changes, and links the e
             .first()
         )
       ).toMatchObject({
-        text: `Nuevos patrones históricos de cargos recurrentes del 2026-10-06. No indica que sigan activos.\n32 patrones. Informe completo: https://app.fidyapp.com/insights/recurring/${id}`,
+        text: `Nuevos patrones históricos de cargos recurrentes del 2026-10-06. No indica que sigan activos. 32 patrones. Informe completo: https://app.fidyapp.com/insights/recurring/${id}`,
       });
       expect(
         yield* Effect.tryPromise(() =>

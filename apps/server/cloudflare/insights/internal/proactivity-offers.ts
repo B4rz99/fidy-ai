@@ -93,12 +93,12 @@ const offerText = (
   kind: ProactivityOptInKind,
   hasGrant: boolean
 ): string => {
-  if (!hasGrant) return `${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`;
+  if (!hasGrant) return `${offer.disclosure.text} ${offer.acceptChoice} ${offer.declineChoice}`;
   const choices =
     kind === "manual-entry-reminder"
-      ? `${offer.acceptChoice}\n${offer.revokeChoice}`
+      ? `${offer.acceptChoice} ${offer.revokeChoice}`
       : offer.revokeChoice;
-  return `${offer.disclosure.text}\n${choices}`;
+  return `${offer.disclosure.text} ${choices}`;
 };
 
 const consentContext = (

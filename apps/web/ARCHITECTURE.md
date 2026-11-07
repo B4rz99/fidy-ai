@@ -501,10 +501,16 @@ Recurring capture retains its separate occurrence-owned editor and recovery cont
 
 One mounted Transaction Correction module coordinates inline Category edits, individual Corrections
 and atomic bulk Corrections for the canonical history resource. It owns synchronous write admission,
-observed revisions, outcomes and explicit canonical reread recovery. Drafts remain with presentation;
-single and atomic mutations retain their distinct server contracts. Closing an editing panel does
-not release an uncertain write. Recovery rereads history and Category data, and a failed reread
-preserves the write lock. The command Atom and its HTTP runtime mount on the first write or recovery
+observed revisions and outcomes. A definite save rejection automatically rereads history and Category
+data without replaying the mutation. The editor retains its draft and bulk selection through that
+reread; only an explicit subsequent save submits against the refreshed revisions. Failed refreshes
+retain the draft and lock writes until explicit retry succeeds. Recovery rereads the previously
+loaded history pages while retaining their display, so later-page editing remains mounted until the
+fresh pages settle. Successful saves and explicit uncertain-outcome verification keep their existing
+workspace reset. Drafts remain with presentation; single and atomic mutations retain their distinct
+server contracts. Closing an editing panel does not release an uncertain write. Automatic recovery
+uses the existing canonical transport observations; no financial-content telemetry or additional
+external workflow is introduced. The command Atom and its HTTP runtime mount on the first write or recovery
 action, so viewing history does not initialize them. The privacy history remains read-only and mounts
 no Correction authority.
 

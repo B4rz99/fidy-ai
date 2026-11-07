@@ -1,6 +1,6 @@
 import { MoneyField } from "./money-field";
 import { formatMoneyInput, parseMoneyInput } from "@/transport/money-input";
-import { RefreshButton } from "@/ui/components/refresh-button";
+import { CorrectionRecoveryFeedback } from "./correction-feedback";
 
 import { BigDecimal, DateTime, Option, Schema } from "effect";
 import { useState } from "react";
@@ -225,36 +225,19 @@ const DraftNotes = ({
     />
   </div>
 );
-const CorrectionFeedback = ({
-  status,
-  onRefresh,
-}: Readonly<{ status: CorrectionStatus; onRefresh: () => void }>): JSX.Element => (
+const CorrectionFeedback = ({ status }: Readonly<{ status: CorrectionStatus }>): JSX.Element => (
   <>
     {status === "invalid" ? (
       <p role="alert" className="text-sm text-destructive">
         Revisa el monto, la fecha y la categoría.
       </p>
     ) : null}
-    {status === "rejected" ? (
-      <div role="alert">
-        <p className="text-sm">
-          No se guardaron los cambios. Actualiza el historial y vuelve a abrir la transacción para
-          revisar su versión actual.
-        </p>
-        <RefreshButton variant="outline" onClick={onRefresh} label="Actualizar historial" />
-      </div>
-    ) : null}
-    {status === "uncertain" ? (
-      <div role="alert">
-        <p className="text-sm">
-          No pudimos confirmar los cambios. Actualiza el historial y revisa la transacción antes de
-          volver a editarla.
-        </p>
-        <RefreshButton variant="outline" onClick={onRefresh} label="Actualizar historial" />
-      </div>
-    ) : null}
   </>
 );
+const saveLabel = (status: CorrectionStatus): string => {
+  if (status === "refreshing") return "Actualizando…";
+  return status === "saving" ? "Guardando…" : "Guardar";
+};
 const CorrectionActions = ({
   status,
   locked,
@@ -269,7 +252,7 @@ const CorrectionActions = ({
       Cancelar
     </Button>
     <Button type="submit" disabled={locked}>
-      {status === "saving" ? "Guardando…" : "Guardar"}
+      {saveLabel(status)}
     </Button>
   </div>
 );
@@ -277,23 +260,24 @@ const CorrectionActions = ({
 export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
   const [draft, setDraft] = useState(() => initialDraft(props.transaction, props.timeZone));
   const corrections = useTransactionCorrections();
-  const [invalid, setInvalid] = useState(false);
+  const [submission, setSubmission] = useState<"pristine" | "invalid" | "submitted">("pristine");
   const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
-  const status: CorrectionStatus = feedback === "idle" && invalid ? "invalid" : feedback;
+  const status: CorrectionStatus =
+    !corrections.locked && submission === "invalid" ? "invalid" : feedback;
   const locked = corrections.locked;
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     if (locked) return;
     const changes = correctionChanges(draft, props);
     if (Option.isNone(changes)) {
-      setInvalid(true);
+      setSubmission("invalid");
       return;
     }
     if (Object.keys(changes.value).length === 0) {
       props.onCancel();
       return;
     }
-    setInvalid(false);
+    setSubmission("submitted");
     corrections.submit({
       kind: "single",
       origin: "editor",
@@ -309,7 +293,10 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
         <DraftInputs draft={draft} timeZone={props.timeZone} locked={locked} onChange={setDraft} />
         <DraftNotes draft={draft} onChange={setDraft} />
       </fieldset>
-      <CorrectionFeedback status={status} onRefresh={corrections.recover} />
+      <CorrectionFeedback status={status} />
+      {submission === "submitted" || corrections.status !== "recovered" ? (
+        <CorrectionRecoveryFeedback kind="single" />
+      ) : null}
       <CorrectionActions
         status={status}
         locked={

@@ -15,7 +15,7 @@ type HistoryInput = Required<
 >;
 type PageAtom = Atom.Atom<AsyncResult.AsyncResult<TransactionPage, unknown>>;
 class PageKey extends Data.Class<{ generation: number; cursor: string }> {}
-type HistoryNavigation = Readonly<{ generation: number; pages: number }>;
+type HistoryNavigation = Readonly<{ generation: number; pages: number; retain: boolean }>;
 export type HistoryState = Readonly<{
   query: CanonicalQueryState<Pick<TransactionPage, "data">, unknown>;
   generation: number;
@@ -24,7 +24,7 @@ export type HistoryState = Readonly<{
 }>;
 type History = Readonly<{
   state: Atom.Atom<HistoryState>;
-  action: Atom.Writable<Option.Option<void>, "more" | "retry" | "reset">;
+  action: Atom.Writable<Option.Option<void>, "more" | "retry" | "reset" | "refresh">;
 }>;
 type ReadyPage = Extract<CanonicalQueryState<TransactionPage, unknown>, { _tag: "Ready" }>;
 const continuationInput = Schema.Struct({
@@ -135,6 +135,30 @@ const pageQuery = (apiClient: FidyClient, period: HistoryInput, cursor: string):
     )
   );
 
+const retainHistory = (
+  result: BrowsedHistory,
+  previous: Option.Option<BrowsedHistory>
+): BrowsedHistory => {
+  if (
+    result.query._tag !== "Ready" ||
+    Option.isNone(previous) ||
+    previous.value.query._tag !== "Ready"
+  ) {
+    return result;
+  }
+  const waiting = result.query.waiting || result.continuation === "loading";
+  const refreshFailure =
+    result.continuation === "failure"
+      ? Option.some({ _tag: "BoundaryFailure" as const })
+      : result.query.refreshFailure;
+  if (!waiting && Option.isNone(refreshFailure)) return result;
+  return {
+    ...result,
+    loadedPages: previous.value.loadedPages,
+    query: { ...result.query, value: previous.value.query.value, waiting, refreshFailure },
+  };
+};
+
 /** Canonical query atoms own records; this projection joins explicitly requested pages.
  * Reset replaces continuation identities so old responses cannot join refreshed history.
  */
@@ -149,7 +173,7 @@ export const transactionHistory = ({
   period: HistoryInput;
   locate: Option.Option<string>;
 }>): History => {
-  const navigation = Atom.make<HistoryNavigation>({ generation: 0, pages: 1 });
+  const navigation = Atom.make<HistoryNavigation>({ generation: 0, pages: 1, retain: false });
   const pages = Atom.family((key: PageKey) => pageQuery(apiClient, period, key.cursor));
   const state = Atom.make((get): BrowsedHistory => {
     const current = get(navigation);
@@ -163,7 +187,7 @@ export const transactionHistory = ({
         query: first,
       };
     }
-    return browse({
+    const result = browse({
       first,
       navigation: current,
       period,
@@ -173,12 +197,18 @@ export const transactionHistory = ({
         return { atom, query: presentCanonicalQuery(get(atom)) };
       },
     });
+    return current.retain ? retainHistory(result, get.self<BrowsedHistory>()) : result;
   });
-  const action = Atom.fnSync<"more" | "retry" | "reset">()((command, get): void => {
-    if (command === "reset") {
+  const action = Atom.fnSync<"more" | "retry" | "reset" | "refresh">()((command, get): void => {
+    if (command === "reset" || command === "refresh") {
       const current = get(navigation);
-      get.set(navigation, { generation: current.generation + 1, pages: 1 });
+      const count = command === "refresh" ? Math.max(1, get(state).loadedPages) : 1;
       get.refresh(firstPage);
+      get.set(navigation, {
+        generation: current.generation + 1,
+        pages: count,
+        retain: command === "refresh",
+      });
     } else if (command === "retry") {
       Option.match(get(state).retryPage, {
         onNone: () => get.refresh(firstPage),

@@ -362,7 +362,7 @@ const ReadyTransactionResources = ({
   return (
     <Suspense fallback={<TransactionListView state={{ _tag: "Loading" }} />}>
       <TransactionWorkspace
-        key={`${history.generation}:${Option.getOrElse(locate, () => "browse")}`}
+        key={`${corrections.workspaceGeneration}:${Option.getOrElse(locate, () => "browse")}`}
         locate={locate}
         captureHistoryVersion={Option.some({
           month: dateFilter.month,

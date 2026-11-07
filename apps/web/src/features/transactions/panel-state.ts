@@ -2,7 +2,14 @@ import type { Array } from "effect";
 import type { CaptureStatus } from "./capture";
 import type { Transaction } from "./presentation";
 
-export type CorrectionStatus = "idle" | "saving" | "invalid" | "rejected" | "uncertain";
+export type CorrectionStatus =
+  | "idle"
+  | "saving"
+  | "invalid"
+  | "rejected"
+  | "uncertain"
+  | "refreshing"
+  | "recovered";
 
 export type DeletionStatus = "idle" | "saving" | "rejected" | "uncertain";
 export type DetailMode =

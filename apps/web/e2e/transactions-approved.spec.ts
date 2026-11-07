@@ -1,5 +1,5 @@
 import { expectFinancialLabels } from "./financial-form-text";
-import type { Page } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { type Cause, DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -1081,3 +1081,279 @@ for (const dark of [false, true]) {
     page,
   }) => Effect.runPromise(flatInteractionJourney(page, dark)));
 }
+
+const rejectedStatus = 400;
+const recoveryViewports = {
+  narrow: { width: 320, height: 853 },
+  wide: { width: 1280, height: 853 },
+};
+type RecoveryFixture = { requests: Array<unknown>; rejected: boolean; retry: boolean };
+const installRejectedCorrection = (
+  page: Page,
+  failRefresh: boolean
+): Effect.Effect<RecoveryFixture, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    yield* installWorkspace(page);
+    const state: RecoveryFixture = { requests: [], rejected: false, retry: false };
+    const { requests } = state;
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions?*`, (route) =>
+        route.fulfill({
+          status: state.rejected && failRefresh && !state.retry ? unavailableStatus : okStatus,
+          contentType: "application/json",
+          body: response([{ ...first, revision: state.rejected ? 2 : 1 }]),
+        })
+      )
+    );
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions/${first.id}`, (route) => {
+        requests.push(route.request().postDataJSON());
+        state.rejected = true;
+        return route.fulfill({
+          status: requests.length === 1 ? rejectedStatus : okStatus,
+          contentType: "application/json",
+          body:
+            requests.length === 1
+              ? JSON.stringify({
+                  error: { code: "validation_failed", message: "Invalid", fields: [] },
+                  next: [],
+                })
+              : response({
+                  ...first,
+                  revision: 3,
+                  notes: "Nota sin guardar",
+                  money: { amount: "30000", currency: "COP" },
+                }),
+        });
+      })
+    );
+    return state;
+  });
+const rejectedCorrectionJourney = (page: Page, failRefresh: boolean): Journey =>
+  Effect.gen(function* () {
+    const state = yield* installRejectedCorrection(page, failRefresh);
+    const { requests } = state;
+    yield* wait(() => page.goto("/app/transactions"));
+    yield* wait(() =>
+      page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).press("Enter")
+    );
+    yield* wait(() =>
+      page.getByLabel("Notas (opcional)", { exact: true }).fill("Nota sin guardar")
+    );
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("30.000"));
+    const save = page.getByRole("button", { name: "Guardar", exact: true });
+    yield* wait(() => save.press("Enter"));
+    if (failRefresh) {
+      yield* wait(() =>
+        expect(page.getByRole("form", { name: "Corregir transacción" })).toContainText(
+          "No pudimos actualizar el historial"
+        )
+      );
+      yield* wait(() => expect(save).toBeDisabled());
+      expect(requests).toHaveLength(1);
+      state.retry = true;
+      yield* wait(() =>
+        page.getByRole("button", { name: "Reintentar", exact: true }).press("Enter")
+      );
+    }
+    yield* wait(() =>
+      expect(page.getByRole("form", { name: "Corregir transacción" })).toContainText(
+        "Ya actualizamos el historial"
+      )
+    );
+    yield* wait(() =>
+      expect(page.getByLabel("Notas (opcional)", { exact: true })).toHaveValue("Nota sin guardar")
+    );
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("30.000"));
+    yield* wait(() => expect(save).toBeEnabled());
+    yield* wait(() =>
+      page.screenshot({ path: test.info().outputPath("correction-recovered.png"), fullPage: true })
+    );
+    expect(requests).toHaveLength(1);
+    yield* wait(() => save.press("Enter"));
+    yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
+    expect(requests[1]).toEqual({
+      expectedRevision: 2,
+      changes: { notes: "Nota sin guardar", money: { amount: "30000", currency: "COP" } },
+    });
+  });
+for (const failRefresh of [false, true]) {
+  test(`rejected Correction preserves its draft through ${failRefresh ? "failed refresh and explicit retry" : "automatic refresh at 320px"} without replay`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* wait(() =>
+          page.setViewportSize(failRefresh ? recoveryViewports.wide : recoveryViewports.narrow)
+        );
+        yield* rejectedCorrectionJourney(page, failRefresh);
+      })
+    ));
+}
+
+const installRejectedBulk = (
+  page: Page,
+  rows: ReadonlyArray<typeof first>
+): Effect.Effect<RecoveryFixture, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    yield* installWorkspace(page, [...rows]);
+    const state: RecoveryFixture = { requests: [], rejected: false, retry: false };
+    const { requests } = state;
+    const currentRows = (): ReadonlyArray<typeof first> =>
+      rows.map((record) => ({ ...record, revision: record.revision + (state.rejected ? 1 : 0) }));
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions?*`, (route) =>
+        route.fulfill({
+          contentType: "application/json",
+          body: response(currentRows()),
+        })
+      )
+    );
+    yield* wait(() =>
+      page.route(`${apiOrigin}/operations/atomic-batch`, (route) => {
+        requests.push(route.request().postDataJSON());
+        state.rejected = true;
+        return route.fulfill({
+          status: rejectedStatus,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: {
+              code: "validation_failed",
+              message: "Invalid",
+              failedCallIndex: 0,
+              operation: "transactions.updateTransaction",
+              fields: [],
+            },
+            next: [],
+          }),
+        });
+      })
+    );
+    return state;
+  });
+const cancelRecoveredBulk = (page: Page): Journey =>
+  Effect.gen(function* () {
+    const form = page.getByRole("form", { name: "Editar transacciones seleccionadas" });
+    yield* wait(() => expect(form).toContainText("Ya actualizamos el historial"));
+    yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).press("Enter"));
+    yield* wait(() =>
+      page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).press("Enter")
+    );
+    yield* wait(() =>
+      expect(page.getByLabel("Notas (opcional)", { exact: true })).toHaveValue("Nota anterior")
+    );
+    yield* wait(() =>
+      expect(page.getByRole("form", { name: "Corregir transacción" })).not.toContainText(
+        "Ya actualizamos el historial"
+      )
+    );
+  });
+const rejectedBulkJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    const rows = Array.from({ length: maximumSelection + 1 }, (_, index) => row(index + 1));
+    const { requests } = yield* installRejectedBulk(page, rows);
+    yield* selectTwelve(page);
+    yield* wait(() =>
+      page
+        .getByRole("button", { name: "Categoría de la selección: Sin cambiar", exact: true })
+        .click()
+    );
+    yield* wait(() => page.getByRole("menuitemradio", { name: "Transporte", exact: true }).click());
+    yield* wait(() => page.getByLabel("Notas", { exact: true }).fill("Lote sin guardar"));
+    yield* wait(() => page.getByLabel("Monto · COP", { exact: true }).fill("31.000"));
+    yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).press("Enter"));
+    const form = page.getByRole("form", { name: "Editar transacciones seleccionadas" });
+    yield* wait(() => expect(form).toContainText("Ya actualizamos el historial"));
+    yield* wait(() => expect(form).toContainText("12 transacciones seleccionadas"));
+    yield* wait(() =>
+      expect(page.getByLabel("Notas", { exact: true })).toHaveValue("Lote sin guardar")
+    );
+    yield* wait(() =>
+      expect(page.getByLabel("Monto · COP", { exact: true })).toHaveValue("31.000")
+    );
+    yield* wait(() =>
+      expect(
+        page.getByRole("button", { name: "Categoría de la selección: Transporte", exact: true })
+      ).toBeEnabled()
+    );
+    expect(requests).toHaveLength(1);
+    yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).press("Enter"));
+    yield* wait(() => expect.poll(() => requests.length).toBe(2));
+    expect(requests[1]).toMatchObject({
+      calls: rows.slice(0, maximumSelection).map((record) => ({
+        operation: "transactions.updateTransaction",
+        input: {
+          params: { id: record.id },
+          payload: {
+            expectedRevision: record.revision + 1,
+            changes: {
+              categoryId: categories[1]?.id,
+              notes: "Lote sin guardar",
+              money: { amount: "31000", currency: "COP" },
+            },
+          },
+        },
+      })),
+    });
+    yield* cancelRecoveredBulk(page);
+  });
+test("rejected atomic Correction retains twelve selections and financial fields for an explicit save at fresh revisions", ({
+  page,
+}) => Effect.runPromise(rejectedBulkJourney(page)));
+
+const fulfillInlineRead = (
+  route: Route,
+  state: RecoveryFixture,
+  gate: Promise<void>
+): Promise<void> =>
+  (state.rejected ? gate : Promise.resolve()).then(() =>
+    route.fulfill({
+      contentType: "application/json",
+      body: response([{ ...first, revision: state.rejected ? 2 : 1 }]),
+    })
+  );
+const rejectedInlineJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    const state = yield* installRejectedCorrection(page, false);
+    const gate = Promise.withResolvers<void>();
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions?*`, (route) =>
+        fulfillInlineRead(route, state, gate.promise)
+      )
+    );
+    try {
+      yield* wait(() => page.goto("/app/transactions"));
+      const category = page.getByRole("button", {
+        name: "Cambiar categoría de Prueba 1",
+        exact: true,
+      });
+      yield* wait(() => category.click());
+      yield* wait(() =>
+        page.getByRole("menuitemradio", { name: "Transporte", exact: true }).click()
+      );
+      yield* wait(() =>
+        expect(
+          page.getByText("No se guardó la categoría. Actualizando el historial automáticamente.", {
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+      expect(state.requests).toHaveLength(1);
+      gate.resolve();
+      yield* wait(() =>
+        expect(
+          page.getByText(
+            "No se guardó la categoría. Ya actualizamos el historial. Puedes volver a elegirla.",
+            { exact: true }
+          )
+        ).toBeVisible()
+      );
+      yield* wait(() => expect(category).toBeEnabled());
+      expect(state.requests).toHaveLength(1);
+    } finally {
+      gate.resolve();
+    }
+  });
+test("rejected inline Category keeps failure feedback distinct during and after automatic refresh", ({
+  page,
+}) => Effect.runPromise(rejectedInlineJourney(page)));

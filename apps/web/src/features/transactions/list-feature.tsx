@@ -1,5 +1,6 @@
 import { ManualCaptureProvider } from "./manual-capture";
 import { TransactionWorkspace } from "./workspace-component";
+import { TransactionPeriodControls } from "./period-controls";
 import { PendingRead } from "@/ui/components/pending-read";
 import { TransactionLocationNotice } from "./location-notice";
 import { TransactionDestination } from "./destination";
@@ -30,6 +31,11 @@ import {
   presentPeriod,
 } from "./presentation";
 
+type FailurePeriod = Readonly<{
+  value: string;
+  label: string;
+  onChange: (month: string) => void;
+}>;
 type QueryActivity =
   | Readonly<{
       _tag: "Current";
@@ -51,22 +57,29 @@ export type TransactionPageState =
     }>
   | Readonly<{
       _tag: "CanonicalError" | "BoundaryError";
+      period: Option.Option<FailurePeriod>;
       onRetry: () => void;
       waiting: boolean;
     }>;
 const QueryError = ({
   boundary,
   onRetry,
+  period,
   waiting,
 }: Readonly<{
   boundary: boolean;
   onRetry: () => void;
+  period: Option.Option<FailurePeriod>;
   waiting: boolean;
 }>): JSX.Element => (
   <CanonicalQueryRetry
-    description="Intenta de nuevo en unos momentos."
+    description={Option.match(period, {
+      onNone: () => "Intenta de nuevo en unos momentos.",
+      onSome: ({ label }) => `No se cargaron los movimientos de ${label}. Intenta de nuevo.`,
+    })}
     onRetry={onRetry}
     retryLabel="Reintentar carga"
+    variant="default"
     retryingLabel="Reintentando…"
     title={boundary ? "No pudimos comunicarnos con Fidy" : "No pudimos cargar tus transacciones"}
     waiting={waiting}
@@ -74,8 +87,10 @@ const QueryError = ({
 );
 const QueryActivityNotice = ({
   query,
+  monthLabel,
 }: Readonly<{
   query: QueryActivity;
+  monthLabel: string;
 }>): JSX.Element => {
   switch (query._tag) {
     case "Current":
@@ -84,9 +99,10 @@ const QueryActivityNotice = ({
     case "RefreshFailure":
       return (
         <CanonicalQueryRetry
-          description="Mostramos las últimas transacciones disponibles."
+          description={`Mostramos las últimas transacciones disponibles de ${monthLabel}.`}
           onRetry={query.onRetry}
           retryLabel="Reintentar actualización"
+          variant="default"
           retryingLabel="Reintentando…"
           title="No pudimos actualizar las transacciones"
           waiting={query.waiting}
@@ -109,6 +125,7 @@ const TransactionPageContent = ({
         <QueryError
           boundary={state._tag === "BoundaryError"}
           onRetry={state.onRetry}
+          period={state.period}
           waiting={state.waiting}
         />
       );
@@ -127,24 +144,38 @@ export const TransactionListView = ({
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-2">
         <h1 className="font-heading text-3xl font-semibold tracking-tight">Transacciones</h1>
-        <p className="text-muted-foreground">Movimientos del mes actual.</p>
+        <p className="text-muted-foreground">
+          {Option.match(state.period, {
+            onNone: () => "Consulta tus movimientos.",
+            onSome: ({ label }) => `Movimientos de ${label}.`,
+          })}
+        </p>
       </header>
+      {Option.match(state.period, {
+        onNone: () => null,
+        onSome: (period) => (
+          <TransactionPeriodControls {...period} disabled={false} className="p-0" />
+        ),
+      })}
       <TransactionPageContent state={state} />
     </main>
   );
 const FailedTransactionQuery = ({
   boundary,
   onRetry,
+  period,
   waiting,
 }: Readonly<{
   boundary: boolean;
   onRetry: () => void;
+  period: FailurePeriod;
   waiting: boolean;
 }>): JSX.Element => (
   <TransactionListView
     state={{
       _tag: boundary ? "BoundaryError" : "CanonicalError",
       onRetry,
+      period: Option.some(period),
       waiting,
     }}
   />
@@ -295,10 +326,16 @@ const TransactionResourceContent = (
 ): JSX.Element => {
   const { categoryState, transactionState, corrections } = props.queries;
   const retry = corrections.recover;
+  const failurePeriod: FailurePeriod = {
+    value: props.dateFilter.month,
+    label: presentPeriod({ locale: props.currentUser.locale, period: props.period }).monthLabel,
+    onChange: props.dateFilter.onMonth,
+  };
   if (categoryState._tag === "Failure") {
     return (
       <FailedTransactionQuery
         boundary={categoryState.failure._tag !== "DeclaredFailure"}
+        period={failurePeriod}
         onRetry={retry}
         waiting={categoryState.waiting}
       />
@@ -308,6 +345,7 @@ const TransactionResourceContent = (
     return (
       <FailedTransactionQuery
         boundary={transactionState.failure._tag !== "DeclaredFailure"}
+        period={failurePeriod}
         onRetry={retry}
         waiting={transactionState.waiting}
       />
@@ -359,6 +397,7 @@ const ReadyTransactionResources = ({
     queries;
   const retry = corrections.recover;
   const activity = readyQueryActivity(categoryState, transactionState, retry);
+  const presentation = presentPeriod({ locale: currentUser.locale, period });
   return (
     <Suspense fallback={<TransactionListView state={{ _tag: "Loading" }} />}>
       <TransactionWorkspace
@@ -379,10 +418,10 @@ const ReadyTransactionResources = ({
         currentUser={currentUser}
         categories={categoryState.value.data}
         transactions={transactionState.value.data}
-        period={presentPeriod({ locale: currentUser.locale, period })}
+        period={presentation}
         queryNotice={
           <>
-            <QueryActivityNotice query={activity} />
+            <QueryActivityNotice query={activity} monthLabel={presentation.monthLabel} />
             <TransactionLocationNotice
               locate={locate}
               history={history}
@@ -492,6 +531,7 @@ const CurrentUserQuery = ({
           state={{
             _tag: state.failure._tag === "DeclaredFailure" ? "CanonicalError" : "BoundaryError",
             onRetry: refresh,
+            period: Option.none(),
             waiting: state.waiting,
           }}
         />

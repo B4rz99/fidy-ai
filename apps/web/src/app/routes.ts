@@ -32,6 +32,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { RouteFailure } from "./route-failure";
+import { TransactionsRouteFailure } from "./transactions-route-failure";
 
 type WebRouterOptions = WebRouterContext &
   Readonly<{
@@ -258,6 +259,7 @@ const transactionsRoute = createRoute({
   getParentRoute: () => independentApplicationRoute,
   path: "/app/transactions",
   validateSearch: (search) => Schema.decodeSync(TransactionSearch)(search),
+  errorComponent: TransactionsRouteFailure,
   loaderDeps: ({ search }) => ({
     month: search.month,
     date: search.date,

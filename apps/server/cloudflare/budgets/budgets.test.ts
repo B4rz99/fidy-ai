@@ -2007,8 +2007,13 @@ it("installed category generation atomically materializes two Budget events and 
           ])
         );
         expect(Option.isSome(yield* findInsightRecipient({ db, userId }))).toBe(true);
-        expect(Option.isSome(yield* findProactivityReport({ db, userId, id: group.id }))).toBe(
-          true
+        const report = Option.getOrThrow(
+          yield* findProactivityReport({ db, userId, id: group.id })
+        );
+        expect(report.text).toEqual(
+          Option.some(
+            "Tu presupuesto de la categoría Otros alcanzó el 80% y 100%. Salidas registradas: 110 COP. Tope capturado: 100 COP. Mes aplicado: 2026-10 (America/Bogota)."
+          )
         );
         const provider = vi.fn(() =>
           Promise.resolve(

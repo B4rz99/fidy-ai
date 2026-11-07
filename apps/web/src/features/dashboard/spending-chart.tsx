@@ -1,6 +1,8 @@
 import { currencyChartData } from "./spending-presentation";
 import { BigDecimal, Option } from "effect";
 import type { JSX } from "react";
+// The Dashboard owns this lazy chart boundary; another import boundary would serialize rendering.
+// react-doctor-disable-next-line prefer-dynamic-import
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import {
   DashboardAxisTick,

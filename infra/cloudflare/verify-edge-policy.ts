@@ -2,8 +2,11 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "f95fb82889650dbd79e46569a535ba44e0a6e2bf7333bc5fd45d8f17a72ae7dd";
+const expectedEdgePolicyDigest = "2ba010c16bf99c25946093f30c9371ce1babb07326f32d998d192e1c31f981cb";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/src/shell/browser-transport/contract.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/erasure/runtime.ts", import.meta.url)
   ).text(),

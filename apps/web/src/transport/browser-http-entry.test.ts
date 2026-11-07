@@ -1,7 +1,12 @@
 // @vitest-environment node
 import { Context, Deferred, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
+import {
+  HttpClient,
+  type HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/http";
 import { expect, it } from "@effect/vitest";
 import { browserHttpClientLayer } from "./browser-http-policy";
 
@@ -23,7 +28,12 @@ it.effect("paces a declared unadmitted mutation without loading the bootstrap AP
         )
       );
     });
-    const transport = HttpClient.makeWith(Effect.flatMap(respond), Effect.succeed);
+    const transport = HttpClient.makeWith(
+      (
+        request: Effect.Effect<HttpClientRequest.HttpClientRequest, HttpClientError.HttpClientError>
+      ) => Effect.flatMap(request, respond),
+      Effect.succeed
+    );
     const context = yield* Layer.build(
       Layer.succeed(HttpClient.HttpClient, transport).pipe(
         browserHttpClientLayer("canonical", "https://api.test.fidyapp.com")

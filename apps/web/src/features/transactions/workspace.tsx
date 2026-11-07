@@ -828,5 +828,5 @@ TransactionWorkspace.preloadInteractions = (): Promise<void> =>
   Promise.all([
     BulkTransactionCorrection.preload?.(),
     TransactionDetail.preload?.(),
-    TransactionCapture.preload?.(),
+    ManualCapturePanel.preload?.(),
   ]).then(() => undefined);

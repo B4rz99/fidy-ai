@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "2ba010c16bf99c25946093f30c9371ce1babb07326f32d998d192e1c31f981cb";
+const expectedEdgePolicyDigest = "730ab835655f145f17ca54f0d94567308c7ea438a9df160e75ade6fbc920cc1d";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/src/shell/browser-transport/contract.ts", import.meta.url)

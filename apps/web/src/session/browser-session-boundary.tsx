@@ -57,7 +57,7 @@ const bindingRead = (
         context: first && window.location.pathname.startsWith("/app/"),
         request: Option.none(),
       }),
-    onSome: (work) => work.result.pipe(Effect.flatMap((result) => result)),
+    onSome: (work) => Effect.flatten(work.result),
   });
 /** Resume checks retain the exact same session object so feature owners do not remount on focus. */
 const retainedBinding = (

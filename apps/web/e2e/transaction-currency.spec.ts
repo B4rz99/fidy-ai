@@ -232,9 +232,13 @@ test("capture and corrections preserve exact Money after reload and budgets only
   return Effect.runPromise(
     Effect.gen(function* () {
       yield* wait(() => signInMoneyInputThroughCore({ page, request }));
-      const month = yield* wait(() =>
-        page.getByRole("textbox", { name: "Mes de transacciones", exact: true }).inputValue()
+      const selectedMonth = yield* wait(() =>
+        page.getByRole("combobox", { name: "Mes de transacciones", exact: true }).inputValue()
       );
+      const selectedYear = yield* wait(() =>
+        page.getByRole("combobox", { name: "Año de transacciones", exact: true }).innerText()
+      );
+      const month = `${selectedYear}-${selectedMonth}`;
       yield* createBudget(page.request, month);
       yield* registerForeignExpense(page);
       yield* wait(() => reloadTransactionsThroughCore(page));

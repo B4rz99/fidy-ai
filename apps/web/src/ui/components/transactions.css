@@ -1075,3 +1075,68 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   font-size: 14px;
   font-weight: 600;
 }
+
+[data-transaction-slot~="transaction-period"] {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+[data-transaction-slot~="transaction-period"] > span {
+  align-self: center;
+}
+[data-transaction-slot~="transaction-period"] [data-period-field] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+}
+[data-transaction-slot~="transaction-period"] [data-period-field="month"] {
+  width: 13rem;
+}
+[data-transaction-slot~="transaction-period"] [data-period-field="year"] {
+  width: 7rem;
+}
+[data-transaction-slot~="transaction-period"] [data-slot="native-select-wrapper"] {
+  width: 100%;
+}
+[data-transaction-slot~="transaction-period"] [data-slot="native-select"] {
+  height: auto;
+  min-height: 48px;
+  padding: 10px 44px 10px 12px;
+  border-color: var(--control-border);
+  border-radius: 12px;
+  font: inherit;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+[data-transaction-slot~="transaction-period"] [data-slot="native-select"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+[data-transaction-slot~="transaction-period"] [data-slot="button"] {
+  flex-shrink: 0;
+  min-width: 48px;
+  min-height: 48px;
+}
+
+[data-transaction-slot~="transaction-period"] [data-slot="native-select-icon"] {
+  width: 20px;
+  height: 20px;
+  right: 12px;
+}
+[data-transaction-slot~="transaction-period"] [data-period-field] [data-slot="button"] {
+  border-color: var(--control-border);
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+[data-transaction-slot~="transaction-period"]
+  [data-period-field]
+  [data-slot="button"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}

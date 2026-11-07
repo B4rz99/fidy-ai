@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import { DateTime, Effect, Option } from "effect";
-import { apiOrigin, installCategories, installUser } from "./http-fixtures";
+import { apiOrigin, installBoundUser, installCategories } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
@@ -159,7 +159,7 @@ const installHistory = (page: Page, count: number): Promise<HistoryFixture> => {
 test("loads the next Transaction page only when scrolling to the end", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => installUser(page));
+      yield* wait(() => installBoundUser(page));
       yield* wait(() => installCategories({ page, categories: [category] }));
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       yield* wait(() => page.goto("/app/transactions"));
@@ -174,7 +174,7 @@ test("loads the next Transaction page only when scrolling to the end", ({ page }
 test("pauses automatic continuation while a capture draft is open", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => installUser(page));
+      yield* wait(() => installBoundUser(page));
       yield* wait(() => installCategories({ page, categories: [category] }));
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       yield* wait(() => page.goto("/app/transactions"));
@@ -198,7 +198,7 @@ test("pauses automatic continuation while a capture draft is open", ({ page }) =
 test("browses beyond 100 Transactions and discloses loaded filter and summary scope", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installBoundUser(page));
       yield* Effect.tryPromise(() => installCategories({ page, categories: [category] }));
       const fixture = yield* Effect.tryPromise(() => installHistory(page, beyondPage));
       fixture.mode = "hold";
@@ -243,7 +243,7 @@ for (const count of [0, pageSize, multiplePages]) {
   test(`exhausts ${count} Transactions with equal sort keys in canonical order`, ({ page }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        yield* wait(() => installUser(page));
+        yield* wait(() => installBoundUser(page));
         yield* wait(() => installCategories({ page, categories: [category] }));
         const fixture = yield* wait(() => installHistory(page, count));
         yield* wait(() => page.goto("/app/transactions"));
@@ -284,7 +284,7 @@ for (const count of [0, pageSize, multiplePages]) {
 test("retains loaded Transactions on interruption and retries the same bounded page", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => installUser(page));
+      yield* wait(() => installBoundUser(page));
       yield* wait(() => installCategories({ page, categories: [category] }));
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       fixture.mode = "hold";
@@ -335,7 +335,7 @@ test("retains loaded Transactions on interruption and retries the same bounded p
 test("refresh clears selection and ignores the old pending continuation", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => installUser(page));
+      yield* wait(() => installBoundUser(page));
       yield* wait(() => installCategories({ page, categories: [category] }));
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       fixture.mode = "hold";
@@ -377,7 +377,7 @@ test("refresh clears selection and ignores the old pending continuation", ({ pag
 test("retains completed history pages through a failed refresh and recovery", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => installUser(page));
+      yield* wait(() => installBoundUser(page));
       yield* wait(() => installCategories({ page, categories: [category] }));
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       yield* wait(() => page.goto("/app/transactions"));
@@ -410,7 +410,7 @@ test("expires authentication during continuation and starts a clean replacement 
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => installUser(page));
+      yield* wait(() => installBoundUser(page));
       yield* wait(() => installCategories({ page, categories: [category] }));
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       fixture.mode = "expired";
@@ -444,7 +444,7 @@ test("saving a later Transaction resets pages and reloads its correction without
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => installUser(page));
+      yield* wait(() => installBoundUser(page));
       yield* wait(() => installCategories({ page, categories: [category] }));
       const fixture = yield* wait(() => installHistory(page, beyondPage));
       const last = Option.getOrThrow(Option.fromNullishOr(fixture.rows.at(-1)));
@@ -517,7 +517,7 @@ test("calendar selection loads the selected month and clearing the day retains t
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* wait(() => installUser(page));
+      yield* wait(() => installBoundUser(page));
       yield* wait(() => installCategories({ page, categories: [category] }));
       const current = yield* DateTime.now;
       const historical = DateTime.subtract(current, { months: 2 });
@@ -564,7 +564,7 @@ test("calendar selection loads the selected month and clearing the day retains t
   ));
 
 const prepareHistoricalMonth = Effect.fnUntraced(function* (page: Page) {
-  yield* wait(() => installUser(page));
+  yield* wait(() => installBoundUser(page));
   yield* wait(() => installCategories({ page, categories: [category] }));
   yield* wait(() => installCalendarHistory(page, DateTime.makeUnsafe("2026-10-31T23:00:00Z")));
 });
@@ -610,11 +610,13 @@ for (const viewport of [
         yield* wait(() => page.getByRole("button", { name: "Mes anterior", exact: true }).click());
         yield* expectHistoricalTransaction(page);
         yield* wait(() =>
-          expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("2026-10")
+          expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("10")
         );
         yield* wait(() => page.reload());
         yield* expectHistoricalTransaction(page);
-        yield* wait(() => page.getByLabel("Mes de transacciones", { exact: true }).fill("2026-12"));
+        yield* wait(() =>
+          page.getByLabel("Mes de transacciones", { exact: true }).selectOption("12")
+        );
         yield* wait(() =>
           expect(
             page.getByRole("heading", {
@@ -693,3 +695,144 @@ test("changing and clearing a day preserves the active search within the mounted
     }).pipe(Effect.ensuring(Effect.sync(() => released.resolve())))
   );
 });
+
+test("month and year remain readable and selectable with enlarged text on a narrow screen", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => page.setViewportSize({ width: 320, height: 800 }));
+      yield* prepareHistoricalMonth(page);
+      yield* wait(() => page.goto("/app/transactions?month=2026-10"));
+      yield* expectHistoricalTransaction(page);
+      yield* wait(() => page.evaluate(enlargeText));
+      const month = page.getByRole("combobox", { name: "Mes de transacciones", exact: true });
+      const year = page.getByRole("combobox", { name: "Año de transacciones", exact: true });
+      yield* wait(() => expect(month).toHaveValue("10"));
+      yield* wait(() => expect(year).toHaveText("2026"));
+      yield* wait(() => month.selectOption({ label: "septiembre" }));
+      yield* wait(() => expect(page).toHaveURL(/month=2026-09/u));
+      expect(yield* wait(() => month.evaluate(selectedValueFits))).toBe(true);
+      expect(yield* wait(() => page.evaluate(pageFits))).toBe(true);
+      yield* wait(() => chooseYear(page, "2025"));
+      yield* wait(() => expect(page).toHaveURL(/month=2025-09/u));
+      yield* wait(() => month.selectOption("12"));
+      yield* wait(() => expect(page.getByText("diciembre de 2025", { exact: true })).toBeVisible());
+      yield* wait(() => page.getByRole("button", { name: "Mes siguiente", exact: true }).click());
+      yield* wait(() => expect(month).toHaveValue("01"));
+      yield* wait(() => expect(year).toHaveText("2026"));
+      yield* wait(() => page.getByRole("button", { name: "Mes anterior", exact: true }).click());
+      yield* wait(() => expect(month).toHaveValue("12"));
+      yield* wait(() => expect(year).toHaveText("2025"));
+    })
+  ));
+
+const enlargeText = (): void => {
+  document.documentElement.style.fontSize = "32px";
+};
+const pageFits = (): boolean => document.documentElement.scrollWidth <= window.innerWidth;
+const selectedValueFits = (element: HTMLSelectElement): boolean => {
+  const style = getComputedStyle(element);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (context === null) return false;
+  context.font = style.font;
+  const label = element.selectedOptions[0]?.textContent ?? "";
+  const available =
+    element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  return context.measureText(label).width <= available;
+};
+
+const chooseYear = (page: Page, value: string): Promise<void> =>
+  page
+    .getByRole("combobox", { name: "Año de transacciones", exact: true })
+    .click()
+    .then(() =>
+      page.getByRole("combobox", { name: "Buscar: Año de transacciones", exact: true }).fill(value)
+    )
+    .then(() => page.getByRole("option", { name: value, exact: true }).click())
+    .then(() =>
+      expect(page.getByRole("combobox", { name: "Año de transacciones", exact: true })).toHaveText(
+        value
+      )
+    );
+
+test("period controls share one row on desktop and support keyboard year selection and recovery", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => page.setViewportSize({ width: 1280, height: 800 }));
+      yield* prepareHistoricalMonth(page);
+      yield* wait(() => page.goto("/app/transactions?month=2026-10"));
+      yield* expectHistoricalTransaction(page);
+      const period = page.getByRole("navigation", { name: "Periodo de transacciones" });
+      const month = period.getByRole("combobox", { name: "Mes de transacciones", exact: true });
+      const year = period.getByRole("combobox", { name: "Año de transacciones", exact: true });
+      const bottom = yield* wait(() => month.evaluate(controlBottom));
+      for (const control of [
+        year,
+        period.getByRole("button", { name: "Mes anterior" }),
+        period.getByRole("button", { name: "Mes siguiente" }),
+      ]) {
+        expect(yield* wait(() => control.evaluate(controlBottom))).toBeCloseTo(bottom, 0);
+      }
+      yield* wait(() => year.press("Enter"));
+      const search = page.getByRole("combobox", {
+        name: "Buscar: Año de transacciones",
+        exact: true,
+      });
+      yield* wait(() => search.fill("sin año"));
+      yield* wait(() => expect(page.getByText("Sin resultados.", { exact: true })).toBeVisible());
+      yield* wait(() => search.press("Escape"));
+      yield* wait(() => expect(year).toBeFocused());
+      yield* wait(() => expect(year).toHaveText("2026"));
+      yield* wait(() => year.press("Enter"));
+      yield* wait(() => search.fill("2027"));
+      yield* wait(() => search.press("ArrowDown"));
+      yield* wait(() => search.press("Enter"));
+      yield* wait(() => expect(page).toHaveURL(/month=2027-10/u));
+      yield* wait(() => chooseYear(page, "0002"));
+      yield* wait(() => month.selectOption("01"));
+      yield* wait(() =>
+        expect(period.getByRole("button", { name: "Mes anterior" })).toBeDisabled()
+      );
+      yield* wait(() => chooseYear(page, "9998"));
+      yield* wait(() => month.selectOption("12"));
+      yield* wait(() =>
+        expect(period.getByRole("button", { name: "Mes siguiente" })).toBeDisabled()
+      );
+    })
+  ));
+
+const controlBottom = (element: Element): number => element.getBoundingClientRect().bottom;
+
+test("year choices stay reachable by keyboard in a short enlarged-text viewport", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => page.setViewportSize({ width: 320, height: 480 }));
+      yield* prepareHistoricalMonth(page);
+      yield* wait(() => page.goto("/app/transactions?month=2026-10"));
+      yield* expectHistoricalTransaction(page);
+      yield* wait(() => page.evaluate(enlargeText));
+      yield* wait(() =>
+        page.getByRole("combobox", { name: "Año de transacciones", exact: true }).click()
+      );
+      const search = page.getByRole("combobox", {
+        name: "Buscar: Año de transacciones",
+        exact: true,
+      });
+      yield* wait(() => search.fill("202"));
+      const choices = page.getByRole("option");
+      const count = yield* wait(() => choices.count());
+      const lastId = yield* wait(() => choices.last().getAttribute("id"));
+      for (let index = 0; index < count; index++) {
+        if ((yield* wait(() => search.getAttribute("aria-activedescendant"))) === lastId) break;
+        yield* wait(() => search.press("ArrowDown"));
+      }
+      yield* wait(() => expect(choices.last()).toBeInViewport({ ratio: 1 }));
+      yield* wait(() => expect(search).toBeInViewport({ ratio: 1 }));
+      yield* wait(() => search.press("Enter"));
+      yield* wait(() => expect(page).toHaveURL(/month=9202-10/u));
+    })
+  ));

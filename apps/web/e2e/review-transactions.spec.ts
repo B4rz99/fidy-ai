@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
-import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
+import { apiOrigin, installBoundUser, installCategories, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
@@ -42,7 +42,7 @@ const reviewRoute = (route: Route): Promise<void> => {
 };
 const installHistory = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() => installUser(page));
+    yield* Effect.tryPromise(() => installBoundUser(page));
     yield* Effect.tryPromise(() =>
       installCategories({ page, categories: [{ id: categoryId, label: "Mercado" }] })
     );
@@ -91,7 +91,7 @@ test("created review history opens its Transaction in the local month list witho
         expect(page.getByLabel("Monto", { exact: true })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("2026-09")
+        expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("09")
       );
     })
   ));
@@ -310,7 +310,7 @@ const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =
       ).toBeInViewport()
     );
     yield* Effect.tryPromise(() =>
-      expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("2026-08")
+      expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("08")
     );
     yield* Effect.tryPromise(() => page.reload());
     yield* Effect.tryPromise(() =>

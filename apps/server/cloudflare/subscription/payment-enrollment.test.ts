@@ -2045,6 +2045,7 @@ it.each([
           environment,
           subject: fixture.subject,
           outcome: "approved",
+          expectedSourceCancellation: "voided",
         });
         expect(sourceVoids).toBe(1);
         expect(chargeCreations).toBe(1);
@@ -2431,6 +2432,7 @@ const proveSandboxCancellation = (
     environment: Awaited<ReturnType<typeof setup>>["environment"];
     subject: TransactionSubject;
     outcome: "approved" | "declined";
+    expectedSourceCancellation: "detached" | "voided";
   }>
 ): Effect.Effect<void, TestPromiseFailure> =>
   Effect.gen(function* () {
@@ -2512,7 +2514,7 @@ const proveSandboxCancellation = (
     expect(after.data.paidSubscription).toEqual(before.data.paidSubscription);
     expect(after.data.recentAttempts).toEqual(before.data.recentAttempts);
     const cancellation = Option.getOrThrow(after.data.cancellation);
-    expect(["detached", "voided"]).toContain(cancellation.sourceCancellation);
+    expect(cancellation.sourceCancellation).toBe(input.expectedSourceCancellation);
     expect(
       yield* fromTestPromise(() =>
         db.prepare("SELECT count(*) AS total FROM subscription_cancellations").first()
@@ -2708,6 +2710,7 @@ it
           environment,
           subject: fixture.subject,
           outcome: scenario.outcome,
+          expectedSourceCancellation: "detached",
         });
       })
     ),
@@ -2831,6 +2834,7 @@ it
           environment,
           subject: fixture.subject,
           outcome: scenario.outcome,
+          expectedSourceCancellation: "voided",
         }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure({ stage: "cancellation" })));
       }).pipe(
         Effect.catchCauseIf(

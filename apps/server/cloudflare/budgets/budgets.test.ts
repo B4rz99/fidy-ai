@@ -862,7 +862,7 @@ it.each([
             })
           ).text
         ).toBe(
-          `Fidy te avisa: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice} Más en Fidy.`
+          `Fidy te avisa: ${offer.disclosure.text} ${offer.acceptChoice} ${offer.declineChoice} Más en Fidy.`
         );
         expect(provider).toHaveBeenCalledOnce();
       })

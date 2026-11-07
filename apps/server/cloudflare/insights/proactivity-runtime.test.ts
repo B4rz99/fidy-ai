@@ -935,7 +935,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           work: { kind: "proactivity-generate", version: 1, userId },
         });
         const offer = Option.getOrThrow(yield* findCurrentProactivityOffer(context));
-        const exact = `Fidy te avisa: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice} Más en Fidy.`;
+        const exact = `Fidy te avisa: ${offer.disclosure.text} ${offer.acceptChoice} ${offer.declineChoice} Más en Fidy.`;
         const provider = vi.fn(() =>
           Promise.resolve(
             Response.json({
@@ -1790,7 +1790,7 @@ it.each(["paused", "stopped"] as const)(
                   .first()
               )
             ).toEqual({
-              text: `Fidy te avisa: Has recibido tres recordatorios sin responder. ¿Quieres continuar?\nreminder:${replacement.delivery_id}:continue\nreminder:${replacement.delivery_id}:stop Más en Fidy.`,
+              text: `Fidy te avisa: Has recibido tres recordatorios sin responder. ¿Quieres continuar? reminder:${replacement.delivery_id}:continue reminder:${replacement.delivery_id}:stop Más en Fidy.`,
             });
             expect(Option.getOrThrow(yield* findReminderGovernor({ db, userId }))).toEqual({
               _tag: "QuestionDelivered",

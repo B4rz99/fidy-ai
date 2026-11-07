@@ -17,6 +17,19 @@ const configuration = {
 };
 const fixedLength = body.replace("{{1}}", "").length;
 
+it.effect("refuses provider-invalid template whitespace before sending", () =>
+  Effect.gen(function* () {
+    const sender = makeProactivityTemplateSender({
+      configuration,
+      outboundHttp: { execute: () => Effect.die("must not contact provider") },
+    });
+    for (const invalid of ["uno\ndos", "uno\rdos", "uno\tdos", "uno     dos"]) {
+      expect(Exit.isFailure(yield* Effect.exit(sender.prepare(invalid)))).toBe(true);
+    }
+    expect((yield* sender.prepare("uno    dos")).parameter).toBe("uno    dos");
+  })
+);
+
 it.effect("sends the full approved body and preserves literal replacement characters", () =>
   Effect.gen(function* () {
     let submitted = "";

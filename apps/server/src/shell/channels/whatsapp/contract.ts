@@ -49,11 +49,16 @@ export const ProactivityTemplateConfiguration = Schema.Struct({
 const maximumProactivityLength = 1024;
 const maximumProactivityParameterLength =
   maximumProactivityLength - proactivityTemplateBody.replace("{{1}}", "").length;
+/** Meta rejects line breaks, tabs and five consecutive spaces even in approved text parameters. */
+export const ProactivityTemplateParameter = Schema.String.check(
+  Schema.isMaxLength(maximumProactivityParameterLength),
+  Schema.makeFilter((text) => !/[\r\n\t]| {5}/u.test(text))
+);
 /** Frozen template identity and complete visible body; a later configuration cannot re-render it. */
 export const PreparedProactivityTemplate = Schema.Struct({
   name: ProactivityTemplateConfiguration.fields.name,
   language: Schema.Literal("es"),
-  parameter: Schema.String.check(Schema.isMaxLength(maximumProactivityParameterLength)),
+  parameter: ProactivityTemplateParameter,
   text: TranscriptText,
 }).check(
   Schema.makeFilter(

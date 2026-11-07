@@ -73,6 +73,12 @@ use the current protected-trunk workflow only. Do not remove the floor to recove
 
 ## Release sequence
 
+Each workflow execution supplies `RELEASE_ATTEMPT_ID` as its GitHub run ID and attempt number.
+Core and ingress use that bounded identity as their Worker version tag, so a configuration-only
+redeploy or retry uploads fresh candidates for both roles even when the Git revision is unchanged.
+The source revision and contract digest remain immutable release evidence. Resource identities,
+zero-traffic staging, exact-version smoke tests and promotion guards are unchanged.
+
 The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from ordinary MVP code deployments. The Free plan's indefinite WhatsApp retention is disclosed for the current MVP and must not be reported as a finite retention setting. Before broad real-user WhatsApp launch, run the check and complete the provider review; do not mistake a successful code deployment for launch approval. The workflow allows one active release and does not cancel an active deployment.
 
 1. Check out the exact `github.sha` revision and install the locked workspace.

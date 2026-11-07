@@ -51,7 +51,7 @@
   font: inherit;
   border-radius: 11px;
   min-height: 44px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 [data-transaction-slot~="transaction-workspace"] [data-slot="button"] {
   font-weight: 400;
@@ -64,8 +64,8 @@
   box-shadow: none;
 }
 [data-transaction-slot~="transaction-workspace"] label {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 0.875rem;
+  font-weight: 600;
   line-height: 1.5;
 }
 [data-transaction-slot~="transaction-workspace"] textarea {
@@ -325,7 +325,7 @@
 [data-transaction-slot~="transaction-form-actions"] > * {
   flex: 1;
   min-width: 0;
-  font-size: 12px !important;
+  font-size: 0.875rem !important;
 }
 [data-transaction-slot~="transaction-delete-actions"] {
   flex-direction: column;
@@ -550,7 +550,7 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   border-radius: 11px;
   min-height: 44px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 400;
 }
 [data-transaction-slot~="transaction-workspace"]

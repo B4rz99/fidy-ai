@@ -1,0 +1,35 @@
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_617e4709660962::t_5be3687ad886b9 1,556
+apps/web/e2e/provider-authentication.journeys.ts
+  s_617e4709660962::t_5be3687ad886b9 1
+apps/web/e2e/security-journeys.spec.ts
+  s_617e4709660962::t_5be3687ad886b9 1,38
+apps/web/e2e/oauth-review.spec.ts
+  s_617e4709660962::t_5be3687ad886b9 1,163,356,820
+apps/web/e2e/browser-storage.spec.ts
+  s_617e4709660962::t_6fd5983c5c447e 1-41
+apps/web/e2e/browser-storage-fixture.ts
+  s_617e4709660962::t_5be3687ad886b9 1-34
+apps/web/e2e/real-core-fixture.ts
+  s_617e4709660962::t_5be3687ad886b9 1,315
+apps/web/e2e/recovery-live-disclosure.spec.ts
+  s_617e4709660962::t_5be3687ad886b9 1,43
+apps/web/e2e/browser-pairing.spec.ts
+  s_617e4709660962::t_5be3687ad886b9 1,196,394,580
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6f25681b25a9ec3b9f15753eac52826669f158bd",
+  "prompts": {},
+  "sessions": {
+    "s_617e4709660962": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d57bef93d808",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

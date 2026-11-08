@@ -241,6 +241,7 @@ test("a correction retains all loaded filtered rows while a later page refresh i
       yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("0,02"));
       fixture.mode = "hold";
       yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+      yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
       yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
       yield* wait(() => expect(rows).toHaveCount(multiplePages));
       yield* wait(() =>

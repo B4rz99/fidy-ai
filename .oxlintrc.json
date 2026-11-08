@@ -180,6 +180,11 @@
       "files": ["apps/web/src/features/agent/visible-reply.tsx"],
       "rules": { "effect-guards/no-react-use-effect": "off" }
     },
+    // Restore Router-owned scroll once asynchronous Transaction pages have rendered.
+    {
+      "files": ["apps/web/src/features/transactions/scroll-restoration.ts"],
+      "rules": { "effect-guards/no-react-use-effect": "off" }
+    },
     // These libraries expose extensionless package exports that resolve to .mjs.
     {
       "files": [

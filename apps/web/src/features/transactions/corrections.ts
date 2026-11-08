@@ -7,10 +7,11 @@ import {
   type CanonicalInput,
   type CanonicalSuccess,
   type FidyClient,
+  Transaction as TransactionSchema,
 } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import type { HistoryState } from "./history";
+import type { HistoryCommand, HistoryState } from "./history";
 import type { Transaction } from "./presentation";
 
 type Revision = Pick<Transaction, "id" | "revision">;
@@ -53,8 +54,8 @@ type Input = Readonly<{
   firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, PageFailure>;
   categories: Query<CanonicalSuccess<"categories.listCategories">, unknown>;
   history: Atom.Atom<HistoryState>;
-  historyAction: Atom.Writable<Option.Option<void>, "more" | "retry" | "reset" | "refresh">;
-  saved: (kind: Correction["kind"]) => void;
+  historyAction: Atom.Writable<Option.Option<void>, HistoryCommand>;
+  saved: (transactions: ReadonlyArray<Transaction>) => void;
 }>;
 type Work = Effect.Effect<void>;
 type Owner = Input & {
@@ -199,8 +200,16 @@ const prepare = (correction: Correction): Option.Option<Write> => {
 };
 const write = Effect.fnUntraced(function* (owner: Owner, command: Write) {
   const client = yield* owner.client;
-  if (command.kind === "single") yield* client.transactions.updateTransaction(command.input);
-  else yield* client.operations.executeAtomicBatch(command.input);
+  if (command.kind === "single") {
+    const result = yield* client.transactions.updateTransaction(command.input);
+    return [result.data];
+  }
+  const batch = yield* client.operations.executeAtomicBatch(command.input);
+  return yield* Effect.forEach(batch.data.results, (result) =>
+    Schema.decodeUnknownEffect(Schema.Struct({ data: Schema.toType(TransactionSchema) }))(
+      result.output
+    ).pipe(Effect.map(({ data }) => data))
+  );
 });
 const rejected = (cause: Cause.Cause<unknown>, kind: Correction["kind"]): boolean => {
   const failure = Cause.findErrorOption(cause);
@@ -243,7 +252,7 @@ const submit = (owner: Owner, correction: Correction): void => {
         }
         return;
       }
-      owner.saved(command.value.kind);
+      owner.saved(result.value);
       yield* reread(owner, generation, "saved");
     })
   );
@@ -295,12 +304,12 @@ const reread = (
     const categories = owner.get.once(owner.categories);
     const firstPage = owner.get.once(owner.firstPage);
     owner.get.refresh(owner.categories);
-    owner.get.set(owner.historyAction, reason === "saved" ? "reset" : "refresh");
+    owner.get.set(owner.historyAction, "refresh");
     const results = yield* Effect.all([
       nextResult(owner, owner.categories, categories),
       nextResult(owner, owner.firstPage, firstPage),
     ]);
-    if (reason !== "saved" && results.every(Boolean)) results.push(yield* refreshedHistory(owner));
+    if (results.every(Boolean)) results.push(yield* refreshedHistory(owner));
     if (!live(owner, generation)) return;
     owner.status = results.every(Boolean) ? statuses.success : statuses.failure;
     notify(owner);

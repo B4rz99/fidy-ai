@@ -21,6 +21,19 @@ const compactViewportWidth = 320;
 const tabletViewportWidth = 768;
 const desktopViewportWidth = 1280;
 const fitsViewport = (): boolean => document.documentElement.scrollWidth <= window.innerWidth;
+const refuseBudgetReads = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() =>
+      page.route(`${apiOrigin}/budget-status**`, (route) =>
+        route.fulfill({ status: unavailableStatus, body: "{}" })
+      )
+    );
+    yield* wait(() =>
+      page.route(`${apiOrigin}/budgets**`, (route) =>
+        route.fulfill({ status: unavailableStatus, body: "{}" })
+      )
+    );
+  });
 const categories = [
   { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" },
   { id: "24000000-0000-4000-8000-000000000244", label: "Transporte" },
@@ -541,6 +554,174 @@ const correctionJourney = (page: Page): Journey =>
 test("individual correction clears empty Notes at its revision and cancellation restores keyboard focus", ({
   page,
 }) => Effect.runPromise(correctionJourney(page)));
+test("transaction search survives browser history and reload without entering the URL and clears explicitly", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installWorkspace(page, [row(1), row(2)]);
+      yield* refuseBudgetReads(page);
+      yield* wait(() => page.goto("/app/transactions"));
+      const search = page.getByRole("searchbox", { name: "Buscar transacciones" });
+      yield* wait(() => search.fill("Prueba 1"));
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Prueba 2", exact: true })
+        ).toHaveCount(0)
+      );
+      yield* wait(() => page.getByRole("link", { name: "Presupuestos", exact: true }).click());
+      yield* wait(() => expect(page).toHaveURL(/\/app\/budgets/u));
+      yield* wait(() => page.goBack());
+      yield* wait(() => expect(search).toHaveValue("Prueba 1"));
+      yield* wait(() => page.goForward());
+      yield* wait(() => expect(page).toHaveURL(/\/app\/budgets/u));
+      yield* wait(() => page.goBack());
+      yield* wait(() => expect(search).toHaveValue("Prueba 1"));
+      yield* wait(() => page.reload());
+      yield* wait(() => expect(search).toHaveValue("Prueba 1"));
+      expect(new URL(page.url()).search).not.toContain("Prueba");
+      yield* wait(() => page.getByRole("button", { name: "Limpiar filtros", exact: true }).click());
+      yield* wait(() => expect(search).toHaveValue(""));
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Prueba 2", exact: true })
+        ).toBeVisible()
+      );
+      yield* wait(() => page.reload());
+      yield* wait(() => expect(search).toHaveValue(""));
+    })
+  ));
+const installSearchCorrection = (page: Page, notes: string): Journey =>
+  Effect.gen(function* () {
+    let current = row(1);
+    yield* installWorkspace(page);
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions?*`, (route) =>
+        route.fulfill({
+          contentType: "application/json",
+          body: response([current, { ...row(2), notes: "Otra nota" }]),
+        })
+      )
+    );
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions/${first.id}`, (route) => {
+        if (route.request().method() === "GET") {
+          return route.fulfill({
+            contentType: "application/json",
+            body: response({
+              ...current,
+              presentation: { kind: "independent" },
+              reconciliation: { kind: "independent" },
+              sources: [],
+            }),
+          });
+        }
+        current = { ...current, notes, revision: 2 };
+        return route.fulfill({ contentType: "application/json", body: response(current) });
+      })
+    );
+  });
+const installForeignHistory = (): void =>
+  window.history.replaceState(
+    {
+      transactionView: {
+        version: 1,
+        binding: "26000000-0000-4000-8000-000000000001",
+        scope: "2026-10:America/Bogota",
+        filters: { search: "Prueba 1", direction: "all", categoryId: "all" },
+        pages: 1,
+      },
+    },
+    ""
+  );
+test("history from another browser session cannot restore its transaction search", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installWorkspace(page, [row(1), row(2)]);
+      yield* wait(() => page.goto("/app/transactions"));
+      const search = page.getByRole("searchbox", { name: "Buscar transacciones" });
+      yield* wait(() => search.fill("Prueba 1"));
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Prueba 2", exact: true })
+        ).toHaveCount(0)
+      );
+      yield* wait(() => page.addInitScript(installForeignHistory));
+      yield* wait(() => page.reload());
+      yield* wait(() => expect(search).toHaveValue(""));
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Prueba 2", exact: true })
+        ).toBeVisible()
+      );
+    })
+  ));
+const installInvalidHistory = (): void =>
+  window.history.replaceState(
+    {
+      transactionView: {
+        version: 1,
+        binding: "none",
+        scope: "2026-10:America/Bogota",
+        filters: { search: "Prueba 1", direction: "all", categoryId: "all" },
+        pages: 1_000_000,
+      },
+    },
+    ""
+  );
+test("malformed retained transaction state falls back to the ordinary first page", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installWorkspace(page, [row(1), row(2)]);
+      yield* wait(() => page.addInitScript(installInvalidHistory));
+      yield* wait(() => page.goto("/app/transactions"));
+      yield* wait(() =>
+        expect(page.getByRole("searchbox", { name: "Buscar transacciones" })).toHaveValue("")
+      );
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Prueba 2", exact: true })
+        ).toBeVisible()
+      );
+    })
+  ));
+test("saving a correction retains search and explains when the transaction stops matching", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installSearchCorrection(page, "Nota de prueba");
+      yield* wait(() => page.goto("/app/transactions"));
+      const search = page.getByRole("searchbox", { name: "Buscar transacciones" });
+      yield* wait(() => search.fill("Nota anterior"));
+      yield* wait(() =>
+        page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).click()
+      );
+      yield* wait(() =>
+        page.getByLabel("Notas (opcional)", { exact: true }).fill("Nota de prueba")
+      );
+      yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+      yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
+      yield* wait(() => expect(search).toHaveValue("Nota anterior"));
+      yield* wait(() =>
+        expect(
+          page.getByText("La transacción guardada ya no coincide con tus filtros.", { exact: true })
+        ).toBeVisible()
+      );
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true })
+        ).toHaveCount(0)
+      );
+      yield* wait(() => page.getByRole("button", { name: "Limpiar filtros", exact: true }).click());
+      yield* wait(() =>
+        page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).click()
+      );
+      yield* wait(() =>
+        expect(page.getByLabel("Notas (opcional)", { exact: true })).toHaveValue("Nota de prueba")
+      );
+    })
+  ));
 const correctionRecoveryJourney = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* installWorkspace(page);
@@ -629,6 +810,80 @@ const batchProbe = Schema.Struct({
     })
   ),
 });
+const correctedBulkFixture = (
+  records: ReadonlyArray<typeof first>,
+  input: unknown
+): Readonly<{ records: Array<typeof first>; body: string }> => {
+  const batch = Schema.decodeUnknownSync(
+    Schema.Struct({
+      calls: Schema.Array(Schema.Struct({ callId: Schema.String, operation: Schema.String })),
+    })
+  )(input);
+  const corrected = records.map((record) => ({
+    ...record,
+    notes: "Nota de prueba",
+    revision: record.revision + 1,
+  }));
+  return {
+    records: corrected,
+    body: response({
+      results: batch.calls.map((call, index) => ({
+        ...call,
+        output: { data: corrected[index], next: [] },
+      })),
+    }),
+  };
+};
+const installBulkSearchCorrection = (page: Page): Journey =>
+  Effect.gen(function* () {
+    let current = [row(1), row(2)];
+    yield* installWorkspace(page, current);
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions?*`, (route) =>
+        route.fulfill({ contentType: "application/json", body: response(current) })
+      )
+    );
+    yield* wait(() =>
+      page.route(`${apiOrigin}/operations/atomic-batch`, (route) => {
+        const corrected = correctedBulkFixture(current, route.request().postDataJSON());
+        current = corrected.records;
+        return route.fulfill({ contentType: "application/json", body: corrected.body });
+      })
+    );
+  });
+test("bulk corrections preserve search and explain the confirmed results that stop matching", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installBulkSearchCorrection(page);
+      yield* wait(() => page.goto("/app/transactions"));
+      const search = page.getByRole("searchbox", { name: "Buscar transacciones" });
+      yield* wait(() => search.fill("Nota anterior"));
+      yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+      for (const name of ["Prueba 1", "Prueba 2"]) {
+        yield* wait(() =>
+          page.getByRole("checkbox", { name: `Seleccionar ${name}`, exact: true }).click()
+        );
+      }
+      yield* wait(() =>
+        page.getByRole("button", { name: "Editar selección de transacciones", exact: true }).click()
+      );
+      yield* wait(() => page.getByLabel("Notas", { exact: true }).fill("Nota de prueba"));
+      yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+      yield* wait(() =>
+        expect(
+          page.getByText("2 transacciones guardadas ya no coinciden con tus filtros.", {
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+      yield* wait(() => expect(search).toHaveValue("Nota anterior"));
+      yield* wait(() =>
+        expect(page.getByRole("button", { name: /^Ver transacción Prueba /u })).toHaveCount(0)
+      );
+    })
+  ));
 const bulkJourney = (page: Page): Journey =>
   Effect.gen(function* () {
     const rows = Array.from({ length: maximumSelection + 1 }, (_, index) =>

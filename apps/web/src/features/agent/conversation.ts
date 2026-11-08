@@ -10,6 +10,8 @@ import {
   presentHostedConversation,
 } from "./conversation-state";
 
+const initialDeliveredTurn = Option.none<string>();
+
 /**
  * Owns one mounted conversation, including exact receipt retention and bounded visible history.
  * Mount with the authenticated layout so dismissal/navigation retain it and logout discards it.
@@ -26,7 +28,7 @@ export const useHostedConversation = ({
   const propose = useAtomSet(commands.propose);
   const progress = useAtomSet(commands.progress);
   const acknowledge = useAtomSet(commands.receipt);
-  const deliveredTurn = useRef(Option.none<string>());
+  const deliveredTurn = useRef(initialDeliveredTurn);
   const actions = (): HostedConversation =>
     presentHostedConversation({
       conversation,

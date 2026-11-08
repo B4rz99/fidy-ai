@@ -10,7 +10,7 @@ import {
   ChatStart,
   ChatStatus,
 } from "@/ui/components/chat-content";
-import type { VisibleAgentReply, useHostedConversation } from "./conversation";
+import type { HostedConversation, VisibleAgentReply } from "./conversation-state";
 import { VisibleReply } from "./visible-reply";
 
 export const AgentContent = ({
@@ -19,7 +19,7 @@ export const AgentContent = ({
   text,
   setText,
 }: Readonly<{
-  conversation: ReturnType<typeof useHostedConversation>;
+  conversation: HostedConversation;
   open: boolean;
   text: string;
   setText: (text: string) => void;

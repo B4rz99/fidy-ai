@@ -10,7 +10,6 @@ class ResourceReleaseFailed extends Data.TaggedError("ResourceReleaseFailed")<{
 
 const Phase = Schema.Literals(["upload", "retire"]);
 const maximumRefusalReasons = 16;
-const maximumFailureFrames = 16;
 
 const ProviderRefusal = Schema.Struct({
   _tag: Schema.Literals([
@@ -41,28 +40,21 @@ const ProviderRefusal = Schema.Struct({
   code: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 999999 }))),
 });
 
+const ExceptionName = Schema.Union([
+  ProviderRefusal.fields._tag,
+  Schema.Literals(["SchemaError", "HttpClientError", "UnknownError", "TypeError", "RangeError"]),
+]);
+
 const exceptionCategory = (error: unknown, failure: boolean): string => {
   if (Schema.isSchemaError(error)) return "SchemaError";
   if (HttpClientError.isHttpClientError(error)) return "HttpClientError";
   if (Cause.isUnknownError(error)) return "UnknownError";
   if (error instanceof TypeError) return "TypeError";
   if (error instanceof RangeError) return "RangeError";
-  if (error instanceof Error) return "Error";
-  return failure ? "UnclassifiedFailure" : "UnclassifiedDefect";
-};
-
-const failureLocation = (error: unknown): Option.Option<string> => {
-  if (!(error instanceof Error) || error.stack === undefined) return Option.none();
-  for (const frame of error.stack.split("\n").slice(1, maximumFailureFrames + 1)) {
-    const location =
-      /^\s+at .+\/node_modules\/(?:alchemy\/src\/(?:Cloudflare\/Workers\/)?(WorkerProvider|Assets|Apply)|@distilled\.cloud\/(?:cloudflare|core)\/src\/(protocol|protocol-http))\.ts:(\d{1,5}):\d{1,4}\)?$/u.exec(
-        frame
-      );
-    if (location !== null) {
-      return Option.some(`${location[1] ?? location[2]}:${location[3]}`);
-    }
+  if (error instanceof Error) {
+    return Option.getOrElse(Schema.decodeUnknownOption(ExceptionName)(error.name), () => "Error");
   }
-  return Option.none();
+  return failure ? "UnclassifiedFailure" : "UnclassifiedDefect";
 };
 
 export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
@@ -75,13 +67,7 @@ export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
       const { _tag, code } = refusal.value;
       details.add(code === undefined ? _tag : `${_tag}; code=${code}`);
     } else {
-      const category = exceptionCategory(error, Cause.isFailReason(reason));
-      details.add(
-        Option.match(failureLocation(error), {
-          onNone: () => category,
-          onSome: (location) => `${category}; source=${location}`,
-        })
-      );
+      details.add(exceptionCategory(error, Cause.isFailReason(reason)));
     }
   }
   const suffix = details.size === 0 ? "" : ` (${[...details].join(", ")})`;

@@ -1,12 +1,21 @@
 import { Credentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import { createScriptVersion } from "@distilled.cloud/cloudflare/workers";
+import { BadRequest } from "@distilled.cloud/cloudflare/Errors";
 import { it } from "@effect/vitest";
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { describe, expect } from "vitest";
 import { resourceFailureMessage } from "./production-resources";
 
 describe("resource release refusal diagnostics", () => {
+  it("retains a known provider category after error serialization drops its tag and code", () => {
+    const error = BadRequest.make({ message: "Bearer private-token" });
+    const serialized = Schema.encodeSync(Schema.Defect())(error);
+    const restored = Schema.decodeSync(Schema.Defect())(serialized);
+    expect(resourceFailureMessage(Cause.fail(restored))).toBe(
+      "Alchemy resource operation failed (BadRequest); inspect release state."
+    );
+  });
   it("identifies a rejected Worker version configuration without publishing its provider message", () => {
     expect(
       resourceFailureMessage(
@@ -65,7 +74,7 @@ describe("resource release refusal diagnostics", () => {
     }
   });
 
-  it("reports only a reviewed dependency filename and line from native failure stacks", () => {
+  it("excludes private stacks and unknown exception names", () => {
     const error = new Error("Bearer private-token");
     error.stack = [
       "Error: Bearer private-token",
@@ -73,8 +82,9 @@ describe("resource release refusal diagnostics", () => {
       "    at unknown (/private-user/private-proof.ts:99:1)",
     ].join("\n");
     expect(resourceFailureMessage(Cause.die(error))).toBe(
-      "Alchemy resource operation failed (Error; source=WorkerProvider:4253); inspect release state."
+      "Alchemy resource operation failed (Error); inspect release state."
     );
+    error.name = "private-token";
     error.stack = "Error: private\n    at private (/private-proof.ts:3:1)";
     expect(resourceFailureMessage(Cause.die(error))).toBe(
       "Alchemy resource operation failed (Error); inspect release state."
@@ -86,7 +96,7 @@ it.effect.each([
   { code: 10021, expected: " (BadRequest; code=10021)" },
   { code: undefined, expected: " (BadRequest)" },
   { code: "private-code", expected: " (BadRequest)" },
-  { code: -1, expected: " (Error)" },
+  { code: -1, expected: " (BadRequest)" },
   { code: 10007, expected: " (WorkerNotFound; code=10007)" },
 ])("retains only a native numeric upload refusal code: $code", ({ code, expected }) =>
   Effect.gen(function* () {

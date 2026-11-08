@@ -67,6 +67,9 @@ JavaScript compiler API while the workspace uses TypeScript 7. `build:production
 also requires and publishes the exact `RELEASE_GIT_SHA`. The normal Production
 workflow builds and verifies both static artifacts and checks their revision on
 their public hosts. Core/ingress candidate promotion remains server-owned.
+Live OAuth checks inherit only a verified normal-traffic D1 quota deferral. They still validate
+available metadata and the unauthenticated MCP challenge; an unavailable probe must return the
+exact non-cacheable OAuth refusal. Reports annotate deferred availability separately.
 
 Playwright uses Wrangler’s local Worker and asset server for built output on port 4322, with JavaScript-disabled content
 checks, canonical metadata, sitemap exclusions, interactive island hydration,

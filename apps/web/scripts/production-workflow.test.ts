@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const repositoryRoot = `${process.cwd()}/../..`;
 const workflow = await Bun.file(`${repositoryRoot}/.github/workflows/production.yml`).text();
@@ -18,6 +21,66 @@ const preflight = await Bun.file(
 ).text();
 
 describe("Production release workflow policy", () => {
+  it("propagates only a successful verified normal-traffic quota outcome to public-site checks", () => {
+    const postSmoke = workflow
+      .split("      - name: Probe normal Worker traffic after promotion")[1]
+      ?.split("\n      - name:")[0];
+    const script = postSmoke
+      ?.split("        run: |\n")[1]
+      ?.split("\n")
+      .map((line) => (line.startsWith("          ") ? line.slice(10) : line))
+      .join("\n");
+    expect(script).toBeDefined();
+    const fixture = mkdtempSync(join(tmpdir(), "fidy-smoke-output-"));
+    try {
+      const verifier = join(fixture, "bun"),
+        sleeper = join(fixture, "sleep");
+      const messageFile = join(fixture, "message"),
+        output = join(fixture, "output");
+      writeFileSync(
+        verifier,
+        '#!/bin/sh\ncat "$SMOKE_FIXTURE_FILE"\nexit "$SMOKE_FIXTURE_EXIT"\n',
+        { mode: 0o700 }
+      );
+      writeFileSync(sleeper, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+      for (const entry of [
+        { message: "Production smoke passed.", code: 0, expected: "d1_quota_deferred=false\n" },
+        {
+          message:
+            "Production identity, routing and independent edge verification passed; D1 synthetic work and OAuth availability deferred: daily quota exhausted.",
+          code: 0,
+          expected: "d1_quota_deferred=true\n",
+        },
+        {
+          message:
+            "Production identity, routing and independent edge verification passed; D1 synthetic work and OAuth availability deferred: daily quota exhausted.",
+          code: 1,
+          expected: "",
+        },
+        { message: "unverified success", code: 0, expected: "" },
+      ]) {
+        writeFileSync(messageFile, `${entry.message}\n`);
+        writeFileSync(output, "");
+        const result = Bun.spawnSync(["/bin/bash", "-e", "-c", script ?? "exit 1"], {
+          env: {
+            PATH: `${fixture}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+            RUNNER_TEMP: fixture,
+            GITHUB_OUTPUT: output,
+            SMOKE_FIXTURE_FILE: messageFile,
+            SMOKE_FIXTURE_EXIT: String(entry.code),
+          },
+        });
+        expect(result.exitCode === 0).toBe(entry.expected !== "");
+        expect(readFileSync(output, "utf8")).toBe(entry.expected);
+      }
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+    expect(workflow).toContain(
+      "SITE_D1_QUOTA_DEFERRED: ${{ steps.post_smoke.outputs.d1_quota_deferred }}"
+    );
+  });
+
   it("verifies the live database only on protected opt-in inspection without changing traffic", () => {
     expect(inspection).toContain("verify_database:");
     expect(inspection).toContain("type: boolean\n        default: false");

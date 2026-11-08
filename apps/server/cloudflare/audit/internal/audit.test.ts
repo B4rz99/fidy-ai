@@ -80,6 +80,87 @@ const setup = (): Effect.Effect<D1Database, FixtureFailure> =>
     return db;
   });
 
+it("records group correction outcomes without rebuilding another User's retained Audit history", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* attempt(() =>
+        db
+          .prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<12000)
+          INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms)
+          SELECT 'credential_call',printf('90000000-0000-4000-8000-%012d',i),?,?,
+            'transactions.listTransactions','accepted',1 FROM n`)
+          .bind(otherUserId, otherSessionId)
+          .run()
+      );
+      const accepted = recordOwnerCall({
+        id: "30000000-0000-4000-8000-000000000091",
+        userId,
+        caller: { _tag: "WebSession", id: sessionId },
+        operation: "transactions.updateTransactions",
+        outcome: "success",
+        current,
+        afterOwnerWrite: false,
+        when: { sql: "SELECT 1 FROM users WHERE id = ?", params: [userId] },
+      });
+      const rejected = recordAuthorizedCall({
+        authority: liveWebSessionAuthority({ subject: { id: sessionId, userId, digest }, current }),
+        id: "30000000-0000-4000-8000-000000000092",
+        operation: "transactions.updateTransactions",
+        outcome: "validation_failed",
+        current: current + 1,
+        afterOwnerWrite: false,
+      });
+      yield* attempt(() =>
+        db.batch(
+          [accepted, rejected].map((statement) =>
+            db.prepare(statement.sql).bind(...statement.params)
+          )
+        )
+      );
+      const audit = makeAudit({ database: db });
+      expect(
+        (yield* audit.query({ userId, limit: 10 })).map((entry) => ({
+          operation: entry.operation,
+          caller: entry.caller,
+          outcome: entry.outcome,
+        }))
+      ).toEqual([
+        {
+          operation: "transactions.updateTransactions",
+          caller: { _tag: "WebSession", webSessionId: sessionId },
+          outcome: "succeeded",
+        },
+        {
+          operation: "transactions.updateTransactions",
+          caller: { _tag: "WebSession", webSessionId: sessionId },
+          outcome: "rejected",
+        },
+      ]);
+      expect(
+        yield* attempt(() =>
+          db
+            .prepare("SELECT count(*) AS n FROM audit_entries WHERE user_id = ?")
+            .bind(otherUserId)
+            .first("n")
+        )
+      ).toBe(12000);
+      expect(
+        (yield* attempt(() =>
+          db
+            .prepare(
+              "SELECT record_type,outcome FROM audit_entries WHERE user_id = ? ORDER BY occurred_at_ms"
+            )
+            .bind(userId)
+            .all()
+        )).results
+      ).toEqual([
+        { record_type: "credential_call", outcome: "accepted" },
+        { record_type: "credential_call", outcome: "rejected" },
+      ]);
+    })
+  ));
+
 it("records only approved canonical-call metadata and never returns another User's evidence", () =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -1,4 +1,4 @@
-import { Data, type Effect } from "effect";
+import { Data, type Effect, type Option } from "effect";
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
@@ -58,11 +58,11 @@ export type CanonicalReadFinalization = () => Effect.Effect<
 
 export const canonicalReadCompletionHeader = "fidy-internal-read-completion";
 
-/** Original selection ends before external byte I/O; final disclosure must settle its lease. */
-export type CanonicalBrowserMaterialRead = (
-  input: Parameters<CanonicalBrowserRead>[0]
-) => Readonly<{
+/** Source selection shares admission; dependent work must freshly fence final disclosure and settle its lease. */
+export type CanonicalBrowserSourceRead = (input: Parameters<CanonicalBrowserRead>[0]) => Readonly<{
   statements: ReadonlyArray<D1PreparedStatement>;
+  /** Preserve an owner's existing storage-failure response; authority and pressure refusals stay shared. */
+  unavailable: Option.Option<() => Response>;
   present: (
     rows: ReadonlyArray<D1Result>,
     subject: AuthenticatedWebSession,

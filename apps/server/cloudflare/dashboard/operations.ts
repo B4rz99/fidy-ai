@@ -6,6 +6,7 @@ import {
 import {
   type CanonicalBrowserQueryFinalizer,
   type CanonicalBrowserRead,
+  type CanonicalBrowserSourceRead,
   type CanonicalReadCompletion,
 } from "../canonical-admission/contract";
 import {
@@ -39,6 +40,7 @@ import {
 import { DashboardUninitialized } from "../../src/shell/dashboard/contract";
 
 import {
+  type DashboardSource,
   audit,
   credentialUse,
   dashboardOutcome,
@@ -48,6 +50,7 @@ import {
   findDashboardDocument,
   findDashboardSource,
   firstUse,
+  prepareDashboardViewSource,
   projectDashboardValue,
   validCategories,
 } from "./internal/dashboard-mutation";
@@ -275,6 +278,7 @@ export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response
         subject,
         operation: input.operation,
         completion: input.completion,
+        preparedSource: Option.none(),
       });
     }
     const edit =
@@ -377,18 +381,39 @@ export const prepareBoundDashboardCatalog: CanonicalBrowserRead = ({
   present: () => presentDashboardCatalog().pipe(Effect.orElseSucceed(transactionUnavailable)),
 });
 
-const queryDashboard = ({
-  db,
-  subject,
-  operation,
-  completion,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  completion: Option.Option<CanonicalReadCompletion>;
-  operation: DashboardQueryOperation;
-}>): Effect.Effect<Response> =>
+/** The dependent financial projection keeps its own fresh revision, calendar and disclosure fence. */
+export const prepareBoundDashboardView: CanonicalBrowserSourceRead = (input) => {
+  const source = prepareDashboardViewSource(input);
+  return {
+    statements: source.statements,
+    unavailable: Option.some(transactionUnavailable),
+    present: (rows, subject, completion) =>
+      source.decode(rows).pipe(
+        Effect.flatMap((preparedSource) =>
+          queryDashboard({
+            db: input.db,
+            subject,
+            operation: "dashboard.getDashboardView",
+            completion: Option.some(completion),
+            preparedSource: Option.some(preparedSource),
+          })
+        ),
+        Effect.orElseSucceed(transactionUnavailable)
+      ),
+  };
+};
+
+const queryDashboard = (
+  input: Readonly<{
+    db: D1Database;
+    subject: QueryCaller;
+    completion: Option.Option<CanonicalReadCompletion>;
+    operation: DashboardQueryOperation;
+    preparedSource: Option.Option<DashboardSource>;
+  }>
+): Effect.Effect<Response> =>
   Effect.gen(function* () {
+    const { db, subject, operation, completion, preparedSource } = input;
     const final = dashboardFinalization({ db, subject, completion, operation });
     const measured = makeDashboardTiming(operation === "dashboard.getDashboardView");
     const current = DateTime.toEpochMillis(yield* DateTime.now);
@@ -399,10 +424,11 @@ const queryDashboard = ({
     if (operation === "dashboard.listDashboardCatalog") {
       return yield* readDashboardCatalog({ db, subject, current, operation });
     }
-    const source = yield* measured.measure(
-      "source",
-      findDashboardSource({ db, subject, current, operation })
-    );
+    const source = yield* Option.match(preparedSource, {
+      onNone: () =>
+        measured.measure("source", findDashboardSource({ db, subject, current, operation })),
+      onSome: Effect.succeed,
+    });
     if (!source.live) return refusedDashboardCaller();
     if (Option.isNone(source.document)) {
       yield* accountQuery({ db, subject, current, operation });

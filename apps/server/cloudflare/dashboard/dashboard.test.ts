@@ -1930,7 +1930,7 @@ it(
   30_000
 );
 
-it("keeps the complete browser Dashboard journey within three fresh recovery-fenced native units", () =>
+it("keeps the complete browser Dashboard journey within two fresh recovery-fenced native units", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const raw = yield* initializedSetup();
@@ -1962,7 +1962,9 @@ it("keeps the complete browser Dashboard journey within three fresh recovery-fen
         yield* Effect.tryPromise(() => reply.json())
       );
       const timings = reply.headers.get("server-timing") ?? "";
-      for (const phase of ["source", "projection", "audit"]) {
+      expect(timings).toContain("canonical-admission;dur=");
+      expect(timings).not.toContain("dashboard-source;");
+      for (const phase of ["projection", "audit"]) {
         const field = timings
           .split(",")
           .find((entry) => entry.trim().startsWith(`dashboard-${phase};`));
@@ -1970,8 +1972,8 @@ it("keeps the complete browser Dashboard journey within three fresh recovery-fen
         const duration = Number(field?.split(";dur=")[1]);
         expect(Number.isFinite(duration) && duration >= 0).toBe(true);
       }
-      expect(observed.roundTrips()).toBe(3);
-      expect(generationReads).toBe(3);
+      expect(observed.roundTrips()).toBe(2);
+      expect(generationReads).toBe(2);
       expect(observed.cost().rowsWritten).toBeLessThanOrEqual(19);
     })
   ));

@@ -1,0 +1,82 @@
+apps/web/src/features/transactions/workspace.tsx
+  s_617e4709660962::t_d0a617b5ad8d08 25-27,29-30
+  s_617e4709660962::t_fd49fb5262c4e3 28,444
+  s_617e4709660962::t_f2f436ffeed5cb 72,726,735
+  s_617e4709660962::t_c5549c4934a13e 746
+  s_617e4709660962::t_8dff3434a857e6 727-734
+apps/web/e2e/transaction-pagination.spec.ts
+  s_617e4709660962::t_9254e76e5d814e 18,21-23,197
+  s_617e4709660962::t_2448c1285046dc 161,165-166
+  s_617e4709660962::t_c5549c4934a13e 162-164
+  s_617e4709660962::t_fa30425ec8a7a8 17,19-20,184-185,191
+  s_617e4709660962::t_1f41bf924e2557 167-183,186-190,192-196,198-202
+apps/web/src/features/transactions/corrections.test.ts
+  s_617e4709660962::t_c5549c4934a13e 98,305
+apps/web/src/features/transactions/view-state.ts
+  s_617e4709660962::t_fd49fb5262c4e3 5,9
+  s_617e4709660962::t_f2f436ffeed5cb 4,8,14-25,27-28,30,110-114,117,120-121
+  s_617e4709660962::t_c5549c4934a13e 1,26,31-38,49-53,55,60,83-91,116
+  s_617e4709660962::t_612e6bd02b4dab 7,41,54,56-58,81-82,118-119
+  s_617e4709660962::t_d0a617b5ad8d08 10-12,39-40,42,46-47,92-97,100-104
+  s_617e4709660962::t_1f41bf924e2557 43,45,59,61-80
+  s_617e4709660962::t_8dff3434a857e6 107-109
+  s_617e4709660962::t_bd15953dc00ac4 2-3,48,98-99,105-106
+  s_617e4709660962::t_dbaa3c11bc9d98 6,13,29,115
+  s_617e4709660962::t_898abf1fb9d1d3 44
+apps/web/src/features/transactions/list-feature.tsx
+  s_617e4709660962::t_2c24370faa7d01 233,235,238,244,257
+  s_617e4709660962::t_f847f5f4c9968c 269,271
+  s_617e4709660962::t_d0a617b5ad8d08 209-215,221-222
+  s_617e4709660962::t_c5549c4934a13e 18,199-207,216-220,226,248-252,276,282
+  s_617e4709660962::t_bd15953dc00ac4 6,19
+  s_617e4709660962::t_1f41bf924e2557 7-11,234,273-275,277-281,283-284
+  s_7cb4cb4652680a::t_433ec747167e13 198,208,223-225,227,262,469
+apps/web/e2e/transactions-approved.spec.ts
+  s_617e4709660962::t_aa21b7ad7388c7 258-261,276
+  s_617e4709660962::t_8dff3434a857e6 18-30,231-235,249-253
+  s_617e4709660962::t_52e3512e32daae 325
+  s_617e4709660962::t_dbaa3c11bc9d98 227
+  s_617e4709660962::t_2c24370faa7d01 291-301,303-324,326-340
+  s_617e4709660962::t_d0a617b5ad8d08 262-275,341-377
+  s_617e4709660962::t_07957bd5626acb 221-226,228-230,236-248,254-257
+  s_617e4709660962::t_fb94264a523ba5 277-290,302
+apps/web/src/features/transactions/query.test.ts
+  s_617e4709660962::t_c5549c4934a13e 148
+apps/web/src/app/routes.ts
+  s_617e4709660962::t_c469a4fe5eda12 404-405
+  s_617e4709660962::t_fd49fb5262c4e3 406-407
+apps/web/ARCHITECTURE.md
+  s_617e4709660962::t_2e8d6cbf3325fd 95-106
+apps/web/src/features/transactions/history.ts
+  s_617e4709660962::t_f847f5f4c9968c 148
+  s_617e4709660962::t_7a29516ffcbaa9 154
+  s_617e4709660962::t_1f41bf924e2557 184-187
+  s_617e4709660962::t_612e6bd02b4dab 22,26,29,156,181-182
+apps/web/src/features/transactions/corrections.ts
+  s_617e4709660962::t_612e6bd02b4dab 13,47,233,253,260
+  s_617e4709660962::t_bd15953dc00ac4 48,189-194,232
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e8f199fc62acd9d19b27900639cf35a639dda6e4",
+  "prompts": {},
+  "sessions": {
+    "s_617e4709660962": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d57bef93d808",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_7cb4cb4652680a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d5670becfdd8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

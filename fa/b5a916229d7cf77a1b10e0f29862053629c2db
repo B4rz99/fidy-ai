@@ -1,0 +1,19 @@
+apps/web/e2e/transactions-approved.spec.ts
+  s_7cb4cb4652680a::t_55796349a7c753 839,856,858,862,1507-1509
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fab5a916229d7cf77a1b10e0f29862053629c2db",
+  "prompts": {},
+  "sessions": {
+    "s_7cb4cb4652680a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d5670becfdd8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

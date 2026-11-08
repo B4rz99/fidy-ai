@@ -524,7 +524,7 @@ const selectedTransactionItems = (
   selected: ReadonlySet<string>,
   visible: ReadonlyArray<Transaction>
 ): React.ComponentProps<typeof SelectionSummary>["items"] => {
-  const visibleIds = new Set(visible.map((record) => record.id));
+  const visibleIds = new Set<string>(visible.map((record) => record.id));
   return presentTransactionRows({
     transactions: props.transactions.filter((record) => selected.has(record.id)),
     categories: props.categories,

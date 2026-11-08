@@ -836,7 +836,7 @@ test("changing the transaction month requires explicitly discarding a nonempty s
       yield* wait(() => checkbox.check());
       const month = page.getByLabel("Mes de transacciones", { exact: true });
       yield* wait(() => page.evaluate(enlargeApplicationText));
-      yield* wait(() => month.fill("2026-09"));
+      yield* wait(() => month.selectOption("09"));
       yield* wait(() =>
         expect(
           page.getByRole("dialog", {
@@ -853,13 +853,13 @@ test("changing the transaction month requires explicitly discarding a nonempty s
       yield* wait(() =>
         page.getByRole("button", { name: "Conservar selección", exact: true }).click()
       );
-      yield* wait(() => expect(month).toHaveValue("2026-10"));
+      yield* wait(() => expect(month).toHaveValue("10"));
       yield* wait(() => expect(checkbox).toBeChecked());
-      yield* wait(() => month.fill("2026-09"));
+      yield* wait(() => month.selectOption("09"));
       yield* wait(() =>
         page.getByRole("button", { name: "Limpiar selección y continuar", exact: true }).click()
       );
-      yield* wait(() => expect(month).toHaveValue("2026-09"));
+      yield* wait(() => expect(month).toHaveValue("09"));
       yield* wait(() =>
         expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeVisible()
       );
@@ -1504,6 +1504,9 @@ const cancelRecoveredBulk = (page: Page): Journey =>
     const form = page.getByRole("form", { name: "Editar transacciones seleccionadas" });
     yield* wait(() => expect(form).toContainText("Ya actualizamos el historial"));
     yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).press("Enter"));
+    yield* wait(() =>
+      page.getByRole("searchbox", { name: "Buscar transacciones", exact: true }).fill("")
+    );
     yield* wait(() =>
       page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).press("Enter")
     );

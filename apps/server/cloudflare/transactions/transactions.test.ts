@@ -850,6 +850,67 @@ it("corrects a selected group of 500 Transactions in one atomic save with retain
       });
     })
   ));
+it("composes a group correction larger than 4 KiB with another atomic mutation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const prefix = "53000000-0000-4000-8000-";
+      const count = 64;
+      yield* seedHistory({
+        db,
+        subject: owner,
+        transactionPrefix: prefix,
+        count,
+        linked: false,
+        linkedFraction: 0,
+        spacingMinutes: 1,
+      });
+      const group: AtomicBatchCall = {
+        callId: batchCallId(1),
+        operation: "transactions.updateTransactions",
+        input: {
+          payload: {
+            transactions: Array.from({ length: count }, (_, index) => ({
+              id: `${prefix}${String(index + 1).padStart(12, "0")}`,
+              expectedRevision: 0,
+            })),
+            changes: { notes: "Corregidas juntas" },
+          },
+        },
+      };
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        group.input
+      ).pipe(Effect.orDie);
+      expect(new TextEncoder().encode(encoded).length).toBeGreaterThan(4096);
+      const result = yield* fromTestPromise(() =>
+        sendPublicRequest(db, batchRequest(0, [group, memoryCall(2, "Preferencia confirmada")]))
+      );
+      expect(result.status).toBe(200);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT count(*) AS count FROM transactions WHERE user_id = ? AND revision = 1 AND notes = 'Corregidas juntas'",
+            owner
+          )
+        )
+      ).toBe(count);
+      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
+        { operation: "transactions.updateTransactions", outcome: "success" },
+      ]);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ? AND text = 'Preferencia confirmada'",
+            owner
+          )
+        )
+      ).toBe(1);
+    })
+  ));
+
 it("rejects foreign, missing, duplicate, deleted and stale group members without partial corrections", () =>
   Effect.runPromise(
     Effect.gen(function* () {

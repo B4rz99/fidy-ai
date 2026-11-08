@@ -93,6 +93,7 @@ import { ownsTransactionPath as transactionPath } from "../../../src/shell/trans
 import {
   type TransactionCaller as CanonicalCaller,
   isPATCaller,
+  maximumTransactionGroupInputBytes,
   maximumTransactionInputBytes,
   rejectBatchEnvelope,
   rejectInvalidTransactionInput,
@@ -457,7 +458,7 @@ const sendToCoordinator = ({
   });
 
 const groupCorrectionPolicy = Schema.decodeSync(RequestBodyPolicy)({
-  maximumBytes: 524288,
+  maximumBytes: maximumTransactionGroupInputBytes,
   deadlineMilliseconds: 2000,
 });
 

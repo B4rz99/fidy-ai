@@ -1,0 +1,29 @@
+apps/web/src/features/transactions/scroll-restoration.ts
+  s_617e4709660962::t_fe18472131a7ba 1-23
+.oxlintrc.json
+  s_617e4709660962::t_fe18472131a7ba 183-187
+apps/web/e2e/transaction-pagination.spec.ts
+  s_617e4709660962::t_5fe9efc7c7d3fd 288,298
+  s_617e4709660962::t_bea1548a943e37 289-290,294-295,297
+  s_617e4709660962::t_cfe1e03684b124 293
+apps/web/src/features/transactions/list-feature.tsx
+  s_617e4709660962::t_fe18472131a7ba 35,337-343
+apps/web/ARCHITECTURE.md
+  s_617e4709660962::t_fe18472131a7ba 106-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3cf3cd9e3edf1f8d83a310ec2883397ba6821f94",
+  "prompts": {},
+  "sessions": {
+    "s_617e4709660962": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d57bef93d808",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

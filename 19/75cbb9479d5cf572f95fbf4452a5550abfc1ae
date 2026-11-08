@@ -1,0 +1,29 @@
+apps/web/src/transport/money.ts
+  s_ab3196562c6359::t_166433f1f317dc 87
+apps/web/src/features/budgets/presentation.test.ts
+  s_7cb4cb4652680a::t_3628ed3b726bea 56,92,97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1975cbb9479d5cf572f95fbf4452a5550abfc1ae",
+  "prompts": {},
+  "sessions": {
+    "s_7cb4cb4652680a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d5670becfdd8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ab3196562c6359": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-aea4-70a0-b358-7553b5215abb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

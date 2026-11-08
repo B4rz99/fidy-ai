@@ -3,6 +3,7 @@ import { PendingRead } from "@/ui/components/pending-read";
 import type { FidyClient } from "@/transport/client";
 import { type ReviewDecisions, type ReviewWorkspaceQuery, makeReviewDecisions } from "./decisions";
 import { ReviewFullState, ReviewWorkspaceLayout } from "@/ui/components/review-workspace";
+import { SelectionScopeDialog } from "@/ui/components/selection-scope-dialog";
 import { Button } from "@/ui/components/button";
 import { type InboxControl, useInboxControl } from "./inbox-controller";
 import {
@@ -16,7 +17,7 @@ import { ReviewToolbar } from "./toolbar";
 import { useAtomValue } from "@effect/atom-react";
 import { Navigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Option } from "effect";
-import { type JSX, type ReactNode, type RefCallback, useState } from "react";
+import { type JSX, type ReactNode, type RefCallback, useId, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -214,11 +215,13 @@ const ReviewUnavailable = ({
   refresh: () => void;
   loading: boolean;
 }>): JSX.Element => {
+  const sourceId = useId();
   const [source, setSource] = useState("all");
   const [search, setSearch] = useState("");
   return (
     <>
       <ReviewNavigation
+        sourceId={sourceId}
         filter={filter}
         select={select}
         refresh={refresh}
@@ -274,6 +277,48 @@ type ReadyInboxProps = Readonly<{
   decisions: ReviewDecisions;
   workspaceQuery: ReviewWorkspaceQuery;
 }>;
+type ReviewScope = Readonly<{ filter: Filter; page: number }>;
+const useSelectionScope = (
+  props: Pick<ReadyInboxProps, "filter" | "page" | "select">,
+  control: InboxControl
+): Readonly<{
+  select: ReadyInboxProps["select"];
+  move: ReadyInboxProps["move"];
+  confirmation: JSX.Element;
+  sourceId: string;
+}> => {
+  const sourceId = useId();
+  const [pending, setPending] = useState<Option.Option<ReviewScope>>(Option.none());
+  const select = (filter: Filter, page: number): void => {
+    const changed = filter !== props.filter || page !== props.page;
+    const retainsPanel =
+      (filter === "pending") !== (props.filter === "pending") &&
+      props.page === 0 &&
+      ["pending", "history"].includes(props.filter);
+    if (control.checked.length > 0 && changed && !retainsPanel) {
+      setPending(Option.some({ filter, page }));
+    } else props.select(filter, page);
+  };
+  return {
+    sourceId,
+    select,
+    move: (page) => select(props.filter, page),
+    confirmation: (
+      <SelectionScopeDialog
+        returnFocusId={sourceId}
+        open={Option.isSome(pending)}
+        count={control.checked.length}
+        onKeep={() => setPending(Option.none())}
+        onDiscard={() => {
+          if (Option.isNone(pending)) return;
+          control.clearChecked();
+          props.select(pending.value.filter, pending.value.page);
+          setPending(Option.none());
+        }}
+      />
+    ),
+  };
+};
 const ReadyInbox = ({
   active,
   ...props
@@ -285,6 +330,14 @@ const ReadyInbox = ({
   if (active && !displayed) setDisplayed(true);
   return displayed ? <ReadyInboxView {...props} /> : <></>;
 };
+const inboxCaughtUp = (
+  view: Workspace,
+  filters: Readonly<{ filter: Filter; source: string; search: string }>
+): boolean =>
+  filters.filter === "pending" &&
+  filters.source === "all" &&
+  filters.search === "" &&
+  view.pendingCount === 0;
 const ReadyInboxView = ({
   children,
   workspaceQuery,
@@ -293,7 +346,6 @@ const ReadyInboxView = ({
   freshness,
   view,
   page,
-  move,
   filter,
   select,
 }: ReadyInboxProps): JSX.Element => {
@@ -303,43 +355,44 @@ const ReadyInboxView = ({
   const visible = filterReviewPage({ view, source, search, page, contexts: context.contexts });
   const inbox = useInboxControl({ view, visibleItems: visible.items, decisions });
   const control = { ...inbox, locked: inbox.locked || freshness !== "current" };
-  const checked = control.checked.filter((id) => visible.items.some((entry) => entry.id === id));
+  const scope = useSelectionScope({ filter, page, select }, control);
   return (
     <>
+      {scope.confirmation}
       {view.items.length === 0 || !context.loading ? children : null}
       {notice}
       <ReviewNavigation
+        sourceId={scope.sourceId}
         contextFeedback={<SourceContextFeedback context={context} />}
         unavailable={false}
         filter={filter}
-        select={select}
+        select={scope.select}
         count={Option.some(view.pendingCount)}
         refresh={control.recover}
         source={source}
-        setSource={(value) => {
-          control.clearChecked();
-          setSource(value);
-        }}
+        setSource={setSource}
         search={search}
-        setSearch={(value) => {
-          control.clearChecked();
-          setSearch(value);
-        }}
+        setSearch={setSearch}
       />
-      <ReviewToolbar view={visible} control={{ ...control, checked }} />
+      <ReviewToolbar
+        sourceId={scope.sourceId}
+        view={view}
+        visibleItems={visible.items}
+        contexts={context.contexts}
+        page={page}
+        control={control}
+      />
       <InboxWorkspace
         unfilteredItems={view.items}
         contexts={context.contexts}
         contextLoading={context.loading}
         workspaceQuery={workspaceQuery}
         freshness={freshness}
-        caughtUp={
-          filter === "pending" && source === "all" && search === "" && view.pendingCount === 0
-        }
+        caughtUp={inboxCaughtUp(view, { filter, source, search })}
         view={visible}
         control={control}
         page={page}
-        move={move}
+        move={scope.move}
         pageLength={view.items.length}
       />
     </>

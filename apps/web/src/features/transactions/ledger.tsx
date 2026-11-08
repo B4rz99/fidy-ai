@@ -58,6 +58,7 @@ type LedgerProps = Readonly<{
   onEdit: () => void;
   canEdit: boolean;
   selection: Readonly<{
+    summary: JSX.Element;
     active: boolean;
     ids: ReadonlyArray<string>;
     onToggle: (id: string) => void;
@@ -366,7 +367,7 @@ const LedgerControls = ({
     {toolbar}
     <div className="ledger-actions contents">
       {readOnly ? null : (
-        <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
+        <Button variant="outline" disabled={disabled || (empty && !selecting)} onClick={onEdit}>
           <HugeiconsIcon icon={PencilIcon} size={16} strokeWidth={1.5} aria-hidden="true" />
           {selecting ? "Cancelar selección" : "Editar varias"}
         </Button>
@@ -498,7 +499,7 @@ const SelectionBar = ({
   <>
     {selection.active ? (
       <div data-transaction-slot="transaction-selection-bar">
-        <span aria-live="polite">{selection.ids.length} seleccionadas</span>
+        {selection.summary}
         <Button
           variant="outline"
           aria-label="Editar selección de transacciones"

@@ -619,6 +619,14 @@ const selectTwelve = (page: Page): Journey =>
       ).toBeDisabled()
     );
     yield* wait(() =>
+      page.getByRole("searchbox", { name: "Buscar transacciones", exact: true }).fill("Prueba 13")
+    );
+    yield* wait(() =>
+      expect(
+        page.getByRole("checkbox", { name: "Seleccionar Prueba 13", exact: true })
+      ).toBeDisabled()
+    );
+    yield* wait(() =>
       page.getByRole("button", { name: "Editar selección de transacciones", exact: true }).click()
     );
   });
@@ -676,6 +684,187 @@ const bulkJourney = (page: Page): Journey =>
 test("bulk selection stops at twelve and mixed Currency keeps amount locked while empty fields preserve facts", ({
   page,
 }) => Effect.runPromise(bulkJourney(page)));
+
+const expectHiddenCorrection = (batches: ReadonlyArray<unknown>): void => {
+  expect(batches).toEqual([
+    {
+      calls: [
+        {
+          callId: expect.any(String),
+          operation: "transactions.updateTransaction",
+          input: {
+            params: { id: row(1).id },
+            payload: {
+              expectedRevision: 1,
+              changes: { counterparty: "Corrección de selección" },
+            },
+          },
+        },
+        {
+          callId: expect.any(String),
+          operation: "transactions.updateTransaction",
+          input: {
+            params: { id: row(2).id },
+            payload: {
+              expectedRevision: 2,
+              changes: { counterparty: "Corrección de selección" },
+            },
+          },
+        },
+      ],
+    },
+  ]);
+};
+
+test("bulk selection survives search changes and submits hidden transactions at their revisions", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installWorkspace(page, [row(1), row(2), row(3)]);
+      const batches: Array<unknown> = [];
+      yield* recordMutation(page, "/operations/atomic-batch", {
+        requests: batches,
+        outcome: "uncertain",
+      });
+      yield* wait(() => page.goto("/app/transactions"));
+      yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+      yield* wait(() =>
+        page.getByRole("checkbox", { name: "Seleccionar Prueba 1", exact: true }).check()
+      );
+      const search = page.getByRole("searchbox", { name: "Buscar transacciones", exact: true });
+      yield* wait(() => search.fill("Prueba 2"));
+      yield* wait(() =>
+        expect(page.getByText("1 fuera de este filtro", { exact: true }).first()).toBeVisible()
+      );
+      yield* wait(() =>
+        page.getByRole("checkbox", { name: "Seleccionar Prueba 2", exact: true }).check()
+      );
+      yield* wait(() => search.fill("Sin coincidencias"));
+      yield* wait(() =>
+        expect(page.getByText("2 fuera de este filtro", { exact: true }).first()).toBeVisible()
+      );
+      yield* wait(() =>
+        page.getByRole("button", { name: "Revisar selección (2)", exact: true }).click()
+      );
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Quitar Prueba 1 de la selección", exact: true })
+        ).toBeVisible()
+      );
+      yield* wait(() =>
+        page.getByRole("button", { name: "Editar selección de transacciones", exact: true }).click()
+      );
+      yield* wait(() =>
+        page.getByLabel("Contraparte", { exact: true }).fill("Corrección de selección")
+      );
+      yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+      yield* wait(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos confirmar los cambios")
+      );
+      expectHiddenCorrection(batches);
+    })
+  ));
+
+const selectionPhoneWidth = 390;
+const selectionDesktopWidth = 1440;
+const clearHiddenSelection = (page: Page, width: number): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.setViewportSize({ width, height: 844 }));
+    yield* installWorkspace(page, [row(1), row(2)]);
+    yield* wait(() => page.goto("/app/transactions"));
+    if (width === selectionPhoneWidth) {
+      yield* wait(() =>
+        page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click()
+      );
+    }
+    yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+    for (const name of ["Seleccionar Prueba 1", "Seleccionar Prueba 2"]) {
+      yield* wait(() => page.getByRole("checkbox", { name, exact: true }).check());
+    }
+    const search = page.getByRole("searchbox", { name: "Buscar transacciones", exact: true });
+    yield* wait(() => search.fill("Sin coincidencias"));
+    yield* wait(() =>
+      page.getByRole("button", { name: "Revisar selección (2)", exact: true }).press("Enter")
+    );
+    yield* wait(() =>
+      page.getByRole("button", { name: "Quitar Prueba 1 de la selección", exact: true }).click()
+    );
+    yield* wait(() =>
+      expect(page.getByText("1 fuera de este filtro", { exact: true })).toBeVisible()
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Revisar selección (1)", exact: true })).toBeFocused()
+    );
+    yield* wait(() => page.getByRole("button", { name: "Limpiar selección", exact: true }).click());
+    yield* wait(() =>
+      expect(
+        page.getByRole("button", { name: "Filtrar por tipo: Todas las transacciones", exact: true })
+      ).toBeFocused()
+    );
+    yield* wait(() =>
+      expect(
+        page.getByRole("button", { name: "Editar selección de transacciones", exact: true })
+      ).toBeDisabled()
+    );
+    yield* wait(() => search.fill(""));
+    for (const name of ["Seleccionar Prueba 1", "Seleccionar Prueba 2"]) {
+      yield* wait(() =>
+        expect(page.getByRole("checkbox", { name, exact: true })).not.toBeChecked()
+      );
+    }
+    expect(
+      yield* wait(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
+    ).toBe(false);
+  });
+for (const width of [selectionPhoneWidth, selectionDesktopWidth]) {
+  test(`hidden bulk selections can be removed and explicitly cleared at ${width}px`, ({ page }) =>
+    Effect.runPromise(clearHiddenSelection(page, width)));
+}
+
+const fitsHorizontally = (element: Element): boolean => element.scrollWidth <= element.clientWidth;
+test("changing the transaction month requires explicitly discarding a nonempty selection", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => page.setViewportSize({ width: selectionPhoneWidth, height: 844 }));
+      yield* installWorkspace(page);
+      yield* wait(() => page.goto("/app/transactions"));
+      yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+      const checkbox = page.getByRole("checkbox", { name: "Seleccionar Prueba 1", exact: true });
+      yield* wait(() => checkbox.check());
+      const month = page.getByLabel("Mes de transacciones", { exact: true });
+      yield* wait(() => page.evaluate(enlargeApplicationText));
+      yield* wait(() => month.fill("2026-09"));
+      yield* wait(() =>
+        expect(
+          page.getByRole("dialog", {
+            name: "¿Limpiar la selección para cambiar de vista?",
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+      const dialog = page.getByRole("dialog", {
+        name: "¿Limpiar la selección para cambiar de vista?",
+        exact: true,
+      });
+      expect(yield* wait(() => dialog.evaluate(fitsHorizontally))).toBe(true);
+      yield* wait(() =>
+        page.getByRole("button", { name: "Conservar selección", exact: true }).click()
+      );
+      yield* wait(() => expect(month).toHaveValue("2026-10"));
+      yield* wait(() => expect(checkbox).toBeChecked());
+      yield* wait(() => month.fill("2026-09"));
+      yield* wait(() =>
+        page.getByRole("button", { name: "Limpiar selección y continuar", exact: true }).click()
+      );
+      yield* wait(() => expect(month).toHaveValue("2026-09"));
+      yield* wait(() =>
+        expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeVisible()
+      );
+    })
+  ));
 
 const waitForFonts = (page: Page): Promise<void> =>
   page.evaluate(() => document.fonts.ready.then(() => {}));
@@ -896,7 +1085,7 @@ test("120-character Counterparty stays fully readable in the desktop detail rail
     })
   ));
 
-const enlargeCaptureText = (): void => {
+const enlargeApplicationText = (): void => {
   document.documentElement.style.fontSize = "32px";
 };
 const captureTextWidths = { narrow: 320, intermediate: 900, mobile: 390 };
@@ -915,7 +1104,7 @@ const captureLayoutJourney = (page: Page): Journey =>
     for (const field of fields) {
       yield* wait(() => expect(field).toHaveCSS("font-size", "16px"));
     }
-    yield* wait(() => page.evaluate(enlargeCaptureText));
+    yield* wait(() => page.evaluate(enlargeApplicationText));
     yield* expectFinancialLabels(form, "28px");
     for (const name of [/^Categoría:/u, /^Fecha:/u]) {
       yield* wait(() => expect(form.getByRole("button", { name })).toHaveCSS("font-size", "26px"));

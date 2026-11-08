@@ -1,3 +1,4 @@
+import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { RecurringSeriesPage } from "../../../src/core/recurring/contract";
 import { ApproveBrowserLoginPairingPayload } from "../../../src/shell/browser-login/contract";
 
@@ -242,6 +243,48 @@ const transactionTextChanges = (changes: UpdateTransactionInput["changes"]): Arr
   }
   return fields;
 };
+const transactionChanges = ({
+  changes,
+  timeZone,
+}: Readonly<{ changes: UpdateTransactionInput["changes"]; timeZone: string }>): Option.Option<
+  ReadonlyArray<string>
+> =>
+  Option.gen(function* () {
+    const fields: Array<string> = [];
+    if (changes.money !== undefined) fields.push(`importe: ${moneyText(changes.money)}`);
+    if (changes.categoryId !== undefined) {
+      fields.push(`categoría: ${yield* categoryText(changes.categoryId)}`);
+    }
+    if (changes.direction !== undefined) {
+      fields.push(changes.direction === "inflow" ? "será un ingreso" : "será un gasto");
+    }
+    if (changes.occurredAt !== undefined) {
+      fields.push(`fecha: ${yield* localDateText({ date: changes.occurredAt, timeZone })}`);
+    }
+    fields.push(...transactionTextChanges(changes));
+    return fields;
+  });
+const describeGroupCorrection = (
+  context: Context,
+  operation: string,
+  input: unknown
+): Effect.Effect<Option.Option<string>> =>
+  Effect.sync(() =>
+    Option.gen(function* () {
+      const { payload } = yield* decode(
+        Schema.Struct({ payload: Schema.toCodecJson(UpdateTransactionsInput) }),
+        input
+      );
+      const fields = yield* transactionChanges({
+        changes: payload.changes,
+        timeZone: context.timeZone,
+      });
+      const targets = payload.transactions
+        .map((record) => `${record.id} (revisión ${record.expectedRevision})`)
+        .join("; ");
+      return `Corregir juntas ${payload.transactions.length} transacciones. Selección exacta: ${targets}. Cambios: ${fields.join("; ")}. Se guardan todas o ninguna.`;
+    })
+  );
 const describeTransactionChange = (
   context: Context,
   operation: string,
@@ -269,21 +312,10 @@ const describeTransactionChange = (
     );
     return Option.flatMap(change, ({ payload }) =>
       Option.gen(function* () {
-        const fields: Array<string> = [];
-        const changes = payload.changes;
-        if (changes.money !== undefined) fields.push(`importe: ${moneyText(changes.money)}`);
-        if (changes.categoryId !== undefined) {
-          fields.push(`categoría: ${yield* categoryText(changes.categoryId)}`);
-        }
-        if (changes.direction !== undefined) {
-          fields.push(changes.direction === "inflow" ? "será un ingreso" : "será un gasto");
-        }
-        if (changes.occurredAt !== undefined) {
-          fields.push(
-            `fecha: ${yield* localDateText({ date: changes.occurredAt, timeZone: context.timeZone })}`
-          );
-        }
-        fields.push(...transactionTextChanges(changes));
+        const fields = yield* transactionChanges({
+          changes: payload.changes,
+          timeZone: context.timeZone,
+        });
         return `Corregir el ${current.value}. Cambios: ${fields.join("; ")}.`;
       })
     );
@@ -305,6 +337,7 @@ const recordDescriptions: Readonly<
   "categories.deleteKeywordRule": describeKeywordChange,
   "transactions.createTransaction": describeTransactionCreation,
   "transactions.updateTransaction": describeTransactionChange,
+  "transactions.updateTransactions": describeGroupCorrection,
   "transactions.deleteTransaction": describeTransactionChange,
 };
 const describeRecord = (

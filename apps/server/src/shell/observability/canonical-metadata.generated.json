@@ -130,6 +130,11 @@
     "route": "/web/email/replacement/verify"
   },
   {
+    "id": "transactions.updateTransactions",
+    "method": "POST",
+    "route": "/transactions/corrections"
+  },
+  {
     "id": "transactions.createTransaction",
     "method": "POST",
     "route": "/transactions"

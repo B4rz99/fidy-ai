@@ -60,6 +60,26 @@ const destructiveWrite = operationPolicy({
 const TransactionQueryParameters = TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey));
 const UpdateTransactionParams = Schema.Struct({ id: TransactionId });
 
+/** Resource bound for one revision-checked group correction, independent of UI selection. */
+export const maximumCorrectionRecords = 4096;
+export const UpdateTransactionsInput = Schema.Struct({
+  transactions: Schema.NonEmptyArray(
+    Schema.Struct({
+      id: TransactionId,
+      expectedRevision: UpdateTransactionInput.fields.expectedRevision,
+    })
+  ).check(
+    Schema.isMaxLength(maximumCorrectionRecords),
+    Schema.makeFilter(
+      (records) => new Set(records.map((record) => record.id)).size === records.length
+    )
+  ),
+  changes: UpdateTransactionInput.fields.changes,
+}).annotate({ identifier: "UpdateTransactionsInput" });
+export const UpdateTransactionsResult = Schema.Struct({
+  updated: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumCorrectionRecords })),
+});
+
 /** Successful create response shared by canonical consumers that present the stored Transaction. */
 export const CreateTransactionResponse = OperationResponse(Transaction);
 
@@ -70,6 +90,18 @@ export const CreateTransactionResponse = OperationResponse(Transaction);
 export const TransactionListResponse = OperationResponse(Schema.Array(Transaction));
 
 export const TransactionsGroup = HttpApiGroup.make("transactions")
+  .add(
+    HttpApiEndpoint.post("updateTransactions", "/transactions/corrections", {
+      payload: UpdateTransactionsInput,
+      success: OperationResponse(UpdateTransactionsResult),
+      error: [NotFound, ValidationFailed, ResourceLimited],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Apply the same supplied corrections to an explicit selection of owned Transactions in one all-or-nothing save. Supply every selected id and its observed revision; missing, foreign, deleted, duplicate or stale selections never partially change history. Omitted fields retain each Transaction's existing value. SourceAttestations remain unchanged."
+      )
+      .annotateMerge(destructiveWrite)
+  )
   .add(
     HttpApiEndpoint.post("createTransaction", "/transactions", {
       payload: CreateTransactionInput,

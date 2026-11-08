@@ -766,3 +766,11 @@ from service refusal and uncertain-write recovery.
 Browser trace receipt validation imports only the shared opaque TraceId schema. Server telemetry
 registries, generated canonical telemetry metadata and trace export schemas stay outside the browser
 graph; the bundle gate refuses those modules. The server and browser share the same TraceId codec.
+
+Transactions selection offers “Seleccionar todas” and “Limpiar selección” beside its count. The
+selection is explicit: all loaded rows matching current filters, including offscreen rows, with
+individual adjustment and no twelve-record cap. Later continuation never silently adds records;
+filter changes clear selection through the existing workspace transition. Group Corrections use
+`transactions.updateTransactions` with each observed revision and one shared change set. The
+existing correction owner retains admission, pending state and explicit uncertainty recovery;
+there is no splitting into partially committed batches or automatic mutation replay.

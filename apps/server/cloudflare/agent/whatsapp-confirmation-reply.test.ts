@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { expect, it } from "vitest";
 import { now, reply, setup, users } from "./hosted-turn.test-fixture";
 import {
@@ -6,6 +6,52 @@ import {
   successfulCapability,
   toolReply,
 } from "./whatsapp-capabilities.test-fixture";
+
+it("reviews and saves one explicit Transaction group through exact WhatsApp confirmation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const occurredAt = DateTime.formatIso(yield* DateTime.now);
+      const selected: Array<{ id: string; expectedRevision: number }> = [];
+      for (const counterparty of ["Grupo A", "Grupo B"]) {
+        const output = yield* successfulCapability({
+          db,
+          operation: "transactions.createTransaction",
+          input: {
+            payload: {
+              money: { amount: "10000", currency: "COP" },
+              direction: "outflow",
+              categoryId: "10000000-0000-4000-8000-000000000016",
+              counterparty,
+              occurredAt,
+            },
+          },
+        });
+        const { data } = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Struct({ id: Schema.String, revision: Schema.Int }) })
+        )(output);
+        selected.push({ id: data.id, expectedRevision: data.revision });
+      }
+      const output = yield* successfulCapability({
+        db,
+        operation: "transactions.updateTransactions",
+        input: {
+          payload: { transactions: selected, changes: { notes: "Corrección confirmada" } },
+        },
+      });
+      expect(output).toMatchObject({ data: { updated: 2 } });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM transactions WHERE user_id = ? AND notes = 'Corrección confirmada' AND revision = 1"
+            )
+            .bind(users[0])
+            .first<number>("count")
+        )
+      ).toBe(2);
+    })
+  ));
 
 it("does not present a consumed confirmation as approval for a new WhatsApp update", () =>
   Effect.runPromise(

@@ -23,7 +23,7 @@ import { CategoryVisual } from "@/ui/components/category-visual";
 import { TransactionContextPanel, TransactionSurface } from "@/ui/components/transactions";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { TransactionDateFilter } from "./date-filter";
-import { type FidyClient, maximumAtomicBatchCalls } from "@/transport/client";
+import { type FidyClient } from "@/transport/client";
 import { TransactionSummary } from "./summary";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
@@ -306,10 +306,7 @@ const BulkPanel = (
     return props.renderPanel(
       <section aria-label="Selección de transacciones" className="flex flex-col gap-5">
         <h2 className="text-xl font-semibold">Editar varias transacciones</h2>
-        <p>
-          Selecciona las transacciones que quieres corregir. Puedes elegir hasta{" "}
-          {maximumAtomicBatchCalls}.
-        </p>
+        <p>Selecciona las transacciones que quieres corregir.</p>
         <p aria-live="polite">{selected.length} seleccionadas</p>
         <SelectedTransactions selected={selected} categories={props.categories} />
         <Button
@@ -538,40 +535,65 @@ const selectedTransactionItems = (
     hidden: !visibleIds.has(record.id),
   }));
 };
+type BulkSelectionProps = Readonly<{
+  panel: TransactionPanel;
+  onPanel: (panel: TransactionPanel) => void;
+  props: WorkspaceProps;
+  visible: ReadonlyArray<Transaction>;
+  disabled: boolean;
+}>;
+const TransactionSelectionSummary = ({
+  panel,
+  onPanel,
+  props,
+  visible,
+  disabled,
+}: BulkSelectionProps): JSX.Element => {
+  const ids = bulkIds(panel);
+  const selected = new Set(ids);
+  return (
+    <SelectionSummary
+      showClear={false}
+      clearFocusId="transaction-type-filter"
+      items={selectedTransactionItems(props, selected, visible)}
+      label={`${ids.length} seleccionadas`}
+      disabled={disabled || panel._tag !== "Bulk" || panel.stage !== "selecting"}
+      onClear={() => onPanel({ _tag: "Bulk", ids: [], stage: "selecting" })}
+      onRemove={(id) => {
+        if (panel._tag === "Bulk" && panel.stage === "selecting") {
+          onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
+        }
+      }}
+    />
+  );
+};
 const bulkSelection = ({
   panel,
   onPanel,
   props,
   visible,
   disabled,
-}: Readonly<{
-  panel: TransactionPanel;
-  onPanel: (panel: TransactionPanel) => void;
-  props: WorkspaceProps;
-  visible: ReadonlyArray<Transaction>;
-  disabled: boolean;
-}>): React.ComponentProps<typeof TransactionLedger>["selection"] => {
+}: BulkSelectionProps): React.ComponentProps<typeof TransactionLedger>["selection"] => {
   const transactions = props.transactions;
   const ids = bulkIds(panel);
   const selected = new Set(ids);
   return {
-    summary: (
-      <SelectionSummary
-        clearFocusId="transaction-type-filter"
-        items={selectedTransactionItems(props, selected, visible)}
-        label={`${ids.length} seleccionadas`}
-        disabled={disabled || panel._tag !== "Bulk" || panel.stage !== "selecting"}
-        onClear={() => onPanel({ _tag: "Bulk", ids: [], stage: "selecting" })}
-        onRemove={(id) => {
-          if (panel._tag === "Bulk" && panel.stage === "selecting") {
-            onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
-          }
-        }}
-      />
-    ),
+    summary: <TransactionSelectionSummary {...{ panel, onPanel, props, visible, disabled }} />,
     active: panel._tag === "Bulk",
     ids,
-    limit: maximumAtomicBatchCalls,
+    allSelected: visible.every((record) => selected.has(record.id)),
+    onSelectAll: () => {
+      if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
+      onPanel({
+        ...panel,
+        ids: [...new Set([...panel.ids, ...visible.map((record) => record.id)])],
+      });
+    },
+    onClear: () => {
+      if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
+      document.getElementById("transaction-type-filter")?.focus();
+      onPanel({ ...panel, ids: [] });
+    },
     onContinue: () => {
       if (panel._tag === "Bulk" && panel.stage === "selecting") {
         beginBulkEditing(
@@ -584,7 +606,7 @@ const bulkSelection = ({
       if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
       if (selected.has(id)) {
         onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
-      } else if (panel.ids.length < maximumAtomicBatchCalls) {
+      } else {
         onPanel({ ...panel, ids: [...panel.ids, id] });
       }
     },

@@ -1,3 +1,4 @@
+import { UpdateTransactionsInput } from "../../src/shell/transactions/contract";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { type TransactionCaller } from "../canonical-work/contract";
 import { type PreparedCanonicalMutation } from "../canonical-operations/contract";
@@ -15,7 +16,7 @@ import { TransactionPairInput, UpdateTransactionInput } from "../../src/core/tra
 import { installedCanonicalOperations } from "../canonical-operations/operations";
 import { prepareOAuthConfirmation } from "../oauth-confirmation/operations";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { prepareCorrection, prepareUnlink } from "./operations";
+import { prepareCorrection, prepareGroupCorrection, prepareUnlink } from "./operations";
 
 const databases = isolatedTestDatabases();
 class TestAdapterFailure extends Data.TaggedError("TestAdapterFailure") {}
@@ -144,7 +145,32 @@ const setup = (): Effect.Effect<D1Database, TestAdapterFailure> =>
     return db;
   });
 
-type Work = "correction" | "unlink";
+type Work = "correction" | "group" | "unlink";
+const prepareWork = (
+  db: D1Database,
+  work: Work,
+  input: Readonly<{ caller: TransactionCaller; id: string; current: number }>
+): ReturnType<typeof prepareCorrection> => {
+  const { caller, id, current } = input;
+  if (work === "correction") {
+    return prepareCorrection({ db, subject: caller, id, input: correction, current });
+  }
+  if (work === "unlink") return prepareUnlink({ db, subject: caller, pair, current });
+  return Effect.gen(function* () {
+    const selectedId = yield* Schema.decodeEffect(TransactionPairInput.fields.firstTransactionId)(
+      id
+    ).pipe(Effect.orDie);
+    return yield* prepareGroupCorrection({
+      db,
+      subject: caller,
+      current,
+      input: {
+        transactions: [{ id: selectedId, expectedRevision: correction.expectedRevision }],
+        changes: correction.changes,
+      },
+    });
+  });
+};
 const prepare = (
   db: D1Database,
   work: Work,
@@ -156,9 +182,7 @@ const prepare = (
       id: first,
       current: yield* Clock.currentTimeMillis,
     };
-    const preparation = yield* work === "correction"
-      ? prepareCorrection({ db, subject: caller, id, input: correction, current })
-      : prepareUnlink({ db, subject: caller, pair, current });
+    const preparation = yield* prepareWork(db, work, { caller, id, current });
     if (preparation._tag !== "Prepared") {
       return yield* Effect.die(new Error(`Owner refused ${work}: ${preparation._tag}`));
     }
@@ -233,14 +257,21 @@ const acceptedCommit = (
       correction
     );
     const pairJson = yield* Schema.encodeEffect(Schema.toCodecJson(TransactionPairInput))(pair);
+    const primary = mutations[0];
+    if (primary === undefined) return yield* Effect.die("Missing reviewed mutation");
     const calls: Array<Schema.Json> = [
       {
         callId: "80000000-0000-4000-8000-000000000001",
-        operation: "transactions.updateTransaction",
-        input: {
-          params: { id: mutations.length > 1 ? third : first },
-          payload: correctionJson,
-        },
+        operation: primary.outcome.operation,
+        input:
+          primary.outcome.operation === "transactions.updateTransactions"
+            ? {
+                payload: yield* Schema.encodeEffect(Schema.toCodecJson(UpdateTransactionsInput))({
+                  transactions: [{ id: pair.firstTransactionId, expectedRevision: 0 }],
+                  changes: correction.changes,
+                }),
+              }
+            : { params: { id: mutations.length > 1 ? third : first }, payload: correctionJson },
       },
     ];
     if (mutations.length > 1) {
@@ -299,6 +330,24 @@ const changedPremises: ReadonlyArray<
       db
         .prepare("UPDATE transactions SET counterparty = 'Actualizada' WHERE id = ?")
         .bind(first)
+        .run(),
+  },
+  {
+    name: "linked partner facts",
+    change: (db) =>
+      db
+        .prepare("UPDATE transactions SET counterparty = 'Institución actualizada' WHERE id = ?")
+        .bind(second)
+        .run(),
+  },
+  {
+    name: "the linked Reconciliation state",
+    change: (db) =>
+      db
+        .prepare(
+          "UPDATE transaction_reconciliation_decisions SET state = 'keep-separate', visible_transaction_id = NULL WHERE user_id = ?"
+        )
+        .bind(userId)
         .run(),
   },
   {
@@ -370,20 +419,25 @@ const changedPremises: ReadonlyArray<
   },
 ];
 
-for (const work of ["correction", "unlink"] as const) {
+const reviewCopy = {
+  correction: "Corregir la Transacción original",
+  group: "Corregir las Transacciones originales",
+  unlink: "Desvincular la Reconciliación",
+} as const;
+for (const work of ["correction", "group", "unlink"] as const) {
   for (const premise of changedPremises) {
     it(`rolls back native protected ${work} and acceptance after changes to ${premise.name}`, () =>
       Effect.runPromise(
         Effect.gen(function* () {
           const db = yield* setup();
           const current = yield* Clock.currentTimeMillis;
-          const correctionMutation = yield* prepare(db, "correction", {
+          const correctionMutation = yield* prepare(db, work === "group" ? "group" : "correction", {
             id: work === "unlink" ? third : first,
             caller: subject,
             current,
           });
           const mutations =
-            work === "correction"
+            work !== "unlink"
               ? [correctionMutation]
               : [correctionMutation, yield* prepare(db, "unlink")];
           const statements = yield* acceptedCommit(db, mutations);
@@ -416,11 +470,7 @@ for (const work of ["correction", "unlink"] as const) {
           effect: initial.effect,
           revision: initial.revision,
         });
-        expect(initial.effect).toContain(
-          work === "correction"
-            ? "Corregir la Transacción original"
-            : "Desvincular la Reconciliación"
-        );
+        expect(initial.effect).toContain(reviewCopy[work]);
         expect(initial.effect).toContain("45000");
         expect(initial.effect).toContain("COP");
         expect(initial.effect).toContain("Institución");
@@ -509,7 +559,7 @@ it("does not introduce OAuth review or snapshot reads for PAT or browser Transac
       });
       const checks: Array<Effect.Effect<void>> = [];
       for (const caller of callers) {
-        for (const work of ["correction", "unlink"] as const) {
+        for (const work of ["correction", "group", "unlink"] as const) {
           checks.push(
             Effect.gen(function* () {
               const current = yield* Clock.currentTimeMillis;

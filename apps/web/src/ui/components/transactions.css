@@ -1143,3 +1143,10 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   outline-offset: 2px;
   box-shadow: none;
 }
+
+[data-transaction-slot~="transaction-selection-bar"] {
+  flex-wrap: wrap;
+  padding: 16px 0;
+  border-block: 1px solid var(--transaction-line);
+  background: transparent;
+}

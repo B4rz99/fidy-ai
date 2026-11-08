@@ -1,3 +1,4 @@
+import { prepareGroupCorrection as ownerPrepareGroupCorrection } from "./internal/group-correction";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
 import { prepareBoundTransactionRead as ownerPrepareBoundRead } from "./internal/bound-history";
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
@@ -274,3 +275,7 @@ export const readBrowserTransactionPage = (
 /** Compose the existing initial history page and Audit in bootstrap's final snapshot. */
 export const prepareBrowserTransactionPage: typeof prepareInitialPage = (input) =>
   prepareInitialPage(input);
+
+/** Prepare an explicit revision-checked selection for one all-or-nothing correction. */
+export const prepareGroupCorrection: typeof ownerPrepareGroupCorrection = (input) =>
+  ownerPrepareGroupCorrection(input);

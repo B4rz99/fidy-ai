@@ -1704,6 +1704,286 @@
     }
   },
   {
+    "wireName": "transactions__updateTransactions",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "transactions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                    "format": "uuid",
+                    "description": "Shape: string(uuid)"
+                  },
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "id",
+                  "expectedRevision"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 4096
+            },
+            "changes": {
+              "type": "object",
+              "properties": {
+                "money": {
+                  "type": "object",
+                  "properties": {
+                    "amount": {
+                      "type": "string",
+                      "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                      "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.\nShape: string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/"
+                    },
+                    "currency": {
+                      "type": "string",
+                      "enum": [
+                        "AED",
+                        "AFN",
+                        "ALL",
+                        "AMD",
+                        "AOA",
+                        "ARS",
+                        "AUD",
+                        "AWG",
+                        "AZN",
+                        "BAM",
+                        "BBD",
+                        "BDT",
+                        "BHD",
+                        "BIF",
+                        "BMD",
+                        "BND",
+                        "BOB",
+                        "BRL",
+                        "BSD",
+                        "BTN",
+                        "BWP",
+                        "BYN",
+                        "BZD",
+                        "CAD",
+                        "CDF",
+                        "CHF",
+                        "CLP",
+                        "CNY",
+                        "COP",
+                        "CRC",
+                        "CUP",
+                        "CVE",
+                        "CZK",
+                        "DJF",
+                        "DKK",
+                        "DOP",
+                        "DZD",
+                        "EGP",
+                        "ERN",
+                        "ETB",
+                        "EUR",
+                        "FJD",
+                        "FKP",
+                        "GBP",
+                        "GEL",
+                        "GHS",
+                        "GIP",
+                        "GMD",
+                        "GNF",
+                        "GTQ",
+                        "GYD",
+                        "HKD",
+                        "HNL",
+                        "HTG",
+                        "HUF",
+                        "IDR",
+                        "ILS",
+                        "INR",
+                        "IQD",
+                        "IRR",
+                        "ISK",
+                        "JMD",
+                        "JOD",
+                        "JPY",
+                        "KES",
+                        "KGS",
+                        "KHR",
+                        "KMF",
+                        "KPW",
+                        "KRW",
+                        "KWD",
+                        "KYD",
+                        "KZT",
+                        "LAK",
+                        "LBP",
+                        "LKR",
+                        "LRD",
+                        "LSL",
+                        "LYD",
+                        "MAD",
+                        "MDL",
+                        "MGA",
+                        "MKD",
+                        "MMK",
+                        "MNT",
+                        "MOP",
+                        "MRU",
+                        "MUR",
+                        "MVR",
+                        "MWK",
+                        "MXN",
+                        "MYR",
+                        "MZN",
+                        "NAD",
+                        "NGN",
+                        "NIO",
+                        "NOK",
+                        "NPR",
+                        "NZD",
+                        "OMR",
+                        "PAB",
+                        "PEN",
+                        "PGK",
+                        "PHP",
+                        "PKR",
+                        "PLN",
+                        "PYG",
+                        "QAR",
+                        "RON",
+                        "RSD",
+                        "RUB",
+                        "RWF",
+                        "SAR",
+                        "SBD",
+                        "SCR",
+                        "SDG",
+                        "SEK",
+                        "SGD",
+                        "SHP",
+                        "SLE",
+                        "SOS",
+                        "SRD",
+                        "SSP",
+                        "STN",
+                        "SVC",
+                        "SYP",
+                        "SZL",
+                        "THB",
+                        "TJS",
+                        "TMT",
+                        "TND",
+                        "TOP",
+                        "TRY",
+                        "TTD",
+                        "TWD",
+                        "TZS",
+                        "UAH",
+                        "UGX",
+                        "USD",
+                        "UYU",
+                        "UYW",
+                        "UZS",
+                        "VED",
+                        "VES",
+                        "VND",
+                        "VUV",
+                        "WST",
+                        "XAF",
+                        "XCD",
+                        "XCG",
+                        "XOF",
+                        "XPF",
+                        "YER",
+                        "ZAR",
+                        "ZMW",
+                        "ZWG"
+                      ],
+                      "description": "A recognized monetary ISO 4217 alphabetic code. It determines the maximum fractional precision of Money and does not imply that fidy operates in that currency's markets."
+                    }
+                  },
+                  "required": [
+                    "amount",
+                    "currency"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied."
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "inflow",
+                    "outflow"
+                  ],
+                  "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign."
+                },
+                "categoryId": {
+                  "type": "string",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+                  "format": "uuid",
+                  "description": "Shape: string(uuid)"
+                },
+                "counterparty": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                      "maxLength": 120
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Shape: (string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/|null)"
+                },
+                "notes": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                      "maxLength": 500
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Shape: (string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/|null)"
+                },
+                "occurredAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
+                  "description": "When the money actually moved. It must already have happened — a Transaction dated in the future is rejected — and the history is ordered by it, so send the instant the user is describing rather than the moment you are recording it.\nShape: string(date-time)"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "transactions",
+            "changes"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "wireName": "transactions__createTransaction",
     "parameters": {
       "type": "object",
@@ -6078,6 +6358,133 @@
                       "operation": {
                         "type": "string",
                         "enum": [
+                          "transactions.updateTransactions"
+                        ]
+                      },
+                      "input": {
+                        "type": "object",
+                        "properties": {
+                          "payload": {
+                            "type": "object",
+                            "properties": {
+                              "transactions": {
+                                "type": "array",
+                                "minItems": 1,
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "$ref": "#/$defs/TransactionId"
+                                    },
+                                    "expectedRevision": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "expectedRevision"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "maxItems": 4096
+                              },
+                              "changes": {
+                                "type": "object",
+                                "properties": {
+                                  "money": {
+                                    "type": "object",
+                                    "properties": {
+                                      "amount": {
+                                        "type": "string",
+                                        "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+                                        "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation."
+                                      },
+                                      "currency": {
+                                        "$ref": "#/$defs/Currency"
+                                      }
+                                    },
+                                    "required": [
+                                      "amount",
+                                      "currency"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied."
+                                  },
+                                  "direction": {
+                                    "type": "string",
+                                    "enum": [
+                                      "inflow",
+                                      "outflow"
+                                    ],
+                                    "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign."
+                                  },
+                                  "categoryId": {
+                                    "$ref": "#/$defs/CategoryId"
+                                  },
+                                  "counterparty": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                                        "maxLength": 120
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "notes": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                                        "maxLength": 500
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "occurredAt": {
+                                    "$ref": "#/$defs/TransactionOccurredAt"
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "transactions",
+                              "changes"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "payload"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "callId",
+                      "operation",
+                      "input"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "callId": {
+                        "$ref": "#/$defs/AtomicBatchCallId"
+                      },
+                      "operation": {
+                        "type": "string",
+                        "enum": [
                           "transactions.createTransaction"
                         ]
                       },
@@ -8087,7 +8494,7 @@
                     "additionalProperties": false
                   }
                 ],
-                "description": "Shape: ({callId:string(uuid),operation:\"identity.updateUserPreferences\",input:{payload:{locale:\"es-CO\",timeZone:string}}}|{callId:string(uuid),operation:\"categories.createKeywordRule\",input:{payload:{keyword:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,categoryId:string(uuid)}}}|{callId:string(uuid),operation:\"categories.updateKeywordRule\",input:{params:{id:string(uuid)},payload:{keyword:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,categoryId:string(uuid)}}}|{callId:string(uuid),operation:\"categories.deleteKeywordRule\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"budgets.createBudget\",input:{payload:{categoryId:string(uuid),cap:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},groupName?:string,month?:string}}}|{callId:string(uuid),operation:\"budgets.updateBudget\",input:{params:{id:string(uuid)},payload:{categoryId:string(uuid),cap:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},groupName?:string,month?:string,groupCurrency?:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"],groupCategoryIds?:Array<string(uuid)>}}}|{callId:string(uuid),operation:\"budgets.deleteBudget\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"connections.connectInstitution\",input:{payload:{institutionId:string matching /^[a-z][a-z0-9-]{0,63}$/}}}|{callId:string(uuid),operation:\"dashboard.initializeDashboard\",input:object}|{callId:string(uuid),operation:\"dashboard.applyDashboardEdit\",input:{payload:({op:\"set-title\",title:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/}|{op:\"add-widget\",widget:({id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"spending-chart\",groupBy:\"category\"|\"day\"|\"month\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"budget-bar\",categoryId:string(uuid),currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"transaction-list\",limit:integer,categories?:Array<string(uuid)>,search?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"custom-metric\",label:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,aggregation:\"sum\"|\"average\"|\"maximum\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>}),at:(\"top\"|\"bottom\"|{besideWidget:string(uuid),axis:\"row\"|\"column\",side:\"before\"|\"after\"})}|{op:\"remove-widget\",widgetId:string(uuid)}|{op:\"move-widget\",widgetId:string(uuid),at:(\"top\"|\"bottom\"|{besideWidget:string(uuid),axis:\"row\"|\"column\",side:\"before\"|\"after\"})}|{op:\"swap-widgets\",widgetId:string(uuid),withWidgetId:string(uuid)}|{op:\"resize-region\",widgetIds:Array<string(uuid)>,size:({kind:\"weight\",weight:number}|{kind:\"ratio\",ratio:\"one-quarter\"|\"one-third\"|\"one-half\"|\"two-thirds\"|\"three-quarters\"})}|{op:\"update-widget\",widget:({id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"spending-chart\",groupBy:\"category\"|\"day\"|\"month\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"budget-bar\",categoryId:string(uuid),currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"transaction-list\",limit:integer,categories?:Array<string(uuid)>,search?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"custom-metric\",label:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,aggregation:\"sum\"|\"average\"|\"maximum\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>})})}}|{callId:string(uuid),operation:\"transactions.createTransaction\",input:{payload:{money:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,direction:\"inflow\"|\"outflow\",categoryId?:string(uuid),notes?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,occurredAt:string(date-time)}}}|{callId:string(uuid),operation:\"transactions.linkTransactions\",input:{payload:{firstTransactionId:string(uuid),secondTransactionId:string(uuid)}}}|{callId:string(uuid),operation:\"transactions.unlinkTransactions\",input:{payload:{firstTransactionId:string(uuid),secondTransactionId:string(uuid)}}}|{callId:string(uuid),operation:\"transactions.updateTransaction\",input:{params:{id:string(uuid)},payload:{expectedRevision:integer,changes:{money?:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},direction?:\"inflow\"|\"outflow\",categoryId?:string(uuid),counterparty?:(string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/|null),notes?:(string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/|null),occurredAt?:string(date-time)}}}}|{callId:string(uuid),operation:\"transactions.deleteTransaction\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"ingestion.applyReviewEdit\",input:{payload:({_tag:\"Create\",id:string(uuid),revision:integer,extraction:{money:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,direction:\"inflow\"|\"outflow\",occurredAt:string(date-time)},categoryId?:string(uuid)}|{_tag:\"SaveDraft\",id:string(uuid),revision:integer,draft:{amount:string,currency?:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"],direction?:\"inflow\"|\"outflow\",counterparty:string,occurredAt:string,categoryId?:string(uuid),userProvidedFields:Array<\"money\"|\"direction\"|\"counterparty\"|\"occurredAt\"|\"categoryId\">}}|{_tag:\"Skip\",items:Array<{id:string(uuid),revision:integer}>}|{_tag:\"Restore\",items:Array<{id:string(uuid),revision:integer}>})}}|{callId:string(uuid),operation:\"ingestion.enableEmailForwarding\",input:object}|{callId:string(uuid),operation:\"ingestion.resolveNeedsReviewItem\",input:{params:{id:string(uuid)},payload:{extraction:{money:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,direction:\"inflow\"|\"outflow\",occurredAt:string(date-time)}}}}|{callId:string(uuid),operation:\"ingestion.skipNeedsReviewItem\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"ingestion.abandonStatementSubmission\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"insights.updateReminderSchedule\",input:{payload:{expectedVersion:integer,cadence:({kind:\"daily\"}|{kind:\"weekdays\"}|{kind:\"every-three-days\",anchorDate:string matching /^\\d{4}-\\d{2}-\\d{2}$/}|{kind:\"weekly\",weekday:integer}),timing:{hour:integer,minute:integer},timeZone:string}}}|{callId:string(uuid),operation:\"insights.markInsightDelivered\",input:{params:{id:string(uuid)},payload:{sentAt:string(date-time),channel:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,provider:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,providerMessageId:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/}}}|{callId:string(uuid),operation:\"insights.markInsightRead\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"insights.dismissInsight\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"recurringPlans.applyRecurringEdit\",input:{payload:{expectedRevision:integer,edit:({kind:\"create\",id:string(uuid),plan:{name:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,kind:\"income\"|\"expense\"|\"transfer\",cardPayment?:boolean,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"],amountMode:\"fixed\"|\"estimated\"|\"unknown\",money?:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},frequency:one of [\"weekly\",\"fortnightly\",\"twice-monthly\",\"monthly\",\"quarterly\",\"half-yearly\",\"yearly\"],monthDays?:Array<undefined>,firstDate:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,endDate?:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,timeZone:string,counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,categoryId?:string(uuid),accountId?:string(uuid)},seriesId?:string(uuid)}|{kind:\"edit\",planId:string(uuid),date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,scope:\"once\"|\"forward\",plan:{name:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,kind:\"income\"|\"expense\"|\"transfer\",cardPayment?:boolean,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"],amountMode:\"fixed\"|\"estimated\"|\"unknown\",money?:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},frequency:one of [\"weekly\",\"fortnightly\",\"twice-monthly\",\"monthly\",\"quarterly\",\"half-yearly\",\"yearly\"],monthDays?:Array<undefined>,firstDate:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,endDate?:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,timeZone:string,counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,categoryId?:string(uuid),accountId?:string(uuid)}}|{kind:\"lifecycle\",planId:string(uuid),date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,action:\"pause\"|\"resume\"|\"stop\"}|{kind:\"skip\",planId:string(uuid),date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,skipped:boolean}|{kind:\"fulfill\",fulfillment:{id:string(uuid),planId:string(uuid),date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,money:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},actualDate:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,settled:boolean,automatic?:boolean,transactionId?:string(uuid)},replaces?:string(uuid)}|{kind:\"reverse\",fulfillmentId:string(uuid)}|{kind:\"suggestion\",seriesId:string(uuid),action:\"dismiss\"|\"restore\"|\"link\",planId?:string(uuid)}),view?:\"compact\"}}}|{callId:string(uuid),operation:\"memory.remember\",input:{payload:{text:string}}}|{callId:string(uuid),operation:\"memory.revise\",input:{params:{id:string(uuid)},payload:{text:string}}}|{callId:string(uuid),operation:\"memory.forget\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"subscription.cancelSubscription\",input:object}|{callId:string(uuid),operation:\"pats.createManualPAT\",input:{payload:{requestId:string(uuid),grant:{recipientLabel:string,scopes:Array<\"read\"|\"write\"|\"dashboard\">,lifetimeDays?:7|30|90|365,reviewExpiresAt:string(date-time)}}}}|{callId:string(uuid),operation:\"pats.inspectPATPairing\",input:{payload:{publicCode:string}}}|{callId:string(uuid),operation:\"pats.approvePATPairing\",input:{payload:{pairingId:string(uuid)}}})"
+                "description": "Shape: ({callId:string(uuid),operation:\"identity.updateUserPreferences\",input:{payload:{locale:\"es-CO\",timeZone:string}}}|{callId:string(uuid),operation:\"categories.createKeywordRule\",input:{payload:{keyword:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,categoryId:string(uuid)}}}|{callId:string(uuid),operation:\"categories.updateKeywordRule\",input:{params:{id:string(uuid)},payload:{keyword:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,categoryId:string(uuid)}}}|{callId:string(uuid),operation:\"categories.deleteKeywordRule\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"budgets.createBudget\",input:{payload:{categoryId:string(uuid),cap:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},groupName?:string,month?:string}}}|{callId:string(uuid),operation:\"budgets.updateBudget\",input:{params:{id:string(uuid)},payload:{categoryId:string(uuid),cap:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},groupName?:string,month?:string,groupCurrency?:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"],groupCategoryIds?:Array<string(uuid)>}}}|{callId:string(uuid),operation:\"budgets.deleteBudget\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"connections.connectInstitution\",input:{payload:{institutionId:string matching /^[a-z][a-z0-9-]{0,63}$/}}}|{callId:string(uuid),operation:\"dashboard.initializeDashboard\",input:object}|{callId:string(uuid),operation:\"dashboard.applyDashboardEdit\",input:{payload:({op:\"set-title\",title:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/}|{op:\"add-widget\",widget:({id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"spending-chart\",groupBy:\"category\"|\"day\"|\"month\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"budget-bar\",categoryId:string(uuid),currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"transaction-list\",limit:integer,categories?:Array<string(uuid)>,search?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"custom-metric\",label:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,aggregation:\"sum\"|\"average\"|\"maximum\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>}),at:(\"top\"|\"bottom\"|{besideWidget:string(uuid),axis:\"row\"|\"column\",side:\"before\"|\"after\"})}|{op:\"remove-widget\",widgetId:string(uuid)}|{op:\"move-widget\",widgetId:string(uuid),at:(\"top\"|\"bottom\"|{besideWidget:string(uuid),axis:\"row\"|\"column\",side:\"before\"|\"after\"})}|{op:\"swap-widgets\",widgetId:string(uuid),withWidgetId:string(uuid)}|{op:\"resize-region\",widgetIds:Array<string(uuid)>,size:({kind:\"weight\",weight:number}|{kind:\"ratio\",ratio:\"one-quarter\"|\"one-third\"|\"one-half\"|\"two-thirds\"|\"three-quarters\"})}|{op:\"update-widget\",widget:({id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"spending-chart\",groupBy:\"category\"|\"day\"|\"month\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"budget-bar\",categoryId:string(uuid),currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"transaction-list\",limit:integer,categories?:Array<string(uuid)>,search?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"custom-metric\",label:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,aggregation:\"sum\"|\"average\"|\"maximum\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>})})}}|{callId:string(uuid),operation:\"transactions.updateTransactions\",input:{payload:{transactions:Array<{id:string(uuid),expectedRevision:integer}>,changes:{money?:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},direction?:\"inflow\"|\"outflow\",categoryId?:string(uuid),counterparty?:(string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/|null),notes?:(string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/|null),occurredAt?:string(date-time)}}}}|{callId:string(uuid),operation:\"transactions.createTransaction\",input:{payload:{money:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,direction:\"inflow\"|\"outflow\",categoryId?:string(uuid),notes?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,occurredAt:string(date-time)}}}|{callId:string(uuid),operation:\"transactions.linkTransactions\",input:{payload:{firstTransactionId:string(uuid),secondTransactionId:string(uuid)}}}|{callId:string(uuid),operation:\"transactions.unlinkTransactions\",input:{payload:{firstTransactionId:string(uuid),secondTransactionId:string(uuid)}}}|{callId:string(uuid),operation:\"transactions.updateTransaction\",input:{params:{id:string(uuid)},payload:{expectedRevision:integer,changes:{money?:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},direction?:\"inflow\"|\"outflow\",categoryId?:string(uuid),counterparty?:(string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/|null),notes?:(string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/|null),occurredAt?:string(date-time)}}}}|{callId:string(uuid),operation:\"transactions.deleteTransaction\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"ingestion.applyReviewEdit\",input:{payload:({_tag:\"Create\",id:string(uuid),revision:integer,extraction:{money:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,direction:\"inflow\"|\"outflow\",occurredAt:string(date-time)},categoryId?:string(uuid)}|{_tag:\"SaveDraft\",id:string(uuid),revision:integer,draft:{amount:string,currency?:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"],direction?:\"inflow\"|\"outflow\",counterparty:string,occurredAt:string,categoryId?:string(uuid),userProvidedFields:Array<\"money\"|\"direction\"|\"counterparty\"|\"occurredAt\"|\"categoryId\">}}|{_tag:\"Skip\",items:Array<{id:string(uuid),revision:integer}>}|{_tag:\"Restore\",items:Array<{id:string(uuid),revision:integer}>})}}|{callId:string(uuid),operation:\"ingestion.enableEmailForwarding\",input:object}|{callId:string(uuid),operation:\"ingestion.resolveNeedsReviewItem\",input:{params:{id:string(uuid)},payload:{extraction:{money:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,direction:\"inflow\"|\"outflow\",occurredAt:string(date-time)}}}}|{callId:string(uuid),operation:\"ingestion.skipNeedsReviewItem\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"ingestion.abandonStatementSubmission\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"insights.updateReminderSchedule\",input:{payload:{expectedVersion:integer,cadence:({kind:\"daily\"}|{kind:\"weekdays\"}|{kind:\"every-three-days\",anchorDate:string matching /^\\d{4}-\\d{2}-\\d{2}$/}|{kind:\"weekly\",weekday:integer}),timing:{hour:integer,minute:integer},timeZone:string}}}|{callId:string(uuid),operation:\"insights.markInsightDelivered\",input:{params:{id:string(uuid)},payload:{sentAt:string(date-time),channel:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,provider:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,providerMessageId:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/}}}|{callId:string(uuid),operation:\"insights.markInsightRead\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"insights.dismissInsight\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"recurringPlans.applyRecurringEdit\",input:{payload:{expectedRevision:integer,edit:({kind:\"create\",id:string(uuid),plan:{name:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,kind:\"income\"|\"expense\"|\"transfer\",cardPayment?:boolean,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"],amountMode:\"fixed\"|\"estimated\"|\"unknown\",money?:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},frequency:one of [\"weekly\",\"fortnightly\",\"twice-monthly\",\"monthly\",\"quarterly\",\"half-yearly\",\"yearly\"],monthDays?:Array<undefined>,firstDate:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,endDate?:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,timeZone:string,counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,categoryId?:string(uuid),accountId?:string(uuid)},seriesId?:string(uuid)}|{kind:\"edit\",planId:string(uuid),date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,scope:\"once\"|\"forward\",plan:{name:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,kind:\"income\"|\"expense\"|\"transfer\",cardPayment?:boolean,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"],amountMode:\"fixed\"|\"estimated\"|\"unknown\",money?:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},frequency:one of [\"weekly\",\"fortnightly\",\"twice-monthly\",\"monthly\",\"quarterly\",\"half-yearly\",\"yearly\"],monthDays?:Array<undefined>,firstDate:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,endDate?:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,timeZone:string,counterparty?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,categoryId?:string(uuid),accountId?:string(uuid)}}|{kind:\"lifecycle\",planId:string(uuid),date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,action:\"pause\"|\"resume\"|\"stop\"}|{kind:\"skip\",planId:string(uuid),date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,skipped:boolean}|{kind:\"fulfill\",fulfillment:{id:string(uuid),planId:string(uuid),date:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,money:{amount:string matching /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/,currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]},actualDate:string matching /^20\\d{2}-\\d{2}-\\d{2}$/,settled:boolean,automatic?:boolean,transactionId?:string(uuid)},replaces?:string(uuid)}|{kind:\"reverse\",fulfillmentId:string(uuid)}|{kind:\"suggestion\",seriesId:string(uuid),action:\"dismiss\"|\"restore\"|\"link\",planId?:string(uuid)}),view?:\"compact\"}}}|{callId:string(uuid),operation:\"memory.remember\",input:{payload:{text:string}}}|{callId:string(uuid),operation:\"memory.revise\",input:{params:{id:string(uuid)},payload:{text:string}}}|{callId:string(uuid),operation:\"memory.forget\",input:{params:{id:string(uuid)}}}|{callId:string(uuid),operation:\"subscription.cancelSubscription\",input:object}|{callId:string(uuid),operation:\"pats.createManualPAT\",input:{payload:{requestId:string(uuid),grant:{recipientLabel:string,scopes:Array<\"read\"|\"write\"|\"dashboard\">,lifetimeDays?:7|30|90|365,reviewExpiresAt:string(date-time)}}}}|{callId:string(uuid),operation:\"pats.inspectPATPairing\",input:{payload:{publicCode:string}}}|{callId:string(uuid),operation:\"pats.approvePATPairing\",input:{payload:{pairingId:string(uuid)}}})"
               },
               "maxItems": 12
             }
@@ -8506,17 +8913,17 @@
           ],
           "description": "Shape: ({id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"spending-chart\",groupBy:\"category\"|\"day\"|\"month\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"budget-bar\",categoryId:string(uuid),currency:one of [\"AED\",\"AFN\",\"ALL\",\"AMD\",\"AOA\",\"ARS\",\"AUD\",\"AWG\",\"AZN\",\"BAM\",\"BBD\",\"BDT\",\"BHD\",\"BIF\",\"BMD\",\"BND\",\"BOB\",\"BRL\",\"BSD\",\"BTN\",\"BWP\",\"BYN\",\"BZD\",\"CAD\",\"CDF\",\"CHF\",\"CLP\",\"CNY\",\"COP\",\"CRC\",\"CUP\",\"CVE\",\"CZK\",\"DJF\",\"DKK\",\"DOP\",\"DZD\",\"EGP\",\"ERN\",\"ETB\",\"EUR\",\"FJD\",\"FKP\",\"GBP\",\"GEL\",\"GHS\",\"GIP\",\"GMD\",\"GNF\",\"GTQ\",\"GYD\",\"HKD\",\"HNL\",\"HTG\",\"HUF\",\"IDR\",\"ILS\",\"INR\",\"IQD\",\"IRR\",\"ISK\",\"JMD\",\"JOD\",\"JPY\",\"KES\",\"KGS\",\"KHR\",\"KMF\",\"KPW\",\"KRW\",\"KWD\",\"KYD\",\"KZT\",\"LAK\",\"LBP\",\"LKR\",\"LRD\",\"LSL\",\"LYD\",\"MAD\",\"MDL\",\"MGA\",\"MKD\",\"MMK\",\"MNT\",\"MOP\",\"MRU\",\"MUR\",\"MVR\",\"MWK\",\"MXN\",\"MYR\",\"MZN\",\"NAD\",\"NGN\",\"NIO\",\"NOK\",\"NPR\",\"NZD\",\"OMR\",\"PAB\",\"PEN\",\"PGK\",\"PHP\",\"PKR\",\"PLN\",\"PYG\",\"QAR\",\"RON\",\"RSD\",\"RUB\",\"RWF\",\"SAR\",\"SBD\",\"SCR\",\"SDG\",\"SEK\",\"SGD\",\"SHP\",\"SLE\",\"SOS\",\"SRD\",\"SSP\",\"STN\",\"SVC\",\"SYP\",\"SZL\",\"THB\",\"TJS\",\"TMT\",\"TND\",\"TOP\",\"TRY\",\"TTD\",\"TWD\",\"TZS\",\"UAH\",\"UGX\",\"USD\",\"UYU\",\"UYW\",\"UZS\",\"VED\",\"VES\",\"VND\",\"VUV\",\"WST\",\"XAF\",\"XCD\",\"XCG\",\"XOF\",\"XPF\",\"YER\",\"ZAR\",\"ZMW\",\"ZWG\"]}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"transaction-list\",limit:integer,categories?:Array<string(uuid)>,search?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/}|{id:string(uuid),title?:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,type:\"custom-metric\",label:string matching /^\\S[\\s\\S]*\\S$|^\\S$|^$/,aggregation:\"sum\"|\"average\"|\"maximum\",period:one of [\"this-week\",\"this-month\",\"last-week\",\"last-month\",\"last-7-days\",\"last-30-days\"],categories?:Array<string(uuid)>})"
         },
-        "TransactionOccurredAt": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
-          "description": "When the money actually moved. It must already have happened — a Transaction dated in the future is rejected — and the history is ordered by it, so send the instant the user is describing rather than the moment you are recording it.\nShape: string(date-time)"
-        },
         "TransactionId": {
           "type": "string",
           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
           "format": "uuid",
           "description": "Shape: string(uuid)"
+        },
+        "TransactionOccurredAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
+          "description": "When the money actually moved. It must already have happened — a Transaction dated in the future is rejected — and the history is ordered by it, so send the instant the user is describing rather than the moment you are recording it.\nShape: string(date-time)"
         },
         "TransactionPairInput": {
           "type": "object",

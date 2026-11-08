@@ -57,7 +57,7 @@ export const generateReminderQuestion = (
     const previous = candidate.value;
     const id = newId();
     const current = schedule.value;
-    const text = `Has recibido tres recordatorios sin responder. ¿Quieres continuar? reminder:${id}:continue reminder:${id}:stop`;
+    const text = `Has recibido tres recordatorios sin responder. ¿Quieres continuar? Responde a este mensaje con «Sí» para continuar o «No» para detenerlos.`;
     yield* Effect.tryPromise(() =>
       input.db.batch([
         prepareProactivityConsentAction({

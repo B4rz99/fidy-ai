@@ -1,3 +1,4 @@
+import { HostedTurnConfirmation, HostedTurnProposal } from "../../src/shell/agent/contract";
 import { openAiTestKey } from "../openai.test-fixture";
 import {
   CanonicalToolOutcome,
@@ -494,7 +495,9 @@ it("does not describe a partially committed tool round as wholly complete", () =
       const visible = yield* Schema.decodeUnknownEffect(VisibleReply)(
         yield* Effect.tryPromise(() => reply.json())
       );
-      expect(visible.text).toBe("Una operación se completó; otras no pudieron completarse.");
+      expect(visible.text).toBe(
+        "Completé una parte de lo que pediste. Quedaron cambios sin hacer."
+      );
       const stored = yield* Effect.tryPromise(() =>
         db.prepare("SELECT text FROM memories WHERE user_id = ?").bind(users[0]).all()
       );
@@ -665,12 +668,13 @@ it.each(["memory.forget", "operations.executeAtomicBatch"] as const)(
             })
           );
         const awaited7 = yield* Effect.tryPromise(() => send("Olvida la memoria"));
-        const challenge = yield* Schema.decodeUnknownEffect(VisibleReply)(
+        const challenge = yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
           yield* Effect.tryPromise(() => awaited7.json())
         );
-        expect(challenge.text).toContain(operation);
-        expect(challenge.text).toContain(memoryId);
-        const command = challenge.text.split("Responde exactamente: ")[1];
+        expect(challenge.text).toContain("Olvidar el recuerdo");
+        expect(challenge.text).not.toContain(operation);
+        expect(challenge.text).not.toContain(memoryId);
+        const command = challenge.confirmation?.command;
         expect(command).toMatch(/^CONFIRMAR [0-9a-f]{64}$/u);
         expect(
           (yield* Effect.tryPromise(() =>
@@ -752,7 +756,7 @@ it.each(["memory.forget", "operations.executeAtomicBatch"] as const)(
         const confirmed = yield* Schema.decodeUnknownEffect(VisibleReply)(
           yield* Effect.tryPromise(() => awaited8.json())
         );
-        expect(confirmed.text).toBe("Operación confirmada.");
+        expect(confirmed.text).toBe("Listo, apliqué los cambios.");
         expect(requests).toBe(1);
         expect(
           (yield* Effect.tryPromise(() =>
@@ -952,10 +956,13 @@ it.each([
             })
           );
         const awaited9 = yield* Effect.tryPromise(() => send("Olvida la memoria"));
-        const proposal = yield* Schema.decodeUnknownEffect(VisibleReply)(
+        const proposal = yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
           yield* Effect.tryPromise(() => awaited9.json())
         );
-        const command = proposal.text.split("Responde exactamente: ")[1] ?? "";
+        const confirmation = yield* Schema.decodeUnknownEffect(HostedTurnConfirmation)(
+          proposal.confirmation
+        );
+        const command = confirmation.command;
         expect(
           (yield* Effect.tryPromise(() =>
             coordinator.fetch(
@@ -1104,7 +1111,7 @@ it.each([
           const visible = yield* Schema.decodeUnknownEffect(VisibleReply)(
             yield* Effect.tryPromise(() => reply.json())
           );
-          expect(visible.text).toBe("Operación confirmada.");
+          expect(visible.text).toBe("Listo, apliqué los cambios.");
           expect(
             (yield* Effect.tryPromise(() =>
               coordinator.fetch(
@@ -1226,9 +1233,10 @@ it.each([
         const visible = yield* Schema.decodeUnknownEffect(VisibleReply)(
           yield* Effect.tryPromise(() => response.json())
         );
-        expect(visible.text).toContain("memory.forget");
-        expect(visible.text).toContain(memoryId);
-        expect(visible.text).toContain("Responde exactamente: CONFIRMAR ");
+        expect(visible.text).toContain("Olvidar el recuerdo");
+        expect(visible.text).not.toContain("memory.forget");
+        expect(visible.text).toContain("». Se borrará definitivamente.");
+        expect(visible.text).not.toContain("CONFIRMAR");
         expect(requests).toHaveLength(expectedCalls);
         const finalRequest = encodeJson(requests.at(-1));
         expect(finalRequest).toContain(hostile);

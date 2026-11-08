@@ -1,3 +1,4 @@
+import { TranscriptText } from "../../src/core/agent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
@@ -935,7 +936,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           work: { kind: "proactivity-generate", version: 1, userId },
         });
         const offer = Option.getOrThrow(yield* findCurrentProactivityOffer(context));
-        const exact = `Fidy te avisa: ${offer.disclosure.text} ${offer.acceptChoice} ${offer.declineChoice} Más en Fidy.`;
+        const exact = `Fidy te avisa: ${offer.disclosure.text} Responde a este mensaje con «Sí» para activar estos avisos o «No» para rechazarlos. Más en Fidy.`;
         const provider = vi.fn(() =>
           Promise.resolve(
             Response.json({
@@ -1482,7 +1483,20 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         receivedAtMs: later.epochMilliseconds,
         text: `reminder:${question.delivery_id}:stop`,
       });
-      expect(yield* controlManualReminders({ db, proof, now: later.epochMilliseconds })).toBe(true);
+      const humanProof = {
+        ...proof,
+        text: TranscriptText.make("No"),
+        replyToMessageId: Option.some(WhatsAppProviderMessageId.make(`crash-${sent}`)),
+      };
+      const body = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.toCodecJson(WhatsAppTurnAdmission))
+      )(humanProof);
+      const response = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator/hosted-turn/whatsapp", { method: "POST", body })
+        )
+      );
+      expect(response.status).toBe(200);
       expect(Option.getOrThrow(yield* findReminderSchedule({ db, userId })).enabled).toBe(false);
     })
   ));
@@ -1790,7 +1804,7 @@ it.each(["paused", "stopped"] as const)(
                   .first()
               )
             ).toEqual({
-              text: `Fidy te avisa: Has recibido tres recordatorios sin responder. ¿Quieres continuar? reminder:${replacement.delivery_id}:continue reminder:${replacement.delivery_id}:stop Más en Fidy.`,
+              text: `Fidy te avisa: Has recibido tres recordatorios sin responder. ¿Quieres continuar? Responde a este mensaje con «Sí» para continuar o «No» para detenerlos. Más en Fidy.`,
             });
             expect(Option.getOrThrow(yield* findReminderGovernor({ db, userId }))).toEqual({
               _tag: "QuestionDelivered",
@@ -1917,8 +1931,10 @@ it.each(["paused", "stopped"] as const)(
             const report = Option.getOrThrow(
               yield* findProactivityReport({ db, userId, id: offer.id })
             );
-            expect(Option.getOrThrow(report.text)).toContain(offer.acceptChoice);
-            expect(Option.getOrThrow(report.text)).toContain(offer.revokeChoice);
+            expect(Option.getOrThrow(report.text)).toContain("«Sí» para continuar");
+            expect(Option.getOrThrow(report.text)).not.toContain(offer.acceptChoice);
+            expect(Option.getOrThrow(report.text)).toContain("«Desactivar»");
+            expect(Option.getOrThrow(report.text)).not.toContain(offer.revokeChoice);
             yield* deliver(offer.id, afterTime);
             const choice = {
               ...context,

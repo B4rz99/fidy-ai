@@ -403,16 +403,13 @@ it.each([
           userId: users[1],
           submissionId: submission.id,
         });
-        const foreignChallenge = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ command: TranscriptText })
-        )(
-          yield* Effect.tryPromise(() =>
-            db
-              .prepare("SELECT command FROM hosted_confirmations WHERE user_id=?")
-              .bind(users[1])
-              .first()
-          )
+        const foreignChallenge = yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT command FROM hosted_confirmations WHERE user_id=?")
+            .bind(users[1])
+            .first()
         );
+        expect(foreignChallenge).toBeNull();
         const foreignWrite = yield* completeWhatsAppTurnWithAdmission({
           input: {
             db,
@@ -426,7 +423,7 @@ it.each([
               replyToMessageId: Option.none(),
               sandboxPhone: Option.none(),
             }),
-            text: foreignChallenge.command,
+            text: TranscriptText.make(`CONFIRMAR ${"0".repeat(64)}`),
             inference: inferenceModel,
             executeMutation: Option.none(),
             deliver: {
@@ -443,8 +440,7 @@ it.each([
           },
           onAdmitted: () => {},
         });
-        expect(foreignWrite.status).toBe(202);
-        yield* finishLatestWhatsAppFixture({ db, subject: foreignCaller });
+        expect(foreignWrite.status).toBe(401);
         const refusedWrite = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ outcome_json: Schema.String })
         )(
@@ -457,7 +453,7 @@ it.each([
               .first()
           )
         );
-        expect(refusedWrite.outcome_json).toContain("not_found");
+        expect(refusedWrite.outcome_json).toContain("confirmation_unavailable");
         expect(
           (yield* Effect.tryPromise(() =>
             db

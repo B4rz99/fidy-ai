@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
-import { it } from "@effect/vitest";
-import { Effect, Exit, Ref, Schema } from "effect";
+import { expect, it } from "@effect/vitest";
+import { Effect, Exit, Option, Ref, Schema } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { type HostedInferenceService, type HostedTextResult } from "./contract";
 import { makeHostedInferenceStub, verifyHostedInferenceConformanceChecks } from "./operations";
@@ -21,6 +21,7 @@ const conformanceStub = (
   firstText: string,
   amount: number | string = representativeAmount,
   times: Readonly<{
+    conversationalText: Option.Option<string>;
     occurredAt: string;
     dateOnly: string;
     recurringDate: string;
@@ -35,6 +36,7 @@ const conformanceStub = (
       | "extra-evidence"
       | "derived";
   }> = {
+    conversationalText: Option.none(),
     occurredAt: "2026-09-22T12:00:00Z",
     dateOnly: "2026-09-21T05:00:00Z",
     recurringDate: "2026-09-22",
@@ -43,6 +45,10 @@ const conformanceStub = (
   }
 ): Effect.Effect<HostedInferenceService> =>
   Effect.gen(function* () {
+    const conversationalText = Option.getOrElse(
+      times.conversationalText,
+      () => "Tienes Pro, pero no hay una suscripción de pago que cancelar."
+    );
     const recurring = times.recurring;
     const recurringRead = times.recurringRead;
     const occurredAt = times.occurredAt;
@@ -51,19 +57,20 @@ const conformanceStub = (
     let mutationRound = 0;
     let recurringRound = 0;
     let recurringReadRound = 0;
+    let conversationalRound = 0;
     const recurringReadResult = (): Omit<HostedTextResult, "continuation"> => {
       recurringReadRound++;
       const maximumReads = recurringRead === "derived" || recurringRead === "past" ? 1 : 2;
       if (recurringReadRound > maximumReads) {
         const replies = {
-          observe: '{"state":"active","nextDate":"2026-10-18"}',
-          historical: '{"state":"active","nextDate":"2026-10-18"}',
-          past: '{"state":"active","nextDate":"2026-09-18"}',
-          occurrence: '{"state":"unconfirmed","nextDate":"2026-10-18"}',
-          inactive: '{"state":"inactive","nextDate":"2026-10-18"}',
+          observe: "El plan está activo. Su próximo pago es el 18 de octubre de 2026.",
+          historical: "El plan está activo. Su próximo pago es el 18 de octubre de 2026.",
+          past: "El plan está activo. Su próximo pago es el 18 de septiembre de 2026.",
+          occurrence: "El plan está sin confirmar. Su próximo pago es el 18 de octubre de 2026.",
+          inactive: "El plan no está activo. Su próximo pago es el 18 de octubre de 2026.",
           "extra-evidence":
-            '{"state":"active","nextDate":"2026-10-18","explanation":"El plan no está activo"}',
-          derived: '{"state":"active","nextDate":"2026-10-18"}',
+            "El plan está activo. Su próximo pago es el 18 de octubre de 2026. El plan no está activo.",
+          derived: "El plan está activo. Su próximo pago es el 18 de octubre de 2026.",
           contradictory:
             "El plan no está activo; próxima fecha 2026-09-18; después aparece 2026-10-18",
         };
@@ -146,6 +153,23 @@ const conformanceStub = (
       generate: (policy) => {
         if (
           policy.availableOperations.includes(
+            CanonicalOperationId.make("subscription.getSubscriptionStatus")
+          )
+        ) {
+          return Effect.succeed(
+            conversationalRound++ === 0
+              ? result("", [
+                  {
+                    id: "subscription-status",
+                    operation: CanonicalOperationId.make("subscription.getSubscriptionStatus"),
+                    params: {},
+                  },
+                ])
+              : result(conversationalText)
+          );
+        }
+        if (
+          policy.availableOperations.includes(
             CanonicalOperationId.make("recurring.listRecurringSeries")
           )
         ) {
@@ -201,6 +225,7 @@ it.effect(
 it.effect("accepts the correct future date derived from the complete canonical plan", () =>
   Effect.gen(function* () {
     const inference = yield* conformanceStub("inválido", representativeAmount, {
+      conversationalText: Option.none(),
       occurredAt: "2026-09-22T12:00:00Z",
       dateOnly: "2026-09-21T05:00:00Z",
       recurringDate: "2026-09-22",
@@ -235,6 +260,7 @@ it.effect("rejects a canonical mutation whose Money differs from the User's requ
 it.effect("rejects local wall time when the canonical mutation needs the UTC instant", () =>
   Effect.gen(function* () {
     const inference = yield* conformanceStub("inválido", representativeAmount, {
+      conversationalText: Option.none(),
       occurredAt: "2026-09-22T07:00:00Z",
       dateOnly: "2026-09-21T05:00:00Z",
       recurringDate: "2026-09-22",
@@ -263,6 +289,7 @@ it.effect("rejects UTC midnight and an invented daylight-saving offset for a dat
   Effect.gen(function* () {
     for (const dateOnly of ["2026-09-21T00:00:00Z", "2026-09-21T04:00:00Z"]) {
       const inference = yield* conformanceStub("inválido", representativeAmount, {
+        conversationalText: Option.none(),
         occurredAt: "2026-09-22T12:00:00Z",
         dateOnly,
         recurringDate: "2026-09-22",
@@ -281,6 +308,7 @@ it.effect("rejects timestamps and a different calendar day for recurring lifecyc
   Effect.gen(function* () {
     for (const recurringDate of ["2026-09-22T05:00:00Z", "2026-09-23"]) {
       const inference = yield* conformanceStub("inválido", representativeAmount, {
+        conversationalText: Option.none(),
         occurredAt: "2026-09-22T12:00:00Z",
         dateOnly: "2026-09-21T05:00:00Z",
         recurringDate,
@@ -299,6 +327,7 @@ it.effect("requires a workspace read followed by an edit using the observed revi
   Effect.gen(function* () {
     for (const recurring of ["ask", "invent", "ask-after-read", "stale"] as const) {
       const inference = yield* conformanceStub("inválido", representativeAmount, {
+        conversationalText: Option.none(),
         occurredAt: "2026-09-22T12:00:00Z",
         dateOnly: "2026-09-21T05:00:00Z",
         recurringDate: "2026-09-22",
@@ -326,6 +355,7 @@ it.effect(
         "extra-evidence",
       ] as const) {
         const inference = yield* conformanceStub("inválido", representativeAmount, {
+          conversationalText: Option.none(),
           occurredAt: "2026-09-22T12:00:00Z",
           dateOnly: "2026-09-21T05:00:00Z",
           recurringDate: "2026-09-22",
@@ -338,4 +368,27 @@ it.effect(
         );
       }
     })
+);
+
+it.effect.each([
+  "Tienes **Pro**; no hay una suscripción de pago que cancelar.",
+  '{"accessTier":"pro","paidSubscription":null}',
+  "Tienes Pro por ManualProGrant; no hay una suscripción de pago que cancelar.",
+  "Tu ID es 00000000-0000-4000-8000-000000000001; tienes Pro y no hay suscripción.",
+  "Tienes Pro y una suscripción de pago que cancelar.",
+])("rejects technical, formatted or misleading consumer replies: %s", (text) =>
+  Effect.gen(function* () {
+    const inference = yield* conformanceStub("inválido", representativeAmount, {
+      occurredAt: "2026-09-22T12:00:00Z",
+      dateOnly: "2026-09-21T05:00:00Z",
+      recurringDate: "2026-09-22",
+      recurring: "observe",
+      recurringRead: "observe",
+      conversationalText: Option.some(text),
+    });
+    expect(yield* verifyHostedInferenceConformanceChecks(inference).pipe(Effect.flip)).toEqual({
+      check: "conversational_es_co",
+      category: "InvalidOutput",
+    });
+  })
 );

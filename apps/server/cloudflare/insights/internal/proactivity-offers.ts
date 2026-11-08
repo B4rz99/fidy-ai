@@ -93,12 +93,13 @@ const offerText = (
   kind: ProactivityOptInKind,
   hasGrant: boolean
 ): string => {
-  if (!hasGrant) return `${offer.disclosure.text} ${offer.acceptChoice} ${offer.declineChoice}`;
-  const choices =
-    kind === "manual-entry-reminder"
-      ? `${offer.acceptChoice} ${offer.revokeChoice}`
-      : offer.revokeChoice;
-  return `${offer.disclosure.text} ${choices}`;
+  if (!hasGrant) {
+    return `${offer.disclosure.text} Responde a este mensaje con «Sí» para activar estos avisos o «No» para rechazarlos.`;
+  }
+  if (kind === "manual-entry-reminder") {
+    return `${offer.disclosure.text} Responde a este mensaje con «Sí» para continuar o «Desactivar» para dejar de recibirlos.`;
+  }
+  return `${offer.disclosure.text} Responde a este mensaje con «Desactivar» para dejar de recibir estos avisos.`;
 };
 
 const consentContext = (

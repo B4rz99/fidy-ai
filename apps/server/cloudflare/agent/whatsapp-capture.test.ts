@@ -70,6 +70,7 @@ const exerciseTurn = Effect.fn(function* ({
   );
   const model = yield* Effect.tryPromise(() => inference(generate));
   const sent: Array<string> = [];
+  const confirmationCommands: Array<string> = [];
   const response = yield* resumeWhatsAppTurn({
     db,
     userId: UserId.make(users[0]),
@@ -82,8 +83,10 @@ const exerciseTurn = Effect.fn(function* ({
       contextualReplyQuery: Option.none(),
       send: ({
         text,
+        confirmation,
       }): Effect.Effect<{ kind: "accepted"; messageId: WhatsAppProviderMessageId }> => {
         sent.push(text);
+        if (Option.isSome(confirmation)) confirmationCommands.push(confirmation.value.command);
         return Effect.succeed({
           kind: "accepted",
           messageId: WhatsAppProviderMessageId.make(`${messageId}-reply`),
@@ -94,7 +97,7 @@ const exerciseTurn = Effect.fn(function* ({
     scheduleRecovery: () => Promise.resolve(),
     onAdmitted: () => {},
   });
-  return { turnId, sent, response };
+  return { turnId, sent, response, confirmationCommands };
 });
 
 const captureInput = {
@@ -257,7 +260,10 @@ it("commits a WhatsApp capture once, confirms its stored local date, and retriev
         "La fecha local de hoy en America/Bogota es 2026-11-01"
       );
       expect(sent).toHaveLength(1);
-      expect(sent[0]).toContain("Registré 12500 COP con fecha 2026-11-01");
+      expect(sent[0]).toContain("12.500 pesos");
+      expect(sent[0]).toContain("1 de noviembre de 2026");
+      expect(sent[0]).not.toContain("Referencia:");
+      expect(sent[0]).not.toMatch(/[0-9a-f]{8}-[0-9a-f-]{27}/u);
       const stored = yield* Effect.tryPromise(() =>
         db.prepare("SELECT id,user_id,amount,currency,category_id FROM transactions").all()
       );
@@ -271,7 +277,7 @@ it("commits a WhatsApp capture once, confirms its stored local date, and retriev
         Schema.Struct({ id: Schema.String, category_id: Schema.String })
       )(stored.results[0]);
       expect(transaction.category_id).not.toBe("");
-      expect(sent[0]).toContain(transaction.id);
+      expect(sent[0]).not.toContain(transaction.id);
       yield* run(turnId, model);
       expect(sent).toHaveLength(1);
       expect(requests).toHaveLength(1);
@@ -498,7 +504,9 @@ it.each(["transactions.updateTransaction", "transactions.deleteTransaction"] as 
           generate: () => Promise.resolve(toolReply(operation, input)),
         });
         expect(proposal.sent).toHaveLength(1);
-        expect(proposal.sent[0]).toContain("Responde exactamente: CONFIRMAR ");
+        expect(proposal.sent[0]).toContain("Toca Confirmar");
+        expect(proposal.confirmationCommands).toHaveLength(1);
+        expect(proposal.sent[0]).not.toContain(proposal.confirmationCommands[0]);
         expect(
           yield* Effect.tryPromise(() =>
             db

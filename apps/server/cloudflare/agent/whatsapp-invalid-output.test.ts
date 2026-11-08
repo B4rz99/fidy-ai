@@ -91,7 +91,7 @@ it("repairs invalid mutation arguments after a successful query without repeatin
       });
       expect(rounds).toBe(3);
       expect(result.sent).toHaveLength(1);
-      expect(result.sent[0]).toContain("Responde exactamente: CONFIRMAR ");
+      expect(result.sent[0]).toContain("Toca Confirmar");
       expect(
         yield* Effect.tryPromise(() =>
           db

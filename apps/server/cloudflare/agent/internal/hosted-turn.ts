@@ -1,6 +1,7 @@
+import { plainReply } from "./plain-reply";
 import { captureWithoutCommit, transactionReceipt } from "./capture-reply";
 import { browserConfirmationText, readBrowserConfirmation } from "./hosted-browser-confirmation";
-import type { HostedTurnProposal } from "../../../src/shell/agent/contract";
+import type { HostedTurnConfirmation, HostedTurnProposal } from "../../../src/shell/agent/contract";
 import { observeApplicationOperation } from "../../runtime/application-observation/operations";
 import { Telemetry } from "../../../src/shell/observability/operations";
 import { TelemetryAttempt, boundedTelemetryCount } from "../../../src/shell/observability/contract";
@@ -96,6 +97,7 @@ import {
   guardModelConfirmationReply,
   isHostedConfirmationAttempt,
   issueHostedConfirmation,
+  readWhatsAppConfirmation,
 } from "./hosted-confirmation";
 import {
   type HostedAdmissionChannel,
@@ -115,6 +117,9 @@ import {
   selectHostedSession,
   stageHostedDelivery,
 } from "./turn-store";
+
+const plainWhatsAppAnswer = (answer: TranscriptText): TranscriptText =>
+  guardModelConfirmationReply(plainReply(answer));
 
 type HostedWorkFailure =
   | Cause.UnknownError
@@ -213,6 +218,7 @@ type WhatsAppHostedDelivery = Readonly<{
       text: TranscriptText;
       turnId: TranscriptTurnId;
       correlationToken: HostedDeliveryCorrelationToken;
+      confirmation: Option.Option<typeof HostedTurnConfirmation.Type>;
     }>
   ) => Effect.Effect<
     | Readonly<{ kind: "accepted"; messageId: WhatsAppProviderMessageId }>
@@ -1159,6 +1165,7 @@ const executeAdmittedTurn = ({
               signal,
               mutation,
               deadlineMs: startedAtMs + maximumModelRoundMillis,
+              timeZone,
             });
             if (
               Option.exists(action, (value) => value._tag === "Result" && value.mutationSucceeded)
@@ -1258,7 +1265,7 @@ const executeAdmittedTurn = ({
         }
         const answer = isWhatsAppHosted(subject)
           ? Option.orElse(captureWithoutCommit({ request: requestText }), () =>
-              Option.map(approvedAnswer(generated.value), guardModelConfirmationReply)
+              Option.map(approvedAnswer(generated.value), plainWhatsAppAnswer)
             )
           : approvedAnswer(generated.value);
         if (Option.isNone(answer)) {
@@ -1365,7 +1372,9 @@ const committedAnswer = (
     }
   }
   return TranscriptText.make(
-    partial ? "Una operación se completó; otras no pudieron completarse." : "Operación completada."
+    partial
+      ? "Completé una parte de lo que pediste. Quedaron cambios sin hacer."
+      : "Listo, apliqué los cambios."
   );
 };
 
@@ -1500,6 +1509,7 @@ const executeHostedTool = ({
   signal,
   mutation,
   deadlineMs,
+  timeZone,
 }: Readonly<{
   db: D1Database;
   subject: HostedSubject;
@@ -1512,6 +1522,7 @@ const executeHostedTool = ({
   signal: AbortSignal;
   mutation: { started: boolean; attempted: boolean };
   deadlineMs: number;
+  timeZone: string;
 }>): Effect.Effect<Option.Option<HostedToolAction>, HostedWorkFailure> => {
   const isExpired = Clock.currentTimeMillis.pipe(
     Effect.map((now) => signal.aborted || now >= deadlineMs)
@@ -1568,6 +1579,33 @@ const executeHostedTool = ({
         operation,
         input: evidence.value,
         now: yield* Clock.currentTimeMillis,
+        timeZone,
+        nativeButton: isWhatsAppHosted(subject),
+        read: (query, input) =>
+          Effect.gen(function* () {
+            if (yield* isExpired) return Option.none();
+            const remaining = Math.max(0, deadlineMs - (yield* Clock.currentTimeMillis));
+            const observed = Option.flatten(
+              yield* (
+                isWhatsAppHosted(subject)
+                  ? executeWhatsAppStatementQuery({
+                      db,
+                      subject,
+                      bucket,
+                      turnId,
+                      operation: query,
+                      input,
+                    })
+                  : executeCanonicalQuery({ db, subject, bucket, operation: query, input })
+              ).pipe(Effect.timeoutOption(Duration.millis(remaining)))
+            );
+            if (Option.isNone(observed) || !observed.value.ok || (yield* isExpired)) {
+              return Option.none();
+            }
+            return Schema.decodeUnknownOption(CanonicalToolEvidence)(
+              yield* Effect.tryPromise(() => observed.value.json())
+            );
+          }).pipe(Effect.orElseSucceed(() => Option.none())),
       });
       const rejected = yield* recordHostedToolOutcome({
         db,
@@ -1581,8 +1619,15 @@ const executeHostedTool = ({
           },
         },
       });
-      return Option.isSome(challenge) && Option.isSome(rejected)
-        ? Option.some<HostedToolAction>({ _tag: "Challenge", text: challenge.value.text })
+      return Option.isSome(rejected)
+        ? Option.some<HostedToolAction>({
+            _tag: "Challenge",
+            text: Option.isSome(challenge)
+              ? challenge.value.text
+              : TranscriptText.make(
+                  "No pude preparar esos cambios para que los revises. Pídemelos por separado o vuelve a intentarlo."
+                ),
+          })
         : Option.none();
     }
     let executed: Option.Option<Response>;
@@ -1822,9 +1867,7 @@ const executeConfirmedHostedTurn = ({
         ? yield* confirmedStatementReply({ db, subject, turnId, operation: operation.id })
         : Option.none();
       const answer = Option.getOrElse(clarification, () =>
-        TranscriptText.make(
-          succeeded ? "Operación confirmada." : "No se pudo completar la operación."
-        )
+        TranscriptText.make(succeeded ? "Listo, apliqué los cambios." : "No pude hacer ese cambio.")
       );
       return yield* proposeDelivery({
         db,
@@ -1904,8 +1947,19 @@ const proposeWhatsAppDelivery = ({
       yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
       return Response.json({ status: "delivery_failed" }, { status: 202, headers: noStore });
     }
+    const confirmation = yield* readWhatsAppConfirmation({
+      db,
+      userId,
+      turnId,
+      now: yield* Clock.currentTimeMillis,
+    });
     const sent = yield* deliver
-      .send({ text: answer, turnId, correlationToken: token.value })
+      .send({
+        text: answer,
+        turnId,
+        correlationToken: token.value,
+        confirmation,
+      })
       .pipe(Effect.orElseSucceed(() => ({ kind: "ambiguous" as const })));
     const recorded = yield* recordWhatsAppSend({
       db,

@@ -65,7 +65,7 @@ it("creates a Budget through an admitted WhatsApp Turn with an attributable dura
           ),
       });
       expect(result.sent).toHaveLength(1);
-      expect(result.sent[0]).toBe("Operación completada.");
+      expect(result.sent[0]).toBe("Listo, apliqué los cambios.");
       expect(
         yield* Effect.tryPromise(() =>
           db.prepare("SELECT count(*) AS count FROM budgets").first<number>("count")

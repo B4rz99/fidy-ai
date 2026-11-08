@@ -14,6 +14,7 @@ import {
   HostedInferenceError,
   type HostedInferenceService,
   type HostedInitialTextContext,
+  type HostedTextResult,
   HostedToolCallMaximum,
 } from "~/shell/hosted-inference/contract";
 
@@ -261,6 +262,22 @@ const representativeRecurringWorkspace = (
     });
   }).pipe(Effect.mapError(conformanceFailure));
 
+const verifyRecurringReadAnswer = (answer: unknown): Effect.Effect<void, HostedInferenceError> =>
+  Effect.gen(function* () {
+    const text = yield* Schema.decodeUnknownEffect(Schema.String)(answer).pipe(
+      Effect.mapError(conformanceFailure)
+    );
+    yield* requireTextEvidence(text, "activo");
+    yield* requireTextEvidence(text, "18 de octubre de 2026");
+    if (
+      /[`*]|^\s*[[{#]|\b(?:state|nextDate|unconfirmed)\b|no\s+(?:está|sigue)\s+activo|inactivo|sin confirmar|pausado|detenido|2026-09-18|18 de septiembre/imu.test(
+        text
+      )
+    ) {
+      return yield* conformanceFailure();
+    }
+  });
+
 /** A maintained plan is distinct from both historical detection and a past occurrence's state. */
 export const verifyRecurringPlanRead = (
   inference: HostedInferenceService
@@ -269,7 +286,7 @@ export const verifyRecurringPlanRead = (
     const maximumReads = 2;
     const prepared = yield* inference.prepareText({
       context: context(
-        "Consulta el recurrente «Plan de prueba» de la vista Recurrentes en septiembre de 2026 y dime el estado del plan y su próxima fecha posterior a hoy en formato AAAA-MM-DD. Responde solo JSON sin bloques de código: state (active, paused o stopped) y nextDate (AAAA-MM-DD). No cambies nada."
+        "¿Sigue activo mi plan «Plan de prueba»? ¿Cuándo viene su próximo pago? Estamos en septiembre de 2026. Solo quiero consultar, sin hacer cambios."
       ),
       availableOperations: [
         CanonicalOperationId.make("recurring.listRecurringSeries"),
@@ -312,12 +329,7 @@ export const verifyRecurringPlanRead = (
       result = yield* next.execute;
     }
     if (reads === 0 || result.toolCalls.length !== 0) return yield* conformanceFailure();
-    yield* Schema.decodeUnknownEffect(
-      Schema.fromJsonString(
-        Schema.Struct({ state: Schema.Literal("active"), nextDate: Schema.Literal("2026-10-18") })
-      ),
-      { onExcessProperty: "error" }
-    )(result.text).pipe(Effect.mapError(conformanceFailure));
+    yield* verifyRecurringReadAnswer(result.text);
   });
 
 export const verifyRecurringLifecycle = (
@@ -436,3 +448,64 @@ export const verifyStructuredColombianSpanish = (
       Effect.flatMap((prepared) => prepared.execute),
       Effect.asVoid
     );
+
+const isFinishedReply = (answer: HostedTextResult): boolean =>
+  answer.toolCalls.length === 0 && answer.finishReason === "stop";
+const maximumConversationalReplyLength = 500;
+export const verifyConversationalSpanish = (
+  inference: HostedInferenceService
+): Effect.Effect<void, HostedInferenceError> =>
+  Effect.gen(function* () {
+    const operation = CanonicalOperationId.make("subscription.getSubscriptionStatus");
+    const prepared = yield* inference.prepareText({
+      context: context("¿Tengo Pro? ¿Hay alguna suscripción de pago que pueda cancelar?"),
+      availableOperations: [operation],
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(1),
+    });
+    const requested = yield* prepared.execute;
+    if (requested.toolCalls.length !== 1 || requested.toolCalls[0]?.operation !== operation) {
+      return yield* conformanceFailure();
+    }
+    const call = requested.toolCalls[0];
+    const next = yield* requested.continuation.prepare([
+      {
+        _tag: "ToolResult",
+        toolCallId: ToolCallId.make(call.id),
+        operation,
+        outcome: {
+          _tag: "Succeeded",
+          output: {
+            data: {
+              accessTier: "pro",
+              hasProGrant: true,
+              trialPeriod: { startedAt: "2026-08-01T00:00:00Z", endsAt: "2026-08-08T00:00:00Z" },
+              paidSubscription: null,
+              cancellation: null,
+              recentAttempts: [],
+            },
+            next: [],
+          },
+        },
+      },
+    ]);
+    const answer = yield* next.execute;
+    const text = yield* Schema.decodeUnknownEffect(Schema.String)(answer.text).pipe(
+      Effect.mapError(conformanceFailure)
+    );
+    if (
+      !isFinishedReply(answer) ||
+      /[`*]|^\s*[[{#]|\b(?:ManualProGrant|hasProGrant|paidSubscription|API|JSON|UUID|ID)\b|[0-9a-f]{8}-[0-9a-f-]{27}|subscription\./imu.test(
+        text
+      )
+    ) {
+      return yield* conformanceFailure();
+    }
+    if (text.length > maximumConversationalReplyLength) {
+      return yield* conformanceFailure();
+    }
+    yield* requireTextEvidence(text, "pro");
+    if (!/(?:no (?:tienes|hay|aparece)|ninguna).{0,70}suscripci[oó]n/iu.test(text)) {
+      return yield* conformanceFailure();
+    }
+  });

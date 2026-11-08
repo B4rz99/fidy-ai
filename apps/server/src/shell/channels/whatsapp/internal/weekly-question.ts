@@ -24,7 +24,7 @@ export const buildWeeklyQuestionSender = (
     Effect.gen(function* () {
       if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
       const parameter = yield* Schema.decodeEffect(ProactivityTemplateParameter)(
-        `¿quieres que te siga enviando esto? ${offer.disclosure.text} Aceptar o continuar: ${offer.acceptChoice} Rechazar: ${offer.declineChoice}`
+        `¿Quieres seguir recibiendo tu resumen semanal? ${offer.disclosure.text} Responde a este mensaje con «Sí» para continuar o «No» para dejar de recibirlo.`
       );
       const text = proactivityTemplateBody.replace("{{1}}", () => parameter);
       if (

@@ -1,3 +1,4 @@
+import { readProactivityReplyChoice } from "./disclosure-reply";
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { ConsentRecordId } from "../../../src/core/consent/contract";
 import { UserId } from "../../../src/core/identity/contract";
@@ -319,24 +320,26 @@ export const readWeeklyReplyChoice = (
       !["no", "no, gracias", "sí", "si"].includes(normalized) ||
       Option.isNone(input.proof.replyToMessageId)
     ) {
-      return Option.none();
+      return yield* readProactivityReplyChoice(input);
     }
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT offer_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered' AND (?='decline' OR expires_at_ms>?)"
+          "SELECT offer_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered' AND business_phone_number_id=? AND delivered_at_ms<=?+1000 AND (?='decline' OR expires_at_ms>?)"
         )
         .bind(
           input.proof.userId,
           input.proof.portfolioId,
           input.proof.bsuid,
           Option.getOrElse(input.proof.replyToMessageId, () => ""),
+          input.proof.businessPhoneNumberId,
+          input.proof.occurredAtMs,
           decision,
           input.now
         )
         .first()
     );
-    if (raw === null) return Option.none();
+    if (raw === null) return yield* readProactivityReplyChoice(input);
     const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ offer_id: ConsentRecordId }))(
       raw
     );

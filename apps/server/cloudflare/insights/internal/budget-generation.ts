@@ -1,8 +1,12 @@
+import {
+  formatWhatsAppDate,
+  formatWhatsAppMoney,
+} from "../../../src/shell/channels/whatsapp/operations";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import type { UserId } from "../../../src/core/identity/contract";
 import { BudgetCrossing } from "../../../src/core/budgets/contract";
-import { MoneyGroups, encodeMoneyAmount, groupMoney } from "../../../src/core/_shared/money";
+import { MoneyGroups, groupMoney } from "../../../src/core/_shared/money";
 import { budgetAlertDeadline } from "../../../src/core/insights/operations";
 import { type BudgetCrossingGroup } from "../../budgets/contract";
 import {
@@ -31,8 +35,12 @@ const messageWrites = (
   if (Option.isNone(group.grantId)) return [];
   const first = group.crossings[0];
   const expires = budgetAlertDeadline({ detectedAt: first.detectedAt, monthEnd: first.period.to });
-  const thresholds = group.crossings.map((crossing) => `${crossing.threshold}%`).join(" y ");
-  const text = `Tu presupuesto de la categoría ${categoryLabel} alcanzó el ${thresholds}. Salidas registradas: ${encodeMoneyAmount(first.spent.amount)} ${first.spent.currency}. Tope capturado: ${encodeMoneyAmount(first.cap.amount)} ${first.cap.currency}. Mes aplicado: ${DateTime.formatIsoDate(DateTime.setZoneNamedUnsafe(first.period.from, first.period.timeZone)).slice(0, monthDatePrefixLength)} (${first.period.timeZone}).`;
+  const thresholds = group.crossings.map((crossing) => `${crossing.threshold}%`).join(" y el ");
+  const month = DateTime.formatIsoDate(
+    DateTime.setZoneNamedUnsafe(first.period.from, first.period.timeZone)
+  ).slice(0, monthDatePrefixLength);
+  const monthName = formatWhatsAppDate(`${month}-01`).replace(/^1 de /u, "");
+  const text = `Llevas ${formatWhatsAppMoney(first.spent)} de los ${formatWhatsAppMoney(first.cap)} de tu presupuesto de ${categoryLabel} para ${monthName}. Alcanzaste el ${thresholds}.`;
   return [
     input.db
       .prepare(

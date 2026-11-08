@@ -862,7 +862,7 @@ it.each([
             })
           ).text
         ).toBe(
-          `Fidy te avisa: ${offer.disclosure.text} ${offer.acceptChoice} ${offer.declineChoice} Más en Fidy.`
+          `Fidy te avisa: ${offer.disclosure.text} Responde a este mensaje con «Sí» para activar estos avisos o «No» para rechazarlos. Más en Fidy.`
         );
         expect(provider).toHaveBeenCalledOnce();
       })
@@ -2012,7 +2012,7 @@ it("installed category generation atomically materializes two Budget events and 
         );
         expect(report.text).toEqual(
           Option.some(
-            "Tu presupuesto de la categoría Otros alcanzó el 80% y 100%. Salidas registradas: 110 COP. Tope capturado: 100 COP. Mes aplicado: 2026-10 (America/Bogota)."
+            "Llevas 110 pesos de los 100 pesos de tu presupuesto de Otros para octubre de 2026. Alcanzaste el 80% y el 100%."
           )
         );
         const provider = vi.fn(() =>
@@ -2091,8 +2091,8 @@ it("installed category generation atomically materializes two Budget events and 
         expect(Option.getOrThrow(Option.getOrThrow(EffectArray.last(transcripts))).id).toBe(
           first.id
         );
-        expect(first.text).toContain("80% y 100%");
-        expect(first.text).toContain("110 COP");
+        expect(first.text).toContain("80% y el 100%");
+        expect(first.text).toContain("110 pesos");
         expect(provider).toHaveBeenCalledOnce();
         yield* executeProactivityWork({
           environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
@@ -2245,7 +2245,7 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
         work: { kind: "proactivity-generate", version: 1, userId },
       });
       const report = Option.getOrThrow(yield* findProactivityReport({ db, userId, id: group.id }));
-      expect(Option.getOrThrow(report.text)).toContain("110 COP");
+      expect(Option.getOrThrow(report.text)).toContain("110 pesos");
       yield* Effect.tryPromise(() =>
         db.batch([
           prepareInsightRecipient({

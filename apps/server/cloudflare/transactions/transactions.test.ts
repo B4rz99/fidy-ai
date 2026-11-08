@@ -390,7 +390,7 @@ const auditedOperations = (
 ): Promise<ReadonlyArray<{ operation: string; outcome: string }>> =>
   db
     .prepare(
-      "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY occurred_at_ms"
+      "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call' OR (record_type='credential_call' AND operation='transactions.updateTransactions' AND session_id IS NOT NULL)) AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY occurred_at_ms"
     )
     .bind(userId)
     .all<{ operation: string; outcome: string }>()
@@ -846,7 +846,7 @@ it("corrects a selected group of 500 Transactions in one atomic save with retain
       ).toBe(500);
       expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toContainEqual({
         operation: "transactions.updateTransactions",
-        outcome: "success",
+        outcome: "accepted",
       });
     })
   ));
@@ -897,7 +897,7 @@ it("composes a group correction larger than 4 KiB with another atomic mutation",
         )
       ).toBe(count);
       expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
-        { operation: "transactions.updateTransactions", outcome: "success" },
+        { operation: "transactions.updateTransactions", outcome: "accepted" },
       ]);
       expect(
         yield* fromTestPromise(() =>
@@ -985,7 +985,7 @@ it("rolls back every group correction and its evidence when final Audit is refus
       yield* fromTestPromise(() =>
         db
           .prepare(`CREATE TRIGGER refuse_group_audit BEFORE INSERT ON audit_entries
-    WHEN NEW.operation = 'transactions.updateTransactions' AND NEW.outcome = 'success'
+    WHEN NEW.operation = 'transactions.updateTransactions' AND NEW.outcome = 'accepted'
     BEGIN SELECT RAISE(IGNORE); END`)
           .run()
       );

@@ -216,6 +216,9 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+Group Corrections use the existing credential-neutral Audit projection with the exact browser
+session and accepted/rejected outcome. The original Audit history and table remain in place;
+adding this operation requires no Audit rebuild.
 The canonical Transaction detail query returns linked originals alongside the effective facts in
 the same authorized, audited snapshot. Bounded SourceAttestation capture kinds explain
 how each original was obtained without returning retained source material. Original selection remains same-User and bounded to the

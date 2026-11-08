@@ -852,12 +852,15 @@ test("month and year remain readable and selectable with enlarged text on a narr
       yield* wait(() => page.evaluate(enlargeText));
       const month = page.getByRole("combobox", { name: "Mes de transacciones", exact: true });
       const year = page.getByRole("combobox", { name: "Año de transacciones", exact: true });
+      const monthFits = (): Promise<boolean> => month.evaluate(selectedValueFits);
+      const viewportFits = (): Promise<boolean> => page.evaluate(pageFits);
       yield* wait(() => expect(month).toHaveValue("10"));
       yield* wait(() => expect(year).toHaveText("2026"));
       yield* wait(() => month.selectOption({ label: "septiembre" }));
       yield* wait(() => expect(page).toHaveURL(/month=2026-09/u));
-      expect(yield* wait(() => month.evaluate(selectedValueFits))).toBe(true);
-      expect(yield* wait(() => page.evaluate(pageFits))).toBe(true);
+      yield* wait(() => expect(month).toHaveValue("09"));
+      yield* wait(() => expect.poll(monthFits).toBe(true));
+      yield* wait(() => expect.poll(viewportFits).toBe(true));
       yield* wait(() => chooseYear(page, "2025"));
       yield* wait(() => expect(page).toHaveURL(/month=2025-09/u));
       yield* wait(() => month.selectOption("12"));

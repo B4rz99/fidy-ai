@@ -6,10 +6,15 @@ import {
   prepareBoundReviewWorkspace,
   validationFailed,
 } from "../../ingestion/operations";
-import { browseDashboard, prepareBoundDashboardCatalog } from "../../dashboard/operations";
+import {
+  browseDashboard,
+  prepareBoundDashboardCatalog,
+  prepareBoundDashboardView,
+} from "../../dashboard/operations";
 import {
   type CanonicalBrowserRead,
   type CanonicalBrowserSnapshotOperation,
+  type CanonicalBrowserSourceRead,
   type CanonicalReadCompletion,
 } from "../../canonical-admission/contract";
 
@@ -44,9 +49,9 @@ import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
 
 import {
-  protectCanonicalBrowserMaterial,
   protectCanonicalBrowserRequest,
   protectCanonicalBrowserSnapshot,
+  protectCanonicalBrowserSource,
   protectCanonicalRequest,
   protectCanonicalSource,
 } from "../../canonical-admission/operations";
@@ -1618,12 +1623,36 @@ const preparedBrowserRead = (
     (entry) => ({ operation: entry.operation, read: entry.prepare(request) })
   );
 };
-const supportsBrowserMaterial = (operation: CatalogOperation, request: Request): boolean =>
-  operation.id === "ingestion.getReviewMaterial" &&
-  request.method === "GET" &&
-  operation.policy.requiredTier === "free" &&
-  operation.policy.kind === "query" &&
-  operation.policy.access._tag === "WebSessionOnly";
+const isDashboardViewSource = (operation: CatalogOperation, request: Request): boolean =>
+  operation.id === "dashboard.getDashboardView" &&
+  operation.policy.access._tag === "UserOwnedAgentScoped" &&
+  new URL(request.url).search === "";
+
+const preparedBrowserSource = (
+  operation: CatalogOperation,
+  request: Request,
+  environment: CoreHttpEnvironment
+): Option.Option<CanonicalBrowserSourceRead> => {
+  if (
+    request.method !== "GET" ||
+    operation.policy.requiredTier !== "free" ||
+    operation.policy.kind !== "query"
+  ) {
+    return Option.none();
+  }
+  if (isDashboardViewSource(operation, request)) {
+    return Option.some(prepareBoundDashboardView);
+  }
+  return operation.id === "ingestion.getReviewMaterial" &&
+    operation.policy.access._tag === "WebSessionOnly"
+    ? Option.some(
+        prepareBoundReviewMaterial({
+          request,
+          bucket: reviewQueryBucket(environment, operation.id),
+        })
+      )
+    : Option.none();
+};
 
 const browserCanonicalResponse = (
   request: Request,
@@ -1632,16 +1661,14 @@ const browserCanonicalResponse = (
 ): Effect.Effect<Response> =>
   Clock.currentTimeMillis.pipe(
     Effect.flatMap((current) => {
-      if (supportsBrowserMaterial(operation, request)) {
-        return protectCanonicalBrowserMaterial({
+      const source = preparedBrowserSource(operation, request, environment);
+      if (Option.isSome(source)) {
+        return protectCanonicalBrowserSource({
           request,
           db: environment.DB,
           current,
           operation,
-          read: prepareBoundReviewMaterial({
-            request,
-            bucket: reviewQueryBucket(environment, operation.id),
-          }),
+          read: source.value,
         }).pipe(observeCanonicalResponse(operation.id));
       }
       const prepared = preparedBrowserRead(operation, request);

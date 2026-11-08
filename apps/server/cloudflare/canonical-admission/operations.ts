@@ -1,10 +1,10 @@
 import {
   type AuthorizedCanonicalCaller,
   CanonicalAdmissionUnavailable,
-  type CanonicalBrowserMaterialRead,
   type CanonicalBrowserQueryFinalizer,
   type CanonicalBrowserRead,
   type CanonicalBrowserSnapshotOperation,
+  type CanonicalBrowserSourceRead,
   type CanonicalReadCompletion,
   type PreparedCanonicalBrowserRead,
   type PreparedCanonicalReadCompletion,
@@ -950,10 +950,12 @@ const refuseBrowserSnapshot = ({
   db,
   lookup,
   cause,
+  unavailableResponse,
 }: Readonly<{
   db: D1Database;
   lookup: BoundWebSessionLookup;
   cause: unknown;
+  unavailableResponse: () => Response;
 }>): Effect.Effect<Response, CanonicalAdmissionUnavailable> =>
   Effect.gen(function* () {
     // A response can be lost after commit. Never replay owner work.
@@ -973,7 +975,7 @@ const refuseBrowserSnapshot = ({
       response:
         cause instanceof Error && /canonical_request_(rate|concurrency)/u.test(cause.message)
           ? rateLimited()
-          : unavailable(),
+          : unavailableResponse(),
     });
   });
 
@@ -1083,6 +1085,7 @@ export const protectCanonicalBrowserSnapshot = (
             db: input.db,
             lookup,
             cause: committed.error.cause,
+            unavailableResponse: unavailable,
           });
         }
         timings.sql = reportedSqlDuration(committed.rows.map((row) => row.meta));
@@ -1214,16 +1217,16 @@ export const prepareCanonicalBrowserQueryFinalization = (
   };
 };
 
-/** Admission and original-material source selection share the first phase; external I/O retains a lease. */
-type BrowserMaterialRequest = Readonly<{
+/** Admission and owner source selection share the first phase; dependent work retains a lease. */
+type BrowserSourceRequest = Readonly<{
   db: D1Database;
   request: Request;
   operation: CatalogOperation;
   current: number;
-  read: CanonicalBrowserMaterialRead;
+  read: CanonicalBrowserSourceRead;
 }>;
-const executeBrowserMaterial = (
-  input: BrowserMaterialRequest,
+const executeBrowserSource = (
+  input: BrowserSourceRequest,
   timings: Option.Option<CanonicalRequestTimings>
 ): Effect.Effect<Response> =>
   Effect.uninterruptibleMask((restore) =>
@@ -1253,6 +1256,7 @@ const executeBrowserMaterial = (
           db: input.db,
           lookup: lookup.value,
           cause: rows.cause,
+          unavailableResponse: Option.getOrElse(source.unavailable, () => unavailable),
         });
       }
       const subject = resolveBoundCanonicalWebSession({
@@ -1280,13 +1284,13 @@ const executeBrowserMaterial = (
     })
   ).pipe(Effect.orElseSucceed(unavailable));
 
-/** Retain complete-request timing while the original's byte retrieval remains outside D1. */
-export const protectCanonicalBrowserMaterial = (
-  input: BrowserMaterialRequest
+/** Retain complete-request timing across source admission and freshly fenced dependent work. */
+export const protectCanonicalBrowserSource = (
+  input: BrowserSourceRequest
 ): Effect.Effect<Response> =>
   Effect.suspend(() => {
     const timings: CanonicalRequestTimings = { admission: 0, owner: 0, standing: 0 };
-    return executeBrowserMaterial(input, Option.some(timings)).pipe(
+    return executeBrowserSource(input, Option.some(timings)).pipe(
       Effect.timed,
       Effect.map(([duration, response]) => appendCanonicalTimings({ response, duration, timings }))
     );

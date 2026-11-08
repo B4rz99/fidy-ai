@@ -1,6 +1,6 @@
 import { type Cause, Effect, Option, Schema } from "effect";
 import type {
-  CanonicalBrowserMaterialRead,
+  CanonicalBrowserSourceRead,
   CanonicalReadCompletion,
 } from "../../canonical-admission/contract";
 import { prepareCanonicalBrowserQueryFinalization } from "../../canonical-admission/operations";
@@ -126,7 +126,7 @@ export const prepareBoundReviewMaterial =
   }: Readonly<{
     request: Request;
     bucket: Option.Option<R2Bucket>;
-  }>): CanonicalBrowserMaterialRead =>
+  }>): CanonicalBrowserSourceRead =>
   ({ db, reservation: users }) => {
     const id = new URL(request.url).pathname.split("/").at(materialIdPosition) ?? "";
     const material = materialSelection.replaceAll(
@@ -143,6 +143,7 @@ export const prepareBoundReviewMaterial =
     ];
     return {
       statements,
+      unavailable: Option.none(),
       present: (rows, subject, completion) =>
         presentMaterial({ db, bucket, statements, subject, completion }, rows),
     };

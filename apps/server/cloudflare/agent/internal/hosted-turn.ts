@@ -800,6 +800,7 @@ const prepareHostedWork = ({
       userId,
       activeTurnId,
       user: snapshot.user,
+      channel: isWhatsAppHosted(subject) ? "whatsapp" : "web",
       startedAt: DateTime.makeUnsafe(startedAtMs),
       memories: continuity.memories,
       compactedConversation: continuity.compactedConversation,

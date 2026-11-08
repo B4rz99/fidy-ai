@@ -13,6 +13,7 @@ import {
 } from "~/core/agent/contract";
 import type {
   HostedContextSection,
+  HostedConversationChannel,
   HostedStructuredContext,
   HostedTextContext,
 } from "~/shell/hosted-inference/contract";
@@ -61,6 +62,7 @@ const recurringToolWorkflow =
   `Distingue el estado del plan (data.document.plans, sus pausas y stoppedOn vigentes en data.today) ` +
   `del estado de cada ocurrencia: unconfirmed significa que esa ocurrencia está sin confirmar, no que el plan esté inactivo. ` +
   `Para la próxima fecha usa ocurrencias canónicas y data.today: nunca presentes una fecha pasada como próxima. ` +
+  `Para elegir el próximo pago compara las fechas de todas las ocurrencias futuras y nombra la más cercana, aunque su importe no esté definido. No priorices la primera fila ni un pago posterior por tener importe conocido. ` +
   `Si el mes consultado solo contiene fechas pasadas, consulta el mes siguiente; si no puedes verificar la próxima fecha, dilo sin inventarla. ` +
   `Para editar recurrentes, consulta recurringPlans.getRecurringWorkspace y usa data.document.revision; ` +
   `no pidas IDs ni expectedRevision al Usuario. `;
@@ -83,13 +85,20 @@ const confirmationWorkflow =
   `el host emitirá el desafío antes de ejecutar si corresponde. No sustituyas esa llamada ` +
   `por una propuesta en texto ni copies comandos CONFIRMAR de turnos anteriores. `;
 
+const channelGuidance = (channel: HostedConversationChannel): string =>
+  channel === "web"
+    ? `El chat web solo admite texto. No tiene controles para adjuntar archivos, imágenes ni audios. No digas que se puede adjuntar, pegar o arrastrar un PDF aquí. Para enviar documentos, indica el chat de Fidy en WhatsApp o el correo personal de Fidy si está activado; consulta su dirección cuando haga falta, nunca la inventes. `
+    : `En WhatsApp puedes recibir documentos PDF adjuntos en este chat. Que se pueda adjuntar un archivo no prueba que ya se haya recibido, leído o registrado: confirma esos resultados solo con evidencia de las herramientas. `;
+
 /** @internal */
 export const systemPromptInternal = ({
   serviceMarket,
   locale,
   timeZone,
-}: Pick<User, "serviceMarket" | "locale" | "timeZone">): string =>
-  `Eres Fidy, un asistente de finanzas personales. ${conversationStyle}${personalFinanceScope}` +
+  channel,
+}: Pick<User, "serviceMarket" | "locale" | "timeZone"> &
+  Readonly<{ channel: HostedConversationChannel }>): string =>
+  `Eres Fidy, un asistente de finanzas personales. ${conversationStyle}${channelGuidance(channel)}${personalFinanceScope}` +
   `El contexto explícito del Usuario es ServiceMarket ${serviceMarket}, locale ${locale} ` +
   `y zona IANA ${timeZone}. ServiceMarket indica la jurisdicción donde Fidy habilita su servicio; ` +
   `no es el nombre del Usuario ni del servicio. No se suministra un nombre del Usuario aquí. ` +
@@ -307,7 +316,12 @@ const projectEvidenceSection = (
 
 const projectSection = (section: HostedContextSection): ReadonlyArray<Prompt.MessageEncoded> => {
   if (section._tag === "AssistantPolicy") {
-    return [{ role: "system", content: systemPromptInternal(section.user) }];
+    return [
+      {
+        role: "system",
+        content: systemPromptInternal({ ...section.user, channel: section.channel }),
+      },
+    ];
   }
   if (section._tag === "TurnStarted") {
     return [

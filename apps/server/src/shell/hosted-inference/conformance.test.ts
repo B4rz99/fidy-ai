@@ -35,7 +35,8 @@ const conformanceStub = (
       | "contradictory"
       | "extra-evidence"
       | "derived"
-      | "unnamed";
+      | "unnamed"
+      | "amount-priority";
   }> = {
     conversationalText: Option.none(),
     occurredAt: "2026-09-22T12:00:00Z",
@@ -68,6 +69,8 @@ const conformanceStub = (
             "El plan «Plan de prueba» está activo. Su próximo pago es el 18 de octubre de 2026.",
           historical:
             "El plan «Plan de prueba» está activo. Su próximo pago es el 18 de octubre de 2026.",
+          "amount-priority":
+            "El plan «Plan de prueba» está activo. El próximo pago con importe confirmado es «Pago posterior»: 107 pesos el 20 de octubre de 2026. El 18 de octubre de 2026 hay otro pago sin importe definido.",
           unnamed: "El plan está activo. Su próximo pago es el 18 de octubre de 2026.",
           past: "El plan «Plan de prueba» está activo. Su próximo pago es el 18 de septiembre de 2026.",
           occurrence:
@@ -361,6 +364,7 @@ it.effect(
         "contradictory",
         "extra-evidence",
         "unnamed",
+        "amount-priority",
       ] as const) {
         const inference = yield* conformanceStub("inválido", representativeAmount, {
           conversationalText: Option.none(),

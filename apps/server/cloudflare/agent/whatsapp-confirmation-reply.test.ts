@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { expect, it } from "vitest";
-import { reply, setup } from "./hosted-turn.test-fixture";
+import { now, reply, setup, users } from "./hosted-turn.test-fixture";
 import {
   exerciseTurn,
   successfulCapability,
@@ -162,3 +162,78 @@ it("describes a budget confirmation in Spanish without exposing the operation, J
       ).toEqual({ total: 0 });
     })
   ));
+
+it.each([
+  { batch: false, standing: true },
+  { batch: true, standing: true },
+  { batch: false, standing: false },
+])(
+  "explains missing paid access before offering cancellation, including a batch: %s",
+  ({ batch, standing }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        if (standing) {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=? WHERE id=?")
+              .bind(now(), now() + 604800000, users[0])
+              .run()
+          );
+        }
+        const result = yield* exerciseTurn({
+          db,
+          text: "Quiero cancelar la suscripción de Fidy.",
+          messageId: "wamid.cancel-without-paid-subscription",
+          generate: () =>
+            Promise.resolve(
+              toolReply(
+                batch
+                  ? {
+                      operation: "operations.executeAtomicBatch",
+                      input: {
+                        payload: {
+                          calls: [
+                            {
+                              callId: "70000000-0000-4000-8000-000000000001",
+                              operation: "subscription.cancelSubscription",
+                              input: {},
+                            },
+                            {
+                              callId: "70000000-0000-4000-8000-000000000002",
+                              operation: "budgets.createBudget",
+                              input: {
+                                payload: {
+                                  categoryId: "10000000-0000-4000-8000-000000000001",
+                                  cap: { amount: "300000", currency: "COP" },
+                                },
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    }
+                  : { operation: "subscription.cancelSubscription", input: {} }
+              )
+            ),
+        });
+        expect(result.sent).toEqual([
+          standing
+            ? "No tienes una suscripción de pago que cancelar." +
+              (batch ? " No apliqué ningún cambio." : "")
+            : "No pude consultar tu suscripción. Inténtalo de nuevo.",
+        ]);
+        expect(result.confirmationCommands).toEqual([]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS total FROM budgets").first()
+          )
+        ).toEqual({ total: 0 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS total FROM hosted_confirmations").first()
+          )
+        ).toEqual({ total: 0 });
+      })
+    )
+);

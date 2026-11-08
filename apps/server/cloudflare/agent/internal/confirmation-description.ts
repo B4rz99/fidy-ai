@@ -756,7 +756,7 @@ const describeTransactionPair = (
 const describeAdditionalChange = (operation: string, input: unknown): Option.Option<string> => {
   if (operation === "subscription.cancelSubscription") {
     return Option.some(
-      "Cancelar la renovación de tu suscripción de Fidy. Conservarás Pro hasta que termine el periodo que ya pagaste; esto no solicita una devolución."
+      "Cancelar los próximos cobros de tu suscripción de Fidy. Esto no incluye un reembolso."
     );
   }
   if (operation === "ingestion.submitForExtraction") {

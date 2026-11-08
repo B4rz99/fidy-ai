@@ -1615,7 +1615,10 @@ const executeHostedTool = ({
         outcome: {
           _tag: "ToolInputRejected",
           failure: {
-            code: Option.isSome(challenge) ? "confirmation_required" : "confirmation_unavailable",
+            code:
+              Option.isSome(challenge) && challenge.value._tag === "Challenge"
+                ? "confirmation_required"
+                : "confirmation_unavailable",
           },
         },
       });

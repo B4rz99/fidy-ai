@@ -34,6 +34,7 @@ const context = (text: string): HostedInitialTextContext =>
     sections: [
       {
         _tag: "AssistantPolicy",
+        channel: "web",
         user: {
           serviceMarket: "CO",
           locale: "es-CO",
@@ -212,6 +213,26 @@ const expectedRecurringLifecycle = Schema.Struct({
   }),
 });
 
+const laterRecurringPlan = {
+  id: "00000000-0000-4000-8000-000000000003",
+  revisions: [
+    {
+      from: "2026-10-20",
+      plan: {
+        name: "Pago posterior",
+        kind: "expense",
+        currency: "COP",
+        amountMode: "fixed",
+        money: { amount: "107", currency: "COP" },
+        frequency: "monthly",
+        firstDate: "2026-10-20",
+        timeZone: "America/Bogota",
+      },
+    },
+  ],
+  pauses: [],
+} as const;
+
 const representativeRecurringWorkspace = (
   month: "2026-09" | "2026-10" = "2026-09",
   firstDate: "2026-09-18" | "2026-09-22" = "2026-09-22"
@@ -220,6 +241,7 @@ const representativeRecurringWorkspace = (
     const document = yield* Schema.decodeEffect(RecurringDocument)({
       revision: 2,
       plans: [
+        laterRecurringPlan,
         {
           id: representativePlanId,
           revisions: [
@@ -271,6 +293,8 @@ const verifyRecurringReadAnswer = (answer: unknown): Effect.Effect<void, HostedI
     yield* requireTextEvidence(text, "activo");
     yield* requireTextEvidence(text, "plan de prueba");
     yield* requireTextEvidence(text, "18 de octubre de 2026");
+    yield* forbidTextEvidence(text, "pago posterior");
+    yield* forbidTextEvidence(text, "20 de octubre");
     if (
       /[`*]|^\s*[[{#]|\b(?:state|nextDate|unconfirmed)\b|no\s+(?:está|sigue)\s+activo|inactivo|sin confirmar|pausado|detenido|2026-09-18|18 de septiembre/imu.test(
         text
@@ -288,7 +312,7 @@ export const verifyRecurringPlanRead = (
     const maximumReads = 2;
     const prepared = yield* inference.prepareText({
       context: context(
-        "¿Sigue activo mi plan «Plan de prueba»? ¿Cuándo viene su próximo pago? Estamos en septiembre de 2026. Solo quiero consultar, sin hacer cambios."
+        "¿Sigue activo mi plan «Plan de prueba»? ¿Cuál es mi próximo pago recurrente? Estamos en septiembre de 2026. Solo quiero consultar, sin hacer cambios."
       ),
       availableOperations: [
         CanonicalOperationId.make("recurring.listRecurringSeries"),

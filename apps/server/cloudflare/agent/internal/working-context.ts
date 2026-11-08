@@ -6,7 +6,10 @@ import {
 import { Brand, type DateTime, Option } from "effect";
 import { type User, type UserId } from "../../../src/core/identity/contract";
 
-import type { HostedInitialTextContext } from "../../../src/shell/hosted-inference/contract";
+import type {
+  HostedConversationChannel,
+  HostedInitialTextContext,
+} from "../../../src/shell/hosted-inference/contract";
 import { hostedContextSections } from "./context-sections";
 import type { ProactiveReplyContext } from "../contract";
 
@@ -30,6 +33,7 @@ export const assembleWorkingContext = ({
   userId,
   activeTurnId,
   user,
+  channel,
   startedAt,
   memories,
   compactedConversation,
@@ -41,6 +45,7 @@ export const assembleWorkingContext = ({
   userId: UserId;
   activeTurnId: TranscriptTurnId;
   user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
+  channel: HostedConversationChannel;
   startedAt: DateTime.Utc;
   memories: ReadonlyArray<Readonly<{ text: string }>>;
   compactedConversation: Option.Option<
@@ -63,6 +68,7 @@ export const assembleWorkingContext = ({
   return makeInitialContext({
     sections: hostedContextSections({
       user,
+      channel,
       startedAt,
       memories,
       compactedConversation: Option.filter(

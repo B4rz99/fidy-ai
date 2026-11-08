@@ -18,10 +18,13 @@ import {
   maximumToolCallsPerTurn,
 } from "~/core/agent/contract";
 
+export type HostedConversationChannel = "web" | "whatsapp";
+
 /** Ordered semantic material projected by Agent without exposing provider prompt fragments. */
 export type HostedContextSection =
   | Readonly<{
       _tag: "AssistantPolicy";
+      channel: HostedConversationChannel;
       user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
     }>
   | Readonly<{ _tag: "TurnStarted"; startedAt: DateTime.Utc; timeZone: string }>

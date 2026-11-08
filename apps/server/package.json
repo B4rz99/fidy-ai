@@ -318,7 +318,7 @@
     "fflate": "0.8.3",
     "jose": "6.2.14",
     "mupdf": "1.28.1",
-    "parse5": "8.0.1",
+    "parse5": "8.1.0",
     "postal-mime": "2.7.6",
     "saxes": "6.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"

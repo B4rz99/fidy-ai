@@ -51,13 +51,27 @@ describe("resource release refusal diagnostics", () => {
       expect(result).toMatch(/^Alchemy resource operation failed/u);
     }
   });
+
+  it("distinguishes native upload exceptions without publishing their messages", () => {
+    for (const [error, category] of [
+      [new TypeError("private request body"), "TypeError"],
+      [new RangeError("private token"), "RangeError"],
+      [new Error("private recovery proof"), "Error"],
+      [new Cause.UnknownError({ token: "private" }), "UnknownError"],
+    ] as const) {
+      expect(resourceFailureMessage(Cause.die(error))).toBe(
+        `Alchemy resource operation failed (${category}); inspect release state.`
+      );
+    }
+  });
 });
 
 it.effect.each([
   { code: 10021, expected: " (BadRequest; code=10021)" },
   { code: undefined, expected: " (BadRequest)" },
   { code: "private-code", expected: " (BadRequest)" },
-  { code: -1, expected: "" },
+  { code: -1, expected: " (Error)" },
+  { code: 10007, expected: " (WorkerNotFound; code=10007)" },
 ])("retains only a native numeric upload refusal code: $code", ({ code, expected }) =>
   Effect.gen(function* () {
     const client = HttpClient.make((request) =>

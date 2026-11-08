@@ -362,7 +362,6 @@ it.each([
     operation: "connections.connectInstitution",
     input: { payload: { institutionId: "bancolombia" } },
   },
-  { operation: "subscription.cancelSubscription", input: {} },
 ])(
   "returns the canonical refusal for $operation when no eligible resource exists",
   ({ operation, input }) =>
@@ -383,7 +382,7 @@ it.each([
     )
 );
 
-it("cancels seeded paid access through exact WhatsApp confirmation and preserves its paid history on retry", () =>
+it("cancels paid access through exact confirmation and explains an already cancelled renewal without another approval", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => baseSetup());
@@ -418,15 +417,22 @@ it("cancels seeded paid access through exact WhatsApp confirmation and preserves
         input: {},
       });
       expect(cancellation).toMatchObject({ data: { sourceCancellation: "detached" } });
-      expect(
-        yield* successfulCapability({ db, operation: "subscription.cancelSubscription", input: {} })
-      ).toEqual(cancellation);
       const after = yield* standing();
       expect(after.data.accessTier).toBe("pro");
       expect(after.data.hasProGrant).toBe(false);
       expect(after.data.paidSubscription).toEqual(before.data.paidSubscription);
       expect(after.data.recentAttempts).toEqual(before.data.recentAttempts);
       expect(Option.isSome(after.data.cancellation)).toBe(true);
+      const repeated = yield* exerciseTurn({
+        db,
+        text: "Quiero cancelar la suscripción de Fidy.",
+        messageId: "wamid.already-cancelled-renewal",
+        generate: () =>
+          Promise.resolve(toolReply({ operation: "subscription.cancelSubscription", input: {} })),
+      });
+      expect(repeated.sent).toEqual(["La renovación de tu suscripción ya está cancelada."]);
+      expect(repeated.confirmationCommands).toEqual([]);
+
       expect(
         yield* Effect.tryPromise(() =>
           db
@@ -446,7 +452,7 @@ it("cancels seeded paid access through exact WhatsApp confirmation and preserves
             .bind(users[0])
             .first()
         )
-      ).toEqual({ total: 2 });
+      ).toEqual({ total: 1 });
     })
   ));
 

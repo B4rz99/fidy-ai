@@ -1,3 +1,4 @@
+import { reviewCancellation } from "./cancellation-review";
 import { HostedTurnConfirmation } from "../../../src/shell/agent/contract";
 import type { ConfirmationRead } from "./confirmation-description";
 import {
@@ -41,6 +42,9 @@ export type ConfirmationRow = typeof ConfirmationRow.Type;
 
 /** A User-visible host challenge, bound to precisely the model's validated canonical input. */
 export type PendingHostedConfirmation = Readonly<{ text: TranscriptText; command: string }>;
+type ConfirmationPreparation =
+  | Readonly<PendingHostedConfirmation & { _tag: "Challenge" }>
+  | Readonly<{ _tag: "Notice"; text: TranscriptText }>;
 
 /** Store a short-lived, single-use challenge before offering it through visible delivery. */
 type IssueConfirmationInput = Readonly<{
@@ -65,11 +69,13 @@ export const issueHostedConfirmation = ({
   timeZone,
   nativeButton,
 }: IssueConfirmationInput): Effect.Effect<
-  Option.Option<PendingHostedConfirmation>,
+  Option.Option<ConfirmationPreparation>,
   Cause.UnknownError | Schema.SchemaError,
   Crypto.Crypto
 > =>
   Effect.gen(function* () {
+    const cancellation = yield* reviewCancellation({ operation: operation.id, input, read });
+    if (cancellation._tag === "Notice") return Option.some(cancellation);
     const crypto = yield* Crypto.Crypto;
     const nonce = yield* crypto.randomBytes(nonceBytes).pipe(Effect.option);
     if (Option.isNone(nonce)) return Option.none();
@@ -107,7 +113,9 @@ export const issueHostedConfirmation = ({
         )
         .run()
     );
-    return issued.meta.changes === 1 ? Option.some({ text: text.value, command }) : Option.none();
+    return issued.meta.changes === 1
+      ? Option.some({ _tag: "Challenge", text: text.value, command })
+      : Option.none();
   });
 
 export const readWhatsAppConfirmation = ({

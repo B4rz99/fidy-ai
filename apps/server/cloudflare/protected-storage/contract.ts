@@ -7,9 +7,8 @@ export const ProtectedCommand = Schema.Struct({
   ),
 });
 export type ProtectedCommand = typeof ProtectedCommand.Type;
-const maximumCommands = 256;
 export const ProtectedUnit = Schema.Struct({
-  commands: Schema.Array(ProtectedCommand).check(Schema.isMaxLength(maximumCommands)),
+  commands: Schema.Array(ProtectedCommand),
   bookmark: Schema.OptionFromOptionalKey(Schema.String),
 });
 export type ProtectedUnit = typeof ProtectedUnit.Type;

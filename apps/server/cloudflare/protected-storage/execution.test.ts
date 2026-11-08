@@ -283,3 +283,18 @@ it("cancels an oversized private reply without returning data or replaying the o
       expect(attempts).toBe(1);
     })
   ));
+
+it("retains native batch cardinality within the wire byte budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const input = yield* Effect.tryPromise(fixture);
+      const db = guarded(input);
+      const commands = Array.from({ length: 300 }, (_, index) =>
+        db.prepare("SELECT ? AS n").bind(index)
+      );
+      const rows = yield* Effect.tryPromise(() => db.batch(commands));
+      expect(rows).toHaveLength(300);
+      expect(rows[0]?.results).toEqual([{ n: 0 }]);
+      expect(rows[299]?.results).toEqual([{ n: 299 }]);
+    })
+  ));

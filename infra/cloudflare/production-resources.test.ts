@@ -64,6 +64,22 @@ describe("resource release refusal diagnostics", () => {
       );
     }
   });
+
+  it("reports only a reviewed dependency filename and line from native failure stacks", () => {
+    const error = new Error("Bearer private-token");
+    error.stack = [
+      "Error: Bearer private-token",
+      "    at upload (/private-user/fidy/node_modules/alchemy/src/Cloudflare/Workers/WorkerProvider.ts:4253:14)",
+      "    at unknown (/private-user/private-proof.ts:99:1)",
+    ].join("\n");
+    expect(resourceFailureMessage(Cause.die(error))).toBe(
+      "Alchemy resource operation failed (Error; source=WorkerProvider:4253); inspect release state."
+    );
+    error.stack = "Error: private\n    at private (/private-proof.ts:3:1)";
+    expect(resourceFailureMessage(Cause.die(error))).toBe(
+      "Alchemy resource operation failed (Error); inspect release state."
+    );
+  });
 });
 
 it.effect.each([

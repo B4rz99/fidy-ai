@@ -135,7 +135,7 @@ const installPair = (
     );
     yield* Effect.tryPromise(() => page.goto("/app/transactions"));
     yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Ver transacción El Corral", exact: true }).click()
+      page.getByRole("button", { name: /^Ver transacción El Corral(?: Restaurantes)?$/u }).click()
     );
     return fixture;
   });
@@ -266,7 +266,7 @@ for (const outcome of ["uncertain", "refused"] as const) {
         );
         yield* Effect.tryPromise(() =>
           expect(
-            page.getByRole("button", { name: "Ver transacción El Corral", exact: true })
+            page.getByRole("button", { name: /^Ver transacción El Corral(?: Restaurantes)?$/u })
           ).toHaveCount(2)
         );
         expect(fixture.unlinks).toBe(1);
@@ -308,7 +308,7 @@ test("pending unlink locks dismissal and selection, then refreshes both original
       yield* Effect.tryPromise(() => page.keyboard.press("Escape"));
       yield* Effect.tryPromise(() =>
         expect(
-          page.getByRole("button", { name: "Ver transacción El Corral", exact: true })
+          page.getByRole("button", { name: /^Ver transacción El Corral(?: Restaurantes)?$/u })
         ).toBeDisabled()
       );
       fixture.linked = false;
@@ -324,7 +324,7 @@ test("pending unlink locks dismissal and selection, then refreshes both original
       );
       yield* Effect.tryPromise(() =>
         expect(
-          page.getByRole("button", { name: "Ver transacción El Corral", exact: true })
+          page.getByRole("button", { name: /^Ver transacción El Corral(?: Restaurantes)?$/u })
         ).toHaveCount(2)
       );
       expect(fixture.unlinks).toBe(1);

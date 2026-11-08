@@ -79,8 +79,7 @@ test("created review history opens its Transaction in the local month list witho
         page.getByRole("link", { name: "Ver transacción", exact: true }).click()
       );
       const row = page.getByRole("button", {
-        name: "Ver transacción Mercado QA revisión",
-        exact: true,
+        name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u,
       });
       yield* Effect.tryPromise(() => expect(row).toBeInViewport());
       yield* Effect.tryPromise(() => expect(row).toHaveAttribute("aria-expanded", "false"));
@@ -155,15 +154,14 @@ const laterPageJourney = (page: Page, width: number): Effect.Effect<void, Cause.
       page.getByRole("link", { name: "Ver transacción", exact: true }).press("Enter")
     );
     const record = page.getByRole("button", {
-      name: "Ver transacción Mercado QA revisión",
-      exact: true,
+      name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u,
     });
     yield* Effect.tryPromise(() => expect(record).toBeInViewport());
     yield* Effect.tryPromise(() => expect(record).toHaveAttribute("aria-expanded", "false"));
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
     yield* Effect.tryPromise(() =>
       expect(
-        page.getByRole("button", { name: "Ver transacción Otra transacción 0", exact: true })
+        page.getByRole("button", { name: /^Ver transacción Otra transacción 0(?: Mercado)?$/u })
       ).toBeAttached()
     );
     yield* Effect.tryPromise(() => record.click());
@@ -229,7 +227,7 @@ const unavailableJourney = (
       );
       yield* Effect.tryPromise(() =>
         expect(
-          page.getByRole("button", { name: "Ver transacción Mercado QA revisión", exact: true })
+          page.getByRole("button", { name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u })
         ).toBeInViewport()
       );
     }
@@ -306,7 +304,7 @@ const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =
     );
     yield* Effect.tryPromise(() =>
       expect(
-        page.getByRole("button", { name: "Ver transacción Mercado QA revisión", exact: true })
+        page.getByRole("button", { name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u })
       ).toBeInViewport()
     );
     yield* Effect.tryPromise(() =>
@@ -315,7 +313,7 @@ const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =
     yield* Effect.tryPromise(() => page.reload());
     yield* Effect.tryPromise(() =>
       expect(
-        page.getByRole("button", { name: "Ver transacción Mercado QA revisión", exact: true })
+        page.getByRole("button", { name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u })
       ).toHaveAttribute("aria-expanded", "false")
     );
   });

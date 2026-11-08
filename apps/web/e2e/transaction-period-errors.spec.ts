@@ -53,7 +53,7 @@ const initialFailureJourney = Effect.fn(function* (page: Page) {
   yield* wait(() => page.getByRole("button", { name: "Reintentar carga", exact: true }).click());
   yield* wait(() =>
     expect(
-      page.getByRole("button", { name: "Ver transacción Mercado de octubre", exact: true })
+      page.getByRole("button", { name: /^Ver transacción Mercado de octubre(?: Mercado)?$/u })
     ).toBeVisible()
   );
   yield* wait(() => expect(page).toHaveURL(/month=2026-10/u));
@@ -75,7 +75,9 @@ const initialFailureJourney = Effect.fn(function* (page: Page) {
 const refreshFailureJourney = Effect.fn(function* (page: Page) {
   const fixture = yield* installHistory(page, false);
   yield* wait(() => page.goto("/app/transactions?month=2026-10&date=2026-10-15"));
-  const row = page.getByRole("button", { name: "Ver transacción Mercado de octubre", exact: true });
+  const row = page.getByRole("button", {
+    name: /^Ver transacción Mercado de octubre(?: Mercado)?$/u,
+  });
   yield* wait(() => expect(row).toBeVisible());
   fixture.failed = true;
   yield* wait(() =>

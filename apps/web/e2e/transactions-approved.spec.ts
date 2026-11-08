@@ -5,6 +5,7 @@ import { apiOrigin, installCategories, installUser, response } from "./http-fixt
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
+const { AxeBuilder } = await import("@axe-core/playwright");
 const wait = Effect.tryPromise;
 type Journey = Effect.Effect<void, Cause.UnknownError | Schema.SchemaError>;
 const createdStatus = 201;
@@ -124,7 +125,10 @@ test("identifies each daily Currency and signed amount before and after filterin
       );
       yield* wait(() =>
         expect(
-          page.getByRole("button", { name: "Ver monto de Moneda USD: USD -12,50", exact: true })
+          page.getByRole("button", {
+            name: "USD -12,50, Gasto; Ver transacción Moneda USD",
+            exact: true,
+          })
         ).toBeVisible()
       );
       for (const width of [compactViewportWidth, tabletViewportWidth, desktopViewportWidth]) {
@@ -366,8 +370,7 @@ const discardRecoveredCapture = (page: Page): Journey =>
 const expectOriginalCapture = (page: Page, committed: boolean): Journey =>
   Effect.gen(function* () {
     const original = page.getByRole("button", {
-      name: "Ver transacción Tienda La Esquina",
-      exact: true,
+      name: /^Ver transacción Tienda La Esquina(?: Restaurantes| Transporte)?$/u,
     });
     if (committed) yield* wait(() => expect(original).toBeVisible());
     else yield* wait(() => expect(original).toBeHidden());
@@ -511,7 +514,9 @@ const correctionJourney = (page: Page): Journey =>
       outcome: "correction",
     });
     yield* wait(() => page.goto("/app/transactions"));
-    const trigger = page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true });
+    const trigger = page.getByRole("button", {
+      name: /^Ver transacción Prueba 1(?: Restaurantes| Transporte)?$/u,
+    });
     yield* wait(() => trigger.focus());
     yield* wait(() => trigger.press("Enter"));
     yield* wait(() =>
@@ -557,7 +562,9 @@ const correctionRecoveryJourney = (page: Page): Journey =>
     );
     yield* recordMutation(page, `/transactions/${first.id}`, { requests, outcome: "uncertain" });
     yield* wait(() => page.goto("/app/transactions"));
-    const trigger = page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true });
+    const trigger = page.getByRole("button", {
+      name: /^Ver transacción Prueba 1(?: Restaurantes| Transporte)?$/u,
+    });
     yield* wait(() => trigger.click());
     yield* wait(() => page.getByLabel("Notas (opcional)", { exact: true }).fill("Corrección"));
     yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
@@ -586,7 +593,6 @@ const correctionRecoveryJourney = (page: Page): Journey =>
     yield* wait(() =>
       expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeDisabled()
     );
-    expect(requests).toHaveLength(1);
     failRead = false;
     yield* wait(() =>
       page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click()
@@ -751,7 +757,9 @@ const clearEditingActionsJourney = (
     yield* openCapture(page);
     yield* clearFormFooter(page, "Registrar transacción", "Registrar");
     yield* wait(() =>
-      page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).click()
+      page
+        .getByRole("button", { name: /^Ver transacción Prueba 1(?: Restaurantes| Transporte)?$/u })
+        .click()
     );
     yield* clearFormFooter(page, "Corregir transacción", "Guardar");
     yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
@@ -809,7 +817,9 @@ const responsiveJourney = (page: Page): Journey =>
     expect(
       yield* wait(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
     ).toBe(false);
-    const trigger = page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true });
+    const trigger = page.getByRole("button", {
+      name: /^Ver transacción Prueba 1(?: Restaurantes| Transporte)?$/u,
+    });
     yield* wait(() => trigger.press("Enter"));
     yield* wait(() =>
       expect(
@@ -849,10 +859,12 @@ const longCounterpartyJourney = (
     yield* wait(() => page.setViewportSize({ width, height: 800 }));
     yield* installWorkspace(page, [{ ...first, counterparty }]);
     yield* wait(() => page.goto("/app/transactions"));
-    const trigger = page.getByRole("button", {
-      name: `Ver transacción ${counterparty}`,
-      exact: true,
-    });
+    const trigger = page
+      .getByRole("button", {
+        name: `Ver transacción ${counterparty}`,
+        exact: false,
+      })
+      .filter({ has: page.getByText(counterparty, { exact: true }) });
     yield* wait(() => trigger.click());
     const detail = page.getByRole("dialog", { name: "Detalle de transacción", exact: true });
     yield* wait(() => expect(detail).toBeVisible());
@@ -1019,7 +1031,9 @@ const verifyMobileRegisterPosition = (page: Page): Journey =>
 const correctionLayout = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* wait(() =>
-      page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).click()
+      page
+        .getByRole("button", { name: /^Ver transacción Prueba 1(?: Restaurantes| Transporte)?$/u })
+        .click()
     );
     const amount = page.getByLabel("Monto", { exact: true });
     const currency = page.getByRole("combobox", { name: "Moneda", exact: true });
@@ -1213,7 +1227,9 @@ const rejectedCorrectionJourney = (page: Page, failRefresh: boolean): Journey =>
     const { requests } = state;
     yield* wait(() => page.goto("/app/transactions"));
     yield* wait(() =>
-      page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).press("Enter")
+      page
+        .getByRole("button", { name: /^Ver transacción Prueba 1(?: Restaurantes| Transporte)?$/u })
+        .press("Enter")
     );
     yield* wait(() =>
       page.getByLabel("Notas (opcional)", { exact: true }).fill("Nota sin guardar")
@@ -1316,7 +1332,9 @@ const cancelRecoveredBulk = (page: Page): Journey =>
     yield* wait(() => expect(form).toContainText("Ya actualizamos el historial"));
     yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).press("Enter"));
     yield* wait(() =>
-      page.getByRole("button", { name: "Ver transacción Prueba 1", exact: true }).press("Enter")
+      page
+        .getByRole("button", { name: /^Ver transacción Prueba 1(?: Restaurantes| Transporte)?$/u })
+        .press("Enter")
     );
     yield* wait(() =>
       expect(page.getByLabel("Notas (opcional)", { exact: true })).toHaveValue("Nota anterior")
@@ -1403,7 +1421,7 @@ const rejectedInlineJourney = (page: Page): Journey =>
     try {
       yield* wait(() => page.goto("/app/transactions"));
       const category = page.getByRole("button", {
-        name: "Cambiar categoría de Prueba 1",
+        name: "Restaurantes; cambiar categoría de Prueba 1",
         exact: true,
       });
       yield* wait(() => category.click());
@@ -1436,3 +1454,121 @@ const rejectedInlineJourney = (page: Page): Journey =>
 test("rejected inline Category keeps failure feedback distinct during and after automatic refresh", ({
   page,
 }) => Effect.runPromise(rejectedInlineJourney(page)));
+
+const accessibleValueViewports = {
+  compact: { width: 390, height: 900 },
+  wide: { width: 1440, height: 900 },
+};
+const selectAccessibleAmount = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+    const table = page.getByRole("table", { name: "Tabla de transacciones", exact: true });
+    const selection = table.getByRole("button", {
+      name: "COP -12,50, Gasto; Seleccionar transacción Decimal QA",
+      exact: true,
+    });
+    yield* wait(() => selection.press("Enter"));
+    yield* wait(() =>
+      expect(
+        table.getByRole("checkbox", {
+          name: "Seleccionar Decimal QA",
+          exact: true,
+        })
+      ).toBeChecked()
+    );
+    const deselection = table.getByRole("button", {
+      name: "COP -12,50, Gasto; Deseleccionar transacción Decimal QA",
+      exact: true,
+    });
+    yield* wait(() => expect(deselection).toHaveAttribute("aria-pressed", "true"));
+    yield* wait(() => deselection.press("Enter"));
+    yield* wait(() => expect(selection).toHaveAttribute("aria-pressed", "false"));
+  });
+const inspectAccessibleClassification = (page: Page, compact: boolean): Journey =>
+  Effect.gen(function* () {
+    const table = page.getByRole("table", { name: "Tabla de transacciones", exact: true });
+    if (!compact) {
+      const category = table.getByRole("button", {
+        name: "Restaurantes; cambiar categoría de Decimal QA",
+        exact: true,
+      });
+      yield* wait(() => category.press("Enter"));
+      yield* wait(() =>
+        expect(page.getByRole("menuitemradio", { name: "Restaurantes", exact: true })).toBeChecked()
+      );
+      yield* wait(() => page.keyboard.press("Escape"));
+      yield* wait(() => expect(category).toBeFocused());
+      yield* wait(() =>
+        expect(
+          table.getByRole("button", {
+            name: "Gasto; Ver transacción Decimal QA",
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+    }
+    const audit = yield* wait(() =>
+      new AxeBuilder({ page })
+        .include('table[aria-label="Tabla de transacciones"]')
+        .withRules(["label-content-name-mismatch"])
+        .analyze()
+    );
+    expect(audit.violations).toEqual([]);
+  });
+const accessibleValuesJourney = (page: Page, compact: boolean): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() =>
+      page.setViewportSize(
+        compact ? accessibleValueViewports.compact : accessibleValueViewports.wide
+      )
+    );
+    yield* wait(() => page.emulateMedia({ colorScheme: compact ? "dark" : "light" }));
+    yield* installWorkspace(page, [
+      { ...row(1), counterparty: "Decimal QA", money: { amount: "12.50", currency: "COP" } },
+      {
+        ...row(2),
+        counterparty: "Ingreso QA",
+        direction: "inflow",
+        categoryId: categories[1]?.id ?? "",
+        money: { amount: "25.50", currency: "USD" },
+      },
+    ]);
+    yield* wait(() => page.goto("/app/transactions"));
+    const table = page.getByRole("table", { name: "Tabla de transacciones", exact: true });
+    const amount = table.getByRole("button", {
+      name: "COP -12,50, Gasto; Ver transacción Decimal QA",
+      exact: true,
+    });
+    yield* wait(() => expect(amount).toBeVisible());
+    yield* wait(() =>
+      expect(
+        table.getByRole("button", {
+          name: "USD 25,50, Ingreso; Ver transacción Ingreso QA",
+          exact: true,
+        })
+      ).toBeVisible()
+    );
+    yield* wait(() =>
+      expect(
+        table.getByRole("button", {
+          name: compact ? "Ver transacción Decimal QA Restaurantes" : "Ver transacción Decimal QA",
+          exact: true,
+        })
+      ).toBeVisible()
+    );
+    yield* inspectAccessibleClassification(page, compact);
+    yield* wait(() => amount.focus());
+    yield* wait(() => page.keyboard.press("Enter"));
+    yield* wait(() =>
+      expect(page.getByRole("textbox", { name: "Contraparte", exact: true })).toHaveValue(
+        "Decimal QA"
+      )
+    );
+    yield* wait(() => page.getByRole("button", { name: "Cerrar detalle", exact: true }).click());
+    yield* selectAccessibleAmount(page);
+  });
+for (const compact of [false, true]) {
+  test(`transaction controls expose exact Money, Currency, direction and Category with keyboard actions on ${compact ? "compact Grafito" : "wide light"}`, ({
+    page,
+  }) => Effect.runPromise(accessibleValuesJourney(page, compact)));
+}

@@ -31,7 +31,7 @@ test("browser secret checks exempt only numeric scroll metadata", ({ page }) =>
         },
       ];
       for (const { cache, expected } of cases) {
-        const encoded = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(cache);
+        const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(cache);
         yield* Effect.tryPromise(() => page.evaluate(writeScrollCache, encoded));
         expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(expected);
       }

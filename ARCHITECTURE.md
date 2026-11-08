@@ -19,7 +19,8 @@ fields and operational procedures live in their linked references.
 ## Production boundary
 
 Cloudflare is the sole Production runtime. The public ingress Worker forwards to a private Core
-Worker and has no D1 binding. Core owns the User-scoped data API; the unrouted Email Worker has
+Worker and has no D1 binding. Core delegates protected native database operations through one private
+storage Worker near D1 and R2; it retains request handling and canonical operation ownership. Core owns the User-scoped data API; the unrouted Email Worker has
 narrow forwarded-mail admission and retention authority. Static site and web Workers serve the
 marketing and product applications separately. The customer docs use an independent assets-only
 stack, automatically published when documentation or its build inputs change on trunk.
@@ -29,7 +30,10 @@ flowchart LR
   Clients[Web / CLI / MCP clients] --> Ingress[Public ingress]
   Ingress --> Core[Private Core]
   Core --> Coordinator[Per-User Durable Objects]
-  Coordinator --> D1[(D1)]
+  Core --> Storage[Private protected storage]
+  Coordinator --> Storage
+  Storage --> D1[(D1)]
+  Storage --> Registry[(R2 recovery registry)]
   Core --> Background[Queues / Workflows]
   Background --> Coordinator
   Email[Private Email Worker] --> D1

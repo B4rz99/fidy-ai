@@ -63,6 +63,12 @@ export const localCanonicalReadBearer = "fin_localdev_local-emulation-category-r
 /** Stable production network surface consumed by the Alchemy stack and topology tests. */
 export const productionTopology = {
   docs: { hostname: "docs.fidyapp.com" },
+  protectedStorage: {
+    binding: "PROTECTED_STORAGE",
+    localPort: 8789,
+    workersDev: false,
+    region: "aws:us-east-1",
+  },
   core: {
     d1Binding: "DB",
     localPort: 8788,

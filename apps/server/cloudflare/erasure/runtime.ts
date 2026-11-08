@@ -11,10 +11,17 @@ import { RequestBodyPolicy } from "../http/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { ErasureBrowserAdmission } from "./contract";
 import { guardedDatabase } from "./internal/database";
+import { makeProtectedExecution } from "../protected-storage/operations";
 import { type RecoveryMeasurement, makeRecoveryMeasurement } from "./internal/measurement";
 
 type RecoveryEnvironment = Readonly<{ DB: D1Database }> &
-  Partial<Readonly<{ ERASURE_REQUIRED: string; ERASURE_BUCKET: R2Bucket }>>;
+  Partial<
+    Readonly<{
+      ERASURE_REQUIRED: string;
+      ERASURE_BUCKET: R2Bucket;
+      PROTECTED_STORAGE: Pick<Fetcher, "fetch">;
+    }>
+  >;
 
 /** Native entrypoints supply the required private registry binding in the deployed topology. Missing required configuration fails closed when a data unit executes. */
 const wrapRecovery = <Environment extends RecoveryEnvironment>(
@@ -28,6 +35,9 @@ const wrapRecovery = <Environment extends RecoveryEnvironment>(
           db: environment.DB,
           bucket: Option.fromUndefinedOr(environment.ERASURE_BUCKET),
           measurement,
+          execution: Option.map(Option.fromUndefinedOr(environment.PROTECTED_STORAGE), (binding) =>
+            makeProtectedExecution({ binding, measurement })
+          ),
         }),
       }
     : environment;

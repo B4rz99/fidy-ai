@@ -7,11 +7,7 @@ import {
   ConnectionInstitutions,
   type registeredConnectionInstitutionIds,
 } from "../../src/shell/connections/contract";
-import {
-  measureErasureRecovery,
-  protectedStorageAvailable,
-  withErasureRecovery,
-} from "../erasure/runtime";
+import { measureErasureRecovery, withErasureRecovery } from "../erasure/runtime";
 import type { CoreRejectionBoundary } from "../runtime/operational-health/contract";
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
@@ -20,7 +16,7 @@ import { Clock, Context, Effect, Layer, Option } from "effect";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import type { TelemetryService } from "../../src/shell/observability/contract";
-import type { CoreHttpEnvironment, CoreHttpHandler } from "./contract";
+import type { CoreHttpHandler } from "./contract";
 import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
 import { recoveryIsolationResponse } from "../release-isolation/operations";
@@ -38,35 +34,6 @@ type CoreComposition = Readonly<{
   institutions: typeof registeredConnectionInstitutionIds;
 }>;
 
-const unavailableStatus = 503;
-const healthReadiness = (
-  input: Readonly<{
-    request: Request;
-    environment: CoreHttpEnvironment;
-  }>
-): Effect.Effect<Option.Option<Response>> => {
-  const binding = input.environment.PROTECTED_STORAGE;
-  if (
-    input.request.method !== "GET" ||
-    new URL(input.request.url).pathname !== "/health" ||
-    binding === undefined
-  ) {
-    return Effect.succeedNone;
-  }
-  return protectedStorageAvailable(binding).pipe(
-    Effect.map((available) =>
-      available
-        ? Option.none()
-        : Option.some(
-            Response.json(
-              { status: "unavailable" },
-              { status: unavailableStatus, headers: { "cache-control": "no-store" } }
-            )
-          )
-    )
-  );
-};
-
 export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
   return (request, environment, context) =>
@@ -79,8 +46,6 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         },
       });
       if (Option.isSome(isolated)) return isolated.value;
-      const readiness = yield* healthReadiness({ request, environment });
-      if (Option.isSome(readiness)) return readiness.value;
       const recovery = measureErasureRecovery(environment);
       const clients = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)

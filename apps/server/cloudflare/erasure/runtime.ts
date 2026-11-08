@@ -1,5 +1,3 @@
-import { executeProtectedRequest } from "./internal/protected-receiver";
-import { ProtectedStorageHealth } from "./internal/protected-contract";
 import { HttpClient } from "effect/http";
 import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
 import type { ErasureOperatorEnvironment } from "./contract";
@@ -8,22 +6,15 @@ import type { AuthenticatedWebSession } from "../web-session/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { ErasureRequest } from "../../src/core/erasure/contract";
 import { authenticateWebSession } from "../web-session/operations";
-import { boundedJsonBody, collectBoundedRequestBody } from "../http/operations";
+import { boundedJsonBody } from "../http/operations";
 import { RequestBodyPolicy } from "../http/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
 import { ErasureBrowserAdmission } from "./contract";
 import { guardedDatabase } from "./internal/database";
-import { makeProtectedExecution } from "./internal/protected-execution";
 import { type RecoveryMeasurement, makeRecoveryMeasurement } from "./internal/measurement";
 
 type RecoveryEnvironment = Readonly<{ DB: D1Database }> &
-  Partial<
-    Readonly<{
-      ERASURE_REQUIRED: string;
-      ERASURE_BUCKET: R2Bucket;
-      PROTECTED_STORAGE: Pick<Fetcher, "fetch">;
-    }>
-  >;
+  Partial<Readonly<{ ERASURE_REQUIRED: string; ERASURE_BUCKET: R2Bucket }>>;
 
 /** Native entrypoints supply the required private registry binding in the deployed topology. Missing required configuration fails closed when a data unit executes. */
 const wrapRecovery = <Environment extends RecoveryEnvironment>(
@@ -37,9 +28,6 @@ const wrapRecovery = <Environment extends RecoveryEnvironment>(
           db: environment.DB,
           bucket: Option.fromUndefinedOr(environment.ERASURE_BUCKET),
           measurement,
-          execution: Option.map(Option.fromUndefinedOr(environment.PROTECTED_STORAGE), (binding) =>
-            makeProtectedExecution({ binding, measurement })
-          ),
         }),
       }
     : environment;
@@ -152,51 +140,3 @@ export const handleErasureOperator = (
     });
     return yield* operatorRequest({ ...input, http });
   });
-
-/** Only Core receives this private SQL execution capability; this entrypoint has no public route. */
-export const receiveProtectedUnit = (
-  input: Readonly<{
-    request: Request;
-    environment: Readonly<{ DB: D1Database; ERASURE_BUCKET: R2Bucket }>;
-  }>
-): Promise<Response> => {
-  const url = new URL(input.request.url);
-  if (input.request.method === "GET" && url.pathname === "/health" && url.search === "") {
-    return Promise.resolve(
-      Response.json(
-        Schema.encodeSync(ProtectedStorageHealth)({ status: "available", protocol: 1 }),
-        { headers: { "cache-control": "no-store" } }
-      )
-    );
-  }
-  if (
-    input.request.method !== "POST" ||
-    url.pathname !== "/execute" ||
-    url.search !== "" ||
-    input.request.headers.get("content-type") !== "application/json"
-  ) {
-    return Promise.resolve(new Response(null, { status: 404 }));
-  }
-  return executeProtectedRequest(input);
-};
-
-const maximumHealthBytes = 1024;
-
-/** Zero-SQL release readiness checks the same private execution capability used by protected units. */
-export const protectedStorageAvailable = (
-  binding: Pick<Fetcher, "fetch">
-): Effect.Effect<boolean> =>
-  Effect.gen(function* () {
-    const response = yield* Effect.tryPromise(() =>
-      binding.fetch(new Request("https://protected-storage.internal/health"))
-    );
-    if (!response.ok) return false;
-    const request = new Request("https://protected-storage.internal/execute", {
-      method: "POST",
-      body: response.body,
-    });
-    const bytes = yield* collectBoundedRequestBody(request, maximumHealthBytes);
-    const text = yield* Effect.try(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    yield* Schema.decodeEffect(Schema.fromJsonString(ProtectedStorageHealth))(text);
-    return true;
-  }).pipe(Effect.orElseSucceed(() => false));

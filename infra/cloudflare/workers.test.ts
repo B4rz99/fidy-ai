@@ -618,26 +618,6 @@ describe("Cloudflare Worker topology", () => {
       expect(health.status).toBe(200);
     })
   );
-  it.effect("refuses Core readiness when its private storage dependency is unavailable", () =>
-    Effect.gen(function* () {
-      const response = yield* Effect.tryPromise(() =>
-        coreWorker.fetch(new Request("https://core.internal/health"), {
-          ...coreEnvironment,
-          PROTECTED_STORAGE: { fetch: () => Promise.resolve(new Response(null, { status: 503 })) },
-        })
-      );
-      expect(response.status).toBe(503);
-      const healthy = yield* Effect.tryPromise(() =>
-        coreWorker.fetch(new Request("https://core.internal/health"), {
-          ...coreEnvironment,
-          PROTECTED_STORAGE: {
-            fetch: () => Promise.resolve(Response.json({ status: "available", protocol: 1 })),
-          },
-        })
-      );
-      expect(healthy.status).toBe(200);
-    })
-  );
   it.effect("returns only bounded release and health metadata from Core", () =>
     Effect.gen(function* () {
       const response = yield* Effect.tryPromise(() =>

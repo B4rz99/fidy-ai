@@ -155,7 +155,6 @@ type CoordinatorEnvironment = Readonly<{
   Partial<
     Readonly<{
       ERASURE_BUCKET: R2Bucket;
-      PROTECTED_STORAGE: Pick<Fetcher, "fetch">;
       ERASURE_REQUIRED: string;
       STATEMENT_STAGING_BUCKET: R2Bucket;
       STATEMENT_EXTRACTION_QUEUE: StatementQueue;

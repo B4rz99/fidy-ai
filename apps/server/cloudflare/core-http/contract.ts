@@ -28,7 +28,6 @@ export type CoreHttpEnvironment = ProviderEnvironment &
       ERASURE_SUPPORT_AUDIENCE: string;
       ERASURE_BUCKET: R2Bucket;
       ERASURE_REQUIRED: string;
-      PROTECTED_STORAGE: Pick<Fetcher, "fetch">;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;
       WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;

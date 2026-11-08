@@ -416,7 +416,8 @@ it(
         const prepared = Option.getOrThrow(
           prepareBoundPlanningTransactions({
             db,
-            userSelection: { sql: "SELECT ? AS userId", params: [userId] },
+            rangeUsers: { sql: "SELECT ? AS userId", params: [userId] },
+            referenceUsers: { sql: "SELECT ? AS userId", params: [userId] },
             references: {
               sql: "SELECT value AS transactionId FROM json_each(?)",
               params: [encodedIds],
@@ -451,3 +452,46 @@ it(
     ),
   30000
 );
+
+it("keeps linked facts under live User selection independently of the matching-range gate", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.batch([movement(db, 1), movement(db, 2, { userId: otherUserId })])
+      );
+      const ids = [transactionId(1), transactionId(2)];
+      const references = {
+        sql: "SELECT value AS transactionId FROM json_each(?)",
+        params: [
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(ids),
+        ],
+      };
+      for (const readiness of ["ready", "dirty"]) {
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE transaction_projection_state SET readiness=? WHERE user_id=?")
+            .bind(readiness, userId)
+            .run()
+        );
+        for (const selectedUser of [userId, otherUserId]) {
+          const prepared = Option.getOrThrow(
+            prepareBoundPlanningTransactions({
+              db,
+              rangeUsers: { sql: "SELECT ? AS userId WHERE 0", params: [selectedUser] },
+              referenceUsers: { sql: "SELECT ? AS userId", params: [selectedUser] },
+              references,
+              ranges: [{ from: DateTime.formatIso(from), through: DateTime.formatIso(to) }],
+            })
+          );
+          const actual = Option.getOrThrow(
+            prepared.decode(yield* Effect.tryPromise(() => db.batch([...prepared.statements])), ids)
+          );
+          expect(actual.selected.map((value) => value.id)).toEqual([
+            transactionId(selectedUser === userId ? 1 : 2),
+          ]);
+          expect(Option.getOrThrow(actual.ranges[0] ?? Option.none()).transactions).toEqual([]);
+        }
+      }
+    })
+  ));

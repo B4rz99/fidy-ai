@@ -48,7 +48,8 @@ const prepareWorkspace = ({
   return Option.map(
     prepareBoundPlanningTransactions({
       db,
-      userSelection: planningUsers(reservation),
+      rangeUsers: planningUsers(reservation),
+      referenceUsers: reservation,
       references: planningReferences(reservation),
       ranges: [
         matchingRange(query.previousMonth ?? previousMonth(query.month)),

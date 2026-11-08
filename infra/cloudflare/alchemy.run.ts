@@ -367,6 +367,21 @@ export default Alchemy.Stack(
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
       },
     });
+    const protectedStorage = yield* Cloudflare.Worker("ProtectedStorage", {
+      main: "../../apps/server/cloudflare/protected-storage-worker.ts",
+      observability: freeTierWorkerObservability,
+      compatibility: { date: "2026-09-08" },
+      workersDev: productionTopology.protectedStorage.workersDev,
+      placement: production
+        ? { mode: "targeted", region: productionTopology.protectedStorage.region }
+        : undefined,
+      dev: {
+        host: "127.0.0.1",
+        port: productionTopology.protectedStorage.localPort,
+        strictPort: true,
+      },
+      env: { DB: database, ERASURE_BUCKET: erasureBucket },
+    });
     const core = yield* Cloudflare.Worker("Core", {
       main: "../../apps/server/cloudflare/core-worker.ts",
       version: production
@@ -420,6 +435,7 @@ export default Alchemy.Stack(
         [productionTopology.core.d1Binding]: database,
         EMAIL_BUCKET: emailBucket,
         ERASURE_BUCKET: erasureBucket,
+        [productionTopology.protectedStorage.binding]: protectedStorage,
         ERASURE_REQUIRED: erasureRequired,
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,

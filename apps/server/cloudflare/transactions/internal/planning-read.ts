@@ -174,16 +174,19 @@ const orderedReferences = (
 };
 
 /** Prepare independently capped matching windows and all bounded linked facts in one snapshot.
+ * Range-only eligibility stays separate from the linked facts' live User proof.
  * Decoding restores the existing 128-reference group order without repeating selection per group.
  */
 export const prepareBoundPlanningTransactions = ({
   db,
-  userSelection,
+  rangeUsers,
+  referenceUsers,
   references,
   ranges,
 }: Readonly<{
   db: D1Database;
-  userSelection: OwnedStatement;
+  rangeUsers: OwnedStatement;
+  referenceUsers: OwnedStatement;
   references: OwnedStatement;
   ranges: ReadonlyArray<PlanningTransactionRange>;
 }>): Option.Option<PreparedPlanningFacts> => {
@@ -200,7 +203,7 @@ export const prepareBoundPlanningTransactions = ({
   if (Option.isNone(decoded)) return Option.none();
   const windows = decoded.value.map(({ from, through }) =>
     selectedEffectiveHistoryPage({
-      userSelection,
+      userSelection: rangeUsers,
       where:
         "user_id=(SELECT userId FROM transaction_history_user) AND occurred_at_ms >= ? AND occurred_at_ms < ?",
       bindings: [DateTime.toEpochMillis(from), DateTime.toEpochMillis(through)],
@@ -208,7 +211,7 @@ export const prepareBoundPlanningTransactions = ({
     })
   );
   const linked = selectedEffectiveHistoryPage({
-    userSelection,
+    userSelection: referenceUsers,
     where: `user_id=(SELECT userId FROM transaction_history_user) AND id IN (SELECT transactionId FROM (${references.sql}))`,
     bindings: references.params,
     limit: maximumReferences + 1,

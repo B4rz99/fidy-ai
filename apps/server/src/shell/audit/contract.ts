@@ -73,6 +73,7 @@ export type AuditCredentialOperation =
   | "transactions.searchTransactions"
   | "transactions.unlinkTransactions"
   | "transactions.deleteTransaction"
+  | "transactions.updateTransactions"
   | "transactions.updateTransaction";
 /** Supporting evidence is retained only for these credential-free statement projections. */
 export type AuditPublicationOperation =

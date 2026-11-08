@@ -106,6 +106,16 @@ Browser User responses can carry the bounded Category display catalog through it
 published projection seam, with live browser credential evidence checked after that read. These
 projections do not add a generic batching transport or bypass admission, Consent or write guards.
 
+Transactions declares `updateTransactions` for an explicit revision-bound selection sharing one
+Correction. The owner reads only those same-User originals, prepares each record's correction
+evidence, and commits set-based writes and one metadata-only operation Audit through the canonical
+mutation unit. Exact affected-row assertions roll back incomplete writes. The 4096-record and
+512KiB HTTP bounds protect one unit of work; the browser has no checkbox cap. OAuth group
+approval observes and rechecks the selected originals, linked partners, effective facts,
+Reconciliation membership and precedence inputs through the same snapshot owner as individual
+correction, so changes to any financial premise invalidate pending approval. The generic atomic
+batch remains limited to twelve canonical operations, independently of this selection size.
+
 Queries share an observational owner implementation. Individual and atomic-batch mutations share
 the User-scoped mutation unit. Dedicated browser/proof transports retain separate declarations and
 authority; using one does not confer canonical, agent or batch privileges.

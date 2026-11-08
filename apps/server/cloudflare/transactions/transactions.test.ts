@@ -785,6 +785,233 @@ const sendPublicRequest = (
     },
   });
 };
+
+const groupCorrectionRequest = (index: number, payload: object): Request => {
+  const original = request(index, "/transactions/corrections", payload);
+  const headers = new Headers(original.headers);
+  headers.set("origin", "https://app.fidyapp.com");
+  return new Request(original, { headers });
+};
+
+it("corrects a selected group of 500 Transactions in one atomic save with retained correction evidence", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const prefix = "52000000-0000-4000-8000-";
+      yield* seedHistory({
+        db,
+        subject: owner,
+        transactionPrefix: prefix,
+        count: 500,
+        linked: false,
+        linkedFraction: 0,
+        spacingMinutes: 1,
+      });
+      const transactions = Array.from({ length: 500 }, (_, index) => ({
+        id: `${prefix}${String(index + 1).padStart(12, "0")}`,
+        expectedRevision: 0,
+      }));
+      const result = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          groupCorrectionRequest(0, {
+            transactions,
+            changes: { notes: "Corregidas juntas" },
+          })
+        )
+      );
+      expect(result.status).toBe(200);
+      expect(yield* fromTestPromise(() => result.json())).toEqual({
+        data: { updated: 500 },
+        next: [],
+      });
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT count(*) AS count FROM transactions WHERE user_id = ? AND revision = 1 AND notes = 'Corregidas juntas'",
+            owner
+          )
+        )
+      ).toBe(500);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT count(*) AS count FROM transaction_corrections WHERE user_id = ?",
+            owner
+          )
+        )
+      ).toBe(500);
+      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toContainEqual({
+        operation: "transactions.updateTransactions",
+        outcome: "success",
+      });
+    })
+  ));
+it("composes a group correction larger than 4 KiB with another atomic mutation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const prefix = "53000000-0000-4000-8000-";
+      const count = 64;
+      yield* seedHistory({
+        db,
+        subject: owner,
+        transactionPrefix: prefix,
+        count,
+        linked: false,
+        linkedFraction: 0,
+        spacingMinutes: 1,
+      });
+      const group: AtomicBatchCall = {
+        callId: batchCallId(1),
+        operation: "transactions.updateTransactions",
+        input: {
+          payload: {
+            transactions: Array.from({ length: count }, (_, index) => ({
+              id: `${prefix}${String(index + 1).padStart(12, "0")}`,
+              expectedRevision: 0,
+            })),
+            changes: { notes: "Corregidas juntas" },
+          },
+        },
+      };
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        group.input
+      ).pipe(Effect.orDie);
+      expect(new TextEncoder().encode(encoded).length).toBeGreaterThan(4096);
+      const result = yield* fromTestPromise(() =>
+        sendPublicRequest(db, batchRequest(0, [group, memoryCall(2, "Preferencia confirmada")]))
+      );
+      expect(result.status).toBe(200);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT count(*) AS count FROM transactions WHERE user_id = ? AND revision = 1 AND notes = 'Corregidas juntas'",
+            owner
+          )
+        )
+      ).toBe(count);
+      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([
+        { operation: "transactions.updateTransactions", outcome: "success" },
+      ]);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ? AND text = 'Preferencia confirmada'",
+            owner
+          )
+        )
+      ).toBe(1);
+    })
+  ));
+
+it("rejects foreign, missing, duplicate, deleted and stale group members without partial corrections", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const own = "52000000-0000-4000-8000-000000000001";
+      const foreign = "52000000-0000-4000-8000-000000000002";
+      const deleted = "52000000-0000-4000-8000-000000000003";
+      const missing = "52000000-0000-4000-8000-000000000004";
+      const stale = "52000000-0000-4000-8000-000000000005";
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: owner, id: own, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[1] ?? "", id: foreign, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: owner, id: stale, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: owner, id: deleted, categoryId: category })
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare("UPDATE transactions SET deleted_at_ms = ? WHERE user_id = ? AND id = ?")
+          .bind(transactionNow(), owner, deleted)
+          .run()
+      );
+      for (const invalid of [
+        { id: foreign, expectedRevision: 0 },
+        { id: missing, expectedRevision: 0 },
+        { id: own, expectedRevision: 0 },
+        { id: deleted, expectedRevision: 0 },
+        { id: stale, expectedRevision: 1 },
+      ]) {
+        const result = yield* fromTestPromise(() =>
+          sendPublicRequest(
+            db,
+            groupCorrectionRequest(0, {
+              transactions: [{ id: own, expectedRevision: 0 }, invalid],
+              changes: { notes: "Sin guardar" },
+            })
+          )
+        );
+        expect(result.status).toBe(
+          invalid.id === foreign || invalid.id === missing || invalid.id === deleted ? 404 : 400
+        );
+        expect(
+          yield* fromTestPromise(() =>
+            countRows(db, "SELECT count(*) AS count FROM transaction_corrections")
+          )
+        ).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            countRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
+          )
+        ).toBe(0);
+      }
+    })
+  ));
+it("rolls back every group correction and its evidence when final Audit is refused", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const ids = ["52000000-0000-4000-8000-000000000001", "52000000-0000-4000-8000-000000000002"];
+      for (const id of ids) {
+        yield* fromTestPromise(() =>
+          seedTransaction({ db, userId: owner, id, categoryId: category })
+        );
+      }
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER refuse_group_audit BEFORE INSERT ON audit_entries
+    WHEN NEW.operation = 'transactions.updateTransactions' AND NEW.outcome = 'success'
+    BEGIN SELECT RAISE(IGNORE); END`)
+          .run()
+      );
+      const result = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          groupCorrectionRequest(0, {
+            transactions: ids.map((id) => ({ id, expectedRevision: 0 })),
+            changes: { notes: "Sin guardar" },
+          })
+        )
+      );
+      expect(result.status).not.toBe(200);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT count(*) AS count FROM transaction_corrections")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
+        )
+      ).toBe(0);
+    })
+  ));
+
 effectIt.effect(
   "routes a browser Turn through public ingress, Core and the per-User coordinator to OpenAI",
   () =>
@@ -888,6 +1115,95 @@ effectIt.effect(
       expect(rows.results).toEqual([{ status: "completed" }]);
     })
 );
+
+it("refuses under-scoped and oversized group corrections before changing any selected Transaction", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const userId = users[0] ?? "";
+      const id = "52000000-0000-4000-8000-000000000001";
+      yield* fromTestPromise(() => seedTransaction({ db, userId, id, categoryId: category }));
+      const token = `fin_${"r".repeat(8)}_${"r".repeat(43)}`;
+      const current = yield* Clock.currentTimeMillis;
+      yield* seedPAT({ db, userId, token, scopes: ["read"], current });
+      const payload = {
+        transactions: [{ id, expectedRevision: 0 }],
+        changes: { notes: "Sin guardar" },
+      };
+      const denied = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/transactions/corrections", {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        )
+      );
+      expect(denied.status).toBe(403);
+      const oversized = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          groupCorrectionRequest(0, {
+            transactions: Array.from({ length: 4097 }, (_, index) => ({
+              id: `52000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+              expectedRevision: 0,
+            })),
+            changes: payload.changes,
+          })
+        )
+      );
+      expect(oversized.status).toBe(400);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT count(*) AS count FROM transaction_corrections")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
+        )
+      ).toBe(0);
+    })
+  ));
+
+it("rolls back the whole group when one selected row stops accepting its correction at commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const userId = users[0] ?? "";
+      const ids = ["52000000-0000-4000-8000-000000000001", "52000000-0000-4000-8000-000000000002"];
+      for (const id of ids) {
+        yield* fromTestPromise(() => seedTransaction({ db, userId, id, categoryId: category }));
+      }
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER refuse_one_group_row BEFORE UPDATE ON transactions
+      WHEN OLD.id = '52000000-0000-4000-8000-000000000002' BEGIN SELECT RAISE(IGNORE); END`)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          groupCorrectionRequest(0, {
+            transactions: ids.map((id) => ({ id, expectedRevision: 0 })),
+            changes: { notes: "Sin guardar" },
+          })
+        )
+      );
+      expect(response.status).not.toBe(200);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT count(*) AS count FROM transaction_corrections")
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT count(*) AS count FROM transactions WHERE revision != 0")
+        )
+      ).toBe(0);
+    })
+  ));
 const hostedReceiptBrowserRequest = (index: number, body: string): Request =>
   new Request("https://api.fidyapp.com/web/hosted-turns/delivery", {
     method: "POST",

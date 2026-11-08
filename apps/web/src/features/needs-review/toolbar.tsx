@@ -30,6 +30,7 @@ const ReviewSelection = ({
   const visibleIds = new Set(visibleItems.map((item) => item.id));
   return (
     <SelectionSummary
+      showClear
       clearFocusId={sourceId}
       label={selectedCountLabel(control.checked.length)}
       disabled={control.locked}

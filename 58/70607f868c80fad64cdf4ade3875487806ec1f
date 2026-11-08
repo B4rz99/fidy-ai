@@ -1,0 +1,52 @@
+apps/web/src/transport/client.ts
+  s_617e4709660962::t_579652af1ea627 46
+apps/web/src/features/transactions/workspace.tsx
+  s_617e4709660962::t_c2e2271ef0b02d 720-722,725,727-730,733
+  s_617e4709660962::t_02b7095b853bc2 45
+  s_617e4709660962::t_9d892e26f32cb1 693
+  s_617e4709660962::t_bf51a3ecad6349 723-724,726
+apps/web/e2e/transaction-pagination.spec.ts
+  s_617e4709660962::t_c2e2271ef0b02d 229-231,248-250
+  s_617e4709660962::t_0133c5b2f0f7d9 167-175,177-186,188-228,242,251-254,632
+  s_617e4709660962::t_9d892e26f32cb1 232-241,243-247
+  s_617e4709660962::t_6b26f554c512e9 164-166,176,187
+  s_617e4709660962::t_0013e9e6c07c27 530,553
+apps/web/ARCHITECTURE.md
+  s_617e4709660962::t_94834f32c078a2 106-108
+apps/web/src/features/transactions/corrections.ts
+  s_617e4709660962::t_579652af1ea627 10,49,192,194-198
+  s_617e4709660962::t_6aca69f044393a 199,237
+apps/web/src/features/transactions/list-feature.tsx
+  s_617e4709660962::t_74172ac814db20 18-24,229,231,233-235,237
+  s_617e4709660962::t_579652af1ea627 207,219,228,273,477,486
+  s_617e4709660962::t_02b7095b853bc2 422-423
+  s_617e4709660962::t_bf51a3ecad6349 230,232,236
+apps/web/e2e/transactions-approved.spec.ts
+  s_617e4709660962::t_74172ac814db20 463-486,498-500
+  s_617e4709660962::t_0133c5b2f0f7d9 487-497,501-536
+apps/web/src/features/transactions/privacy-view.tsx
+  s_617e4709660962::t_02b7095b853bc2 65
+apps/web/src/features/transactions/history.ts
+  s_617e4709660962::t_9d892e26f32cb1 144-145
+  s_617e4709660962::t_e159fa23a9d8ac 157
+  s_617e4709660962::t_74172ac814db20 146-147,155-156,158-161,171-173
+  s_617e4709660962::t_3e5c184f4fa520 148-154,163-165,167-170,174-177,208,218
+  s_617e4709660962::t_62bf3be3da9332 166
+  s_617e4709660962::t_dec19bdc89bd9b 140-143,162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5870607f868c80fad64cdf4ade3875487806ec1f",
+  "prompts": {},
+  "sessions": {
+    "s_617e4709660962": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d57bef93d808",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

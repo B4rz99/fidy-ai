@@ -25,30 +25,34 @@ const ReviewSelection = ({
   page,
   control,
   sourceId,
-}: ToolbarProps): JSX.Element => (
-  <SelectionSummary
-    clearFocusId={sourceId}
-    label={selectedCountLabel(control.checked.length)}
-    disabled={control.locked}
-    onClear={control.clearChecked}
-    onRemove={(id) => {
-      const item = view.items.find((item) => item.id === id);
-      if (item !== undefined) control.toggle(item);
-    }}
-    items={view.items.flatMap((item, index) =>
-      control.checked.includes(item.id)
-        ? [
-            {
-              id: item.id,
-              label: `${sources[item.source]} ${sourceReference({ item, context: Option.fromUndefinedOr(contexts.get(item.id)), position: page + index + 1 })}`,
-              description: `${reviewTitle(item)} · ${reviewAmount(item)}`,
-              hidden: !visibleItems.some((visible) => visible.id === item.id),
-            },
-          ]
-        : []
-    )}
-  />
-);
+}: ToolbarProps): JSX.Element => {
+  const checked = new Set(control.checked);
+  const visibleIds = new Set(visibleItems.map((item) => item.id));
+  return (
+    <SelectionSummary
+      clearFocusId={sourceId}
+      label={selectedCountLabel(control.checked.length)}
+      disabled={control.locked}
+      onClear={control.clearChecked}
+      onRemove={(id) => {
+        const item = view.items.find((item) => item.id === id);
+        if (item !== undefined) control.toggle(item);
+      }}
+      items={view.items.flatMap((item, index) =>
+        checked.has(item.id)
+          ? [
+              {
+                id: item.id,
+                label: `${sources[item.source]} ${sourceReference({ item, context: Option.fromUndefinedOr(contexts.get(item.id)), position: page + index + 1 })}`,
+                description: `${reviewTitle(item)} · ${reviewAmount(item)}`,
+                hidden: !visibleIds.has(item.id),
+              },
+            ]
+          : []
+      )}
+    />
+  );
+};
 const ReviewBulkAction = ({
   selected,
   control,

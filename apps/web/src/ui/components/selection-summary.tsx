@@ -1,5 +1,5 @@
 import { type JSX, useId, useRef, useState } from "react";
-import { Button } from "@/ui/components/button";
+import { Button } from "./button";
 
 type SelectionItem = Readonly<{
   id: string;

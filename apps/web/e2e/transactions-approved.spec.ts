@@ -721,7 +721,7 @@ test("bulk selection survives search changes and submits hidden transactions at 
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* installWorkspace(page, [row(1), row(2), row(3)]);
+      yield* installWorkspace(page, [row(1), { ...row(2), direction: "inflow" }, row(3)]);
       const batches: Array<unknown> = [];
       yield* recordMutation(page, "/operations/atomic-batch", {
         requests: batches,
@@ -752,6 +752,9 @@ test("bulk selection survives search changes and submits hidden transactions at 
           page.getByRole("button", { name: "Quitar Prueba 1 de la selección", exact: true })
         ).toBeVisible()
       );
+      const selection = page.getByRole("list", { name: "Registros seleccionados", exact: true });
+      yield* wait(() => expect(selection).toContainText("Gasto · COP -64.000,00"));
+      yield* wait(() => expect(selection).toContainText("Ingreso · COP 64.000,00"));
       yield* wait(() =>
         page.getByRole("button", { name: "Editar selección de transacciones", exact: true }).click()
       );
@@ -860,6 +863,41 @@ test("changing the transaction month requires explicitly discarding a nonempty s
         page.getByRole("button", { name: "Limpiar selección y continuar", exact: true }).click()
       );
       yield* wait(() => expect(month).toHaveValue("09"));
+      yield* wait(() =>
+        expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeVisible()
+      );
+    })
+  ));
+
+test("a day filter confirms before replacing a located transaction selection", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installWorkspace(page);
+      yield* wait(() => page.goto(`/app/transactions?transaction=${first.id}`));
+      yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+      const checkbox = page.getByRole("checkbox", { name: "Seleccionar Prueba 1", exact: true });
+      yield* wait(() => checkbox.check());
+      const chooseDay = (): Promise<void> =>
+        page
+          .getByRole("button", { name: "Fecha", exact: true })
+          .click()
+          .then(() => page.getByRole("button", { name: /23 de octubre de 2026/u }).click());
+      yield* wait(chooseDay);
+      const dialog = page.getByRole("dialog", {
+        name: "¿Limpiar la selección para cambiar de vista?",
+        exact: true,
+      });
+      yield* wait(() => expect(dialog).toBeVisible());
+      yield* wait(() =>
+        page.getByRole("button", { name: "Conservar selección", exact: true }).click()
+      );
+      yield* wait(() => expect(checkbox).toBeChecked());
+      yield* wait(() => expect(page).toHaveURL(/transaction=/u));
+      yield* wait(chooseDay);
+      yield* wait(() =>
+        page.getByRole("button", { name: "Limpiar selección y continuar", exact: true }).click()
+      );
+      yield* wait(() => expect(page).toHaveURL(/date=2026-10-23/u));
       yield* wait(() =>
         expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeVisible()
       );

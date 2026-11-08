@@ -519,6 +519,25 @@ const bulkIds = (panel: TransactionPanel): ReadonlyArray<string> => {
   if (panel.stage === "selecting") return panel.ids;
   return panel.transactions.map((record) => record.id);
 };
+const selectedTransactionItems = (
+  props: WorkspaceProps,
+  selected: ReadonlySet<string>,
+  visible: ReadonlyArray<Transaction>
+): React.ComponentProps<typeof SelectionSummary>["items"] => {
+  const visibleIds = new Set(visible.map((record) => record.id));
+  return presentTransactionRows({
+    transactions: props.transactions.filter((record) => selected.has(record.id)),
+    categories: props.categories,
+    locale: props.currentUser.locale,
+    timeZone: props.currentUser.timeZone,
+    counterpartyFallback: "Contraparte no identificada",
+  }).map((record) => ({
+    id: record.id,
+    label: record.counterpartyLabel,
+    description: `${record.transactionTypeLabel} · ${record.moneyText} · ${record.occurredOnText}`,
+    hidden: !visibleIds.has(record.id),
+  }));
+};
 const bulkSelection = ({
   panel,
   onPanel,
@@ -539,14 +558,7 @@ const bulkSelection = ({
     summary: (
       <SelectionSummary
         clearFocusId="transaction-type-filter"
-        items={transactions
-          .filter((record) => selected.has(record.id))
-          .map((record) => ({
-            id: record.id,
-            label: Option.getOrElse(record.counterparty, () => "Contraparte no identificada"),
-            description: `${formatMoneyWithCode({ money: record.money, locale: props.currentUser.locale })} · ${formatOccurrence({ locale: props.currentUser.locale, timeZone: props.currentUser.timeZone, occurredAt: record.occurredAt })}`,
-            hidden: !visible.some((item) => item.id === record.id),
-          }))}
+        items={selectedTransactionItems(props, selected, visible)}
         label={`${ids.length} seleccionadas`}
         disabled={disabled || panel._tag !== "Bulk" || panel.stage !== "selecting"}
         onClear={() => onPanel({ _tag: "Bulk", ids: [], stage: "selecting" })}
@@ -828,7 +840,7 @@ const usePeriodSelection = (
   panel: TransactionPanel,
   onPanel: (panel: TransactionPanel) => void
 ): Readonly<{ props: WorkspaceProps; confirmation: JSX.Element }> => {
-  const [pending, setPending] = useState<Option.Option<PeriodChoice>>(Option.none());
+  const [pending, setPending] = useState<Option.Option<PeriodChoice>>(Option.none);
   const count = bulkIds(panel).length;
   const apply = (next: PeriodChoice): void => {
     if (next.kind === "date") source.dateFilter.onChange(next.value);
@@ -840,7 +852,11 @@ const usePeriodSelection = (
         ? next.value !== value
         : next.value !== "" && !next.value.startsWith(`${value}-`)
     );
-    if (count > 0 && replacesPeriod) setPending(Option.some(next));
+    const replacesDestination =
+      next.kind === "date" &&
+      Option.isSome(source.locate) &&
+      next.value !== source.dateFilter.value;
+    if (count > 0 && (replacesPeriod || replacesDestination)) setPending(Option.some(next));
     else apply(next);
   };
   return {

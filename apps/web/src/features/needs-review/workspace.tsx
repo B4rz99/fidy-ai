@@ -288,7 +288,7 @@ const useSelectionScope = (
   sourceId: string;
 }> => {
   const sourceId = useId();
-  const [pending, setPending] = useState<Option.Option<ReviewScope>>(Option.none());
+  const [pending, setPending] = useState<Option.Option<ReviewScope>>(Option.none);
   const select = (filter: Filter, page: number): void => {
     const changed = filter !== props.filter || page !== props.page;
     const retainsPanel =

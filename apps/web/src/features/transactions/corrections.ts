@@ -309,7 +309,7 @@ const reread = (
       nextResult(owner, owner.categories, categories),
       nextResult(owner, owner.firstPage, firstPage),
     ]);
-    if (results.every(Boolean)) results.push(yield* refreshedHistory(owner));
+    if (reason !== "saved" && results.every(Boolean)) results.push(yield* refreshedHistory(owner));
     if (!live(owner, generation)) return;
     owner.status = results.every(Boolean) ? statuses.success : statuses.failure;
     notify(owner);

@@ -65,7 +65,7 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
   return (
     <div className="min-w-0">
       <InlineChoiceDropdown
-        label={`Cambiar categoría de ${props.row.counterpartyLabel}`}
+        label={`${props.row.categoryLabel}; cambiar categoría de ${props.row.counterpartyLabel}`}
         disabled={props.disabled || corrections.locked}
         leading={<CategoryVisual label={props.row.categoryLabel} bubble large={false} />}
         value={props.transaction.categoryId}

@@ -34,7 +34,8 @@ const conformanceStub = (
       | "inactive"
       | "contradictory"
       | "extra-evidence"
-      | "derived";
+      | "derived"
+      | "unnamed";
   }> = {
     conversationalText: Option.none(),
     occurredAt: "2026-09-22T12:00:00Z",
@@ -63,16 +64,22 @@ const conformanceStub = (
       const maximumReads = recurringRead === "derived" || recurringRead === "past" ? 1 : 2;
       if (recurringReadRound > maximumReads) {
         const replies = {
-          observe: "El plan está activo. Su próximo pago es el 18 de octubre de 2026.",
-          historical: "El plan está activo. Su próximo pago es el 18 de octubre de 2026.",
-          past: "El plan está activo. Su próximo pago es el 18 de septiembre de 2026.",
-          occurrence: "El plan está sin confirmar. Su próximo pago es el 18 de octubre de 2026.",
-          inactive: "El plan no está activo. Su próximo pago es el 18 de octubre de 2026.",
+          observe:
+            "El plan «Plan de prueba» está activo. Su próximo pago es el 18 de octubre de 2026.",
+          historical:
+            "El plan «Plan de prueba» está activo. Su próximo pago es el 18 de octubre de 2026.",
+          unnamed: "El plan está activo. Su próximo pago es el 18 de octubre de 2026.",
+          past: "El plan «Plan de prueba» está activo. Su próximo pago es el 18 de septiembre de 2026.",
+          occurrence:
+            "El plan «Plan de prueba» está sin confirmar. Su próximo pago es el 18 de octubre de 2026.",
+          inactive:
+            "El plan «Plan de prueba» no está activo. Su próximo pago es el 18 de octubre de 2026.",
           "extra-evidence":
-            "El plan está activo. Su próximo pago es el 18 de octubre de 2026. El plan no está activo.",
-          derived: "El plan está activo. Su próximo pago es el 18 de octubre de 2026.",
+            "El plan «Plan de prueba» está activo. Su próximo pago es el 18 de octubre de 2026. El plan «Plan de prueba» no está activo.",
+          derived:
+            "El plan «Plan de prueba» está activo. Su próximo pago es el 18 de octubre de 2026.",
           contradictory:
-            "El plan no está activo; próxima fecha 2026-09-18; después aparece 2026-10-18",
+            "El plan «Plan de prueba» no está activo; próxima fecha 2026-09-18; después aparece 2026-10-18",
         };
         return result(replies[recurringRead]);
       }
@@ -353,6 +360,7 @@ it.effect(
         "inactive",
         "contradictory",
         "extra-evidence",
+        "unnamed",
       ] as const) {
         const inference = yield* conformanceStub("inválido", representativeAmount, {
           conversationalText: Option.none(),
@@ -376,6 +384,7 @@ it.effect.each([
   "Tienes Pro por ManualProGrant; no hay una suscripción de pago que cancelar.",
   "Tu ID es 00000000-0000-4000-8000-000000000001; tienes Pro y no hay suscripción.",
   "Tienes Pro y una suscripción de pago que cancelar.",
+  "Tienes Pro y no hay una suscripción de pago activa. Veo un intento de cobro semanal por 9.900 pesos que falló el 10 de agosto de 2026.",
 ])("rejects technical, formatted or misleading consumer replies: %s", (text) =>
   Effect.gen(function* () {
     const inference = yield* conformanceStub("inválido", representativeAmount, {

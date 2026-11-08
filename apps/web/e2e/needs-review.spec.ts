@@ -1,6 +1,6 @@
 import { expectFinancialLabels } from "./financial-form-text";
 import { signInNavigationPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
-import type { Response as BrowserResponse, Page, Route } from "@playwright/test";
+import type { Response as BrowserResponse, Page, Request, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -1348,7 +1348,9 @@ test("dismisses every editor picker when leaving the retained review", ({ page, 
     )
   ));
 
-test("clears bulk selection when filtering and retains paging after no local matches", ({ page }) =>
+test("preserves bulk selection when filtering and retains paging after no local matches", ({
+  page,
+}) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const entries: Fixture[] = Array.from({ length: 51 }, (_, index) => ({
@@ -1378,7 +1380,7 @@ test("clears bulk selection when filtering and retains paging after no local mat
       yield* Effect.tryPromise(() =>
         page.getByRole("textbox", { name: "Buscar pendientes en esta página" }).fill("")
       );
-      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox").first()).not.toBeChecked());
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox").first()).toBeChecked());
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Filtrar por origen en esta página" }).click()
       );
@@ -1391,10 +1393,123 @@ test("clears bulk selection when filtering and retains paging after no local mat
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Siguiente", exact: true }).click()
       );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Limpiar selección y continuar", exact: true }).click()
+      );
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/offset=50/));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Anterior", exact: true })).toBeEnabled()
       );
+    })
+  ));
+
+const bulkEditRequest = (page: Page): Promise<Request> =>
+  page.waitForRequest((request) => request.url().endsWith("/edits") && request.method() === "POST");
+
+test("bulk skip includes selected statements hidden by the source filter", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [id, secondId].map((value) => ({
+        id: value,
+        revision: 0,
+        status: "pending",
+        draft: undefined,
+      }));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" }).check()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 2" }).check()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Filtrar por origen en esta página" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("menuitemradio", { name: "Imágenes", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("2 fuera de este filtro", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Revisar selección (2)", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Quitar Extracto Fila 1 de la selección", exact: true })
+        ).toBeVisible()
+      );
+      const [request] = yield* Effect.all(
+        [
+          Effect.tryPromise(() => bulkEditRequest(page)),
+          Effect.tryPromise(() =>
+            page.getByRole("button", { name: "Omitir 2 seleccionados", exact: true }).click()
+          ),
+        ],
+        { concurrency: "unbounded" }
+      );
+      expect(request.postDataJSON()).toEqual({
+        _tag: "Skip",
+        items: [
+          { id, revision: 0 },
+          { id: secondId, revision: 0 },
+        ],
+      });
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Deshacer omisión", exact: true })).toBeVisible()
+      );
+    })
+  ));
+
+test("changing review history status keeps selected rows until explicit discard", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [{ id, revision: 0, status: "skipped", draft: undefined }];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      const checkbox = page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" });
+      yield* Effect.tryPromise(() => checkbox.check());
+      const filter = page.getByRole("button", {
+        name: "Mostrar historial: Historial",
+        exact: true,
+      });
+      yield* Effect.tryPromise(() => filter.click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("menuitemradio", { name: "Omitidas", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Conservar selección", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(checkbox).toBeChecked());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", {
+            name: "Filtrar por origen en esta página: Todos los orígenes",
+            exact: true,
+          })
+        ).toBeFocused()
+      );
+      yield* Effect.tryPromise(() => filter.click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("menuitemradio", { name: "Omitidas", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Limpiar selección y continuar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/status=skipped/u));
+      yield* Effect.tryPromise(() => expect(checkbox).not.toBeChecked());
     })
   ));
 

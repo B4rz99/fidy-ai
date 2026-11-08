@@ -1,17 +1,11 @@
 import { Effect, Option, Schema } from "effect";
-import { ErasureUnavailable } from "../erasure-store/contract";
-import { collectBoundedRequestBody } from "../http/operations";
-import type { RecoveryMeasurement } from "../erasure/internal/measurement";
-import {
-  type ProtectedExecution,
-  ProtectedReply,
-  ProtectedStorageHealth,
-  ProtectedUnit,
-} from "./contract";
+import { ErasureUnavailable } from "../../erasure-store/contract";
+import { collectBoundedRequestBody } from "../../http/operations";
+import type { RecoveryMeasurement } from "./measurement";
+import { type ProtectedExecution, ProtectedReply, ProtectedUnit } from "./protected-contract";
 
 export const maximumUnitBytes = 4_194_304;
 export const maximumReplyBytes = 16_777_216;
-const maximumHealthBytes = 1024;
 const endpoint = "https://protected-storage.internal/execute";
 const encode = Schema.encodeSync(Schema.fromJsonString(ProtectedUnit));
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(ProtectedReply));
@@ -78,19 +72,3 @@ export const makeProtectedExecution =
     const run: () => ReturnType<ProtectedExecution> = () => execute({ ...input, unit });
     return Option.isSome(input.measurement) ? input.measurement.value.remote(run) : run();
   };
-
-/** Zero-SQL release readiness checks the same private execution capability used by protected units. */
-export const protectedStorageAvailable = (
-  binding: Pick<Fetcher, "fetch">
-): Effect.Effect<boolean> =>
-  Effect.gen(function* () {
-    const response = yield* Effect.tryPromise(() =>
-      binding.fetch(new Request("https://protected-storage.internal/health"))
-    );
-    if (!response.ok) return false;
-    const request = new Request(endpoint, { method: "POST", body: response.body });
-    const bytes = yield* collectBoundedRequestBody(request, maximumHealthBytes);
-    const text = yield* Effect.try(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    yield* Schema.decodeEffect(Schema.fromJsonString(ProtectedStorageHealth))(text);
-    return true;
-  }).pipe(Effect.orElseSucceed(() => false));

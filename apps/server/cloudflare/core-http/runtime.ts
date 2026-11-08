@@ -7,7 +7,11 @@ import {
   ConnectionInstitutions,
   type registeredConnectionInstitutionIds,
 } from "../../src/shell/connections/contract";
-import { measureErasureRecovery, withErasureRecovery } from "../erasure/runtime";
+import {
+  measureErasureRecovery,
+  protectedStorageAvailable,
+  withErasureRecovery,
+} from "../erasure/runtime";
 import type { CoreRejectionBoundary } from "../runtime/operational-health/contract";
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
@@ -19,7 +23,6 @@ import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { CoreHttpEnvironment, CoreHttpHandler } from "./contract";
 import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
-import { protectedStorageAvailable } from "../protected-storage/operations";
 import { recoveryIsolationResponse } from "../release-isolation/operations";
 
 const rejectionBoundary = (request: Request): CoreRejectionBoundary => {

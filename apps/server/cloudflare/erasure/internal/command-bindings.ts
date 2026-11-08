@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { ProtectedCommand } from "../contract";
+import { ProtectedCommand } from "./protected-contract";
 
 const values = Schema.decodeUnknownSync(ProtectedCommand.fields.params);
 

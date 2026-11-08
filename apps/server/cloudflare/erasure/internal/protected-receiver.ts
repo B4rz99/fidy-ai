@@ -1,15 +1,10 @@
 import { Effect, Option, Schema } from "effect";
-import { guardedDatabase } from "../erasure/internal/database";
-import { type RecoveryMeasurement, makeRecoveryMeasurement } from "../erasure/internal/measurement";
-import { ErasureUnavailable } from "../erasure-store/contract";
-import { collectBoundedRequestBody } from "../http/operations";
-import {
-  ProtectedReply,
-  ProtectedStorageHealth,
-  ProtectedUnit,
-  maximumErrorLength,
-} from "./contract";
-import { maximumReplyBytes, maximumUnitBytes } from "./operations";
+import { guardedDatabase } from "./database";
+import { type RecoveryMeasurement, makeRecoveryMeasurement } from "./measurement";
+import { ErasureUnavailable } from "../../erasure-store/contract";
+import { collectBoundedRequestBody } from "../../http/operations";
+import { ProtectedReply, ProtectedUnit, maximumErrorLength } from "./protected-contract";
+import { maximumReplyBytes, maximumUnitBytes } from "./protected-execution";
 
 const successStatus = 200;
 const unavailableStatus = 503;
@@ -94,30 +89,9 @@ const response = (reply: ProtectedReply, measurement: RecoveryMeasurement): Resp
   });
 };
 
-/** Only Core receives this private SQL execution capability; this entrypoint has no public route. */
-export const receiveProtectedUnit = (
-  input: Readonly<{
-    request: Request;
-    environment: StorageEnvironment;
-  }>
+export const executeProtectedRequest = (
+  input: Readonly<{ request: Request; environment: StorageEnvironment }>
 ): Promise<Response> => {
-  const url = new URL(input.request.url);
-  if (input.request.method === "GET" && url.pathname === "/health" && url.search === "") {
-    return Promise.resolve(
-      Response.json(
-        Schema.encodeSync(ProtectedStorageHealth)({ status: "available", protocol: 1 }),
-        { headers: { "cache-control": "no-store" } }
-      )
-    );
-  }
-  if (
-    input.request.method !== "POST" ||
-    url.pathname !== "/execute" ||
-    url.search !== "" ||
-    input.request.headers.get("content-type") !== "application/json"
-  ) {
-    return Promise.resolve(new Response(null, { status: 404 }));
-  }
   const measurement = makeRecoveryMeasurement();
   return execute({ ...input, measurement }).then((reply) => response(reply, measurement));
 };

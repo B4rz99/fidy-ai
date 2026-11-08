@@ -1,4 +1,4 @@
-import { receiveProtectedUnit } from "./protected-storage/runtime";
+import { receiveProtectedUnit } from "./erasure/runtime";
 
 export default {
   fetch: (

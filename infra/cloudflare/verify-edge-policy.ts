@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "c49dc963d1b2f5400986957a0b77805814212d9462c53eec2dde7ba92a2a3a8b";
+const expectedEdgePolicyDigest = "074d6fde00ca205d3a0ff96f3e90653dc1702922a11832576c270874cd231b24";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/src/shell/browser-transport/contract.ts", import.meta.url)
@@ -303,16 +303,16 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/protected-storage-worker.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/protected-storage/contract.ts", import.meta.url)
+    new URL("../../apps/server/cloudflare/erasure/internal/protected-contract.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/protected-storage/operations.ts", import.meta.url)
+    new URL("../../apps/server/cloudflare/erasure/internal/protected-execution.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/protected-storage/runtime.ts", import.meta.url)
+    new URL("../../apps/server/cloudflare/erasure/internal/protected-receiver.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/protected-storage/internal/commands.ts", import.meta.url)
+    new URL("../../apps/server/cloudflare/erasure/internal/command-bindings.ts", import.meta.url)
   ).text(),
 
   await Bun.file(

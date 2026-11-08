@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import type { RecoveryTiming } from "../../protected-storage/contract";
+import type { RecoveryTiming } from "./protected-contract";
 
 const decodeSql = Schema.decodeUnknownOption(
   Schema.Array(

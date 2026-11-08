@@ -4,8 +4,8 @@ import { ErasureUnavailable } from "../../erasure-store/contract";
 import type { ErasureRecoveryConfiguration } from "../contract";
 import type { RecoveryMeasurement } from "./measurement";
 
-import type { ProtectedCommand, ProtectedExecution } from "../../protected-storage/contract";
-import { commandBindings } from "../../protected-storage/internal/commands";
+import type { ProtectedCommand, ProtectedExecution } from "./protected-contract";
+import { commandBindings } from "./command-bindings";
 
 const commands = new WeakMap<D1PreparedStatement, ProtectedCommand>();
 type Queries = Pick<D1DatabaseSession, "prepare" | "batch">;

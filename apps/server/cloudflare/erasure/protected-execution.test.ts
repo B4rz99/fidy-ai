@@ -2,11 +2,11 @@ import { Deferred, Effect, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { isolatedTestStorage } from "../d1-test-fixture";
 import { ErasureUnavailable } from "../erasure-store/contract";
-import { guardedDatabase } from "../erasure/internal/database";
-import { makeRecoveryMeasurement } from "../erasure/internal/measurement";
-import { makeProtectedExecution } from "./operations";
+import { guardedDatabase } from "./internal/database";
+import { makeRecoveryMeasurement } from "./internal/measurement";
+import { makeProtectedExecution } from "./internal/protected-execution";
 import { receiveProtectedUnit } from "./runtime";
-import { ProtectedReply, ProtectedUnit } from "./contract";
+import { ProtectedReply, ProtectedUnit } from "./internal/protected-contract";
 
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());

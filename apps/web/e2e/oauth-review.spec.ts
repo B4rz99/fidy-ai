@@ -1,3 +1,4 @@
+import { retainedSecretCount } from "./browser-storage-fixture";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
 import { Effect, Schema } from "effect";
 import type { Cause } from "effect";
@@ -48,7 +49,6 @@ const protectedCallback = (route: Route): Promise<void> =>
     contentType: "text/html",
     body: "<!doctype html><title>Client callback</title><p>Return to your agent</p>",
   });
-const browserStorageCount = (): number => localStorage.length + sessionStorage.length;
 
 const authorization = (request: APIRequestContext): Effect.Effect<URLSearchParams, TestFailure> =>
   Effect.gen(function* () {
@@ -160,7 +160,7 @@ test("built browser returns from established sign-in to a text-only request revi
       yield* Effect.tryPromise((signal) =>
         expect(page.getByRole("status")).toContainText(cancelledMessage, { signal })
       );
-      expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageCount))).toBe(0);
+      expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
       expect(page.url()).not.toContain("code=");
     })
   ));
@@ -353,7 +353,7 @@ const inspectAndRevoke = (
       (yield* Effect.tryPromise(() => callCategories(request, second.access_token))).status()
     ).toBe(ok);
     yield* revokeAllWithRacingRefresh({ page, request, second, form });
-    expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageCount))).toBe(0);
+    expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
     const text = yield* Effect.tryPromise(() => page.locator("body").innerText());
     expect(text.includes(token.access_token) || text.includes(token.refresh_token)).toBe(false);
   });
@@ -817,7 +817,7 @@ const exerciseNativeOperationApproval = (
     expect(yield* Effect.tryPromise(() => replay.json())).toMatchObject({
       result: { isError: true },
     });
-    expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageCount))).toBe(0);
+    expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
   });
 
 const prepareNativeOperation = Effect.fn(function* (request: APIRequestContext, bearer: string) {

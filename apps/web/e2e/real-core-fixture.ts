@@ -1,3 +1,4 @@
+import { retainedSecretCount } from "./browser-storage-fixture";
 import type { APIRequestContext, APIResponse, Page, Response, Route } from "@playwright/test";
 import type { Cause } from "effect";
 import { Clock, Effect, Option, Redacted, Schema } from "effect";
@@ -311,11 +312,7 @@ export const signInWithVerifiedEmailThroughCore = ({
         expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: pairingTimeoutMilliseconds })
       );
       expect(page.url()).not.toContain(proof);
-      expect(
-        yield* Effect.tryPromise(() =>
-          page.evaluate(() => localStorage.length + sessionStorage.length)
-        )
-      ).toBe(0);
+      expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
     })
   );
 

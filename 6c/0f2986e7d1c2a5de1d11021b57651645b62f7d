@@ -1,0 +1,48 @@
+apps/web/e2e/transaction-pagination.spec.ts
+  s_617e4709660962::t_0133c5b2f0f7d9 168-176,178-187,189-229,233-234,238-241,619
+  s_617e4709660962::t_c2e2271ef0b02d 230-232,235-237
+  s_617e4709660962::t_0013e9e6c07c27 517,540
+  s_617e4709660962::t_6b26f554c512e9 165-167,177,188
+apps/web/src/features/transactions/privacy-view.tsx
+  s_617e4709660962::t_02b7095b853bc2 65
+apps/web/src/features/transactions/workspace.tsx
+  s_617e4709660962::t_02b7095b853bc2 45
+  s_617e4709660962::t_bf51a3ecad6349 727-728,730
+  s_617e4709660962::t_c2e2271ef0b02d 724-726,729,731-734,737
+apps/web/ARCHITECTURE.md
+  s_617e4709660962::t_94834f32c078a2 106-108
+apps/web/src/transport/client.ts
+  s_617e4709660962::t_579652af1ea627 46
+apps/web/e2e/transactions-approved.spec.ts
+  s_617e4709660962::t_0133c5b2f0f7d9 487-497,501-536
+  s_617e4709660962::t_74172ac814db20 463-486,498-500
+apps/web/src/features/transactions/history.ts
+  s_617e4709660962::t_e159fa23a9d8ac 154
+  s_617e4709660962::t_3e5c184f4fa520 145-151,159-162,164-167,171-174,205,215
+  s_617e4709660962::t_62bf3be3da9332 163
+  s_617e4709660962::t_74172ac814db20 140-144,152-153,155-158,168-170
+apps/web/src/features/transactions/list-feature.tsx
+  s_617e4709660962::t_579652af1ea627 207,219,228,273,477,486
+  s_617e4709660962::t_bf51a3ecad6349 230,232,236
+  s_617e4709660962::t_02b7095b853bc2 422-423
+  s_617e4709660962::t_74172ac814db20 18-24,229,231,233-235,237
+apps/web/src/features/transactions/corrections.ts
+  s_617e4709660962::t_579652af1ea627 10,49,192,194-198
+  s_617e4709660962::t_6aca69f044393a 199,237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6c0f2986e7d1c2a5de1d11021b57651645b62f7d",
+  "prompts": {},
+  "sessions": {
+    "s_617e4709660962": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d57bef93d808",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

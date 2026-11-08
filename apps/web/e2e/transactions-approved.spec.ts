@@ -17,6 +17,10 @@ const identifierWidth = 12;
 const maximumSingleLineHeight = 24;
 const maximumControlAlignmentDifference = 1;
 const actionHitInset = 12;
+const compactViewportWidth = 320;
+const tabletViewportWidth = 768;
+const desktopViewportWidth = 1280;
+const fitsViewport = (): boolean => document.documentElement.scrollWidth <= window.innerWidth;
 const categories = [
   { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" },
   { id: "24000000-0000-4000-8000-000000000244", label: "Transporte" },
@@ -98,6 +102,45 @@ const installWorkspace = (
       )
     );
   });
+test("identifies each daily Currency and signed amount before and after filtering", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installWorkspace(page, [
+        { ...row(1), counterparty: "Moneda COP", money: { amount: "524000", currency: "COP" } },
+        { ...row(2), counterparty: "Moneda USD", money: { amount: "12.50", currency: "USD" } },
+      ]);
+      yield* wait(() => page.goto("/app/transactions"));
+      const totals = page.getByRole("list", { name: "Totales del día por moneda", exact: true });
+      yield* wait(() => expect(totals).toHaveText("COP -524.000,00USD -12,50"));
+      yield* wait(() =>
+        expect(totals.getByRole("listitem").filter({ hasText: "COP -524.000,00" })).toHaveText(
+          "COP -524.000,00"
+        )
+      );
+      yield* wait(() =>
+        expect(totals.getByRole("listitem").filter({ hasText: "USD -12,50" })).toHaveText(
+          "USD -12,50"
+        )
+      );
+      yield* wait(() =>
+        expect(
+          page.getByRole("button", { name: "Ver monto de Moneda USD: USD -12,50", exact: true })
+        ).toBeVisible()
+      );
+      for (const width of [compactViewportWidth, tabletViewportWidth, desktopViewportWidth]) {
+        yield* wait(() => page.setViewportSize({ width, height: 900 }));
+        yield* wait(() => expect(totals).toBeVisible());
+        expect(yield* wait(() => page.evaluate(fitsViewport))).toBe(true);
+      }
+      yield* wait(() =>
+        page.getByRole("searchbox", { name: "Buscar transacciones" }).fill("Moneda USD")
+      );
+      yield* wait(() => expect(totals).toHaveText("USD -12,50"));
+      yield* wait(() => expect(totals).not.toContainText("COP"));
+      yield* wait(() => page.getByRole("searchbox", { name: "Buscar transacciones" }).clear());
+      yield* wait(() => expect(totals).toHaveText("COP -524.000,00USD -12,50"));
+    })
+  ));
 const recordMutation = (
   page: Page,
   path: string,

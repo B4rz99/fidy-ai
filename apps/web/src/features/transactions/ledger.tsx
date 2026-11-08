@@ -33,7 +33,7 @@ import { RecordToolbar } from "@/ui/components/workspace-layout";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { CategoryVisual } from "@/ui/components/category-visual";
 import { DirectionIndicator } from "@/ui/components/icon-indicator";
-import { formatMoney } from "@/transport/money";
+import { formatMoneyWithCode } from "@/transport/money";
 import type { HistoryState } from "./history";
 import type { TransactionListRow } from "./presentation";
 
@@ -173,7 +173,7 @@ const TransactionAmount = ({
           !selection.ids.includes(row.id))
       }
       onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-      aria-label={`Ver monto de ${row.counterpartyLabel}`}
+      aria-label={`Ver monto de ${row.counterpartyLabel}: ${row.moneyText}`}
       title={row.transactionTypeLabel}
       className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
     >
@@ -254,25 +254,26 @@ const LedgerHeader = ({
     ))}
   </TableHeader>
 );
-const dailyTotals = (rows: ReadonlyArray<TransactionListRow>, locale: string): string =>
-  Array.from(new Set(rows.map((row) => row.money.currency)))
-    .map((currency) =>
-      formatMoney({
-        locale,
-        money: {
-          currency,
-          amount: BigDecimal.sumAll(
-            rows.flatMap((row) => {
-              if (row.money.currency !== currency) return [];
-              return [
-                row.direction === "inflow" ? row.money.amount : BigDecimal.negate(row.money.amount),
-              ];
-            })
-          ),
-        },
-      })
-    )
-    .join(" · ");
+const dailyTotals = (
+  rows: ReadonlyArray<TransactionListRow>,
+  locale: string
+): ReadonlyArray<string> =>
+  Array.from(new Set(rows.map((row) => row.money.currency))).map((currency) =>
+    formatMoneyWithCode({
+      locale,
+      money: {
+        currency,
+        amount: BigDecimal.sumAll(
+          rows.flatMap((row) => {
+            if (row.money.currency !== currency) return [];
+            return [
+              row.direction === "inflow" ? row.money.amount : BigDecimal.negate(row.money.amount),
+            ];
+          })
+        ),
+      },
+    })
+  );
 const sortValue = (sorting: SortingState): string =>
   Option.fromNullishOr(sorting[0]).pipe(
     Option.map((sort) => `${sort.id}:${sort.desc ? "desc" : "asc"}`),
@@ -444,14 +445,21 @@ const LedgerBody = ({
         <Fragment key={date}>
           <TableRow data-date-group="true">
             <TableCell colSpan={4}>
-              <div className="flex items-center justify-between gap-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
                 <span>{rows.find((row) => row.occurredOnText === date)?.dateLabel}</span>
-                <span className="tabular-nums">
+                <ul
+                  aria-label="Totales del día por moneda"
+                  className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums"
+                >
                   {dailyTotals(
                     rows.filter((row) => row.occurredOnText === date),
                     locale
-                  )}
-                </span>
+                  ).map((total) => (
+                    <li key={total} className="whitespace-nowrap">
+                      {total}
+                    </li>
+                  ))}
+                </ul>
               </div>
             </TableCell>
           </TableRow>

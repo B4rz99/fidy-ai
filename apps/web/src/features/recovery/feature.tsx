@@ -1,18 +1,11 @@
 import { BackupRecoveryRotationPresentation, type RotationState } from "./view";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Effect, Option, Redacted, Schema } from "effect";
-import type { Atom } from "effect/reactivity";
+import { Option } from "effect";
 import { type JSX, useState } from "react";
 import { type SensitiveClipboard, sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
-import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
-
-export type RotateBackupRecoveryCommand = Readonly<{
-  onRotated: (code: BackupRecoveryCode) => void;
-  onFailed: () => void;
-  onFreshSessionRequired: () => void;
-}>;
+import { type RotateBackupRecoveryCommand, makeRotateCommand } from "./command";
 
 type RotationViewProps = Readonly<{
   rotate: (command: RotateBackupRecoveryCommand) => void;
@@ -41,36 +34,11 @@ export const BackupRecoveryRotationView = ({
   return <BackupRecoveryRotationPresentation state={state} onStart={start} onCopy={copyCode} />;
 };
 
-const FreshSessionRequired = Schema.Struct({
-  error: Schema.Struct({ code: Schema.Literal("user_action_required") }),
-});
-
-const makeRotateCommand = (
-  apiClient: FidyClient
-): Atom.AtomResultFn<RotateBackupRecoveryCommand, void, never> =>
-  apiClient.runtime.fn<RotateBackupRecoveryCommand>()(
-    (command) =>
-      Effect.gen(function* () {
-        const client = yield* apiClient;
-        const response = yield* client.recovery.rotateBackupRecoveryCode();
-        yield* Effect.sync(() =>
-          command.onRotated(Redacted.value(response.data.backupRecoveryCode))
-        );
-      }).pipe(
-        Effect.catch((error) =>
-          Effect.sync(
-            Schema.is(FreshSessionRequired)(error)
-              ? command.onFreshSessionRequired
-              : command.onFailed
-          )
-        )
-      ),
-    { concurrent: false }
-  );
-
 export const BackupRecoveryFeature = (): JSX.Element => {
   const router = useRouter();
-  const [rotateAtom] = useState(() => makeRotateCommand(router.options.context.apiClient));
+  const [rotateAtom] = useState(() =>
+    makeRotateCommand({ apiClient: router.options.context.apiClient })
+  );
   const rotate = useAtomSet(rotateAtom);
   return (
     <SensitiveClipboardBoundary className={Option.none()} lifetime={sensitiveClipboardLifetime}>

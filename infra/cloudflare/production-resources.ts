@@ -42,7 +42,14 @@ const ProviderRefusal = Schema.Struct({
 
 const ExceptionName = Schema.Union([
   ProviderRefusal.fields._tag,
-  Schema.Literals(["SchemaError", "HttpClientError", "UnknownError", "TypeError", "RangeError"]),
+  Schema.Literals([
+    "SchemaError",
+    "HttpClientError",
+    "UnknownError",
+    "TypeError",
+    "RangeError",
+    "MigrationError",
+  ]),
 ]);
 
 const exceptionCategory = (error: unknown, failure: boolean): string => {
@@ -57,17 +64,32 @@ const exceptionCategory = (error: unknown, failure: boolean): string => {
   return failure ? "UnclassifiedFailure" : "UnclassifiedDefect";
 };
 
+const refusalCategory = (error: unknown, failure: boolean): string => {
+  const refusal = Schema.decodeUnknownOption(ProviderRefusal)(error);
+  if (Option.isNone(refusal)) return exceptionCategory(error, failure);
+  const { _tag, code } = refusal.value;
+  return code === undefined ? _tag : `${_tag}; code=${code}`;
+};
+
+const failureCategories = (value: unknown, failure: boolean): ReadonlyArray<string> => {
+  const details: string[] = [];
+  let error = value;
+  for (let depth = 0; depth < 4; depth++) {
+    const category = refusalCategory(error, failure);
+    if (depth === 0 || !category.startsWith("Unclassified")) details.push(category);
+    if (!(error instanceof Error) || error.cause === undefined) break;
+    error = error.cause;
+  }
+  return details;
+};
+
 export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
   const details = new Set<string>();
   for (const reason of cause.reasons.slice(0, maximumRefusalReasons)) {
     if (Cause.isInterruptReason(reason)) continue;
     const error = Cause.isFailReason(reason) ? reason.error : reason.defect;
-    const refusal = Schema.decodeUnknownOption(ProviderRefusal)(error);
-    if (Option.isSome(refusal)) {
-      const { _tag, code } = refusal.value;
-      details.add(code === undefined ? _tag : `${_tag}; code=${code}`);
-    } else {
-      details.add(exceptionCategory(error, Cause.isFailReason(reason)));
+    for (const category of failureCategories(error, Cause.isFailReason(reason))) {
+      details.add(category);
     }
   }
   const suffix = details.size === 0 ? "" : ` (${[...details].join(", ")})`;

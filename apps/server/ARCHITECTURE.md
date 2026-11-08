@@ -25,17 +25,6 @@ narrow Ingestion and maintenance capabilities. Infrastructure owns bindings, not
 Production Core uses default execution near the incoming request. Staging requires the exact
 Core version to omit placement metadata; live settings cannot establish a candidate's configuration.
 
-Core and its coordinators share one private `PROTECTED_STORAGE` binding. This Worker runs near the
-storage region and receives the existing SQL and bound values, not new feature queries. The original
-recovery guard reads R2 afresh and prepends its generation assertion in the same native D1 batch.
-Authorization, Consent, Audit, admission and feature SQL remain with their existing owners. The
-helper has only D1 and recovery-bucket bindings, no public route, provider credentials or coordinator.
-The native prepared-statement interface retains binding validation, Sessions, row access and native
-refusal causes. In-flight operations settle without automatic replay after uncertain transport outcomes.
-Request and response bodies are bounded; malformed or oversized exchanges fail closed. Receiver R2,
-D1 and SQL timings describe nested work inside the inclusive private roundtrip and must not be added
-to it. Entry points without the private binding retain the same local recovery guard.
-
 Core consumes build-generated hosted tool parameters instead of converting every operation to a
 provider schema at startup. Statement parsing loads its bundled CSV/XLSX implementation only after
 bounded source admission; ordinary API reads do not initialize those engines. Runtime authority,

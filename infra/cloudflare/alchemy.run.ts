@@ -367,7 +367,8 @@ export default Alchemy.Stack(
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
       },
     });
-    const protectedStorage = yield* Cloudflare.Worker("ProtectedStorage", {
+    // Retain during native-path promotion; remove after active Core no longer binds this helper.
+    yield* Cloudflare.Worker("ProtectedStorage", {
       main: "../../apps/server/cloudflare/protected-storage-worker.ts",
       observability: freeTierWorkerObservability,
       compatibility: { date: "2026-09-08" },
@@ -435,7 +436,6 @@ export default Alchemy.Stack(
         [productionTopology.core.d1Binding]: database,
         EMAIL_BUCKET: emailBucket,
         ERASURE_BUCKET: erasureBucket,
-        [productionTopology.protectedStorage.binding]: protectedStorage,
         ERASURE_REQUIRED: erasureRequired,
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,

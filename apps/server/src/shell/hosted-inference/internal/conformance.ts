@@ -1,3 +1,4 @@
+import { SubscriptionStatus } from "~/core/subscription/contract";
 import { BigDecimal, Brand, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import {
   CreateTransactionInput,
@@ -268,6 +269,7 @@ const verifyRecurringReadAnswer = (answer: unknown): Effect.Effect<void, HostedI
       Effect.mapError(conformanceFailure)
     );
     yield* requireTextEvidence(text, "activo");
+    yield* requireTextEvidence(text, "plan de prueba");
     yield* requireTextEvidence(text, "18 de octubre de 2026");
     if (
       /[`*]|^\s*[[{#]|\b(?:state|nextDate|unconfirmed)\b|no\s+(?:está|sigue)\s+activo|inactivo|sin confirmar|pausado|detenido|2026-09-18|18 de septiembre/imu.test(
@@ -449,6 +451,32 @@ export const verifyStructuredColombianSpanish = (
       Effect.asVoid
     );
 
+const subscriptionStatusCodec = Schema.toCodecJson(SubscriptionStatus);
+const representativeProStatus = Schema.decodeEffect(subscriptionStatusCodec)({
+  accessTier: "pro",
+  hasProGrant: true,
+  trialPeriod: { startedAt: "2026-08-01T00:00:00Z", endsAt: "2026-08-08T00:00:00Z" },
+  paidSubscription: null,
+  cancellation: null,
+  recentAttempts: [
+    {
+      status: "failed",
+      id: "00000000-0000-4000-8000-000000000001",
+      priceId: "00000000-0000-4000-8000-000000000002",
+      money: { amount: "9900", currency: "COP" },
+      billingPeriod: "weekly",
+      serviceMarket: "CO",
+      taxTreatment: "not-taxable",
+      timeZone: "America/Bogota",
+      createdAt: "2026-08-10T12:00:00Z",
+      failedAt: "2026-08-10T12:01:00Z",
+    },
+  ],
+}).pipe(
+  Effect.flatMap(Schema.encodeEffect(subscriptionStatusCodec)),
+  Effect.mapError(conformanceFailure)
+);
+
 const isFinishedReply = (answer: HostedTextResult): boolean =>
   answer.toolCalls.length === 0 && answer.finishReason === "stop";
 const maximumConversationalReplyLength = 500;
@@ -476,14 +504,7 @@ export const verifyConversationalSpanish = (
         outcome: {
           _tag: "Succeeded",
           output: {
-            data: {
-              accessTier: "pro",
-              hasProGrant: true,
-              trialPeriod: { startedAt: "2026-08-01T00:00:00Z", endsAt: "2026-08-08T00:00:00Z" },
-              paidSubscription: null,
-              cancellation: null,
-              recentAttempts: [],
-            },
+            data: yield* representativeProStatus,
             next: [],
           },
         },
@@ -495,7 +516,7 @@ export const verifyConversationalSpanish = (
     );
     if (
       !isFinishedReply(answer) ||
-      /[`*]|^\s*[[{#]|\b(?:ManualProGrant|hasProGrant|paidSubscription|API|JSON|UUID|ID)\b|[0-9a-f]{8}-[0-9a-f-]{27}|subscription\./imu.test(
+      /[`*]|^\s*[[{#]|\b(?:ManualProGrant|hasProGrant|paidSubscription|accessTier|trialPeriod|recentAttempts|cancellation|API|JSON|UUID|ID)\b|[0-9a-f]{8}-[0-9a-f-]{27}|subscription\.|intento.{0,40}(?:cobro|pago)|9[.,]900|10 de agosto/imu.test(
         text
       )
     ) {

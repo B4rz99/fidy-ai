@@ -1,0 +1,37 @@
+apps/web/src/ui/components/selection-scope-dialog.tsx
+  s_7cb4cb4652680a::t_17cc3ebabc4238 1-4,12-17,24-29,33,36-38,42-46
+  s_7cb4cb4652680a::t_06051b39e61d2a 5-11,18-23,30-32,34-35,39-41
+apps/web/src/features/needs-review/workspace.tsx
+  s_7cb4cb4652680a::t_06051b39e61d2a 6,278-293,295,297-316,345,348,355,382
+  s_7cb4cb4652680a::t_ae7429c1c4b760 294,296
+apps/web/src/features/transactions/workspace.tsx
+  s_7cb4cb4652680a::t_06051b39e61d2a 17,541,825-871,882,904
+.oxlintrc.json
+  s_7cb4cb4652680a::t_a6ecad1783b5d8 189
+apps/web/e2e/needs-review.spec.ts
+  s_7cb4cb4652680a::t_76288ed2f24860 1396-1398,1469-1512
+apps/web/e2e/transactions-approved.spec.ts
+  s_7cb4cb4652680a::t_a4d28468659ab1 796-798,800-804,825-860
+apps/web/src/features/needs-review/toolbar.tsx
+  s_7cb4cb4652680a::t_5ad1e67a3e403c 28
+apps/web/src/ui/components/selection-summary.tsx
+  s_7cb4cb4652680a::t_3c85c2121593c9 1,17,25,29-38,43,47,55,73,105-119
+apps/web/src/ui/pattern-reference.tsx
+  s_7cb4cb4652680a::t_ca74e1eb04d161 5,237,256-260,267-279,281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "30abd2f45449c0cd46751696038e5859acd312f4",
+  "prompts": {},
+  "sessions": {
+    "s_7cb4cb4652680a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d5670becfdd8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

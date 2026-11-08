@@ -1,0 +1,35 @@
+apps/web/src/transport/money.ts
+  s_ab3196562c6359::t_e3052b0d0d46f3 85-86,90,94,122
+  s_ab3196562c6359::t_cedfe7266882bc 82-84
+apps/web/src/features/transactions/presentation.ts
+  s_ab3196562c6359::t_b24902a8597fdf 2-3,125-134
+apps/web/src/transport/money.test.ts
+  s_ab3196562c6359::t_85f94865ac3bef 12-14
+apps/web/src/features/transactions/presentation.test.ts
+  s_ab3196562c6359::t_22cda760d61732 91,102
+apps/web/e2e/transactions-approved.spec.ts
+  s_ab3196562c6359::t_9399701893576e 68-75,77-78,87-88,92,94-95,97,101-106
+  s_ab3196562c6359::t_cedfe7266882bc 80-81,85-86,89-91,98-100
+  s_ab3196562c6359::t_9f82dec00a452d 82-83
+  s_ab3196562c6359::t_bc3a80463eee41 18-21,76,79,84,93,96
+apps/web/src/features/transactions/ledger.tsx
+  s_ab3196562c6359::t_9f82dec00a452d 36,176,448,457,461
+  s_ab3196562c6359::t_bc3a80463eee41 450,458,460,462
+  s_ab3196562c6359::t_cedfe7266882bc 257-276,451-453,459
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eb8392e1a663a6f4ec0b3f3c6d74570ba3f4b9fa",
+  "prompts": {},
+  "sessions": {
+    "s_ab3196562c6359": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-aea4-70a0-b358-7553b5215abb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

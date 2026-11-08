@@ -31,9 +31,21 @@ const ProviderRefusal = Schema.Struct({
     "UnownedResource",
     "MissingProviderError",
     "WorkerVersionConfigError",
+    "WorkerNotFound",
+    "WorkerVersionNotFound",
+    "WorkerPreviewConfigError",
+    "WorkerDomainConfigError",
   ]),
   code: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 999999 }))),
 });
+
+const exceptionCategory = (error: unknown, failure: boolean): string => {
+  if (Cause.isUnknownError(error)) return "UnknownError";
+  if (error instanceof TypeError) return "TypeError";
+  if (error instanceof RangeError) return "RangeError";
+  if (error instanceof Error) return "Error";
+  return failure ? "UnclassifiedFailure" : "UnclassifiedDefect";
+};
 
 export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
   const details = new Set<string>();
@@ -44,6 +56,8 @@ export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
     if (Option.isSome(refusal)) {
       const { _tag, code } = refusal.value;
       details.add(code === undefined ? _tag : `${_tag}; code=${code}`);
+    } else {
+      details.add(exceptionCategory(error, Cause.isFailReason(reason)));
     }
   }
   const suffix = details.size === 0 ? "" : ` (${[...details].join(", ")})`;

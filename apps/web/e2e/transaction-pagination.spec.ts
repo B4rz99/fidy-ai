@@ -260,8 +260,8 @@ for (const count of [0, pageSize, multiplePages]) {
           );
           yield* wait(() => expect(rows).toHaveCount(Math.min(loaded + pageSize, count)));
         }
-        expect(yield* wait(() => rows.allTextContents())).toEqual(
-          fixture.rows.map((row) => `${row.counterparty}${category.label}`)
+        expect(yield* wait(() => rows.getByText(/^Registro \d+$/u).allTextContents())).toEqual(
+          fixture.rows.map((row) => row.counterparty)
         );
         yield* wait(() =>
           expect(

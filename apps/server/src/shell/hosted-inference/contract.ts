@@ -351,7 +351,8 @@ export type HostedConformanceCheck =
   | "canonical_recurring_lifecycle"
   | "canonical_recurring_read"
   | "invalid_output_recovery"
-  | "structured_es_co";
+  | "structured_es_co"
+  | "conversational_es_co";
 
 /** Only a closed check and failure category may leave the live conformance boundary. */
 export type HostedConformanceFailure = Readonly<{

@@ -126,11 +126,13 @@ export const makeHostedSender = ({
     businessPhoneNumberId,
     text,
     correlationToken,
+    confirmation,
   }: Readonly<{
     recipient: WhatsAppBusinessScopedUserId;
     sandboxPhone: Option.Option<E164PhoneNumber>;
     businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
     text: TranscriptText;
+    confirmation: Parameters<WhatsAppDelivery["sendText"]>[0]["confirmation"];
     correlationToken: HostedDeliveryCorrelationToken;
   }>): ReturnType<WhatsAppDelivery["sendText"]> =>
     client.sendText({
@@ -138,6 +140,7 @@ export const makeHostedSender = ({
       destination: { recipient, sandboxPhone },
       text,
       opaqueCallbackData: Option.some(correlationToken),
+      confirmation,
     });
 };
 
@@ -171,6 +174,7 @@ export const makeVoiceUnavailableSender = (
     }>
   ): ReturnType<WhatsAppDelivery["sendText"]> =>
     client.sendText({
+      confirmation: Option.none(),
       businessPhoneNumberId: request.phoneNumberId,
       destination: {
         recipient: request.caller.businessScopedUserId,

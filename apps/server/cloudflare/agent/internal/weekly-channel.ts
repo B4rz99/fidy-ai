@@ -40,7 +40,7 @@ import {
   proactivityReminderReplyQuery,
   proactivityVerifiedDeliveryQuery,
   proactivityVerifiedTranscriptQuery,
-  readWeeklyReplyChoice,
+  readDisclosureReplyChoice,
   reconcileInsightStatus,
   reconcileProactivityStatus,
   reconcileWeeklyQuestion,
@@ -273,7 +273,7 @@ export const handleWeeklyChoice = (
       now: DateTime.makeUnsafe(now),
       timeZone: IanaTimeZone.make("America/Bogota"),
     };
-    const replyChoice = yield* readWeeklyReplyChoice({ db: environment.DB, proof, now });
+    const replyChoice = yield* readDisclosureReplyChoice({ db: environment.DB, proof, now });
     const choice = Option.getOrElse(replyChoice, () => proof.text);
     if (choice.startsWith("reminder:")) {
       const saved = yield* controlManualReminders({

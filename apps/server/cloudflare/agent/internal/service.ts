@@ -139,8 +139,10 @@ const sendWhatsAppAttempt = ({
   admission,
   text,
   correlationToken,
+  confirmation,
 }: Readonly<{
   sender: ReturnType<typeof makeHostedSender>;
+  confirmation: Parameters<ReturnType<typeof makeHostedSender>>[0]["confirmation"];
   admission: Pick<WhatsAppTurnAdmission, "bsuid" | "businessPhoneNumberId" | "sandboxPhone">;
   text: TranscriptText;
   correlationToken: HostedDeliveryCorrelationToken;
@@ -155,6 +157,7 @@ const sendWhatsAppAttempt = ({
       businessPhoneNumberId: admission.businessPhoneNumberId,
       text,
       correlationToken,
+      confirmation,
     })
   ).pipe(
     Effect.map((outcome) =>
@@ -207,6 +210,17 @@ const prepareWhatsAppExecution = (
     return Option.some({ inference: inference.value, sender, outbound });
   });
 
+type StartWhatsAppTurnInput = Readonly<{
+  db: D1Database;
+  bucket: Option.Option<R2Bucket>;
+  outbound: OutboundHttpService;
+  proof: WhatsAppTurnAdmission | WhatsAppDocumentAdmission;
+  inference: HostedInferenceService;
+  sender: ReturnType<typeof makeHostedSender>;
+  signal: AbortSignal;
+  scheduleRecovery: (dueAtMs: number) => Promise<void>;
+  onAdmitted: (turnId: TranscriptTurnId) => void;
+}>;
 const startWhatsAppTurn = ({
   db,
   proof,
@@ -217,17 +231,7 @@ const startWhatsAppTurn = ({
   onAdmitted,
   bucket,
   outbound,
-}: Readonly<{
-  db: D1Database;
-  bucket: Option.Option<R2Bucket>;
-  outbound: OutboundHttpService;
-  proof: WhatsAppTurnAdmission | WhatsAppDocumentAdmission;
-  inference: HostedInferenceService;
-  sender: ReturnType<typeof makeHostedSender>;
-  signal: AbortSignal;
-  scheduleRecovery: (dueAtMs: number) => Promise<void>;
-  onAdmitted: (turnId: TranscriptTurnId) => void;
-}>): ReturnType<typeof completeWhatsAppTurnWithAdmission> => {
+}: StartWhatsAppTurnInput): ReturnType<typeof completeWhatsAppTurnWithAdmission> => {
   const input: Parameters<typeof completeWhatsAppTurnWithAdmission>[0]["input"] = {
     db,
     subject: WhatsAppHostedSubject.make({
@@ -250,8 +254,14 @@ const startWhatsAppTurn = ({
     deliver: {
       _tag: "WhatsApp",
       contextualReplyQuery: contextualProactiveInsightQuery(proof),
-      send: ({ text, correlationToken }) =>
-        sendWhatsAppAttempt({ sender, admission: proof, text, correlationToken }),
+      send: ({ text, correlationToken, confirmation }) =>
+        sendWhatsAppAttempt({
+          sender,
+          admission: proof,
+          text,
+          correlationToken,
+          confirmation,
+        }),
     },
     signal,
     scheduleRecovery,
@@ -553,12 +563,13 @@ const runWhatsAppWork = (
               ...admission,
               userId: UserId.make(userId),
             }),
-            send: ({ text, correlationToken }) =>
+            send: ({ text, correlationToken, confirmation }) =>
               sendWhatsAppAttempt({
                 sender: prepared.value.sender,
                 admission,
                 text,
                 correlationToken,
+                confirmation,
               }),
           }),
         });

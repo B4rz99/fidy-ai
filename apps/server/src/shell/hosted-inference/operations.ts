@@ -12,6 +12,7 @@ import type {
 import {
   verifyCanonicalMutation,
   verifyCanonicalQuery,
+  verifyConversationalSpanish,
   verifyDateOnlyMutation,
   verifyInvalidOutputRecovery,
   verifyMutationMoney,
@@ -74,6 +75,7 @@ export const verifyHostedInferenceConformanceChecks = (
     Effect.andThen(check("canonical_date_only", verifyDateOnlyMutation(inference))),
     Effect.andThen(check("canonical_recurring_lifecycle", verifyRecurringLifecycle(inference))),
     Effect.andThen(check("invalid_output_recovery", verifyInvalidOutputRecovery(inference))),
-    Effect.andThen(check("structured_es_co", verifyStructuredColombianSpanish(inference)))
+    Effect.andThen(check("structured_es_co", verifyStructuredColombianSpanish(inference))),
+    Effect.andThen(check("conversational_es_co", verifyConversationalSpanish(inference)))
   );
 };

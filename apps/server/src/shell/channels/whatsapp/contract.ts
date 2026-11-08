@@ -1,3 +1,4 @@
+import { type HostedTurnConfirmation } from "~/shell/agent/contract";
 import {
   Data,
   type DateTime,
@@ -303,6 +304,7 @@ export type WhatsAppDelivery = {
     readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
     readonly destination: WhatsAppDestination;
     readonly text: TranscriptText;
+    readonly confirmation: Option.Option<typeof HostedTurnConfirmation.Type>;
     /** Opaque attempt correlation forwarded unchanged to lifecycle webhooks. */
     readonly opaqueCallbackData: Option.Option<
       DisclosureDeliveryCorrelationToken | HostedDeliveryCorrelationToken

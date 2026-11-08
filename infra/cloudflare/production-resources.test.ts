@@ -8,6 +8,38 @@ import { describe, expect } from "vitest";
 import { resourceFailureMessage } from "./production-resources";
 
 describe("resource release refusal diagnostics", () => {
+  it("retains a migration refusal and its provider cause after serialization", () => {
+    const wrapped = new Error("private migration text", {
+      cause: BadRequest.make({ message: "private provider refusal" }),
+    });
+    wrapped.name = "MigrationError";
+    const restored = Schema.decodeSync(Schema.Defect())(
+      Schema.encodeSync(Schema.Defect())(wrapped)
+    );
+    expect(resourceFailureMessage(Cause.fail(restored))).toBe(
+      "Alchemy resource operation failed (MigrationError, BadRequest); inspect release state."
+    );
+  });
+  it("bounds cause traversal and excludes private nested values", () => {
+    const cyclic = new Error("private text");
+    cyclic.cause = cyclic;
+    expect(resourceFailureMessage(Cause.fail(cyclic))).toBe(
+      "Alchemy resource operation failed (Error); inspect release state."
+    );
+    const nested = new Error("private text", {
+      cause: new Error("private proof", { cause: { _tag: "Forbidden", code: 10000 } }),
+    });
+    expect(resourceFailureMessage(Cause.fail(nested))).toBe(
+      "Alchemy resource operation failed (Error, Forbidden; code=10000); inspect release state."
+    );
+    const unknown = new Error("private text", {
+      cause: { _tag: "private-token", message: "private" },
+    });
+    expect(resourceFailureMessage(Cause.fail(unknown))).toBe(
+      "Alchemy resource operation failed (Error); inspect release state."
+    );
+  });
+
   it("retains a known provider category after error serialization drops its tag and code", () => {
     const error = BadRequest.make({ message: "Bearer private-token" });
     const serialized = Schema.encodeSync(Schema.Defect())(error);

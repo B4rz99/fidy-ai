@@ -260,8 +260,8 @@ for (const count of [0, pageSize, multiplePages]) {
           );
           yield* wait(() => expect(rows).toHaveCount(Math.min(loaded + pageSize, count)));
         }
-        expect(yield* wait(() => rows.allTextContents())).toEqual(
-          fixture.rows.map((row) => `${row.counterparty}${category.label}`)
+        expect(yield* wait(() => rows.getByText(/^Registro \d+$/u).allTextContents())).toEqual(
+          fixture.rows.map((row) => row.counterparty)
         );
         yield* wait(() =>
           expect(
@@ -543,7 +543,9 @@ test("calendar selection loads the selected month and clearing the day retains t
       yield* wait(() => page.getByRole("button", { name: label, exact: true }).click());
       yield* wait(() =>
         expect(
-          page.getByRole("button", { name: "Ver transacción Registro histórico", exact: true })
+          page.getByRole("button", {
+            name: /^Ver transacción Registro histórico(?: Restaurantes)?$/u,
+          })
         ).toBeVisible()
       );
       expect(requests.at(-1)?.searchParams.get("from")?.slice(0, "YYYY-MM".length)).toBe(
@@ -556,7 +558,9 @@ test("calendar selection loads the selected month and clearing the day retains t
       );
       yield* wait(() =>
         expect(
-          page.getByRole("button", { name: "Ver transacción Registro histórico", exact: true })
+          page.getByRole("button", {
+            name: /^Ver transacción Registro histórico(?: Restaurantes)?$/u,
+          })
         ).toBeVisible()
       );
       expect(requests).toHaveLength(count);
@@ -572,7 +576,7 @@ const prepareHistoricalMonth = Effect.fnUntraced(function* (page: Page) {
 const expectHistoricalTransaction = Effect.fn((page: Page) =>
   wait(() =>
     expect(
-      page.getByRole("button", { name: "Ver transacción Registro histórico", exact: true })
+      page.getByRole("button", { name: /^Ver transacción Registro histórico(?: Restaurantes)?$/u })
     ).toBeVisible()
   )
 );

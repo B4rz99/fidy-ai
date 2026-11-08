@@ -621,7 +621,8 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
     row-gap: 10px;
   }
 }
-[data-transaction-slot~="transaction-workspace"] button[aria-label^="Ver transacción"] {
+[data-transaction-slot~="transaction-workspace"]
+  [data-transaction-slot~="transaction-identity-control"] {
   font-size: 14px;
   font-weight: 400;
 }
@@ -697,7 +698,8 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
   }
 }
 @container ledger (width < 400px) {
-  [data-transaction-slot~="transaction-workspace"] button[aria-label^="Ver transacción"],
+  [data-transaction-slot~="transaction-workspace"]
+    [data-transaction-slot~="transaction-identity-control"],
   [data-transaction-slot~="transaction-workspace"]
     .transaction-ledger
     [data-slot="table-cell"]:last-child

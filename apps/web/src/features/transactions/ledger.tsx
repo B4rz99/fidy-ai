@@ -66,6 +66,13 @@ type LedgerProps = Readonly<{
     limit: number;
   }>;
 }>;
+const transactionAction = (
+  row: TransactionListRow,
+  selection: LedgerProps["selection"]
+): string => {
+  if (!selection.active) return "Ver transacción";
+  return `${selection.ids.includes(row.id) ? "Deseleccionar" : "Seleccionar"} transacción`;
+};
 const TransactionIdentity = ({
   row,
   selected,
@@ -90,10 +97,12 @@ const TransactionIdentity = ({
           type="button"
           disabled={disabled || (selection.active && atLimit)}
           onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-          aria-label={`Ver transacción ${row.counterpartyLabel}`}
+          aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
           aria-expanded={Option.contains(selected, row.id)}
+          data-transaction-slot="transaction-identity-control"
           className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         >
+          <span className="sr-only">{transactionAction(row, selection)} </span>
           <span className="transaction-identity-icon">
             <CategoryVisual label={row.categoryLabel} bubble large={false} />
           </span>
@@ -134,7 +143,8 @@ const TransactionClassification = ({
             !selection.ids.includes(row.id))
         }
         onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-        aria-label={`Ver tipo de ${row.counterpartyLabel}`}
+        aria-label={`${row.transactionTypeLabel}; ${transactionAction(row, selection)} ${row.counterpartyLabel}`}
+        aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
         className="flex w-full items-center gap-2 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         <DirectionIndicator inflow={row.direction === "inflow"} />
@@ -174,8 +184,8 @@ const TransactionAmount = ({
           !selection.ids.includes(row.id))
       }
       onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-      aria-label={`Ver monto de ${row.counterpartyLabel}: ${row.moneyText}`}
-      title={row.transactionTypeLabel}
+      aria-label={`${row.moneyText}, ${row.transactionTypeLabel}; ${transactionAction(row, selection)} ${row.counterpartyLabel}`}
+      aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
       className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
     >
       <span className="transaction-amount-direction inline-flex shrink-0 @min-[481px]/ledger:hidden">

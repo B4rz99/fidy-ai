@@ -83,8 +83,8 @@ const currencyAmount = ({
     whole === 0n && BigDecimal.isNegative(decimal) ? -0 : whole
   );
   const formatted = parts
-    .filter((part) => currencyDisplay !== "code" || part.type !== "currency")
     .map((part) => {
+      if (currencyDisplay === "code" && part.type === "currency") return "";
       if (part.type === "fraction") return fraction;
       return currencyDisplay === "code" && part.type === "literal"
         ? part.value.replaceAll(/\s/gu, "")

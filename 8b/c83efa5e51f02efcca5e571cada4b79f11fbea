@@ -1,0 +1,19 @@
+apps/web/src/ui/components/selection-scope-dialog.tsx
+  s_7cb4cb4652680a::t_e826aeb01f7de7 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8bc83efa5e51f02efcca5e571cada4b79f11fbea",
+  "prompts": {},
+  "sessions": {
+    "s_7cb4cb4652680a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d5670becfdd8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

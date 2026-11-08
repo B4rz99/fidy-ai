@@ -7,6 +7,7 @@ Run from the repository root with its frozen dependencies installed:
 
 ```sh
 node reports/performance/infra-topology-2026-11-08/native.mjs
+node reports/performance/infra-topology-2026-11-08/sustained.mjs
 bun reports/performance/infra-topology-2026-11-08/conventional.ts
 node reports/performance/infra-topology-2026-11-08/transport.mjs
 ```
@@ -43,7 +44,7 @@ expiry on the Worker, and cleanup with independent inventory verification. It bi
 application Worker, production bucket or customer data. Inspect the final inventory's cleanup
 verdict before considering the experiment complete. Do not deploy the broader native worker as
 an application. Hosted application/D1 experiments require the existing account-wide budget
-preflight; `budget-check.py` records that decision without weakening it.
+preflight; `budget-check.py` records that decision against actual Free-tier allowance.
 
 Generated measurements stay ignored. Publish dated evidence and remaining work to the linked
 GitHub issue. Keep this code on its prototype branch; do not merge it into production.

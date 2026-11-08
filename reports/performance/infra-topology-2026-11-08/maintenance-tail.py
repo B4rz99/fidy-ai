@@ -18,7 +18,7 @@ def work_metadata(value,depth=0):
     v=value.get(key)
     if type(v)in[int,float]and 0<=v<=1000000000:row[key]=v
    found.append(row)
-  for k in ['message','operation','logs','data']: 
+  for k in ['message','operation','logs','data']:
    if k in value:found+=work_metadata(value[k],depth+1)
  elif isinstance(value,list):
   for v in value[:100]:found+=work_metadata(v,depth+1)

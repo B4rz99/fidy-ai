@@ -15,7 +15,7 @@ const estimate = { rowsRead: 100_000, rowsWritten: 5_000 };
 const input = { accountId, nowEpochMs, observation, estimate };
 
 describe("account-wide Free D1 benchmark headroom", () => {
-  it("admits a bounded experiment while retaining production reserves", () => {
+  it("admits a bounded experiment within the actual allowance", () => {
     expect(assessFreeD1BenchmarkBudget(input)).toEqual({
       _tag: "Allowed",
       maximumRowsRead: 100_000,
@@ -49,23 +49,30 @@ describe("account-wide Free D1 benchmark headroom", () => {
       })
     ).toEqual({ _tag: "Refused", reason: "wrong_utc_day" });
   });
-  it.each([
-    { rowsRead: 100_001, rowsWritten: 1 },
-    { rowsRead: 1, rowsWritten: 5_001 },
-  ])("refuses an oversized experiment", (estimate) => {
-    expect(assessFreeD1BenchmarkBudget({ ...input, estimate })).toEqual({
-      _tag: "Refused",
-      reason: "experiment_too_large",
-    });
+  it("admits a larger experiment without an artificial per-run cap", () => {
+    expect(
+      assessFreeD1BenchmarkBudget({
+        ...input,
+        estimate: { rowsRead: 200_000, rowsWritten: 20_000 },
+      })
+    ).toEqual({ _tag: "Allowed", maximumRowsRead: 200_000, maximumRowsWritten: 20_000 });
   });
   it.each([
     { rowsRead: 2_400_001, rowsWritten: 0 },
-    { rowsRead: 0, rowsWritten: 45_001 },
-    { rowsRead: 890_181, rowsWritten: 107_974 },
-  ])("refuses spending production's reserve or an exhausted allowance", (counts) => {
+    { rowsRead: 0, rowsWritten: 60_647 },
+  ])("admits work beyond the former reserve boundary", (counts) => {
     expect(
       assessFreeD1BenchmarkBudget({ ...input, observation: { ...observation, ...counts } })
-    ).toEqual({ _tag: "Refused", reason: "production_reserve" });
+    ).toEqual({ _tag: "Allowed", maximumRowsRead: 100_000, maximumRowsWritten: 5_000 });
+  });
+  it.each([
+    { rowsRead: 4_900_001, rowsWritten: 0 },
+    { rowsRead: 0, rowsWritten: 95_001 },
+    { rowsRead: 890_181, rowsWritten: 107_974 },
+  ])("refuses work beyond the actual Free-tier allowance", (counts) => {
+    expect(
+      assessFreeD1BenchmarkBudget({ ...input, observation: { ...observation, ...counts } })
+    ).toEqual({ _tag: "Refused", reason: "allowance_exhausted" });
   });
   it.each([NaN, Infinity, -1, Number.MAX_SAFE_INTEGER + 1])(
     "refuses invalid native usage counts",

@@ -4,10 +4,6 @@ import { Clock, DateTime, Effect, Option, Schema } from "effect";
 export const freeD1BenchmarkLimits = {
   dailyReads: 5_000_000,
   dailyWrites: 100_000,
-  reservedReads: 2_500_000,
-  reservedWrites: 50_000,
-  experimentReads: 100_000,
-  experimentWrites: 5_000,
   observationAgeMs: 60_000,
 } as const;
 
@@ -35,14 +31,13 @@ type BudgetRefusal =
   | "invalid_observation"
   | "stale_observation"
   | "wrong_utc_day"
-  | "experiment_too_large"
-  | "production_reserve";
+  | "allowance_exhausted";
 export type D1BenchmarkBudgetDecision =
   | Readonly<{ _tag: "Refused"; reason: BudgetRefusal }>
   | Readonly<{ _tag: "Allowed"; maximumRowsRead: number; maximumRowsWritten: number }>;
 
 const isoDateLength = 10;
-/** A conservative preflight, not a reservation: unknown, stale or another account's usage refuses.
+/** Checks actual Free-tier allowance: unknown, stale or another account's usage refuses.
  * The caller must obtain fresh account-wide analytics, including deleted fixture databases, before
  * provisioning and enforce the admitted experiment ceiling against every native batch's metadata.
  */
@@ -76,18 +71,10 @@ const assessEstimate = ({
   estimate,
 }: typeof BudgetInput.Type): D1BenchmarkBudgetDecision => {
   if (
-    estimate.rowsRead > freeD1BenchmarkLimits.experimentReads ||
-    estimate.rowsWritten > freeD1BenchmarkLimits.experimentWrites
+    observation.rowsRead + estimate.rowsRead > freeD1BenchmarkLimits.dailyReads ||
+    observation.rowsWritten + estimate.rowsWritten > freeD1BenchmarkLimits.dailyWrites
   ) {
-    return { _tag: "Refused", reason: "experiment_too_large" };
-  }
-  if (
-    observation.rowsRead + estimate.rowsRead >
-      freeD1BenchmarkLimits.dailyReads - freeD1BenchmarkLimits.reservedReads ||
-    observation.rowsWritten + estimate.rowsWritten >
-      freeD1BenchmarkLimits.dailyWrites - freeD1BenchmarkLimits.reservedWrites
-  ) {
-    return { _tag: "Refused", reason: "production_reserve" };
+    return { _tag: "Refused", reason: "allowance_exhausted" };
   }
   return {
     _tag: "Allowed",

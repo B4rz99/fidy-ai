@@ -1,6 +1,7 @@
 import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
 import { Cause, Config, Data, Effect, Option, Schema } from "effect";
+import { HttpClientError } from "effect/http";
 import { releaseCommand } from "./production-release";
 
 class ResourceReleaseFailed extends Data.TaggedError("ResourceReleaseFailed")<{
@@ -9,6 +10,7 @@ class ResourceReleaseFailed extends Data.TaggedError("ResourceReleaseFailed")<{
 
 const Phase = Schema.Literals(["upload", "retire"]);
 const maximumRefusalReasons = 16;
+const maximumFailureFrames = 16;
 
 const ProviderRefusal = Schema.Struct({
   _tag: Schema.Literals([
@@ -40,11 +42,27 @@ const ProviderRefusal = Schema.Struct({
 });
 
 const exceptionCategory = (error: unknown, failure: boolean): string => {
+  if (Schema.isSchemaError(error)) return "SchemaError";
+  if (HttpClientError.isHttpClientError(error)) return "HttpClientError";
   if (Cause.isUnknownError(error)) return "UnknownError";
   if (error instanceof TypeError) return "TypeError";
   if (error instanceof RangeError) return "RangeError";
   if (error instanceof Error) return "Error";
   return failure ? "UnclassifiedFailure" : "UnclassifiedDefect";
+};
+
+const failureLocation = (error: unknown): Option.Option<string> => {
+  if (!(error instanceof Error) || error.stack === undefined) return Option.none();
+  for (const frame of error.stack.split("\n").slice(1, maximumFailureFrames + 1)) {
+    const location =
+      /^\s+at .+\/node_modules\/(?:alchemy\/src\/(?:Cloudflare\/Workers\/)?(WorkerProvider|Assets|Apply)|@distilled\.cloud\/(?:cloudflare|core)\/src\/(protocol|protocol-http))\.ts:(\d{1,5}):\d{1,4}\)?$/u.exec(
+        frame
+      );
+    if (location !== null) {
+      return Option.some(`${location[1] ?? location[2]}:${location[3]}`);
+    }
+  }
+  return Option.none();
 };
 
 export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
@@ -57,7 +75,13 @@ export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
       const { _tag, code } = refusal.value;
       details.add(code === undefined ? _tag : `${_tag}; code=${code}`);
     } else {
-      details.add(exceptionCategory(error, Cause.isFailReason(reason)));
+      const category = exceptionCategory(error, Cause.isFailReason(reason));
+      details.add(
+        Option.match(failureLocation(error), {
+          onNone: () => category,
+          onSome: (location) => `${category}; source=${location}`,
+        })
+      );
     }
   }
   const suffix = details.size === 0 ? "" : ` (${[...details].join(", ")})`;

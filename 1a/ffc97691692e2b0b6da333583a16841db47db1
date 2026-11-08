@@ -1,0 +1,25 @@
+apps/web/e2e/needs-review.spec.ts
+  s_7cb4cb4652680a::t_da919a6c3e1bb4 1478-1481
+apps/web/src/features/needs-review/toolbar.tsx
+  s_7cb4cb4652680a::t_8978ff6223878a 14,27,30
+apps/web/src/features/needs-review/view-navigation.tsx
+  s_7cb4cb4652680a::t_2a1906eb610acc 12,83
+apps/web/src/features/needs-review/workspace.tsx
+  s_7cb4cb4652680a::t_e5e3da06957102 20,218,224,288,290,303,308,333-340,365,378,391
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1affc97691692e2b0b6da333583a16841db47db1",
+  "prompts": {},
+  "sessions": {
+    "s_7cb4cb4652680a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d5670becfdd8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

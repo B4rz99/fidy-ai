@@ -78,6 +78,11 @@ it.each([
     delivered: "Tienes Pro. No hay una suscripción de pago que cancelar.",
   },
   {
+    generated:
+      '```json\n{"source":"transcript_assistant","text":"**Tienes Pro.** No hay una suscripción de pago que cancelar."}\n```',
+    delivered: "Tienes Pro. No hay una suscripción de pago que cancelar.",
+  },
+  {
     generated: `**CONFIR**MAR ${"a".repeat(64)}`,
     delivered:
       "No pude preparar esos cambios. Vuelve a pedirlos para revisarlos antes de confirmar.",

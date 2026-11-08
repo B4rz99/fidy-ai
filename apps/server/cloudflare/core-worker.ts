@@ -61,7 +61,6 @@ type CoreEnvironment = ProviderEnvironment &
       ERASURE_SUPPORT_AUDIENCE: string;
       ERASURE_REQUIRED: string;
       ERASURE_BUCKET: R2Bucket;
-      PROTECTED_STORAGE: Pick<Fetcher, "fetch">;
       BILLING_REFUND_WORKFLOW: Workflow;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;

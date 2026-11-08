@@ -878,7 +878,7 @@ test("changing the transaction month requires explicitly discarding a nonempty s
 test("a day filter confirms before replacing a located transaction selection", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* installWorkspace(page);
+      yield* installWorkspace(page, [row(1)], "native-date");
       yield* wait(() => page.goto(`/app/transactions?transaction=${first.id}`));
       yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
       const checkbox = page.getByRole("checkbox", { name: "Seleccionar Prueba 1", exact: true });

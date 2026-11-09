@@ -186,10 +186,11 @@ for (const scenario of [
   { binding: "none", status: 401, rechecks: 0 },
 ]) {
   it.effect(
-    `handles ${scenario.status} for ${scenario.binding} without changing request identity`,
+    `handles ${scenario.status} for ${scenario.binding} without replaying a mutation or changing request identity`,
     () => {
       const lifetime = new AbortController();
       const recheck = vi.fn();
+      const requests = vi.fn();
       return Effect.gen(function* () {
         const transport = HttpClient.makeWith<
           HttpClientError.HttpClientError,
@@ -198,6 +199,8 @@ for (const scenario of [
           never
         >(
           Effect.map((request) => {
+            requests();
+            expect(request.method).toBe("POST");
             expect(request.headers["fidy-session-binding"]).toBe(scenario.binding);
             return HttpClientResponse.fromWeb(
               request,
@@ -212,11 +215,12 @@ for (const scenario of [
             lifetime: { binding: scenario.binding, signal: lifetime.signal, recheck },
           })
         );
-        const reply = yield* Context.get(services, HttpClient.HttpClient).get(
-          "https://api.test.fidyapp.com/user",
+        const reply = yield* Context.get(services, HttpClient.HttpClient).post(
+          "https://api.test.fidyapp.com/transactions",
           { headers: { "Fidy-Session-Binding": "untrusted-override" } }
         );
         expect(reply.status).toBe(scenario.status);
+        expect(requests).toHaveBeenCalledOnce();
         expect(recheck).toHaveBeenCalledTimes(scenario.rechecks);
       }).pipe(Effect.scoped);
     }

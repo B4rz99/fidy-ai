@@ -274,6 +274,12 @@ lifetime, and a failed check blocks access. This distinguishes payment freshness
 session expiry without replaying a refused action. Canonical unauthenticated responses retain their
 explicit authentication-expiration policy, and every protected action keeps its server authority checks.
 
+A mismatched or unavailable binding aborts the original lifetime and its prepared work before
+expiry or reload-required presentation. Retired attachments admit no late bootstrap reply or wake
+hint. Disposal cancels that attachment's work; eligible repeated handoff reads remain restricted to
+the same owner, while canceled or foreign-owner work cannot become a new entry. Anonymous 401
+does not request binding validation.
+
 Provider web signup/login begins at `/login`, discoverable from the public site.
 The mounted Provider Authentication feature owns its private pairing proof, one-time recovery view,
 and provider popup. It uses the generated authentication client: accept the exact disclosure revision,

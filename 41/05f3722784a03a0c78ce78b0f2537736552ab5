@@ -1,0 +1,29 @@
+apps/server/package.json
+  s_617e4709660962::t_45733c3467ecdf 319,327,338
+apps/web/package.json
+  s_617e4709660962::t_bc2788878b691b 64
+bun.lock
+  s_617e4709660962::t_ad9fb91ab1d7eb 62,70,81,150,161,167,371,373,375,377,379,381,785,787,789,791,793,795,797,799,835,837,839,841,843,845,847,849,919,921,923,925,927,929,1575,2125,2127,2369
+infra/cloudflare/package.json
+  s_617e4709660962::t_d2409396aab4f0 20,26
+tools/depcruise/bun.lock
+  s_617e4709660962::t_517213d9b3a733 8,34,50
+tools/depcruise/package.json
+  s_617e4709660962::t_b32c56f8d9089e 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4105f3722784a03a0c78ce78b0f2537736552ab5",
+  "prompts": {},
+  "sessions": {
+    "s_617e4709660962": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d57bef93d808",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

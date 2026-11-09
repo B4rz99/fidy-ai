@@ -95,7 +95,6 @@ const beginReview = (
   });
 };
 
-/** Disclosure stays within this mounted view; only uncertain outcomes expose safe request facts. */
 export type PATCreationDisplay =
   | Extract<ManualPATCreationState, { _tag: "Editing" | "Issued" }>
   | Readonly<{ _tag: "Reviewing" | "Issuing"; grant: ReviewedManualPATGrant }>
@@ -223,14 +222,14 @@ const confirmPAT = (
   issue: Issue,
   clipboard: SensitiveClipboard
 ): void => {
-  const { owner: task, state: previous } = binding;
-  const { current, lifetime: owner, change } = task;
-  if (!owner.active || current.value !== previous || previous._tag !== "Reviewing") return;
-  const generation = owner.generation;
+  const { owner, state: previous } = binding;
+  const { current, lifetime, change } = owner;
+  if (!lifetime.active || current.value !== previous || previous._tag !== "Reviewing") return;
+  const generation = lifetime.generation;
   const { grant, requestId } = previous;
   const issuing = { _tag: "Issuing" as const, grant, requestId };
   const live = (): boolean =>
-    owner.active && owner.generation === generation && current.value === issuing;
+    lifetime.active && lifetime.generation === generation && current.value === issuing;
   change(issuing);
   const fail = (failure: IssuanceFailure): void => {
     if (!live()) return;
@@ -256,7 +255,7 @@ const confirmPAT = (
     deliver: (issued) => {
       if (!live()) return;
       change({ _tag: "Issued", issued });
-      clipboard.reveal(expireDisclosure({ owner: task, generation, patId: issued.pat.id }));
+      clipboard.reveal(expireDisclosure({ owner, generation, patId: issued.pat.id }));
     },
   }).then(
     () => fail({ _tag: "Uncertain" }),
@@ -270,6 +269,12 @@ const reviewDraft = ({ owner, state }: CreationBinding): void => {
     owner.change(beginReview(draft));
   }
 };
+const editingDraft = (draft: PATDraft): Extract<ManualPATCreationState, { _tag: "Editing" }> => ({
+  _tag: "Editing",
+  recipientLabel: draft.recipientLabel,
+  scopes: draft.scopes,
+  lifetimeDays: draft.lifetimeDays,
+});
 const prepareReview = ({ owner, state }: CreationBinding): void => {
   if (state._tag !== "Uncertain" && state._tag !== "Refused") return;
   if (
@@ -279,12 +284,7 @@ const prepareReview = ({ owner, state }: CreationBinding): void => {
   ) {
     return;
   }
-  owner.change({
-    _tag: "Editing",
-    recipientLabel: state.grant.recipientLabel,
-    scopes: state.grant.scopes,
-    lifetimeDays: state.grant.lifetimeDays,
-  });
+  owner.change(editingDraft(state.grant));
 };
 const creationActions = (
   binding: CreationBinding,
@@ -304,14 +304,9 @@ const creationActions = (
     edit: () => {
       if (!live()) return;
       if (state._tag === "Reviewing") {
-        change({
-          _tag: "Editing",
-          recipientLabel: state.grant.recipientLabel,
-          scopes: state.grant.scopes,
-          lifetimeDays: state.grant.lifetimeDays,
-        });
+        change(editingDraft(state.grant));
       } else if (state._tag === "IdentityConfirmation") {
-        change({ _tag: "Editing", ...state.draft });
+        change(editingDraft(state.draft));
       }
     },
     confirm: () => {
@@ -372,10 +367,9 @@ const mountIssuance =
   ): RefCallback<HTMLElement> =>
   (node) => {
     if (node === null) return;
-    const owner = lifetime;
-    owner.active = true;
-    if (!owner.initialized) {
-      owner.initialized = true;
+    lifetime.active = true;
+    if (!lifetime.initialized) {
+      lifetime.initialized = true;
       if (Option.isSome(initialDraft)) {
         change(beginReview({ _tag: "Editing", ...initialDraft.value }));
       }
@@ -383,8 +377,8 @@ const mountIssuance =
     const hide = clear;
     window.addEventListener("pagehide", hide);
     return (): void => {
-      owner.active = false;
-      owner.generation += 1;
+      lifetime.active = false;
+      lifetime.generation += 1;
       window.removeEventListener("pagehide", hide);
       if (current.value._tag === "Issued") clear();
     };

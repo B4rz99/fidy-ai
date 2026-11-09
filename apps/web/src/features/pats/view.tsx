@@ -326,7 +326,7 @@ const UncertainState = ({
   prepareAnother: () => void;
 }>): JSX.Element => (
   <section aria-label="Creación sin confirmar" className="flex min-w-0 flex-col gap-4">
-    <Alert variant="destructive">
+    <Alert variant="warning">
       <AlertTitle>No pudimos confirmar la creación</AlertTitle>
       <AlertDescription>
         El token puede haberse creado. No volveremos a enviar esta solicitud ni podremos recuperar

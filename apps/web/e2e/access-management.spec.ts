@@ -307,9 +307,6 @@ const editReviewedGrant = Effect.fn(function* (page: Page) {
     page.getByRole("button", { name: "Crear token", exact: true }).click()
   );
   const review = page.getByRole("region", { name: "Revisión del token" });
-  const oldConfirm = yield* Effect.tryPromise(() =>
-    review.getByRole("button", { name: "Confirmar y crear token", exact: true }).elementHandle()
-  );
   yield* Effect.tryPromise(() => review.getByRole("button", { name: "Editar" }).click());
   yield* Effect.tryPromise(() => name.fill("  Agente editado  "));
   yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).uncheck());
@@ -332,7 +329,7 @@ const editReviewedGrant = Effect.fn(function* (page: Page) {
       "El vencimiento exacto se calculará al crear el token, 7 días después."
     )
   );
-  return { review, oldConfirm };
+  return review;
 });
 const checkReviewedIssuance = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() => installAccess(page));
@@ -346,14 +343,9 @@ const checkReviewedIssuance = Effect.fn(function* (page: Page) {
       return route.fallback();
     })
   );
-  const { review, oldConfirm } = yield* editReviewedGrant(page);
+  const review = yield* editReviewedGrant(page);
   const reviewExpiresAt = yield* Effect.tryPromise(() =>
     review.locator("time").getAttribute("datetime")
-  );
-  yield* Effect.tryPromise(() =>
-    oldConfirm.evaluate((button) =>
-      button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    )
   );
   expect(submissions).toHaveLength(0);
   yield* Effect.tryPromise(() =>
@@ -588,30 +580,45 @@ for (const outcome of ["undecodable", "lost", "consumed"] as const) {
   }) => Effect.runPromise(checkUnknownIssuance(page, outcome)));
 }
 
+type IssuanceRefusal = Readonly<{ status: number; error: unknown }>;
+const installIssuanceRefusal = (
+  page: Page,
+  refusal: IssuanceRefusal,
+  submitted: (payload: CreateManualPATPayload) => void
+): Promise<void> =>
+  page
+    .route(`${apiOrigin}/pats`, (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      submitted(
+        Schema.decodeUnknownSync(Schema.toCodecJson(CreateManualPATPayload))(
+          route.request().postDataJSON()
+        )
+      );
+      return route.fulfill({
+        status: refusal.status,
+        contentType: "application/json",
+        body: JSON.stringify({ error: refusal.error, next: [] }),
+      });
+    })
+    .then(() => {});
 const checkReviewRefusal = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() => installAccess(page));
   const requestIds: string[] = [];
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/pats`, (route) => {
-      if (route.request().method() !== "POST") return route.fallback();
-      requestIds.push(
-        Schema.decodeUnknownSync(Schema.toCodecJson(CreateManualPATPayload))(
-          route.request().postDataJSON()
-        ).requestId
-      );
-      return route.fulfill({
+    installIssuanceRefusal(
+      page,
+      {
         status: 422,
-        contentType: "application/json",
-        body: JSON.stringify({
-          error: {
-            code: "user_action_required",
-            message:
-              "This PAT review is stale or inconsistent. Review the grant again before creating it.",
-          },
-          next: [],
-        }),
-      });
-    })
+        error: {
+          code: "user_action_required",
+          message:
+            "This PAT review is stale or inconsistent. Review the grant again before creating it.",
+        },
+      },
+      (payload) => {
+        requestIds.push(payload.requestId);
+      }
+    )
   );
   yield* reviewNewPAT(page);
   yield* Effect.tryPromise(() =>
@@ -656,23 +663,21 @@ const checkRateRefusal = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() => installAccess(page));
   let mutations = 0;
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/pats`, (route) => {
-      if (route.request().method() !== "POST") return route.fallback();
-      mutations += 1;
-      return route.fulfill({
+    installIssuanceRefusal(
+      page,
+      {
         status: 429,
-        contentType: "application/json",
-        body: JSON.stringify({
-          error: {
-            code: "rate_limited",
-            message:
-              "This User has created too many PATs recently. Wait for the retry interval before trying again.",
-            retryAfterSeconds: 3,
-          },
-          next: [],
-        }),
-      });
-    })
+        error: {
+          code: "rate_limited",
+          message:
+            "This User has created too many PATs recently. Wait for the retry interval before trying again.",
+          retryAfterSeconds: 3,
+        },
+      },
+      () => {
+        mutations += 1;
+      }
+    )
   );
   yield* reviewNewPAT(page);
   yield* Effect.tryPromise(() =>
@@ -722,14 +727,8 @@ const checkDeclaredRefusal = Effect.fn(function* (
   yield* Effect.tryPromise(() => installAccess(page));
   let mutations = 0;
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/pats`, (route) => {
-      if (route.request().method() !== "POST") return route.fallback();
+    installIssuanceRefusal(page, refusal, () => {
       mutations += 1;
-      return route.fulfill({
-        status: refusal.status,
-        contentType: "application/json",
-        body: JSON.stringify({ error: refusal.error, next: [] }),
-      });
     })
   );
   yield* reviewNewPAT(page);

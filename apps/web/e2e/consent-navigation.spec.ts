@@ -220,6 +220,13 @@ test("Upgrade keeps ordinary queries and payment controls behind its own pending
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
       );
+      yield* Effect.tryPromise(() => page.goto("/settings/privacy"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Privacidad", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status", { name: "Tu autorización está vigente." })).toBeVisible()
+      );
       const pending = Promise.withResolvers<Route>();
       const holdConsent = (route: Route): void => pending.resolve(route);
       yield* Effect.tryPromise(() => page.route(`${api}/web/consent`, holdConsent));

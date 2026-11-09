@@ -115,6 +115,7 @@ TransactionsPage.prepareEntry = ({
           }).catch(() => undefined),
         };
       }
+      return undefined;
     })
   );
 };

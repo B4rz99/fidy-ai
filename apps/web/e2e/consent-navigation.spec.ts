@@ -207,3 +207,46 @@ test("Transactions rechecks Consent before restoring editing and chat after leav
   request,
 }, information) =>
   Effect.runPromise(recheckConsent(page, request, information).pipe(Effect.scoped)));
+
+test("Upgrade keeps ordinary queries and payment controls behind its own pending Consent read", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInNavigationThroughCore({ page, request, identity: "navigationConsent" })
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+      );
+      const pending = Promise.withResolvers<Route>();
+      const holdConsent = (route: Route): void => pending.resolve(route);
+      yield* Effect.tryPromise(() => page.route(`${api}/web/consent`, holdConsent));
+      const ordinaryRequests: string[] = [];
+      page.on("request", (incoming) => {
+        const url = new URL(incoming.url());
+        if (
+          url.origin === api &&
+          url.pathname !== "/web/consent" &&
+          url.pathname !== "/web/session/binding"
+        ) {
+          ordinaryRequests.push(`${incoming.method()} ${url.pathname}`);
+        }
+      });
+      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      const consent = yield* Effect.tryPromise(() => pending.promise);
+      yield* Effect.tryPromise(() => expect(page.getByText("Cargando ofertas")).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: /^mensual\b/iu })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Abrir agente Fidy" })).toHaveCount(0)
+      );
+      expect(ordinaryRequests).toEqual([]);
+      yield* Effect.tryPromise(() => consent.continue());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: /^mensual\b/iu })).toBeVisible()
+      );
+    })
+  ));

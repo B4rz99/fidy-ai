@@ -1,17 +1,7 @@
-import {
-  PrivacyTransactionFeature,
-  TransactionCaptureFeature,
-  TransactionSearch,
-} from "@/features/transactions/feature";
+import { TransactionCaptureFeature, TransactionSearch } from "@/features/transactions/feature";
 import { Effect, Option, Schema } from "effect";
-import { AsyncResult } from "effect/reactivity";
 import { BudgetRoute, RecurringRoute } from "./destination-components";
-import { prepareQuery } from "@/transport/query-preparation";
 import { retainPreparedWorkspaceMetadata } from "@/transport/workspace-query";
-import {
-  consumeInitialTransactionConsent,
-  transactionEntryConsent,
-} from "@/session/transaction-entry";
 import { RecurringWorkspace, ReviewWorkspace } from "./workspace-components";
 import { NeedsReviewRoute } from "@/features/needs-review/feature";
 import { LoginSearch } from "@/session/login-destination";
@@ -273,46 +263,13 @@ const transactionsRoute = createRoute({
   loader: {
     staleReloadMode: "blocking",
     handler: ({ context, deps, preload, cause, abortController }) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          yield* Effect.tryPromise(() => Promise.resolve(TransactionListFeature.preload?.()));
-          if (!preload) {
-            const consent = transactionEntryConsent(context.webAuthClient);
-            const initial = consumeInitialTransactionConsent(context.registry);
-            yield* Effect.tryPromise(() =>
-              prepareQuery({
-                registry: context.registry,
-                query: consent,
-                options: {
-                  mode: initial || cause === "stay" ? "cached" : "fresh",
-                  signal: Option.some(abortController.signal),
-                },
-              })
-            );
-            const status = context.registry.get(consent);
-            if (AsyncResult.isSuccess(status) && status.value.status === "Revoked") {
-              yield* Effect.tryPromise(() => PrivacyTransactionFeature.preload());
-            }
-            if (
-              AsyncResult.isSuccess(status) &&
-              !status.waiting &&
-              status.value.status === "Granted"
-            ) {
-              const { TransactionsPage } = yield* Effect.tryPromise(
-                () => import("./transactions-page")
-              );
-              // Consent has completed; data preparation remains owned by this route signal.
-              return {
-                preparation: TransactionsPage.preloadData({
-                  search: deps,
-                  apiClient: context.apiClient,
-                  registry: context.registry,
-                  signal: abortController.signal,
-                }).catch(() => undefined),
-              };
-            }
-          }
-          return undefined;
+      import("./transactions-page").then(({ TransactionsPage }) =>
+        TransactionsPage.prepareEntry({
+          context,
+          search: deps,
+          preload,
+          cause,
+          signal: abortController.signal,
         })
       ),
   },

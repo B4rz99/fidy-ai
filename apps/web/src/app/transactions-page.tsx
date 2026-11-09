@@ -1,16 +1,26 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
-import { transactionEntryConsent } from "@/session/transaction-entry";
+import {
+  consumeInitialTransactionConsent,
+  transactionEntryConsent,
+} from "@/session/transaction-entry";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { Link, useRouter } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Link, type LoaderFnContext, useRouter } from "@tanstack/react-router";
+import { Effect, Option } from "effect";
+import { AsyncResult } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import type { ProcessingConsentStatus } from "@/transport/client";
 import { Button } from "@/ui/components/button";
 import { AccessRefused, SignedInContent } from "@/features/signed-in/feature";
 import { HostedAgentFeature } from "@/features/agent/feature";
-import { PrivacyTransactionFeature, TransactionListFeature } from "@/features/transactions/feature";
+import {
+  PrivacyTransactionFeature,
+  TransactionListFeature,
+  type TransactionSearch,
+} from "@/features/transactions/feature";
+import { preparationActive, prepareQuery } from "@/transport/query-preparation";
+import type { WebRouterContext } from "./router-context";
 
 // Fetch presentation with this route's code while its unchanged query owners check live access.
 TransactionListFeature.preload().catch(() => undefined);
@@ -60,3 +70,51 @@ export const TransactionsPage = (): JSX.Element => {
 };
 
 TransactionsPage.preloadData = TransactionListFeature.preloadData;
+
+/** Await entry authority; return ordinary preparation separately so it can finish after route reveal. */
+TransactionsPage.prepareEntry = ({
+  context,
+  search,
+  preload,
+  cause,
+  signal,
+}: Readonly<{
+  context: WebRouterContext;
+  search: TransactionSearch;
+  preload: boolean;
+  cause: LoaderFnContext["cause"];
+  signal: AbortSignal;
+}>): Promise<Readonly<{ preparation: Promise<void> }> | void> => {
+  if (preload || !preparationActive(signal)) return Promise.resolve();
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const consent = transactionEntryConsent(context.webAuthClient);
+      const initial = consumeInitialTransactionConsent(context.registry);
+      yield* Effect.tryPromise(() =>
+        prepareQuery({
+          registry: context.registry,
+          query: consent,
+          options: {
+            mode: initial || cause === "stay" ? "cached" : "fresh",
+            signal: Option.some(signal),
+          },
+        })
+      );
+      if (!preparationActive(signal)) return;
+      const status = context.registry.get(consent);
+      if (AsyncResult.isSuccess(status) && status.value.status === "Revoked") {
+        yield* Effect.tryPromise(() => PrivacyTransactionFeature.preload());
+      }
+      if (AsyncResult.isSuccess(status) && !status.waiting && status.value.status === "Granted") {
+        return {
+          preparation: TransactionsPage.preloadData({
+            search,
+            apiClient: context.apiClient,
+            registry: context.registry,
+            signal,
+          }).catch(() => undefined),
+        };
+      }
+    })
+  );
+};

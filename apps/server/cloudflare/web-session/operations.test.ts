@@ -54,7 +54,9 @@ it("issues one exact-User browser session under competing claims and never redis
       const db = yield* Effect.tryPromise(() => databases.acquire());
       const redeem = yield* readyPairing(db);
       const responses = yield* Effect.all([redeem(), redeem()], { concurrency: 2 });
-      expect(responses.map(({ status }) => status).sort()).toEqual([200, 400]);
+      expect(responses.map(({ status }) => status).sort((left, right) => left - right)).toEqual([
+        200, 400,
+      ]);
       const winner = responses.find(({ status }) => status === 200);
       const cookie = winner?.headers.get("set-cookie")?.split(";")[0];
       expect(cookie).toBeDefined();

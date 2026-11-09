@@ -189,6 +189,10 @@ native receipt can settle its per-provider-attempt review. Original accepted-cha
 Onboarding composes owner preparations in one D1 unit with exact originating proof consumption.
 Returning authentication preserves established User identity and creation facts. Browser Login alone
 establishes a WebSession with the browser's private verifier.
+Browser Login owns pairing order through immutable native insertion rowids. Every approval owner
+rechecks its candidate against the same User's live ready pairing in its guarded write; only a newer
+candidate can replace it. Supersession invalidates the replaced ready pairing in that same native
+unit, including rollback with the originating proof. Creation alone does not supersede approval.
 See [ADR 0009](../../docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.md) and the
 [browser authentication feature](../web/src/features/provider-authentication/FEATURE.md).
 

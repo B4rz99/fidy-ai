@@ -28,5 +28,8 @@ export const prepareRecoveryApproval = ({
     .prepare(`UPDATE browser_login_pairings SET state = 'ready',
       user_id = (SELECT userId FROM (${subject.sql}))
       WHERE id = (SELECT pairingId FROM (${subject.sql}))
-        AND state = 'pending_approval' AND expires_at_ms > ?`)
-    .bind(...subject.params, ...subject.params, current);
+        AND state = 'pending_approval' AND expires_at_ms > ? AND wrong_attempts < 5
+        AND NOT EXISTS (SELECT 1 FROM browser_login_pairings AS ready
+          WHERE ready.state = 'ready' AND ready.user_id = (SELECT userId FROM (${subject.sql}))
+            AND ready.expires_at_ms > ? AND ready.rowid >= browser_login_pairings.rowid)`)
+    .bind(...subject.params, ...subject.params, current, ...subject.params, current);

@@ -4,7 +4,15 @@ import { afterAll, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { retainedRecoveryPairingsQuery } from "../recovery/operations";
 import { makeWebSessionErasureStores } from "../web-session/runtime";
-import { startBrowserPairing } from "./operations";
+import {
+  approveBrowserPairing,
+  prepareProvedBrowserPairingApproval,
+  prepareRecoveryBrowserPairingApproval,
+  redeemBrowserPairing,
+  startBrowserPairing,
+} from "./operations";
+import { DisclosureSnapshot } from "../../src/shell/consent/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { handleWebAuthentication } from "../web-authentication/operations";
 import {
   DisabledTelemetryResource,
@@ -19,6 +27,375 @@ const support = {
   CLOUDFLARE_ACCESS_AUDIENCE: "support",
 };
 const pairingId = "30000000-0000-4000-8000-000000000001";
+
+const approvalTime = 1_800_000_000_000;
+const approvalUser = "10000000-0000-4000-8000-000000000001";
+const newerPairing = "30000000-0000-4000-8000-000000000002";
+const approvalFixture = (): Promise<D1Database> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* Effect.tryPromise(() => installTestSchema({ db }));
+      const disclosure = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
+        currentDisclosureFor()
+      );
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?,'portfolio','CO.Person1',?)"
+            )
+            .bind(approvalUser, approvalTime, approvalTime),
+          db
+            .prepare(
+              "INSERT INTO consent_history(record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES('processing_grant','grant',?,?,'disclosed','accepted',?,?)"
+            )
+            .bind(approvalUser, disclosure, approvalTime, approvalTime),
+          ...[pairingId, newerPairing].map((id, index) =>
+            db
+              .prepare(
+                "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,created_at_ms,expires_at_ms) VALUES(?,?,randomblob(32),?,?)"
+              )
+              .bind(
+                id,
+                index === 0 ? "BCDF-GHJK" : "BCDF-GHJL",
+                approvalTime,
+                approvalTime + 600_000
+              )
+          ),
+        ])
+      );
+      return db;
+    })
+  );
+const approvalStatement = (
+  db: D1Database,
+  id: string,
+  { channel, current = approvalTime }: Readonly<{ channel: "proved" | "recovery"; current: number }>
+): D1PreparedStatement =>
+  channel === "proved"
+    ? prepareProvedBrowserPairingApproval({
+        db,
+        pairingId: id,
+        subject: { sql: "SELECT ? AS userId", params: [approvalUser] },
+        current,
+      })
+    : prepareRecoveryBrowserPairingApproval({
+        db,
+        subject: { sql: "SELECT ? AS pairingId,? AS userId", params: [id, approvalUser] },
+        current,
+      });
+const approvePairing = (
+  db: D1Database,
+  id: string,
+  {
+    channel,
+    current = approvalTime,
+  }: Readonly<{ channel: "proved" | "recovery" | "whatsapp"; current: number }>
+): Promise<boolean> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      return channel === "whatsapp"
+        ? (yield* approveBrowserPairing({
+            db,
+            input: {
+              portfolioId: "portfolio",
+              bsuid: "CO.Person1",
+              messageId: id,
+              publicCode: id === pairingId ? "BCDF-GHJK" : "BCDF-GHJL",
+              occurredAtMs: current,
+              receivedAtMs: current,
+            },
+          })).status === 200
+        : (yield* Effect.tryPromise(() => approvalStatement(db, id, { channel, current }).run()))
+            .meta.changes > 0;
+    })
+  );
+const pairingStates = (db: D1Database): Promise<ReadonlyArray<unknown>> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      return (yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT id,state,user_id AS userId FROM browser_login_pairings ORDER BY rowid")
+          .all()
+      )).results;
+    })
+  );
+
+it.each(["proved", "recovery", "whatsapp"] as const)(
+  "%s approval refuses older work after a newer pairing is ready",
+  (channel) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => approvalFixture());
+        expect(
+          yield* Effect.tryPromise(() =>
+            approvePairing(db, newerPairing, { channel, current: approvalTime })
+          )
+        ).toBe(true);
+        expect(
+          yield* Effect.tryPromise(() =>
+            approvePairing(db, pairingId, { channel, current: approvalTime })
+          )
+        ).toBe(false);
+        expect(yield* Effect.tryPromise(() => pairingStates(db))).toEqual([
+          { id: pairingId, state: "pending_approval", userId: null },
+          { id: newerPairing, state: "ready", userId: approvalUser },
+        ]);
+      })
+    )
+);
+
+it.each(["proved", "recovery", "whatsapp"] as const)(
+  "%s approval supersedes older ready work without creating a session",
+  (channel) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => approvalFixture());
+        expect(
+          yield* Effect.tryPromise(() =>
+            approvePairing(db, pairingId, { channel, current: approvalTime })
+          )
+        ).toBe(true);
+        expect(
+          yield* Effect.tryPromise(() =>
+            approvePairing(db, newerPairing, { channel, current: approvalTime })
+          )
+        ).toBe(true);
+        expect(yield* Effect.tryPromise(() => pairingStates(db))).toEqual([
+          { id: pairingId, state: "invalidated", userId: null },
+          { id: newerPairing, state: "ready", userId: approvalUser },
+        ]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS total FROM web_sessions").first()
+          )
+        ).toEqual({
+          total: 0,
+        });
+      })
+    )
+);
+
+it("rolls supersession back with a rejected proof in the same native batch", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => approvalFixture());
+      expect(
+        yield* Effect.tryPromise(() =>
+          approvePairing(db, pairingId, { channel: "proved", current: approvalTime })
+        )
+      ).toBe(true);
+      yield* Effect.tryPromise(() =>
+        expect(
+          db.batch([
+            approvalStatement(db, newerPairing, { channel: "proved", current: approvalTime }),
+            db.prepare("INSERT INTO sql_assertions(scope,accepted) VALUES('refused-proof',0)"),
+          ])
+        ).rejects.toThrow()
+      );
+      expect(yield* Effect.tryPromise(() => pairingStates(db))).toEqual([
+        { id: pairingId, state: "ready", userId: approvalUser },
+        { id: newerPairing, state: "pending_approval", userId: null },
+      ]);
+      const proofBatch = yield* Effect.tryPromise(() =>
+        db.batch([
+          approvalStatement(db, newerPairing, { channel: "proved", current: approvalTime }),
+          db.prepare(
+            "INSERT INTO sql_assertions(scope,accepted) VALUES('accepted-proof',changes()=1)"
+          ),
+          db.prepare("DELETE FROM sql_assertions WHERE scope='accepted-proof'"),
+        ])
+      );
+      expect(proofBatch[1]?.meta.changes).toBe(1);
+      expect(yield* Effect.tryPromise(() => pairingStates(db))).toEqual([
+        { id: pairingId, state: "invalidated", userId: null },
+        { id: newerPairing, state: "ready", userId: approvalUser },
+      ]);
+    })
+  ));
+
+it.each(["proved", "recovery", "whatsapp"] as const)(
+  "%s approval refuses the original deadline without replacing ready work",
+  (channel) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => approvalFixture());
+        expect(
+          yield* Effect.tryPromise(() =>
+            approvePairing(db, pairingId, { channel, current: approvalTime })
+          )
+        ).toBe(true);
+        expect(
+          yield* Effect.tryPromise(() =>
+            approvePairing(db, newerPairing, { channel, current: approvalTime + 600_000 })
+          )
+        ).toBe(false);
+        expect(yield* Effect.tryPromise(() => pairingStates(db))).toEqual([
+          { id: pairingId, state: "ready", userId: approvalUser },
+          { id: newerPairing, state: "pending_approval", userId: null },
+        ]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS total FROM web_sessions").first()
+          )
+        ).toEqual({
+          total: 0,
+        });
+      })
+    )
+);
+
+it("keeps another User's ready pairing and does not supersede on creation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => approvalFixture());
+      expect(
+        yield* Effect.tryPromise(() =>
+          approvePairing(db, pairingId, { channel: "proved", current: approvalTime })
+        )
+      ).toBe(true);
+      expect(
+        (yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }))
+          .status
+      ).toBe(200);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state,user_id AS userId FROM browser_login_pairings WHERE id=?")
+            .bind(pairingId)
+            .first()
+        )
+      ).toEqual({ state: "ready", userId: approvalUser });
+      const otherUser = "10000000-0000-4000-8000-000000000002";
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?)"
+          )
+          .bind(otherUser, approvalTime)
+          .run()
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          prepareProvedBrowserPairingApproval({
+            db,
+            pairingId: newerPairing,
+            subject: { sql: "SELECT ? AS userId", params: [otherUser] },
+            current: approvalTime,
+          }).run()
+        )).meta.changes
+      ).toBe(1);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state,user_id AS userId FROM browser_login_pairings WHERE id=?")
+            .bind(pairingId)
+            .first()
+        )
+      ).toEqual({ state: "ready", userId: approvalUser });
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare("UPDATE browser_login_pairings SET rowid=rowid+100 WHERE id=?")
+            .bind(pairingId)
+            .run()
+        ).rejects.toThrow()
+      );
+    })
+  ));
+
+const redeem = (db: D1Database, privateVerifier: string): Promise<Response> =>
+  Effect.runPromise(
+    redeemBrowserPairing({
+      db,
+      request: new Request("https://api.fidyapp.com/web/pairings/redeem", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pairingId, privateVerifier }),
+      }),
+    })
+  );
+
+it("invalidates the fifth wrong verifier without pacing it or extending expiry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => approvalFixture());
+      expect(
+        yield* Effect.tryPromise(() =>
+          approvePairing(db, pairingId, { channel: "proved", current: approvalTime })
+        )
+      ).toBe(true);
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        const response = yield* Effect.tryPromise(() => redeem(db, "r".repeat(43)));
+        expect(response.status).toBe(400);
+        expect(response.headers.get("retry-after")).toBeNull();
+        expect(response.headers.get("set-cookie")).toBeNull();
+      }
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT state,wrong_attempts,user_id AS userId,expires_at_ms FROM browser_login_pairings WHERE id=?"
+            )
+            .bind(pairingId)
+            .first()
+        )
+      ).toEqual({
+        state: "invalidated",
+        wrong_attempts: 5,
+        userId: null,
+        expires_at_ms: approvalTime + 600_000,
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS total FROM web_sessions").first()
+        )
+      ).toEqual({
+        total: 0,
+      });
+    })
+  ));
+
+it("advertises bounded slowdown for an early valid poll without renewing its deadline", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => approvalFixture());
+      const privateVerifier = "q".repeat(43);
+      const digest = new Uint8Array(
+        yield* Effect.tryPromise(() =>
+          crypto.subtle.digest("SHA-256", new TextEncoder().encode(privateVerifier))
+        )
+      );
+      const current = yield* Clock.currentTimeMillis;
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE browser_login_pairings SET verifier_digest=?,last_poll_at_ms=?,minimum_poll_interval_seconds=60 WHERE id=?"
+          )
+          .bind(digest, current, pairingId)
+          .run()
+      );
+      const response = yield* Effect.tryPromise(() => redeem(db, privateVerifier));
+      expect(response.status).toBe(429);
+      expect(Number(response.headers.get("retry-after"))).toBeLessThanOrEqual(60);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT state,wrong_attempts,minimum_poll_interval_seconds,expires_at_ms FROM browser_login_pairings WHERE id=?"
+            )
+            .bind(pairingId)
+            .first()
+        )
+      ).toEqual({
+        state: "pending_approval",
+        wrong_attempts: 0,
+        minimum_poll_interval_seconds: 60,
+        expires_at_ms: approvalTime + 600_000,
+      });
+    })
+  ));
 
 it("cancels a stalled browser redemption body when authentication is interrupted", () =>
   Effect.runPromise(

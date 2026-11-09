@@ -267,7 +267,7 @@ it.live(
         expect(router.state.location.pathname).toBe("/settings/privacy");
         expect(requests.every((request) => request.method === "GET")).toBe(true);
       } finally {
-        Effect.runSync(Deferred.succeed(release, undefined));
+        yield* Deferred.succeed(release, undefined);
         registry.dispose();
       }
     })

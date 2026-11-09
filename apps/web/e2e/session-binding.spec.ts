@@ -168,7 +168,7 @@ test("retains an unsaved draft while coalescing same-cookie resume checks", ({ p
       }
       yield* Effect.tryPromise(() => expect(draft).toBeVisible());
       yield* Effect.tryPromise(() => expect(draft).toHaveValue("Same session private draft"));
-      expect(yield* Effect.tryPromise(() => retainedInput?.evaluate(isConnected))).toBe(true);
+      expect(yield* Effect.tryPromise(() => retainedInput.evaluate(isConnected))).toBe(true);
       expect(yield* Effect.tryPromise(() => draft.evaluate(isInert))).toBe(false);
       expect(held.reads()).toBe(1);
     })

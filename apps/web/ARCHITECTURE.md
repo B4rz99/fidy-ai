@@ -383,6 +383,16 @@ older actions, even when the choices later match. Confirmation synchronously adm
 review before canonical work starts. Review expiration remains an estimate; the server grants the
 full selected lifetime from issuance and retains its independent review-age and authority guards.
 
+Manual issuance distinguishes decoded refusal from an unknown outcome. Refused reviews require a
+new review, Consent refusal leads to Privacy, and rate refusal retains its original retry deadline.
+Lost, undecodable, unavailable or consumed-request responses retain the reviewed facts and request
+reference without replay or bearer retrieval. Existing token listing and revocation remain available
+for inspection; a metadata read cannot establish the original command's outcome. Preparing another
+grant is an explicit acknowledged action that returns choices to editing and allocates a new request
+only after another review. Disclosure and clipboard acknowledgements remain bound to their current
+mounted owner and original reveal deadline; leaving or clearing fences later callbacks. The existing
+canonical transport continues to own request timing and safe failure observations.
+
 Sensitive-operation confirmation under #1564 uses a server-owned native MCP form in supported interactive MCP clients, not a web feature or browser handoff. The server owns the exact effect disclosure,
 intent binding and atomic single-use consumption; it trusts the authorized client's response
 without independently attesting human presence, as explicitly accepted in ADR 0033. Unsupported

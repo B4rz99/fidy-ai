@@ -8,9 +8,9 @@ import {
   type FidyClient,
   type IssuedPAT,
   type ManualPATGrantInput,
-  ManualPATReauthenticationRequired,
   ManualPATRequestId,
   type ManualPATRequestId as ManualPATRequestIdType,
+  type PATId,
   type PATLifetimeDays,
   PATRecipientLabel,
   type PATScope,
@@ -21,6 +21,13 @@ import { type PATDraft, preservePATDraft } from "./reauthentication-draft";
 import { activePATReactivityKey } from "./presentation";
 
 type PATScopeValue = PATScope;
+type PATRefusal =
+  | Readonly<{ _tag: "ReviewExpired" | "Input" | "Consent" | "Authority" }>
+  | Readonly<{ _tag: "RateLimited"; retryAt: DateTime.Utc }>;
+type IssuanceFailure =
+  | Readonly<{ _tag: "Uncertain" }>
+  | Readonly<{ _tag: "IdentityConfirmation"; userId: string }>
+  | Readonly<{ _tag: "Refused"; refusal: PATRefusal }>;
 export type ReviewedManualPATGrant = ManualPATGrantInput &
   Readonly<{ reviewExpiresAt: DateTime.Utc }>;
 type ManualPATCreationState =
@@ -41,7 +48,7 @@ type ManualPATCreationState =
       requestId: ManualPATRequestIdType;
     }>
   | Readonly<{
-      _tag: "IssueFailed";
+      _tag: "Uncertain";
       grant: ReviewedManualPATGrant;
       requestId: ManualPATRequestIdType;
     }>
@@ -50,6 +57,12 @@ type ManualPATCreationState =
       userId: string;
       draft: PATDraft;
       preservationFailed: boolean;
+    }>
+  | Readonly<{
+      _tag: "Refused";
+      grant: ReviewedManualPATGrant;
+      requestId: ManualPATRequestIdType;
+      refusal: PATRefusal;
     }>
   | Readonly<{ _tag: "Issued"; issued: IssuedPAT }>;
 
@@ -82,18 +95,18 @@ const beginReview = (
   });
 };
 
-/** Presentation receives no request identity or User-bound handoff data. */
+/** Disclosure stays within this mounted view; only uncertain outcomes expose safe request facts. */
 export type PATCreationDisplay =
   | Extract<ManualPATCreationState, { _tag: "Editing" | "Issued" }>
   | Readonly<{ _tag: "Reviewing" | "Issuing"; grant: ReviewedManualPATGrant }>
-  | Readonly<{ _tag: "IssueFailed" }>
+  | Extract<ManualPATCreationState, { _tag: "Uncertain" | "Refused" }>
   | Readonly<{ _tag: "IdentityConfirmation"; preservationFailed: boolean }>;
 export type PATCreationActions = Readonly<{
   update: (draft: Extract<ManualPATCreationState, { _tag: "Editing" }>) => void;
   review: () => void;
   edit: () => void;
   confirm: () => void;
-  retry: () => void;
+  prepareReview: () => void;
   confirmIdentity: () => void;
   reset: () => void;
   copy: (onCopied: () => void) => void;
@@ -102,8 +115,52 @@ type Issuance = Readonly<{
   grant: ManualPATGrantInput;
   requestId: ManualPATRequestIdType;
   deliver: (issued: IssuedPAT) => void;
-  fail: (userId: Option.Option<string>) => void;
+  fail: (failure: IssuanceFailure) => void;
 }>;
+type ManualPATError = Effect.Error<
+  ReturnType<Effect.Success<FidyClient>["pats"]["createManualPAT"]>
+>;
+type OrdinaryIssuanceError = Exclude<
+  ManualPATError,
+  { _tag: "ManualPATReauthenticationRequired" | "ManualPATIssuanceRateLimited" | "ResourceLimited" }
+>;
+const refusalTags: Readonly<
+  Record<OrdinaryIssuanceError["_tag"], Exclude<PATRefusal["_tag"], "RateLimited"> | "Uncertain">
+> = {
+  ManualPATReviewExpired: "ReviewExpired",
+  ValidationFailed: "Input",
+  ConsentRequired: "Consent",
+  UserActionRequired: "Consent",
+  Unauthenticated: "Authority",
+  ScopeMissing: "Authority",
+  HttpClientError: "Uncertain",
+  ManualPATIssuanceConsumed: "Uncertain",
+  PaywallRequired: "Uncertain",
+  QuotaExhausted: "Uncertain",
+  SchemaError: "Uncertain",
+  Unavailable: "Uncertain",
+};
+const classifyIssueError = (error: ManualPATError): IssuanceFailure => {
+  if (error._tag === "ManualPATReauthenticationRequired") {
+    return { _tag: "IdentityConfirmation", userId: error.error.userId };
+  }
+  if (error._tag === "ManualPATIssuanceRateLimited" || error._tag === "ResourceLimited") {
+    return {
+      _tag: "Refused",
+      refusal: {
+        _tag: "RateLimited",
+        retryAt: DateTime.addDuration(
+          Effect.runSync(DateTime.now),
+          Duration.seconds(error.error.retryAfterSeconds ?? 1)
+        ),
+      },
+    };
+  }
+  const refusal = refusalTags[error._tag];
+  return refusal === "Uncertain"
+    ? { _tag: "Uncertain" }
+    : { _tag: "Refused", refusal: { _tag: refusal } };
+};
 const issueCommand = (apiClient: FidyClient): Atom.AtomResultFn<Issuance, void, never> =>
   apiClient.runtime.fn<Issuance>()(
     (command) =>
@@ -116,17 +173,7 @@ const issueCommand = (apiClient: FidyClient): Atom.AtomResultFn<Issuance, void, 
           [activePATReactivityKey]
         );
         yield* Effect.sync(() => command.deliver(response.data));
-      }).pipe(
-        Effect.catch((error) =>
-          Effect.sync(() =>
-            command.fail(
-              Schema.is(ManualPATReauthenticationRequired)(error)
-                ? Option.some(error.error.userId)
-                : Option.none()
-            )
-          )
-        )
-      ),
+      }).pipe(Effect.catch((error) => Effect.sync(() => command.fail(classifyIssueError(error))))),
     { concurrent: false }
   );
 
@@ -135,8 +182,9 @@ const display = (state: ManualPATCreationState): PATCreationDisplay => {
     case "Reviewing":
     case "Issuing":
       return { _tag: state._tag, grant: state.grant };
-    case "IssueFailed":
-      return { _tag: state._tag };
+    case "Uncertain":
+    case "Refused":
+      return state;
     case "IdentityConfirmation":
       return { _tag: state._tag, preservationFailed: state.preservationFailed };
     case "Editing":
@@ -149,16 +197,34 @@ type IssuanceOwner = Readonly<{
   current: { value: ManualPATCreationState };
   lifetime: { active: boolean; generation: number; initialized: boolean };
   change: (next: ManualPATCreationState) => void;
+  forget: () => void;
   clear: () => void;
 }>;
 type Issue = (command: Issuance) => Promise<Exit.Exit<void, never>>;
 type CreationBinding = Readonly<{ owner: IssuanceOwner; state: ManualPATCreationState }>;
+type DisclosureBinding = Readonly<{ owner: IssuanceOwner; generation: number; patId: PATId }>;
+const currentDisclosure = ({ owner, generation, patId }: DisclosureBinding): boolean =>
+  owner.lifetime.active &&
+  owner.lifetime.generation === generation &&
+  owner.current.value._tag === "Issued" &&
+  owner.current.value.issued.pat.id === patId;
+const expireDisclosure =
+  (binding: DisclosureBinding): (() => void) =>
+  () => {
+    if (currentDisclosure(binding)) binding.owner.forget();
+  };
+const acknowledgeCopy =
+  (binding: DisclosureBinding, copied: () => void): (() => void) =>
+  () => {
+    if (currentDisclosure(binding)) copied();
+  };
 const confirmPAT = (
-  { owner: { current, lifetime, change, clear }, state: previous }: CreationBinding,
+  binding: CreationBinding,
   issue: Issue,
   clipboard: SensitiveClipboard
 ): void => {
-  const owner = lifetime;
+  const { owner: task, state: previous } = binding;
+  const { current, lifetime: owner, change } = task;
   if (!owner.active || current.value !== previous || previous._tag !== "Reviewing") return;
   const generation = owner.generation;
   const { grant, requestId } = previous;
@@ -166,23 +232,22 @@ const confirmPAT = (
   const live = (): boolean =>
     owner.active && owner.generation === generation && current.value === issuing;
   change(issuing);
-  const fail = (userId: Option.Option<string>): void => {
+  const fail = (failure: IssuanceFailure): void => {
     if (!live()) return;
-    change(
-      Option.match(userId, {
-        onNone: () => ({ _tag: "IssueFailed" as const, grant, requestId }),
-        onSome: (id) => ({
-          _tag: "IdentityConfirmation" as const,
-          userId: id,
-          draft: {
-            recipientLabel: grant.recipientLabel,
-            scopes: grant.scopes,
-            lifetimeDays: grant.lifetimeDays,
-          },
-          preservationFailed: false,
-        }),
-      })
-    );
+    if (failure._tag === "IdentityConfirmation") {
+      change({
+        _tag: "IdentityConfirmation",
+        userId: failure.userId,
+        draft: {
+          recipientLabel: grant.recipientLabel,
+          scopes: grant.scopes,
+          lifetimeDays: grant.lifetimeDays,
+        },
+        preservationFailed: false,
+      });
+    } else if (failure._tag === "Refused") {
+      change({ _tag: "Refused", grant, requestId, refusal: failure.refusal });
+    } else change({ _tag: "Uncertain", grant, requestId });
   };
   issue({
     grant,
@@ -191,21 +256,35 @@ const confirmPAT = (
     deliver: (issued) => {
       if (!live()) return;
       change({ _tag: "Issued", issued });
-      clipboard.reveal(() => {
-        if (
-          owner.active &&
-          owner.generation === generation &&
-          current.value._tag === "Issued" &&
-          current.value.issued.pat.id === issued.pat.id
-        ) {
-          clear();
-        }
-      });
+      clipboard.reveal(expireDisclosure({ owner: task, generation, patId: issued.pat.id }));
     },
   }).then(
-    () => fail(Option.none()),
-    () => fail(Option.none())
+    () => fail({ _tag: "Uncertain" }),
+    () => fail({ _tag: "Uncertain" })
   );
+};
+const reviewDraft = ({ owner, state }: CreationBinding): void => {
+  if (state._tag !== "Editing") return;
+  const draft = { ...state, recipientLabel: state.recipientLabel.trim() };
+  if (Schema.is(PATRecipientLabel)(draft.recipientLabel) && Schema.is(PATScopes)(draft.scopes)) {
+    owner.change(beginReview(draft));
+  }
+};
+const prepareReview = ({ owner, state }: CreationBinding): void => {
+  if (state._tag !== "Uncertain" && state._tag !== "Refused") return;
+  if (
+    state._tag === "Refused" &&
+    state.refusal._tag === "RateLimited" &&
+    DateTime.isLessThan(Effect.runSync(DateTime.now), state.refusal.retryAt)
+  ) {
+    return;
+  }
+  owner.change({
+    _tag: "Editing",
+    recipientLabel: state.grant.recipientLabel,
+    scopes: state.grant.scopes,
+    lifetimeDays: state.grant.lifetimeDays,
+  });
 };
 const creationActions = (
   binding: CreationBinding,
@@ -220,14 +299,7 @@ const creationActions = (
       if (live() && state._tag === "Editing") change(draft);
     },
     review: () => {
-      if (!live() || state._tag !== "Editing") return;
-      const draft = { ...state, recipientLabel: state.recipientLabel.trim() };
-      if (
-        Schema.is(PATRecipientLabel)(draft.recipientLabel) &&
-        Schema.is(PATScopes)(draft.scopes)
-      ) {
-        change(beginReview(draft));
-      }
+      if (live()) reviewDraft(binding);
     },
     edit: () => {
       if (!live()) return;
@@ -245,9 +317,8 @@ const creationActions = (
     confirm: () => {
       if (live()) confirmPAT(binding, issue, clipboard);
     },
-    retry: () => {
-      if (!live()) return;
-      if (state._tag === "IssueFailed") change({ ...state, _tag: "Reviewing" });
+    prepareReview: () => {
+      if (live()) prepareReview(binding);
     },
     confirmIdentity: () => {
       if (!live()) return;
@@ -262,7 +333,13 @@ const creationActions = (
     copy: (onCopied) => {
       if (!live()) return;
       if (state._tag === "Issued") {
-        clipboard.copy(Redacted.value(state.issued.bearer), onCopied);
+        clipboard.copy(
+          Redacted.value(state.issued.bearer),
+          acknowledgeCopy(
+            { owner, generation: lifetime.generation, patId: state.issued.pat.id },
+            onCopied
+          )
+        );
       }
     },
   };
@@ -277,12 +354,16 @@ const makeIssuanceOwner = (
     current.value = next;
     setState(next);
   };
-  const clear = (): void => {
-    const previous = current.value;
-    if (previous._tag === "Issued") clipboard.clear(Redacted.value(previous.issued.bearer));
+  const forget = (): void => {
+    lifetime.generation += 1;
     change({ ...initialState });
   };
-  return { current, lifetime, change, clear };
+  const clear = (): void => {
+    const previous = current.value;
+    forget();
+    if (previous._tag === "Issued") clipboard.clear(Redacted.value(previous.issued.bearer));
+  };
+  return { current, lifetime, change, forget, clear };
 };
 const mountIssuance =
   (
@@ -299,10 +380,7 @@ const mountIssuance =
         change(beginReview({ _tag: "Editing", ...initialDraft.value }));
       }
     }
-    const hide = (): void => {
-      owner.generation += 1;
-      clear();
-    };
+    const hide = clear;
     window.addEventListener("pagehide", hide);
     return (): void => {
       owner.active = false;

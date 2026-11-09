@@ -311,6 +311,7 @@ export const adversarialCorpus = cases.map((entry) => ({
       sections: [
         {
           _tag: "AssistantPolicy",
+          channel: "web",
           user: {
             serviceMarket: "CO",
             locale: "es-CO",

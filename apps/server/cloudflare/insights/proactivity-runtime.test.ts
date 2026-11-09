@@ -1,3 +1,4 @@
+import { TranscriptText } from "../../src/core/agent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
@@ -65,7 +66,12 @@ const configuration = (db: D1Database): ProactivityEnvironment => ({
   KAPSO_API_KEY: "test-only",
   PROACTIVITY_TEMPLATE_JSON: Schema.encodeSync(
     Schema.fromJsonString(ProactivityTemplateConfiguration)
-  )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
+  )({
+    name: "fidy_proactivity",
+    language: "es",
+    approval: "approved",
+    body: "Fidy te avisa: {{1}} Más en Fidy.",
+  }),
 });
 const workRequest = (work: ProactivityActivity): Request =>
   new Request("https://coordinator/proactivity-work", {
@@ -92,7 +98,11 @@ it("strips untrusted diagnostic fields before persisting proactivity Workflow pa
       };
       const create = vi
         .fn<Workflow<ProactivityDeliveryWork>["create"]>()
-        .mockResolvedValue(instance);
+        .mockImplementation((options) =>
+          options?.id === undefined || options.id.length > 100
+            ? Promise.reject(new Error("Workflow instance ID exceeds provider limit"))
+            : Promise.resolve(instance)
+        );
       const workflow: Workflow<ProactivityDeliveryWork> = {
         create,
         get: unexpected,
@@ -100,7 +110,7 @@ it("strips untrusted diagnostic fields before persisting proactivity Workflow pa
         deleteBatch: unexpected,
       };
       const work = {
-        kind: "weekly-question" as const,
+        kind: "proactivity-delivery" as const,
         version: 1 as const,
         userId: proactivityTestUsers[0],
         id: "85000000-0000-4000-8000-000000000099",
@@ -571,7 +581,9 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
           now: now.epochMilliseconds,
         })
       );
-      expect(transcript.text).toBe("Fidy: Recuerda registrar tus movimientos manuales en Fidy.");
+      expect(transcript.text).toBe(
+        "Fidy te avisa: Recuerda registrar tus movimientos manuales en Fidy. Más en Fidy."
+      );
       expect(DateTime.isUtc(transcript.occurredAt)).toBe(true);
       expect(
         Option.isNone(
@@ -599,7 +611,9 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         }),
       });
       expect(prompt).toContain("ProactiveInsightTranscriptEntry");
-      expect(prompt).toContain("Fidy: Recuerda registrar tus movimientos manuales en Fidy.");
+      expect(prompt).toContain(
+        "Fidy te avisa: Recuerda registrar tus movimientos manuales en Fidy. Más en Fidy."
+      );
       expect(
         Option.getOrThrow(yield* findReminderGovernor({ db, userId: proactivityTestUsers[0] }))
       ).toEqual({ _tag: "Attentive", unanswered: 0 });
@@ -653,7 +667,7 @@ it("refuses approved-template drift between a deferred staging and the irreversi
         environment: {
           ...configuration(db),
           PROACTIVITY_TEMPLATE_JSON:
-            '{"name":"changed_template","language":"es","body":"Fidy: {{1}}","approval":"approved"}',
+            '{"name":"changed_template","language":"es","body":"Fidy te avisa: {{1}} Más en Fidy.","approval":"approved"}',
         },
         userId: proactivityTestUsers[0],
       });
@@ -747,7 +761,7 @@ const revokeScenarioCategory = (
       ...input,
       userId: proactivityTestUsers[0],
       kind: "manual-entry-reminder",
-      choice: `proactivity:manual-entry-reminder:${grant.offer_id}:revoke`,
+      choice: `p:manual-entry-reminder:${grant.offer_id}:revoke`,
       decisionMessageId: "revoke-queued-category",
     });
   });
@@ -922,7 +936,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           work: { kind: "proactivity-generate", version: 1, userId },
         });
         const offer = Option.getOrThrow(yield* findCurrentProactivityOffer(context));
-        const exact = `Fidy: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`;
+        const exact = `Fidy te avisa: ${offer.disclosure.text} Responde a este mensaje con «Sí» para activar estos avisos o «No» para rechazarlos. Más en Fidy.`;
         const provider = vi.fn(() =>
           Promise.resolve(
             Response.json({
@@ -1469,7 +1483,20 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         receivedAtMs: later.epochMilliseconds,
         text: `reminder:${question.delivery_id}:stop`,
       });
-      expect(yield* controlManualReminders({ db, proof, now: later.epochMilliseconds })).toBe(true);
+      const humanProof = {
+        ...proof,
+        text: TranscriptText.make("No"),
+        replyToMessageId: Option.some(WhatsAppProviderMessageId.make(`crash-${sent}`)),
+      };
+      const body = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.toCodecJson(WhatsAppTurnAdmission))
+      )(humanProof);
+      const response = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator/hosted-turn/whatsapp", { method: "POST", body })
+        )
+      );
+      expect(response.status).toBe(200);
       expect(Option.getOrThrow(yield* findReminderSchedule({ db, userId })).enabled).toBe(false);
     })
   ));
@@ -1777,7 +1804,7 @@ it.each(["paused", "stopped"] as const)(
                   .first()
               )
             ).toEqual({
-              text: `Fidy: Has recibido tres recordatorios sin responder. ¿Quieres continuar?\nreminder:${replacement.delivery_id}:continue\nreminder:${replacement.delivery_id}:stop`,
+              text: `Fidy te avisa: Has recibido tres recordatorios sin responder. ¿Quieres continuar? Responde a este mensaje con «Sí» para continuar o «No» para detenerlos. Más en Fidy.`,
             });
             expect(Option.getOrThrow(yield* findReminderGovernor({ db, userId }))).toEqual({
               _tag: "QuestionDelivered",
@@ -1904,8 +1931,10 @@ it.each(["paused", "stopped"] as const)(
             const report = Option.getOrThrow(
               yield* findProactivityReport({ db, userId, id: offer.id })
             );
-            expect(Option.getOrThrow(report.text)).toContain(offer.acceptChoice);
-            expect(Option.getOrThrow(report.text)).toContain(offer.revokeChoice);
+            expect(Option.getOrThrow(report.text)).toContain("«Sí» para continuar");
+            expect(Option.getOrThrow(report.text)).not.toContain(offer.acceptChoice);
+            expect(Option.getOrThrow(report.text)).toContain("«Desactivar»");
+            expect(Option.getOrThrow(report.text)).not.toContain(offer.revokeChoice);
             yield* deliver(offer.id, afterTime);
             const choice = {
               ...context,

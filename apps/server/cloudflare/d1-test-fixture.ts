@@ -47,13 +47,17 @@ const objectName = (sql: string): string =>
   /^CREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER|VIEW) "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   "";
 const statementOwner = (sql: string): string =>
-  /^(?:CREATE|ALTER) TABLE "?(\w+)"?/u.exec(sql.trim())?.[1] ??
+  /^(?:CREATE|ALTER|DROP) TABLE "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   /^CREATE (?:UNIQUE )?INDEX "?\w+"?\s+ON "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   /^CREATE TRIGGER "?\w+"?[\s\S]*?\bON "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   "";
 const tableName = (sql: string): string => {
   const owner = statementOwner(sql);
   return owner.length > 0 ? owner : (/^INSERT INTO "?(\w+)"?/u.exec(sql.trim())?.[1] ?? "");
+};
+const renamedTableOwner = (sql: string, owners: ReadonlyMap<string, string>): string => {
+  const owner = tableName(sql);
+  return owners.get(owner) ?? owner;
 };
 /** Focused owner fixtures stub caller-owned authentication; owner constraints come from the production baseline. */
 export const installCurrentTestObjects = ({
@@ -73,8 +77,15 @@ export const installCurrentTestObjects = ({
   const installed = installedObjects.get(db) ?? new Set<string>();
   const owned = new Set(tables);
   return loadSchemaStatements().then((sql) => {
+    const renamedOwners = new Map<string, string>();
+    for (const statement of sql) {
+      const rename = /^ALTER TABLE (\w+) RENAME TO (\w+)/u.exec(statement);
+      if (rename?.[1] !== undefined && rename[2] !== undefined) {
+        renamedOwners.set(rename[2], renamedOwners.get(rename[1]) ?? rename[1]);
+      }
+    }
     const selected = sql.filter((statement) => {
-      const owner = tableName(statement);
+      const owner = renamedTableOwner(statement, renamedOwners);
       const name = objectName(statement);
       return (
         (owned.has(owner) ||

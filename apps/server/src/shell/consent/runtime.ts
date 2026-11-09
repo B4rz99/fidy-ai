@@ -39,6 +39,7 @@ export const makeDisclosureSender = (
     }>
   ): ReturnType<WhatsAppDelivery["sendText"]> =>
     client.sendText({
+      confirmation: Option.none(),
       businessPhoneNumberId: request.phoneNumberId,
       destination: {
         recipient: request.caller.businessScopedUserId,

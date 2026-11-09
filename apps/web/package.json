@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "bun --bun vite",
     "shadcn": "shadcn",
-    "build": "tsc --noEmit && bun --bun vite build",
+    "build": "bun run typecheck && bun --bun vite build",
     "build:production": "bun scripts/build-production.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --build tsconfig.app.json",
     "test": "bun --bun vitest run",
     "test:coverage": "bun --bun vitest run --coverage",
     "check:bundle": "bun scripts/check-browser-bundle.ts",
@@ -21,12 +21,12 @@
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",
-    "@dnd-kit/dom": "0.5.1",
-    "@dnd-kit/react": "0.5.1",
+    "@dnd-kit/dom": "0.5.3",
+    "@dnd-kit/react": "0.5.3",
     "@effect/atom-react": "4.0.6",
     "@effect/platform-browser": "4.0.6",
     "@fidy/server": "workspace:0.0.0",
-    "@hugeicons/core-free-icons": "4.3.5",
+    "@hugeicons/core-free-icons": "4.4.0",
     "@hugeicons/react": "1.1.10",
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-table": "8.21.3",
@@ -61,6 +61,6 @@
     "typescript": "7.0.2",
     "vite": "8.3.5",
     "vitest": "5.0.5",
-    "wrangler": "4.154.0"
+    "wrangler": "4.156.1"
   }
 }

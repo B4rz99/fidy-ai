@@ -312,7 +312,7 @@ it.each([
       );
       expect(Exit.isSuccess(outcome)).toBe(scenario.expectedBindings === "healthy");
       const identities = {
-        category: `weekly-${userId}-proactivity-delivery-${deliveryId}`,
+        category: `proactivity-${userId}-${deliveryId}`,
         weekly: `weekly-${userId}-weekly-question-${questionId}`,
       };
       expect(inspected).toEqual(scenario.expectedKinds.map((kind) => identities[kind]));

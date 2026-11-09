@@ -1,4 +1,4 @@
-import { Option, Schema } from "effect";
+import { Option } from "effect";
 
 const noContentStatus = 204;
 const resetContentStatus = 205;
@@ -48,7 +48,10 @@ export const ownBrowserResponse = ({
               release();
               controller.close();
             } else {
-              controller.enqueue(Schema.decodeSync(Schema.Uint8Array)(next.value));
+              if (!(next.value instanceof Uint8Array)) {
+                throw new TypeError("Response chunk must be Uint8Array");
+              }
+              controller.enqueue(next.value);
             }
           })
           .catch((error: unknown) => {

@@ -7,6 +7,7 @@ import {
   PreparedProactivityTemplate,
   ProactivityTemplateConfiguration,
   type ProactivityTemplateSender,
+  proactivityTemplateBody,
 } from "~/shell/channels/whatsapp/contract";
 import { sendKapsoMessage } from "./kapso-client";
 
@@ -25,7 +26,7 @@ export const buildProactivityTemplateSender = (
           name: configuration.value.name,
           language: configuration.value.language,
           parameter: content,
-          text: `Fidy: ${content}`,
+          text: proactivityTemplateBody.replace("{{1}}", () => content),
         });
       }).pipe(Effect.mapError(() => new InsightTemplateUnavailable())),
     send: (request) =>

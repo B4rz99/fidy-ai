@@ -29,16 +29,9 @@ const awaitAbort = (signal: AbortSignal): Effect.Effect<void> =>
 
 it.effect.each([
   {
-    stage: "idle renewal",
-    sql: "UPDATE web_sessions SET idle_expires_at_ms",
-    method: "first" as const,
-    logout: false,
-    audits: 0,
-  },
-  {
-    stage: "current-user Audit",
-    sql: "INSERT INTO audit_entries",
-    method: "run" as const,
+    stage: "atomic current-user metadata",
+    sql: "",
+    method: "batch" as const,
     logout: false,
     audits: 1,
   },
@@ -57,7 +50,7 @@ it.effect.each([
       const db = yield* Effect.tryPromise(sessionDatabase);
       yield* seedSession({ db, idle: 4102444801000, hard: 4110220800000 });
       yield* TestClock.setTime(4102444800000);
-      const held = yield* holdSessionCallback({ db, sqlPrefix: sql, method });
+      const held = yield* holdSessionCallback({ db, sqlPrefix: sql, method, before: false });
       const completed = yield* Deferred.make<Exit.Exit<Response>>();
       const requested = yield* Deferred.make<void>();
       const running = yield* Effect.forkChild(
@@ -107,66 +100,6 @@ it.effect.each([
               .first()
           )
         ).toEqual({ count: audits });
-      }).pipe(
-        Effect.ensuring(
-          Effect.gen(function* () {
-            yield* held.release;
-            controller.abort();
-            yield* Fiber.await(running);
-            if (yield* Deferred.isDone(held.entered)) yield* Deferred.await(held.settled);
-          })
-        )
-      );
-    }).pipe(
-      Effect.provideService(
-        HttpClient.HttpClient,
-        HttpClient.make(() => Effect.die("Authentication must not perform outbound HTTP."))
-      )
-    );
-  }
-);
-
-it.effect(
-  "cancels a held User projection without shielding the whole workflow or starting Audit",
-  () => {
-    const controller = new AbortController();
-    return Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(sessionDatabase);
-      yield* seedSession({ db, idle: 4102444801000, hard: 4110220800000 });
-      yield* TestClock.setTime(4102444800000);
-      const held = yield* holdSessionCallback({ db, sqlPrefix: "SELECT u.id", method: "all" });
-      const running = yield* Effect.forkChild(
-        handleWebAuthentication(sessionRequest({ db: held.db, logout: false }))
-      );
-      const interrupting = yield* Effect.forkChild(
-        awaitAbort(controller.signal).pipe(Effect.andThen(Fiber.interruptAs(running, undefined))),
-        { startImmediately: true }
-      );
-      yield* Effect.gen(function* () {
-        yield* Effect.raceFirst(
-          Deferred.await(held.entered),
-          Fiber.await(running).pipe(
-            Effect.flatMap((outcome) =>
-              Effect.die(
-                new Error("Authentication exited before User projection readiness", {
-                  cause: outcome,
-                })
-              )
-            )
-          )
-        );
-        controller.abort();
-        deepStrictEqual(yield* Fiber.await(running), Exit.failCause(Cause.interrupt()));
-        yield* Fiber.join(interrupting);
-        expect(
-          yield* Effect.tryPromise(() =>
-            db
-              .prepare(
-                "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,occurred_at_ms FROM audit_entries WHERE record_type='identity_read') AS canonical_user_reads"
-              )
-              .first()
-          )
-        ).toEqual({ count: 0 });
       }).pipe(
         Effect.ensuring(
           Effect.gen(function* () {

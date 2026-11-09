@@ -570,6 +570,7 @@ export {
   TransactionBoundaryFailure,
   transactionNoStore,
   maximumTransactionInputBytes,
+  maximumTransactionGroupInputBytes,
   missingTransactionMessage,
   invalidTransactionMessage,
   pairPolicyMessage,

@@ -525,8 +525,13 @@ it("deletes expired undecided disclosure offers independently while retaining ac
 it("retains exact category disclosure hashes rather than a model-generated opt-in", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      for (const kind of ["budget-threshold", "manual-entry-reminder"] as const) {
+      for (const kind of [
+        "budget-threshold",
+        "manual-entry-reminder",
+        "new-recurring-series",
+      ] as const) {
         const disclosure = proactivityDisclosureFor(kind);
+        expect(disclosure.text).not.toMatch(/[\r\n\t]| {5}/u);
         const bytes = yield* Effect.tryPromise(() =>
           crypto.subtle.digest("SHA-256", new TextEncoder().encode(disclosure.text))
         );

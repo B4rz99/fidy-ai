@@ -2,6 +2,8 @@ import { Effect, Option } from "effect";
 import type { CategoryId } from "../../../src/core/categories/contract";
 import { categorizeCapture } from "../../../src/core/categories/operations";
 import { type CaptureCategoryInput, CategoriesUnavailable } from "../contract";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
+import { keywordRulesFromRows, selectedKeywordRulesQuery } from "./keyword-rules";
 import { findOwnedKeywordRules } from "./keyword-rule-shared";
 
 const maximumCaptures = 100;
@@ -28,3 +30,36 @@ export const captureCategories = ({
       categorizeCapture({ ...input, rules: rules.value })
     );
   });
+
+/** Decode once and resolve captures without further storage work in a protected read. */
+export const prepareCaptureCategories = ({
+  db,
+  users,
+}: Readonly<{ db: D1Database; users: OwnedStatement }>): Readonly<{
+  statement: D1PreparedStatement;
+  decode: (
+    rows: unknown
+  ) => (
+    captures: ReadonlyArray<CaptureCategoryInput>
+  ) => Effect.Effect<ReadonlyArray<CategoryId>, CategoriesUnavailable>;
+}> => {
+  const query = selectedKeywordRulesQuery(users);
+  return {
+    statement: db.prepare(query.sql).bind(...query.params),
+    decode: (rows: unknown) => {
+      const rules = keywordRulesFromRows(rows);
+      return (
+        captures: ReadonlyArray<CaptureCategoryInput>
+      ): Effect.Effect<ReadonlyArray<CategoryId>, CategoriesUnavailable> => {
+        const selected = captures.some((input) => Option.isSome(input.counterparty))
+          ? rules
+          : Option.some([]);
+        return Option.isNone(selected) || captures.length > maximumCaptures
+          ? Effect.fail(new CategoriesUnavailable())
+          : Effect.forEach(captures, (input) =>
+              categorizeCapture({ ...input, rules: selected.value })
+            );
+      };
+    },
+  };
+};

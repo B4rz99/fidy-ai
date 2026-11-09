@@ -24,6 +24,7 @@ export class DaviplataSandboxProofFailure extends Data.TaggedError("DaviplataSan
     | "source-recovery"
     | "source-unavailable"
     | "settlement"
+    | "cancellation"
     | "unexpected";
 }> {}
 

@@ -151,6 +151,10 @@ export type ResourceAdmissionGrant = Readonly<{
   readonly grantId: ResourceAdmissionGrantId;
 }>;
 
+/** Only caller-owned statement results, in request order, after admission commits atomically. */
+export type ResourceAdmissionResult = ResourceAdmissionGrant &
+  Readonly<{ results: ReadonlyArray<D1Result> }>;
+
 /** Prepared admission never spends capacity until all statements commit in the owner's batch.
  * Keep every statement together, on the configured binding, without provider I/O in between.
  */

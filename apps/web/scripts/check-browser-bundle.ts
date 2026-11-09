@@ -4,6 +4,7 @@ import { Data, Effect, Option } from "effect";
 import { decodeBuildMetafile } from "./build-metafile";
 
 const forbiddenDependencies = [
+  /apps\/server\/src\/shell\/observability\/(?:contract\.ts|canonical-metadata\.generated\.json)$/u,
   /(^|\/)node_modules\/@effect\/ai(?:-|\/)/u,
   /(^|\/)node_modules\/@effect\/platform(?:-|\/)/u,
   /(^|\/)node_modules\/@kapso\//u,
@@ -183,9 +184,10 @@ const findBrowserEntry = (outputs: BuildOutputs): Option.Option<string> =>
 const assertNoDashboardInInitialInputs = (inputs: ReadonlyArray<string>): void => {
   const leaked = inputs.filter(
     (input) =>
-      input.includes("/features/dashboard/") ||
+      (input.includes("/features/dashboard/") && !input.endsWith("/features/dashboard/code.ts")) ||
       input.includes("node_modules/recharts/") ||
-      input.includes("/features/needs-review/")
+      (input.includes("/features/needs-review/") &&
+        !input.endsWith("/features/needs-review/code.ts"))
   );
   if (leaked.length > 0) {
     throw new Error(
@@ -259,7 +261,12 @@ const findForbiddenServerImport = (
           ![
             "@fidy/server/client",
             "@fidy/server/browser-bootstrap",
+            "@fidy/server/browser-http",
             "@fidy/server/browser-transport",
+            "@fidy/server/dashboard-contract",
+            "@fidy/server/hosted-turn-api",
+            "@fidy/server/money",
+            "@fidy/server/product-context",
           ].includes(importPath) || !sourceFile.startsWith("src/transport/")
         );
       }

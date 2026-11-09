@@ -1,4 +1,7 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, type JsonSchema, Layer } from "effect";
+import { operationCatalog } from "~/shell/api";
+import { hostedOperationBindings } from "~/shell/canonical-operations/operations";
+import { openAiProviderSchema } from "~/shell/hosted-inference/internal/provider-schema";
 import type {
   HostedConformanceCheck,
   HostedConformanceFailure,
@@ -9,6 +12,7 @@ import type {
 import {
   verifyCanonicalMutation,
   verifyCanonicalQuery,
+  verifyConversationalSpanish,
   verifyDateOnlyMutation,
   verifyInvalidOutputRecovery,
   verifyMutationMoney,
@@ -20,6 +24,15 @@ import {
   verifyTransactionDeletion,
 } from "~/shell/hosted-inference/internal/conformance";
 import { makeHostedInferenceStubInternal } from "~/shell/hosted-inference/internal/stub";
+
+/** Static build projection; live tool availability and input decoding retain canonical authority. */
+export const makeHostedToolParameters = (): ReadonlyArray<
+  Readonly<{ wireName: string; parameters: JsonSchema.JsonSchema }>
+> =>
+  hostedOperationBindings(operationCatalog).map(({ operation, wireName }) => ({
+    wireName,
+    parameters: openAiProviderSchema(operation.input),
+  }));
 
 /** Hosted inference authority supplied by the Cloudflare OpenAI adapter. */
 export class HostedInference extends Context.Service<HostedInference, HostedInferenceService>()(
@@ -62,6 +75,7 @@ export const verifyHostedInferenceConformanceChecks = (
     Effect.andThen(check("canonical_date_only", verifyDateOnlyMutation(inference))),
     Effect.andThen(check("canonical_recurring_lifecycle", verifyRecurringLifecycle(inference))),
     Effect.andThen(check("invalid_output_recovery", verifyInvalidOutputRecovery(inference))),
-    Effect.andThen(check("structured_es_co", verifyStructuredColombianSpanish(inference)))
+    Effect.andThen(check("structured_es_co", verifyStructuredColombianSpanish(inference))),
+    Effect.andThen(check("conversational_es_co", verifyConversationalSpanish(inference)))
   );
 };

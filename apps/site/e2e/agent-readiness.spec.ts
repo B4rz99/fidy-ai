@@ -1,5 +1,24 @@
 import { expect, test } from "@playwright/test";
 
+const unavailableStatus = 503;
+type OAuthProbeResponse = Readonly<{
+  status: () => number;
+  headers: () => Readonly<Record<string, string>>;
+  json: () => Promise<unknown>;
+}>;
+
+/** Recognizes only the closed OAuth refusal after exact-pair smoke verified D1 quota exhaustion. */
+const isDeferredOAuthAvailability = async (
+  response: OAuthProbeResponse,
+  quotaVerified: boolean
+): Promise<boolean> => {
+  if (!quotaVerified || response.status() !== unavailableStatus) return false;
+  expect(response.headers()["content-type"]).toContain("application/json");
+  expect(response.headers()["cache-control"]).toContain("no-store");
+  expect(await response.json()).toEqual({ error: "temporarily_unavailable" });
+  return true;
+};
+
 const ok = 200;
 const notFound = 404;
 const methodNotAllowed = 405;
@@ -266,33 +285,48 @@ test("verifies public OAuth discovery and keeps MCP tools authenticated", async 
     process.env.SITE_PUBLIC_ORIGIN !== "https://fidyapp.com",
     "Live API discovery runs after deployment."
   );
+  const quotaVerified = process.env.SITE_D1_QUOTA_DEFERRED === "true";
+  let deferred = 0;
   const metadata = await request.get(
     "https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp"
   );
-  expect(metadata.status(), `OAuth discovery: ${metadata.headers()["cf-ray"] ?? "no ray"}`).toBe(
-    ok
-  );
-  expect(metadata.headers()["content-type"]).toContain("application/json");
-  expect(await metadata.json()).toMatchObject({
-    resource: "https://api.fidyapp.com/mcp",
-    authorization_servers: ["https://api.fidyapp.com"],
-    scopes_supported: expect.arrayContaining(["read"]),
-    bearer_methods_supported: ["header"],
-  });
+  if (await isDeferredOAuthAvailability(metadata, quotaVerified)) deferred++;
+  else {
+    expect(metadata.status(), `OAuth discovery: ${metadata.headers()["cf-ray"] ?? "no ray"}`).toBe(
+      ok
+    );
+    expect(metadata.headers()["content-type"]).toContain("application/json");
+    expect(await metadata.json()).toMatchObject({
+      resource: "https://api.fidyapp.com/mcp",
+      authorization_servers: ["https://api.fidyapp.com"],
+      scopes_supported: expect.arrayContaining(["read"]),
+      bearer_methods_supported: ["header"],
+    });
+  }
   const authorization = await request.get(
     "https://api.fidyapp.com/.well-known/oauth-authorization-server"
   );
-  expect(authorization.status()).toBe(ok);
-  expect(await authorization.json()).toMatchObject({
-    issuer: "https://api.fidyapp.com",
-    scopes_supported: expect.arrayContaining(["read", "write", "dashboard"]),
-  });
+  if (await isDeferredOAuthAvailability(authorization, quotaVerified)) deferred++;
+  else {
+    expect(authorization.status()).toBe(ok);
+    expect(await authorization.json()).toMatchObject({
+      issuer: "https://api.fidyapp.com",
+      scopes_supported: expect.arrayContaining(["read", "write", "dashboard"]),
+    });
+  }
   const mcp = await request.get("https://api.fidyapp.com/mcp");
-  const unauthorized = 401;
-  expect(mcp.status()).toBe(unauthorized);
-  expect(mcp.headers()["www-authenticate"]).toContain(
-    'resource_metadata="https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp"'
-  );
+  if (await isDeferredOAuthAvailability(mcp, quotaVerified)) deferred++;
+  else {
+    const unauthorized = 401;
+    expect(mcp.status()).toBe(unauthorized);
+    expect(mcp.headers()["www-authenticate"]).toContain(
+      'resource_metadata="https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp"'
+    );
+  }
+  if (deferred > 0) {
+    const description = `OAuth availability deferred under verified D1 quota for ${deferred} probes.`;
+    test.info().annotations.push({ type: "D1 quota deferral", description });
+  }
 });
 
 for (const path of ["/", "/docs", "/funciones/transacciones"]) {
@@ -323,5 +357,66 @@ for (const path of ["/", "/docs", "/funciones/transacciones"]) {
       };
     });
     expect(result).toEqual({ rejected: true, empty: true, injected: undefined });
+  });
+}
+
+const okStatus = 200;
+const unauthorizedStatus = 401;
+const forbiddenStatus = 403;
+const limitedStatus = 429;
+const internalErrorStatus = 500;
+const badGatewayStatus = 502;
+const timeoutStatus = 504;
+
+const probeResponse = (
+  status: number,
+  body: unknown = { error: "temporarily_unavailable" },
+  headers = { "content-type": "application/json", "cache-control": "no-store" }
+): Parameters<typeof isDeferredOAuthAvailability>[0] => ({
+  status: () => status,
+  headers: () => headers,
+  json: () => Promise.resolve(body),
+});
+
+test("requires verified quota before accepting unavailable OAuth", async () => {
+  expect(await isDeferredOAuthAvailability(probeResponse(unavailableStatus), false)).toBe(false);
+  expect(await isDeferredOAuthAvailability(probeResponse(unavailableStatus), true)).toBe(true);
+});
+
+for (const status of [
+  okStatus,
+  unauthorizedStatus,
+  forbiddenStatus,
+  limitedStatus,
+  internalErrorStatus,
+  badGatewayStatus,
+  timeoutStatus,
+]) {
+  test(`does not replace normal verification for OAuth status ${status}`, async () => {
+    expect(await isDeferredOAuthAvailability(probeResponse(status), true)).toBe(false);
+  });
+}
+
+for (const body of [
+  null,
+  {},
+  { error: "unrecognized" },
+  { error: "temporarily_unavailable", data: [] },
+]) {
+  test(`rejects an unexpected unavailable response ${JSON.stringify(body)}`, async () => {
+    await expect(
+      isDeferredOAuthAvailability(probeResponse(unavailableStatus, body), true)
+    ).rejects.toThrow();
+  });
+}
+
+for (const [kind, headers] of Object.entries({
+  html: { "content-type": "text/html", "cache-control": "no-store" },
+  cacheable: { "content-type": "application/json", "cache-control": "public, max-age=300" },
+})) {
+  test(`rejects an unavailable ${kind} response`, async () => {
+    await expect(
+      isDeferredOAuthAvailability(probeResponse(unavailableStatus, undefined, headers), true)
+    ).rejects.toThrow();
   });
 }

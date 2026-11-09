@@ -518,6 +518,7 @@ it("valid PAT callers behind a saturated unresolved-bearer source keep their own
         requestId: "40000000-0000-4000-8000-000000000005",
         grant: manualGrant(),
       });
+      vi.useFakeTimers({ toFake: ["Date"] });
       let denied: Response = Response.json({});
       for (let attempt = 0; attempt < 11; attempt += 1) {
         denied = yield* awaitPromise(
@@ -2534,11 +2535,13 @@ for (const refusal of ["revoked", "withdrawn", "suppressed-audit"] as const) {
           })
         );
         const Refusal = Schema.Struct({ error: Schema.Struct({ code: Schema.String }) });
-        expect(http.status).toBe(401);
+        expect(http.status).toBe(refusal === "suppressed-audit" ? 503 : 401);
         expect(hosted.status).toBe(401);
         expect(
           yield* Schema.decodeUnknownEffect(Refusal)(yield* awaitPromise(http.json()))
-        ).toEqual({ error: { code: "unauthenticated" } });
+        ).toEqual({
+          error: { code: refusal === "suppressed-audit" ? "unavailable" : "unauthenticated" },
+        });
         expect(
           yield* Schema.decodeUnknownEffect(Refusal)(yield* awaitPromise(hosted.json()))
         ).toEqual({ error: { code: "unauthenticated" } });

@@ -2,12 +2,16 @@ import { type DateTime, Option } from "effect";
 
 import type { User } from "../../../src/core/identity/contract";
 import type { TranscriptEntry } from "../../../src/core/agent/contract";
-import type { HostedContextSection } from "../../../src/shell/hosted-inference/contract";
+import type {
+  HostedContextSection,
+  HostedConversationChannel,
+} from "../../../src/shell/hosted-inference/contract";
 
 import type { ProactiveReplyContext } from "../contract";
 
 export type HostedContextSectionInput = Readonly<{
   readonly user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
+  readonly channel: HostedConversationChannel;
   readonly startedAt: DateTime.Utc;
   readonly memories: ReadonlyArray<Readonly<{ text: string }>>;
   readonly compactedConversation: Option.Option<Readonly<{ text: string }>>;
@@ -18,7 +22,7 @@ export type HostedContextSectionInput = Readonly<{
 export const hostedContextSections = (
   input: HostedContextSectionInput
 ): ReadonlyArray<HostedContextSection> => [
-  { _tag: "AssistantPolicy", user: input.user },
+  { _tag: "AssistantPolicy", user: input.user, channel: input.channel },
   { _tag: "TurnStarted", startedAt: input.startedAt, timeZone: input.user.timeZone },
   { _tag: "ContinuityBoundary", boundary: "open" },
   ...input.memories.map(({ text }) => ({ _tag: "Memory" as const, text })),

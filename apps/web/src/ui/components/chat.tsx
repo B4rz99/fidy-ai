@@ -25,16 +25,25 @@ type ChatWindowProps = Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
+  prepare: () => void;
 }>;
 
 /** Non-modal chat; Base UI owns focus and dismissal. */
-export const ChatWindow = ({ open, onOpenChange, children }: ChatWindowProps): JSX.Element => {
+export const ChatWindow = ({
+  open,
+  onOpenChange,
+  children,
+  prepare,
+}: ChatWindowProps): JSX.Element => {
   const compact = useSyncExternalStore(subscribeCompact, isCompact);
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
         render={<Button size="icon-lg" />}
         aria-label="Abrir agente Fidy"
+        onPointerEnter={prepare}
+        onFocus={prepare}
+        onPointerDownCapture={prepare}
         className="application-agent-trigger"
       >
         <HugeiconsIcon icon={SparklesIcon} size={24} strokeWidth={1.5} aria-hidden="true" />

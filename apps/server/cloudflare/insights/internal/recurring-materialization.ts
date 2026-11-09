@@ -180,10 +180,10 @@ const compareItems = (left: RecurringDigestItem, right: RecurringDigestItem): nu
 };
 const presentation = (report: RecurringDigestReport): string => {
   const heading = `Nuevos patrones históricos de cargos recurrentes del ${report.payload.confirmationDay.localDate}. No indica que sigan activos.`;
-  const text = `${heading}\n${report.payload.items.map((item) => `${item.counterparty}: ${encodeMoneyAmount(item.money.amount)} ${item.money.currency}; mensual.`).join("\n")}`;
+  const text = `${heading} ${report.payload.items.map((item) => `${item.counterparty}: ${encodeMoneyAmount(item.money.amount)} ${item.money.currency}; mensual.`).join(" ")}`;
   return Option.isSome(Schema.decodeOption(PreparedProactivityTemplate.fields.parameter)(text))
     ? text
-    : `${heading}\n${report.payload.items.length} patrones. Informe completo: https://app.fidyapp.com/insights/recurring/${report.insightEventId}`;
+    : `${heading} ${report.payload.items.length} patrones. Informe completo: https://app.fidyapp.com/insights/recurring/${report.insightEventId}`;
 };
 
 export const materializeDay = (

@@ -19,12 +19,19 @@ type HistoryNavigation = Readonly<{ generation: number; pages: number }>;
 export type HistoryState = Readonly<{
   query: CanonicalQueryState<Pick<TransactionPage, "data">, unknown>;
   generation: number;
+  loadedPages: number;
   continuation: "complete" | "available" | "loading" | "failure";
   retryPage: Option.Option<PageAtom>;
 }>;
+export type HistoryCommand =
+  | "more"
+  | "retry"
+  | "reset"
+  | "refresh"
+  | Readonly<{ restorePages: number }>;
 type History = Readonly<{
   state: Atom.Atom<HistoryState>;
-  action: Atom.Writable<Option.Option<void>, "more" | "retry" | "reset">;
+  action: Atom.Writable<Option.Option<void>, HistoryCommand>;
 }>;
 type ReadyPage = Extract<CanonicalQueryState<TransactionPage, unknown>, { _tag: "Ready" }>;
 const continuationInput = Schema.Struct({
@@ -135,6 +142,44 @@ const pageQuery = (apiClient: FidyClient, period: HistoryInput, cursor: string):
     )
   );
 
+const isHistoryFailed = (current: BrowsedHistory): boolean =>
+  current.continuation === "failure" ||
+  (current.query._tag === "Ready" && Option.isSome(current.query.refreshFailure));
+const isHistoryPending = (current: BrowsedHistory): boolean =>
+  current.continuation === "loading" ||
+  isHistoryFailed(current) ||
+  (current.query._tag === "Ready" && current.query.waiting);
+
+const retainLoadedHistory = (
+  current: BrowsedHistory,
+  previous: Option.Option<BrowsedHistory>,
+  requestedPages: number
+): BrowsedHistory => {
+  if (
+    current.query._tag !== "Ready" ||
+    Option.isNone(previous) ||
+    previous.value.query._tag !== "Ready" ||
+    Math.min(requestedPages, previous.value.loadedPages) <= current.loadedPages ||
+    !isHistoryPending(current)
+  ) {
+    return current;
+  }
+  const failed = isHistoryFailed(current);
+  return {
+    ...current,
+    loadedPages: previous.value.loadedPages,
+    continuation: failed ? current.continuation : "loading",
+    query: {
+      ...current.query,
+      value: previous.value.query.value,
+      waiting: !failed,
+      refreshFailure: failed
+        ? Option.some({ _tag: "BoundaryFailure" })
+        : current.query.refreshFailure,
+    },
+  };
+};
+
 /** Canonical query atoms own records; this projection joins explicitly requested pages.
  * Reset replaces continuation identities so old responses cannot join refreshed history.
  */
@@ -143,13 +188,15 @@ export const transactionHistory = ({
   firstPage,
   period,
   locate,
+  initialPages,
 }: Readonly<{
   apiClient: FidyClient;
   firstPage: PageAtom;
   period: HistoryInput;
   locate: Option.Option<string>;
+  initialPages: number;
 }>): History => {
-  const navigation = Atom.make<HistoryNavigation>({ generation: 0, pages: 1 });
+  const navigation = Atom.make<HistoryNavigation>({ generation: 0, pages: initialPages });
   const pages = Atom.family((key: PageKey) => pageQuery(apiClient, period, key.cursor));
   const state = Atom.make((get): BrowsedHistory => {
     const current = get(navigation);
@@ -163,7 +210,7 @@ export const transactionHistory = ({
         query: first,
       };
     }
-    return browse({
+    const browsed = browse({
       first,
       navigation: current,
       period,
@@ -173,11 +220,16 @@ export const transactionHistory = ({
         return { atom, query: presentCanonicalQuery(get(atom)) };
       },
     });
+    return retainLoadedHistory(browsed, get.self<BrowsedHistory>(), current.pages);
   });
-  const action = Atom.fnSync<"more" | "retry" | "reset">()((command, get): void => {
-    if (command === "reset") {
-      const current = get(navigation);
-      get.set(navigation, { generation: current.generation + 1, pages: 1 });
+  const action = Atom.fnSync<HistoryCommand>()((command, get): void => {
+    const changePages = (pages: number): void => get.set(navigation, { ...get(navigation), pages });
+    if (typeof command !== "string") return changePages(command.restorePages);
+    if (command === "reset" || command === "refresh") {
+      get.set(navigation, {
+        generation: get(navigation).generation + 1,
+        pages: command === "refresh" ? Math.max(1, get(state).loadedPages) : 1,
+      });
       get.refresh(firstPage);
     } else if (command === "retry") {
       Option.match(get(state).retryPage, {

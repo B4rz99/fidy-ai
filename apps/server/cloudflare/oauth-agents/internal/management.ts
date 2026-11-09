@@ -1,3 +1,4 @@
+import type { OAuthRecentActivity } from "../../../src/core/audit/contract";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { OAuthRevocationAdmission } from "../contract";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -14,8 +15,8 @@ import {
   oauthConnectionPageSize,
   oauthPaths,
 } from "../../../src/shell/oauth-agents/contract";
-import type { AuditUnavailable } from "../../../src/shell/audit/contract";
-import { readOAuthActivity } from "../../../src/shell/audit/operations";
+import { AuditUnavailable } from "../../../src/shell/audit/contract";
+import { prepareOAuthActivityPage } from "../../../src/shell/audit/operations";
 import { liveSessionConditions } from "../../../src/shell/web-session/operations";
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
 import { browserSession } from "../../web-session/operations";
@@ -27,8 +28,13 @@ type ManagementInput = Readonly<{
   db: D1Database;
   browserOrigin: string;
   current: number;
+  listingSession: Option.Option<FreshSessionSubject>;
   coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
   admitUser: (userId: string) => Effect.Effect<void, BootstrapUnavailable>;
+  readForUser: (
+    userId: string,
+    statements: D1PreparedStatement[]
+  ) => Effect.Effect<ReadonlyArray<D1Result>, BootstrapUnavailable>;
 }>;
 type AuthorizedInput = ManagementInput & Readonly<{ session: FreshSessionSubject }>;
 const ConnectionRow = Schema.Struct({
@@ -53,16 +59,11 @@ const connectionState = (
 };
 const projectConnection = (
   input: AuthorizedInput,
-  row: typeof ConnectionRow.Type
+  row: typeof ConnectionRow.Type,
+  recentActivity: OAuthRecentActivity
 ): Effect.Effect<OAuthConnectionMetadata, AuditUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
     const scopes = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(row.scopes_json);
-    const recentActivity = yield* readOAuthActivity({
-      db: input.db,
-      userId: input.session.user_id,
-      connectionId: row.id,
-      guard: liveSessionConditions(input),
-    });
     return yield* Schema.decodeUnknownEffect(Schema.toType(OAuthConnectionMetadata))({
       connectionId: row.id,
       claimedClientName: row.claimed_client_name,
@@ -79,25 +80,31 @@ const listConnections = (
   Effect.gen(function* () {
     const query = new URL(input.request.url).searchParams;
     if (new Set(query.keys()).size !== Array.from(query.keys()).length) {
+      yield* input.admitUser(input.session.user_id);
       return oauthResponse({ body: { error: "invalid_request" }, status: 400 });
     }
     const decoded = yield* Schema.decodeEffect(OAuthConnectionListQuery, {
       onExcessProperty: "error",
-    })(Object.fromEntries(query));
-    const guard = liveSessionConditions(input);
-    const results = yield* dbWork(() =>
-      input.db.batch([
-        input.db.prepare(`SELECT 1 AS live WHERE ${guard.sql}`).bind(...guard.params),
-        input.db
-          .prepare(`SELECT id,claimed_client_name,scopes_json,expires_at_ms,revoked_at_ms FROM oauth_connections
-      WHERE user_id = ? AND id > ? AND ${guard.sql} ORDER BY id LIMIT 26`)
-          .bind(
-            input.session.user_id,
-            Option.getOrElse(decoded.after, () => ""),
-            ...guard.params
-          ),
-      ])
+    })(Object.fromEntries(query)).pipe(
+      Effect.tapError(() => input.admitUser(input.session.user_id))
     );
+    const guard = liveSessionConditions(input);
+    const after = Option.getOrElse(decoded.after, () => "");
+    const activity = prepareOAuthActivityPage({
+      connections: {
+        sql: "SELECT id,user_id FROM oauth_connections WHERE user_id=? AND id>? ORDER BY id LIMIT 25",
+        params: [input.session.user_id, after],
+      },
+      guard,
+    });
+    const results = yield* input.readForUser(input.session.user_id, [
+      input.db.prepare(`SELECT 1 AS live WHERE ${guard.sql}`).bind(...guard.params),
+      input.db
+        .prepare(`SELECT id,claimed_client_name,scopes_json,expires_at_ms,revoked_at_ms FROM oauth_connections
+      WHERE user_id = ? AND id > ? AND ${guard.sql} ORDER BY id LIMIT 26`)
+        .bind(input.session.user_id, after, ...guard.params),
+      input.db.prepare(activity.statement.sql).bind(...activity.statement.params),
+    ]);
     if (results[0]?.results.length !== 1) {
       return oauthResponse({ body: { error: "unauthenticated" }, status: 401 });
     }
@@ -105,7 +112,13 @@ const listConnections = (
       Schema.Array(ConnectionRow).check(Schema.isMaxLength(oauthConnectionPageSize + 1))
     )(results[1]?.results).pipe(Effect.mapError(() => new BootstrapUnavailable()));
     const page = rows.slice(0, oauthConnectionPageSize);
-    const connections = yield* Effect.forEach(page, (row) => projectConnection(input, row));
+    const activities = yield* activity.decode(results[2]?.results);
+    const connections = yield* Effect.forEach(page, (row) => {
+      const recent = activities.get(row.id);
+      return recent === undefined
+        ? Effect.fail(new AuditUnavailable())
+        : projectConnection(input, row, recent);
+    });
     const body = yield* Schema.decodeEffect(Schema.toType(OAuthConnectionList))({
       connections,
       nextCursor:
@@ -171,12 +184,11 @@ export const manageConnections = (
     const listing =
       input.request.method === "GET" &&
       new URL(input.request.url).pathname === oauthPaths.connections;
-    const session = yield* dbWork(() =>
-      browserSession({
-        ...input,
-        input: { current: input.current, fresh: !listing },
-      })
-    );
+    const session = listing
+      ? input.listingSession
+      : yield* dbWork(() =>
+          browserSession({ ...input, input: { current: input.current, fresh: true } })
+        );
     if (Option.isNone(session)) {
       if (!listing) {
         const live = yield* dbWork(() =>
@@ -189,8 +201,8 @@ export const manageConnections = (
       }
       return oauthResponse({ body: { error: "unauthenticated" }, status: 401 });
     }
-    yield* input.admitUser(session.value.user_id);
     if (!listing) {
+      yield* input.admitUser(session.value.user_id);
       return yield* requestRevocation({ ...input, session: session.value }).pipe(
         Effect.catchTag("BootstrapInvalid", () =>
           Effect.succeed(oauthResponse({ body: { error: "invalid_request" }, status: 400 }))

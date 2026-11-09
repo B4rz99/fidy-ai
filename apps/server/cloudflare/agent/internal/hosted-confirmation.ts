@@ -1,3 +1,6 @@
+import { reviewCancellation } from "./cancellation-review";
+import { HostedTurnConfirmation } from "../../../src/shell/agent/contract";
+import type { ConfirmationRead } from "./confirmation-description";
 import {
   CanonicalToolEvidence,
   TranscriptText,
@@ -22,7 +25,7 @@ const modelCommand = new RegExp(`\\b${commandPrefix}[a-f0-9]{${nonceBytes * 2}}\
 export const guardModelConfirmationReply = (text: TranscriptText): TranscriptText =>
   modelCommand.test(text)
     ? TranscriptText.make(
-        "No preparé una confirmación válida para estos cambios. No uses códigos anteriores; vuelve a solicitar la operación."
+        "No pude preparar esos cambios. Vuelve a pedirlos para revisarlos antes de confirmar."
       )
     : text;
 
@@ -39,8 +42,22 @@ export type ConfirmationRow = typeof ConfirmationRow.Type;
 
 /** A User-visible host challenge, bound to precisely the model's validated canonical input. */
 export type PendingHostedConfirmation = Readonly<{ text: TranscriptText; command: string }>;
+type ConfirmationPreparation =
+  | Readonly<PendingHostedConfirmation & { _tag: "Challenge" }>
+  | Readonly<{ _tag: "Notice"; text: TranscriptText }>;
 
 /** Store a short-lived, single-use challenge before offering it through visible delivery. */
+type IssueConfirmationInput = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  operation: CatalogOperation;
+  input: CanonicalToolEvidence;
+  now: number;
+  read: ConfirmationRead;
+  timeZone: string;
+  nativeButton: boolean;
+}>;
 export const issueHostedConfirmation = ({
   db,
   userId,
@@ -48,19 +65,17 @@ export const issueHostedConfirmation = ({
   operation,
   input,
   now,
-}: Readonly<{
-  db: D1Database;
-  userId: UserId;
-  turnId: TranscriptTurnId;
-  operation: CatalogOperation;
-  input: CanonicalToolEvidence;
-  now: number;
-}>): Effect.Effect<
-  Option.Option<PendingHostedConfirmation>,
+  read,
+  timeZone,
+  nativeButton,
+}: IssueConfirmationInput): Effect.Effect<
+  Option.Option<ConfirmationPreparation>,
   Cause.UnknownError | Schema.SchemaError,
   Crypto.Crypto
 > =>
   Effect.gen(function* () {
+    const cancellation = yield* reviewCancellation({ operation: operation.id, input, read });
+    if (cancellation._tag === "Notice") return Option.some(cancellation);
     const crypto = yield* Crypto.Crypto;
     const nonce = yield* crypto.randomBytes(nonceBytes).pipe(Effect.option);
     if (Option.isNone(nonce)) return Option.none();
@@ -73,7 +88,9 @@ export const issueHostedConfirmation = ({
       userId,
       operation: operation.id,
       input,
-      inputJson,
+      read,
+      timeZone,
+      nativeButton,
       command,
     });
     if (Option.isNone(text)) return Option.none();
@@ -96,7 +113,35 @@ export const issueHostedConfirmation = ({
         )
         .run()
     );
-    return issued.meta.changes === 1 ? Option.some({ text: text.value, command }) : Option.none();
+    return issued.meta.changes === 1
+      ? Option.some({ _tag: "Challenge", text: text.value, command })
+      : Option.none();
+  });
+
+export const readWhatsAppConfirmation = ({
+  db,
+  userId,
+  turnId,
+  now,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  now: number;
+}>): Effect.Effect<Option.Option<typeof HostedTurnConfirmation.Type>, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const row = yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          `SELECT command FROM hosted_confirmations c WHERE user_id=? AND issued_turn_id=? AND consumed_turn_id IS NULL AND expires_at_ms>? AND EXISTS(SELECT 1 FROM hosted_turns t WHERE t.id=c.issued_turn_id AND t.user_id=c.user_id AND t.inbound_message_id IS NOT NULL AND t.status='pending') LIMIT 1`
+        )
+        .bind(userId, turnId, now)
+        .first()
+    );
+    return Option.flatMap(
+      Option.fromNullishOr(row),
+      Schema.decodeUnknownOption(HostedTurnConfirmation)
+    );
   });
 
 /** Read only the most recent challenge for this stable User after its visible Turn completed. */

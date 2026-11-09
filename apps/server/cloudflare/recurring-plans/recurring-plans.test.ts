@@ -1,3 +1,6 @@
+import { browserSessionBindingHeader } from "../../src/shell/browser-transport/contract";
+import { prepareBoundCanonicalWebSession } from "../web-session/operations";
+import { browseRecurringPlans, prepareBoundRecurringWorkspace } from "./operations";
 import { type CanonicalWork } from "../canonical-operations/contract";
 import { type QueryCaller } from "../canonical-work/operations";
 import { Cause, Config, DateTime, Effect, Option, Schema } from "effect";
@@ -142,6 +145,7 @@ const fixture = (): Effect.Effect<
   });
 const call = (db: D1Database, subject: QueryCaller, work: CanonicalWork): Effect.Effect<Response> =>
   executeCanonicalWork({
+    completion: Option.none(),
     db,
     subject,
     work,
@@ -160,14 +164,15 @@ const edit = (revision: number, change: object, view?: "compact"): CanonicalWork
 });
 const read = (
   db: D1Database,
-  subject: QueryCaller
+  subject: QueryCaller,
+  view?: "compact"
 ): Effect.Effect<typeof RecurringWorkspace.Type, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const result = yield* executeCanonicalQuery({
       db,
       subject,
       operation: CanonicalOperationId.make("recurringPlans.getRecurringWorkspace"),
-      input: { query: { month: "2026-10" } },
+      input: { query: { month: "2026-10", ...(view === undefined ? {} : { view }) } },
       bucket: Option.none(),
     });
     const response = Option.getOrThrow(result);
@@ -1382,4 +1387,160 @@ it.skipIf(!measureStorage)(
       })
     ),
   60_000
+);
+
+it("settles browser Recurring facts, Audit, standing and its exact lease in the second owner batch", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, subjects } = yield* fixture();
+      const subject = subjects[0];
+      if (subject === undefined) return yield* Effect.die("Missing fixture subject");
+      const leaseId = "60000000-0000-4000-8000-000000000001";
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("INSERT INTO canonical_request_leases VALUES(?,?,?)")
+          .bind(leaseId, subject.userId, DateTime.nowUnsafe().epochMilliseconds + 90000)
+          .run()
+      );
+      const observed = observeRetentionCost(yield* recoveryDatabase(db));
+      const response = yield* browseRecurringPlans({
+        db: observed.database,
+        subject,
+        request: new Request(
+          "https://canonical.internal/recurring-plans?month=2026-10&view=compact"
+        ),
+        completion: Option.some({ leaseId }),
+      });
+      expect(response.status).toBe(200);
+      expect(observed.roundTrips()).toBe(2);
+      expect(response.headers.get("fidy-internal-read-completion")).toBe(leaseId);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
+        )
+      ).toEqual({ total: 0 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM audit_entries WHERE operation='recurringPlans.getRecurringWorkspace'"
+            )
+            .first()
+        )
+      ).toEqual({ total: 1 });
+    })
+  ));
+
+const preparedRead = Effect.fn(function* (db: D1Database, view?: "compact") {
+  const request = new Request(
+    `https://canonical.internal/recurring-plans?month=2026-10${view === undefined ? "" : "&view=compact"}`,
+    {
+      headers: {
+        cookie: `__Host-fidy_session=${bearer(0)}`,
+        [browserSessionBindingHeader]: sessions[0] ?? "",
+      },
+    }
+  );
+  const current = DateTime.nowUnsafe().epochMilliseconds;
+  const lookup = Option.getOrThrow(
+    yield* Effect.tryPromise(() => prepareBoundCanonicalWebSession({ request, current }))
+  );
+  const observed = observeRetentionCost(db);
+  const prepared = prepareBoundRecurringWorkspace(request)({
+    db: observed.database,
+    authority: lookup.authority,
+    reservation: lookup.statement,
+    current,
+  });
+  const rows = yield* Effect.tryPromise(() => observed.database.batch([...prepared.statements]));
+  const response = yield* prepared.present(rows);
+  expect(observed.roundTrips()).toBe(1);
+  expect(response.status).toBe(200);
+  return yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ data: Schema.toCodecJson(RecurringWorkspace) })
+  )(yield* Effect.tryPromise(() => response.json()));
+});
+
+it.each(["empty", "history", "linked", "capped"] as const)(
+  "preserves complete %s workspace output in the prepared native snapshot",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, subjects } = yield* fixture();
+        const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+        if (kind === "history") {
+          const history = yield* Schema.decodeEffect(Schema.toCodecJson(RecurringDocument))({
+            revision: 10000,
+            exceptions: [],
+            fulfillments: [],
+            excludedTransactionIds: [],
+            suggestions: [],
+            plans: Array.from({ length: 100 }, (_, index) => ({
+              id: `40000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+              pauses: [],
+              revisions: Array.from({ length: 100 }, (_, revision) => ({
+                from: DateTime.formatIsoDateUtc(
+                  DateTime.add(DateTime.makeUnsafe("2026-01-01"), { months: revision })
+                ),
+                plan: planInput,
+              })),
+            })),
+          });
+          yield* seedPlanningHistory(
+            db,
+            owner.userId,
+            yield* Schema.encodeEffect(RecurringDocument)(history)
+          );
+        } else if (kind !== "empty") {
+          expect(
+            (yield* call(db, owner, edit(0, { kind: "create", id: planId, plan: planInput })))
+              .status
+          ).toBe(200);
+          const count = kind === "linked" ? 257 : 129;
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(`WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<?)
+        INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms)
+        SELECT printf('70000000-0000-4000-8000-%012d',x),?,'1000000','COP','outflow','Propietario','10000000-0000-4000-8000-000000000016',1793451600000+x,1793451600000+x FROM n`)
+              .bind(count - 1, owner.userId)
+              .run()
+          );
+          if (kind === "linked") {
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare(`INSERT INTO recurring_plan_fulfillments(user_id,id,plan_id,position,local_date,actual_date,amount,currency,settled,transaction_id)
+          SELECT user_id,replace(id,'70000000','80000000'),?,CAST(substr(id,-12) AS INTEGER),'2026-10-31','2026-10-31',amount,currency,1,id FROM transactions WHERE user_id=?`)
+                .bind(planId, owner.userId)
+                .run()
+            );
+          }
+        }
+        const expected = yield* read(db, owner);
+        const actual = yield* preparedRead(db);
+        expect(actual.data).toEqual(expected);
+        expect((yield* preparedRead(db, "compact")).data).toEqual(
+          yield* read(db, owner, "compact")
+        );
+        if (kind === "linked") {
+          expect(
+            (yield* call(db, owner, {
+              _tag: "Call",
+              operation: CanonicalOperationId.make("transactions.updateTransaction"),
+              input: {
+                params: { id: "70000000-0000-4000-8000-000000000001" },
+                payload: {
+                  expectedRevision: 0,
+                  changes: { money: { amount: "1", currency: "COP" } },
+                },
+              },
+            })).status
+          ).toBe(200);
+          expect((yield* preparedRead(db)).data).toEqual(yield* read(db, owner));
+          expect((yield* preparedRead(db, "compact")).data).toEqual(
+            yield* read(db, owner, "compact")
+          );
+        }
+      })
+    ),
+  30000
 );

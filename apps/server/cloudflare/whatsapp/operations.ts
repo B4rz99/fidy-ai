@@ -122,7 +122,7 @@ export const reconcileWeeklyQuestion: typeof reconcileQuestion = (input) =>
 export const weeklyQuestionDeliveryQuery: typeof questionDeliveryQuery = (input) =>
   questionDeliveryQuery(input);
 /** Literal yes/no is actionable only as an authenticated reply to this User's verified disclosure. */
-export const readWeeklyReplyChoice: typeof readReplyChoice = (input) => readReplyChoice(input);
+export const readDisclosureReplyChoice: typeof readReplyChoice = (input) => readReplyChoice(input);
 
 /** Independently delete expired exact prompt content while preserving no-resend identities. */
 export const expireWeeklyQuestions: typeof expireQuestions = (input) => expireQuestions(input);

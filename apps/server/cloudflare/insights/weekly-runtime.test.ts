@@ -44,7 +44,7 @@ const questionTemplate = {
   name: "fidy_weekly_question",
   language: "es",
   approval: "approved",
-  body: "Fidy: {{1}}",
+  body: "Fidy te avisa: {{1}} Más en Fidy.",
 };
 const configuration = (db: D1Database): ProactivityEnvironment => ({
   DB: db,

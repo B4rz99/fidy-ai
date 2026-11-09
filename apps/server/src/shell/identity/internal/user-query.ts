@@ -14,17 +14,20 @@ const UserRow = Schema.Struct({
   ends_at_ms: Schema.DateTimeUtcFromMillis,
 });
 
-export const currentUserQuery = (userId: UserId): OwnedStatement =>
+export const selectedCurrentUserQuery = (users: OwnedStatement): OwnedStatement =>
   protectConsentStatement({
     statement: {
       sql: `SELECT u.id, u.service_market, u.locale, u.time_zone, u.created_at_ms,
               u.trial_started_at_ms AS started_at_ms, u.trial_ends_at_ms AS ends_at_ms FROM users AS u
-              WHERE u.id = ?`,
-      params: [userId],
+              WHERE u.id IN (SELECT userId FROM (${users.sql}))`,
+      params: users.params,
     },
     subject: { _tag: "Owner", column: "u.id" },
     requirement: "granted",
   });
+
+export const currentUserQuery = (userId: UserId): OwnedStatement =>
+  selectedCurrentUserQuery({ sql: "SELECT ? AS userId", params: [userId] });
 
 /** Decode the selected User without publishing its persisted representation. */
 export const decodeUser = (row: unknown): Effect.Effect<User, Schema.SchemaError> =>

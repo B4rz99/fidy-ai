@@ -1,3 +1,7 @@
+import {
+  decodeProcessingConsentStatusRead,
+  prepareSelectedProcessingConsentRead,
+} from "../../src/shell/processing-consent/operations";
 import { handleErasureRequest } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -10,8 +14,14 @@ import {
   ProcessingConsentWithdrawal,
 } from "../../src/shell/processing-consent/contract";
 import { readPrivacyTransactions } from "../transactions/operations";
-import { authenticateBoundWebSession } from "../web-session/operations";
-import { protectCanonicalPressure } from "../canonical-admission/operations";
+import {
+  authenticateBoundWebSession,
+  prepareBrowserSessionLookup,
+} from "../web-session/operations";
+import {
+  prepareBrowserObservationProtection,
+  protectCanonicalPressure,
+} from "../canonical-admission/operations";
 import { boundedJsonBody } from "../http/operations";
 import { RequestBodyPolicy } from "../http/contract";
 import { captureTraceHeaders } from "../runtime/telemetry/operations";
@@ -111,6 +121,55 @@ const forwardDecision = (
     );
   }).pipe(Effect.orElseSucceed(() => consentResponse(unavailableStatus)));
 
+const readBoundStatus = (input: PrivacyRequest, current: number): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const lookup = yield* Effect.tryPromise(() =>
+      prepareBrowserSessionLookup({ request: input.request, current, mounted: true })
+    );
+    if (Option.isNone(lookup)) return consentResponse(unauthenticatedStatus);
+    const read = prepareSelectedProcessingConsentRead(lookup.value.statement);
+    const rows = yield* Effect.tryPromise(() =>
+      input.db.batch([
+        ...prepareBrowserObservationProtection({
+          db: input.db,
+          lookup: lookup.value,
+          current,
+          leaseId: Option.none(),
+        }),
+        input.db.prepare(read.sql).bind(...read.params),
+      ])
+    ).pipe(Effect.uninterruptible);
+    const status = yield* decodeProcessingConsentStatusRead(rows.at(-1)?.results ?? []);
+    return Option.match(status, {
+      onNone: () => consentResponse(unauthenticatedStatus),
+      onSome: (value) => Response.json(value, { headers: { "cache-control": "no-store" } }),
+    });
+  }).pipe(
+    Effect.catch((failure) =>
+      Effect.succeed(
+        failure instanceof Error &&
+          "cause" in failure &&
+          failure.cause instanceof Error &&
+          /canonical_request_(rate|concurrency)/u.test(failure.cause.message)
+          ? Response.json(
+              {
+                error: {
+                  code: "rate_limited",
+                  message: "Too many concurrent or recent requests. Retry later.",
+                  retryAfterSeconds: 1,
+                },
+                next: [],
+              },
+              {
+                status: resourceLimitedStatus,
+                headers: { "cache-control": "no-store", "retry-after": "1" },
+              }
+            )
+          : consentResponse(unavailableStatus)
+      )
+    )
+  );
+
 /** Resolve cookie-only privacy authority without demanding withdrawn Consent or a purchased plan. */
 export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Effect<Response> =>
   Effect.gen(function* () {
@@ -129,6 +188,7 @@ export const handleProcessingConsentRequest = (input: PrivacyRequest): Effect.Ef
       return consentResponse(invalidStatus);
     }
     const current = yield* Clock.currentTimeMillis;
+    if (transport.value.operation === "status") return yield* readBoundStatus(input, current);
     const subject = yield* Effect.tryPromise(() =>
       authenticateBoundWebSession({
         ...input,

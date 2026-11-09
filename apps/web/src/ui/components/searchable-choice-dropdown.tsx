@@ -64,18 +64,27 @@ export const SearchableChoiceDropdown = ({
 );
 const SearchableChoicePopup = ({ label }: Readonly<{ label: string }>): JSX.Element => (
   <Combobox.Portal>
-    <Combobox.Positioner sideOffset={6} align="start" className="z-50">
-      <Combobox.Popup className="max-h-(--available-height) w-(--anchor-width) min-w-56 max-w-(--available-width) overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
-        <Combobox.Input aria-label={`Buscar: ${label}`} placeholder="Buscar…" render={<Input />} />
-        <Combobox.Empty className="p-4 text-center text-sm text-muted-foreground">
+    <Combobox.Positioner
+      sideOffset={6}
+      align="start"
+      collisionAvoidance={{ side: "shift", align: "shift" }}
+      className="z-50"
+    >
+      <Combobox.Popup className="flex max-h-(--available-height) flex-col w-(--anchor-width) min-w-[min(14rem,var(--available-width))] max-w-(--available-width) overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
+        <Combobox.Input
+          aria-label={`Buscar: ${label}`}
+          placeholder="Buscar…"
+          render={<Input className="shrink-0" />}
+        />
+        <Combobox.Empty className="p-4 text-center text-sm text-muted-foreground empty:p-0">
           Sin resultados.
         </Combobox.Empty>
-        <Combobox.List className="max-h-64 overflow-y-auto overscroll-contain p-1">
+        <Combobox.List className="min-h-0 max-h-64 overflow-y-auto overscroll-contain p-1">
           {(item: Choice) => (
             <Combobox.Item
               key={item.value}
               value={item}
-              className="relative flex min-h-11 cursor-default items-center gap-2 rounded-md py-2 pr-8 pl-2 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+              className="relative flex min-h-11 cursor-default items-center gap-2 rounded-md py-2 pr-8 pl-2 text-sm outline-none data-highlighted:bg-control-hover data-highlighted:text-foreground data-highlighted:underline data-highlighted:underline-offset-4"
             >
               {item.label}
               <Combobox.ItemIndicator className="absolute right-2">

@@ -26,6 +26,7 @@ import { makeHostedInferenceInternal } from "./inference";
 import { hostedOutputTokenReserve } from "./limits";
 import { exactTranscriptPromptInternal } from "./prompt";
 import { openAiProviderSchema } from "./provider-schema";
+import generatedToolParameters from "./tool-parameters.generated.json";
 
 type OpenAiInputItem = OpenAiRequest["messages"][number];
 type OpenAiFunctionCall = NonNullable<
@@ -123,12 +124,15 @@ const ProviderResponse = Schema.Struct({
 type ProviderResponse = typeof ProviderResponse.Type;
 type FunctionCallItem = typeof ProviderFunctionCall.Type;
 
+const parametersByWireName = new Map(
+  generatedToolParameters.map(({ wireName, parameters }) => [wireName, parameters])
+);
 const openAiOperationBindings = hostedOperationBindings(operationCatalog).map(
-  ({ operation, wireName }) => ({
-    operation,
-    wireName,
-    parameters: openAiProviderSchema(operation.input),
-  })
+  ({ operation, wireName }) => {
+    const parameters = parametersByWireName.get(wireName);
+    if (parameters === undefined) throw new Error("Hosted tool parameters must be generated");
+    return { operation, wireName, parameters };
+  }
 );
 
 const operationByWireName = new Map(

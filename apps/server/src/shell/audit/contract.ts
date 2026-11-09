@@ -73,6 +73,7 @@ export type AuditCredentialOperation =
   | "transactions.searchTransactions"
   | "transactions.unlinkTransactions"
   | "transactions.deleteTransaction"
+  | "transactions.updateTransactions"
   | "transactions.updateTransaction";
 /** Supporting evidence is retained only for these credential-free statement projections. */
 export type AuditPublicationOperation =
@@ -165,7 +166,8 @@ export type AuditQueryCall = Readonly<{
     | "transactions.getTransaction"
     | "transactions.listTransactions"
     | "transactions.searchTransactions"
-    | "ingestion.getStatementSubmission";
+    | "ingestion.getStatementSubmission"
+    | "ingestion.getReviewItem";
   current: number;
   missingWhen: OwnedStatement;
 }>;

@@ -2,8 +2,10 @@ import { Effect, Option, Schema } from "effect";
 import { TranscriptText } from "~/core/agent/contract";
 import {
   InsightTemplateUnavailable,
+  ProactivityTemplateParameter,
   type WeeklyQuestionSender,
   WeeklyQuestionTemplateConfiguration,
+  proactivityTemplateBody,
 } from "~/shell/channels/whatsapp/contract";
 import { type OutboundHttpService } from "~/shell/outbound-http/operations";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
@@ -21,8 +23,10 @@ export const buildWeeklyQuestionSender = (
   const prepare: WeeklyQuestionSender["prepare"] = (offer) =>
     Effect.gen(function* () {
       if (Option.isNone(configuration)) return yield* new InsightTemplateUnavailable();
-      const parameter = `¿quieres que te siga enviando esto?\n${offer.disclosure.text}\nAceptar o continuar: ${offer.acceptChoice}\nRechazar: ${offer.declineChoice}`;
-      const text = `Fidy: ${parameter}`;
+      const parameter = yield* Schema.decodeEffect(ProactivityTemplateParameter)(
+        `¿Quieres seguir recibiendo tu resumen semanal? ${offer.disclosure.text} Responde a este mensaje con «Sí» para continuar o «No» para dejar de recibirlo.`
+      );
+      const text = proactivityTemplateBody.replace("{{1}}", () => parameter);
       if (
         text.length > maximumQuestionLength ||
         new TextEncoder().encode(text).byteLength > maximumQuestionBytes
@@ -30,7 +34,7 @@ export const buildWeeklyQuestionSender = (
         return yield* new InsightTemplateUnavailable();
       }
       return { parameter, text: TranscriptText.make(text) };
-    });
+    }).pipe(Effect.mapError(() => new InsightTemplateUnavailable()));
   return {
     prepare,
     send: (request) =>

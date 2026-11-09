@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { ComponentProps, JSX } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 
@@ -7,6 +7,7 @@ export const CanonicalQueryRetry = ({
   description,
   onRetry,
   retryLabel,
+  variant = "outline",
   retryingLabel,
   title,
   waiting,
@@ -17,12 +18,13 @@ export const CanonicalQueryRetry = ({
   retryingLabel: string;
   title: string;
   waiting: boolean;
-}>): JSX.Element => (
+}> &
+  Pick<ComponentProps<typeof Button>, "variant">): JSX.Element => (
   <Alert variant="destructive">
     <AlertTitle>{title}</AlertTitle>
     <AlertDescription className="flex flex-col items-start gap-3">
       <span>{description}</span>
-      <Button disabled={waiting} onClick={onRetry} type="button" variant="outline">
+      <Button disabled={waiting} onClick={onRetry} type="button" variant={variant}>
         {waiting ? retryingLabel : retryLabel}
       </Button>
     </AlertDescription>

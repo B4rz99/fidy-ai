@@ -74,11 +74,13 @@ it("keeps optional review paging and the existing UTF-16 search bounds", () => {
 
 it("returns the same canonical input accepted by the published batch child schema", () => {
   const input = getCanonicalOperationInput("transactions.updateTransaction");
-  const erased = operationCatalog.byId.get("transactions.updateTransaction");
-  expect(input.ast).toBe(erased?.input.ast);
+  const erased = Option.getOrThrow(
+    Option.fromUndefinedOr(operationCatalog.byId.get("transactions.updateTransaction"))
+  );
 
   const attempted = { params: { id: "not-a-transaction-id" }, payload: {} };
   const direct = Schema.decodeOption(input)(attempted);
+  expect(Schema.decodeOption(erased.input)(attempted)).toEqual(direct);
   const batch = Schema.decodeOption(getAtomicBatchCallSchema())({
     callId: "00000000-0000-4000-8000-000000000001",
     operation: "transactions.updateTransaction",

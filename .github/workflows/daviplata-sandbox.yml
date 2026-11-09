@@ -24,7 +24,7 @@ jobs:
         with:
           bun-version: "1.4.1"
       - run: bun install --frozen-lockfile
-      - name: Verify exact OTP protocol and matching first-payment settlement
+      - name: Verify OTP, matching settlement and source cancellation
         env:
           FIDY_DAVIPLATA_SANDBOX: "1"
           WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}
@@ -43,5 +43,7 @@ jobs:
             '- Synthetic tokenization, OTP send/confirm and authenticated reusable DAVIPLATA source verification completed.' \
             '- Weekly, monthly and yearly first payments reached matching verified success.' \
             '- Declined weekly first payment reached the existing bounded failure decision.' \
+            '- Successful periods were cancelled canonically; retry retained the receipt and paid history.' \
+            '- DaviPlata reusable sources reached independently verified VOIDED status.' \
             '- No tokens, provider identities, service URLs, document/product values or response bodies are retained.' \
             '- Local D1/activity harness plus real Sandbox provider; not browser CORS, recovery, Production or native-platform launch approval.' >> "$GITHUB_STEP_SUMMARY"

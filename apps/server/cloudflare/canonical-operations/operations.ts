@@ -1,3 +1,4 @@
+import type { CanonicalReadCompletion } from "../canonical-admission/contract";
 import { requestFor } from "./internal/canonical-request";
 import { observeCanonicalResponse } from "../runtime/application-observation/operations";
 import {
@@ -247,6 +248,7 @@ const executeOAuthMutation = ({
   Effect.gen(function* () {
     const work = yield* oauthMutationWork(operation, input.input);
     const response = yield* executeCanonicalWork({
+      completion: Option.none(),
       db: input.db,
       subject,
       current,
@@ -324,6 +326,7 @@ type WorkInput = Readonly<{
   current: number;
   hostedFence: Option.Option<HostedCommitFence>;
   oauthConfirmation: Option.Option<OAuthConfirmationWork>;
+  completion: Option.Option<CanonicalReadCompletion>;
 }>;
 
 const executeCall = (
@@ -582,6 +585,7 @@ const invokeQueryOwner = ({
   request,
   bucket,
   browserOrigin,
+  completion,
 }: Readonly<{
   db: D1Database;
   subject: QueryCaller;
@@ -589,6 +593,7 @@ const invokeQueryOwner = ({
   request: Request;
   bucket: Option.Option<R2Bucket>;
   browserOrigin: Option.Option<string>;
+  completion: Option.Option<CanonicalReadCompletion>;
 }>): Effect.Effect<Option.Option<Response>, Cause.UnknownError> =>
   Effect.gen(function* () {
     const owner = canonicalQueryOwner(operation.id);
@@ -604,6 +609,7 @@ const invokeQueryOwner = ({
           request,
           bucket,
           browserOrigin,
+          completion,
         })
       ).pipe((effect) => observeCanonicalResponse(effect, operation.id))
     );
@@ -615,9 +621,9 @@ const invokeQueryOwner = ({
 
 /**
  * Execute an admitted HTTP query through the installed owner dispatch. Document/view assembly
- * and accounting stay inside the same User coordinator, including rejected query strings. The
- * HTTP adapter retains transport admission; owners retain validation, live authority and Audit.
- * The coordinator receives a catalog-bound target only, never cookies or bearer plaintext.
+ * and accounting use the owner's native consistency guards. The HTTP adapter retains transport
+ * admission; owners retain validation, live authority and Audit. Recurring's phased non-browser
+ * reader still requires the same User's coordinator.
  */
 export const executeCanonicalHttpQuery = ({
   operation: operationId,
@@ -630,6 +636,7 @@ export const executeCanonicalHttpQuery = ({
   request: Request;
   bucket: Option.Option<R2Bucket>;
   browserOrigin: string;
+  completion: Option.Option<CanonicalReadCompletion>;
   coordinate: (work: CanonicalWork) => Effect.Effect<Response>;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
@@ -653,11 +660,7 @@ export const executeCanonicalHttpQuery = ({
     ) {
       return transactionUnavailable();
     }
-    if (
-      operationId === "dashboard.getDashboard" ||
-      operationId === "dashboard.getDashboardView" ||
-      operationId === "recurringPlans.getRecurringWorkspace"
-    ) {
+    if (operationId === "recurringPlans.getRecurringWorkspace") {
       return yield* coordinate({
         _tag: "Query",
         operation: operationId,
@@ -698,6 +701,7 @@ export const executeCanonicalQuery = ({
     const request = requestFor({ operation: operation.value, input });
     if (Option.isNone(request)) return Option.none();
     return yield* invokeQueryOwner({
+      completion: Option.none(),
       db,
       subject,
       operation: operation.value,

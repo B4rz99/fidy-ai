@@ -18,9 +18,19 @@ import {
   type ResourceAdmissionRefused,
   type ResourceAdmissionUnavailable,
 } from "../resource-admission/contract";
-import { admitResource, releaseOutstandingResource } from "../resource-admission/operations";
+import {
+  admitResource,
+  prepareOutstandingResourceRelease,
+  prepareResourceAdmission,
+  releaseOutstandingResource,
+} from "../resource-admission/operations";
 import { awaitRequestAbort } from "../http/operations";
 import { newId } from "../secret-material/operations";
+import {
+  prepareBrowserSessionLookup,
+  resolveBoundCanonicalWebSession,
+} from "../web-session/operations";
+import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { oauthResponse as response } from "./internal/response";
 import { manageConnections } from "./internal/management";
 import { reviewRequest } from "./internal/review";
@@ -53,6 +63,7 @@ const successStatus = 200;
 const maximumBootstrapBytes = 16384;
 const unavailableStatus = 503;
 const rateLimitedStatus = 429;
+const bootstrapPolicies = ["oauth.source.v1", "oauth.global.v1", "oauth.concurrent.v1"] as const;
 const policies = Schema.decodeSync(ResourceAdmissionPolicies)([
   {
     key: "oauth.source.v1",
@@ -109,7 +120,7 @@ const charge = (
     const keys =
       input.kind === "registration"
         ? ["oauth.registration-source.v1", "oauth.registration-global.v1"]
-        : ["oauth.source.v1", "oauth.global.v1", "oauth.concurrent.v1"];
+        : bootstrapPolicies;
     const claims =
       input.kind === "user"
         ? [{ policyKey: "oauth.user.v1", scopeKey: input.source, units: 1 }]
@@ -164,13 +175,84 @@ const discoveryResponse = (path: string): Response => {
   }
   return response({ body: { error: "temporarily_unavailable" }, status: unavailableStatus });
 };
+type ListingAdmission = ResourceAdmissionGrant &
+  Readonly<{ session: Option.Option<FreshSessionSubject> }>;
+const admitListing = (
+  input: BootstrapInput & Readonly<{ source: string }>
+): Effect.Effect<ListingAdmission, AdmissionFailure | BootstrapUnavailable> =>
+  Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
+    const lookup = yield* Effect.tryPromise({
+      try: () =>
+        prepareBrowserSessionLookup({
+          request: input.request,
+          current: clock.currentTimeMillisUnsafe(),
+          mounted: true,
+        }),
+      catch: () => new BootstrapUnavailable(),
+    });
+    const grant = yield* admitResource(authority(input.db, clock), {
+      grantId: ResourceAdmissionGrantId.make(newId()),
+      charges: yield* Schema.decodeUnknownEffect(ResourceAdmissionCharges)(
+        bootstrapPolicies.map((policyKey, index) => ({
+          policyKey,
+          scopeKey: index === 0 ? input.source : "oauth",
+          units: 1,
+        }))
+      ),
+      statements: Option.match(lookup, {
+        onNone: () => [],
+        onSome: ({ statement }) => [input.db.prepare(statement.sql).bind(...statement.params)],
+      }),
+    });
+    const session = Option.flatMap(lookup, (value) =>
+      resolveBoundCanonicalWebSession({ lookup: value, row: grant.results[0]?.results[0] })
+    );
+    return {
+      grantId: grant.grantId,
+      session: Option.map(session, (value) => ({ id: value.id, user_id: value.userId })),
+    };
+  });
+type ListingCompletion = ListingAdmission & Readonly<{ committed: () => void }>;
 const executeManagement = (
   input: BootstrapInput,
-  current: number
+  current: number,
+  completion: Option.Option<ListingCompletion>
 ): Effect.Effect<Response, BootstrapUnavailable> =>
   manageConnections({
     ...input,
     current,
+    listingSession: Option.flatMap(completion, (value) => value.session),
+    readForUser: (userId, statements) =>
+      Effect.gen(function* () {
+        const clock = yield* Clock.Clock;
+        const prepared = prepareResourceAdmission(authority(input.db, clock), {
+          grantId: ResourceAdmissionGrantId.make(newId()),
+          charges: yield* Schema.decodeEffect(ResourceAdmissionCharges)([
+            { policyKey: "oauth.user.v1", scopeKey: userId, units: 1 },
+          ]),
+        });
+        const release = Option.match(completion, {
+          onNone: () => [],
+          onSome: (value) =>
+            prepareOutstandingResourceRelease(authority(input.db, clock), {
+              grantId: value.grantId,
+              statements: [],
+            }),
+        });
+        const rows = yield* Effect.tryPromise({
+          try: () => input.db.batch([...prepared.statements, ...statements, ...release]),
+          catch: () => new BootstrapUnavailable(),
+        });
+        if (Option.isSome(completion)) completion.value.committed();
+        return rows.slice(
+          prepared.statements.length,
+          prepared.statements.length + statements.length
+        );
+      }).pipe(
+        Effect.uninterruptible,
+        Effect.mapError(() => new BootstrapUnavailable())
+      ),
     admitUser: (userId) =>
       charge({ db: input.db, source: userId, kind: "user" }).pipe(
         Effect.asVoid,
@@ -185,7 +267,7 @@ const executeManagement = (
     Effect.mapError(() => new BootstrapUnavailable())
   );
 const executeBootstrap = (
-  input: BootstrapInput & Readonly<{ source: string }>
+  input: BootstrapInput & Readonly<{ source: string; completion: Option.Option<ListingCompletion> }>
 ): Effect.Effect<Response, BootstrapFailure> =>
   Effect.gen(function* () {
     const path = new URL(input.request.url).pathname;
@@ -209,7 +291,7 @@ const executeBootstrap = (
         (owned) => owned === path
       )
     ) {
-      return yield* executeManagement(input, current);
+      return yield* executeManagement(input, current, input.completion);
     }
     if (path === oauthPaths.authorize) return yield* startAuthorization({ ...input, current });
     if (path === oauthPaths.token) {
@@ -247,14 +329,37 @@ export const handleOAuthRequest = (input: BootstrapInput): Effect.Effect<Respons
       return response({ body: { error: "temporarily_unavailable" }, status: unavailableStatus });
     }
     const clock = yield* Clock.Clock;
+    let listingCompleted = false;
+    const listing =
+      input.request.method === "GET" &&
+      new URL(input.request.url).pathname === oauthPaths.connections;
     return yield* Effect.acquireUseRelease(
-      charge({ db: input.db, source: source.value, kind: "bootstrap" }),
-      () => executeBootstrap({ ...input, source: source.value }),
+      listing
+        ? admitListing({ ...input, source: source.value })
+        : charge({ db: input.db, source: source.value, kind: "bootstrap" }).pipe(
+            Effect.map((grant): ListingAdmission => ({ ...grant, session: Option.none() }))
+          ),
       (grant) =>
-        releaseOutstandingResource(authority(input.db, clock), {
-          grantId: grant.grantId,
-          statements: [],
-        }).pipe(Effect.ignore)
+        executeBootstrap({
+          ...input,
+          source: source.value,
+          completion: listing
+            ? Option.some({
+                grantId: grant.grantId,
+                session: grant.session,
+                committed: () => {
+                  listingCompleted = true;
+                },
+              })
+            : Option.none(),
+        }),
+      (grant) =>
+        listingCompleted
+          ? Effect.void
+          : releaseOutstandingResource(authority(input.db, clock), {
+              grantId: grant.grantId,
+              statements: [],
+            }).pipe(Effect.ignore)
     );
   }).pipe(
     Effect.catchTags({

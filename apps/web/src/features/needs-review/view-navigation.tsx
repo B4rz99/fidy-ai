@@ -9,6 +9,7 @@ import { Input } from "@/ui/components/input";
 export type Filter = "pending" | "history" | "created" | "skipped" | "expired";
 type Props = Readonly<{
   contextFeedback: ReactNode;
+  sourceId: string;
   filter: Filter;
   select: (status: Filter, offset: number) => void;
   count: Option.Option<number>;
@@ -79,7 +80,7 @@ const ReviewFilters = (props: Props & Readonly<{ searchHelp: string }>): JSX.Ele
       />
     ) : null}
     <ChoiceDropdown
-      id="review-source"
+      id={props.sourceId}
       label="Filtrar por origen en esta página"
       value={props.source}
       options={[

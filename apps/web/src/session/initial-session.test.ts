@@ -1,4 +1,4 @@
-import { loadBrowserSessionEntry } from "@/transport/session-binding";
+import { loadBrowserSessionEntry } from "@/transport/session-entry";
 import { beginInitialBrowserSession } from "@/transport/initial-session";
 import { afterEach, expect, it, vi } from "vitest";
 import { Effect, Exit, Option } from "effect";

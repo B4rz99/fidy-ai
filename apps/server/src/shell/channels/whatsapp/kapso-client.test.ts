@@ -65,6 +65,7 @@ it.effect.each(["123456789", "987654321"])(
         }),
       });
       const result = yield* sender({
+        confirmation: Option.none(),
         recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
         businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make(businessPhoneNumberId),
         sandboxPhone,
@@ -90,6 +91,7 @@ it.effect("fails closed before provider egress when a sandbox caller has no phon
       }),
     });
     const exit = yield* sender({
+      confirmation: Option.none(),
       recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
       businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
       sandboxPhone: Option.none(),
@@ -157,6 +159,7 @@ it.effect("addresses the fixed voice failure reply to the authenticated sandbox 
 const sendInput = (
   overrides: Partial<Parameters<WhatsAppDelivery["sendText"]>[0]> = {}
 ): Parameters<WhatsAppDelivery["sendText"]>[0] => ({
+  confirmation: Option.none(),
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
   destination: {
     recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
@@ -689,5 +692,69 @@ it.effect("rejects sandbox delivery locally when authenticated phone evidence is
         automaticRetry: false,
       })
     );
+  })
+);
+
+it.effect(
+  "keeps the exact confirmation command in a button while showing only readable review text",
+  () =>
+    Effect.gen(function* () {
+      let outboundRequest: Option.Option<OutboundHttpRequest> = Option.none();
+      const service = makeService({
+        execute: (request) => {
+          outboundRequest = Option.some(request);
+          return Effect.succeed({
+            status: 200,
+            headers: {},
+            body: new TextEncoder().encode(
+              JSON.stringify({
+                messaging_product: "whatsapp",
+                messages: [{ id: "wamid.confirm-button" }],
+              })
+            ),
+          });
+        },
+      });
+      const command = `CONFIRMAR ${"a".repeat(64)}`;
+      yield* service.sendText(
+        sendInput({
+          text: TranscriptText.make("Cambiar el presupuesto de Restaurantes a 300.000 pesos."),
+          confirmation: Option.some({ command }),
+        })
+      );
+      const request = Option.getOrThrow(outboundRequest);
+      if (request._tag !== "KapsoMessages") return yield* Effect.die("Unexpected destination");
+      const body = yield* Schema.decodeEffect(UnknownJsonString)(request.body);
+      expect(body).toMatchObject({
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: "Cambiar el presupuesto de Restaurantes a 300.000 pesos." },
+          action: { buttons: [{ type: "reply", reply: { id: command, title: "Confirmar" } }] },
+        },
+      });
+      expect(body).not.toHaveProperty("text");
+    })
+);
+
+it.effect("refuses an oversized confirmation review before provider egress", () =>
+  Effect.gen(function* () {
+    let requests = 0;
+    const service = makeService({
+      execute: () => {
+        requests++;
+        return Effect.die("must not send a truncated confirmation");
+      },
+    });
+    const outcome = yield* service
+      .sendText(
+        sendInput({
+          text: TranscriptText.make("a".repeat(1025)),
+          confirmation: Option.some({ command: `CONFIRMAR ${"a".repeat(64)}` }),
+        })
+      )
+      .pipe(Effect.exit);
+    expect(Exit.isFailure(outcome)).toBe(true);
+    expect(requests).toBe(0);
   })
 );

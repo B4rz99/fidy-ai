@@ -109,6 +109,7 @@ it("serializes the authorized source and complete financial projections", () =>
       const observed = observeConcurrency(cost.database);
       const result = Option.getOrThrow(
         yield* loadDashboardFacts({
+          finalization: Option.none(),
           db: observed.database,
           userId,
           document: defaultDocument(),
@@ -169,6 +170,7 @@ it("loads all daily chart intervals in bounded native batches without rereading 
       const original = defaultDocument();
       const result = Option.getOrThrow(
         yield* loadDashboardFacts({
+          finalization: Option.none(),
           db: cost.database,
           userId,
           document: { ...original, layout: dailyChart(original.layout) },
@@ -213,6 +215,7 @@ it.each(["revision", "consent"] as const)(
         expect(
           Option.isSome(
             yield* loadDashboardFacts({
+              finalization: Option.none(),
               db,
               userId,
               document: defaultDocument(),

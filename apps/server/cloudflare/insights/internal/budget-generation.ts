@@ -1,8 +1,12 @@
+import {
+  formatWhatsAppDate,
+  formatWhatsAppMoney,
+} from "../../../src/shell/channels/whatsapp/operations";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import type { UserId } from "../../../src/core/identity/contract";
 import { BudgetCrossing } from "../../../src/core/budgets/contract";
-import { MoneyGroups, encodeMoneyAmount, groupMoney } from "../../../src/core/_shared/money";
+import { MoneyGroups, groupMoney } from "../../../src/core/_shared/money";
 import { budgetAlertDeadline } from "../../../src/core/insights/operations";
 import { type BudgetCrossingGroup } from "../../budgets/contract";
 import {
@@ -11,6 +15,8 @@ import {
 } from "../../budgets/operations";
 import { prepareConsentAction } from "../../consent/operations";
 import { newId } from "../../secret-material/operations";
+import { requireCategory } from "../../categories/operations";
+import type { Category } from "../../../src/core/categories/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { InsightUnavailable } from "../contract";
 
@@ -23,13 +29,18 @@ const occurrenceProof = (input: Scope, id: string): OwnedStatement => ({
 });
 const messageWrites = (
   input: Scope,
-  group: BudgetCrossingGroup
+  group: BudgetCrossingGroup,
+  categoryLabel: Category["label"]
 ): ReadonlyArray<D1PreparedStatement> => {
   if (Option.isNone(group.grantId)) return [];
   const first = group.crossings[0];
   const expires = budgetAlertDeadline({ detectedAt: first.detectedAt, monthEnd: first.period.to });
-  const thresholds = group.crossings.map((crossing) => `${crossing.threshold}%`).join(" y ");
-  const text = `Tu presupuesto de la categoría ${first.categoryId} alcanzó el ${thresholds}. Salidas registradas: ${encodeMoneyAmount(first.spent.amount)} ${first.spent.currency}. Tope capturado: ${encodeMoneyAmount(first.cap.amount)} ${first.cap.currency}. Mes aplicado: ${DateTime.formatIsoDate(DateTime.setZoneNamedUnsafe(first.period.from, first.period.timeZone)).slice(0, monthDatePrefixLength)} (${first.period.timeZone}).`;
+  const thresholds = group.crossings.map((crossing) => `${crossing.threshold}%`).join(" y el ");
+  const month = DateTime.formatIsoDate(
+    DateTime.setZoneNamedUnsafe(first.period.from, first.period.timeZone)
+  ).slice(0, monthDatePrefixLength);
+  const monthName = formatWhatsAppDate(`${month}-01`).replace(/^1 de /u, "");
+  const text = `Llevas ${formatWhatsAppMoney(first.spent)} de los ${formatWhatsAppMoney(first.cap)} de tu presupuesto de ${categoryLabel} para ${monthName}. Alcanzaste el ${thresholds}.`;
   return [
     input.db
       .prepare(
@@ -57,6 +68,10 @@ const commitGroup = (
   group: BudgetCrossingGroup
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
+    const category = yield* requireCategory({
+      db: input.db,
+      categoryId: group.crossings[0].categoryId,
+    });
     const money = yield* groupMoney({ inflows: [], outflows: [group.crossings[0].spent] });
     const encodedMoney = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(MoneyGroups))
@@ -96,7 +111,7 @@ const commitGroup = (
       statements.push(prepareChangedRowAssertion({ db: input.db, scope: "proactivity_message" }));
     }
     statements.push(
-      ...messageWrites(input, group),
+      ...messageWrites(input, group, category.label),
       prepareBudgetCrossingPublication({
         ...input,
         id: group.id,

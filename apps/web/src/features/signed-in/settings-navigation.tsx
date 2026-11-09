@@ -10,7 +10,9 @@ const settingsLinks = [
   { to: "/settings/access", label: "Accesos" },
 ] as const;
 
-export const SettingsNavigation = (): JSX.Element => {
+export const SettingsNavigation = ({
+  prepareNavigation,
+}: Readonly<{ prepareNavigation: (destination: string) => void }>): JSX.Element => {
   const inSettings = useRouterState({
     select: (state) => state.location.pathname.startsWith("/settings/"),
   });
@@ -33,6 +35,9 @@ export const SettingsNavigation = (): JSX.Element => {
             to={link.to}
             search={{}}
             onClick={dismissCompactNavigation}
+            onPointerEnter={() => prepareNavigation(link.to)}
+            onPointerDownCapture={() => prepareNavigation(link.to)}
+            onFocus={() => prepareNavigation(link.to)}
             className="application-settings-link"
             activeProps={{ className: "application-navigation-active" }}
           >

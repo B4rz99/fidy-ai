@@ -1,3 +1,4 @@
+import type { CanonicalReadFinalization } from "../../canonical-admission/contract";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { prepareUserContext } from "../../identity/user-context/operations";
@@ -16,10 +17,12 @@ import type { Budget } from "../../../src/core/budgets/contract";
 import type { DashboardTransactionSnapshot } from "../../transactions/contract";
 import { prepareBudgetCaps } from "../../budgets/operations";
 import { readDashboardTransactions } from "../../transactions/operations";
+import { unchangedUserDocument } from "../../user-documents/operations";
 
 export type DashboardReadContext = Readonly<{
   context: UserContext;
   categories: ReadonlyArray<Category>;
+  document: Option.Option<Readonly<{ encoded: string; revision: number }>>;
 }>;
 type LayoutWidgets = ReturnType<typeof collectLayoutWidgets>;
 type RangePlan = Readonly<{
@@ -76,6 +79,7 @@ const findFinancialSnapshot = ({
   db,
   userId,
   initial,
+  finalization,
   lists,
   plan,
   now,
@@ -86,6 +90,7 @@ const findFinancialSnapshot = ({
   lists: ListQueries;
   plan: RangePlan;
   now: DateTime.Utc;
+  finalization: Option.Option<CanonicalReadFinalization>;
 }>): Effect.Effect<Option.Option<FinancialSnapshot>> => {
   const { context, categories } = initial;
   const month = DateTime.formatIsoDate(
@@ -93,7 +98,9 @@ const findFinancialSnapshot = ({
   ).slice(0, monthLabelLength);
   const caps = prepareBudgetCaps({ db, userId, month });
   if (Option.isNone(caps)) return Effect.succeedNone;
+  const source = unchangedUserDocument({ userId, kind: "dashboard", observed: initial.document });
   return readDashboardTransactions({
+    finalization,
     db,
     userId,
     categories,
@@ -105,8 +112,10 @@ const findFinancialSnapshot = ({
           db,
           userId: UserId.make(userId),
           statement: {
-            sql: "SELECT serviceMarket, locale, timeZone FROM identity_user_context",
-            params: [],
+            sql: `SELECT serviceMarket, locale, timeZone FROM identity_user_context
+              WHERE (SELECT accepted FROM (${source.sql}))='true'
+              AND json(CASE WHEN serviceMarket=? AND locale=? AND timeZone=? THEN 'true' ELSE '' END)='true'`,
+            params: [...source.params, context.serviceMarket, context.locale, context.timeZone],
           },
         }),
         caps.value.statement,
@@ -148,18 +157,21 @@ export const loadDashboardFacts = ({
   document,
   now,
   initial,
+  finalization,
 }: Readonly<{
   db: D1Database;
   userId: string;
   document: DashboardDocument;
   now: DateTime.Utc;
   initial: DashboardReadContext;
+  finalization: Option.Option<CanonicalReadFinalization>;
 }>): Effect.Effect<Option.Option<DashboardFacts>> =>
   Effect.gen(function* () {
     const widgets = collectLayoutWidgets(document.layout);
     const plan = planRanges(widgets, now, initial.context);
     const lists = planLists(widgets);
     const selected = yield* findFinancialSnapshot({
+      finalization,
       db,
       userId,
       initial,

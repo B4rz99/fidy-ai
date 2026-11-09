@@ -100,7 +100,7 @@
   },
   "dnd-kit": {
     "repository": "https://github.com/clauderic/dnd-kit",
-    "verifiedOn": "2026-10-22",
+    "verifiedOn": "2026-11-07",
     "snapshot": {
       "manifest": ".repos/dnd-kit/packages/react/package.json",
       "version": "0.5.0",
@@ -113,12 +113,12 @@
       {
         "name": "@dnd-kit/react",
         "manifest": "apps/web/package.json",
-        "version": "0.5.1"
+        "version": "0.5.3"
       },
       {
         "name": "@dnd-kit/dom",
         "manifest": "apps/web/package.json",
-        "version": "0.5.1"
+        "version": "0.5.3"
       }
     ],
     "sourcePaths": [

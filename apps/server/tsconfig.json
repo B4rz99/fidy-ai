@@ -18,7 +18,9 @@
     "scripts/**/*.ts",
     "src/**/*.ts",
     "src/**/*.json",
-    "tools/contracts/**/*.ts"
+    "tools/contracts/**/*.ts",
+    "tools/hosted-inference/**/*.ts",
+    "tools/telemetry/**/*.ts"
   ],
   "exclude": ["**/node_modules/**", "**/dist/**", "**/build/**"]
 }

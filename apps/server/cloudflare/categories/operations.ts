@@ -1,4 +1,4 @@
-import { captureCategories } from "./internal/capture";
+import { captureCategories, prepareCaptureCategories as prepareCaptures } from "./internal/capture";
 import type { QueryAuthority } from "../canonical-work/operations";
 import {
   prepareBoundCategoryRead as prepareBrowserRead,
@@ -92,3 +92,6 @@ export const prepareCategoryReference: typeof categoryReferenceStatement = (inpu
 export const verifyCategoryStorage = (
   input: Readonly<{ db: D1Database }>
 ): Effect.Effect<void, CategoriesUnavailable> => verifyStorage(input);
+
+/** Prepare request-local Category interpretation inside an existing protected snapshot. */
+export const prepareCaptureCategories: typeof prepareCaptures = (input) => prepareCaptures(input);

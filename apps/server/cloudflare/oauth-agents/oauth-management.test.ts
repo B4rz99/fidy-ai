@@ -1,7 +1,11 @@
+import { authenticateBoundWebSession } from "../web-session/operations";
+import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
+import { observeRetentionCost } from "../d1-test-fixture";
 import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { deepStrictEqual } from "node:assert";
 import { afterEach, expect, it, vi } from "vitest";
 import { reviewRequest } from "./internal/review";
+import { handleOAuthRequest } from "./runtime";
 import { manageConnections } from "./internal/management";
 import { BootstrapUnavailable } from "./internal/bootstrap";
 import { OAuthReviewChoice } from "../../src/shell/oauth-agents/contract";
@@ -19,6 +23,20 @@ import {
 } from "./oauth-ingress.test-fixture";
 
 afterEach(() => vi.restoreAllMocks());
+
+const listingSession = (
+  input: Readonly<{ db: D1Database; headers: HeadersInit; current: number }>
+): Effect.Effect<Option.Option<FreshSessionSubject>, Effect.Error<ReturnType<typeof wait>>> =>
+  wait(
+    authenticateBoundWebSession({
+      db: input.db,
+      request: new Request("https://api.fidyapp.com/web/oauth/connections", {
+        headers: input.headers,
+      }),
+      current: input.current,
+      freshness: "live",
+    })
+  ).pipe(Effect.map(Option.map((subject) => ({ id: subject.id, user_id: subject.userId }))));
 
 it("lists distinct owned agent connections with canonical activity and no credential material", () =>
   Effect.runPromise(
@@ -533,7 +551,17 @@ it("keeps corrupt retained OAuth review and connection dates in the typed failur
         deepStrictEqual(
           yield* Effect.exit(
             manageConnections({
+              listingSession: yield* listingSession({
+                db: approved.db,
+                headers: approved.headers,
+                current: DateTime.nowUnsafe().epochMilliseconds,
+              }),
               db: approved.db,
+              readForUser: (_, statements) =>
+                Effect.tryPromise({
+                  try: () => approved.db.batch(statements),
+                  catch: () => new BootstrapUnavailable(),
+                }),
               request: new Request("https://api.fidyapp.com/web/oauth/connections", {
                 headers: approved.headers,
               }),
@@ -792,3 +820,259 @@ it("pages retained connections and refuses oversized revoke-all atomically rathe
       ).toBe(0);
     })
   ));
+
+it("batches recent activity for an entire connection page", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      for (let index = 0; index < 3; index++) yield* approveAgain(fixture);
+      const observed = observeRetentionCost(fixture.db);
+      const response = yield* manageConnections({
+        listingSession: yield* listingSession({
+          db: observed.database,
+          headers: fixture.headers,
+          current: DateTime.nowUnsafe().epochMilliseconds,
+        }),
+        db: observed.database,
+        readForUser: (_, statements) =>
+          Effect.tryPromise({
+            try: () => observed.database.batch(statements),
+            catch: () => new BootstrapUnavailable(),
+          }),
+        request: new Request("https://api.fidyapp.com/web/oauth/connections", {
+          headers: fixture.headers,
+        }),
+        browserOrigin: "https://app.fidyapp.com",
+        current: DateTime.nowUnsafe().epochMilliseconds,
+        admitUser: () => Effect.void,
+        coordinator: {
+          getByName: () => {
+            throw new Error("Listing must not revoke");
+          },
+        },
+      });
+      expect(response.status).toBe(200);
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ connections: Schema.Array(Schema.Unknown) })
+      )(yield* wait(response.json()));
+      expect(body.connections).toHaveLength(4);
+      expect(observed.roundTrips()).toBe(2);
+    })
+  ));
+
+it.each(["missing", "different"] as const)("refuses a %s mounted binding before listing", (kind) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const headers = new Headers(fixture.headers);
+      if (kind === "missing") headers.delete("Fidy-Session-Binding");
+      else headers.set("Fidy-Session-Binding", "20000000-0000-4000-8000-000000000003");
+      let admitted = false;
+      const response = yield* manageConnections({
+        listingSession: yield* listingSession({
+          db: fixture.db,
+          headers,
+          current: DateTime.nowUnsafe().epochMilliseconds,
+        }),
+        db: fixture.db,
+        readForUser: (_, statements) =>
+          Effect.tryPromise({
+            try: () => fixture.db.batch(statements),
+            catch: () => new BootstrapUnavailable(),
+          }),
+        request: new Request("https://api.fidyapp.com/web/oauth/connections", { headers }),
+        browserOrigin: "https://app.fidyapp.com",
+        current: yield* Clock.currentTimeMillis,
+        admitUser: () =>
+          Effect.sync(() => {
+            admitted = true;
+          }),
+        coordinator: {
+          getByName: () => {
+            throw new Error("Listing must not revoke");
+          },
+        },
+      });
+      expect(response.status).toBe(401);
+      expect(admitted).toBe(false);
+    })
+  )
+);
+
+it("withholds the connection page if the resolved browser session is revoked before its snapshot", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const current = yield* Clock.currentTimeMillis;
+      const response = yield* manageConnections({
+        listingSession: yield* listingSession({
+          db: fixture.db,
+          headers: fixture.headers,
+          current,
+        }),
+        db: fixture.db,
+        readForUser: (_, statements) =>
+          wait(
+            fixture.db.prepare("UPDATE web_sessions SET revoked_at_ms=?").bind(current).run()
+          ).pipe(
+            Effect.mapError(() => new BootstrapUnavailable()),
+            Effect.flatMap(() =>
+              Effect.tryPromise({
+                try: () => fixture.db.batch(statements),
+                catch: () => new BootstrapUnavailable(),
+              })
+            )
+          ),
+        request: new Request("https://api.fidyapp.com/web/oauth/connections", {
+          headers: fixture.headers,
+        }),
+        browserOrigin: "https://app.fidyapp.com",
+        current,
+        admitUser: () =>
+          wait(
+            fixture.db.prepare("UPDATE web_sessions SET revoked_at_ms=?").bind(current).run()
+          ).pipe(
+            Effect.asVoid,
+            Effect.mapError(() => new BootstrapUnavailable())
+          ),
+        coordinator: {
+          getByName: () => {
+            throw new Error("Listing must not revoke");
+          },
+        },
+      });
+      expect(response.status).toBe(401);
+      expect(yield* wait(response.json())).toEqual({ error: "unauthenticated" });
+    })
+  ));
+
+it("combines listing source pressure and exact binding before the User page unit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const observed = observeRetentionCost(fixture.db);
+      const headers = new Headers(fixture.headers);
+      headers.set("x-oauth-source", "a".repeat(64));
+      const response = yield* handleOAuthRequest({
+        db: observed.database,
+        request: new Request("https://api.fidyapp.com/web/oauth/connections", { headers }),
+        browserOrigin: "https://app.fidyapp.com",
+        coordinator: {
+          getByName: () => {
+            throw new Error("Listing must not revoke");
+          },
+        },
+      });
+      expect(response.status).toBe(200);
+      expect(observed.roundTrips()).toBe(2);
+      const body = yield* wait(response.json());
+      expect(body).toMatchObject({ connections: [expect.anything()] });
+    })
+  ));
+
+it.each(["missing-binding", "wrong-cookie"] as const)(
+  "charges source pressure and releases work after listing rejects %s",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* approvedFixture();
+        const headers = new Headers(fixture.headers);
+        const source = "e".repeat(64);
+        headers.set("x-oauth-source", source);
+        if (failure === "missing-binding") headers.delete("Fidy-Session-Binding");
+        else headers.set("cookie", `__Host-fidy_session=${"Z".repeat(43)}`);
+        const response = yield* handleOAuthRequest({
+          db: fixture.db,
+          request: new Request("https://api.fidyapp.com/web/oauth/connections", { headers }),
+          browserOrigin: "https://app.fidyapp.com",
+          coordinator: {
+            getByName: () => {
+              throw new Error("Rejected listing must not reach the coordinator");
+            },
+          },
+        });
+        expect(response.status).toBe(401);
+        expect(yield* wait(response.json())).toEqual({ error: "unauthenticated" });
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare(
+                "SELECT sum(units) AS used FROM resource_admission_events WHERE policy_key='oauth.source.v1' AND scope_key=?"
+              )
+              .bind(source)
+              .first<number>("used")
+          )
+        ).toBe(1);
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare(
+                "SELECT count(*) AS active FROM resource_admission_events WHERE dimension='outstanding_work' AND released_at_epoch_ms IS NULL"
+              )
+              .first<number>("active")
+          )
+        ).toBe(0);
+      })
+    )
+);
+
+it.each(["refused", "lost-reply"] as const)(
+  "settles listing pressure safely after a %s page batch",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* approvedFixture();
+        const userUnits = (): Effect.Effect<number, Effect.Error<ReturnType<typeof wait>>> =>
+          wait(
+            fixture.db
+              .prepare(
+                "SELECT coalesce(sum(units),0) AS used FROM resource_admission_events WHERE policy_key='oauth.user.v1'"
+              )
+              .first<number>("used")
+          ).pipe(Effect.map((value) => Option.getOrThrow(Option.fromNullishOr(value))));
+        const before = yield* userUnits();
+        let batches = 0;
+        const database = new Proxy(fixture.db, {
+          get: (target, property): unknown =>
+            property === "batch"
+              ? (statements: D1PreparedStatement[]) => {
+                  batches++;
+                  if (batches !== 2) return target.batch(statements);
+                  if (failure === "refused") {
+                    return target.batch([
+                      ...statements,
+                      target.prepare("SELECT * FROM missing_listing_test_table"),
+                    ]);
+                  }
+                  return target.batch(statements).then(() => {
+                    throw new Error("Synthetic lost native reply");
+                  });
+                }
+              : Reflect.get(target, property, target),
+        });
+        const headers = new Headers(fixture.headers);
+        headers.set("x-oauth-source", "b".repeat(64));
+        const response = yield* handleOAuthRequest({
+          db: database,
+          request: new Request("https://api.fidyapp.com/web/oauth/connections", { headers }),
+          browserOrigin: "https://app.fidyapp.com",
+          coordinator: {
+            getByName: () => {
+              throw new Error("Listing must not revoke");
+            },
+          },
+        });
+        expect(response.status).toBe(503);
+        expect(yield* userUnits()).toBe(before + (failure === "lost-reply" ? 1 : 0));
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare(
+                "SELECT count(*) AS active FROM resource_admission_events WHERE dimension='outstanding_work' AND released_at_epoch_ms IS NULL"
+              )
+              .first<number>("active")
+          )
+        ).toBe(0);
+      })
+    )
+);

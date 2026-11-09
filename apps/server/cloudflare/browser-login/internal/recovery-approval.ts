@@ -25,11 +25,11 @@ export const prepareRecoveryApproval = ({
   subject,
   current,
 }: RecoveryBrowserPairingApproval): D1PreparedStatement => {
-  const ordering = noLaterReadyPairing(
-    { sql: `(SELECT userId FROM (${subject.sql}))`, params: subject.params },
-    "browser_login_pairings",
-    current
-  );
+  const ordering = noLaterReadyPairing({
+    userId: { sql: `(SELECT userId FROM (${subject.sql}))`, params: subject.params },
+    candidate: "browser_login_pairings",
+    current,
+  });
   return db
     .prepare(`UPDATE browser_login_pairings SET state = 'ready',
       user_id = (SELECT userId FROM (${subject.sql}))

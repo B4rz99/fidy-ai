@@ -1,3 +1,6 @@
+import { makeBrowserLoginErasureStores } from "./browser-login/runtime";
+import { makeWebSessionErasureStores } from "./web-session/runtime";
+import type { ErasureStore } from "./erasure-store/contract";
 import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { Clock, Context, Effect, Layer } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -70,3 +73,11 @@ export const scheduledFixture = {
     }).pipe(Effect.runPromise);
   },
 };
+
+/** Credential erasure composes both owners against the same native journey database. */
+export const fixtureBrowserCredentialErasureStores = (
+  db: D1Database
+): ReadonlyArray<ErasureStore> => [
+  ...makeWebSessionErasureStores(db),
+  ...makeBrowserLoginErasureStores(db),
+];

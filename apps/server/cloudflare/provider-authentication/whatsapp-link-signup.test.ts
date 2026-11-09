@@ -1,5 +1,4 @@
-import { makeWebSessionErasureStores } from "../web-session/runtime";
-import { makeBrowserLoginErasureStores } from "../browser-login/runtime";
+import { fixtureBrowserCredentialErasureStores } from "../core-worker.test-fixture";
 import { makeProviderAuthenticationErasureStores, sweepProviderAuthentication } from "./runtime";
 import { authenticateChatProvider } from "./whatsapp-provider.test-fixture";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -919,8 +918,7 @@ it("erases superseded signup evidence only for its associated User and fences un
       );
       const stores = [
         ...makeProviderAuthenticationErasureStores(journey.db),
-        ...makeWebSessionErasureStores(journey.db),
-        ...makeBrowserLoginErasureStores(journey.db),
+        ...fixtureBrowserCredentialErasureStores(journey.db),
       ];
       for (const id of ["provider_authentication_attempts", "whatsapp_signup_invitations"]) {
         const store = stores.find((item) => item.id === id);

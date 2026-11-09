@@ -129,6 +129,11 @@ per connection. Audit selection requires the existing User/connection/time index
 broad User-history scan. Identity-only listing remains available after Processing Consent withdrawal;
 request pressure and fresh-session requirements for revocation remain independent.
 
+PAT and OAuth activity indexes contain only credential calls with the corresponding credential
+identifier. Other browser and hosted calls retain their complete Audit records without updating
+unrelated activity indexes. Index replacement bounds the inspected history and destination entries
+before any schema change; it never rebuilds the Audit table or changes its append-only guards.
+
 MCP projects canonical capabilities under a separately identifiable OAuthConnection. It uses the
 same owner behavior, User coordination, Consent, accounting and Audit boundaries as other clients.
 OAuth approval, refresh, revocation and sensitive-operation confirmation remain distinct from PAT

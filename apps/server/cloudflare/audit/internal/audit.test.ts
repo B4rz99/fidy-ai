@@ -111,13 +111,14 @@ it("records group correction outcomes without rebuilding another User's retained
         current: current + 1,
         afterOwnerWrite: false,
       });
-      yield* attempt(() =>
+      const recorded = yield* attempt(() =>
         db.batch(
           [accepted, rejected].map((statement) =>
             db.prepare(statement.sql).bind(...statement.params)
           )
         )
       );
+      expect(recorded.reduce((total, result) => total + result.meta.rows_written, 0)).toBe(16);
       const audit = makeAudit({ database: db });
       expect(
         (yield* audit.query({ userId, limit: 10 })).map((entry) => ({

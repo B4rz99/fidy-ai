@@ -1,3 +1,4 @@
+import type { ErasureRecoveryConfiguration, ErasureRegistry } from "../erasure/contract";
 import { makeWorkerCrypto } from "../secret-material/runtime";
 import { makeUserRecoveryAlarm } from "./internal/recovery-alarm";
 import {
@@ -18,7 +19,11 @@ import {
   ConnectionInstitutions,
   registeredConnectionInstitutionIds,
 } from "../../src/shell/connections/contract";
-import { measureErasureRecovery, withErasureRecovery } from "../erasure/runtime";
+import {
+  measureErasureRecovery,
+  withErasureRecovery,
+  withErasureRegistry,
+} from "../erasure/runtime";
 import { type ErasureStore, ErasureUnavailable } from "../erasure-store/contract";
 import {
   executeErasureAdmission,
@@ -155,6 +160,7 @@ type CoordinatorEnvironment = Readonly<{
   Partial<
     Readonly<{
       ERASURE_BUCKET: R2Bucket;
+      ERASURE_REGISTRY: ErasureRegistry;
       ERASURE_REQUIRED: string;
       STATEMENT_STAGING_BUCKET: R2Bucket;
       STATEMENT_EXTRACTION_QUEUE: StatementQueue;
@@ -460,6 +466,10 @@ const consentActivities = new Map([
   ["/consent-renew", executeConsentRenewal],
   ["/consent-withdraw", executeConsentWithdrawal],
 ]);
+const erasureRecovery = (environment: CoordinatorEnvironment): ErasureRecoveryConfiguration => ({
+  db: environment.DB,
+  bucket: Option.fromUndefinedOr(environment.ERASURE_REGISTRY ?? environment.ERASURE_BUCKET),
+});
 const privateErasureActivity = (
   input: Parameters<typeof privateProactivityActivity>[0] &
     Readonly<{
@@ -478,10 +488,7 @@ const privateErasureActivity = (
         candidate: input.candidate,
         signal: input.request.signal,
         stores: erasureStores(input.environment.DB),
-        recovery: {
-          db: input.environment.DB,
-          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
-        },
+        recovery: erasureRecovery(input.environment),
       })
     );
   }
@@ -498,10 +505,7 @@ const privateErasureActivity = (
           statement: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
           registry: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
         }),
-        recovery: {
-          db: input.environment.DB,
-          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
-        },
+        recovery: erasureRecovery(input.environment),
         clearCoordinator: input.clearCoordinator,
       })
     );
@@ -530,10 +534,7 @@ const privateErasureRestore = (
         userId: input.userId,
         candidate: input.candidate,
         stores: erasureStores(input.environment.DB),
-        recovery: {
-          db: input.environment.DB,
-          bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
-        },
+        recovery: erasureRecovery(input.environment),
       })
     );
   }
@@ -774,7 +775,7 @@ export class UserTransactionCoordinator {
     this.activation = Option.orElse(configuration.activation, () =>
       makeBancolombiaSandboxActivation({ environment: env, userId: state.id.name })
     );
-    this.erasureEnvironment = env;
+    this.erasureEnvironment = withErasureRegistry(env);
     this.env = withErasureRecovery(env);
     this.mcp = makeMcpResidency({
       userId: state.id.name,

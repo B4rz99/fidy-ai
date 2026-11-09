@@ -1,9 +1,14 @@
+import type { ErasureRegistryNamespace } from "./erasure/contract";
 import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { Clock, Context, Effect, Layer } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { OutboundHttpLive } from "./outbound-http/runtime";
 import type { TelemetryService } from "../src/shell/observability/contract";
-import coreWorker, { UserTransactionCoordinator, makeCoreWorker } from "./core-worker";
+import coreWorker, {
+  ErasureRegistryTransport,
+  UserTransactionCoordinator,
+  makeCoreWorker,
+} from "./core-worker";
 /** Direct owner integration retains Core's native reader policy under the test's owning Scope. */
 export const fixtureNativeHttpClient = Effect.gen(function* () {
   const clients = yield* Layer.build(OutboundHttpLive).pipe(
@@ -70,3 +75,29 @@ export const scheduledFixture = {
     }).pipe(Effect.runPromise);
   },
 };
+
+export class DeployedRegistryFixture extends UserTransactionCoordinator {
+  constructor(
+    state: DurableObjectState,
+    environment: ConstructorParameters<typeof UserTransactionCoordinator>[1] &
+      Readonly<{ ROOT_COORDINATOR: ErasureRegistryNamespace }>
+  ) {
+    super(
+      {
+        id: { name: undefined, equals: state.id.equals.bind(state.id) },
+        storage: state.storage,
+        waitUntil: state.waitUntil.bind(state),
+      },
+      { ...environment, ERASURE_REGISTRY_COORDINATOR: environment.ROOT_COORDINATOR }
+    );
+  }
+}
+export class DeployedTransportFixture extends ErasureRegistryTransport {
+  constructor(
+    context: ConstructorParameters<typeof ErasureRegistryTransport>[0],
+    environment: ConstructorParameters<typeof ErasureRegistryTransport>[1] &
+      Readonly<{ ROOT_COORDINATOR: ErasureRegistryNamespace }>
+  ) {
+    super(context, { ...environment, ERASURE_REGISTRY_COORDINATOR: environment.ROOT_COORDINATOR });
+  }
+}

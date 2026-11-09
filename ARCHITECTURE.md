@@ -18,8 +18,10 @@ fields and operational procedures live in their linked references.
 
 ## Production boundary
 
-Cloudflare is the sole Production runtime. The public ingress Worker forwards to a private Core
-Worker and has no D1 binding. Core owns the User-scoped data API; the unrouted Email Worker has
+Cloudflare is the sole Production runtime. The public ingress Worker has no D1 binding. With the shared-read binding enabled, it forwards
+existing query declarations and browser data GET transports to a reserved shared read object in the
+Core artifact, and other requests to the private Core Worker. Core owns the User-scoped data API;
+the unrouted Email Worker has
 narrow forwarded-mail admission and retention authority. Static site and web Workers serve the
 marketing and product applications separately. The customer docs use an independent assets-only
 stack, automatically published when documentation or its build inputs change on trunk.
@@ -28,17 +30,22 @@ stack, automatically published when documentation or its build inputs change on 
 flowchart LR
   Clients[Web / CLI / MCP clients] --> Ingress[Public ingress]
   Ingress --> Core[Private Core]
+  Ingress --> Reads[Reserved shared read object]
+  Reads --> D1
+  Core -- Recovery metadata --> Reads
   Core --> Coordinator[Per-User Durable Objects]
   Coordinator --> D1[(D1)]
   Core --> Background[Queues / Workflows]
   Background --> Coordinator
   Email[Private Email Worker] --> D1
+  Email -- Metadata-only entrypoint --> Core
 ```
 
 D1 retains application state; Durable Objects coordinate per-User work; Queues redeliver bounded
 identities; Workflows execute durable steps; R2 retains private bytes; OpenAI supplies
-Fidy-controlled hosted inference. An independent private erasure registry protects deletion across D1
-restoration. Local development uses the same Worker entrypoints and binding graph.
+Fidy-controlled hosted inference. The shared read object's independent SQLite erasure registry
+protects deletion across D1 restoration. Protected units freshly read its generation; private original
+bytes remain in R2. Local development uses the same Worker entrypoints and binding graph.
 See [ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md).
 
 ## Cross-application contract

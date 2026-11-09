@@ -1,6 +1,6 @@
 import { recoveryWindowMs } from "./retention-policy";
 import { Clock, Effect, Option, Schema } from "effect";
-import type { ErasureOperatorEnvironment } from "../contract";
+import type { ErasureOperatorEnvironment, ErasureRegistry } from "../contract";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 import { expectedGeneration } from "./generation";
 import { RecoveryCase } from "./recovery-case";
@@ -18,7 +18,7 @@ type RestoreInput = Readonly<{
   signal: AbortSignal;
 }>;
 const readRecord = (
-  input: Readonly<{ bucket: R2Bucket; key: string }>
+  input: Readonly<{ bucket: ErasureRegistry; key: string }>
 ): Effect.Effect<typeof RecoveryCase.Type, ErasureUnavailable> =>
   Effect.gen(function* () {
     const object = yield* io(() => input.bucket.get(input.key));
@@ -64,7 +64,9 @@ const restoreOne = (
 const Session = Schema.Struct({ cursor: Schema.String, scanned: Schema.Literals([0, 1]) });
 export const restoreNext = (input: RestoreInput): Effect.Effect<Response, ErasureUnavailable> =>
   Effect.gen(function* () {
-    const bucket = Option.fromUndefinedOr(input.environment.ERASURE_BUCKET);
+    const bucket = Option.fromUndefinedOr(
+      input.environment.ERASURE_REGISTRY ?? input.environment.ERASURE_BUCKET
+    );
     if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
     const configuration = { db: input.environment.DB, bucket };
     const expected = yield* expectedGeneration(configuration);
@@ -123,7 +125,9 @@ export const releaseRestore = (input: RestoreInput): Effect.Effect<Response, Era
   Effect.gen(function* () {
     const configuration = {
       db: input.environment.DB,
-      bucket: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+      bucket: Option.fromUndefinedOr(
+        input.environment.ERASURE_REGISTRY ?? input.environment.ERASURE_BUCKET
+      ),
     };
     const expected = yield* expectedGeneration(configuration);
     const current = yield* Clock.currentTimeMillis;

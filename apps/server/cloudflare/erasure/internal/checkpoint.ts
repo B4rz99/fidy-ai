@@ -3,14 +3,14 @@ import { sealRecoveryCase } from "./sealed-case";
 import { Effect, Option, Schema } from "effect";
 import { type ErasureScope, ErasureUnavailable } from "../../erasure-store/contract";
 import { newId } from "../../secret-material/operations";
-import type { ErasureRecoveryConfiguration } from "../contract";
+import type { ErasureRecoveryConfiguration, ErasureRegistry } from "../contract";
 import { expectedGeneration, generationAssertion, generationKey } from "./generation";
 
 const maximumCaseBytes = 512;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
 type Checkpoint = Readonly<{
-  bucket: R2Bucket;
+  bucket: ErasureRegistry;
   previous: Readonly<{ generation: string; etag: string }>;
   generation: string;
 }>;
@@ -76,7 +76,7 @@ export const publishDeletionMarker = (
   });
 
 const installCase = (
-  input: Readonly<{ bucket: R2Bucket; record: typeof RecoveryCase.Type }>
+  input: Readonly<{ bucket: ErasureRegistry; record: typeof RecoveryCase.Type }>
 ): Effect.Effect<typeof RecoveryCase.Type, ErasureUnavailable> =>
   Effect.gen(function* () {
     const { bucket } = input;

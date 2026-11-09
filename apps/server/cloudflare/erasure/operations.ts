@@ -1,3 +1,4 @@
+import type { ErasureRegistry } from "./contract";
 import { initializeRegistryStorage } from "./internal/registry-initialization";
 import { sweepControlObjects } from "./internal/control-objects";
 import { requireInventory } from "./internal/inventory";
@@ -149,7 +150,7 @@ export const resumeErasureCases = (
   input: Readonly<{
     db: D1Database;
     coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-    bucket: Option.Option<R2Bucket>;
+    bucket: Option.Option<ErasureRegistry>;
   }>
 ): Effect.Effect<void, ErasureUnavailable> =>
   Effect.gen(function* () {

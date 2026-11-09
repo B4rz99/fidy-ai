@@ -1,5 +1,9 @@
 import { Effect, Option, Schema } from "effect";
-import { ErasureGeneration, type ErasureRecoveryConfiguration } from "../contract";
+import {
+  ErasureGeneration,
+  type ErasureRecoveryConfiguration,
+  type ErasureRegistry,
+} from "../contract";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 
 export const generationKey = "recovery/generation";
@@ -7,7 +11,7 @@ const maximumGenerationBytes = 64;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
 const decodeGeneration = (
-  object: R2ObjectBody
+  object: NonNullable<Awaited<ReturnType<ErasureRegistry["get"]>>>
 ): Effect.Effect<
   Readonly<{ generation: typeof ErasureGeneration.Type; etag: string }>,
   ErasureUnavailable

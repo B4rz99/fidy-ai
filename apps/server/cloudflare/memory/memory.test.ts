@@ -181,9 +181,8 @@ const forwardedBody = (input: Send): Option.Option<string> =>
   );
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
-const send = (db: D1Database, input: Send): Promise<Response> => {
-  vi.setSystemTime(clock() + 1000);
-  return publicWorker.fetch(
+const sendAtCurrentTime = (db: D1Database, input: Send): Promise<Response> =>
+  publicWorker.fetch(
     new Request(`https://api.fidyapp.com${input.path}`, {
       method: input.method,
       headers: new Headers({
@@ -202,6 +201,9 @@ const send = (db: D1Database, input: Send): Promise<Response> => {
       },
     }
   );
+const send = (db: D1Database, input: Send): Promise<Response> => {
+  vi.setSystemTime(clock() + 1000);
+  return sendAtCurrentTime(db, input);
 };
 
 const issuedPAT = Schema.Struct({
@@ -538,10 +540,18 @@ it("bounds concurrent remember calls so one User's aggregate is never oversubscr
             .status
         ).toBe(201);
       }
+      vi.setSystemTime(clock() + 1000);
       const outcomes = yield* Effect.forEach(
         ["a", "b"],
         (prefix) =>
-          fromTestPromise(() => remembered(db, `${prefix}${"z".repeat(1_999)}`, cookie(0))),
+          fromTestPromise(() =>
+            sendAtCurrentTime(db, {
+              path: "/memories",
+              method: "POST",
+              session: cookie(0),
+              payload: { text: `${prefix}${"z".repeat(1_999)}` },
+            })
+          ),
         { concurrency: "unbounded" }
       );
       expect(outcomes.map(({ status }) => status).toSorted(compareCount)).toEqual([201, 409]);

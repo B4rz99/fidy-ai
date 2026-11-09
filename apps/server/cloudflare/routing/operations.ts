@@ -16,6 +16,7 @@ export const canonicalMethods = (path: string): ReadonlyArray<string> =>
         .map((operation) => operation.method)
     )
   );
+
 /** Select a declared operation only when verb and path template match; otherwise None. */
 export const canonicalOperation = ({
   method,

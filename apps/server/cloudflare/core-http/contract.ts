@@ -1,3 +1,4 @@
+import type { ErasureRegistry } from "../erasure/contract";
 import type { ProviderEnvironment } from "../provider-authentication/contract";
 import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
 
@@ -27,6 +28,7 @@ export type CoreHttpEnvironment = ProviderEnvironment &
       BILLING_SUPPORT_AUDIENCE: string;
       ERASURE_SUPPORT_AUDIENCE: string;
       ERASURE_BUCKET: R2Bucket;
+      ERASURE_REGISTRY: ErasureRegistry;
       ERASURE_REQUIRED: string;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;

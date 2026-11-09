@@ -2,8 +2,50 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "8feef2ac69e7cc1d5dff84464d7dbacf9c8abda7e0d0b1243e2d5c0f985d28b4";
+const expectedEdgePolicyDigest = "a3140932a788af7664de9c0ecdbbc128a2afa348086f557e331dae2c4b75b422";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/checkpoint.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/generation.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/initialize.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/operator-request.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/restore-case.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/restore.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/registry-cutover.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/registry-object.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/registry-owner.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/registry-storage.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/registry-transport.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/erasure/internal/registry-value.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/routing/runtime.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/browser-transport/contract.ts", import.meta.url)
   ).text(),

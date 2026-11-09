@@ -1,6 +1,17 @@
+import { WorkerEntrypoint } from "cloudflare:workers";
+import {
+  type ErasureRegistry,
+  type ErasureRegistryNamespace,
+  erasureRegistryName,
+} from "./erasure/contract";
 import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
 import { resumeErasureCases, sweepErasureControlObjects } from "./erasure/operations";
-import { withErasureRecovery } from "./erasure/runtime";
+import {
+  makeErasureRegistryOwner,
+  withErasureRecovery,
+  withErasureRegistry,
+} from "./erasure/runtime";
+import { sharedStorageRead } from "./routing/runtime";
 import type { ProviderEnvironment } from "./provider-authentication/contract";
 import type { ProactivityDeliveryWork, ProactivityEnvironment } from "./insights/contract";
 import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./maintenance/contract";
@@ -39,9 +50,7 @@ type CoreEnvironment = ProviderEnvironment &
   Readonly<{ CONTRACT_DIGEST: string; RELEASE_GIT_SHA: string }> & {
     readonly OPENAI_API_KEY: OpenAiEnvironment["OPENAI_API_KEY"];
     readonly DB: D1Database;
-    readonly USER_TRANSACTION_COORDINATOR: Readonly<{
-      getByName: (name: string) => Pick<Fetcher, "fetch">;
-    }>;
+    readonly USER_TRANSACTION_COORDINATOR: ErasureRegistryNamespace;
     readonly HOSTED_AI_MODEL: string;
     readonly KAPSO_API_KEY: string;
     readonly KAPSO_WEBHOOK_SECRET: string;
@@ -61,6 +70,8 @@ type CoreEnvironment = ProviderEnvironment &
       ERASURE_SUPPORT_AUDIENCE: string;
       ERASURE_REQUIRED: string;
       ERASURE_BUCKET: R2Bucket;
+      ERASURE_REGISTRY: ErasureRegistry;
+      ERASURE_REGISTRY_COORDINATOR: ErasureRegistryNamespace;
       BILLING_REFUND_WORKFLOW: Workflow;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;
@@ -206,7 +217,7 @@ class CoreMaintenanceCoordinator {
     environment: CoreEnvironment
   ) {
     this.state = state;
-    this.erasureEnvironment = environment;
+    this.erasureEnvironment = withErasureRegistry(environment);
     this.environment = withErasureRecovery(environment);
   }
 
@@ -214,7 +225,9 @@ class CoreMaintenanceCoordinator {
     return resumeErasureCases({
       db: this.erasureEnvironment.DB,
       coordinator: this.erasureEnvironment.USER_TRANSACTION_COORDINATOR,
-      bucket: Option.fromUndefinedOr(this.erasureEnvironment.ERASURE_BUCKET),
+      bucket: Option.fromUndefinedOr(
+        this.erasureEnvironment.ERASURE_REGISTRY ?? this.erasureEnvironment.ERASURE_BUCKET
+      ),
     }).pipe(
       Effect.ensuring(
         sweepErasureControlObjects({
@@ -293,19 +306,97 @@ class CoreMaintenanceCoordinator {
   }
 }
 
+type CoordinatorState = Omit<ConstructorParameters<typeof UserCoordinatorRuntime>[0], "id"> &
+  Readonly<{ id: Pick<DurableObjectId, "name"> & Partial<Pick<DurableObjectId, "equals">> }> &
+  Partial<Pick<DurableObjectState, "waitUntil">> &
+  Readonly<{
+    storage: Partial<Pick<DurableObjectStorage, "sql" | "transactionSync" | "sync">>;
+  }>;
+
+/** Reserved metadata state shares the deployed class, never a User's object or authority. */
+const makeRegistryCoordinator = (
+  state: CoordinatorState,
+  environment: CoreEnvironment
+): Pick<Fetcher, "fetch"> => {
+  const { sql, transactionSync, sync } = state.storage;
+  if (sql === undefined || transactionSync === undefined || sync === undefined) {
+    return { fetch: () => Promise.resolve(new Response(null, { status: 503 })) };
+  }
+  const read = makeCoreHttp({
+    telemetry: cloudflareWorkerTelemetry,
+    institutions: registeredConnectionInstitutionIds,
+  });
+  return makeErasureRegistryOwner({
+    state: {
+      id: { name: erasureRegistryName },
+      storage: {
+        sql,
+        transactionSync: transactionSync.bind(state.storage),
+        sync: sync.bind(state.storage),
+      },
+    },
+    environment,
+    read: (request, bound) =>
+      sharedStorageRead(request)
+        ? read(
+            request,
+            bound,
+            state.waitUntil === undefined ? undefined : { waitUntil: state.waitUntil.bind(state) }
+          )
+        : Promise.resolve(new Response(null, { status: 404 })),
+  });
+};
+
+/** Email receives metadata transport only, without a binding to User coordinators or canonical HTTP. */
+export class ErasureRegistryTransport extends WorkerEntrypoint<CoreEnvironment> {
+  override fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const namespace =
+      this.env.ERASURE_REGISTRY_COORDINATOR ?? this.env.USER_TRANSACTION_COORDINATOR;
+    if (url.origin !== "https://erasure-registry.invalid" || url.pathname !== "/metadata") {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    return namespace.getByName(erasureRegistryName, { locationHint: "enam" }).fetch(request);
+  }
+}
+
+const isRegistryObject = (state: CoordinatorState, environment: CoreEnvironment): boolean => {
+  if (state.id.name === erasureRegistryName) return true;
+  const namespace = environment.ERASURE_REGISTRY_COORDINATOR;
+  return (
+    namespace?.idFromName !== undefined &&
+    state.id.equals?.(namespace.idFromName(erasureRegistryName)) === true
+  );
+};
+
 /** Preserve the deployed native class identity; reserved maintenance never constructs User work. */
 export class UserTransactionCoordinator {
-  private readonly delegate: CoreMaintenanceCoordinator | UserCoordinatorRuntime;
+  private readonly delegate:
+    | CoreMaintenanceCoordinator
+    | UserCoordinatorRuntime
+    | Pick<Fetcher, "fetch">;
 
   constructor(
-    state: ConstructorParameters<typeof UserCoordinatorRuntime>[0],
+    state: CoordinatorState,
     environment: CoreEnvironment,
     configuration?: ConstructorParameters<typeof UserCoordinatorRuntime>[2]
   ) {
+    if (isRegistryObject(state, environment)) {
+      this.delegate = makeRegistryCoordinator(state, environment);
+      return;
+    }
+    const name = state.id.name;
+    if (name === undefined) {
+      this.delegate = {
+        fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 503 })),
+      };
+      return;
+    }
+    const named = { id: { name }, storage: state.storage };
     this.delegate =
-      state.id.name === "core-maintenance-v1"
-        ? new CoreMaintenanceCoordinator(state, environment)
-        : new UserCoordinatorRuntime(state, environment, configuration);
+      name === "core-maintenance-v1"
+        ? new CoreMaintenanceCoordinator(named, environment)
+        : new UserCoordinatorRuntime(named, environment, configuration);
   }
 
   fetch(request: Request): Promise<Response> {

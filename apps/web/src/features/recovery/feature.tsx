@@ -2,19 +2,28 @@ import { BackupRecoveryRotationPresentation, type RotationState } from "./view";
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option, Redacted } from "effect";
-import { type JSX, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type JSX,
+  type RefCallback,
+  type SetStateAction,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import { type SensitiveClipboard, sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
-import type { BackupRecoveryCode } from "@/transport/client";
+import { authenticationEndedEvent } from "@/session/authentication-channel";
+import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { type RotateBackupRecoveryCommand, makeRotateCommand } from "./command";
+import { makeRotateCommand } from "./command";
 
 type DisclosureState =
   | Exclude<RotationState, { _tag: "Disclosed" }>
   | Readonly<{ _tag: "Disclosed"; code: Redacted.Redacted<BackupRecoveryCode>; copied: boolean }>;
 
 type RotationViewProps = Readonly<{
-  rotate: (command: RotateBackupRecoveryCommand) => void;
+  apiClient: FidyClient;
   clipboard: SensitiveClipboard;
 }>;
 
@@ -30,68 +39,111 @@ const RecoveryDisclosure = ({
   </Alert>
 );
 
+type RecoveryOwner = { current: DisclosureState; active: boolean };
+
+const mountRecoveryTask =
+  (
+    owner: RecoveryOwner,
+    clipboard: SensitiveClipboard,
+    setState: Dispatch<SetStateAction<DisclosureState>>
+  ): RefCallback<HTMLDivElement> =>
+  (node) => {
+    if (node === null) return;
+    owner.active = true;
+    if (owner.current._tag === "Disposed") {
+      owner.current = { _tag: "Idle" };
+      setState(owner.current);
+    }
+    const dispose = (): void => {
+      owner.active = false;
+      const previous = owner.current;
+      owner.current = { _tag: "Disposed" };
+      if (previous._tag === "Disclosed") {
+        clipboard.clear(Redacted.value(previous.code));
+        Redacted.wipeUnsafe(previous.code);
+      }
+    };
+    const hide = (): void => {
+      dispose();
+      setState({ _tag: "Disposed" });
+    };
+    window.addEventListener("pagehide", hide);
+    window.addEventListener(authenticationEndedEvent, hide);
+    return (): void => {
+      dispose();
+      window.removeEventListener("pagehide", hide);
+      window.removeEventListener(authenticationEndedEvent, hide);
+    };
+  };
+
 /** Mounted disclosure view; replacing its React identity irreversibly drops the code state. */
-export const BackupRecoveryRotationView = ({
-  rotate,
-  clipboard,
-}: RotationViewProps): JSX.Element => {
+const MountedRecoveryTask = ({ apiClient, clipboard }: RotationViewProps): JSX.Element => {
   const [state, setState] = useState<DisclosureState>({ _tag: "Idle" });
-  const admission = useRef<DisclosureState>(state);
+  const owner = useRef<RecoveryOwner>({ current: state, active: false }).current;
+  const lifecycleRef = useCallback<RefCallback<HTMLDivElement>>(
+    (node) => mountRecoveryTask(owner, clipboard, setState)(node),
+    [owner, clipboard]
+  );
+  const [rotateAtom] = useState(() => makeRotateCommand({ apiClient }));
+  const rotate = useAtomSet(rotateAtom);
   const publish = (next: DisclosureState): void => {
-    admission.current = next;
+    if (!owner.active) return;
+    owner.current = next;
     setState(next);
   };
   const review = (): void => {
-    if (admission.current._tag !== "Idle" && admission.current._tag !== "Failed") return;
+    if (!owner.active || owner.current._tag !== "Idle") return;
     publish({ _tag: "Reviewing" });
   };
   const cancel = (): void => {
-    if (state._tag !== "Reviewing" || admission.current !== state) return;
+    if (!owner.active || state._tag !== "Reviewing" || owner.current !== state) return;
     publish({ _tag: "Idle" });
   };
   const confirm = (): void => {
-    if (state._tag !== "Reviewing" || admission.current !== state) return;
+    if (!owner.active || state._tag !== "Reviewing" || owner.current !== state) return;
     const submitting = { _tag: "Rotating" } as const;
     publish(submitting);
     const complete = (next: DisclosureState): void => {
-      if (admission.current === submitting) publish(next);
+      if (owner.active && owner.current === submitting) publish(next);
+      else if (next._tag === "Disclosed") Redacted.wipeUnsafe(next.code);
     };
     rotate({
       onRotated: (code) => complete({ _tag: "Disclosed", code, copied: false }),
-      onFailed: () => complete({ _tag: "Failed" }),
+      onUncertain: () => complete({ _tag: "Uncertain" }),
+      onUnauthenticated: () => complete({ _tag: "Unauthenticated" }),
       onFreshSessionRequired: () => complete({ _tag: "FreshSessionRequired" }),
     });
   };
   const copyCode = (): void => {
-    if (state._tag !== "Disclosed" || admission.current !== state) return;
+    if (!owner.active || state._tag !== "Disclosed" || owner.current !== state) return;
     clipboard.copy(Redacted.value(state.code), () => {
-      if (admission.current === state) publish({ ...state, copied: true });
+      if (owner.active && owner.current === state) publish({ ...state, copied: true });
     });
   };
   const view: RotationState =
     state._tag === "Disclosed" ? { _tag: "Disclosed", copied: state.copied } : state;
 
   return (
-    <BackupRecoveryRotationPresentation
-      state={view}
-      disclosure={state._tag === "Disclosed" ? <RecoveryDisclosure code={state.code} /> : null}
-      onStart={review}
-      onConfirm={confirm}
-      onCancel={cancel}
-      onCopy={copyCode}
-    />
+    <div ref={lifecycleRef}>
+      <BackupRecoveryRotationPresentation
+        state={view}
+        disclosure={state._tag === "Disclosed" ? <RecoveryDisclosure code={state.code} /> : null}
+        onStart={review}
+        onConfirm={confirm}
+        onCancel={cancel}
+        onCopy={copyCode}
+      />
+    </div>
   );
 };
 
 export const BackupRecoveryFeature = (): JSX.Element => {
   const router = useRouter();
-  const [rotateAtom] = useState(() =>
-    makeRotateCommand({ apiClient: router.options.context.apiClient })
-  );
-  const rotate = useAtomSet(rotateAtom);
   return (
     <SensitiveClipboardBoundary className={Option.none()} lifetime={sensitiveClipboardLifetime}>
-      {(clipboard) => <BackupRecoveryRotationView clipboard={clipboard} rotate={rotate} />}
+      {(clipboard) => (
+        <MountedRecoveryTask clipboard={clipboard} apiClient={router.options.context.apiClient} />
+      )}
     </SensitiveClipboardBoundary>
   );
 };

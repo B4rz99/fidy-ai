@@ -9,7 +9,9 @@ export type RotationState =
   | Readonly<{ _tag: "Reviewing" }>
   | Readonly<{ _tag: "Rotating" }>
   | Readonly<{ _tag: "Disclosed"; copied: boolean }>
-  | Readonly<{ _tag: "Failed" }>
+  | Readonly<{ _tag: "Uncertain" }>
+  | Readonly<{ _tag: "Unauthenticated" }>
+  | Readonly<{ _tag: "Disposed" }>
   | Readonly<{ _tag: "FreshSessionRequired" }>;
 
 const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
@@ -32,12 +34,19 @@ const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
         </AlertDescription>
       </Alert>
     ) : null}
-    {state._tag === "Failed" ? (
+    {state._tag === "Unauthenticated" ? (
+      <Alert>
+        <AlertTitle>Inicia sesión para continuar</AlertTitle>
+        <AlertDescription>Necesitas una sesión válida para crear un código nuevo.</AlertDescription>
+      </Alert>
+    ) : null}
+    {state._tag === "Uncertain" ? (
       <Alert variant="destructive">
         <AlertTitle>No pudimos confirmar el código nuevo.</AlertTitle>
         <AlertDescription>
-          Intenta crear otro código antes de cerrar esta página. Usa únicamente el último código que
-          veas.
+          El cambio puede haberse completado y el código anterior puede haber dejado de funcionar.
+          No podemos volver a mostrar un código cuya respuesta se perdió. Inicia sesión de nuevo
+          antes de revisar la creación de otro código.
         </AlertDescription>
       </Alert>
     ) : null}
@@ -46,7 +55,6 @@ const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
 
 const actionLabel = (state: RotationState): string => {
   if (state._tag === "Rotating") return "Creando código…";
-  if (state._tag === "Failed") return "Intentar de nuevo";
   return "Crear un código nuevo";
 };
 
@@ -57,6 +65,7 @@ const RotationAction = (props: {
   onConfirm: () => void;
   onCancel: () => void;
 }): JSX.Element => {
+  if (props.state._tag === "Disposed") return <></>;
   if (props.state._tag === "Reviewing") {
     return (
       <div className="flex flex-wrap gap-2">
@@ -69,7 +78,11 @@ const RotationAction = (props: {
       </div>
     );
   }
-  if (props.state._tag === "FreshSessionRequired") {
+  if (
+    props.state._tag === "FreshSessionRequired" ||
+    props.state._tag === "Unauthenticated" ||
+    props.state._tag === "Uncertain"
+  ) {
     return (
       <div>
         <Button

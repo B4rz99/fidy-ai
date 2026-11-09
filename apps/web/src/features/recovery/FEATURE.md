@@ -1,12 +1,6 @@
 # Backup recovery code
 
-Rebased verification, 2026-10-14, baseline `a387f50fb5`: all 23 onboarding Worker/D1 checks passed, including rotation, old-code refusal, replacement redemption for the same User, and single-use replay refusal. The restored rotation/logout fixture now sends the browser session-binding header required by current trunk. The initial 401 was a fixture mismatch, not evidence that production rotation fails. Production recovery credential replacement and real operator delivery remain deferred.
-
-Audit continuation, 2026-10-12, base `8d57b9f42a2`: the complete actual Worker/D1 onboarding suite passed all 20 checks after joining rotation and recovery into one lifecycle regression. It issues an isolated initial code, rotates under fresh authority, logs out through the public operation, refuses the preceding code without approving the pairing, accepts the replacement under verified operator authority, refuses concurrent/replayed consumption, and redeems the browser-private pairing into a live session for the same User. This closes the local old-code/replacement-login gap. Operator signing-key delivery is a controlled external fixture; production credential rotation and real operator/provider recovery remain unverified. No production recovery credential was changed.
-
-Broad non-AI audit, 2026-10-12, baseline `9aafe8db54`: the full 449-check web suite and 99-check ordinary browser suite passed, including the dedicated real local Core/D1 disclosure journey and recovery sign-in journeys. The further onboarding/PAT/OAuth Worker/D1 run passed 303 checks, with rotation and refusal coverage. These aggregate counts include adjacent features. No production recovery proof was rotated; physical provider recovery and production credential replacement remain deferred rather than treated as local passes.
-
-Capability and verification map for `/settings/recovery`. Product requirements remain in GitHub issues.
+Capability and verification map for the recovery section of `/settings/account`. Product requirements remain in GitHub issues.
 
 ## Behaviour
 
@@ -20,27 +14,40 @@ consuming or extending the session's original freshness window.
 
 The replacement remains redacted in private mounted state and reaches the raw-code presenter and
 explicit clipboard action only during disclosure. Generic presentation state has no raw code.
-Navigation/remount drops the disclosure; sensitive clipboard ownership retains its existing
-matching cleanup and ten-minute copy lifetime. Failed clipboard writes do not report “Copiado”.
+Navigation, document departure and authentication replacement synchronously retire the task,
+wipe its redacted code reference and fence late command and copy completions. The settings caller
+mounts the feature without supplying transport callbacks or choosing a User. Sensitive clipboard
+ownership retains matching cleanup and the ten-minute copy lifetime; disclosure has no separate
+expiry timer. Failed clipboard writes do not report “Copiado”, and a late clipboard completion
+cannot clear unrelated newer text.
+
+A lost, malformed or unavailable rotation result is Uncertain rather than retry permission. It
+reveals no code, does not claim that the preceding code remains valid and offers fresh sign-in.
+The Uncertain task offers no repeat action. Fresh sign-in leads to a new mounted task and explicit
+review; that later rotation is a new replacement, never redisclosure or replay. Missing authentication and expired session
+freshness retain distinct sign-in guidance.
 The server continues to own fresh authority, proof replacement and retained security evidence.
 Support refusal remains non-enumerating and does not invent a retained rejected case.
 
 ## Verification
 
-Current regression, 2026-10-12, trunk baseline `9aafe8db54`: the isolated Core/D1 disclosure journey passed again alongside four Accesos checks (five browser checks total, 12 seconds). Rotation disclosed a valid code, navigation and remount removed it, and browser storage remained empty. This did not rotate a production User's recovery proof or establish production recovery login.
+The built-browser recovery journey uses isolated Users and the actual public/Core/D1 rotation,
+with controlled transport loss or malformed responses only after a successful native commit. It
+covers review/cancel admission, duplicate Confirm, uncertain outcomes, fresh same-User sign-in,
+mounted disclosure disposal, denied clipboard acknowledgement and late completions after departure
+or owner replacement. Provider-authentication journeys retain fresh-session refusal and recovery
+rotation through the same review step.
 
-The focused actual Worker/D1 onboarding rerun also passed four checks (16 unrelated checks skipped, 2.22 seconds), covering recovery rotation, expired-freshness refusal and email-replacement refusal/resource behaviour. No production recovery or email credential was changed.
+Sensitive clipboard tests exercise the existing external clipboard boundary, including copy expiry,
+matching cleanup, silent permission refusal and pending completions after scope close. Native
+browser-authentication and support-recovery tests preserve credential races, rollback, atomic Audit,
+unchanged freshness, same-User pairing expiry and one-use backup proof consumption.
 
-On 2026-10-11, **3 rendered checks** passed: mounted disclosure disposal, denied clipboard feedback, and safe retry after failed rotation. These use controlled callbacks; they do not prove real credential rotation or recovery login.
-
-Both actual Worker/D1 fresh-session rotation and expired-freshness refusal passed on 2026-10-11 in the focused onboarding suite. The same run also passed two email replacement refusal/resource checks (**4 passed, 16 skipped** total). These are local isolated persistence and authority tests. Production rotation and recovery login remain untested. Use isolated credentials for these checks; rotating the User's production recovery proof would change their real access.
-
-A real built-browser journey also passed (**1 check**, 12 seconds): fresh verified-email pairing for the isolated recovery User, canonical rotation, valid code disclosure, explicit copy affordance, and removal after navigation and remount with no browser storage. No HTTP routes were intercepted. The initial attempt used the ordinary financial fixture, which has no recovery credential, and received an authentication refusal; switching to the dedicated recovery fixture corrected the test setup without application changes.
-
-The final regression uses a separately seeded disclosure User and proof so it cannot rotate the credential used by the existing recovery sign-in journey. It passed alongside that journey and Dashboard customization with two browser workers (**3 checks**), using actual isolated Core/D1.
+These isolated checks do not establish production credential replacement or live operator/provider
+recovery. Never rotate a production User's recovery proof as a test fixture.
 
 ```sh
-bun run --cwd apps/web test src/features/recovery
+bun run --cwd apps/web test src/browser/clipboard.test.ts
 BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser recovery-live-disclosure.spec.ts --workers=1 --timeout=120000
-bun run --cwd apps/server test:cloudflare cloudflare/onboarding/browser-authentication.test.ts --maxWorkers=1 --testNamePattern='rotates the backup recovery|refuses recovery rotation|rejects the old recovery code'
+bun run --cwd apps/server test:cloudflare cloudflare/onboarding/browser-authentication.test.ts cloudflare/recovery/support-recovery.test.ts --maxWorkers=1
 ```

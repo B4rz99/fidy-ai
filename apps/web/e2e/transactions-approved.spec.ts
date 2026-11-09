@@ -925,7 +925,7 @@ const expectHiddenCorrection = (batches: ReadonlyArray<unknown>): void => {
 test("bulk selection survives a same-month day filter and browser Back", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* installWorkspace(page, [row(1), row(2)]);
+      yield* installWorkspace(page, [row(1), row(2)], "native-date");
       yield* wait(() => page.goto("/app/transactions?month=2026-10"));
       yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
       const selected = page.getByRole("checkbox", { name: "Seleccionar Prueba 1", exact: true });

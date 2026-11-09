@@ -18,7 +18,7 @@ fields and operational procedures live in their linked references.
 
 ## Production boundary
 
-Cloudflare is the sole Production runtime. The public ingress Worker has no D1 binding. It forwards
+Cloudflare is the sole Production runtime. The public ingress Worker has no D1 binding. With the shared-read binding enabled, it forwards
 existing query declarations and browser data GET transports to a reserved shared read object in the
 Core artifact, and other requests to the private Core Worker. Core owns the User-scoped data API;
 the unrouted Email Worker has

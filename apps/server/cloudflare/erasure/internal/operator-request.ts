@@ -107,8 +107,10 @@ const forwardMigration = (
 ): Effect.Effect<Response, Schema.SchemaError | ErasureUnavailable> =>
   Effect.gen(function* () {
     const namespace = input.environment.ERASURE_REGISTRY_COORDINATOR;
-    if (namespace === undefined) return reply(unavailableStatus);
+    const expectedRelease = input.environment.RELEASE_GIT_SHA;
+    if (namespace === undefined || expectedRelease === undefined) return reply(unavailableStatus);
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(ErasureRegistryMigration))({
+      expectedRelease,
       deadlineMs: Math.min(input.current + admissionLifetimeMs, input.operator.expiresAtMs),
       authority: { permission: "titular.erase", ...input.operator },
     });

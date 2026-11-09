@@ -180,6 +180,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           (yield* fixture.root(
             "https://erasure-registry.invalid/migrate",
             encode({
+              expectedRelease: "native-root-fixture",
               deadlineMs: current + 5000,
               authority: {
                 permission: "titular.erase",
@@ -215,6 +216,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ).toBe(503);
         const now = yield* Clock.currentTimeMillis;
         const admission = {
+          expectedRelease: "native-fixture",
           deadlineMs: now + 5000,
           authority: {
             permission: "titular.erase",
@@ -224,6 +226,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         };
         for (const value of [
           {},
+          { ...admission, expectedRelease: "stale-release" },
           { ...admission, deadlineMs: now - 1 },
           { ...admission, deadlineMs: now + 6000 },
           { ...admission, authority: { ...admission.authority, permission: "other" } },

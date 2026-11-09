@@ -6,6 +6,7 @@ import { UserId } from "../../src/core/identity/contract";
 import { ErasureCustodyEvidence, ErasureReference } from "../../src/core/erasure/contract";
 
 const maximumOperatorLength = 256;
+const maximumReleaseLength = 64;
 
 const digestLength = 32;
 export const erasureRegistryName = "erasure-registry-v1";
@@ -17,6 +18,7 @@ export type ErasureRegistryNamespace = Readonly<{
 }> &
   Partial<Pick<DurableObjectNamespace, "idFromName">>;
 export const ErasureRegistryMigration = Schema.Struct({
+  expectedRelease: Schema.String.check(Schema.isBetweenLength(1, maximumReleaseLength)),
   deadlineMs: Schema.Int,
   authority: Schema.Struct({
     permission: Schema.Literal("titular.erase"),
@@ -127,6 +129,7 @@ export type ErasureOperatorEnvironment = Readonly<{
       ERASURE_BUCKET: R2Bucket;
       ERASURE_REGISTRY: ErasureRegistry;
       ERASURE_REGISTRY_COORDINATOR: ErasureRegistryNamespace;
+      RELEASE_GIT_SHA: string;
     }>
   >;
 

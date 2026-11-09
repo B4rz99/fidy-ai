@@ -28,6 +28,7 @@ const migrate = (
     if (request.method !== "POST") return unavailable();
     const admission = yield* boundedJsonBody({ request, policy, schema: ErasureRegistryMigration });
     if (Option.isNone(admission)) return unavailable();
+    if (admission.value.expectedRelease !== release) return unavailable();
     const current = yield* Clock.currentTimeMillis;
     const { deadlineMs, authority } = admission.value;
     if (

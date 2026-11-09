@@ -50,9 +50,7 @@ type CoreEnvironment = ProviderEnvironment &
   Readonly<{ CONTRACT_DIGEST: string; RELEASE_GIT_SHA: string }> & {
     readonly OPENAI_API_KEY: OpenAiEnvironment["OPENAI_API_KEY"];
     readonly DB: D1Database;
-    readonly USER_TRANSACTION_COORDINATOR: Readonly<{
-      getByName: (name: string) => Pick<Fetcher, "fetch">;
-    }>;
+    readonly USER_TRANSACTION_COORDINATOR: ErasureRegistryNamespace;
     readonly HOSTED_AI_MODEL: string;
     readonly KAPSO_API_KEY: string;
     readonly KAPSO_WEBHOOK_SECRET: string;
@@ -353,12 +351,9 @@ const makeRegistryCoordinator = (
 export class ErasureRegistryTransport extends WorkerEntrypoint<CoreEnvironment> {
   override fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const namespace = this.env.ERASURE_REGISTRY_COORDINATOR;
-    if (
-      url.origin !== "https://erasure-registry.invalid" ||
-      url.pathname !== "/metadata" ||
-      namespace === undefined
-    ) {
+    const namespace =
+      this.env.ERASURE_REGISTRY_COORDINATOR ?? this.env.USER_TRANSACTION_COORDINATOR;
+    if (url.origin !== "https://erasure-registry.invalid" || url.pathname !== "/metadata") {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
     return namespace.getByName(erasureRegistryName, { locationHint: "enam" }).fetch(request);

@@ -473,6 +473,11 @@ operator action.
 
 ### Independent erasure metadata handoff
 
+First deploy the metadata-capable runtime without enabling its bindings, then enable shared reads
+and metadata bindings in a subsequent reviewed release. This keeps the stable Durable Object
+version capable of serving the new reserved object while versions converge. The operator admission
+requires that the metadata owner is running the caller's exact release before it can change authority.
+
 Deploy and verify the metadata-aware Core, User coordinators, ForwardedEmail and Ingress before
 invoking the existing Titular erasure endpoint with `{"action":"MigrateRegistry"}`. This requires
 the existing human operator Access assertion for the distinct erasure audience. Do not substitute

@@ -249,8 +249,8 @@ Mutations and held hosted execution retain User coordination.
 Erasure composes each owner's bounded deletion and SQL authorization under User coordination.
 An independent registry fences ordinary activity after database restoration until reconciliation.
 The reserved `erasure-registry-v1` object in the existing coordinator namespace owns this metadata
-in its independent SQLite storage; it never constructs User work.
-Existing query declarations and browser data GET transports execute canonical HTTP in that same
+in its independent SQLite storage after the authenticated handoff; it never constructs User work.
+With the shared-read binding enabled, existing query declarations and browser data GET transports execute canonical HTTP in that same
 object; commands, User coordination and admission policies retain their existing owners. Each
 protected D1 unit reads the current registry generation and asserts it inside its native transaction.
 Other executors reach the same metadata through a bounded private binding. ForwardedEmail receives

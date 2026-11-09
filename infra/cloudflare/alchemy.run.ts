@@ -434,9 +434,6 @@ export default Alchemy.Stack(
           Config.withDefault("2")
         ),
         STATEMENT_EXTRACTION_WORKFLOW: statementExtractionWorkflow,
-        ERASURE_REGISTRY_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
-          className: "UserTransactionCoordinator",
-        }),
         USER_TRANSACTION_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
           className: "UserTransactionCoordinator",
         }),

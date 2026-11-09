@@ -478,6 +478,12 @@ and metadata bindings in a subsequent reviewed release. This keeps the stable Du
 version capable of serving the new reserved object while versions converge. The operator admission
 requires that the metadata owner is running the caller's exact release before it can change authority.
 
+Core selects the reserved owner through its existing native User coordinator namespace at runtime.
+Do not add a second locally hosted Durable Object binding for that same class: the pinned provider
+tracks binding identities and would request a class migration, which cannot accompany a zero-traffic
+version upload. Ingress uses its foreign namespace binding; ForwardedEmail uses the metadata-only
+Worker entrypoint.
+
 Deploy and verify the metadata-aware Core, User coordinators, ForwardedEmail and Ingress before
 invoking the existing Titular erasure endpoint with `{"action":"MigrateRegistry"}`. This requires
 the existing human operator Access assertion for the distinct erasure audience. Do not substitute

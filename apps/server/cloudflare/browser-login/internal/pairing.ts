@@ -178,7 +178,11 @@ export const approveBrowserPairing = ({
       bsuid: caller.value.businessScopedUserId,
     });
     if (Option.isNone(user)) return invalid();
-    const ordering = noLaterReadyPairing({ sql: "w.userId", params: [] }, "p", input.receivedAtMs);
+    const ordering = noLaterReadyPairing({
+      userId: { sql: "w.userId", params: [] },
+      candidate: "p",
+      current: input.receivedAtMs,
+    });
     const result = yield* attempt(() =>
       prepareWhatsAppIdentity({
         db,

@@ -15,6 +15,7 @@ type SelectionSummaryProps = Readonly<{
   onRemove: (id: string) => void;
   onClear: () => void;
   clearFocusId: string;
+  showClear: boolean;
 }>;
 export const SelectionSummary = ({
   items,
@@ -23,6 +24,7 @@ export const SelectionSummary = ({
   onRemove,
   onClear,
   clearFocusId,
+  showClear,
 }: SelectionSummaryProps): JSX.Element => {
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
@@ -53,9 +55,11 @@ export const SelectionSummary = ({
             >
               Revisar selección ({items.length})
             </Button>
-            <Button contentLayout="wrap" variant="ghost" disabled={disabled} onClick={clear}>
-              Limpiar selección
-            </Button>
+            {showClear ? (
+              <Button contentLayout="wrap" variant="ghost" disabled={disabled} onClick={clear}>
+                Limpiar selección
+              </Button>
+            ) : null}
           </>
         ) : null}
       </div>

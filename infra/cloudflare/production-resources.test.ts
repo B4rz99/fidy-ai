@@ -1,12 +1,53 @@
 import { Credentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import { createScriptVersion } from "@distilled.cloud/cloudflare/workers";
+import { BadRequest } from "@distilled.cloud/cloudflare/Errors";
 import { it } from "@effect/vitest";
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { describe, expect } from "vitest";
 import { resourceFailureMessage } from "./production-resources";
 
 describe("resource release refusal diagnostics", () => {
+  it("retains a migration refusal and its provider cause after serialization", () => {
+    const wrapped = new Error("private migration text", {
+      cause: BadRequest.make({ message: "private provider refusal" }),
+    });
+    wrapped.name = "MigrationError";
+    const restored = Schema.decodeSync(Schema.Defect())(
+      Schema.encodeSync(Schema.Defect())(wrapped)
+    );
+    expect(resourceFailureMessage(Cause.fail(restored))).toBe(
+      "Alchemy resource operation failed (MigrationError, BadRequest); inspect release state."
+    );
+  });
+  it("bounds cause traversal and excludes private nested values", () => {
+    const cyclic = new Error("private text");
+    cyclic.cause = cyclic;
+    expect(resourceFailureMessage(Cause.fail(cyclic))).toBe(
+      "Alchemy resource operation failed (Error); inspect release state."
+    );
+    const nested = new Error("private text", {
+      cause: new Error("private proof", { cause: { _tag: "Forbidden", code: 10000 } }),
+    });
+    expect(resourceFailureMessage(Cause.fail(nested))).toBe(
+      "Alchemy resource operation failed (Error, Forbidden; code=10000); inspect release state."
+    );
+    const unknown = new Error("private text", {
+      cause: { _tag: "private-token", message: "private" },
+    });
+    expect(resourceFailureMessage(Cause.fail(unknown))).toBe(
+      "Alchemy resource operation failed (Error); inspect release state."
+    );
+  });
+
+  it("retains a known provider category after error serialization drops its tag and code", () => {
+    const error = BadRequest.make({ message: "Bearer private-token" });
+    const serialized = Schema.encodeSync(Schema.Defect())(error);
+    const restored = Schema.decodeSync(Schema.Defect())(serialized);
+    expect(resourceFailureMessage(Cause.fail(restored))).toBe(
+      "Alchemy resource operation failed (BadRequest); inspect release state."
+    );
+  });
   it("identifies a rejected Worker version configuration without publishing its provider message", () => {
     expect(
       resourceFailureMessage(
@@ -51,13 +92,44 @@ describe("resource release refusal diagnostics", () => {
       expect(result).toMatch(/^Alchemy resource operation failed/u);
     }
   });
+
+  it("distinguishes native upload exceptions without publishing their messages", () => {
+    for (const [error, category] of [
+      [new TypeError("private request body"), "TypeError"],
+      [new RangeError("private token"), "RangeError"],
+      [new Error("private recovery proof"), "Error"],
+      [new Cause.UnknownError({ token: "private" }), "UnknownError"],
+    ] as const) {
+      expect(resourceFailureMessage(Cause.die(error))).toBe(
+        `Alchemy resource operation failed (${category}); inspect release state.`
+      );
+    }
+  });
+
+  it("excludes private stacks and unknown exception names", () => {
+    const error = new Error("Bearer private-token");
+    error.stack = [
+      "Error: Bearer private-token",
+      "    at upload (/private-user/fidy/node_modules/alchemy/src/Cloudflare/Workers/WorkerProvider.ts:4253:14)",
+      "    at unknown (/private-user/private-proof.ts:99:1)",
+    ].join("\n");
+    expect(resourceFailureMessage(Cause.die(error))).toBe(
+      "Alchemy resource operation failed (Error); inspect release state."
+    );
+    error.name = "private-token";
+    error.stack = "Error: private\n    at private (/private-proof.ts:3:1)";
+    expect(resourceFailureMessage(Cause.die(error))).toBe(
+      "Alchemy resource operation failed (Error); inspect release state."
+    );
+  });
 });
 
 it.effect.each([
   { code: 10021, expected: " (BadRequest; code=10021)" },
   { code: undefined, expected: " (BadRequest)" },
   { code: "private-code", expected: " (BadRequest)" },
-  { code: -1, expected: "" },
+  { code: -1, expected: " (BadRequest)" },
+  { code: 10007, expected: " (WorkerNotFound; code=10007)" },
 ])("retains only a native numeric upload refusal code: $code", ({ code, expected }) =>
   Effect.gen(function* () {
     const client = HttpClient.make((request) =>

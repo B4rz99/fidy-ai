@@ -278,6 +278,7 @@ const SelectionExample = (): JSX.Element => {
         }}
       />
       <SelectionSummary
+        showClear
         clearFocusId="selection-example-filter"
         items={items}
         label={`${items.length} seleccionadas`}

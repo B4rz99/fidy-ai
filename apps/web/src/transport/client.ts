@@ -31,7 +31,6 @@ export type {
 export {
   fidyWhatsAppUrl,
   TransactionId,
-  Transaction,
   ReviewCommand,
   ReviewDraft,
   TransactionQueryValues,

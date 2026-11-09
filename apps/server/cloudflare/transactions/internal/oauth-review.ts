@@ -1,3 +1,4 @@
+import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { Effect, Option, Schema } from "effect";
 import { Currency } from "../../../src/core/_shared/money";
 import { Direction, TransactionId } from "../../../src/core/transactions/contract";
@@ -52,12 +53,7 @@ const Snapshot = Schema.Struct({
 });
 const SnapshotRow = Schema.Struct({ snapshot: Schema.fromJsonString(Snapshot) });
 
-const snapshotSql = `WITH roots(id) AS (SELECT ? UNION SELECT ?),
-  decisions AS (SELECT * FROM transaction_reconciliation_decisions
-    WHERE user_id = ? AND ((state = 'linked' AND
-      (first_transaction_id IN roots OR second_transaction_id IN roots)) OR
-      (first_transaction_id = ? AND second_transaction_id = ?))),
-  selected(id) AS (SELECT id FROM roots UNION
+const snapshotBody = `selected(id) AS (SELECT id FROM roots UNION
     SELECT first_transaction_id FROM decisions WHERE state = 'linked' UNION
     SELECT second_transaction_id FROM decisions WHERE state = 'linked')
   SELECT json_object(
@@ -89,6 +85,18 @@ const snapshotSql = `WITH roots(id) AS (SELECT ? UNION SELECT ?),
         WHERE user_id = ? AND transaction_id IN selected ORDER BY transaction_id)))
   ) AS snapshot`;
 
+const snapshotSql = `WITH roots(id) AS (SELECT ? UNION SELECT ?),
+  decisions AS (SELECT * FROM transaction_reconciliation_decisions
+    WHERE user_id = ? AND ((state = 'linked' AND
+      (first_transaction_id IN roots OR second_transaction_id IN roots)) OR
+      (first_transaction_id = ? AND second_transaction_id = ?))),
+  ${snapshotBody}`;
+const groupSnapshotSql = `WITH roots(id) AS (SELECT json_extract(value,'$.id') FROM json_each(?)),
+  decisions AS (SELECT * FROM transaction_reconciliation_decisions
+    WHERE user_id = ? AND state = 'linked'
+      AND (first_transaction_id IN roots OR second_transaction_id IN roots)),
+  ${snapshotBody}`;
+
 export type ObservedTransactions = Readonly<{
   retained: ReadonlyArray<StoredTransaction>;
   effective: ReadonlyArray<StoredTransaction>;
@@ -106,30 +114,20 @@ const decodeFacts = (
     )
   );
 
-/** Read a bounded pair and every retained premise used to select its effective facts. */
-export const observeOAuthTransactions = (
-  input: Readonly<{
-    db: D1Database;
-    userId: string;
-    firstId: string;
-    secondId: string;
-  }>
-): Effect.Effect<ObservedTransactions, TransactionBoundaryFailure | Schema.SchemaError> =>
+const readSnapshot = ({
+  db,
+  sql,
+  params,
+}: Readonly<{
+  db: D1Database;
+  sql: string;
+  params: ReadonlyArray<string>;
+}>): Effect.Effect<ObservedTransactions, TransactionBoundaryFailure | Schema.SchemaError> =>
   Effect.gen(function* () {
-    const params = [
-      input.firstId,
-      input.secondId,
-      input.userId,
-      input.firstId,
-      input.secondId,
-      input.userId,
-      input.userId,
-      input.userId,
-    ];
     const raw = yield* Effect.tryPromise({
       try: () =>
-        input.db
-          .prepare(snapshotSql)
+        db
+          .prepare(sql)
           .bind(...params)
           .first(),
       catch: boundaryFailure,
@@ -148,16 +146,63 @@ export const observeOAuthTransactions = (
       review: (effect: string): Option.Option<OAuthMutationReview> =>
         Option.some(
           oauthMutationReview({
-            db: input.db,
+            db,
             effect,
             revision: encoded.snapshot,
             guard: {
-              sql: `SELECT 1 FROM (${snapshotSql}) WHERE snapshot = ?`,
+              sql: `SELECT 1 FROM (${sql}) WHERE snapshot = ?`,
               params: [...params, encoded.snapshot],
             },
           })
         ),
     };
+  });
+
+/** Read a bounded pair and every retained premise used to select its effective facts. */
+export const observeOAuthTransactions = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    firstId: string;
+    secondId: string;
+  }>
+): Effect.Effect<ObservedTransactions, TransactionBoundaryFailure | Schema.SchemaError> =>
+  readSnapshot({
+    db: input.db,
+    sql: snapshotSql,
+    params: [
+      input.firstId,
+      input.secondId,
+      input.userId,
+      input.firstId,
+      input.secondId,
+      input.userId,
+      input.userId,
+      input.userId,
+    ],
+  });
+
+const encodeSelection = Schema.encodeSync(
+  Schema.fromJsonString(UpdateTransactionsInput.fields.transactions)
+);
+/** Observe a decoded group selection, linked originals and every effective-fact premise. */
+export const observeOAuthGroup = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    transactions: typeof UpdateTransactionsInput.Type.transactions;
+  }>
+): Effect.Effect<ObservedTransactions, TransactionBoundaryFailure | Schema.SchemaError> =>
+  readSnapshot({
+    db: input.db,
+    sql: groupSnapshotSql,
+    params: [
+      encodeSelection(input.transactions),
+      input.userId,
+      input.userId,
+      input.userId,
+      input.userId,
+    ],
   });
 
 /** Exact Spanish financial disclosure, using the same canonical Money encoding as native reads. */

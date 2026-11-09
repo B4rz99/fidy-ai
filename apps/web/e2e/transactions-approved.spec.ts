@@ -1,6 +1,6 @@
 import { expectFinancialLabels } from "./financial-form-text";
 import type { Page, Route } from "@playwright/test";
-import { type Cause, DateTime, Effect, Schema } from "effect";
+import { type Cause, DateTime, Effect, type Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
@@ -13,7 +13,7 @@ const okStatus = 200;
 const unavailableStatus = 503;
 const maximumCounterparty = 120;
 const maximumNotes = 500;
-const maximumSelection = 12;
+const groupSize = 18;
 const identifierWidth = 12;
 const maximumSingleLineHeight = 24;
 const maximumControlAlignmentDifference = 1;
@@ -791,63 +791,31 @@ test("Correction uncertainty survives closing the editor and a failed canonical 
   page,
 }) => Effect.runPromise(correctionRecoveryJourney(page)));
 
-const selectTwelve = (page: Page): Journey =>
+const selectGroup = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* wait(() => page.goto("/app/transactions"));
     yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
-    for (let index = 1; index <= maximumSelection; index += 1) {
-      yield* wait(() =>
-        page.getByRole("checkbox", { name: `Seleccionar Prueba ${index}`, exact: true }).click()
-      );
-    }
     yield* wait(() =>
-      expect(
-        page.getByRole("checkbox", { name: "Seleccionar Prueba 13", exact: true })
-      ).toBeDisabled()
+      page.getByRole("button", { name: "Seleccionar todas", exact: true }).press("Enter")
     );
+    yield* wait(() => expect(page.getByRole("checkbox", { checked: true })).toHaveCount(groupSize));
     yield* wait(() =>
       page.getByRole("searchbox", { name: "Buscar transacciones", exact: true }).fill("Prueba 13")
     );
     yield* wait(() =>
       expect(
         page.getByRole("checkbox", { name: "Seleccionar Prueba 13", exact: true })
-      ).toBeDisabled()
+      ).toBeChecked()
     );
     yield* wait(() =>
       page.getByRole("button", { name: "Editar selección de transacciones", exact: true }).click()
     );
   });
-const batchProbe = Schema.Struct({
-  calls: Schema.Array(
-    Schema.Struct({
-      input: Schema.Struct({ payload: Schema.Struct({ changes: Schema.Unknown }) }),
-    })
-  ),
+const correctedBulkNote = (record: typeof first): typeof first => ({
+  ...record,
+  notes: "Nota de prueba",
+  revision: record.revision + 1,
 });
-const correctedBulkFixture = (
-  records: ReadonlyArray<typeof first>,
-  input: unknown
-): Readonly<{ records: Array<typeof first>; body: string }> => {
-  const batch = Schema.decodeUnknownSync(
-    Schema.Struct({
-      calls: Schema.Array(Schema.Struct({ callId: Schema.String, operation: Schema.String })),
-    })
-  )(input);
-  const corrected = records.map((record) => ({
-    ...record,
-    notes: "Nota de prueba",
-    revision: record.revision + 1,
-  }));
-  return {
-    records: corrected,
-    body: response({
-      results: batch.calls.map((call, index) => ({
-        ...call,
-        output: { data: corrected[index], next: [] },
-      })),
-    }),
-  };
-};
 const installBulkSearchCorrection = (page: Page): Journey =>
   Effect.gen(function* () {
     let current = [row(1), row(2)];
@@ -858,10 +826,12 @@ const installBulkSearchCorrection = (page: Page): Journey =>
       )
     );
     yield* wait(() =>
-      page.route(`${apiOrigin}/operations/atomic-batch`, (route) => {
-        const corrected = correctedBulkFixture(current, route.request().postDataJSON());
-        current = corrected.records;
-        return route.fulfill({ contentType: "application/json", body: corrected.body });
+      page.route(`${apiOrigin}/transactions/corrections`, (route) => {
+        current = current.map(correctedBulkNote);
+        return route.fulfill({
+          contentType: "application/json",
+          body: response({ updated: current.length }),
+        });
       })
     );
   });
@@ -900,16 +870,16 @@ test("bulk corrections preserve search and explain the confirmed results that st
   ));
 const bulkJourney = (page: Page): Journey =>
   Effect.gen(function* () {
-    const rows = Array.from({ length: maximumSelection + 1 }, (_, index) =>
+    const rows = Array.from({ length: groupSize }, (_, index) =>
       row(index + 1, index === 0 ? "USD" : "COP")
     );
     yield* installWorkspace(page, rows);
     const batches: Array<unknown> = [];
-    yield* recordMutation(page, "/operations/atomic-batch", {
+    yield* recordMutation(page, "/transactions/corrections", {
       requests: batches,
       outcome: "uncertain",
     });
-    yield* selectTwelve(page);
+    yield* selectGroup(page);
     const directionLabelHeight = yield* wait(() =>
       page
         .locator("#bulk-direction span")
@@ -931,48 +901,23 @@ const bulkJourney = (page: Page): Journey =>
       expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled()
     );
     expect(batches).toHaveLength(1);
-    expect(batches[0]).toMatchObject({
-      calls: rows.slice(0, maximumSelection).map((record) => ({
-        operation: "transactions.updateTransaction",
-        input: { params: { id: record.id }, payload: { expectedRevision: record.revision } },
-      })),
+    expect(batches[0]).toEqual({
+      transactions: rows.map((record) => ({ id: record.id, expectedRevision: record.revision })),
+      changes: { categoryId: categories[1]?.id },
     });
-    const batch = yield* Schema.decodeUnknownEffect(batchProbe)(batches[0]);
-    for (const call of batch.calls) {
-      expect(call.input.payload.changes).toEqual({ categoryId: categories[1]?.id });
-    }
   });
-test("bulk selection stops at twelve and mixed Currency keeps amount locked while empty fields preserve facts", ({
+test("selecting all includes more than twelve and mixed Currency keeps amount locked while empty fields preserve facts", ({
   page,
 }) => Effect.runPromise(bulkJourney(page)));
 
 const expectHiddenCorrection = (batches: ReadonlyArray<unknown>): void => {
   expect(batches).toEqual([
     {
-      calls: [
-        {
-          callId: expect.any(String),
-          operation: "transactions.updateTransaction",
-          input: {
-            params: { id: row(1).id },
-            payload: {
-              expectedRevision: 1,
-              changes: { counterparty: "Corrección de selección" },
-            },
-          },
-        },
-        {
-          callId: expect.any(String),
-          operation: "transactions.updateTransaction",
-          input: {
-            params: { id: row(2).id },
-            payload: {
-              expectedRevision: 2,
-              changes: { counterparty: "Corrección de selección" },
-            },
-          },
-        },
+      transactions: [
+        { id: row(1).id, expectedRevision: 1 },
+        { id: row(2).id, expectedRevision: 2 },
       ],
+      changes: { counterparty: "Corrección de selección" },
     },
   ]);
 };
@@ -1004,7 +949,7 @@ test("bulk selection survives search changes and submits hidden transactions at 
     Effect.gen(function* () {
       yield* installWorkspace(page, [row(1), { ...row(2), direction: "inflow" }, row(3)]);
       const batches: Array<unknown> = [];
-      yield* recordMutation(page, "/operations/atomic-batch", {
+      yield* recordMutation(page, "/transactions/corrections", {
         requests: batches,
         outcome: "uncertain",
       });
@@ -1019,7 +964,7 @@ test("bulk selection survives search changes and submits hidden transactions at 
         expect(page.getByText("1 fuera de este filtro", { exact: true }).first()).toBeVisible()
       );
       yield* wait(() =>
-        page.getByRole("checkbox", { name: "Seleccionar Prueba 2", exact: true }).check()
+        page.getByRole("button", { name: "Seleccionar todas", exact: true }).click()
       );
       yield* wait(() => search.fill("Sin coincidencias"));
       yield* wait(() =>
@@ -1188,6 +1133,95 @@ test("a day filter confirms before replacing a located transaction selection", (
       );
     })
   ));
+
+const saveSelectedGroup = (page: Page): Journey =>
+  Effect.gen(function* () {
+    const requests: Array<unknown> = [];
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions/corrections`, (route) => {
+        requests.push(route.request().postDataJSON());
+        return route.fulfill({
+          contentType: "application/json",
+          body: response({ updated: groupSize }),
+        });
+      })
+    );
+    yield* wait(() =>
+      page.getByRole("button", { name: "Editar selección de transacciones", exact: true }).click()
+    );
+    yield* wait(() => page.getByLabel("Notas", { exact: true }).fill("Corrección del grupo"));
+    yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+    yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
+    yield* wait(() =>
+      expect(page.getByRole("region", { name: "Resumen de transacciones" })).toBeVisible()
+    );
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toEqual({
+      transactions: Array.from({ length: groupSize }, (_, index) => ({
+        id: row(index + 1).id,
+        expectedRevision: index + 1,
+      })),
+      changes: { notes: "Corrección del grupo" },
+    });
+  });
+
+const pageFitsViewport = (): boolean => document.documentElement.scrollWidth <= window.innerWidth;
+const filteredGroupCount = 10;
+const adjustedGroupCount = 9;
+for (const { width } of [{ width: 1280 }, { width: 390 }]) {
+  test(`selects the filtered group, clears it and allows manual selection beyond twelve at ${width}px`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* wait(() => page.setViewportSize({ width, height: 844 }));
+        yield* installWorkspace(
+          page,
+          Array.from({ length: groupSize }, (_, index) => row(index + 1))
+        );
+        yield* wait(() => page.goto("/app/transactions"));
+        yield* wait(() =>
+          page.getByLabel("Buscar transacciones", { exact: true }).fill("Prueba 1")
+        );
+        yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+        const all = page.getByRole("button", { name: "Seleccionar todas", exact: true });
+        const clear = page.getByRole("button", { name: "Limpiar selección", exact: true });
+        yield* wait(() => expect(clear).toBeDisabled());
+        yield* wait(() => all.press("Enter"));
+        yield* wait(() =>
+          expect(page.getByRole("checkbox", { checked: true })).toHaveCount(filteredGroupCount)
+        );
+        yield* wait(() => expect(all).toBeDisabled());
+
+        yield* wait(() =>
+          page.getByRole("checkbox", { name: "Seleccionar Prueba 10", exact: true }).press("Space")
+        );
+        yield* wait(() =>
+          expect(page.getByRole("checkbox", { checked: true })).toHaveCount(adjustedGroupCount)
+        );
+        yield* wait(() => expect(all).toBeEnabled());
+        yield* wait(() => clear.press("Enter"));
+        yield* wait(() => expect(page.getByRole("checkbox", { checked: true })).toHaveCount(0));
+        yield* wait(() =>
+          expect(
+            page.getByRole("button", { name: "Editar selección de transacciones", exact: true })
+          ).toBeDisabled()
+        );
+        yield* wait(() => page.getByLabel("Buscar transacciones", { exact: true }).fill(""));
+        yield* wait(() => expect(all).toBeVisible());
+        for (let index = 1; index <= groupSize; index += 1) {
+          yield* wait(() =>
+            page.getByRole("checkbox", { name: `Seleccionar Prueba ${index}`, exact: true }).check()
+          );
+        }
+        yield* wait(() =>
+          expect(page.getByRole("checkbox", { checked: true })).toHaveCount(groupSize)
+        );
+        expect(yield* wait(() => page.evaluate(pageFitsViewport))).toBe(true);
+        yield* saveSelectedGroup(page);
+      })
+    ));
+}
 
 const waitForFonts = (page: Page): Promise<void> =>
   page.evaluate(() => document.fonts.ready.then(() => {}));
@@ -1811,7 +1845,7 @@ const installRejectedBulk = (
       )
     );
     yield* wait(() =>
-      page.route(`${apiOrigin}/operations/atomic-batch`, (route) => {
+      page.route(`${apiOrigin}/transactions/corrections`, (route) => {
         requests.push(route.request().postDataJSON());
         state.rejected = true;
         return route.fulfill({
@@ -1856,9 +1890,9 @@ const cancelRecoveredBulk = (page: Page): Journey =>
   });
 const rejectedBulkJourney = (page: Page): Journey =>
   Effect.gen(function* () {
-    const rows = Array.from({ length: maximumSelection + 1 }, (_, index) => row(index + 1));
+    const rows = Array.from({ length: groupSize }, (_, index) => row(index + 1));
     const { requests } = yield* installRejectedBulk(page, rows);
-    yield* selectTwelve(page);
+    yield* selectGroup(page);
     yield* wait(() =>
       page
         .getByRole("button", { name: "Categoría de la selección: Sin cambiar", exact: true })
@@ -1870,7 +1904,7 @@ const rejectedBulkJourney = (page: Page): Journey =>
     yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).press("Enter"));
     const form = page.getByRole("form", { name: "Editar transacciones seleccionadas" });
     yield* wait(() => expect(form).toContainText("Ya actualizamos el historial"));
-    yield* wait(() => expect(form).toContainText("12 transacciones seleccionadas"));
+    yield* wait(() => expect(form).toContainText("18 transacciones seleccionadas"));
     yield* wait(() =>
       expect(page.getByLabel("Notas", { exact: true })).toHaveValue("Lote sin guardar")
     );
@@ -1885,25 +1919,20 @@ const rejectedBulkJourney = (page: Page): Journey =>
     expect(requests).toHaveLength(1);
     yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).press("Enter"));
     yield* wait(() => expect.poll(() => requests.length).toBe(2));
-    expect(requests[1]).toMatchObject({
-      calls: rows.slice(0, maximumSelection).map((record) => ({
-        operation: "transactions.updateTransaction",
-        input: {
-          params: { id: record.id },
-          payload: {
-            expectedRevision: record.revision + 1,
-            changes: {
-              categoryId: categories[1]?.id,
-              notes: "Lote sin guardar",
-              money: { amount: "31000", currency: "COP" },
-            },
-          },
-        },
+    expect(requests[1]).toEqual({
+      transactions: rows.map((record) => ({
+        id: record.id,
+        expectedRevision: record.revision + 1,
       })),
+      changes: {
+        categoryId: categories[1]?.id,
+        notes: "Lote sin guardar",
+        money: { amount: "31000", currency: "COP" },
+      },
     });
     yield* cancelRecoveredBulk(page);
   });
-test("rejected atomic Correction retains twelve selections and financial fields for an explicit save at fresh revisions", ({
+test("rejected atomic Correction retains the whole selection and financial fields for an explicit save at fresh revisions", ({
   page,
 }) => Effect.runPromise(rejectedBulkJourney(page)));
 

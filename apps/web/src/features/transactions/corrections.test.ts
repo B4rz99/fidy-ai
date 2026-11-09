@@ -320,20 +320,15 @@ it.effect(
       });
       yield* advance();
       expect(test.sent).toHaveLength(1);
-      expect(test.sent[0]?.path).toBe("/operations/atomic-batch");
+      expect(test.sent[0]?.path).toBe("/transactions/corrections");
       expect(
         yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(test.sent[0]?.body ?? "")
       ).toMatchObject({
-        calls: [
-          {
-            operation: "transactions.updateTransaction",
-            input: { params: { id: firstId }, payload: { expectedRevision: 1 } },
-          },
-          {
-            operation: "transactions.updateTransaction",
-            input: { params: { id: secondId }, payload: { expectedRevision: 1 } },
-          },
+        transactions: [
+          { id: firstId, expectedRevision: 1 },
+          { id: secondId, expectedRevision: 1 },
         ],
+        changes: { counterparty: "Together" },
       });
       expect(test.view().status).toBe("uncertain");
     })

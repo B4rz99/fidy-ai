@@ -18,6 +18,62 @@ afterEach(() => {
 });
 const explicitNativeAccept = { action: "accept", content: { confirm: true } };
 
+it("does not use a native group Correction approval after a selected Transaction is removed", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* pendingBudgetDeletion(["write"]);
+      const name = "transactions.updateTransactions";
+      const args = yield* ownerJourneyArgs(fixture, name);
+      const review = yield* wait(
+        nativeConfirmationCall({ fixture, params: { name, arguments: args }, name })
+      );
+      const pending = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
+      )(yield* wait(review.json()));
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM transaction_corrections")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+      yield* wait(
+        fixture.db
+          .prepare("UPDATE transactions SET deleted_at_ms = 1791028800000 WHERE user_id = ?")
+          .bind("10000000-0000-4000-8000-000000000001")
+          .run()
+      );
+      const accepted = yield* wait(
+        nativeConfirmationCall({
+          fixture,
+          name,
+          params: {
+            name,
+            arguments: args,
+            requestState: pending.result.requestState,
+            inputResponses: { review: explicitNativeAccept },
+          },
+        })
+      );
+      expect(yield* wait(accepted.json())).toMatchObject({ result: { isError: true } });
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM transaction_corrections")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM oauth_operation_intents WHERE reference = ?")
+            .bind(pending.result.requestState)
+            .first<number>("count(*)")
+        )
+      ).toBe(1);
+    })
+  ));
+
 const nativeOwnerJourneys = [
   "recurringPlans.applyRecurringEdit",
   "categories.updateKeywordRule",
@@ -26,6 +82,7 @@ const nativeOwnerJourneys = [
   "memory.forget",
   "dashboard.applyDashboardEdit",
   "transactions.updateTransaction",
+  "transactions.updateTransactions",
   "transactions.deleteTransaction",
   "insights.markInsightRead",
   "insights.dismissInsight",
@@ -61,6 +118,33 @@ const insightJourneyArgs = (
           },
         })
       : ownerArgs({ params: { id } });
+  });
+
+const transactionJourneyArgs = (
+  fixture: NativeFixture,
+  name: NativeOwnerJourney,
+  ordinary: (operation: string, args: Schema.Json) => Promise<Response>
+): Effect.Effect<Schema.Json, TestFailure> =>
+  Effect.gen(function* () {
+    const created = yield* wait(ordinary("transactions.createTransaction", transactionArguments));
+    expect(yield* wait(created.json())).toMatchObject({ result: { isError: false } });
+    const id = yield* wait(
+      fixture.db.prepare("SELECT id FROM transactions LIMIT 1").first<string>("id")
+    );
+    if (name === "transactions.updateTransactions") {
+      return ownerArgs({
+        payload: {
+          transactions: [{ id, expectedRevision: 0 }],
+          changes: { counterparty: "Corregida" },
+        },
+      });
+    }
+    return name === "transactions.deleteTransaction"
+      ? ownerArgs({ params: { id } })
+      : ownerArgs({
+          params: { id },
+          payload: { expectedRevision: 0, changes: { counterparty: "Corregida" } },
+        });
   });
 
 const otherOwnerJourneyArgs = (
@@ -112,17 +196,7 @@ const otherOwnerJourneyArgs = (
       return ownerArgs({ payload: { op: "set-title", title: "Revisión nativa" } });
     }
     if (name.startsWith("transactions.")) {
-      const created = yield* wait(ordinary("transactions.createTransaction", transactionArguments));
-      expect(yield* wait(created.json())).toMatchObject({ result: { isError: false } });
-      const id = yield* wait(
-        fixture.db.prepare("SELECT id FROM transactions LIMIT 1").first<string>("id")
-      );
-      return name === "transactions.deleteTransaction"
-        ? ownerArgs({ params: { id } })
-        : ownerArgs({
-            params: { id },
-            payload: { expectedRevision: 0, changes: { counterparty: "Corregida" } },
-          });
+      return yield* transactionJourneyArgs(fixture, name, ordinary);
     }
     return yield* insightJourneyArgs(fixture, name);
   });

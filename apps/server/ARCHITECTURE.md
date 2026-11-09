@@ -106,6 +106,16 @@ Browser User responses can carry the bounded Category display catalog through it
 published projection seam, with live browser credential evidence checked after that read. These
 projections do not add a generic batching transport or bypass admission, Consent or write guards.
 
+Transactions declares `updateTransactions` for an explicit revision-bound selection sharing one
+Correction. The owner reads only those same-User originals, prepares each record's correction
+evidence, and commits set-based writes and one metadata-only operation Audit through the canonical
+mutation unit. Exact affected-row assertions roll back incomplete writes. The 4096-record and
+512KiB HTTP bounds protect one unit of work; the browser has no checkbox cap. OAuth group
+approval observes and rechecks the selected originals, linked partners, effective facts,
+Reconciliation membership and precedence inputs through the same snapshot owner as individual
+correction, so changes to any financial premise invalidate pending approval. The generic atomic
+batch remains limited to twelve canonical operations, independently of this selection size.
+
 Queries share an observational owner implementation. Individual and atomic-batch mutations share
 the User-scoped mutation unit. Dedicated browser/proof transports retain separate declarations and
 authority; using one does not confer canonical, agent or batch privileges.
@@ -118,6 +128,11 @@ session in a bounded native snapshot containing the connection page and its late
 per connection. Audit selection requires the existing User/connection/time index rather than a
 broad User-history scan. Identity-only listing remains available after Processing Consent withdrawal;
 request pressure and fresh-session requirements for revocation remain independent.
+
+PAT and OAuth activity indexes contain only credential calls with the corresponding credential
+identifier. Other browser and hosted calls retain their complete Audit records without updating
+unrelated activity indexes. Index replacement bounds the inspected history and destination entries
+before any schema change; it never rebuilds the Audit table or changes its append-only guards.
 
 MCP projects canonical capabilities under a separately identifiable OAuthConnection. It uses the
 same owner behavior, User coordination, Consent, accounting and Audit boundaries as other clients.
@@ -206,6 +221,9 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+Group Corrections use the existing credential-neutral Audit projection with the exact browser
+session and accepted/rejected outcome. The original Audit history and table remain in place;
+adding this operation requires no Audit rebuild.
 The canonical Transaction detail query returns linked originals alongside the effective facts in
 the same authorized, audited snapshot. Bounded SourceAttestation capture kinds explain
 how each original was obtained without returning retained source material. Original selection remains same-User and bounded to the

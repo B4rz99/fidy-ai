@@ -519,6 +519,37 @@ test("refresh clears selection and ignores the old pending continuation", ({ pag
       );
     })
   ));
+test("selecting all keeps later continuation rows unselected until explicitly included", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => installBoundUser(page));
+      yield* wait(() => installCategories({ page, categories: [category] }));
+      const fixture = yield* wait(() => installHistory(page, beyondPage));
+      fixture.mode = "hold";
+      yield* wait(() => page.goto("/app/transactions"));
+      yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+      const all = page.getByRole("button", { name: "Seleccionar todas", exact: true });
+      yield* wait(() => all.click());
+      yield* wait(() =>
+        expect(page.getByRole("checkbox", { checked: true })).toHaveCount(initialPageSize)
+      );
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
+      fixture.mode = "ready";
+      yield* wait(() => completePending(fixture));
+      yield* wait(() => expect(page.getByRole("checkbox")).toHaveCount(beyondPage));
+      yield* wait(() =>
+        expect(page.getByRole("checkbox", { checked: true })).toHaveCount(initialPageSize)
+      );
+      yield* wait(() => expect(all).toBeEnabled());
+      yield* wait(() => all.click());
+      yield* wait(() =>
+        expect(page.getByRole("checkbox", { checked: true })).toHaveCount(beyondPage)
+      );
+    })
+  ));
 test("retains completed history pages through a failed refresh and recovery", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -63,7 +63,9 @@ type LedgerProps = Readonly<{
     ids: ReadonlyArray<string>;
     onToggle: (id: string) => void;
     onContinue: () => void;
-    limit: number;
+    allSelected: boolean;
+    onSelectAll: () => void;
+    onClear: () => void;
   }>;
 }>;
 const transactionAction = (
@@ -80,43 +82,40 @@ const TransactionIdentity = ({
   disabled,
   selection,
 }: Readonly<{ row: TransactionListRow }> &
-  Pick<LedgerProps, "selected" | "onSelect" | "disabled" | "selection">): JSX.Element => {
-  const atLimit = selection.ids.length >= selection.limit && !selection.ids.includes(row.id);
-  return (
-    <TableCell>
-      <div className="flex min-w-0 items-center gap-3">
-        {selection.active ? (
-          <Checkbox
-            aria-label={`Seleccionar ${row.counterpartyLabel}`}
-            checked={selection.ids.includes(row.id)}
-            disabled={disabled || atLimit}
-            onCheckedChange={() => selection.onToggle(row.id)}
-          />
-        ) : null}
-        <button
-          type="button"
-          disabled={disabled || (selection.active && atLimit)}
-          onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-          aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
-          aria-expanded={Option.contains(selected, row.id)}
-          data-transaction-slot="transaction-identity-control"
-          className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-        >
-          <span className="sr-only">{transactionAction(row, selection)} </span>
-          <span className="transaction-identity-icon">
-            <CategoryVisual label={row.categoryLabel} bubble large={false} />
+  Pick<LedgerProps, "selected" | "onSelect" | "disabled" | "selection">): JSX.Element => (
+  <TableCell>
+    <div className="flex min-w-0 items-center gap-3">
+      {selection.active ? (
+        <Checkbox
+          aria-label={`Seleccionar ${row.counterpartyLabel}`}
+          checked={selection.ids.includes(row.id)}
+          disabled={disabled}
+          onCheckedChange={() => selection.onToggle(row.id)}
+        />
+      ) : null}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
+        aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
+        data-transaction-slot="transaction-identity-control"
+        aria-expanded={Option.contains(selected, row.id)}
+        className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+      >
+        <span className="sr-only">{transactionAction(row, selection)} </span>
+        <span className="transaction-identity-icon">
+          <CategoryVisual label={row.categoryLabel} bubble large={false} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block break-words">{row.counterpartyLabel}</span>
+          <span className="transaction-category-inline block break-words text-xs text-muted-foreground">
+            {row.categoryLabel}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block break-words">{row.counterpartyLabel}</span>
-            <span className="transaction-category-inline block break-words text-xs text-muted-foreground">
-              {row.categoryLabel}
-            </span>
-          </span>
-        </button>
-      </div>
-    </TableCell>
-  );
-};
+        </span>
+      </button>
+    </div>
+  </TableCell>
+);
 const TransactionClassification = ({
   row,
   onSelect,
@@ -136,12 +135,7 @@ const TransactionClassification = ({
     <TableCell className="hidden @min-[481px]/ledger:table-cell">
       <button
         type="button"
-        disabled={
-          disabled ||
-          (selection.active &&
-            selection.ids.length >= selection.limit &&
-            !selection.ids.includes(row.id))
-        }
+        disabled={disabled}
         onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
         aria-label={`${row.transactionTypeLabel}; ${transactionAction(row, selection)} ${row.counterpartyLabel}`}
         aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
@@ -177,12 +171,7 @@ const TransactionAmount = ({
   <TableCell className="text-right font-medium tabular-nums">
     <button
       type="button"
-      disabled={
-        disabled ||
-        (selection.active &&
-          selection.ids.length >= selection.limit &&
-          !selection.ids.includes(row.id))
-      }
+      disabled={disabled}
       onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
       aria-label={`${row.moneyText}, ${row.transactionTypeLabel}; ${transactionAction(row, selection)} ${row.counterpartyLabel}`}
       aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
@@ -509,7 +498,23 @@ const SelectionBar = ({
   <>
     {selection.active ? (
       <div data-transaction-slot="transaction-selection-bar">
-        {selection.summary}
+        <div className="flex min-w-0 basis-full flex-wrap items-center gap-2 @min-[600px]/ledger:flex-1 @min-[600px]/ledger:basis-auto">
+          {selection.summary}
+          <Button
+            variant="outline"
+            disabled={disabled || selection.allSelected}
+            onClick={selection.onSelectAll}
+          >
+            Seleccionar todas
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={disabled || selection.ids.length === 0}
+            onClick={selection.onClear}
+          >
+            Limpiar selección
+          </Button>
+        </div>
         <Button
           variant="outline"
           aria-label="Editar selección de transacciones"
@@ -518,6 +523,9 @@ const SelectionBar = ({
         >
           Editar selección
         </Button>
+        <p className="basis-full text-xs text-muted-foreground">
+          Seleccionar todas incluye las transacciones cargadas que coinciden con tus filtros.
+        </p>
       </div>
     ) : null}
   </>

@@ -1,3 +1,4 @@
+import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { prepareBoundRecurringWorkspace } from "../../recurring-plans/operations";
 import {
   prepareBoundReviewItem,
@@ -92,6 +93,7 @@ import { ownsTransactionPath as transactionPath } from "../../../src/shell/trans
 import {
   type TransactionCaller as CanonicalCaller,
   isPATCaller,
+  maximumTransactionGroupInputBytes,
   maximumTransactionInputBytes,
   rejectBatchEnvelope,
   rejectInvalidTransactionInput,
@@ -454,6 +456,11 @@ const sendToCoordinator = ({
       headers,
     });
   });
+
+const groupCorrectionPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: maximumTransactionGroupInputBytes,
+  deadlineMilliseconds: 2000,
+});
 
 const maximumBatchBytes = maximumAtomicBatchCalls * maximumTransactionInputBytes;
 const batchPolicy = Schema.decodeSync(RequestBodyPolicy)({
@@ -1237,6 +1244,37 @@ const ingestionCanonicalResponse = (
   return Option.none();
 };
 
+const dispatchGroupCorrection = ({
+  request,
+  environment,
+  subject,
+  operation,
+}: Parameters<typeof transactionResponse>[0]): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const payload = yield* boundedJsonBody({
+      request,
+      policy: groupCorrectionPolicy,
+      schema: Schema.toCodecJson(UpdateTransactionsInput),
+    });
+    if (Option.isNone(payload)) {
+      const current = yield* Clock.currentTimeMillis;
+      return yield* Effect.tryPromise(() =>
+        rejectInvalidTransactionInput({
+          db: environment.DB,
+          subject,
+          operation: "transactions.updateTransactions",
+          current,
+        })
+      );
+    }
+    return yield* sendToCoordinator({
+      completion: Option.none(),
+      environment,
+      subject,
+      work: canonicalCall(operation.id, { payload: payload.value }),
+    });
+  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id));
+
 /**
  * The Transaction work this dispatch owns, or None when another slice owns the operation.
  */
@@ -1256,6 +1294,9 @@ const transactionResponse = (
         Effect.withSpan("transactions.createTransaction")
       )
     );
+  }
+  if (operation.id === "transactions.updateTransactions") {
+    return Option.some(dispatchGroupCorrection(input));
   }
   if (operation.id === "transactions.updateTransaction") {
     return Option.some(

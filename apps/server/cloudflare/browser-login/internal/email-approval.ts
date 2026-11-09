@@ -1,3 +1,4 @@
+import { noLaterReadyPairing } from "./approval-order";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { decidePendingBrowserLoginProof } from "../../../src/core/browser-login/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
@@ -89,14 +90,18 @@ export const prepareProvedApproval = ({
   pairingId,
   subject,
   current,
-}: BrowserPairingApprovalStatement): D1PreparedStatement =>
-  db
+}: BrowserPairingApprovalStatement): D1PreparedStatement => {
+  const ordering = noLaterReadyPairing(
+    { sql: `(SELECT userId FROM (${subject.sql}))`, params: subject.params },
+    "browser_login_pairings",
+    current
+  );
+  return db
     .prepare(
       `UPDATE browser_login_pairings SET state = 'ready', user_id = (SELECT userId FROM (${subject.sql}))
    WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ?
      AND wrong_attempts < 5 AND EXISTS (SELECT 1 FROM (${subject.sql}))
-     AND NOT EXISTS (SELECT 1 FROM browser_login_pairings AS ready
-       WHERE ready.state = 'ready' AND ready.user_id = (SELECT userId FROM (${subject.sql}))
-         AND ready.expires_at_ms > ? AND ready.rowid >= browser_login_pairings.rowid)`
+     AND ${ordering.sql}`
     )
-    .bind(...subject.params, pairingId, current, ...subject.params, ...subject.params, current);
+    .bind(...subject.params, pairingId, current, ...subject.params, ...ordering.params);
+};

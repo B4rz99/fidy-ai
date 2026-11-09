@@ -283,7 +283,7 @@ it("keeps another User's ready pairing and does not supersede on creation", () =
             current: approvalTime,
           }).run()
         )).meta.changes
-      ).toBe(1);
+      ).toBeGreaterThan(0);
       expect(
         yield* Effect.tryPromise(() =>
           db

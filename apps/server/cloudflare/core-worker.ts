@@ -362,9 +362,10 @@ export class ErasureRegistryTransport extends WorkerEntrypoint<CoreEnvironment> 
 
 const isRegistryObject = (state: CoordinatorState, environment: CoreEnvironment): boolean => {
   if (state.id.name === erasureRegistryName) return true;
-  const namespace = environment.ERASURE_REGISTRY_COORDINATOR;
+  const namespace =
+    environment.ERASURE_REGISTRY_COORDINATOR ?? environment.USER_TRANSACTION_COORDINATOR;
   return (
-    namespace?.idFromName !== undefined &&
+    namespace.idFromName !== undefined &&
     state.id.equals?.(namespace.idFromName(erasureRegistryName)) === true
   );
 };

@@ -82,13 +82,15 @@ export class DeployedRegistryFixture extends UserTransactionCoordinator {
     environment: ConstructorParameters<typeof UserTransactionCoordinator>[1] &
       Readonly<{ ROOT_COORDINATOR: ErasureRegistryNamespace }>
   ) {
+    const bound = { ...environment, USER_TRANSACTION_COORDINATOR: environment.ROOT_COORDINATOR };
+    delete bound.ERASURE_REGISTRY_COORDINATOR;
     super(
       {
         id: { name: undefined, equals: state.id.equals.bind(state.id) },
         storage: state.storage,
         waitUntil: state.waitUntil.bind(state),
       },
-      { ...environment, ERASURE_REGISTRY_COORDINATOR: environment.ROOT_COORDINATOR }
+      bound
     );
   }
 }
@@ -98,6 +100,8 @@ export class DeployedTransportFixture extends ErasureRegistryTransport {
     environment: ConstructorParameters<typeof ErasureRegistryTransport>[1] &
       Readonly<{ ROOT_COORDINATOR: ErasureRegistryNamespace }>
   ) {
-    super(context, { ...environment, ERASURE_REGISTRY_COORDINATOR: environment.ROOT_COORDINATOR });
+    const bound = { ...environment, USER_TRANSACTION_COORDINATOR: environment.ROOT_COORDINATOR };
+    delete bound.ERASURE_REGISTRY_COORDINATOR;
+    super(context, bound);
   }
 }

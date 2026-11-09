@@ -316,7 +316,7 @@
     "csv-parse": "7.0.3",
     "effect": "4.0.6",
     "fflate": "0.8.3",
-    "jose": "6.2.14",
+    "jose": "6.2.15",
     "mupdf": "1.28.1",
     "parse5": "8.1.0",
     "postal-mime": "2.7.6",
@@ -324,7 +324,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261101.1",
+    "@cloudflare/workers-types": "5.20261102.1",
     "@effect/platform-bun": "4.0.6",
     "@effect/platform-node": "4.0.6",
     "@effect/vitest": "4.0.6",
@@ -335,6 +335,6 @@
     "rolldown": "1.2.16",
     "typescript": "7.0.2",
     "vitest": "5.0.5",
-    "wrangler": "4.156.0"
+    "wrangler": "4.156.1"
   }
 }

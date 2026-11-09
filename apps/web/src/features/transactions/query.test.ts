@@ -145,6 +145,7 @@ it.live(
       });
       const firstPage = transactionFirstPage({ client, period: { from, to } });
       const history = transactionHistory({
+        initialPages: 1,
         apiClient: client,
         firstPage,
         period: { from, to },

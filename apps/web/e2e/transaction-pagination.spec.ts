@@ -8,12 +8,18 @@ test.describe.configure({ mode: "parallel" });
 const category = { id: "24000000-0000-4000-8000-000000000242", label: "Restaurantes" };
 const pageSize = 100;
 const initialPageSize = 25;
-const scrollToEnd = 100_000;
 const unauthorized = 401;
 const multiplePages = pageSize * 2 + 1;
 const wait = Effect.tryPromise;
 const uuidWidth = 12;
 const beyondPage = pageSize + 1;
+const middleRow = 50;
+const scrollTolerance = 64;
+const scrollPosition = (page: Page): Promise<number> => page.evaluate(() => window.scrollY);
+const expectScrollAt = (page: Page, expected: number): Promise<void> =>
+  expect
+    .poll(() => scrollPosition(page).then((actual) => Math.abs(actual - expected)))
+    .toBeLessThan(scrollTolerance);
 type HistoryRow = Readonly<{
   id: string;
   categoryId: string;
@@ -169,6 +175,145 @@ test("loads the next Transaction page only when scrolling to the end", ({ page }
       yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
       yield* wait(() => expect(rows).toHaveCount(beyondPage));
       expect(fixture.requests).toHaveLength(2);
+    })
+  ));
+const installBudgetReturn = (page: Page): Promise<void> =>
+  page
+    .route(`${apiOrigin}/budget-status**`, (route) => route.fulfill({ status: 503, body: "{}" }))
+    .then(() => {});
+const chooseFixtureDay = (page: Page, fixture: HistoryFixture): Promise<void> => {
+  const first = fixture.rows[0];
+  if (first === undefined) throw new Error("Missing fixture Transaction");
+  const label = DateTime.format(DateTime.makeUnsafe(first.occurredAt), {
+    locale: "es-CO",
+    timeZone: "America/Bogota",
+    dateStyle: "full",
+  });
+  return page
+    .getByRole("button", { name: "Fecha", exact: true })
+    .click()
+    .then(() => page.getByRole("button", { name: label }).click());
+};
+test("Back restores each same-month history entry's visited pages independently", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => installBoundUser(page));
+      yield* wait(() => installCategories({ page, categories: [category] }));
+      const fixture = yield* wait(() => installHistory(page, multiplePages));
+      yield* wait(() => page.goto("/app/transactions"));
+      const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => expect(rows).toHaveCount(initialPageSize + pageSize));
+      yield* wait(() =>
+        page.getByRole("searchbox", { name: "Buscar transacciones" }).fill("Registro")
+      );
+      yield* wait(() => chooseFixtureDay(page, fixture));
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => expect(rows).toHaveCount(multiplePages));
+      yield* wait(() => rows.nth(middleRow).scrollIntoViewIfNeeded());
+      yield* wait(() => page.goBack());
+      yield* wait(() => expect(rows).toHaveCount(initialPageSize + pageSize));
+    })
+  ));
+test("a correction retains all loaded filtered rows while a later page refresh is pending", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => installBoundUser(page));
+      yield* wait(() => installCategories({ page, categories: [category] }));
+      const fixture = yield* wait(() => installHistory(page, multiplePages));
+      const last = fixture.rows.at(-1);
+      if (last === undefined) throw new Error("Missing fixture Transaction");
+      yield* wait(() => installCorrection(page, fixture, last));
+      yield* wait(() => page.goto("/app/transactions"));
+      const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
+      for (const count of [initialPageSize + pageSize, multiplePages]) {
+        yield* wait(() =>
+          page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded()
+        );
+        yield* wait(() => expect(rows).toHaveCount(count));
+      }
+      yield* wait(() =>
+        page.getByRole("searchbox", { name: "Buscar transacciones" }).fill("Registro")
+      );
+      yield* wait(() => rows.last().click());
+      yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("0,02"));
+      fixture.mode = "hold";
+      yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+      yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
+      yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
+      yield* wait(() => expect(rows).toHaveCount(multiplePages));
+      yield* wait(() =>
+        expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeDisabled()
+      );
+      fixture.mode = "failure";
+      yield* wait(() => interruptPending(fixture));
+      yield* wait(() =>
+        expect(
+          page.getByText(
+            "No pudimos cargar más transacciones. Conservamos las transacciones cargadas."
+          )
+        ).toBeVisible()
+      );
+      yield* wait(() => expect(rows).toHaveCount(multiplePages));
+      fixture.mode = "ready";
+      yield* wait(() =>
+        page
+          .getByRole("button", { name: "Reintentar carga de más transacciones", exact: true })
+          .click()
+      );
+      yield* wait(() =>
+        expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeEnabled()
+      );
+      yield* wait(() => expect(rows).toHaveCount(multiplePages));
+      yield* wait(() => expect(rows.last()).toBeInViewport());
+    })
+  ));
+
+test("a searched later page survives Back, correction and reload", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(() => installBoundUser(page));
+      yield* wait(() => installCategories({ page, categories: [category] }));
+      const fixture = yield* wait(() => installHistory(page, beyondPage));
+      const last = fixture.rows.at(-1);
+      if (last === undefined) throw new Error("Missing last fixture Transaction");
+      yield* wait(() => installCorrection(page, fixture, last));
+      yield* wait(() => installBudgetReturn(page));
+      yield* wait(() => page.goto("/app/transactions"));
+      const rows = page.getByRole("button", { name: /^Ver transacción Registro /u });
+      yield* wait(() => expect(rows).toHaveCount(initialPageSize));
+      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
+      yield* wait(() => expect(rows).toHaveCount(beyondPage));
+      const search = page.getByRole("searchbox", { name: "Buscar transacciones" });
+      yield* wait(() => search.fill("Registro"));
+      yield* wait(() => expect(rows).toHaveCount(beyondPage));
+      yield* wait(() => rows.nth(middleRow).scrollIntoViewIfNeeded());
+      const before = yield* wait(() => scrollPosition(page));
+      yield* wait(() => page.getByRole("link", { name: "Presupuestos", exact: true }).click());
+      yield* wait(() => expect(page).toHaveURL(/\/app\/budgets/u));
+      yield* wait(() => page.goBack());
+      yield* wait(() => expect(search).toHaveValue("Registro"));
+      yield* wait(() => expect(rows).toHaveCount(beyondPage));
+      yield* wait(() => expectScrollAt(page, before));
+      yield* wait(() => rows.last().click());
+      yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("0,02"));
+      yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
+      yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
+      yield* wait(() => expect(rows).toHaveCount(beyondPage));
+      yield* wait(() => expect(rows.last()).toBeInViewport());
+      yield* wait(() => rows.nth(middleRow).scrollIntoViewIfNeeded());
+      const savedPosition = yield* wait(() => scrollPosition(page));
+      fixture.mode = "hold";
+      yield* wait(() => page.reload());
+      yield* wait(() => expect(search).toHaveValue("Registro"));
+      yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
+      fixture.mode = "ready";
+      yield* wait(() => completePending(fixture));
+      yield* wait(() => expect(rows).toHaveCount(beyondPage));
+      yield* wait(() => expectScrollAt(page, savedPosition));
+      yield* wait(() => expect(rows.nth(middleRow)).toBeInViewport());
     })
   ));
 test("pauses automatic continuation while a capture draft is open", ({ page }) =>
@@ -470,7 +615,7 @@ test("expires authentication during continuation and starts a clean replacement 
     })
   ));
 
-test("saving a later Transaction resets pages and reloads its correction without duplicates", ({
+test("saving a later Transaction retains loaded pages and refreshes its correction without duplicates", ({
   page,
 }) =>
   Effect.runPromise(
@@ -493,10 +638,9 @@ test("saving a later Transaction resets pages and reloads its correction without
       yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
       yield* wait(() =>
         expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
-          initialPageSize
+          beyondPage
         )
       );
-      yield* wait(() => page.mouse.wheel(0, scrollToEnd));
       yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
       fixture.mode = "ready";
       yield* wait(() => completePending(fixture));
@@ -571,7 +715,7 @@ test("calendar selection loads the selected month and clearing the day retains t
         dateStyle: "full",
         timeZone: "America/Bogota",
       }).format(historical.epochMilliseconds);
-      yield* wait(() => page.getByRole("button", { name: label, exact: true }).click());
+      yield* wait(() => page.getByRole("button", { name: label }).click());
       yield* wait(() =>
         expect(
           page.getByRole("button", {
@@ -743,12 +887,15 @@ test("month and year remain readable and selectable with enlarged text on a narr
       yield* wait(() => page.evaluate(enlargeText));
       const month = page.getByRole("combobox", { name: "Mes de transacciones", exact: true });
       const year = page.getByRole("combobox", { name: "Año de transacciones", exact: true });
+      const monthFits = (): Promise<boolean> => month.evaluate(selectedValueFits);
+      const viewportFits = (): Promise<boolean> => page.evaluate(pageFits);
       yield* wait(() => expect(month).toHaveValue("10"));
       yield* wait(() => expect(year).toHaveText("2026"));
       yield* wait(() => month.selectOption({ label: "septiembre" }));
       yield* wait(() => expect(page).toHaveURL(/month=2026-09/u));
-      expect(yield* wait(() => month.evaluate(selectedValueFits))).toBe(true);
-      expect(yield* wait(() => page.evaluate(pageFits))).toBe(true);
+      yield* wait(() => expect(month).toHaveValue("09"));
+      yield* wait(() => expect.poll(monthFits).toBe(true));
+      yield* wait(() => expect.poll(viewportFits).toBe(true));
       yield* wait(() => chooseYear(page, "2025"));
       yield* wait(() => expect(page).toHaveURL(/month=2025-09/u));
       yield* wait(() => month.selectOption("12"));

@@ -304,6 +304,7 @@ const transactionsRoute = createRoute({
               // Consent has completed; data preparation remains owned by this route signal.
               return {
                 preparation: TransactionsPage.preloadData({
+                  destinationMode: cause === "stay" ? "cached" : "fresh",
                   search: deps,
                   apiClient: context.apiClient,
                   registry: context.registry,
@@ -403,6 +404,10 @@ const routeTree = rootRoute.addChildren([
 ]);
 export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
+    scrollRestoration: ({ location }) => location.pathname === "/app/transactions",
+    scrollRestorationBehavior: "instant",
+    getScrollRestorationKey: (location) =>
+      `${options.sessionBinding}:${location.state.__TSR_key ?? "entry"}`,
     defaultPreload: "intent",
     defaultPreloadDelay: 0,
     defaultErrorComponent: RouteFailure,

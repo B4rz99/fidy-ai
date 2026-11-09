@@ -214,7 +214,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
   );
   test.effect(
-    "keeps native owner reads and callback recovery fresh across bounded migration admission",
+    "keeps native owner and original-namespace callback recovery fresh across migration admission",
     () =>
       Effect.gen(function* () {
         const fixture = yield* platform;

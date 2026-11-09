@@ -49,6 +49,7 @@ type RecoveryEnvironment = Readonly<{ DB: D1Database }> &
       ERASURE_REGISTRY: ErasureRegistry;
       ERASURE_REGISTRY_COORDINATOR: ErasureRegistryNamespace;
       ERASURE_REGISTRY_TRANSPORT: Pick<Fetcher, "fetch">;
+      USER_TRANSACTION_COORDINATOR: ErasureRegistryNamespace;
     }>
   >;
 
@@ -57,17 +58,25 @@ export const withErasureRegistry = <Environment extends RecoveryEnvironment>(
   environment: Environment
 ): Environment => {
   if (environment.ERASURE_REGISTRY !== undefined) return environment;
+  // Native namespaces can prove the reserved object's identity when its name is absent.
+  const original =
+    environment.ERASURE_REQUIRED === "true" ? environment.USER_TRANSACTION_COORDINATOR : undefined;
+  const namespace =
+    environment.ERASURE_REGISTRY_COORDINATOR ??
+    (original?.idFromName === undefined ? undefined : original);
   const target = Option.fromUndefinedOr(environment.ERASURE_REGISTRY_TRANSPORT).pipe(
     Option.orElse(() =>
-      Option.fromUndefinedOr(environment.ERASURE_REGISTRY_COORDINATOR).pipe(
-        Option.map((namespace) =>
-          namespace.getByName(erasureRegistryName, { locationHint: "enam" })
-        )
+      Option.fromUndefinedOr(namespace).pipe(
+        Option.map((value) => value.getByName(erasureRegistryName, { locationHint: "enam" }))
       )
     )
   );
   if (Option.isNone(target)) return environment;
-  return { ...environment, ERASURE_REGISTRY: registryClient(target.value) };
+  return {
+    ...environment,
+    ERASURE_REGISTRY_COORDINATOR: namespace,
+    ERASURE_REGISTRY: registryClient(target.value),
+  };
 };
 
 /** Native entrypoints supply the required private registry binding in the deployed topology. Missing required configuration fails closed when a data unit executes. */

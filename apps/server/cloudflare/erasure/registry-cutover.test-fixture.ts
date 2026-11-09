@@ -108,9 +108,15 @@ export class RegistryOwnerFixture {
 }
 
 export class RegistryCallbackFixture {
-  private readonly environment: OwnerEnvironment;
+  private readonly environment: Environment &
+    Readonly<{ USER_TRANSACTION_COORDINATOR: ErasureRegistryNamespace; ERASURE_REQUIRED: string }>;
   constructor(_state: DurableObjectState, environment: OwnerEnvironment) {
-    this.environment = environment;
+    this.environment = {
+      DB: environment.DB,
+      ERASURE_BUCKET: environment.ERASURE_BUCKET,
+      ERASURE_REQUIRED: "true",
+      USER_TRANSACTION_COORDINATOR: environment.ERASURE_REGISTRY_COORDINATOR,
+    };
   }
   fetch(): Promise<Response> {
     return withErasureRecovery(this.environment)

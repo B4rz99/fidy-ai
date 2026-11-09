@@ -62,7 +62,7 @@ const create = (
                     exportName: "ErasureRegistryFixture",
                   },
                 }
-              : {}),
+              : { ERASURE_REGISTRY: { type: "r2" as const, name: "erasure-registry" } }),
             ERASURE_REQUIRED: { type: "text", value: "true" },
             USER_TRANSACTION_COORDINATOR: {
               type: "durable-object",

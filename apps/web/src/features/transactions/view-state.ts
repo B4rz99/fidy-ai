@@ -116,6 +116,15 @@ export const useTransactionFilters = (
   const view = readTransactionView({ state: saved, binding, scope });
   return {
     filters: view.filters,
-    change: (filters) => saveTransactionView(router, scope, { ...view, filters }),
+    change: (filters) => {
+      if (
+        filters.search === view.filters.search &&
+        filters.direction === view.filters.direction &&
+        filters.categoryId === view.filters.categoryId
+      ) {
+        return;
+      }
+      saveTransactionView(router, scope, { ...view, filters });
+    },
   };
 };

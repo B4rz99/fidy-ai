@@ -304,6 +304,7 @@ const transactionsRoute = createRoute({
               // Consent has completed; data preparation remains owned by this route signal.
               return {
                 preparation: TransactionsPage.preloadData({
+                  destinationMode: cause === "stay" ? "cached" : "fresh",
                   search: deps,
                   apiClient: context.apiClient,
                   registry: context.registry,

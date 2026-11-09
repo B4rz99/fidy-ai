@@ -17,13 +17,7 @@ import type { AtomRegistry } from "effect/reactivity";
 import type { FidyClient } from "@/transport/client";
 import { workspaceCategoriesQuery, workspaceProfileQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import {
-  type RegisteredRouter,
-  useNavigate,
-  useRouter,
-  useRouterState,
-  useSearch,
-} from "@tanstack/react-router";
+import { type RegisteredRouter, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type RefCallback, Suspense, useState } from "react";
 import { toast } from "sonner";
@@ -33,7 +27,7 @@ import type { JSX, ReactNode } from "react";
 
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
-import { type HistoryState, transactionHistory } from "./history";
+import { type HistoryCommand, type HistoryState, transactionHistory } from "./history";
 import { useTransactionScrollRestoration } from "./scroll-restoration";
 import {
   type Category,
@@ -231,6 +225,7 @@ type TransactionQueries = Readonly<{
   >;
   history: HistoryState;
   corrections: TransactionCorrections;
+  mount: () => () => void;
   onMore: () => void;
   onRetryMore: () => void;
 }>;
@@ -268,6 +263,36 @@ const notifySavedCorrection = (
     );
   }
   toast.success("Cambios guardados", { description: Option.getOrUndefined(description) });
+};
+const mountTransactionView = ({
+  router,
+  scope,
+  corrections,
+  restore,
+}: Readonly<{
+  router: RegisteredRouter;
+  scope: string;
+  corrections: TransactionCorrections;
+  restore: (command: HistoryCommand) => void;
+}>): (() => void) => {
+  let entry = router.latestLocation.state.__TSR_index;
+  const disposeCorrections = corrections.mount();
+  const unsubscribe = router.subscribe("onResolved", ({ toLocation }) => {
+    if (toLocation.pathname !== "/app/transactions" || toLocation.state.__TSR_index === entry) {
+      return;
+    }
+    entry = toLocation.state.__TSR_index;
+    const view = readTransactionView({
+      state: toLocation.state,
+      binding: router.options.context.sessionBinding,
+      scope,
+    });
+    restore({ restorePages: view.pages });
+  });
+  return () => {
+    unsubscribe();
+    disposeCorrections();
+  };
 };
 const useTransactionQueries = (
   period: TransactionQueries["period"],
@@ -315,6 +340,7 @@ const useTransactionQueries = (
     transactionState: history.query,
     history,
     corrections,
+    mount: () => mountTransactionView({ router, scope, corrections, restore: dispatch }),
     onMore: () => {
       if (history.continuation !== "available") return;
       rememberTransactionPages({ router, scope, pages: history.loadedPages + 1 });
@@ -369,7 +395,7 @@ const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
   );
   const { corrections } = queries;
   const [lifetime] = useState<RefCallback<HTMLDivElement>>(
-    () => (): ReturnType<RefCallback<HTMLDivElement>> => corrections.mount()
+    () => (): ReturnType<RefCallback<HTMLDivElement>> => queries.mount()
   );
   return (
     <TransactionCorrectionContext value={Option.some(corrections)}>
@@ -512,7 +538,6 @@ const TransactionPeriodView = ({
   locate: Option.Option<string>;
 }>): JSX.Element => {
   const navigate = useNavigate();
-  const entry = useRouterState({ select: (state) => state.location.state.__TSR_index });
   const [now] = useState(() => Effect.runSync(DateTime.now));
   const period = selectedTransactionPeriod({ search, now, timeZone: currentUser.timeZone });
   const month = transactionMonth(period);
@@ -521,7 +546,7 @@ const TransactionPeriodView = ({
   };
   return (
     <TransactionResources
-      key={`${entry}:${DateTime.toEpochMillis(period.from)}:${Option.getOrElse(locate, () => "browse")}`}
+      key={`${DateTime.toEpochMillis(period.from)}:${Option.getOrElse(locate, () => "browse")}`}
       locate={locate}
       currentUser={currentUser}
       profileCurrent={profileCurrent}
@@ -634,18 +659,21 @@ export const TransactionListFeature = ({
 }: Readonly<{
   children: ReactNode;
 }>): JSX.Element => <CurrentUserQuery>{children}</CurrentUserQuery>;
-/** Prepare the same first-page resource after fresh entry authority, before the ordinary tree mounts. */
-TransactionListFeature.preloadData = ({
-  apiClient,
-  registry,
-  signal,
-  search,
-}: Readonly<{
+type TransactionPreparation = Readonly<{
   apiClient: FidyClient;
+  destinationMode: "cached" | "fresh";
   registry: AtomRegistry.AtomRegistry;
   signal: AbortSignal;
   search: TransactionSearch;
-}>): Promise<void> =>
+}>;
+/** Prepare the same first-page resource after entry authority, before the ordinary tree mounts. */
+TransactionListFeature.preloadData = ({
+  apiClient,
+  destinationMode,
+  registry,
+  signal,
+  search,
+}: TransactionPreparation): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const profile = workspaceProfileQuery(apiClient);
@@ -670,7 +698,7 @@ TransactionListFeature.preloadData = ({
           prepareQuery({
             registry,
             query: destination,
-            options: { mode: "fresh", signal: Option.some(signal) },
+            options: { mode: destinationMode, signal: Option.some(signal) },
           })
         );
         const record = presentCanonicalQuery(registry.get(destination));

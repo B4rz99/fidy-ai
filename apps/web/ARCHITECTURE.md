@@ -136,8 +136,8 @@ longer matches; recovery retains the visited depth and filters. Router scroll
 restoration applies to Transactions only and keys positions by session and history entry.
 A narrow browser adapter reapplies the Router's saved scroll once restored pages render; it
 captures the entry position on mount and applies it once, leaving later interaction untouched.
-Same-month history entries replace the mounted history/editing lifetime while reusing canonical
-query owners. Correction refreshes retain the loaded projection and ledger until all visited pages
+Same-month navigation restores the entry’s page depth through the mounted history owner, keeping
+bulk selection and canonical query owners alive. Correction refreshes retain the loaded projection and ledger until all visited pages
 settle; pending or failed rereads block edits. Only the editing panel resets on a new generation.
 
 Review history links to Transactions with a validated Transaction identity. After fresh entry

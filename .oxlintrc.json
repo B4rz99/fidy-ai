@@ -191,6 +191,7 @@
         "apps/web/src/ui/components/sheet.tsx",
         "apps/web/src/ui/components/recurring.tsx",
         "apps/web/src/ui/components/dashboard-budget-dialog.tsx",
+        "apps/web/src/ui/components/selection-scope-dialog.tsx",
         "apps/web/src/ui/components/button-variants.ts",
         "apps/web/src/ui/components/table.tsx",
         "apps/web/src/features/transactions/workspace.tsx",

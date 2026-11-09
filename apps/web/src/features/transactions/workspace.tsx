@@ -14,6 +14,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { FilterHorizontalIcon } from "@hugeicons/core-free-icons";
 import { Array, DateTime, Option } from "effect";
 import { Button } from "@/ui/components/button";
+import { SelectionScopeDialog } from "@/ui/components/selection-scope-dialog";
+import { SelectionSummary } from "@/ui/components/selection-summary";
 import { Input } from "@/ui/components/input";
 import { CalendarField } from "@/ui/components/calendar-field";
 import { Label } from "@/ui/components/label";
@@ -506,14 +508,56 @@ const bulkIds = (panel: TransactionPanel): ReadonlyArray<string> => {
   if (panel.stage === "selecting") return panel.ids;
   return panel.transactions.map((record) => record.id);
 };
-const bulkSelection = (
-  panel: TransactionPanel,
-  onPanel: (panel: TransactionPanel) => void,
-  transactions: ReadonlyArray<Transaction>
-): React.ComponentProps<typeof TransactionLedger>["selection"] => {
+const selectedTransactionItems = (
+  props: WorkspaceProps,
+  selected: ReadonlySet<string>,
+  visible: ReadonlyArray<Transaction>
+): React.ComponentProps<typeof SelectionSummary>["items"] => {
+  const visibleIds = new Set<string>(visible.map((record) => record.id));
+  return presentTransactionRows({
+    transactions: props.transactions.filter((record) => selected.has(record.id)),
+    categories: props.categories,
+    locale: props.currentUser.locale,
+    timeZone: props.currentUser.timeZone,
+    counterpartyFallback: "Contraparte no identificada",
+  }).map((record) => ({
+    id: record.id,
+    label: record.counterpartyLabel,
+    description: `${record.transactionTypeLabel} · ${record.moneyText} · ${record.occurredOnText}`,
+    hidden: !visibleIds.has(record.id),
+  }));
+};
+const bulkSelection = ({
+  panel,
+  onPanel,
+  props,
+  visible,
+  disabled,
+}: Readonly<{
+  panel: TransactionPanel;
+  onPanel: (panel: TransactionPanel) => void;
+  props: WorkspaceProps;
+  visible: ReadonlyArray<Transaction>;
+  disabled: boolean;
+}>): React.ComponentProps<typeof TransactionLedger>["selection"] => {
+  const transactions = props.transactions;
   const ids = bulkIds(panel);
   const selected = new Set(ids);
   return {
+    summary: (
+      <SelectionSummary
+        clearFocusId="transaction-type-filter"
+        items={selectedTransactionItems(props, selected, visible)}
+        label={`${ids.length} seleccionadas`}
+        disabled={disabled || panel._tag !== "Bulk" || panel.stage !== "selecting"}
+        onClear={() => onPanel({ _tag: "Bulk", ids: [], stage: "selecting" })}
+        onRemove={(id) => {
+          if (panel._tag === "Bulk" && panel.stage === "selecting") {
+            onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
+          }
+        }}
+      />
+    ),
     active: panel._tag === "Bulk",
     ids,
     limit: maximumAtomicBatchCalls,
@@ -653,7 +697,7 @@ const WorkspaceContent = ({
           readOnly={props.readOnly === true}
           canEdit={props.editable}
           onEdit={() => onPanel(selectionPanel(panel))}
-          selection={bulkSelection(panel, onPanel, props.transactions)}
+          selection={bulkSelection({ panel, onPanel, props, visible, disabled: locked })}
           locate={props.locate}
           rows={rows}
           locale={props.currentUser.locale}
@@ -796,9 +840,60 @@ const useWorkspacePanel = (
   const onPanel = (next: TransactionPanel): void => setInteraction({ generation, panel: next });
   return { panel: capturePanelStatus(panel, capture), onPanel };
 };
-export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
+type PeriodChoice = Readonly<{ kind: "date" | "month"; value: string }>;
+const usePeriodSelection = (
+  source: WorkspaceProps,
+  panel: TransactionPanel,
+  onPanel: (panel: TransactionPanel) => void
+): Readonly<{ props: WorkspaceProps; confirmation: JSX.Element }> => {
+  const [pending, setPending] = useState<Option.Option<PeriodChoice>>(Option.none);
+  const count = bulkIds(panel).length;
+  const apply = (next: PeriodChoice): void => {
+    if (next.kind === "date") source.dateFilter.onChange(next.value);
+    else if (Option.isSome(source.monthFilter)) source.monthFilter.value.onChange(next.value);
+  };
+  const request = (next: PeriodChoice): void => {
+    const replacesPeriod = Option.exists(source.monthFilter, ({ value }) =>
+      next.kind === "month"
+        ? next.value !== value
+        : next.value !== "" && !next.value.startsWith(`${value}-`)
+    );
+    const replacesDestination =
+      next.kind === "date" &&
+      Option.isSome(source.locate) &&
+      next.value !== source.dateFilter.value;
+    if (count > 0 && (replacesPeriod || replacesDestination)) setPending(Option.some(next));
+    else apply(next);
+  };
+  return {
+    props: {
+      ...source,
+      dateFilter: { ...source.dateFilter, onChange: (value) => request({ kind: "date", value }) },
+      monthFilter: Option.map(source.monthFilter, (month) => ({
+        ...month,
+        onChange: (value: string) => request({ kind: "month", value }),
+      })),
+    },
+    confirmation: (
+      <SelectionScopeDialog
+        returnFocusId="transaction-type-filter"
+        open={Option.isSome(pending)}
+        count={count}
+        onKeep={() => setPending(Option.none())}
+        onDiscard={() => {
+          if (Option.isNone(pending)) return;
+          onPanel({ _tag: "Summary" });
+          apply(pending.value);
+          setPending(Option.none());
+        }}
+      />
+    ),
+  };
+};
+export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
-  const { panel: activePanel, onPanel } = useWorkspacePanel(props.generation);
+  const { panel: activePanel, onPanel } = useWorkspacePanel(source.generation);
+  const { props, confirmation } = usePeriodSelection(source, activePanel, onPanel);
   const month = Option.getOrElse(
     Option.map(props.monthFilter, (filter) => filter.value),
     () => "history"
@@ -813,7 +908,6 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const onFilters = (next: WorkspaceFilters): void => {
     setFilters({ search: next.search, direction: next.direction, categoryId: next.categoryId });
     props.dateFilter.onChange(next.date);
-    if (activePanel._tag === "Bulk") onPanel({ _tag: "Summary" });
   };
   const visible = props.transactions.filter((transaction) =>
     matchesTransactionFilters({ transaction, filters, timeZone: props.currentUser.timeZone })
@@ -828,6 +922,7 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const editing = panelEditing(activePanel);
   return (
     <>
+      {confirmation}
       <Toaster position="bottom-right" richColors />
       <TransactionSurface panelOpen={panelEditing(activePanel) || activePanel._tag === "Detail"}>
         <WorkspaceHeader

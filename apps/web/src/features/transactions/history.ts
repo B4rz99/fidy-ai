@@ -23,7 +23,12 @@ export type HistoryState = Readonly<{
   continuation: "complete" | "available" | "loading" | "failure";
   retryPage: Option.Option<PageAtom>;
 }>;
-export type HistoryCommand = "more" | "retry" | "reset" | "refresh";
+export type HistoryCommand =
+  | "more"
+  | "retry"
+  | "reset"
+  | "refresh"
+  | Readonly<{ restorePages: number }>;
 type History = Readonly<{
   state: Atom.Atom<HistoryState>;
   action: Atom.Writable<Option.Option<void>, HistoryCommand>;
@@ -218,10 +223,11 @@ export const transactionHistory = ({
     return retainLoadedHistory(browsed, get.self<BrowsedHistory>(), current.pages);
   });
   const action = Atom.fnSync<HistoryCommand>()((command, get): void => {
+    const changePages = (pages: number): void => get.set(navigation, { ...get(navigation), pages });
+    if (typeof command !== "string") return changePages(command.restorePages);
     if (command === "reset" || command === "refresh") {
-      const current = get(navigation);
       get.set(navigation, {
-        generation: current.generation + 1,
+        generation: get(navigation).generation + 1,
         pages: command === "refresh" ? Math.max(1, get(state).loadedPages) : 1,
       });
       get.refresh(firstPage);

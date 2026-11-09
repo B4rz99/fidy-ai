@@ -1,6 +1,7 @@
 import { retainedSecretCount } from "./browser-storage-fixture";
 import type { Page, Route } from "@playwright/test";
-import { type Cause, Deferred, Effect } from "effect";
+import { type Cause, Deferred, Effect, Schema } from "effect";
+import { ApprovePATPairingPayload, PATPairingPublicCodeInput } from "@fidy/server/client";
 import { apiOrigin, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
@@ -202,7 +203,9 @@ const settlePairingApproval = ({
 }>): Promise<void> =>
   runJourney(
     Effect.gen(function* () {
-      const input = route.request().postDataJSON();
+      const input = yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(ApprovePATPairingPayload)
+      )(route.request().postData());
       approved.push(input.pairingId);
       if (input.pairingId === originalId) yield* Deferred.await(release);
       yield* Effect.tryPromise(() =>
@@ -228,7 +231,10 @@ test("abandoning an approval keeps its late response from completing a replaceme
       const release = yield* Deferred.make<void>();
       const approved: Array<string> = [];
       yield* installRoute(page, `${apiOrigin}/pats/pairings/inspect`, (route) => {
-        const replacement = route.request().postDataJSON().publicCode === "JKLM-NPQR";
+        const input = Schema.decodeUnknownSync(
+          Schema.fromJsonString(Schema.Struct({ publicCode: PATPairingPublicCodeInput }))
+        )(route.request().postData());
+        const replacement = input.publicCode === "JKLM-NPQR";
         return route.fulfill({
           status: ok,
           contentType: "application/json",

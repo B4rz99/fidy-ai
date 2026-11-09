@@ -1,3 +1,4 @@
+import { retainedSecretCount } from "./browser-storage-fixture";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
 import { apiOrigin, response } from "./http-fixtures";
@@ -34,8 +35,7 @@ const revokeIssuedPAT = (page: Page): Promise<void> =>
       expect(page.getByText("Token desactivado. Dejó de funcionar de inmediato.")).toBeVisible()
     );
 
-const browserStorageLength = (page: Page): Promise<number> =>
-  page.evaluate(() => localStorage.length + sessionStorage.length);
+const browserStorageLength = (page: Page): Promise<number> => page.evaluate(retainedSecretCount);
 
 const installActivePATs = (page: Page): Promise<unknown> =>
   page.route(`${apiOrigin}/pats`, (route) => {

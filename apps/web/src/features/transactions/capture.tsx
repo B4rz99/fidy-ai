@@ -1,3 +1,4 @@
+import { type CaptureDraft, emptyCaptureDraft } from "./capture-draft";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { Currency } from "@/transport/client";
 import { MoneyField } from "./money-field";
@@ -111,7 +112,7 @@ const CaptureInputs = ({
   <>
     <div className="flex flex-col gap-2">
       {Option.match(onCurrency, {
-        onNone: () => <p>Moneda · {currency}</p>,
+        onNone: () => <p className="text-sm">Moneda · {currency}</p>,
         onSome: (change) => (
           <>
             <Label htmlFor="transaction-currency">Moneda</Label>
@@ -158,11 +159,6 @@ const CaptureInputs = ({
     </div>
   </>
 );
-
-const currentLocalDay = (timeZone: string): string =>
-  DateTime.formatIsoDate(
-    DateTime.setZone(Effect.runSync(DateTime.now), DateTime.zoneMakeNamedUnsafe(timeZone))
-  );
 
 const CaptureFeedback = ({
   status,
@@ -275,17 +271,9 @@ type CaptureProps = Readonly<{
   disabled: boolean;
   onStatus: (status: CaptureStatus) => void;
 }>;
+type EditorProps = CaptureProps & Readonly<{ newAttempt: boolean }>;
 const captureLocked = (props: CaptureProps): boolean =>
   props.disabled || props.status === "saving" || props.status === "uncertain";
-type CaptureDraft = Readonly<{
-  currency: CaptureCommand["currency"];
-  amount: string;
-  counterparty: string;
-  notes: string;
-  categoryId: string;
-  occurredOn: string;
-  direction: "inflow" | "outflow";
-}>;
 const captureCurrencyChange = (
   fixed: CaptureProps["currency"],
   change: (currency: CaptureCommand["currency"]) => void
@@ -298,7 +286,7 @@ const CaptureForm = ({
   currency,
   revealErrors,
 }: Readonly<{
-  props: CaptureProps;
+  props: EditorProps;
   currency: CaptureCommand["currency"];
   draft: CaptureDraft;
   onDraft: (draft: CaptureDraft) => void;
@@ -349,7 +337,11 @@ const CaptureForm = ({
   </form>
 );
 
-const CaptureActions = ({ props }: Readonly<{ props: CaptureProps }>): JSX.Element => (
+const captureSubmitLabel = (props: EditorProps): string => {
+  if (props.status === "saving") return "Guardando…";
+  return props.newAttempt ? "Registrar como nueva transacción" : "Registrar";
+};
+const CaptureActions = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element => (
   <div data-transaction-slot="transaction-form-actions">
     {Option.isNone(props.onCancel) ? null : (
       <Button
@@ -361,27 +353,25 @@ const CaptureActions = ({ props }: Readonly<{ props: CaptureProps }>): JSX.Eleme
         Cancelar
       </Button>
     )}
-    <Button type="submit" disabled={captureLocked(props)}>
-      {props.status === "saving" ? "Guardando…" : "Registrar"}
+    <Button type="submit" disabled={captureLocked(props)} contentLayout="wrap">
+      {captureSubmitLabel(props)}
     </Button>
   </div>
 );
 
-export const TransactionCapture = (props: CaptureProps): JSX.Element => {
+const CaptureEditor = ({
+  props,
+  draft,
+  setDraft,
+}: Readonly<{
+  props: EditorProps;
+  draft: CaptureDraft;
+  setDraft: (draft: CaptureDraft) => void;
+}>): JSX.Element => {
   const [capture] = useState(() => makeCapture(props.apiClient));
   const submit = useAtomSet(capture);
   const admission = useRef(false);
   const [attempted, setAttempted] = useState(false);
-  const [draft, setDraft] = useState<CaptureDraft>(() => ({
-    currency: "COP",
-    amount: "",
-    counterparty: "",
-    notes: "",
-    categoryId: "",
-    direction: Option.getOrElse(props.direction, () => "outflow"),
-    occurredOn: currentLocalDay(props.timeZone),
-    ...props.initial,
-  }));
   const currency = Option.getOrElse(props.currency, () => draft.currency);
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -427,3 +417,25 @@ export const TransactionCapture = (props: CaptureProps): JSX.Element => {
     />
   );
 };
+
+const LocalCapture = (props: CaptureProps): JSX.Element => {
+  const [draft, setDraft] = useState<CaptureDraft>(() => ({
+    ...emptyCaptureDraft(props.timeZone),
+    direction: Option.getOrElse(props.direction, () => "outflow"),
+    ...props.initial,
+  }));
+  return (
+    <CaptureEditor props={{ ...props, newAttempt: false }} draft={draft} setDraft={setDraft} />
+  );
+};
+
+export const TransactionCapture = LocalCapture;
+
+export const ControlledTransactionCapture = (
+  props: EditorProps &
+    Readonly<{
+      draft: Readonly<{ value: CaptureDraft; onChange: (draft: CaptureDraft) => void }>;
+    }>
+): JSX.Element => (
+  <CaptureEditor props={props} draft={props.draft.value} setDraft={props.draft.onChange} />
+);

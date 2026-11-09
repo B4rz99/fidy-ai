@@ -53,7 +53,7 @@ it("identifies each Currency while preserving exact cents and separate Budget to
     }))
   ).toEqual([
     { currency: "COP", remaining: "COP 0,02", over: false },
-    { currency: "USD", remaining: "-USD 0,15", over: true },
+    { currency: "USD", remaining: "USD -0,15", over: true },
   ]);
   expect(figures.map((figure) => figure.percentage).every((value) => value <= 100)).toBe(true);
   expect(
@@ -89,12 +89,12 @@ it("counts uncapped expenses and recorded income with exact currency balances", 
     {
       currency: "COP",
       balance: "COP 0,02",
-      remaining: "-COP 9.007.199.254.740.993,10",
+      remaining: "COP -9.007.199.254.740.993,10",
       allocationAmount: "COP 9.007.199.254.740.993,12",
     },
     {
       currency: "USD",
-      balance: "-USD 20,15",
+      balance: "USD -20,15",
       remaining: "USD 30,10",
       allocationAmount: "USD 50,25",
     },

@@ -13,7 +13,8 @@ const freshValue = <A,>(state: CanonicalQueryState<A, unknown>): Option.Option<A
 
 /** OAuth review authority never grants product access; Chat requires its own fresh cookie proof. */
 export const OAuthAgent = (): JSX.Element => {
-  const client = useRouter().options.context.webAuthClient;
+  const router = useRouter();
+  const client = router.options.context.webAuthClient;
   const { authentication } = useSession();
   const [consentQuery] = useState(() =>
     client.query("processingConsent", "status", {
@@ -36,7 +37,7 @@ export const OAuthAgent = (): JSX.Element => {
     return <></>;
   }
   return (
-    <HostedAgentProvider>
+    <HostedAgentProvider client={router.options.context.hostedTurnClient}>
       <HostedAgentFeature />
     </HostedAgentProvider>
   );

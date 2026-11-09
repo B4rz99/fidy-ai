@@ -41,7 +41,7 @@ const FloatingExample = (): JSX.Element => {
   const [text, setText] = useState("");
   const { mounted } = useTheme();
   return (
-    <ChatWindow open={open} onOpenChange={setOpen}>
+    <ChatWindow open={open} onOpenChange={setOpen} prepare={() => undefined}>
       <div ref={mounted} className="contents">
         <Conversation className="min-h-0" aria-label="Ejemplo local de conversación">
           <ChatContent>

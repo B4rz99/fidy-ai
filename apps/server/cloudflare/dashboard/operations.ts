@@ -1,5 +1,32 @@
+import { prepareAuthorizedAuditCall } from "../../src/shell/audit/operations";
+import {
+  prepareChangedRowAssertion,
+  prepareReservedChangeCheck,
+} from "../../src/shell/sql-assertions/operations";
+import {
+  type CanonicalBrowserQueryFinalizer,
+  type CanonicalBrowserRead,
+  type CanonicalBrowserSourceRead,
+  type CanonicalReadCompletion,
+} from "../canonical-admission/contract";
+import {
+  type QueryCaller,
+  type TransactionCaller,
+  callerScope,
+  credentialRefusedPreparation,
+  failedPreparation,
+  isOAuthCaller,
+  liveTransactionAuthority,
+  refusedPreparation,
+  transactionFailure,
+  transactionId,
+  transactionNoStore,
+  transactionUnavailable,
+} from "../canonical-work/operations";
+
+import { prepareCanonicalBrowserQueryFinalization } from "../canonical-admission/operations";
 import { makeDashboardTiming } from "./internal/dashboard-timing";
-import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
+
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 
 import { boundedJsonBody } from "../http/operations";
@@ -13,19 +40,7 @@ import {
 import { DashboardUninitialized } from "../../src/shell/dashboard/contract";
 
 import {
-  type QueryCaller,
-  type TransactionCaller,
-  callerScope,
-  credentialRefusedPreparation,
-  failedPreparation,
-  isOAuthCaller,
-  liveTransactionAuthority,
-  refusedPreparation,
-  transactionFailure,
-  transactionNoStore,
-  transactionUnavailable,
-} from "../canonical-work/operations";
-import {
+  type DashboardSource,
   audit,
   credentialUse,
   dashboardOutcome,
@@ -35,6 +50,7 @@ import {
   findDashboardDocument,
   findDashboardSource,
   firstUse,
+  prepareDashboardViewSource,
   projectDashboardValue,
   validCategories,
 } from "./internal/dashboard-mutation";
@@ -51,7 +67,7 @@ import {
 } from "../canonical-operations/contract";
 import { dashboardOAuthReview, oauthDefaultDashboard } from "./internal/oauth-review";
 import { type OAuthMutationReview } from "../oauth-confirmation/contract";
-import { accountQuery, editBodyPolicy } from "./internal/dashboard";
+import { accountQuery, editBodyPolicy, prepareQueryAccounting } from "./internal/dashboard";
 
 type MutationContext = Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;
 
@@ -241,8 +257,9 @@ export const presentDashboard = (
  * Only explicit initialization and edits use the canonical mutation unit; queries never create or
  * repair domain state and return DashboardUninitialized for genuine absence. Views expose complete,
  * validated projections from the Categories, Transactions and Budgets published operations.
- * The caller applies canonical scope policy and dispatches document queries and mutations through the same User's
- * coordinator. Its turn covers every projection read, so a Correction cannot split a chart snapshot.
+ * The caller applies canonical scope policy. Mutations retain the same User's coordinator;
+ * views assert their exact document, calendar interpretation and financial revision in native
+ * snapshots. Concurrent changes withhold the whole view without replaying its work.
  * A subject identity is never a reusable authorization grant.
  */
 export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response> =>
@@ -256,7 +273,13 @@ export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response
       });
     }
     if (!("runMutation" in input)) {
-      return yield* queryDashboard({ db, subject, operation: input.operation });
+      return yield* queryDashboard({
+        db,
+        subject,
+        operation: input.operation,
+        completion: input.completion,
+        preparedSource: Option.none(),
+      });
     }
     const edit =
       operation === "dashboard.applyDashboardEdit"
@@ -295,16 +318,103 @@ const refusedDashboardCaller = (): Response =>
     message: "Present a valid credential and retry.",
   });
 
-const queryDashboard = ({
+const dashboardFinalization = ({
   db,
   subject,
+  completion,
   operation,
 }: Readonly<{
   db: D1Database;
   subject: QueryCaller;
+  completion: Option.Option<CanonicalReadCompletion>;
   operation: DashboardQueryOperation;
-}>): Effect.Effect<Response> =>
+}>): Option.Option<CanonicalBrowserQueryFinalizer> =>
+  operation === "dashboard.getDashboardView" && Option.isSome(completion) && "id" in subject
+    ? Option.some(
+        prepareCanonicalBrowserQueryFinalization({
+          db,
+          subject,
+          completion: completion.value,
+          accounting: (current) => prepareQueryAccounting({ db, subject, current, operation }),
+        })
+      )
+    : Option.none();
+
+const limitedDashboardResponse = (): Effect.Effect<Response> =>
+  Effect.succeed(
+    transactionFailure({
+      code: "rate_limited",
+      status: 429,
+      message: "Daily audit budget exhausted.",
+    })
+  );
+
+const presentDashboardCatalog = (): Effect.Effect<Response, Schema.SchemaError> =>
+  Schema.encodeEffect(Schema.toCodecJson(DashboardCatalog))(
+    makeDashboardCatalog({ restaurantCategoryId: categoryIds.restaurantes })
+  ).pipe(Effect.map((data) => Response.json({ data, next: [] }, { headers: transactionNoStore })));
+
+const readDashboardCatalog = (
+  input: Parameters<typeof accountQuery>[0]
+): Effect.Effect<Response, Effect.Error<ReturnType<typeof accountQuery>> | Schema.SchemaError> =>
+  accountQuery(input).pipe(Effect.andThen(presentDashboardCatalog()));
+
+/** The static catalog needs only one complete browser authority, pressure and accounting unit. */
+export const prepareBoundDashboardCatalog: CanonicalBrowserRead = ({
+  db,
+  authority,
+  reservation,
+  current,
+}) => ({
+  statements: [
+    prepareAuthorizedAuditCall({
+      db,
+      authority,
+      id: transactionId(),
+      current,
+      operation: "dashboard.listDashboardCatalog",
+      outcome: "accepted",
+      afterOwnerWrite: false,
+    }),
+    prepareReservedChangeCheck({ db, scope: "dashboard", reservation }),
+  ],
+  present: () => presentDashboardCatalog().pipe(Effect.orElseSucceed(transactionUnavailable)),
+});
+
+/** The dependent financial projection keeps its own fresh revision, calendar and disclosure fence. */
+export const prepareBoundDashboardView: CanonicalBrowserSourceRead = (input) => {
+  const source = prepareDashboardViewSource(input);
+  return {
+    statements: source.statements,
+    unavailable: Option.some(transactionUnavailable),
+    present: (rows, subject, completion) =>
+      source.decode(rows).pipe(
+        Effect.flatMap((preparedSource) =>
+          queryDashboard({
+            db: input.db,
+            subject,
+            operation: "dashboard.getDashboardView",
+            completion: Option.some(completion),
+            preparedSource: Option.some(preparedSource),
+          })
+        ),
+        Effect.orElseSucceed(transactionUnavailable)
+      ),
+  };
+};
+
+const queryDashboard = (
+  input: Readonly<{
+    db: D1Database;
+    subject: QueryCaller;
+    completion: Option.Option<CanonicalReadCompletion>;
+    operation: DashboardQueryOperation;
+    preparedSource: Option.Option<DashboardSource>;
+  }>
+): Effect.Effect<Response> =>
   Effect.gen(function* () {
+    const { db, subject, operation, completion, preparedSource } = input;
+    const final = dashboardFinalization({ db, subject, completion, operation });
     const measured = makeDashboardTiming(operation === "dashboard.getDashboardView");
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const live =
@@ -312,16 +422,13 @@ const queryDashboard = ({
       (yield* Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current })));
     if (!live) return refusedDashboardCaller();
     if (operation === "dashboard.listDashboardCatalog") {
-      yield* accountQuery({ db, subject, current, operation });
-      const data = yield* Schema.encodeEffect(Schema.toCodecJson(DashboardCatalog))(
-        makeDashboardCatalog({ restaurantCategoryId: categoryIds.restaurantes })
-      );
-      return Response.json({ data, next: [] }, { headers: transactionNoStore });
+      return yield* readDashboardCatalog({ db, subject, current, operation });
     }
-    const source = yield* measured.measure(
-      "source",
-      findDashboardSource({ db, subject, current, operation })
-    );
+    const source = yield* Option.match(preparedSource, {
+      onNone: () =>
+        measured.measure("source", findDashboardSource({ db, subject, current, operation })),
+      onSome: Effect.succeed,
+    });
     if (!source.live) return refusedDashboardCaller();
     if (Option.isNone(source.document)) {
       yield* accountQuery({ db, subject, current, operation });
@@ -335,21 +442,22 @@ const queryDashboard = ({
         operation,
         document: source.document.value.document,
         viewContext: source.viewContext,
+        finalization: Option.map(final, (value) => value.finalization),
       })
     );
     if (Option.isNone(value) || value.value._tag !== "Owner") return transactionUnavailable();
-    yield* measured.measure("audit", accountQuery({ db, subject, current, operation }));
+    yield* measured.measure(
+      "audit",
+      Option.match(final, {
+        onNone: () => accountQuery({ db, subject, current, operation }),
+        onSome: () => Effect.void,
+      })
+    );
     const response = yield* presentDashboard(value.value);
-    return measured.respond(response);
+    return measured.respond(
+      Option.match(final, { onNone: () => response, onSome: (value) => value.present(response) })
+    );
   }).pipe(
-    Effect.catchTag("DashboardQueryLimited", () =>
-      Effect.succeed(
-        transactionFailure({
-          code: "rate_limited",
-          status: 429,
-          message: "Daily audit budget exhausted.",
-        })
-      )
-    ),
+    Effect.catchTag("DashboardQueryLimited", limitedDashboardResponse),
     Effect.orElseSucceed(transactionUnavailable)
   );

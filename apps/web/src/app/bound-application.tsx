@@ -1,7 +1,6 @@
-import type {
-  BrowserSessionLifetime,
-  BrowserSessionObservation,
-} from "@/transport/session-binding";
+import { type HostedTurnClient, makeHostedTurnClient } from "@/transport/hosted-turn-client";
+import type { BrowserSessionLifetime } from "@/transport/session-binding";
+import type { BrowserSessionObservation } from "@/transport/session-entry";
 import { initialApplicationValues } from "./initial-values";
 import { RegistryContext, RegistryProvider } from "@effect/atom-react";
 import { RouterProvider } from "@tanstack/react-router";
@@ -12,10 +11,8 @@ import { useSession } from "@/session/session-context";
 import { SubscriptionEnrollmentLifetime } from "@/session/subscription-enrollment-lifetime";
 import {
   type FidyClient,
-  type HostedTurnClient,
   type WebAuthClient,
   makeFidyClient,
-  makeHostedTurnClient,
   makeSubscriptionEnrollmentClient,
   makeWebAuthClient,
 } from "@/transport/client";

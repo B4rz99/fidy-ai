@@ -2,8 +2,11 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "ed33ed245e0233a44a4d064c5de04dbcba82d5c6c36932aa2295be464ac5e088";
+const expectedEdgePolicyDigest = "8feef2ac69e7cc1d5dff84464d7dbacf9c8abda7e0d0b1243e2d5c0f985d28b4";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/src/shell/browser-transport/contract.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/erasure/runtime.ts", import.meta.url)
   ).text(),
@@ -135,6 +138,24 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/core-http/internal/http.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/payment-enrollment.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/internal/management.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/resource-admission/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/resource-admission/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/web-session/internal/binding.ts", import.meta.url)

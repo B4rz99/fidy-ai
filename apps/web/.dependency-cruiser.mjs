@@ -6,7 +6,7 @@ export default {
       severity: "error",
       comment:
         "A feature imported another feature. Features are vertical modules with one public " +
-        "feature.tsx interface; compose them in app/routes.tsx instead.",
+        "feature.tsx interface and optional code-only preparation; compose them in app instead.",
       from: { path: "^src/features/([^/]+)/" },
       to: {
         path: "^src/features/[^/]+/",
@@ -27,11 +27,12 @@ export default {
       severity: "error",
       comment:
         "Application composition reached a feature private module. Import only that feature's " +
-        "feature.tsx interface; its atoms, views, policies, and transport remain private.",
+        "feature.tsx interface or code.ts preparation entry; its atoms, views, policies, and " +
+        "transport remain private.",
       from: { path: "^src/(app|main\\.tsx$)" },
       to: {
         path: "^src/features/",
-        pathNot: "^src/features/[^/]+/feature\\.tsx$",
+        pathNot: "^src/features/[^/]+/(?:feature\\.tsx|code\\.ts)$",
       },
     },
     {
@@ -153,11 +154,11 @@ export default {
       name: "server-client-imported-outside-transport",
       severity: "error",
       comment:
-        "Only src/transport may import @fidy/server/client. This keeps the server-owned canonical " +
+        "Only src/transport may import published server declarations. This keeps the server-owned canonical " +
         "API behind one browser transport seam and prevents alternate product clients.",
       from: { path: "^src/", pathNot: "^src/transport/" },
       to: {
-        path: "^(?:@fidy/server/client|(?:\\.\\./)?(?:apps/)?server/src/client\\.ts|(?:^|.*/)node_modules/@fidy/server/src/client\\.ts)$",
+        path: "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/",
       },
     },
     {
@@ -170,7 +171,9 @@ export default {
       to: {
         path: "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/",
         pathNot:
-          "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/src/(?:client|browser-bootstrap|browser-transport)\\.ts$",
+          "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/src/(?:" +
+          "(?:client|browser-bootstrap|browser-transport|browser-http)\\.ts|" +
+          "core/(?:dashboard/contract|_shared/(?:money|context))\\.ts|shell/agent/contract\\.ts)$",
       },
     },
     {

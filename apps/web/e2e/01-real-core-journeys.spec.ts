@@ -1,3 +1,4 @@
+import { retainedSecretCount } from "./browser-storage-fixture";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { acceptSubscriptionContracts } from "./subscription-interactions";
 import { PaymentEnrollmentId, ResourceLimited } from "@fidy/server/client";
@@ -552,9 +553,7 @@ test("replaces a verified EmailCredential through public operations after fixtur
         expect(page.getByText("Tu nuevo correo verificado ya está activo.")).toBeVisible()
       );
       expect(page.url()).not.toContain(code);
-      expect(
-        yield* fromPlaywright(page.evaluate(() => localStorage.length + sessionStorage.length))
-      ).toBe(0);
+      expect(yield* fromPlaywright(page.evaluate(retainedSecretCount))).toBe(0);
     })
   ));
 type EnrollmentSubmission = Readonly<{ status: number; body: unknown }>;

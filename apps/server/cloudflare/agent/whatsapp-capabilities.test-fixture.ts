@@ -62,6 +62,7 @@ export const exerciseTurn = Effect.fn(function* ({
   );
   const model = yield* Effect.tryPromise(() => inference(generate));
   const sent: Array<string> = [];
+  const confirmationCommands: Array<string> = [];
   const response = yield* resumeWhatsAppTurn({
     db,
     userId: UserId.make(users[0]),
@@ -74,8 +75,10 @@ export const exerciseTurn = Effect.fn(function* ({
       contextualReplyQuery: Option.none(),
       send: ({
         text,
+        confirmation,
       }): Effect.Effect<{ kind: "accepted"; messageId: WhatsAppProviderMessageId }> => {
         sent.push(text);
+        if (Option.isSome(confirmation)) confirmationCommands.push(confirmation.value.command);
         return Effect.succeed({
           kind: "accepted",
           messageId: WhatsAppProviderMessageId.make(`${messageId}-reply`),
@@ -86,7 +89,7 @@ export const exerciseTurn = Effect.fn(function* ({
     scheduleRecovery: () => Promise.resolve(),
     onAdmitted: () => {},
   });
-  return { turnId, sent, response };
+  return { turnId, sent, response, confirmationCommands };
 });
 
 export const runCapability = Effect.fn(function* ({
@@ -121,6 +124,8 @@ export const runCapability = Effect.fn(function* ({
   yield* finishLatestWhatsAppFixture({ db, subject });
   let result = first;
   if (command !== null) {
+    expect(first.confirmationCommands).toEqual([command]);
+    expect(first.sent[0]).not.toContain(command);
     result = yield* exerciseTurn({
       db,
       text: command,

@@ -1,5 +1,7 @@
 import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
 import { type Cause, Clock, DateTime, Effect, Option } from "effect";
+import { listPATs } from "../tokens/operations";
+import { executeProtectedSubscriptionQuery } from "../subscription/operations";
 import { browseTransactions } from "../transactions/operations";
 import { type Mock, afterAll, expect, it, vi } from "vitest";
 import { getBoundOperationCatalog } from "../../src/shell/canonical-catalog/contract";
@@ -16,10 +18,21 @@ import { makeCoreHttp } from "./runtime";
 
 const databases = isolatedTestDatabases();
 const storage = isolatedTestStorage();
+const browserQueries = new Map<string, string>([
+  ["budgets.getBudgetStatus", "?timeZone=America%2FBogota"],
+  ["recurringPlans.getRecurringWorkspace", "?month=2026-10&view=compact"],
+]);
 const atomicListings = [
+  "pats.listPATs",
+  "subscription.listSubscriptionOffers",
+  "subscription.getSubscriptionStatus",
+  "recurringPlans.getRecurringWorkspace",
   "categories.listCategories",
+  "dashboard.listDashboardCatalog",
   "transactions.listTransactions",
   "budgets.getBudgetStatus",
+  "ingestion.getReviewWorkspace",
+  "ingestion.getReviewPageContext",
 ] as const;
 afterAll(() => databases.dispose());
 afterAll(() => storage.dispose());
@@ -81,6 +94,14 @@ const browserFixture = (
           ),
       ])
     );
+    if (operationId === "subscription.getSubscriptionStatus") {
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=? WHERE id=?")
+          .bind(current - 1209600000, current - 604800000, userId)
+          .run()
+      );
+    }
     const { bucket } = yield* Effect.tryPromise(() => storage.acquire());
     yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
     const generationReads = vi.fn();
@@ -124,7 +145,7 @@ const browserFixture = (
     const request = (headers: Readonly<Record<string, string>> = {}): Promise<Response> =>
       core(
         new Request(
-          `https://api.fidyapp.com${categoryRoute}${operationId === "budgets.getBudgetStatus" ? "?timeZone=America%2FBogota" : ""}`,
+          `https://api.fidyapp.com${categoryRoute}${browserQueries.get(operationId) ?? ""}`,
           {
             headers: {
               cookie: `__Host-fidy_session=${token}`,
@@ -151,6 +172,7 @@ const browserFixture = (
 
 it.each([
   ["quota.getQuota", 3],
+  ["recurringPlans.getRecurringWorkspace", 1],
   ["categories.listCategories", 1],
   ["transactions.listTransactions", 1],
   ["budgets.getBudgetStatus", 1],
@@ -164,7 +186,7 @@ it.each([
       const response = yield* Effect.tryPromise(() =>
         core(
           new Request(
-            `https://api.fidyapp.com${operation.route}${operationId === "budgets.getBudgetStatus" ? "?timeZone=America%2FBogota" : ""}`,
+            `https://api.fidyapp.com${operation.route}${browserQueries.get(operationId) ?? ""}`,
             {
               headers: {
                 cookie: `__Host-fidy_session=${token}`,
@@ -433,7 +455,7 @@ it.each(atomicListings)(
         yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "CREATE TRIGGER ignore_category_audit BEFORE INSERT ON audit_entries WHEN NEW.operation IN ('categories.listCategories','transactions.listTransactions','budgets.getBudgetStatus') BEGIN SELECT RAISE(IGNORE); END"
+              "CREATE TRIGGER ignore_category_audit BEFORE INSERT ON audit_entries WHEN NEW.operation IN ('categories.listCategories','transactions.listTransactions','budgets.getBudgetStatus','ingestion.getReviewWorkspace','ingestion.getReviewPageContext','dashboard.listDashboardCatalog','recurringPlans.getRecurringWorkspace','pats.listPATs','subscription.listSubscriptionOffers','subscription.getSubscriptionStatus') BEGIN SELECT RAISE(IGNORE); END"
             )
             .run()
         );
@@ -530,7 +552,7 @@ it.each(atomicListings)(
           },
         });
         const request = new Request(
-          `https://api.fidyapp.com${Option.getOrThrow(Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(operationId))).route}${operationId === "budgets.getBudgetStatus" ? "?timeZone=America%2FBogota" : ""}`,
+          `https://api.fidyapp.com${Option.getOrThrow(Option.fromUndefinedOr(getBoundOperationCatalog().byId.get(operationId))).route}${browserQueries.get(operationId) ?? ""}`,
           {
             headers: {
               cookie: `__Host-fidy_session=${fixture.token}`,
@@ -732,4 +754,35 @@ it.each(["ready", "rebuilding", "absent"] as const)(
         ).toEqual({ total: 0 });
       })
     )
+);
+
+it.each([
+  "pats.listPATs",
+  "subscription.listSubscriptionOffers",
+  "subscription.getSubscriptionStatus",
+] as const)("preserves complete %s metadata in the bound snapshot", (operation) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* browserFixture(operation);
+      const actual = yield* Effect.tryPromise(() => fixture.request());
+      const subject = {
+        id: fixture.sessionId,
+        userId: fixture.userId,
+        digest: new Uint8Array(
+          yield* Effect.tryPromise(() =>
+            crypto.subtle.digest("SHA-256", new TextEncoder().encode(fixture.token))
+          )
+        ),
+      };
+      const expected =
+        operation === "pats.listPATs"
+          ? yield* listPATs({ db: fixture.db, subject })
+          : yield* executeProtectedSubscriptionQuery({ db: fixture.db, subject, operation });
+      expect(actual.status).toBe(200);
+      expect(expected.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => actual.json())).toEqual(
+        yield* Effect.tryPromise(() => expected.json())
+      );
+    })
+  )
 );

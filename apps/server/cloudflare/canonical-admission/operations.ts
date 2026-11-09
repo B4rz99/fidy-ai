@@ -1,4 +1,18 @@
 import {
+  type AuthorizedCanonicalCaller,
+  CanonicalAdmissionUnavailable,
+  type CanonicalBrowserQueryFinalizer,
+  type CanonicalBrowserRead,
+  type CanonicalBrowserSnapshotOperation,
+  type CanonicalBrowserSourceRead,
+  type CanonicalReadCompletion,
+  type PreparedCanonicalBrowserRead,
+  type PreparedCanonicalReadCompletion,
+  canonicalReadCompletionHeader,
+  canonicalRequestProtection,
+} from "./contract";
+
+import {
   type CanonicalRequestTimings,
   type CanonicalSnapshotTimings,
   appendCanonicalTimings,
@@ -47,18 +61,13 @@ import {
   quotaStatusForUserSelection,
 } from "../quotas/operations";
 import { newId } from "../secret-material/operations";
-import {
-  type AuthorizedCanonicalCaller,
-  CanonicalAdmissionUnavailable,
-  type CanonicalBrowserRead,
-  type PreparedCanonicalBrowserRead,
-  canonicalRequestProtection,
-} from "./contract";
+
 import { cryptoHash, validatedCanonicalInput } from "./internal/request-input";
 import {
   acquireBoundBrowserRequest,
   acquireRequest,
   admitUnresolvedSource,
+  prepareBoundBrowserRequest,
   prepareBoundBrowserSnapshot,
   releaseRequest,
 } from "./internal/protection";
@@ -738,6 +747,17 @@ const executeProtectedRequest = <E, R>(
     })
   );
 
+const withoutReadCompletion = (response: Response): Response => {
+  if (!response.headers.has(canonicalReadCompletionHeader)) return response;
+  const headers = new Headers(response.headers);
+  headers.delete(canonicalReadCompletionHeader);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
 const executeAcquiredRequest = <E, R>({
   input,
   id,
@@ -759,18 +779,28 @@ const executeAcquiredRequest = <E, R>({
             : unavailable()
         )
       ),
-      Effect.flatMap((response) =>
-        measureCanonicalPhase({
+      Effect.flatMap((response) => {
+        const settled =
+          input.caller._tag === "WebSession" &&
+          [
+            "dashboard.getDashboardView",
+            "recurringPlans.getRecurringWorkspace",
+            "ingestion.getReviewMaterial",
+          ].includes(input.operation.id) &&
+          response.headers.get(canonicalReadCompletionHeader) === id;
+        const disclosed = withoutReadCompletion(response);
+        if (settled) return Effect.succeed({ response: disclosed, leaseReleased: true });
+        return measureCanonicalPhase({
           work: finalizeAllowance({
             db: input.db,
             caller: input.caller,
-            response,
+            response: disclosed,
             leaseId: Option.some(id),
           }),
           phase: "standing",
           timings,
-        })
-      )
+        });
+      })
     )
   ).pipe(
     Effect.onExit((exit) =>
@@ -843,7 +873,10 @@ type BrowserRequest<E, R> = Readonly<{
   request: Request;
   operation: CatalogOperation;
   current: number;
-  work: (subject: AuthenticatedWebSession) => Effect.Effect<Response, E, R>;
+  work: (
+    subject: AuthenticatedWebSession,
+    completion: CanonicalReadCompletion
+  ) => Effect.Effect<Response, E, R>;
 }>;
 
 /** Resolve mounted browser proof with native pressure admission; owner work and disclosure still recheck live authority. */
@@ -871,7 +904,7 @@ const executeBrowserRequest = <E, R>(
             ...input,
             caller: { _tag: "WebSession", value: admission },
             work: measureCanonicalPhase({
-              work: Effect.suspend(() => input.work(admission)),
+              work: Effect.suspend(() => input.work(admission, { leaseId: id })),
               phase: "owner",
               timings,
             }),
@@ -917,10 +950,12 @@ const refuseBrowserSnapshot = ({
   db,
   lookup,
   cause,
+  unavailableResponse,
 }: Readonly<{
   db: D1Database;
   lookup: BoundWebSessionLookup;
   cause: unknown;
+  unavailableResponse: () => Response;
 }>): Effect.Effect<Response, CanonicalAdmissionUnavailable> =>
   Effect.gen(function* () {
     // A response can be lost after commit. Never replay owner work.
@@ -940,7 +975,7 @@ const refuseBrowserSnapshot = ({
       response:
         cause instanceof Error && /canonical_request_(rate|concurrency)/u.test(cause.message)
           ? rateLimited()
-          : unavailable(),
+          : unavailableResponse(),
     });
   });
 
@@ -985,10 +1020,7 @@ type BrowserSnapshotRequest = Readonly<{
   db: D1Database;
   request: Request;
   current: number;
-  operation:
-    | "categories.listCategories"
-    | "transactions.listTransactions"
-    | "budgets.getBudgetStatus";
+  operation: CanonicalBrowserSnapshotOperation;
   read: CanonicalBrowserRead;
 }>;
 
@@ -1053,6 +1085,7 @@ export const protectCanonicalBrowserSnapshot = (
             db: input.db,
             lookup,
             cause: committed.error.cause,
+            unavailableResponse: unavailable,
           });
         }
         timings.sql = reportedSqlDuration(committed.rows.map((row) => row.meta));
@@ -1083,3 +1116,182 @@ export const admitCanonicalOperation = <E, R>(
       discloseCanonicalAllowance({ db: input.db, caller: input.caller, response })
     )
   );
+
+/** Startup/Consent observations share the same native pressure policy as canonical reads. */
+export const prepareBrowserObservationProtection = (
+  input: Readonly<{
+    db: D1Database;
+    lookup: BoundWebSessionLookup;
+    current: number;
+    leaseId: Option.Option<string>;
+  }>
+): ReadonlyArray<D1PreparedStatement> =>
+  Option.match(input.leaseId, {
+    onNone: () => prepareBoundBrowserSnapshot(input),
+    onSome: (id) => prepareBoundBrowserRequest({ ...input, id }),
+  });
+
+/** Cleanup only the server-owned startup lease after a failed or interrupted phased read. */
+export const releaseBrowserObservation = (
+  input: Readonly<{ db: D1Database; id: string }>
+): Effect.Effect<void> => releaseRequest(input);
+
+/** Final standing and exact lease release join the owner's final Audit transaction. */
+export const prepareCanonicalReadCompletion = ({
+  db,
+  subject,
+  completion,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: AuthenticatedWebSession;
+  completion: CanonicalReadCompletion;
+  current: number;
+}>): PreparedCanonicalReadCompletion => {
+  const caller = { _tag: "WebSession", value: subject } as const;
+  const authority = credentialAt(caller, current);
+  const statements = [
+    ...prepareAuthorizedQuotaRead({
+      db,
+      userId: subject.userId,
+      current,
+      authority: proof(authority),
+    }),
+    db
+      .prepare(
+        `SELECT json(CASE WHEN EXISTS (SELECT 1 FROM canonical_request_leases WHERE id=? AND user_id=? AND expires_at_ms>?) THEN 'true' ELSE '' END)`
+      )
+      .bind(completion.leaseId, subject.userId, current),
+    db
+      .prepare("DELETE FROM canonical_request_leases WHERE id=? AND user_id=?")
+      .bind(completion.leaseId, subject.userId),
+  ];
+  return {
+    statements,
+    present: (rows: ReadonlyArray<D1Result>, response: Response): Response => {
+      const status = decodeQuotaStatus({ row: rows[1]?.results[0], current });
+      const result = Option.isSome(status)
+        ? attachStanding(response, status.value, current)
+        : noAuthority();
+      result.headers.set(canonicalReadCompletionHeader, completion.leaseId);
+      return result;
+    },
+  };
+};
+
+/** One request-local finalizer for a phased browser query. Owner Audit and admission settle once. */
+export const prepareCanonicalBrowserQueryFinalization = (
+  input: Readonly<{
+    db: D1Database;
+    subject: AuthenticatedWebSession;
+    completion: CanonicalReadCompletion;
+    accounting: (current: number) => ReadonlyArray<D1PreparedStatement>;
+  }>
+): CanonicalBrowserQueryFinalizer => {
+  let present = Option.none<(response: Response) => Response>();
+  return {
+    finalization: (): Effect.Effect<
+      Readonly<{
+        statements: ReadonlyArray<D1PreparedStatement>;
+        committed: (rows: ReadonlyArray<D1Result>) => void;
+      }>
+    > =>
+      Effect.gen(function* () {
+        const current = yield* Clock.currentTimeMillis;
+        const accounting = input.accounting(current);
+        const completion = prepareCanonicalReadCompletion({ ...input, current });
+        return {
+          statements: [...accounting, ...completion.statements],
+          committed: (rows: ReadonlyArray<D1Result>) => {
+            present = Option.some((response) =>
+              completion.present(rows.slice(accounting.length), response)
+            );
+          },
+        };
+      }),
+    present: (response: Response): Response =>
+      Option.match(present, {
+        onNone: unavailable,
+        onSome: (finish) => finish(response),
+      }),
+  };
+};
+
+/** Admission and owner source selection share the first phase; dependent work retains a lease. */
+type BrowserSourceRequest = Readonly<{
+  db: D1Database;
+  request: Request;
+  operation: CatalogOperation;
+  current: number;
+  read: CanonicalBrowserSourceRead;
+}>;
+const executeBrowserSource = (
+  input: BrowserSourceRequest,
+  timings: Option.Option<CanonicalRequestTimings>
+): Effect.Effect<Response> =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const lookup = yield* Effect.tryPromise(() => prepareBoundCanonicalWebSession(input));
+      if (Option.isNone(lookup)) return noAuthority();
+      const id = newId();
+      const source = input.read({
+        ...input,
+        authority: boundCanonicalWebSessionAuthority(lookup.value),
+        reservation: lookup.value.statement,
+      });
+      const protection = prepareBoundBrowserRequest({ ...input, lookup: lookup.value, id });
+      const rows = yield* measureCanonicalPhase({
+        phase: "admission",
+        timings,
+        work: Effect.tryPromise({
+          try: () => input.db.batch([...protection, ...source.statements]),
+          catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
+        }).pipe(
+          Effect.tapError(() => releaseRequest({ db: input.db, id })),
+          Effect.catch(Effect.succeed)
+        ),
+      });
+      if (rows instanceof CanonicalAdmissionUnavailable) {
+        return yield* refuseBrowserSnapshot({
+          db: input.db,
+          lookup: lookup.value,
+          cause: rows.cause,
+          unavailableResponse: Option.getOrElse(source.unavailable, () => unavailable),
+        });
+      }
+      const subject = resolveBoundCanonicalWebSession({
+        lookup: lookup.value,
+        row: rows[protection.length - 1]?.results[0],
+      });
+      if (Option.isNone(subject)) {
+        yield* releaseRequest({ db: input.db, id });
+        return noAuthority();
+      }
+      return yield* executeAcquiredRequest({
+        input: {
+          ...input,
+          caller: { _tag: "WebSession", value: subject.value },
+          work: measureCanonicalPhase({
+            phase: "owner",
+            timings,
+            work: source.present(rows.slice(protection.length), subject.value, { leaseId: id }),
+          }),
+        },
+        id,
+        restore,
+        timings,
+      });
+    })
+  ).pipe(Effect.orElseSucceed(unavailable));
+
+/** Retain complete-request timing across source admission and freshly fenced dependent work. */
+export const protectCanonicalBrowserSource = (
+  input: BrowserSourceRequest
+): Effect.Effect<Response> =>
+  Effect.suspend(() => {
+    const timings: CanonicalRequestTimings = { admission: 0, owner: 0, standing: 0 };
+    return executeBrowserSource(input, Option.some(timings)).pipe(
+      Effect.timed,
+      Effect.map(([duration, response]) => appendCanonicalTimings({ response, duration, timings }))
+    );
+  });

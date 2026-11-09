@@ -1,3 +1,5 @@
+import type { TransactionBoundaryFailure } from "../../canonical-work/contract";
+import { readFinalizedSnapshot } from "./read-finalization";
 import { type Cause, Effect, Option, Schema } from "effect";
 import type {
   DashboardTransactionFact,
@@ -131,34 +133,60 @@ const findRangePlan = <A>(
         });
   });
 
+const validChunkRows = ({
+  rows,
+  expectedCount,
+  aggregateCount,
+  accepts,
+}: Readonly<{
+  rows: ReadonlyArray<D1Result>;
+  expectedCount: number;
+  aggregateCount: number;
+  accepts: (rows: ReadonlyArray<unknown>) => boolean;
+}>): boolean => rows.length === expectedCount && accepts(rows[aggregateCount]?.results ?? []);
+
 const readChunk = <A>({
   input,
   ranges,
   first,
+  last,
+  revision,
 }: Readonly<{
   input: DashboardTransactionRead<A>;
   ranges: ReadonlyArray<PreparedRange>;
   first: boolean;
-}>): Effect.Effect<Option.Option<Chunk>, Cause.UnknownError> =>
+  last: boolean;
+  revision: Option.Option<number>;
+}>): Effect.Effect<Option.Option<Chunk>, Cause.UnknownError | TransactionBoundaryFailure> =>
   Effect.gen(function* () {
     const { db, userId, snapshot, lists } = input;
     const peers = first ? snapshot.statements : snapshot.statements.slice(0, 1);
-    const rows = yield* Effect.tryPromise(() =>
-      db.batch([
+    const state = revisionSelection(UserId.make(userId));
+    const guardedState = Option.isSome(revision)
+      ? {
+          sql: `SELECT revision,json(CASE WHEN revision=? THEN 'true' ELSE '' END) AS accepted
+            FROM (SELECT (SELECT revision FROM (${state.sql})) AS revision) WHERE 1=1`,
+          params: [revision.value, ...state.params],
+        }
+      : state;
+    const rows = yield* readFinalizedSnapshot({
+      db,
+      finalization: last ? input.finalization : Option.none(),
+      statements: [
         prepareConsentAction({
           db,
           subject: { _tag: "User", userId: UserId.make(userId) },
           requirement: "unrevoked",
-          statement: revisionSelection(UserId.make(userId)),
+          statement: guardedState,
         }),
         ...ranges.flatMap((range) => projectionQueries({ db, userId, range })),
         ...peers,
         ...(first ? dashboardTransactionQueries({ db, userId, lists }) : []),
-      ])
-    );
+      ],
+    });
     const aggregateCount = 1 + ranges.length * 2;
     const expectedCount = aggregateCount + peers.length + (first ? lists.length : 0);
-    if (rows.length !== expectedCount || !snapshot.accepts(rows[aggregateCount]?.results ?? [])) {
+    if (!validChunkRows({ rows, expectedCount, aggregateCount, accepts: snapshot.accepts })) {
       return Option.none();
     }
     const aggregate = decodeAggregateSnapshot({
@@ -200,7 +228,8 @@ const decodeFirstChunk = <A>({
  * Read lists, exact ranges and owner facts under current Consent and one fact revision.
  * Wider groups stay within a raw-row budget; larger working sets keep four-range chunks.
  * Each group repeats the owner proof; a changed revision withholds the whole read.
- * The caller retains the same User's coordinator turn and supplies no reusable authority.
+ * Revision disagreement aborts a later native unit, including its final accounting. The caller
+ * supplies no reusable authority; read assembly does not require a User coordinator turn.
  */
 export const readDashboardTransactions = <A>(
   input: DashboardTransactionRead<A>
@@ -215,6 +244,8 @@ export const readDashboardTransactions = <A>(
         input,
         ranges,
         first: index === 0,
+        last: index === plan.value.groups.length - 1,
+        revision,
       });
       if (
         Option.isNone(chunk) ||

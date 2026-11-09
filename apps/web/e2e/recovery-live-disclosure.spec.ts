@@ -1,9 +1,9 @@
+import { retainedSecretCount } from "./browser-storage-fixture";
 import { Effect } from "effect";
 import { playwright } from "./playwright-runtime";
 import { signInWithVerifiedEmailThroughCore } from "./real-core-fixture";
 
 const { test, expect } = playwright;
-const browserStorageSize = (): number => localStorage.length + sessionStorage.length;
 
 test("discloses a real rotated recovery code only in its mounted settings view", ({
   page,
@@ -40,6 +40,6 @@ test("discloses a real rotated recovery code only in its mounted settings view",
         expect(page.getByRole("button", { name: "Crear un código nuevo" })).toBeVisible()
       );
       yield* Effect.tryPromise(() => expect(page.locator("code")).toHaveCount(0));
-      expect(yield* Effect.tryPromise(() => page.evaluate(browserStorageSize))).toBe(0);
+      expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
     })
   ));

@@ -33,7 +33,7 @@ import { RecordToolbar } from "@/ui/components/workspace-layout";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { CategoryVisual } from "@/ui/components/category-visual";
 import { DirectionIndicator } from "@/ui/components/icon-indicator";
-import { formatMoney } from "@/transport/money";
+import { formatMoneyWithCode } from "@/transport/money";
 import type { HistoryState } from "./history";
 import type { TransactionListRow } from "./presentation";
 
@@ -58,13 +58,23 @@ type LedgerProps = Readonly<{
   onEdit: () => void;
   canEdit: boolean;
   selection: Readonly<{
+    summary: JSX.Element;
     active: boolean;
     ids: ReadonlyArray<string>;
     onToggle: (id: string) => void;
     onContinue: () => void;
-    limit: number;
+    allSelected: boolean;
+    onSelectAll: () => void;
+    onClear: () => void;
   }>;
 }>;
+const transactionAction = (
+  row: TransactionListRow,
+  selection: LedgerProps["selection"]
+): string => {
+  if (!selection.active) return "Ver transacción";
+  return `${selection.ids.includes(row.id) ? "Deseleccionar" : "Seleccionar"} transacción`;
+};
 const TransactionIdentity = ({
   row,
   selected,
@@ -72,41 +82,40 @@ const TransactionIdentity = ({
   disabled,
   selection,
 }: Readonly<{ row: TransactionListRow }> &
-  Pick<LedgerProps, "selected" | "onSelect" | "disabled" | "selection">): JSX.Element => {
-  const atLimit = selection.ids.length >= selection.limit && !selection.ids.includes(row.id);
-  return (
-    <TableCell>
-      <div className="flex min-w-0 items-center gap-3">
-        {selection.active ? (
-          <Checkbox
-            aria-label={`Seleccionar ${row.counterpartyLabel}`}
-            checked={selection.ids.includes(row.id)}
-            disabled={disabled || atLimit}
-            onCheckedChange={() => selection.onToggle(row.id)}
-          />
-        ) : null}
-        <button
-          type="button"
-          disabled={disabled || (selection.active && atLimit)}
-          onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-          aria-label={`Ver transacción ${row.counterpartyLabel}`}
-          aria-expanded={Option.contains(selected, row.id)}
-          className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-        >
-          <span className="transaction-identity-icon">
-            <CategoryVisual label={row.categoryLabel} bubble large={false} />
+  Pick<LedgerProps, "selected" | "onSelect" | "disabled" | "selection">): JSX.Element => (
+  <TableCell>
+    <div className="flex min-w-0 items-center gap-3">
+      {selection.active ? (
+        <Checkbox
+          aria-label={`Seleccionar ${row.counterpartyLabel}`}
+          checked={selection.ids.includes(row.id)}
+          disabled={disabled}
+          onCheckedChange={() => selection.onToggle(row.id)}
+        />
+      ) : null}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
+        aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
+        data-transaction-slot="transaction-identity-control"
+        aria-expanded={Option.contains(selected, row.id)}
+        className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+      >
+        <span className="sr-only">{transactionAction(row, selection)} </span>
+        <span className="transaction-identity-icon">
+          <CategoryVisual label={row.categoryLabel} bubble large={false} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block break-words">{row.counterpartyLabel}</span>
+          <span className="transaction-category-inline block break-words text-xs text-muted-foreground">
+            {row.categoryLabel}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block break-words">{row.counterpartyLabel}</span>
-            <span className="transaction-category-inline block break-words text-xs text-muted-foreground">
-              {row.categoryLabel}
-            </span>
-          </span>
-        </button>
-      </div>
-    </TableCell>
-  );
-};
+        </span>
+      </button>
+    </div>
+  </TableCell>
+);
 const TransactionClassification = ({
   row,
   onSelect,
@@ -126,14 +135,10 @@ const TransactionClassification = ({
     <TableCell className="hidden @min-[481px]/ledger:table-cell">
       <button
         type="button"
-        disabled={
-          disabled ||
-          (selection.active &&
-            selection.ids.length >= selection.limit &&
-            !selection.ids.includes(row.id))
-        }
+        disabled={disabled}
         onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-        aria-label={`Ver tipo de ${row.counterpartyLabel}`}
+        aria-label={`${row.transactionTypeLabel}; ${transactionAction(row, selection)} ${row.counterpartyLabel}`}
+        aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
         className="flex w-full items-center gap-2 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         <DirectionIndicator inflow={row.direction === "inflow"} />
@@ -166,15 +171,10 @@ const TransactionAmount = ({
   <TableCell className="text-right font-medium tabular-nums">
     <button
       type="button"
-      disabled={
-        disabled ||
-        (selection.active &&
-          selection.ids.length >= selection.limit &&
-          !selection.ids.includes(row.id))
-      }
+      disabled={disabled}
       onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
-      aria-label={`Ver monto de ${row.counterpartyLabel}`}
-      title={row.transactionTypeLabel}
+      aria-label={`${row.moneyText}, ${row.transactionTypeLabel}; ${transactionAction(row, selection)} ${row.counterpartyLabel}`}
+      aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}
       className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
     >
       <span className="transaction-amount-direction inline-flex shrink-0 @min-[481px]/ledger:hidden">
@@ -254,25 +254,26 @@ const LedgerHeader = ({
     ))}
   </TableHeader>
 );
-const dailyTotals = (rows: ReadonlyArray<TransactionListRow>, locale: string): string =>
-  Array.from(new Set(rows.map((row) => row.money.currency)))
-    .map((currency) =>
-      formatMoney({
-        locale,
-        money: {
-          currency,
-          amount: BigDecimal.sumAll(
-            rows.flatMap((row) => {
-              if (row.money.currency !== currency) return [];
-              return [
-                row.direction === "inflow" ? row.money.amount : BigDecimal.negate(row.money.amount),
-              ];
-            })
-          ),
-        },
-      })
-    )
-    .join(" · ");
+const dailyTotals = (
+  rows: ReadonlyArray<TransactionListRow>,
+  locale: string
+): ReadonlyArray<string> =>
+  Array.from(new Set(rows.map((row) => row.money.currency))).map((currency) =>
+    formatMoneyWithCode({
+      locale,
+      money: {
+        currency,
+        amount: BigDecimal.sumAll(
+          rows.flatMap((row) => {
+            if (row.money.currency !== currency) return [];
+            return [
+              row.direction === "inflow" ? row.money.amount : BigDecimal.negate(row.money.amount),
+            ];
+          })
+        ),
+      },
+    })
+  );
 const sortValue = (sorting: SortingState): string =>
   Option.fromNullishOr(sorting[0]).pipe(
     Option.map((sort) => `${sort.id}:${sort.desc ? "desc" : "asc"}`),
@@ -365,7 +366,7 @@ const LedgerControls = ({
     {toolbar}
     <div className="ledger-actions contents">
       {readOnly ? null : (
-        <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
+        <Button variant="outline" disabled={disabled || (empty && !selecting)} onClick={onEdit}>
           <HugeiconsIcon icon={PencilIcon} size={16} strokeWidth={1.5} aria-hidden="true" />
           {selecting ? "Cancelar selección" : "Editar varias"}
         </Button>
@@ -444,14 +445,21 @@ const LedgerBody = ({
         <Fragment key={date}>
           <TableRow data-date-group="true">
             <TableCell colSpan={4}>
-              <div className="flex items-center justify-between gap-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
                 <span>{rows.find((row) => row.occurredOnText === date)?.dateLabel}</span>
-                <span className="tabular-nums">
+                <ul
+                  aria-label="Totales del día por moneda"
+                  className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums"
+                >
                   {dailyTotals(
                     rows.filter((row) => row.occurredOnText === date),
                     locale
-                  )}
-                </span>
+                  ).map((total) => (
+                    <li key={total} className="whitespace-nowrap">
+                      {total}
+                    </li>
+                  ))}
+                </ul>
               </div>
             </TableCell>
           </TableRow>
@@ -490,7 +498,23 @@ const SelectionBar = ({
   <>
     {selection.active ? (
       <div data-transaction-slot="transaction-selection-bar">
-        <span aria-live="polite">{selection.ids.length} seleccionadas</span>
+        <div className="flex min-w-0 basis-full flex-wrap items-center gap-2 @min-[600px]/ledger:flex-1 @min-[600px]/ledger:basis-auto">
+          {selection.summary}
+          <Button
+            variant="outline"
+            disabled={disabled || selection.allSelected}
+            onClick={selection.onSelectAll}
+          >
+            Seleccionar todas
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={disabled || selection.ids.length === 0}
+            onClick={selection.onClear}
+          >
+            Limpiar selección
+          </Button>
+        </div>
         <Button
           variant="outline"
           aria-label="Editar selección de transacciones"
@@ -499,6 +523,9 @@ const SelectionBar = ({
         >
           Editar selección
         </Button>
+        <p className="basis-full text-xs text-muted-foreground">
+          Seleccionar todas incluye las transacciones cargadas que coinciden con tus filtros.
+        </p>
       </div>
     ) : null}
   </>

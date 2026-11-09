@@ -171,10 +171,10 @@ it.live.each(refusals)(
     })
 );
 
-it.live("rechecks the bound session after the User projection completes", () =>
+it.live("refuses a bound session revoked before the metadata transaction starts", () =>
   Effect.gen(function* () {
     const db = yield* setup;
-    const held = yield* holdSessionCallback({ db, sqlPrefix: "SELECT u.id", method: "all" });
+    const held = yield* holdSessionCallback({ db, sqlPrefix: "", method: "batch", before: true });
     const running = yield* Effect.forkChild(send(held.db, headers()));
     yield* Effect.gen(function* () {
       yield* Deferred.await(held.entered);

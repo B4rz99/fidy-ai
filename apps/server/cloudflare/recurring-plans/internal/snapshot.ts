@@ -45,6 +45,7 @@ export const snapshotCompletions = ({
     let retained = document;
     for (const month of candidates) {
       const projection = yield* automaticProjection({
+        finalization: Option.none(),
         db: work.db,
         userId: work.subject.userId,
         document: retained,

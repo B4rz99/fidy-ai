@@ -2,6 +2,7 @@ import { RefreshButton } from "@/ui/components/refresh-button";
 import { useAtomSet } from "@effect/atom-react";
 import { Cause, Effect, Predicate } from "effect";
 import type * as Atom from "effect/reactivity/Atom";
+import { Reactivity } from "effect/reactivity";
 import { useState } from "react";
 import type { JSX } from "react";
 import type { FidyClient } from "@/transport/client";
@@ -25,12 +26,16 @@ const makeTransactionDeletion = (
       yield* Effect.sync(command.onDeleted);
     }).pipe(
       Effect.catch((failure) =>
-        Effect.sync(
-          Predicate.isTagged(failure, "ValidationFailed") ||
-            Predicate.isTagged(failure, "NotFound") ||
-            Predicate.isTagged(failure, "ResourceLimited")
-            ? command.onRejected
-            : command.onUncertain
+        Reactivity.invalidate(["transaction-detail"]).pipe(
+          Effect.andThen(
+            Effect.sync(
+              Predicate.isTagged(failure, "ValidationFailed") ||
+                Predicate.isTagged(failure, "NotFound") ||
+                Predicate.isTagged(failure, "ResourceLimited")
+                ? command.onRejected
+                : command.onUncertain
+            )
+          )
         )
       ),
       Effect.catchCause((cause) =>
@@ -44,8 +49,8 @@ const DeletionFeedback = ({ status }: Readonly<{ status: DeletionStatus }>): JSX
   if (status === "rejected") {
     return (
       <p role="alert">
-        No pudimos eliminar la transacción. Si está vinculada a otra, primero debes desvincularlas.
-        Actualiza el historial antes de continuar.
+        No pudimos eliminar la transacción. Actualiza el historial antes de continuar. Si el detalle
+        muestra un vínculo, puedes revisarlo para desvincular las transacciones.
       </p>
     );
   }

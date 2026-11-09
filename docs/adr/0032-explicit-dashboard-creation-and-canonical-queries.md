@@ -25,9 +25,13 @@ PAT to be a query. Kind never relaxes caller eligibility, scope, live credential
 
 ## Execution and web first use
 
-HTTP and hosted execution use the same substantive native Dashboard query implementation. Document
-queries retain the per-User coordinator through validated projection assembly and live accounting,
-preventing concurrent Correction from splitting a snapshot. Exact Currency/direction separation,
+HTTP and hosted execution use the same substantive native Dashboard query implementation. HTTP
+document queries execute directly in Core. Views assert the exact observed document and calendar
+context in each financial snapshot, and the retained financial revision in subsequent snapshots.
+Disagreement aborts the native unit, including final accounting, and returns unavailable without
+retrying or exposing a split view. This trades waiting behind the User mutation coordinator for
+explicit refusal during a conflicting edit. Mutations and held hosted work retain User coordination.
+Exact Currency/direction separation,
 current IANA-zone interpretation and the readiness guarantees of ADR 0030 remain unchanged.
 Credential-use and required metadata-only Audit writes are query accounting, not domain mutation.
 Existing bounded canonical/Worker Work observation is sufficient; no telemetry purpose is added.

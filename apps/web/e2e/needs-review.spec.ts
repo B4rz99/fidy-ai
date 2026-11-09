@@ -1,5 +1,6 @@
+import { expectFinancialLabels } from "./financial-form-text";
 import { signInNavigationPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
-import type { Response as BrowserResponse, Page, Route } from "@playwright/test";
+import type { Response as BrowserResponse, Page, Request, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -162,6 +163,11 @@ const mobileInputViewports = [
 const expectReviewReflow = (page: Page): Promise<void> =>
   expect.poll(() => page.evaluate(hasHorizontalOverflow)).toBe(false);
 
+const captureReviewText = (page: Page): Promise<Buffer> =>
+  page.locator('[data-review="fields"]').screenshot({
+    path: test.info().outputPath("review-enlarged-dark.png"),
+  });
+
 test("mobile review keeps editable financial text legible and enlarges it with text sizing", ({
   page,
 }) =>
@@ -181,6 +187,8 @@ test("mobile review keeps editable financial text legible and enlarges it with t
         page.getByRole("textbox", { name: "Buscar pendientes en esta página", exact: true }),
       ];
       yield* Effect.tryPromise(() => expect(amount).toBeVisible());
+      const amountLabel = page.locator('label[for="review-amount"]');
+      yield* Effect.tryPromise(() => expect(amountLabel).toHaveCSS("font-size", "14px"));
       for (const viewport of mobileInputViewports) {
         yield* Effect.tryPromise(() => page.setViewportSize(viewport));
         for (const field of fields) {
@@ -202,6 +210,7 @@ test("mobile review keeps editable financial text legible and enlarges it with t
       yield* Effect.tryPromise(() => currencySearch.press("Escape"));
       yield* Effect.tryPromise(() => expect(currencySearch).toBeHidden());
       yield* Effect.tryPromise(() => page.evaluate(doubleInputText));
+      yield* Effect.tryPromise(() => expect(amountLabel).toHaveCSS("font-size", "28px"));
       for (const field of fields) {
         yield* Effect.tryPromise(() => expect(field).toHaveCSS("font-size", "32px"));
       }
@@ -212,6 +221,7 @@ test("mobile review keeps editable financial text legible and enlarges it with t
       for (const field of fields) {
         yield* Effect.tryPromise(() => expect(field).toHaveCSS("font-size", "32px"));
       }
+      yield* Effect.tryPromise(() => captureReviewText(page));
       yield* Effect.tryPromise(() => page.evaluate(resetInputText));
       yield* Effect.tryPromise(() => page.setViewportSize({ width: 1440, height: 900 }));
       yield* Effect.tryPromise(() => expect(amount).toHaveCSS("font-size", "12px"));
@@ -1338,7 +1348,9 @@ test("dismisses every editor picker when leaving the retained review", ({ page, 
     )
   ));
 
-test("clears bulk selection when filtering and retains paging after no local matches", ({ page }) =>
+test("preserves bulk selection when filtering and retains paging after no local matches", ({
+  page,
+}) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const entries: Fixture[] = Array.from({ length: 51 }, (_, index) => ({
@@ -1368,7 +1380,7 @@ test("clears bulk selection when filtering and retains paging after no local mat
       yield* Effect.tryPromise(() =>
         page.getByRole("textbox", { name: "Buscar pendientes en esta página" }).fill("")
       );
-      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox").first()).not.toBeChecked());
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox").first()).toBeChecked());
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Filtrar por origen en esta página" }).click()
       );
@@ -1381,10 +1393,123 @@ test("clears bulk selection when filtering and retains paging after no local mat
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Siguiente", exact: true }).click()
       );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Limpiar selección y continuar", exact: true }).click()
+      );
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/offset=50/));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Anterior", exact: true })).toBeEnabled()
       );
+    })
+  ));
+
+const bulkEditRequest = (page: Page): Promise<Request> =>
+  page.waitForRequest((request) => request.url().endsWith("/edits") && request.method() === "POST");
+
+test("bulk skip includes selected statements hidden by the source filter", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [id, secondId].map((value) => ({
+        id: value,
+        revision: 0,
+        status: "pending",
+        draft: undefined,
+      }));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" }).check()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 2" }).check()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Filtrar por origen en esta página" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("menuitemradio", { name: "Imágenes", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("2 fuera de este filtro", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Revisar selección (2)", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Quitar Extracto Fila 1 de la selección", exact: true })
+        ).toBeVisible()
+      );
+      const [request] = yield* Effect.all(
+        [
+          Effect.tryPromise(() => bulkEditRequest(page)),
+          Effect.tryPromise(() =>
+            page.getByRole("button", { name: "Omitir 2 seleccionados", exact: true }).click()
+          ),
+        ],
+        { concurrency: "unbounded" }
+      );
+      expect(request.postDataJSON()).toEqual({
+        _tag: "Skip",
+        items: [
+          { id, revision: 0 },
+          { id: secondId, revision: 0 },
+        ],
+      });
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Deshacer omisión", exact: true })).toBeVisible()
+      );
+    })
+  ));
+
+test("changing review history status keeps selected rows until explicit discard", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries: Fixture[] = [{ id, revision: 0, status: "skipped", draft: undefined }];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Historial", exact: true }).click()
+      );
+      const checkbox = page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 1" });
+      yield* Effect.tryPromise(() => checkbox.check());
+      const filter = page.getByRole("button", {
+        name: "Mostrar historial: Historial",
+        exact: true,
+      });
+      yield* Effect.tryPromise(() => filter.click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("menuitemradio", { name: "Omitidas", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Conservar selección", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(checkbox).toBeChecked());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", {
+            name: "Filtrar por origen en esta página: Todos los orígenes",
+            exact: true,
+          })
+        ).toBeFocused()
+      );
+      yield* Effect.tryPromise(() => filter.click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("menuitemradio", { name: "Omitidas", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Limpiar selección y continuar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page).toHaveURL(/status=skipped/u));
+      yield* Effect.tryPromise(() => expect(checkbox).not.toBeChecked());
     })
   ));
 
@@ -2161,3 +2286,55 @@ const amountReviewRoute = (route: Route): Promise<void> => {
   }
   return reviewRoute(route);
 };
+
+const viewportScale = (): number => window.visualViewport?.scale ?? 0;
+for (const currency of ["COP", undefined]) {
+  test(`Review labels reflow with browser font preferences for ${currency ?? "missing Currency"}`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const entries: Fixture[] = [
+          {
+            id,
+            revision: 0,
+            status: "pending",
+            draft: {
+              amount: "13500",
+              currency,
+              direction: "outflow",
+              counterparty: "Cafe",
+              occurredAt: "2026-01-01T12:00:00Z",
+              userProvidedFields: [],
+            },
+          },
+        ];
+        yield* Effect.tryPromise(() => installUser(page));
+        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+        yield* Effect.tryPromise(() =>
+          page.route(`${apiOrigin}/ingestion/review-workspace**`, lifecycleRoute(entries))
+        );
+        yield* Effect.tryPromise(() => page.setViewportSize({ width: 320, height: 800 }));
+        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        const form = page.locator('[data-review="fields"]');
+        yield* expectFinancialLabels(form, "14px");
+        // Chromium's default font preference changes text sizing without setting page zoom.
+        const session = yield* Effect.tryPromise(() => page.context().newCDPSession(page));
+        yield* Effect.tryPromise(() =>
+          session.send("Page.setFontSizes", { fontSizes: { standard: 32 } })
+        );
+        yield* Effect.tryPromise(() => page.reload());
+        yield* expectFinancialLabels(form, "28px");
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel("Valor", { exact: true })).toHaveCSS("font-size", "32px")
+        );
+        expect(yield* Effect.tryPromise(() => page.evaluate(viewportScale))).toBe(1);
+        yield* Effect.tryPromise(() => expectReviewReflow(page));
+        yield* Effect.tryPromise(() => page.getByLabel("Valor", { exact: true }).focus());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByLabel("Valor", { exact: true })).toBeFocused()
+        );
+        yield* Effect.tryPromise(() => session.detach());
+      })
+    ));
+}

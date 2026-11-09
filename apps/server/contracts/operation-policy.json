@@ -1082,6 +1082,21 @@
         "kind": "mutation",
         "requiredTier": "free"
       }
+    },
+    {
+      "id": "transactions.updateTransactions",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
     }
   ]
 }

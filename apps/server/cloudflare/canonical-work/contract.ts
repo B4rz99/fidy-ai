@@ -44,6 +44,7 @@ export const transactionNoStore = { "cache-control": "no-store" };
 
 /** One canonical Transaction input is bounded by this many bytes, for every adapter that reads one. */
 export const maximumTransactionInputBytes = 4096;
+export const maximumTransactionGroupInputBytes = 524288;
 
 export const missingTransactionMessage = "Transaction unavailable.";
 
@@ -60,6 +61,7 @@ export const unlinkedPairMessage = "That exact Transaction pair is not currently
 export type TransactionMutationOperation =
   | "transactions.createTransaction"
   | "transactions.updateTransaction"
+  | "transactions.updateTransactions"
   | "transactions.deleteTransaction"
   | "transactions.linkTransactions"
   | "transactions.unlinkTransactions";

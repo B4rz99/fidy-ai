@@ -59,6 +59,7 @@ const sensitiveWriteDiscovery = [
   "recurringPlans.applyRecurringEdit",
   "subscription.cancelSubscription",
   "transactions.updateTransaction",
+  "transactions.updateTransactions",
   "transactions.deleteTransaction",
 ];
 const writeDiscovery = [...ordinaryWriteDiscovery, ...sensitiveWriteDiscovery];

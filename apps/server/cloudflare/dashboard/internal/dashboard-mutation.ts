@@ -1,5 +1,10 @@
+import type {
+  CanonicalBrowserRead,
+  CanonicalReadFinalization,
+} from "../../canonical-admission/contract";
 import {
   findUserDocument,
+  prepareSelectedUserDocument,
   prepareUserDocumentWrite,
   readAuthorizedUserDocumentSnapshot,
 } from "../../user-documents/operations";
@@ -116,7 +121,7 @@ export const findDashboardDocument = ({
     Effect.mapError(() => new InvalidStoredDashboard())
   );
 
-type DashboardSource = Readonly<{
+export type DashboardSource = Readonly<{
   live: boolean;
   document: Option.Option<StoredDashboard>;
   viewContext: Option.Option<DashboardReadContext>;
@@ -133,6 +138,74 @@ const decodeViewContext = (related: ReadonlyArray<D1Result>): Option.Option<User
   return related.length === 1 && rows?.length === 1
     ? Schema.decodeUnknownOption(UserContext)(rows[0])
     : Option.none();
+};
+
+const decodeViewSource = (
+  retained: Effect.Success<ReturnType<typeof readAuthorizedUserDocumentSnapshot>>,
+  taxonomy: ReturnType<typeof prepareCategorySnapshot>
+): Effect.Effect<DashboardSource, Schema.SchemaError> =>
+  Effect.gen(function* () {
+    if (!retained.live) {
+      return { live: false, document: Option.none(), viewContext: Option.none() };
+    }
+    const document = Option.isNone(retained.document)
+      ? Option.none()
+      : Option.some(yield* decodeStoredDashboard(retained.document.value));
+    const context = decodeViewContext(retained.related.slice(0, 1));
+    const categories = taxonomy.decode(retained.related[1]?.results);
+    return {
+      live: true,
+      document,
+      viewContext:
+        Option.isSome(context) && Option.isSome(categories)
+          ? Option.some({
+              context: context.value,
+              categories: categories.value,
+              document: retained.document,
+            })
+          : Option.none(),
+    };
+  });
+
+/** Select view sources under admission's exact credential and Consent in that same native unit. */
+export const prepareDashboardViewSource = (
+  input: Parameters<CanonicalBrowserRead>[0]
+): Readonly<{
+  statements: ReadonlyArray<D1PreparedStatement>;
+  decode: (rows: ReadonlyArray<D1Result>) => Effect.Effect<DashboardSource, InvalidStoredDashboard>;
+}> => {
+  const document = prepareSelectedUserDocument({
+    db: input.db,
+    users: input.reservation,
+    kind: "dashboard",
+  });
+  const taxonomy = prepareCategorySnapshot(input);
+  return {
+    statements: [
+      document.statement,
+      prepareUserContext({
+        db: input.db,
+        userSelection: input.reservation,
+        statement: {
+          sql: "SELECT serviceMarket, locale, timeZone FROM identity_user_context",
+          params: [],
+        },
+      }),
+      taxonomy.statement,
+    ],
+    decode: (rows) =>
+      Effect.gen(function* () {
+        const selected = rows[0];
+        if (rows.length !== 3 || selected === undefined || rows.some((row) => !row.success)) {
+          return yield* new InvalidStoredDashboard();
+        }
+        const retained = yield* document.decode(selected.results);
+        return yield* decodeViewSource(
+          { live: true, document: retained, related: rows.slice(1) },
+          taxonomy
+        );
+      }).pipe(Effect.mapError(() => new InvalidStoredDashboard())),
+  };
 };
 
 /** Observe live authority and its gated view sources in one read-only native snapshot. */
@@ -165,22 +238,7 @@ const readViewSource = ({
         taxonomy.statement,
       ],
     });
-    if (!retained.live) {
-      return { live: false, document: Option.none(), viewContext: Option.none() };
-    }
-    const document = Option.isNone(retained.document)
-      ? Option.none()
-      : Option.some(yield* decodeStoredDashboard(retained.document.value));
-    const context = decodeViewContext(retained.related.slice(0, 1));
-    const categories = taxonomy.decode(retained.related[1]?.results);
-    return {
-      live: true,
-      document,
-      viewContext:
-        Option.isSome(context) && Option.isSome(categories)
-          ? Option.some({ context: context.value, categories: categories.value })
-          : Option.none(),
-    };
+    return yield* decodeViewSource(retained, taxonomy);
   }).pipe(Effect.mapError(() => new InvalidStoredDashboard()));
 
 export const findDashboardSource = ({
@@ -298,6 +356,7 @@ export const findDashboardValue = ({
     const document = yield* findDashboardDocument({ db, userId });
     if (Option.isNone(document)) return Option.none();
     return yield* projectDashboardValue({
+      finalization: Option.none(),
       db,
       userId,
       operation,
@@ -313,12 +372,14 @@ export const projectDashboardValue = ({
   operation,
   document,
   viewContext,
+  finalization,
 }: Readonly<{
   db: D1Database;
   userId: string;
   operation: DashboardOperation;
   document: DashboardDocument;
   viewContext: Option.Option<DashboardReadContext>;
+  finalization: Option.Option<CanonicalReadFinalization>;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   Effect.gen(function* () {
     if (operation !== "dashboard.getDashboardView") {
@@ -331,6 +392,7 @@ export const projectDashboardValue = ({
     if (Option.isNone(viewContext)) return Option.none();
     const now = yield* DateTime.now;
     const facts = yield* loadDashboardFacts({
+      finalization,
       db,
       userId,
       document,

@@ -61,6 +61,7 @@ import {
   prepareCapture,
   prepareCorrection,
   prepareDeletion,
+  prepareGroupCorrection,
   prepareLink,
   prepareUnlink,
   transactionRefusal,
@@ -139,6 +140,19 @@ const hostedTransactionAdapter = (operation: string): Option.Option<HostedMutati
           : prepareCapture({ ...work, subject: work.caller, input: input.value.payload });
       },
       present: present(HTTP_CREATED),
+    });
+  }
+  if (operation === "transactions.updateTransactions") {
+    return Option.some({
+      prepare: (work) => {
+        const input = Schema.decodeUnknownOption(
+          Schema.toType(getCanonicalOperationInput("transactions.updateTransactions"))
+        )(work.input);
+        return Option.isNone(input)
+          ? Effect.succeed(failedPreparation())
+          : prepareGroupCorrection({ ...work, subject: work.caller, input: input.value.payload });
+      },
+      present: present(HTTP_OK),
     });
   }
   if (operation === "transactions.updateTransaction") {
@@ -570,6 +584,17 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
       ),
       present: present(HTTP_CREATED),
       invalidRefusal: transactionInvalidRefusal("transactions.createTransaction"),
+    },
+  ],
+  [
+    CanonicalOperationId.make("transactions.updateTransactions"),
+    {
+      prepare: decodeAndPrepare(
+        getCanonicalOperationInput("transactions.updateTransactions"),
+        ({ payload }, work) => prepareGroupCorrection({ ...work, input: payload })
+      ),
+      present: present(HTTP_OK),
+      invalidRefusal: transactionInvalidRefusal("transactions.updateTransactions"),
     },
   ],
   [

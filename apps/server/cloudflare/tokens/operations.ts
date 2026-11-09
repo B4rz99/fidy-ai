@@ -1,3 +1,5 @@
+import { prepareBoundPATList as prepareList } from "./internal/bound-pats";
+import type { CanonicalBrowserRead } from "../canonical-admission/contract";
 import { Effect } from "effect";
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import {
@@ -64,3 +66,5 @@ export const getPATActivity = (
 /** Answer retained activity inside a verified, admitted hosted Turn, with the same projection and Audit as browser execution. */
 export const getHeldPATActivity = (input: PATActivityRead): Effect.Effect<Response> =>
   getHeldActivity(input);
+
+export const prepareBoundPATList: CanonicalBrowserRead = (input) => prepareList(input);

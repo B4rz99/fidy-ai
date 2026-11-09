@@ -9,7 +9,6 @@ import {
   type ParsedStatement,
   StatementParseFailed,
 } from "./contract";
-import { parseCsv, parseXlsx } from "~/shell/ingestion/internal/parser";
 import { interpretNotificationEmail as interpretDecodedEmail } from "~/shell/ingestion/internal/email-interpretation/interpret";
 
 /** Retrieve only a bounded statement document through the closed provider media interface. */
@@ -42,6 +41,11 @@ export const knownUnsupportedStatementBytes = (bytes: Uint8Array): boolean =>
 export const statementSourceFormat = (bytes: Uint8Array): StatementSourceFormat =>
   bytes.slice(0, 2).join(",") === `${zipFirstByte},${zipSecondByte}` ? "xlsx" : "csv";
 
+const statementParseFailure = (failure: unknown): StatementParseFailed =>
+  failure instanceof StatementParseFailed
+    ? failure
+    : new StatementParseFailed({ safeReason: "malformed-file" });
+
 /**
  * Decodes one bounded untrusted statement without executing active workbook content. Only rows
  * required by native finalization leave the owner; mapping samples and parser details stay private.
@@ -49,22 +53,33 @@ export const statementSourceFormat = (bytes: Uint8Array): StatementSourceFormat 
 export const parseStatementFile = (
   bytes: Uint8Array
 ): Effect.Effect<ParsedStatement, StatementParseFailed> =>
-  Effect.try({
-    try: () => {
-      if (bytes.length === 0) throw new StatementParseFailed({ safeReason: "malformed-file" });
-      if (bytes.length > maximumStatementBytes) {
-        throw new StatementParseFailed({ safeReason: "resource-limit" });
-      }
-      if (knownUnsupportedStatementBytes(bytes)) {
-        throw new StatementParseFailed({ safeReason: "unsupported-format" });
-      }
-      const parsed = statementSourceFormat(bytes) === "xlsx" ? parseXlsx(bytes) : parseCsv(bytes);
-      return { sourceFormat: parsed.sourceFormat, headers: parsed.headers, rows: parsed.rows };
-    },
-    catch: (failure) =>
-      failure instanceof StatementParseFailed
-        ? failure
-        : new StatementParseFailed({ safeReason: "malformed-file" }),
+  Effect.gen(function* () {
+    yield* Effect.try({
+      try: () => {
+        if (bytes.length === 0) throw new StatementParseFailed({ safeReason: "malformed-file" });
+        if (bytes.length > maximumStatementBytes) {
+          throw new StatementParseFailed({ safeReason: "resource-limit" });
+        }
+        if (knownUnsupportedStatementBytes(bytes)) {
+          throw new StatementParseFailed({ safeReason: "unsupported-format" });
+        }
+      },
+      catch: statementParseFailure,
+    });
+    // Bundled local code: ordinary API reads never initialize the CSV/XLSX engines.
+    const parser = yield* Effect.tryPromise(() => import("~/shell/ingestion/internal/parser")).pipe(
+      Effect.orDie
+    );
+    return yield* Effect.try({
+      try: () => {
+        const parsed =
+          statementSourceFormat(bytes) === "xlsx"
+            ? parser.parseXlsx(bytes)
+            : parser.parseCsv(bytes);
+        return { sourceFormat: parsed.sourceFormat, headers: parsed.headers, rows: parsed.rows };
+      },
+      catch: statementParseFailure,
+    });
   });
 
 /**

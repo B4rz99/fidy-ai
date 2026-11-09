@@ -1,3 +1,4 @@
+import { HostedTurnConfirmation } from "~/shell/agent/contract";
 import { Config, Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { type WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import { type TranscriptText } from "~/core/agent/contract";
@@ -25,6 +26,8 @@ import {
 } from "~/shell/public-http/contract";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { classifyKapsoMetaFailureCode } from "./kapso-failure";
+
+const maximumReplyButtonBodyLength = 1024;
 
 const kapsoRequestTimeoutMilliseconds = 14_000;
 const firstNonSuccessStatus = 300;
@@ -130,19 +133,37 @@ const resolveRecipientAddress = (
         onSome: (phoneNumber) => Effect.succeed({ to: phoneNumber.slice(1) }),
       });
 
-const encodeTextMessage = (
-  address: KapsoRecipientAddress,
-  text: TranscriptText,
+const encodeTextMessage = ({
+  address,
+  text,
+  opaqueCallbackData,
+  confirmation,
+}: Readonly<{
+  address: KapsoRecipientAddress;
+  text: TranscriptText;
   opaqueCallbackData: Option.Option<
     DisclosureDeliveryCorrelationToken | HostedDeliveryCorrelationToken
-  >
-): Effect.Effect<string> =>
+  >;
+  confirmation: KapsoSendInput["confirmation"];
+}>): Effect.Effect<string> =>
   Schema.encodeEffect(UnknownJsonString)({
     messaging_product: "whatsapp",
     recipient_type: "individual",
     ...address,
-    type: "text",
-    text: { body: text },
+    ...(Option.isNone(confirmation)
+      ? { type: "text", text: { body: text } }
+      : {
+          type: "interactive",
+          interactive: {
+            type: "button",
+            body: { text },
+            action: {
+              buttons: [
+                { type: "reply", reply: { id: confirmation.value.command, title: "Confirmar" } },
+              ],
+            },
+          },
+        }),
     ...Option.match(opaqueCallbackData, {
       onNone: () => ({}),
       onSome: (value) => ({ biz_opaque_callback_data: value }),
@@ -202,7 +223,19 @@ export const makeWhatsAppDelivery = ({
         : deliveryMode,
       input.destination
     );
-    const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);
+    if (
+      Option.isSome(input.confirmation) &&
+      (!Schema.is(HostedTurnConfirmation)(input.confirmation.value) ||
+        input.text.length > maximumReplyButtonBodyLength)
+    ) {
+      return yield* rejected("invalid_response");
+    }
+    const body = yield* encodeTextMessage({
+      address,
+      text: input.text,
+      opaqueCallbackData: input.opaqueCallbackData,
+      confirmation: input.confirmation,
+    });
     return yield* sendKapsoMessage({
       outboundHttp,
       businessPhoneNumberId: input.businessPhoneNumberId,

@@ -28,7 +28,8 @@ const sessionKinds = new Map([
   ["recurring", "credential_call"],
   ["recurringPlans", "credential_call"],
 ]);
-const reviewOperations = new Set<string>([
+const canonicalSessionOperations = new Set<string>([
+  "transactions.updateTransactions",
   "ingestion.getReviewWorkspace",
   "ingestion.getReviewItem",
   "ingestion.getReviewMaterial",
@@ -37,7 +38,7 @@ const reviewOperations = new Set<string>([
 ]);
 const sessionKind = (operation: AuditCredentialOperation): string => {
   const owner = operation.split(".")[0];
-  if (reviewOperations.has(operation)) return "credential_call";
+  if (canonicalSessionOperations.has(operation)) return "credential_call";
   if (owner === "ingestion") return "publication";
   return Option.getOrThrow(Option.fromUndefinedOr(sessionKinds.get(owner ?? "")));
 };
@@ -127,7 +128,7 @@ export const ownerCallStatement = (input: OwnerAuditCall): OwnedStatement => {
       input.userId,
       ...credentialValues,
       operation,
-      input.outcome,
+      kind === "credential_call" ? acceptedOutcome(input.outcome) : input.outcome,
       input.current,
       ...when.params,
       ...ownership.params,
@@ -275,6 +276,13 @@ export const authorizedCallStatement = (input: AuthorizedAuditCall): OwnedStatem
   const values = ["?", "?", "user_id", ...credential.map(() => "id"), "?", "?", "?"];
   return {
     sql: `INSERT INTO audit_entries (${columns.join(", ")}) SELECT ${values.join(", ")} FROM ${authority.table} WHERE ${authority.predicate} ${commitGuard(afterOwnerWrite)}`,
-    params: [kind, id, operation, outcome, current, ...authority.bindings],
+    params: [
+      kind,
+      id,
+      operation,
+      kind === "credential_call" ? acceptedOutcome(outcome) : outcome,
+      current,
+      ...authority.bindings,
+    ],
   };
 };

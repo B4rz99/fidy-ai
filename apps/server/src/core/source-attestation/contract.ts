@@ -75,3 +75,9 @@ export const SourceAttestation = Schema.Union([
   NotificationEmailSourceAttestation,
 ]).annotate({ identifier: "SourceAttestation" });
 export type SourceAttestation = typeof SourceAttestation.Type;
+
+export const SourceAttestationKind = Schema.Union([
+  ManualSourceAttestation.fields.kind,
+  StatementLineSourceAttestation.fields.kind,
+  NotificationEmailSourceAttestation.fields.kind,
+]).annotate({ identifier: "SourceAttestationKind" });

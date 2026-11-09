@@ -22,6 +22,7 @@ export const makeProviderHandoffSender = (
   });
   return ({ event, text }) =>
     client.sendText({
+      confirmation: Option.none(),
       businessPhoneNumberId: event.businessPhoneNumberId,
       destination: {
         recipient: event.caller.businessScopedUserId,

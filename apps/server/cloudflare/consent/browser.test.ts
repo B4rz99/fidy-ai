@@ -1084,26 +1084,23 @@ it("refuses foreign coordinators, forged digests, expired renewal admissions and
     }).pipe(Effect.scoped)
   ));
 
-it("reads Consent with one bound session discovery and rejects retired or foreign bindings", () =>
+it("reads Consent in one native batch and rejects retired or foreign bindings", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* consentSetup();
-      const queries: string[] = [];
+      let batches = 0;
       const observed = new Proxy(db, {
         get(target, key, receiver): unknown {
-          if (key !== "prepare") return Reflect.get(target, key, receiver);
-          return (sql: string): D1PreparedStatement => {
-            queries.push(sql);
-            return target.prepare(sql);
+          if (key !== "batch") return Reflect.get(target, key, receiver);
+          return (statements: D1PreparedStatement[]) => {
+            batches++;
+            return target.batch(statements);
           };
         },
       });
       const accepted = yield* Effect.tryPromise(() => send(observed, request(0, "/web/consent")));
-      const discoveries = queries.filter((sql) =>
-        sql.includes("SELECT id, user_id AS userId FROM web_sessions")
-      ).length;
       expect(accepted.status).toBe(200);
-      expect(discoveries).toBe(1);
+      expect(batches).toBe(1);
       const status = yield* Schema.decodeUnknownEffect(ProcessingConsentStatus)(
         yield* Effect.tryPromise(() => accepted.json())
       );

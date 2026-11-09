@@ -33,20 +33,18 @@ const queryUnavailable = (): Unavailable =>
   });
 
 /** One bounded PAT metadata query, optionally rechecking its web caller at protected D1 work. */
-export const patMetadataQuery = ({
-  userId,
-  current,
-  session,
-}: Readonly<{
-  userId: string;
-  current: number;
-  session: Option.Option<FreshSessionSubject>;
-}>): OwnedStatement => {
+export const patMetadataQuery = (
+  input: Readonly<{ current: number; session: Option.Option<FreshSessionSubject> }> &
+    (Readonly<{ userId: string }> | Readonly<{ users: OwnedStatement }>)
+): OwnedStatement => {
+  const { current, session } = input;
+  const users =
+    "users" in input ? input.users : { sql: "SELECT ? AS userId", params: [input.userId] };
   const protectedQuery = protectConsentStatement({
     statement: {
       sql: `SELECT short_id,recipient_label,scopes_json,created_at_ms,last_used_at_ms,expires_at_ms
-        FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?`,
-      params: [userId, current],
+        FROM pats WHERE user_id = (SELECT userId FROM (${users.sql})) AND revoked_at_ms IS NULL AND expires_at_ms > ?`,
+      params: [...users.params, current],
     },
     subject: { _tag: "Owner", column: "pats.user_id" },
     requirement: "unrevoked",

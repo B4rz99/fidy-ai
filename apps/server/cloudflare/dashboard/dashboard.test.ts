@@ -141,13 +141,12 @@ beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
 const coordinatorObservers = new WeakMap<D1Database, (operation: string) => void>();
-const send = (
+const sendAtCurrentTime = (
   db: D1Database,
   credential: number | string,
   pathAndBody: string | Readonly<{ path: string; method: "POST" | "PUT"; body: object }>
-): Promise<Response> => {
-  vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
-  return publicWorker.fetch(
+): Promise<Response> =>
+  publicWorker.fetch(
     new Request(
       `https://api.fidyapp.com${typeof pathAndBody === "string" ? pathAndBody : pathAndBody.path}`,
       {
@@ -244,6 +243,10 @@ const send = (
       },
     }
   );
+
+const send = (...input: Parameters<typeof sendAtCurrentTime>): Promise<Response> => {
+  vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
+  return sendAtCurrentTime(...input);
 };
 
 const BatchFailure = Schema.Struct({
@@ -278,6 +281,94 @@ const initializedSetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     expect((yield* Effect.tryPromise(() => initialize(db))).status).toBe(200);
     return db;
   });
+
+it("serves live Dashboard reads without waiting for the User mutation coordinator", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* initializedSetup();
+      const coordinated: string[] = [];
+      coordinatorObservers.set(db, (operation) => coordinated.push(operation));
+      try {
+        for (const path of ["/dashboard", "/dashboard/view"]) {
+          const response = yield* Effect.tryPromise(() => send(db, 0, path));
+          expect(response.status).toBe(200);
+          expect(response.headers.get("cache-control")).toBe("no-store");
+          expect((yield* Effect.tryPromise(() => response.text())).length).toBeGreaterThan(0);
+        }
+        expect(coordinated).toEqual([]);
+      } finally {
+        coordinatorObservers.delete(db);
+      }
+    })
+  ));
+
+it.each(["same", "foreign"] as const)(
+  "checks the exact document only for the read's User after a %s-User document change",
+  (changed) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* initializedSetup();
+        expect((yield* Effect.tryPromise(() => initialize(db, 1))).status).toBe(200);
+        const before = yield* Effect.tryPromise(() => count(db, "audit_entries"));
+        const financial = new WeakSet<D1PreparedStatement>();
+        let changedDocument = false;
+        const observed = new Proxy(db, {
+          get(target, key): unknown {
+            if (key === "prepare") {
+              return (sql: string): D1PreparedStatement => {
+                const statement = target.prepare(sql);
+                if (!sql.includes("FROM transaction_projection_bucket")) return statement;
+                return new Proxy(statement, {
+                  get(prepared, property): unknown {
+                    if (property === "bind") {
+                      return (...values: unknown[]) => {
+                        const bound = prepared.bind(...values);
+                        financial.add(bound);
+                        return bound;
+                      };
+                    }
+                    return Reflect.get(prepared, property, prepared);
+                  },
+                });
+              };
+            }
+            if (key === "batch") {
+              return <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> => {
+                if (!changedDocument && statements.some((statement) => financial.has(statement))) {
+                  changedDocument = true;
+                  return db
+                    .prepare(
+                      "UPDATE user_documents SET revision=revision+1 WHERE user_id=? AND kind='dashboard'"
+                    )
+                    .bind(users[changed === "same" ? 0 : 1])
+                    .run()
+                    .then(() => target.batch<Row>(statements));
+                }
+                return target.batch<Row>(statements);
+              };
+            }
+            const value: unknown = Reflect.get(target, key, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+        const response = yield* Effect.tryPromise(() => send(observed, 0, "/dashboard/view"));
+        expect(changedDocument).toBe(true);
+        expect(response.status).toBe(changed === "same" ? 503 : 200);
+        if (changed === "same") {
+          expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+            status: "unavailable",
+          });
+        } else {
+          yield* Schema.decodeUnknownEffect(
+            Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+          )(yield* Effect.tryPromise(() => response.json()));
+        }
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(
+          before + (changed === "same" ? 0 : 1)
+        );
+      })
+    )
+);
 const count = (db: D1Database, table: "dashboard_documents" | "audit_entries"): Promise<number> =>
   db
     .prepare(
@@ -876,8 +967,9 @@ it(
             )
             .all();
         const planningBefore = (yield* Effect.tryPromise(retainedPlanning)).results;
+        // Concurrent requests share one instant; advancing Date per send can reverse admission time.
         const initialize = (): Promise<Response> =>
-          send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} });
+          sendAtCurrentTime(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} });
         const replies = yield* Effect.tryPromise(() => Promise.all([initialize(), initialize()]));
         expect(replies.map((reply) => reply.status)).toEqual([200, 200]);
         const documents = yield* Effect.forEach(replies, (reply) =>
@@ -931,7 +1023,7 @@ it(
         const edits = yield* Effect.tryPromise(() =>
           Promise.all(
             ["Concurrent first", "Concurrent second"].map((title) =>
-              send(db, 0, {
+              sendAtCurrentTime(db, 0, {
                 path: "/dashboard/edits",
                 method: "POST",
                 body: { op: "set-title", title },
@@ -1140,6 +1232,7 @@ it(
             },
           ]) {
             const response = yield* executeCanonicalWork({
+              completion: Option.none(),
               db,
               bucket: Option.none(),
               subject,
@@ -1837,7 +1930,7 @@ it(
   30_000
 );
 
-it("keeps the complete browser Dashboard journey within five fresh recovery-fenced native units", () =>
+it("keeps the complete browser Dashboard journey within two fresh recovery-fenced native units", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const raw = yield* initializedSetup();
@@ -1864,11 +1957,14 @@ it("keeps the complete browser Dashboard journey within five fresh recovery-fenc
       }).DB;
       const reply = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
       expect(reply.status).toBe(200);
+      expect(reply.headers.has("fidy-internal-read-completion")).toBe(false);
       yield* Schema.decodeUnknownEffect(Schema.Struct({ data: Schema.toCodecJson(DashboardView) }))(
         yield* Effect.tryPromise(() => reply.json())
       );
       const timings = reply.headers.get("server-timing") ?? "";
-      for (const phase of ["source", "projection", "audit", "hop", "queue", "execute"]) {
+      expect(timings).toContain("canonical-admission;dur=");
+      expect(timings).not.toContain("dashboard-source;");
+      for (const phase of ["projection", "audit"]) {
         const field = timings
           .split(",")
           .find((entry) => entry.trim().startsWith(`dashboard-${phase};`));
@@ -1876,8 +1972,8 @@ it("keeps the complete browser Dashboard journey within five fresh recovery-fenc
         const duration = Number(field?.split(";dur=")[1]);
         expect(Number.isFinite(duration) && duration >= 0).toBe(true);
       }
-      expect(observed.roundTrips()).toBe(5);
-      expect(generationReads).toBe(5);
+      expect(observed.roundTrips()).toBe(2);
+      expect(generationReads).toBe(2);
       expect(observed.cost().rowsWritten).toBeLessThanOrEqual(19);
     })
   ));
@@ -2502,20 +2598,18 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* initializedSetup();
-        const responses = yield* Effect.tryPromise(() =>
-          Promise.all(
-            [0, 1].map(() =>
-              send(db, 0, {
-                path: "/transactions",
-                method: "POST",
-                body: {
-                  money: { amount: "9007199254740993.01", currency: "COP" },
-                  categoryId: "10000000-0000-4000-8000-000000000001",
-                  direction: "outflow",
-                  occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-                },
-              })
-            )
+        const responses = yield* Effect.forEach([0, 1], () =>
+          Effect.tryPromise(() =>
+            send(db, 0, {
+              path: "/transactions",
+              method: "POST",
+              body: {
+                money: { amount: "9007199254740993.01", currency: "COP" },
+                categoryId: "10000000-0000-4000-8000-000000000001",
+                direction: "outflow",
+                occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+              },
+            })
           )
         );
         expect(responses.map((response) => response.status)).toEqual([201, 201]);
@@ -2836,7 +2930,7 @@ it(
 );
 
 it.each(["/dashboard/view", "/dashboard/view?"])(
-  "keeps one exact day chart at %s when a concurrent Correction moves a Transaction between buckets",
+  "withholds a split day chart at %s while allowing a concurrent Correction to commit",
   (viewPath) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -2933,6 +3027,7 @@ it.each(["/dashboard/view", "/dashboard/view?"])(
           if (operation === "transactions.updateTransaction") correctionQueued.resolve();
         };
         coordinatorObservers.set(delayed, observe);
+        const auditBefore = yield* Effect.tryPromise(() => count(db, "audit_entries"));
         const pendingView = send(delayed, 0, viewPath);
         yield* Effect.tryPromise(() => firstBucketRead.promise);
         const correction = send(delayed, 0, {
@@ -2973,9 +3068,11 @@ it.each(["/dashboard/view", "/dashboard/view?"])(
               };
             });
           });
-        expect(yield* chart(yield* Effect.tryPromise(() => pendingView))).toEqual([
-          { date: localDate(first), amount: "10" },
-        ]);
+        const refused = yield* Effect.tryPromise(() => pendingView);
+        expect(refused.status).toBe(503);
+        expect(yield* Effect.tryPromise(() => refused.json())).toEqual({ status: "unavailable" });
+        expect(yield* Effect.tryPromise(() => count(db, "audit_entries"))).toBe(auditBefore);
+        expect(coordinatedOperations.has("dashboard.getDashboardView")).toBe(false);
         expect((yield* Effect.tryPromise(() => correction)).status).toBe(200);
         coordinatorObservers.delete(delayed);
         expect(yield* chart(yield* Effect.tryPromise(() => send(delayed, 0, viewPath)))).toEqual([

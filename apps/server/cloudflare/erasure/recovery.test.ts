@@ -20,6 +20,45 @@ afterAll(() => storage.dispose());
 const userId = "12740000-0000-4000-8000-000000000001";
 const generation = "12740000-0000-4000-8000-000000000088";
 
+it("a release-pinned generation accepts restored state that a fresh external fence refuses", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      // A running release retains its original proof while a later deletion publishes a new one.
+      const releaseGeneration = "initial";
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", generation));
+      // Native D1 now contains the pre-deletion snapshot, including its old published generation.
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+          )
+          .bind(userId)
+          .run()
+      );
+      const stale = yield* Effect.tryPromise(() =>
+        db.batch([
+          generationAssertion({ db, generation: releaseGeneration }),
+          db.prepare("SELECT id FROM users WHERE id=?").bind(userId),
+        ])
+      );
+      expect(stale[1]?.results).toEqual([{ id: userId }]);
+      const guarded = withErasureRecovery({
+        DB: db,
+        ERASURE_REQUIRED: "true",
+        ERASURE_BUCKET: bucket,
+      }).DB;
+      expect(
+        (yield* Effect.result(
+          Effect.tryPromise(() =>
+            guarded.prepare("SELECT id FROM users WHERE id=?").bind(userId).all()
+          )
+        ))._tag
+      ).toBe("Failure");
+    })
+  ));
+
 it("checks the recovery generation without spending writes on guarded reads", () =>
   Effect.runPromise(
     Effect.gen(function* () {

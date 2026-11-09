@@ -2,6 +2,8 @@ import { type JSX, type MouseEvent, useState } from "react";
 import { Option } from "effect";
 import { Cancel01Icon, PauseCircleIcon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { SelectionScopeDialog } from "@/ui/components/selection-scope-dialog";
+import { SelectionSummary } from "@/ui/components/selection-summary";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
 import { CalendarField } from "@/ui/components/calendar-field";
@@ -229,6 +231,65 @@ const FocusExamples = (): JSX.Element => {
   );
 };
 
+const SelectionExample = (): JSX.Element => {
+  const [ids, setIds] = useState(["first", "second"]);
+  const [filtered, setFiltered] = useState(true);
+  const [changingScope, setChangingScope] = useState(false);
+  const items = [
+    {
+      id: "first",
+      label: "Mercado de ejemplo",
+      description: "$28.000 COP · 02-11-2026",
+      hidden: filtered,
+    },
+    {
+      id: "second",
+      label: "Transporte de ejemplo",
+      description: "$8.000 COP · 02-11-2026",
+      hidden: false,
+    },
+  ].filter((item) => ids.includes(item.id));
+  return (
+    <section aria-label="Selección entre filtros" className="grid gap-4 border-t pt-6">
+      <h3 className="text-xl font-semibold">Selección entre filtros</h3>
+      <div className="flex flex-wrap gap-3">
+        <Button
+          id="selection-example-filter"
+          variant="outline"
+          onClick={() => setFiltered(!filtered)}
+        >
+          {filtered ? "Mostrar todos" : "Filtrar transporte"}
+        </Button>
+        <Button variant="outline" onClick={() => setIds(["first", "second"])}>
+          Restablecer ejemplo
+        </Button>
+      </div>
+      <Button variant="outline" disabled={ids.length === 0} onClick={() => setChangingScope(true)}>
+        Cambiar de vista
+      </Button>
+      <SelectionScopeDialog
+        returnFocusId="selection-example-filter"
+        open={changingScope}
+        count={ids.length}
+        onKeep={() => setChangingScope(false)}
+        onDiscard={() => {
+          setIds([]);
+          setChangingScope(false);
+        }}
+      />
+      <SelectionSummary
+        showClear
+        clearFocusId="selection-example-filter"
+        items={items}
+        label={`${items.length} seleccionadas`}
+        disabled={false}
+        onRemove={(id) => setIds(ids.filter((entry) => entry !== id))}
+        onClear={() => setIds([])}
+      />
+    </section>
+  );
+};
+
 export const PatternReference = (): JSX.Element => (
   <section id="patterns" aria-labelledby="patterns-heading" className="grid gap-6">
     <div className="grid gap-2">
@@ -244,5 +305,6 @@ export const PatternReference = (): JSX.Element => (
       <FocusExamples />
     </div>
     <RowExample />
+    <SelectionExample />
   </section>
 );

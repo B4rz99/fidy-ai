@@ -1,3 +1,5 @@
+import { type ReadonlyMoney, encodeMoneyAmount } from "~/core/_shared/money";
+import { listLaunchCategories } from "~/core/categories/operations";
 import {
   WhatsAppBatchTooLarge,
   WhatsAppDeliveryKey,
@@ -6,7 +8,7 @@ import {
   type WhatsAppWebhookReceipt,
   maxWhatsAppDeliveryEvents,
 } from "./contract";
-import { type DateTime, Effect, Array as EffectArray, Option, type Redacted, Schema } from "effect";
+import { DateTime, Effect, Array as EffectArray, Option, type Redacted, Schema } from "effect";
 import { WhatsAppBusinessPortfolioId } from "~/core/identity/contract";
 import {
   RawKapsoEnvelope,
@@ -130,3 +132,40 @@ export const authenticateIdentityChange = Effect.fn(function* (input: {
   const changes: ReadonlyArray<WhatsAppIdentityChangeEvent> = EffectArray.getSomes(projected);
   return changes;
 });
+
+export const formatWhatsAppMoney = (money: ReadonlyMoney): string => {
+  const [whole = "", fraction] = encodeMoneyAmount(money.amount).split(".");
+  const amount = `${whole.replace(/\B(?=(\d{3})+(?!\d))/gu, ".")}${fraction === undefined ? "" : `,${fraction}`}`;
+  return `${amount} ${money.currency === "COP" ? "pesos" : money.currency}`;
+};
+
+const months = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+export const formatWhatsAppDate = (date: string): string => {
+  const [year, month, day] = date.split("-");
+  return `${Number(day)} de ${months[Number(month) - 1]} de ${year}`;
+};
+export const formatWhatsAppLocalDate = ({
+  date,
+  timeZone,
+}: Readonly<{ date: DateTime.Utc; timeZone: string }>): Option.Option<string> =>
+  Option.map(DateTime.setZoneNamed(date, timeZone), (local) =>
+    formatWhatsAppDate(DateTime.formatIsoDate(local))
+  );
+export const formatWhatsAppCategory = (id: string): Option.Option<string> =>
+  Option.map(
+    Option.fromUndefinedOr(listLaunchCategories().find((category) => category.id === id)),
+    ({ label }) => label
+  );

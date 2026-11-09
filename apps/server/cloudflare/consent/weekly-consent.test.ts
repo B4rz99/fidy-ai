@@ -298,6 +298,7 @@ it.live(
 it.live("retains the exact source-controlled disclosure digest", () =>
   Effect.gen(function* () {
     const disclosure = weeklyDisclosureFor();
+    expect(disclosure.text).not.toMatch(/[\r\n\t]| {5}/u);
     const digest = yield* testPromise(() =>
       crypto.subtle.digest("SHA-256", new TextEncoder().encode(disclosure.text))
     );

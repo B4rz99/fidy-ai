@@ -273,11 +273,28 @@
       "types": "./src/browser-transport.ts",
       "import": "./src/browser-transport.ts",
       "default": "./src/browser-transport.ts"
+    },
+    "./browser-http": {
+      "types": "./src/browser-http.ts",
+      "import": "./src/browser-http.ts",
+      "default": "./src/browser-http.ts"
+    },
+    "./dashboard-contract": {
+      "types": "./src/core/dashboard/contract.ts",
+      "import": "./src/core/dashboard/contract.ts",
+      "default": "./src/core/dashboard/contract.ts"
+    },
+    "./hosted-turn-api": {
+      "types": "./src/shell/agent/contract.ts",
+      "import": "./src/shell/agent/contract.ts",
+      "default": "./src/shell/agent/contract.ts"
     }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "contracts:generate": "bun tools/contracts/generate.ts",
+    "telemetry:generate": "bun tools/telemetry/generate.ts",
+    "hosted-tools:generate": "bun tools/hosted-inference/generate.ts",
     "email-formats:generate": "bun tools/email-formats/generate-runtime.ts",
     "email-formats:check": "bun tools/email-formats/generate-runtime.ts --check",
     "contracts:digest": "bun tools/contracts/digest-artifacts.ts contracts/openapi.json contracts/operation-policy.json",
@@ -299,15 +316,15 @@
     "csv-parse": "7.0.3",
     "effect": "4.0.6",
     "fflate": "0.8.3",
-    "jose": "6.2.13",
+    "jose": "6.2.15",
     "mupdf": "1.28.1",
-    "parse5": "8.0.1",
+    "parse5": "8.1.0",
     "postal-mime": "2.7.6",
     "saxes": "6.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261028.1",
+    "@cloudflare/workers-types": "5.20261102.1",
     "@effect/platform-bun": "4.0.6",
     "@effect/platform-node": "4.0.6",
     "@effect/vitest": "4.0.6",
@@ -315,9 +332,9 @@
     "bun-types": "1.4.4",
     "esbuild": "0.28.2",
     "miniflare": "5.20260911.1-alpha",
-    "rolldown": "1.2.15",
+    "rolldown": "1.2.16",
     "typescript": "7.0.2",
     "vitest": "5.0.5",
-    "wrangler": "4.154.0"
+    "wrangler": "4.156.1"
   }
 }

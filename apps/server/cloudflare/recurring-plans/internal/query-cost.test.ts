@@ -1,4 +1,5 @@
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
+
 import { afterAll, expect, it } from "vitest";
 import { RecurringDocument } from "../../../src/core/recurring-plans/contract";
 import {
@@ -103,7 +104,13 @@ it.each(["none", "own", "missing", "foreign"] as const)(
           month: "2026-10",
         });
         const observed = observeRetentionCost(db);
-        const result = yield* workspaceValue({ db: observed.database, userId, document, query });
+        const result = yield* workspaceValue({
+          finalization: Option.none(),
+          db: observed.database,
+          userId,
+          document,
+          query,
+        });
         expect(result.matchesComplete).toBe(true);
         expect(result.linkedTransactions.map((transaction) => transaction.id)).toEqual(
           { own: [linkedId], none: [], missing: [], foreign: [] }[link]

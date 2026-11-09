@@ -153,7 +153,8 @@ def publish(plan_path, directory):
         for asset in assets:
             destination = Path(temporary) / asset.name
             run('curl', '--proto', '=https', '--proto-redir', '=https', '--fail', '--silent', '--show-error',
-                '--location', '--connect-timeout', '15', '--max-time', '600',
+                '--location', '--retry', '2', '--retry-all-errors', '--retry-max-time', '60',
+                '--connect-timeout', '15', '--max-time', '600',
                 f'https://github.com/{REPOSITORY}/releases/download/{tag}/{asset.name}', '-o', str(destination))
             if hashlib.sha256(destination.read_bytes()).digest() != hashlib.sha256(asset.read_bytes()).digest():
                 raise ValueError('Anonymous asset verification failed; default unchanged')

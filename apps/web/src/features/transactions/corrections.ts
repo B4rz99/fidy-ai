@@ -1,16 +1,9 @@
-import { browserCrypto } from "@/browser/crypto";
-import { Array, Cause, type Context, Deferred, Effect, Option, Predicate, Schema } from "effect";
+import { Array, Cause, type Context, Deferred, Effect, Option, Predicate } from "effect";
 import { type AsyncResult, Atom } from "effect/reactivity";
-import {
-  AtomicBatchCallId,
-  AtomicBatchRejected,
-  type CanonicalInput,
-  type CanonicalSuccess,
-  type FidyClient,
-} from "@/transport/client";
+import { type CanonicalInput, type CanonicalSuccess, type FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import type { HistoryState } from "./history";
+import type { HistoryCommand, HistoryState } from "./history";
 import type { Transaction } from "./presentation";
 
 type Revision = Pick<Transaction, "id" | "revision">;
@@ -27,13 +20,22 @@ type Correction =
       transactions: ReadonlyArray<Revision>;
       changes: Changes;
     }>;
-type Status = "idle" | "saving" | "rejected" | "uncertain" | "recovering";
+type Status =
+  | "idle"
+  | "saving"
+  | "rejected"
+  | "uncertain"
+  | "recovering"
+  | "refreshing"
+  | "recovered";
 export type TransactionCorrections = Readonly<{
   status: Status;
   locked: boolean;
   inlineTransaction: Option.Option<Transaction["id"]>;
+  workspaceGeneration: number;
   submit: (correction: Correction) => void;
   recover: () => void;
+  refreshAfterMutation: () => void;
   mount: () => () => void;
 }>;
 type Client = Context.Service.Shape<FidyClient>;
@@ -44,8 +46,8 @@ type Input = Readonly<{
   firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, PageFailure>;
   categories: Query<CanonicalSuccess<"categories.listCategories">, unknown>;
   history: Atom.Atom<HistoryState>;
-  historyAction: Atom.Writable<Option.Option<void>, "more" | "retry" | "reset">;
-  saved: (kind: Correction["kind"]) => void;
+  historyAction: Atom.Writable<Option.Option<void>, HistoryCommand>;
+  saved: (transactions: ReadonlyArray<Transaction>) => void;
 }>;
 type Work = Effect.Effect<void>;
 type Owner = Input & {
@@ -53,6 +55,7 @@ type Owner = Input & {
   command: Option.Option<Atom.AtomResultFn<Work, void, never>>;
   status: Status;
   inlineTransaction: Option.Option<Transaction["id"]>;
+  workspaceGeneration: number;
   active: boolean;
   generation: number;
   stopped: Deferred.Deferred<void>;
@@ -64,7 +67,7 @@ type Write =
     }>
   | Readonly<{
       kind: "bulk";
-      input: CanonicalInput<"operations.executeAtomicBatch">;
+      input: CanonicalInput<"transactions.updateTransactions">;
     }>;
 /** Owns Correction admission and uncertainty across editing paths. Only a successful explicit
  * canonical reread releases an uncertain write; disposing cannot undo a request already sent.
@@ -77,6 +80,7 @@ export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionC
       get,
       status: "idle",
       inlineTransaction: Option.none(),
+      workspaceGeneration: 0,
       active: false,
       generation: 0,
       stopped: Deferred.makeUnsafe<void>(),
@@ -86,10 +90,12 @@ export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionC
   });
 const present = (owner: Owner): TransactionCorrections => ({
   status: owner.status,
-  locked: owner.status !== "idle",
+  locked: owner.status !== "idle" && owner.status !== "recovered",
   inlineTransaction: owner.inlineTransaction,
+  workspaceGeneration: owner.workspaceGeneration,
   submit: (correction) => submit(owner, correction),
-  recover: () => recover(owner),
+  recover: () => recover(owner, "recovery"),
+  refreshAfterMutation: () => recover(owner, "saved"),
   mount: () => {
     owner.active = true;
     owner.stopped = Deferred.makeUnsafe<void>();
@@ -159,57 +165,50 @@ const prepare = (correction: Correction): Option.Option<Write> => {
   }
   const input = {
     payload: {
-      calls: correction.transactions.map((record) => ({
-        callId: Schema.decodeSync(AtomicBatchCallId)(
-          Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie))
-        ),
-        operation: "transactions.updateTransaction",
-        input: {
-          params: { id: record.id },
-          payload: { expectedRevision: record.revision, changes: correction.changes },
-        },
+      transactions: correction.transactions.map((record) => ({
+        id: record.id,
+        expectedRevision: record.revision,
       })),
+      changes: correction.changes,
     },
   };
-  if (
-    !Array.isReadonlyArrayNonEmpty(input.payload.calls) ||
-    !input.payload.calls.every((call) =>
-      isCanonicalInput("transactions.updateTransaction", call.input)
-    )
-  ) {
-    return Option.none();
-  }
-  const validated = { payload: { calls: input.payload.calls } };
-  return isCanonicalInput("operations.executeAtomicBatch", validated)
+  if (!Array.isReadonlyArrayNonEmpty(input.payload.transactions)) return Option.none();
+  const validated = {
+    payload: { transactions: input.payload.transactions, changes: input.payload.changes },
+  };
+  return isCanonicalInput("transactions.updateTransactions", validated)
     ? Option.some({ kind: "bulk", input: validated })
     : Option.none();
 };
 const write = Effect.fnUntraced(function* (owner: Owner, command: Write) {
   const client = yield* owner.client;
-  if (command.kind === "single") yield* client.transactions.updateTransaction(command.input);
-  else yield* client.operations.executeAtomicBatch(command.input);
+  if (command.kind === "single") {
+    const result = yield* client.transactions.updateTransaction(command.input);
+    return [result.data];
+  }
+  yield* client.transactions.updateTransactions(command.input);
+  return [];
 });
-const rejected = (cause: Cause.Cause<unknown>, kind: Correction["kind"]): boolean => {
+const rejected = (cause: Cause.Cause<unknown>): boolean => {
   const failure = Cause.findErrorOption(cause);
   return (
     Option.isSome(failure) &&
-    (kind === "bulk"
-      ? Schema.is(AtomicBatchRejected)(failure.value)
-      : Predicate.isTagged(failure.value, "ValidationFailed") ||
-        Predicate.isTagged(failure.value, "NotFound") ||
-        Predicate.isTagged(failure.value, "ResourceLimited"))
+    (Predicate.isTagged(failure.value, "ValidationFailed") ||
+      Predicate.isTagged(failure.value, "NotFound") ||
+      Predicate.isTagged(failure.value, "ResourceLimited"))
   );
 };
 const submit = (owner: Owner, correction: Correction): void => {
-  if (!owner.active || owner.status !== "idle") return;
+  if (!owner.active || (owner.status !== "idle" && owner.status !== "recovered")) return;
   owner.inlineTransaction =
     correction.kind === "single" && correction.origin === "inline"
       ? Option.some(correction.transaction.id)
       : Option.none();
   const command = prepare(correction);
   if (!currentRevisions(owner, correction) || Option.isNone(command)) {
-    owner.status = "rejected";
+    owner.status = "refreshing";
     notify(owner);
+    run(owner, reread(owner, owner.generation, "rejected"));
     return;
   }
   owner.status = "saving";
@@ -221,12 +220,20 @@ const submit = (owner: Owner, correction: Correction): void => {
       const result = yield* Effect.exit(write(owner, command.value));
       if (!live(owner, generation)) return;
       if (result._tag === "Failure") {
-        owner.status = rejected(result.cause, command.value.kind) ? "rejected" : "uncertain";
-        notify(owner);
+        if (rejected(result.cause)) {
+          yield* reread(owner, generation, "rejected");
+        } else {
+          owner.status = "uncertain";
+          notify(owner);
+        }
         return;
       }
-      owner.saved(command.value.kind);
-      yield* reread(owner, generation);
+      if (command.value.kind === "single") owner.saved(result.value);
+      yield* reread(owner, generation, "saved");
+      if (command.value.kind === "bulk" && live(owner, generation)) {
+        const records = yield* readSavedSelection(owner, command.value.input.payload.transactions);
+        if (live(owner, generation)) owner.saved(records);
+      }
     })
   );
 };
@@ -246,25 +253,72 @@ const nextResult = <A, E>(
     });
     return Effect.sync(unsubscribe);
   });
-const reread = (owner: Owner, generation: number): Work =>
+const refreshedHistory = (owner: Owner): Effect.Effect<boolean> =>
+  Effect.callback((resume) => {
+    const observe = (state: HistoryState): void => {
+      if (state.query._tag !== "Ready") return resume(Effect.succeed(false));
+      if (state.query.waiting || state.continuation === "loading") return;
+      resume(
+        Effect.succeed(
+          state.continuation !== "failure" && Option.isNone(state.query.refreshFailure)
+        )
+      );
+    };
+    const unsubscribe = owner.get.registry.subscribe(owner.history, observe);
+    observe(owner.get.once(owner.history));
+    return Effect.sync(unsubscribe);
+  });
+const readSavedSelection = (
+  owner: Owner,
+  selected: CanonicalInput<"transactions.updateTransactions">["payload"]["transactions"]
+): Effect.Effect<ReadonlyArray<Transaction>> =>
   Effect.gen(function* () {
-    owner.status = "recovering";
+    if (!(yield* refreshedHistory(owner))) return [];
+    const { query } = owner.get.once(owner.history);
+    if (query._tag !== "Ready") return [];
+    const revisions = new Map(selected.map(({ id, expectedRevision }) => [id, expectedRevision]));
+    return query.value.data.filter(({ id, revision }) => {
+      const previous = revisions.get(id);
+      return previous !== undefined && revision > previous;
+    });
+  });
+const reread = (
+  owner: Owner,
+  generation: number,
+  reason: "saved" | "rejected" | "recovery"
+): Work =>
+  Effect.gen(function* () {
+    const afterRejection = reason === "rejected";
+    const statuses = afterRejection
+      ? ({ waiting: "refreshing", success: "recovered", failure: "rejected" } as const)
+      : ({ waiting: "recovering", success: "idle", failure: "uncertain" } as const);
+    if (!afterRejection) owner.workspaceGeneration += 1;
+    owner.status = statuses.waiting;
     notify(owner);
     const categories = owner.get.once(owner.categories);
     const firstPage = owner.get.once(owner.firstPage);
     owner.get.refresh(owner.categories);
-    owner.get.set(owner.historyAction, "reset");
+    owner.get.set(owner.historyAction, "refresh");
     const results = yield* Effect.all([
       nextResult(owner, owner.categories, categories),
       nextResult(owner, owner.firstPage, firstPage),
     ]);
+    if (reason !== "saved" && results.every(Boolean)) results.push(yield* refreshedHistory(owner));
     if (!live(owner, generation)) return;
-    owner.status = results.every(Boolean) ? "idle" : "uncertain";
+    owner.status = results.every(Boolean) ? statuses.success : statuses.failure;
     notify(owner);
   });
-const recover = (owner: Owner): void => {
-  if (!owner.active || owner.status === "saving" || owner.status === "recovering") return;
-  owner.status = "recovering";
+const recover = (owner: Owner, reason: "recovery" | "saved"): void => {
+  if (
+    !owner.active ||
+    owner.status === "saving" ||
+    owner.status === "recovering" ||
+    owner.status === "refreshing"
+  ) {
+    return;
+  }
+  const afterRejection = owner.status === "rejected";
+  owner.status = afterRejection ? "refreshing" : "recovering";
   notify(owner);
-  run(owner, reread(owner, owner.generation));
+  run(owner, reread(owner, owner.generation, afterRejection ? "rejected" : reason));
 };

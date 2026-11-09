@@ -1,3 +1,8 @@
+import {
+  DashboardAxisTick,
+  DashboardChart,
+  DashboardTooltip,
+} from "@/ui/components/dashboard-chart";
 import { dashboardCategoryVisual } from "@/ui/components/dashboard-category";
 import "@/ui/components/application.css";
 import { Option } from "effect";
@@ -9,14 +14,11 @@ import { Label } from "@/ui/components/label";
 // react-doctor-disable-next-line prefer-dynamic-import
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import {
-  DashboardAxisTick,
   DashboardBudget,
   DashboardCard,
-  DashboardChart,
   DashboardCurrency,
   DashboardFigures,
   DashboardRecentList,
-  DashboardTooltip,
 } from "@/ui/components/dashboard";
 
 const spendingExamples = [

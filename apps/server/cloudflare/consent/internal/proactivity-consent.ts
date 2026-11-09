@@ -56,7 +56,7 @@ const ChannelContext = Schema.Struct({
   kind: ProactivityOptInKind,
 });
 const Choice = Schema.Tuple([
-  Schema.Literal("proactivity"),
+  Schema.Literal("p"),
   ProactivityOptInKind,
   ConsentRecordId,
   Schema.Literals(["accept", "decline", "revoke"]),
@@ -221,7 +221,7 @@ export const createOffer = (
       ).run()
     );
     if (result.meta.changes !== 1) return Option.none();
-    const prefix = `proactivity:${input.kind}:${id}`;
+    const prefix = `p:${input.kind}:${id}`;
     return Option.some({
       id,
       disclosure,
@@ -261,7 +261,7 @@ export const findCurrentOffer = (
         disclosure_json: Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot)),
       })
     )(raw);
-    const prefix = `proactivity:${input.kind}:${row.id}`;
+    const prefix = `p:${input.kind}:${row.id}`;
     return Option.some({
       id: row.id,
       expiresAt: row.expires_at_ms,

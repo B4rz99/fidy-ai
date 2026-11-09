@@ -16,6 +16,12 @@ const transaction = {
   createdAt: now,
   revision: 0,
 };
+const independentTransaction = {
+  ...transaction,
+  presentation: { kind: "independent" },
+  reconciliation: { kind: "independent" },
+  sources: [],
+};
 type DeletionFixture = {
   deleted: boolean;
   requests: number;
@@ -47,6 +53,13 @@ const installDeletion = (
     );
     yield* Effect.tryPromise(() =>
       page.route(`${apiOrigin}/transactions/${transaction.id}`, (route) => {
+        if (route.request().method() === "GET") {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: response(independentTransaction),
+          });
+        }
         expect(route.request().method()).toBe("DELETE");
         fixture.requests += 1;
         if (outcome === "pending") {
@@ -69,7 +82,9 @@ const installDeletion = (
     );
     yield* Effect.tryPromise(() => page.goto("/app/transactions"));
     yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Ver transacción Café de prueba", exact: true }).click()
+      page
+        .getByRole("button", { name: /^Ver transacción Café de prueba(?: Restaurantes)?$/u })
+        .click()
     );
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Eliminar transacción", exact: true }).click()
@@ -143,7 +158,7 @@ for (const outcome of ["rejected", "uncertain"] as const) {
           expect(page.getByRole("alert")).toContainText(
             outcome === "uncertain"
               ? "No pudimos confirmar si se eliminó"
-              : "primero debes desvincularlas"
+              : "No pudimos eliminar la transacción"
           )
         );
         yield* Effect.tryPromise(() =>
@@ -167,7 +182,9 @@ for (const outcome of ["rejected", "uncertain"] as const) {
         } else {
           yield* Effect.tryPromise(() =>
             expect(
-              page.getByRole("button", { name: "Ver transacción Café de prueba", exact: true })
+              page.getByRole("button", {
+                name: /^Ver transacción Café de prueba(?: Restaurantes)?$/u,
+              })
             ).toBeVisible()
           );
         }

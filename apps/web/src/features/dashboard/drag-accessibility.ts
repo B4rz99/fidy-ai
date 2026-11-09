@@ -1,13 +1,11 @@
+import { dashboardDragAnnouncement, sourceLabel } from "./drag-presentation";
 import type { Accessibility, DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/dom";
 import { Option } from "effect";
 import { dashboardDragData } from "./drag-data";
-import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
+import type { DashboardDropTarget } from "./drag-data";
 
 const { decodeSource: decodeDashboardDragSource, decodeTarget: decodeDashboardDropTarget } =
   dashboardDragData;
-
-const sourceLabel = (source: DashboardDragSource): string =>
-  source.kind === "widget" ? source.label : source.entry.name;
 
 const targetLabel = (target: DashboardDropTarget): string => {
   if (target.kind === "dashboard-edge") {
@@ -32,9 +30,8 @@ const destinationLabel = (target: DashboardDropTarget, ariaLabel: Option.Option<
 
 export const dashboardAnnouncementText = {
   started: (sourceData: unknown): Option.Option<string> =>
-    Option.map(
-      decodeDashboardDragSource(sourceData),
-      (source) => `Moviendo ${sourceLabel(source)}.`
+    Option.map(decodeDashboardDragSource(sourceData), (source) =>
+      dashboardDragAnnouncement.started(sourceLabel(source))
     ),
   over: (
     sourceData: unknown,
@@ -42,9 +39,11 @@ export const dashboardAnnouncementText = {
     targetAriaLabel: Option.Option<string>
   ): Option.Option<string> =>
     Option.flatMap(decodeDashboardDragSource(sourceData), (source) =>
-      Option.map(
-        decodeDashboardDropTarget(targetData),
-        (target) => `${sourceLabel(source)}. ${destinationLabel(target, targetAriaLabel)}.`
+      Option.map(decodeDashboardDropTarget(targetData), (target) =>
+        dashboardDragAnnouncement.over(
+          sourceLabel(source),
+          destinationLabel(target, targetAriaLabel)
+        )
       )
     ),
   ended: ({
@@ -59,10 +58,23 @@ export const dashboardAnnouncementText = {
     targetData: unknown;
   }>): Option.Option<string> =>
     Option.map(decodeDashboardDragSource(sourceData), (source) => {
-      if (canceled) return `Movimiento de ${sourceLabel(source)} cancelado.`;
+      if (canceled) {
+        return dashboardDragAnnouncement.ended({
+          label: sourceLabel(source),
+          outcome: { _tag: "Canceled" },
+        });
+      }
       return Option.match(decodeDashboardDropTarget(targetData), {
-        onNone: () => `${sourceLabel(source)} no fue movido.`,
-        onSome: (target) => `${sourceLabel(source)}. ${destinationLabel(target, targetAriaLabel)}.`,
+        onNone: () =>
+          dashboardDragAnnouncement.ended({
+            label: sourceLabel(source),
+            outcome: { _tag: "Unplaced" },
+          }),
+        onSome: (target) =>
+          dashboardDragAnnouncement.over(
+            sourceLabel(source),
+            destinationLabel(target, targetAriaLabel)
+          ),
       });
     }),
 };
@@ -92,4 +104,4 @@ export const dashboardAnnouncements: DashboardAnnouncements = {
     ),
 };
 
-export const dashboardCollisionPriority = (depth: number): number => depth;
+export { dashboardCollisionPriority } from "./drag-presentation";

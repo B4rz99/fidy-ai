@@ -1,3 +1,4 @@
+import type { CanonicalReadCompletion } from "../../canonical-admission/contract";
 import { browseRecurringPlans } from "../../recurring-plans/operations";
 import { browseConnections } from "../../connections/operations";
 import { PATActivityParams } from "../../../src/shell/tokens/contract";
@@ -46,6 +47,7 @@ export type QueryWork = Readonly<{
   request: Request;
   bucket: Option.Option<R2Bucket>;
   browserOrigin: Option.Option<string>;
+  completion: Option.Option<CanonicalReadCompletion>;
 }>;
 export type QueryOwner = (work: QueryWork) => Effect.Effect<Response, Cause.UnknownError>;
 
@@ -165,14 +167,20 @@ const queryOwners = new Map<string, QueryOwner>([
     (operation): readonly [string, QueryOwner] =>
       [
         operation,
-        ({ db, subject, request }: QueryWork) =>
-          browseDashboard({ db, subject, request, operation }),
+        ({ db, subject, request, completion }: QueryWork) =>
+          browseDashboard({ db, subject, request, operation, completion }),
       ] as const
   ),
   [
     "dashboard.listDashboardCatalog",
     ({ db, subject, request }): Effect.Effect<Response, Cause.UnknownError> =>
-      browseDashboard({ db, subject, request, operation: "dashboard.listDashboardCatalog" }),
+      browseDashboard({
+        completion: Option.none(),
+        db,
+        subject,
+        request,
+        operation: "dashboard.listDashboardCatalog",
+      }),
   ],
   [
     "memory.recall",
@@ -318,6 +326,7 @@ export const canonicalHostedStatementQueryOwner = (
     canonicalQueryOwner(id),
     (owner) => (work) =>
       owner({
+        completion: Option.none(),
         db: work.db,
         subject: work.caller,
         request: work.request,

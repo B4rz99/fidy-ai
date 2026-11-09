@@ -11,9 +11,18 @@ production topology, and browser-to-server ownership.
 `apps/web` is the `@fidy/web` React/Vite application package and produces a portable static artifact.
 It owns product browser routing, providers and styles. Public marketing and policy copy belong to
 `apps/site`, which renders the public website with Astro. Its server imports use the
-browser-safe `@fidy/server/client` declaration seam and the narrow `browser-bootstrap` and dependency-free
-`browser-transport` declarations; it never imports server implementations. The API
+browser-safe `@fidy/server/client` declaration seam and the narrow `browser-bootstrap`, `money`,
+`dashboard-contract`, `hosted-turn-api`, `browser-http` and dependency-free `browser-transport` declarations; it never imports server implementations. The API
 Workers do not serve web routes or static assets.
+
+`transport/session-entry.ts` owns the initial session observation and its bootstrap response codecs.
+`transport/session-binding.ts` owns immutable request binding, cancellation and shared transfer
+coordination. Ordinary channel clients and the shared HTTP policy do not import the bootstrap API
+to perform those duties. Dependency-free browser transport declarations supply header formats and
+continuation paths; `@fidy/server/browser-http` supplies the original complete refusal codec only
+when an eligible response could permit automatic replay. Loading that codec counts toward the
+original request deadline and Retry-After wait. A missing decoder fails closed without replay.
+The materializer checks native byte chunks directly and retains the same complete-transfer bounds.
 
 Effect Atom derives browser transport from the assembled `FidyApi` with
 `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. A shared browser HTTP policy
@@ -27,6 +36,10 @@ once. Canonical requests and safe web-auth reads may additionally retry a decode
 and enrollment refusals never gain automatic replay. Cancellation interrupts pacing as well as
 in-flight transport. Shared and server state belongs to Effect
 Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
+
+The hosted conversation derives its client directly from the existing `HostedTurnApi` declaration.
+It shares the same browser HTTP policy, transfer budget and immutable session binding as the other
+clients, without constructing the canonical API catalog when loaded independently.
 
 The browser emits one closed DevTools transport record per logical request: boundary, coarse outcome,
 status class, bounded attempt count and duration, a fixed failure category and, when available, the
@@ -57,6 +70,24 @@ workspace, capture and calendar implementation. Its preload overlaps the list ow
 presentation component used at render; Recurring likewise prepares its injected capture component
 with destination code. Other entries do not need Transaction presentation to interpret a route or
 hydrate their session registry.
+
+An optional feature-owned `code.ts` entry lets application composition start code preparation
+without evaluating the feature's React, transport or query declarations first. Transactions,
+Dashboard, Budgets, Needs Review, Recurring, Subscription and the conversation presentation use
+this entry alongside their route imports so presentation discovery does not wait for the shared runtime. It prepares code only; clients, data reads and
+access checks remain with the actual route.
+
+Production chunking keeps code-only bootstrap helpers together, shared runtime libraries together,
+and each feature's closed panels together. Common read presentation stays cohesive; payment
+protocol adapters and interaction-only controls do not enter that common group. Shared UI uses
+ordinary static package imports rather than top-level asynchronous imports that can wait on a
+chunk depending on the waiting parent. Code preparation never supplies an access decision.
+Feature implementation files stay private, and session, transport and UI modules cannot import
+the code-preparation entry.
+
+The production bundle retains deliberate shared grouping to bound request waves. A smaller named
+runtime alone is not evidence of improvement: compare the complete entry dependency set, request
+waves and populated-content readiness before adopting a different split.
 
 After the application boundary latches the browser session, the initial Budgets
 and Recurring routes may mount the same session-registry profile query before presentation loads.
@@ -92,6 +123,23 @@ continuation and editing lifetimes; clearing a day retains the month. Visible sc
 summary counts identify the period and loaded coverage. Dashboard recent entries link to their
 Transaction's local day in this route. Read-only privacy history retains its independent unbounded
 query and local day filter.
+
+Transactions keeps search, direction, Category and visited page depth in a schema-versioned
+browser history entry bound to the displayed session and calendar month/time zone. Back/Forward
+and same-tab reload restore that view without adding private search text to the URL; a copied URL
+or fresh navigation starts a new view. Clearing filters is explicit. Restoration automatically
+reads at most twenty pages, with ordinary continuation available beyond that bound. Canonical
+query atoms remain the only record owners; history stores no Transaction records, credentials or
+access decisions. Changed or malformed session-bound state falls back to the default view.
+Successful Corrections refresh the visited depth and explain when the confirmed Transaction no
+longer matches; recovery retains the visited depth and filters. Router scroll
+restoration applies to Transactions only and keys positions by session and history entry.
+A narrow browser adapter reapplies the Router's saved scroll once restored pages render; it
+captures the entry position on mount and applies it once, leaving later interaction untouched.
+Same-month navigation restores the entry’s page depth through the mounted history owner, keeping
+bulk selection and canonical query owners alive. Correction refreshes retain the loaded projection and ledger until all visited pages
+settle; pending or failed rereads block edits. Only the editing panel resets on a new generation.
+
 Review history links to Transactions with a validated Transaction identity. After fresh entry
 Consent, its canonical lookup resolves the current effective identity and occurrence month in the
 User's time zone. The ordinary month list remains unselected with its summary; a commit ref scrolls
@@ -481,16 +529,58 @@ Category editors inherit their group Currency; only group settings or a new grou
 
 The Budget summary shows recorded monthly income and all effective expenses, including uncapped categories, using the canonical report’s currency-preserving cash flow. The table identifies its group figures as capped Category spending and shows uncapped Category/Currency outflows separately. Its monthly total reconciles both scopes against that same cash flow. Spending amounts open a read-only, paginated canonical Transaction query with the report’s exact period, Category and Currency; closing the sheet disposes its mounted reader. Its Summary, Income, and Expenses selectors change presentation only; income planning remains outside the expense-cap model.
 
+### Manual Transaction capture recovery
+
+The mounted Transactions period owner retains a manual capture draft and an immutable
+uncertain attempt above month/history-generation workspace remounts. Refreshing history
+never resubmits a capture. Recovery requires an explicit reread of the current month's
+history and Categories, with fresh successful observations before offering resume.
+The User compares the attempt with history; matching fields or an absent loaded row
+cannot prove a write outcome. Resuming edits the retained draft while the original
+attempt remains readable, and a separate submission creates a new Transaction.
+Discard removes only browser interaction state. The draft stays in mounted memory,
+never URLs, browser storage or telemetry, and disappears when Transactions access unmounts.
+Recurring capture retains its separate occurrence-owned editor and recovery contract.
+
 ### Transaction Correction
 
 One mounted Transaction Correction module coordinates inline Category edits, individual Corrections
 and atomic bulk Corrections for the canonical history resource. It owns synchronous write admission,
-observed revisions, outcomes and explicit canonical reread recovery. Drafts remain with presentation;
-single and atomic mutations retain their distinct server contracts. Closing an editing panel does
-not release an uncertain write. Recovery rereads history and Category data, and a failed reread
-preserves the write lock. The command Atom and its HTTP runtime mount on the first write or recovery
+observed revisions and outcomes. A definite save rejection automatically rereads history and Category
+data without replaying the mutation. The editor retains its draft and bulk selection through that
+reread; only an explicit subsequent save submits against the refreshed revisions. Failed refreshes
+retain the draft and lock writes until explicit retry succeeds. Recovery rereads the previously
+loaded history pages while retaining their display, so later-page editing remains mounted until the
+fresh pages settle. Successful saves and explicit uncertain-outcome verification keep their existing
+workspace reset. Drafts remain with presentation; single and atomic mutations retain their distinct
+server contracts. Closing an editing panel does not release an uncertain write. Automatic recovery
+uses the existing canonical transport observations; no financial-content telemetry or additional
+external workflow is introduced. The command Atom and its HTTP runtime mount on the first write or recovery
 action, so viewing history does not initialize them. The privacy history remains read-only and mounts
 no Correction authority.
+
+Individual Correction retains Currency in the local draft alongside the amount. A Currency-only
+change submits complete canonical Money at the observed revision, with no conversion or rounding.
+The selected Currency drives amount validation and save admission; the shared searchable selector
+is explicitly disabled while the Correction owner is locked, including its portaled menu.
+
+### Transaction Reconciliation review
+
+Transaction detail reads the canonical inspection of the effective Transaction and both linked
+originals and their retained capture kinds in one server snapshot. Missing capture information
+is explicitly unavailable; notes never stand in for SourceAttestations. The browser never infers a pair from matching Money. Privacy
+history does not mount this ordinary processing query or unlink authority. Pair review retains
+the exact original identities and deletion intent through its confirmation. Fresh effective facts
+replace the detail display; a newer revision requires history recovery before Correction. Pending, refused and
+uncertain unlink outcomes lock dismissal and selection; only an explicit successful canonical
+reread permits a new review or a return to history. Failed recovery keeps the lock, and recovery
+never resubmits the mutation. A new detail mount performs a fresh inspection.
+Confirmed unlink retains the restored originals while offering a separate deletion confirmation
+for the originally selected identity. An independent recovery retains the freshly read original
+for that same separate confirmation without claiming unlink success. Explicit result dismissal
+refreshes history; Dashboard, Budget and
+Recurring projections are invalidated after confirmed or uncertain writes. The existing canonical
+transport owns authorization, Work observations and audit accounting.
 
 ### Recurring workspace
 
@@ -572,11 +662,13 @@ Router intent preloading prepares destination code only. Pointer, keyboard focus
 start no API read or original-material fetch. Destination data reads belong to the actual route
 entry under its access checks and AbortSignal. Automatic Budget and Recurring loader preloads
 remain disabled so a speculative code match cannot satisfy the actual visit.
-After the foreground workspace is ready, idle preparation may load the remaining destination code,
-yielding between imports and stopping unstarted work on disposal. Composition supplies code loaders
-through context; features do not import application orchestration. Reported data-saving and slow
-connections skip broad code preparation. No idle display-data queue or session-lifetime preparation
-registry remains.
+A fresh entry prepares only its selected screen and the shared conversation presentation. Closed
+Transaction and Budget editors, Recurring panels, Dashboard drag controls and payment fields use
+separate code imports with local pending boundaries. Selected-screen preparation resolves their
+component loaders as well as downloading their modules, so an immediate first interaction can use
+already-prepared code without another lazy suspension. Query, command, session and draft owners
+remain mounted in their existing features. Settings forms and read charts remain immediately
+available. No blanket idle destination preparation or display-data queue runs after a read.
 Needs Review and Recurring route loaders preload the same presentation component used by their
 retained workspace, so resolving destination code does not introduce another lazy suspension. Retained panels activate
 only for successful route matches after destination code and mandatory access checks complete.
@@ -589,7 +681,7 @@ workspace as visited.
 Actual Transactions entries refresh the shared Consent source before revealing the destination.
 Its 400 ms idle retention bridges loader-to-React subscription only; every actual entry refreshes
 it, including Back and rapid re-entry. Transaction loader preloads are disabled, so an in-flight
-code-only speculative result cannot satisfy the actual entry; idle code preparation remains independent.
+code-only speculative result cannot satisfy the actual entry; code preparation remains independent.
 The route stores no copy of Consent or product data. Preparation observes the authentication
 registry's existing query and leaves failures there for the ordinary error view. Cached product
 information can remain visible during revalidation; waiting and failed refreshes still gate decisions.
@@ -632,7 +724,7 @@ A newer saved canonical draft replaces a clean local draft; outstanding local ed
 and require recovery if superseded. A completed autosave releases its draft barrier so subsequent
 bulk decisions use the fresh workspace revision.
 
-`/settings/account` composes independently mounted verified-email replacement and backup-recovery sections under one Account header. Each feature retains its own proof and disclosure lifetime. Fresh sign-in returns to the fixed Account destination without retaining email or recovery material in navigation. Removed settings aliases have no compatibility redirects.
+`/settings/account` composes independently mounted verified-email replacement and backup-recovery sections under one Account header. Their presentation modules accept state and action callbacks without importing the command controllers. Money presentation and Dashboard gesture declarations import their published domain contracts directly, so presentation does not initialize the complete API catalog. Each feature retains its own proof and disclosure lifetime. Fresh sign-in returns to the fixed Account destination without retaining email or recovery material in navigation. Removed settings aliases have no compatibility redirects.
 
 ## Review-return failure evidence
 
@@ -696,3 +788,16 @@ Review suggestions convert canonical decimal points to decimal commas when opene
 editing drafts retain their entered text. Review confirmation uses the same positive Money and
 Currency precision policy as registration. Input validation retains other fields and remains separate
 from service refusal and uncertain-write recovery.
+
+Browser trace receipt validation imports only the shared opaque TraceId schema. Server telemetry
+registries, generated canonical telemetry metadata and trace export schemas stay outside the browser
+graph; the bundle gate refuses those modules. The server and browser share the same TraceId codec.
+
+Transactions selection offers “Seleccionar todas” and “Limpiar selección” beside its count. The
+selection is explicit: all loaded rows matching current filters, including offscreen rows, with
+individual adjustment and no twelve-record cap. Later continuation never silently adds records;
+local filters retain the selection and expose hidden selected records for inspection. Select-all
+adds matching rows to that selection; replacing the loaded period requires explicit discard. Group Corrections use
+`transactions.updateTransactions` with each observed revision and one shared change set. The
+existing correction owner retains admission, pending state and explicit uncertainty recovery;
+there is no splitting into partially committed batches or automatic mutation replay.

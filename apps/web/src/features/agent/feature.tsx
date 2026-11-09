@@ -1,19 +1,13 @@
-import { useRouter } from "@tanstack/react-router";
+import { lazyRouteComponent } from "@tanstack/react-router";
 import { Option } from "effect";
-import { createContext, useContext, useState } from "react";
-import type { JSX, ReactNode, SubmitEvent } from "react";
-import { Conversation, ConversationScrollButton } from "@/ui/components/ai-elements/conversation";
-import { Message, MessageContent } from "@/ui/components/ai-elements/message";
-import { ChatComposer, ChatWindow } from "@/ui/components/chat";
-import {
-  ChatConfirmation,
-  ChatContent,
-  ChatRecovery,
-  ChatStart,
-  ChatStatus,
-} from "@/ui/components/chat-content";
-import { type VisibleAgentReply, useHostedConversation } from "./conversation";
-import { VisibleReply } from "./visible-reply";
+import { Suspense, createContext, useContext, useState } from "react";
+import type { JSX, ReactNode } from "react";
+import type { HostedTurnClient } from "@/transport/hosted-turn-client";
+import { ChatWindow } from "@/ui/components/chat";
+import { PendingRead } from "@/ui/components/pending-read";
+import { useHostedConversation } from "./conversation";
+
+const AgentContent = lazyRouteComponent(() => import("./content"), "AgentContent");
 
 type AgentState = Readonly<{
   conversation: ReturnType<typeof useHostedConversation>;
@@ -27,8 +21,8 @@ const AgentContext = createContext<Option.Option<AgentState>>(Option.none());
 /** One conversation spans independently authorized product routes in the application shell. */
 export const HostedAgentProvider = ({
   children,
-}: Readonly<{ children: ReactNode }>): JSX.Element => {
-  const client = useRouter().options.context.hostedTurnClient;
+  client,
+}: Readonly<{ children: ReactNode; client: HostedTurnClient }>): JSX.Element => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const conversation = useHostedConversation({ client, clearDraft: () => setText("") });
@@ -39,72 +33,24 @@ export const HostedAgentProvider = ({
   );
 };
 
-/** Route authorization controls visibility; the application lifetime owns the conversation. */
 export const HostedAgentFeature = (): JSX.Element => {
   const state = useContext(AgentContext);
   if (Option.isNone(state)) throw new Error("HostedAgentFeature requires HostedAgentProvider");
   const { conversation, open, setOpen, text, setText } = state.value;
-  const { view } = conversation;
-  const onSubmit = (event: SubmitEvent<HTMLFormElement>): void => {
-    event.preventDefault();
-    conversation.submit(text);
-  };
   return (
-    <ChatWindow open={open} onOpenChange={setOpen}>
-      <Conversation className="min-h-0" aria-label="Conversación con Fidy">
-        <ChatContent>
-          {view.empty && <ChatStart onSelect={setText} />}
-          {view.history.map((entry) => (
-            <Message key={entry.id} from={entry.from}>
-              <MessageContent>{entry.text}</MessageContent>
-            </Message>
-          ))}
-          {Option.isSome(view.reply) && (
-            <AgentReply
-              reply={view.reply.value}
-              active={open}
-              canSubmit={view.canSubmit}
-              onVisible={conversation.replyVisible}
-              confirm={conversation.confirm}
-            />
-          )}
-          <ChatStatus text={view.status} kind={view.statusKind} />
-          {view.canCheckProgress && (
-            <ChatRecovery onClick={conversation.checkProgress}>Consultar estado</ChatRecovery>
-          )}
-          {view.canRetryDelivery && (
-            <ChatRecovery onClick={conversation.retryDelivery}>Reintentar conexión</ChatRecovery>
-          )}
-        </ChatContent>
-        <ConversationScrollButton />
-      </Conversation>
-      <ChatComposer
-        text={text}
-        disabled={!view.canSubmit}
-        onTextChange={setText}
-        onSubmit={onSubmit}
-      />
+    <ChatWindow
+      open={open}
+      onOpenChange={setOpen}
+      prepare={() => {
+        AgentContent.preload?.()?.catch(() => undefined);
+      }}
+    >
+      <Suspense fallback={<PendingRead label="Cargando conversación" />}>
+        <AgentContent conversation={conversation} open={open} text={text} setText={setText} />
+      </Suspense>
     </ChatWindow>
   );
 };
 
-const AgentReply = ({
-  reply,
-  active,
-  canSubmit,
-  onVisible,
-  confirm,
-}: Readonly<{
-  reply: VisibleAgentReply;
-  active: boolean;
-  canSubmit: boolean;
-  onVisible: () => void;
-  confirm: () => void;
-}>): JSX.Element => (
-  <VisibleReply active={active && reply.awaitingVisibility} onVisible={onVisible}>
-    <Message from="assistant" aria-label="Respuesta del agente">
-      <MessageContent>{reply.text}</MessageContent>
-      {reply.confirmation && <ChatConfirmation disabled={!canSubmit} onConfirm={confirm} />}
-    </Message>
-  </VisibleReply>
-);
+HostedAgentFeature.preloadInteractions = (): Promise<void> =>
+  Promise.resolve(AgentContent.preload?.()).then(() => undefined);

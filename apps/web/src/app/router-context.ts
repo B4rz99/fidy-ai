@@ -1,5 +1,6 @@
+import type { HostedTurnClient } from "@/transport/hosted-turn-client";
 import type { AtomRegistry } from "effect/reactivity";
-import type { FidyClient, HostedTurnClient, WebAuthClient } from "@/transport/client";
+import type { FidyClient, WebAuthClient } from "@/transport/client";
 
 export type WebRouterContext = Readonly<{
   registry: AtomRegistry.AtomRegistry;

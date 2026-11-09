@@ -1,9 +1,15 @@
 import type { CanonicalSuccess } from "@/transport/client";
-import { DateTime, Option } from "effect";
-import { formatMoney } from "@/transport/money";
+import { BigDecimal, DateTime, Option } from "effect";
+import { formatMoneyWithCode } from "@/transport/money";
 
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];
 export type Category = CanonicalSuccess<"categories.listCategories">["data"][number];
+export type LinkedPair = Extract<
+  CanonicalSuccess<"transactions.getTransaction">["data"]["reconciliation"],
+  { kind: "linked" }
+>;
+export type CaptureSources = CanonicalSuccess<"transactions.getTransaction">["data"]["sources"];
+export type OriginalTransactions = Pick<LinkedPair, "firstTransaction" | "secondTransaction">;
 export type Transaction = CanonicalSuccess<"transactions.listTransactions">["data"][number];
 
 /** Half-open UTC bounds for one calendar month in the exact applied IANA time zone. */
@@ -122,7 +128,16 @@ export const presentTransactionRows = ({
       return dateFormatter.format(transaction.occurredAt.epochMilliseconds);
     },
     get moneyText(): string {
-      return formatMoney({ locale, money: transaction.money });
+      return formatMoneyWithCode({
+        locale,
+        money: {
+          currency: transaction.money.currency,
+          amount:
+            transaction.direction === "outflow"
+              ? BigDecimal.negate(transaction.money.amount)
+              : transaction.money.amount,
+        },
+      });
     },
     occurredOnText: occurrenceText(occurredOnFormatter, transaction.occurredAt),
   }));

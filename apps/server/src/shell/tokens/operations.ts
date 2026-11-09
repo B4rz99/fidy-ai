@@ -411,14 +411,14 @@ export const listPATsResponse = (
 /** Prepare safe User-owned metadata under the exact live caller proof; commit Audit in the same snapshot before disclosure. */
 export const preparePATMetadata = (
   input: Readonly<{
-    userId: string;
     current: number;
     authority: Readonly<{
       table: "web_sessions" | "hosted_turns";
       predicate: string;
       bindings: ReadonlyArray<string | number | Uint8Array>;
     }>;
-  }>
+  }> &
+    (Readonly<{ userId: string }> | Readonly<{ users: OwnedStatement }>)
 ): Readonly<{
   statement: OwnedStatement;
   decode: (rows: unknown) => Effect.Effect<

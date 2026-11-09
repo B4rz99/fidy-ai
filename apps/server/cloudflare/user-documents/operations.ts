@@ -5,6 +5,8 @@ import {
   callerAuthority,
 } from "../canonical-work/operations";
 
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+
 type Kind = "dashboard" | "recurring-plan";
 const Stored = Schema.Struct({ encoded: Schema.String, revision: Schema.Int });
 const NativeRows = Schema.Array(
@@ -30,7 +32,7 @@ const sourceRows = (
 };
 
 /**
- * Observe exact live authority, its gated document and at most two owner-prepared peer reads.
+ * Observe exact live authority, its gated document and bounded owner-prepared peer reads (two Dashboard, four Recurring ledger selections).
  * Peers must gate private rows with the same authority. This batch performs no writes and grants
  * no reusable authority. A failed observation is unavailable; it is never retried or classified
  * from an earlier proof. The enclosing operation retains its fresh Audit and disclosure checks.
@@ -52,7 +54,9 @@ export const readAuthorizedUserDocumentSnapshot = (
   Cause.UnknownError | Schema.SchemaError | InvalidDocumentSnapshot
 > =>
   Effect.gen(function* () {
-    if (input.related.length > 2) return yield* new InvalidDocumentSnapshot();
+    if (input.related.length > (input.kind === "recurring-plan" ? 4 : 2)) {
+      return yield* new InvalidDocumentSnapshot();
+    }
     const authority = callerAuthority(input);
     const results = yield* Effect.tryPromise(() =>
       input.db.batch([
@@ -113,6 +117,31 @@ export const readUserDocumentSnapshot = (
     return { document, related: results.slice(1) };
   });
 
+/** Prepare one document from an at-most-one-User credential selection without submitting a read. */
+export const prepareSelectedUserDocument = ({
+  db,
+  users,
+  kind,
+}: Readonly<{
+  db: D1Database;
+  users: OwnedStatement;
+  kind: Kind;
+}>): Readonly<{
+  statement: D1PreparedStatement;
+  decode: (
+    rows: ReadonlyArray<unknown>
+  ) => Effect.Effect<Option.Option<typeof Stored.Type>, Schema.SchemaError>;
+}> => ({
+  statement: db
+    .prepare(`SELECT document_json AS encoded,revision FROM user_documents
+    WHERE user_id = (SELECT userId FROM (${users.sql})) AND kind=?`)
+    .bind(...users.params, kind),
+  decode: (rows) =>
+    Schema.decodeUnknownEffect(Schema.Array(Stored).check(Schema.isMaxLength(1)))(rows).pipe(
+      Effect.map((selected) => Option.fromUndefinedOr(selected[0]))
+    ),
+});
+
 export const findUserDocument = (
   input: Readonly<{ db: D1Database; userId: string; kind: Kind }>
 ): Effect.Effect<
@@ -122,6 +151,26 @@ export const findUserDocument = (
   readUserDocumentSnapshot({ ...input, related: [] }).pipe(
     Effect.map((snapshot) => snapshot.document)
   );
+
+/** Assert the exact document observation inside a later native unit; disagreement aborts that unit. */
+export const unchangedUserDocument = ({
+  userId,
+  kind,
+  observed,
+}: Readonly<{
+  userId: string;
+  kind: Kind;
+  observed: Option.Option<Readonly<{ encoded: string; revision: number }>>;
+}>): OwnedStatement => ({
+  sql: `SELECT json(CASE WHEN ${Option.isSome(observed) ? "EXISTS" : "NOT EXISTS"}
+    (SELECT 1 FROM user_documents WHERE user_id=? AND kind=?${Option.isSome(observed) ? " AND revision=? AND document_json=?" : ""})
+    THEN 'true' ELSE '' END) AS accepted`,
+  params: [
+    userId,
+    kind,
+    ...(Option.isSome(observed) ? [observed.value.revision, observed.value.encoded] : []),
+  ],
+});
 
 export const prepareUserDocumentWrite = (
   input: Readonly<{

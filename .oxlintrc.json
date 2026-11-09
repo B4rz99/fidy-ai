@@ -180,16 +180,24 @@
       "files": ["apps/web/src/features/agent/visible-reply.tsx"],
       "rules": { "effect-guards/no-react-use-effect": "off" }
     },
+    // Restore Router-owned scroll once asynchronous Transaction pages have rendered.
+    {
+      "files": ["apps/web/src/features/transactions/scroll-restoration.ts"],
+      "rules": { "effect-guards/no-react-use-effect": "off" }
+    },
     // These libraries expose extensionless package exports that resolve to .mjs.
     {
       "files": [
         "apps/web/src/ui/components/sheet.tsx",
+        "apps/web/src/ui/components/recurring.tsx",
         "apps/web/src/ui/components/dashboard-budget-dialog.tsx",
+        "apps/web/src/ui/components/selection-scope-dialog.tsx",
         "apps/web/src/ui/components/button-variants.ts",
         "apps/web/src/ui/components/table.tsx",
         "apps/web/src/features/transactions/workspace.tsx",
         "apps/web/src/features/transactions/list-feature.tsx",
-        "apps/web/src/features/transactions/ledger.tsx"
+        "apps/web/src/features/transactions/ledger.tsx",
+        "apps/web/src/features/needs-review/workspace.tsx"
       ],
       "rules": { "import/extensions": "off" }
     },

@@ -86,6 +86,51 @@
       "manifest": "infra/cloudflare/package.json",
       "reason": "Some Effect 4.0.6 satellite packages crossed seven days on 2026-10-29 around 03:26 UTC, but the coordinated family cannot yet update: effect 4.0.6 was published 2026-10-22T17:47:13.255Z, @effect/platform-bun 4.0.6 at 18:29:03.133Z, and @effect/platform-node 4.0.6 at 18:30:12.643Z. Registry timestamps were checked on 2026-10-29 UTC. scripts/check-effect-family.ts requires one shared version; upgrading just this satellite would violate that invariant, while upgrading core now would violate the unchanged seven-day minimumReleaseAge. Retain the complete 4.0.5 family until 2026-10-29T18:30:12.643Z, then update all direct and override family pins together, update selected-source metadata, reinstall normally and rerun family/source/static, unit and browser checks. This defers a compatible update only; existing SCA exclusions and accepted vulnerabilities are unchanged. Primary evidence: https://registry.npmjs.org/effect and https://registry.npmjs.org/@effect/platform-node.",
       "until": "2026-10-29T18:30:12.643Z"
+    },
+    {
+      "name": "@effect/platform-bun",
+      "reason": "Verified on 2026-11-05: installing the coordinated 4.1.0 family succeeds, but the production-mode web build fails because effect removed the Crypto export used by src/browser/crypto.ts. The forced project build also rejects the server crypto adapters and requires Terminal.size on the CLI test service. Keep the complete 4.0.6 family together until an explicit migration updates the crypto service boundaries and Terminal fixture; then rerun the production web build, forced typecheck and native/browser suites. Evidence is attached to PR #1854; local build/typecheck logs: /tmp/fidy-browser-repro.log and /tmp/fidy-ci-static-fix.log.",
+      "until": "2026-11-12T00:00:00Z"
+    },
+    {
+      "name": "effect",
+      "reason": "Verified on 2026-11-05: installing the coordinated 4.1.0 family succeeds, but the production-mode web build fails because effect removed the Crypto export used by src/browser/crypto.ts. The forced project build also rejects the server crypto adapters and requires Terminal.size on the CLI test service. Keep the complete 4.0.6 family together until an explicit migration updates the crypto service boundaries and Terminal fixture; then rerun the production web build, forced typecheck and native/browser suites. Evidence is attached to PR #1854; local build/typecheck logs: /tmp/fidy-browser-repro.log and /tmp/fidy-ci-static-fix.log.",
+      "until": "2026-11-12T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-browser",
+      "reason": "Verified on 2026-11-05: installing the coordinated 4.1.0 family succeeds, but the production-mode web build fails because effect removed the Crypto export used by src/browser/crypto.ts. The forced project build also rejects the server crypto adapters and requires Terminal.size on the CLI test service. Keep the complete 4.0.6 family together until an explicit migration updates the crypto service boundaries and Terminal fixture; then rerun the production web build, forced typecheck and native/browser suites. Evidence is attached to PR #1854; local build/typecheck logs: /tmp/fidy-browser-repro.log and /tmp/fidy-ci-static-fix.log.",
+      "until": "2026-11-12T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-node-shared",
+      "reason": "Verified on 2026-11-05: installing the coordinated 4.1.0 family succeeds, but the production-mode web build fails because effect removed the Crypto export used by src/browser/crypto.ts. The forced project build also rejects the server crypto adapters and requires Terminal.size on the CLI test service. Keep the complete 4.0.6 family together until an explicit migration updates the crypto service boundaries and Terminal fixture; then rerun the production web build, forced typecheck and native/browser suites. Evidence is attached to PR #1854; local build/typecheck logs: /tmp/fidy-browser-repro.log and /tmp/fidy-ci-static-fix.log.",
+      "until": "2026-11-12T00:00:00Z"
+    },
+    {
+      "name": "@effect/sql-sqlite-do",
+      "reason": "Verified on 2026-11-05: installing the coordinated 4.1.0 family succeeds, but the production-mode web build fails because effect removed the Crypto export used by src/browser/crypto.ts. The forced project build also rejects the server crypto adapters and requires Terminal.size on the CLI test service. Keep the complete 4.0.6 family together until an explicit migration updates the crypto service boundaries and Terminal fixture; then rerun the production web build, forced typecheck and native/browser suites. Evidence is attached to PR #1854; local build/typecheck logs: /tmp/fidy-browser-repro.log and /tmp/fidy-ci-static-fix.log.",
+      "until": "2026-11-12T00:00:00Z"
+    },
+    {
+      "name": "@effect/vitest",
+      "reason": "Verified on 2026-11-05: installing the coordinated 4.1.0 family succeeds, but the production-mode web build fails because effect removed the Crypto export used by src/browser/crypto.ts. The forced project build also rejects the server crypto adapters and requires Terminal.size on the CLI test service. Keep the complete 4.0.6 family together until an explicit migration updates the crypto service boundaries and Terminal fixture; then rerun the production web build, forced typecheck and native/browser suites. Evidence is attached to PR #1854; local build/typecheck logs: /tmp/fidy-browser-repro.log and /tmp/fidy-ci-static-fix.log.",
+      "until": "2026-11-12T00:00:00Z"
+    },
+    {
+      "name": "@effect/sql-d1",
+      "reason": "Verified on 2026-11-05: installing the coordinated 4.1.0 family succeeds, but the production-mode web build fails because effect removed the Crypto export used by src/browser/crypto.ts. The forced project build also rejects the server crypto adapters and requires Terminal.size on the CLI test service. Keep the complete 4.0.6 family together until an explicit migration updates the crypto service boundaries and Terminal fixture; then rerun the production web build, forced typecheck and native/browser suites. Evidence is attached to PR #1854; local build/typecheck logs: /tmp/fidy-browser-repro.log and /tmp/fidy-ci-static-fix.log.",
+      "until": "2026-11-12T00:00:00Z"
+    },
+    {
+      "name": "@effect/platform-node",
+      "reason": "Verified on 2026-11-05: installing the coordinated 4.1.0 family succeeds, but the production-mode web build fails because effect removed the Crypto export used by src/browser/crypto.ts. The forced project build also rejects the server crypto adapters and requires Terminal.size on the CLI test service. Keep the complete 4.0.6 family together until an explicit migration updates the crypto service boundaries and Terminal fixture; then rerun the production web build, forced typecheck and native/browser suites. Evidence is attached to PR #1854; local build/typecheck logs: /tmp/fidy-browser-repro.log and /tmp/fidy-ci-static-fix.log.",
+      "until": "2026-11-12T00:00:00Z"
+    },
+    {
+      "name": "@effect/atom-react",
+      "reason": "Verified on 2026-11-05: installing the coordinated 4.1.0 family succeeds, but the production-mode web build fails because effect removed the Crypto export used by src/browser/crypto.ts. The forced project build also rejects the server crypto adapters and requires Terminal.size on the CLI test service. Keep the complete 4.0.6 family together until an explicit migration updates the crypto service boundaries and Terminal fixture; then rerun the production web build, forced typecheck and native/browser suites. Evidence is attached to PR #1854; local build/typecheck logs: /tmp/fidy-browser-repro.log and /tmp/fidy-ci-static-fix.log.",
+      "until": "2026-11-12T00:00:00Z"
     }
   ],
   "acceptedVulnerabilities": []

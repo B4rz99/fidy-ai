@@ -1,3 +1,4 @@
+import { TransactionCaptureRecovery } from "@/ui/components/transaction-capture-recovery";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
 import { type JSX, useState } from "react";
 import { AmountInput } from "@/ui/components/amount-input";
@@ -66,6 +67,7 @@ export const TransactionsReference = (): JSX.Element => {
           </Button>
         </TransactionContextPanel>
       </TransactionSurface>
+      <CaptureRecoveryReference />
     </section>
   );
 };
@@ -109,3 +111,44 @@ const ReferenceMoneyFields = ({
     </p>
   </>
 );
+
+const CaptureRecoveryReference = (): JSX.Element => {
+  const [checked, setChecked] = useState(false);
+  const [message, setMessage] = useState("");
+  return (
+    <section
+      aria-label="Recuperación de registro de ejemplo"
+      className="mt-6 flex max-w-sm flex-col gap-4"
+    >
+      <h2>Borrador por revisar</h2>
+      <p>Ejemplo local con datos ficticios. Ninguna acción crea o elimina transacciones.</p>
+      <TransactionCaptureRecovery
+        fields={[
+          { label: "Monto", value: "COP 12.345,67" },
+          { label: "Tipo", value: "Gasto" },
+          { label: "Fecha", value: "07-11-2026" },
+          { label: "Contraparte", value: "Tienda La Esquina" },
+          { label: "Categoría", value: "Alimentación" },
+          { label: "Notas", value: "Compra para la cena" },
+        ]}
+        checked={checked}
+        waiting={false}
+        onCheck={() => {
+          setChecked(true);
+          setMessage("Historial de ejemplo actualizado. Compara antes de continuar.");
+        }}
+        onResume={() =>
+          setMessage(
+            "La aplicación abre los datos conservados para editarlos antes de un nuevo registro explícito."
+          )
+        }
+        onDiscard={() => {
+          setChecked(false);
+          setMessage("Borrador de ejemplo descartado. El historial no cambia.");
+        }}
+        onHistory={() => setMessage("Puedes revisar el historial y volver al borrador conservado.")}
+      />
+      <output>{message}</output>
+    </section>
+  );
+};

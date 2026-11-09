@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
-import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
+import { apiOrigin, installBoundUser, installCategories, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
@@ -18,6 +18,7 @@ const transaction = {
   revision: 1,
   presentation: { kind: "independent" },
 };
+const inspection = { ...transaction, reconciliation: { kind: "independent" }, sources: [] };
 const review = {
   id: reviewId,
   source: "statement",
@@ -41,7 +42,7 @@ const reviewRoute = (route: Route): Promise<void> => {
 };
 const installHistory = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() => installUser(page));
+    yield* Effect.tryPromise(() => installBoundUser(page));
     yield* Effect.tryPromise(() =>
       installCategories({ page, categories: [{ id: categoryId, label: "Mercado" }] })
     );
@@ -50,7 +51,10 @@ const installHistory = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
     );
     yield* Effect.tryPromise(() =>
       page.route(`${apiOrigin}/transactions/${transactionId}`, (route) =>
-        route.fulfill({ contentType: "application/json", body: response(transaction) })
+        route.fulfill({
+          contentType: "application/json",
+          body: response(inspection),
+        })
       )
     );
     yield* Effect.tryPromise(() =>
@@ -75,8 +79,7 @@ test("created review history opens its Transaction in the local month list witho
         page.getByRole("link", { name: "Ver transacción", exact: true }).click()
       );
       const row = page.getByRole("button", {
-        name: "Ver transacción Mercado QA revisión",
-        exact: true,
+        name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u,
       });
       yield* Effect.tryPromise(() => expect(row).toBeInViewport());
       yield* Effect.tryPromise(() => expect(row).toHaveAttribute("aria-expanded", "false"));
@@ -84,10 +87,10 @@ test("created review history opens its Transaction in the local month list witho
         expect(page.getByRole("heading", { name: "Detalle de transacción" })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Monto · COP", { exact: true })).toHaveCount(0)
+        expect(page.getByLabel("Monto", { exact: true })).toHaveCount(0)
       );
       yield* Effect.tryPromise(() =>
-        expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("2026-09")
+        expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("09")
       );
     })
   ));
@@ -151,21 +154,18 @@ const laterPageJourney = (page: Page, width: number): Effect.Effect<void, Cause.
       page.getByRole("link", { name: "Ver transacción", exact: true }).press("Enter")
     );
     const record = page.getByRole("button", {
-      name: "Ver transacción Mercado QA revisión",
-      exact: true,
+      name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u,
     });
     yield* Effect.tryPromise(() => expect(record).toBeInViewport());
     yield* Effect.tryPromise(() => expect(record).toHaveAttribute("aria-expanded", "false"));
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCount(0));
     yield* Effect.tryPromise(() =>
       expect(
-        page.getByRole("button", { name: "Ver transacción Otra transacción 0", exact: true })
+        page.getByRole("button", { name: /^Ver transacción Otra transacción 0(?: Mercado)?$/u })
       ).toBeAttached()
     );
     yield* Effect.tryPromise(() => record.click());
-    yield* Effect.tryPromise(() =>
-      expect(page.getByLabel("Monto · COP", { exact: true })).toBeVisible()
-    );
+    yield* Effect.tryPromise(() => expect(page.getByLabel("Monto", { exact: true })).toBeVisible());
   });
 for (const width of [desktopWidth, phoneWidth]) {
   test(`history reveals a later-page Transaction without opening it at ${width}px, even after original expiry`, ({
@@ -219,7 +219,7 @@ const unavailableJourney = (
       yield* Effect.tryPromise(() => page.unroute(`${apiOrigin}/transactions/${transactionId}`));
       yield* Effect.tryPromise(() =>
         page.route(`${apiOrigin}/transactions/${transactionId}`, (route) =>
-          route.fulfill({ contentType: "application/json", body: response(transaction) })
+          route.fulfill({ contentType: "application/json", body: response(inspection) })
         )
       );
       yield* Effect.tryPromise(() =>
@@ -227,7 +227,7 @@ const unavailableJourney = (
       );
       yield* Effect.tryPromise(() =>
         expect(
-          page.getByRole("button", { name: "Ver transacción Mercado QA revisión", exact: true })
+          page.getByRole("button", { name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u })
         ).toBeInViewport()
       );
     }
@@ -271,7 +271,18 @@ const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =
     };
     yield* Effect.tryPromise(() =>
       page.route(`${apiOrigin}/transactions/${transactionId}`, (route) =>
-        route.fulfill({ contentType: "application/json", body: response(visible) })
+        route.fulfill({
+          contentType: "application/json",
+          body: response({
+            ...visible,
+            reconciliation: {
+              kind: "linked",
+              firstTransaction: transaction,
+              secondTransaction: visible,
+            },
+            sources: [],
+          }),
+        })
       )
     );
     yield* Effect.tryPromise(() =>
@@ -293,16 +304,16 @@ const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =
     );
     yield* Effect.tryPromise(() =>
       expect(
-        page.getByRole("button", { name: "Ver transacción Mercado QA revisión", exact: true })
+        page.getByRole("button", { name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u })
       ).toBeInViewport()
     );
     yield* Effect.tryPromise(() =>
-      expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("2026-08")
+      expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("08")
     );
     yield* Effect.tryPromise(() => page.reload());
     yield* Effect.tryPromise(() =>
       expect(
-        page.getByRole("button", { name: "Ver transacción Mercado QA revisión", exact: true })
+        page.getByRole("button", { name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u })
       ).toHaveAttribute("aria-expanded", "false")
     );
   });

@@ -1,3 +1,4 @@
+import { prepareBoundSubscriptionRead as prepareRead } from "./internal/bound-read";
 import { cancellationRefusal, prepareCancellation } from "./internal/cancellation";
 import type {
   CanonicalMutationPreparation,
@@ -159,3 +160,6 @@ export const prepareSubscriptionCancellation = (
 export const subscriptionCancellationRefusal = (
   work: CanonicalPreparationWork
 ): CanonicalMutationRefusal => cancellationRefusal(work);
+
+export const prepareBoundSubscriptionRead: typeof prepareRead = (operation) =>
+  prepareRead(operation);

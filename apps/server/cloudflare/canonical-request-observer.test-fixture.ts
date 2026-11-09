@@ -22,6 +22,8 @@ const recordCodec = Schema.fromJsonString(
     coordinatorCalls: Schema.Int,
     costBoundary: Schema.String,
     timingBoundary: Schema.String,
+    serverTiming: Schema.String,
+    recoveryBatches: Schema.OptionFromNullOr(Schema.String),
   })
 );
 const microsecondsPerMillisecond = Number("1000");
@@ -35,9 +37,6 @@ const wrap =
           candidate.method === request.method &&
           matchesRouteTemplate({ template: candidate.route, path })
       );
-      if (operation === undefined) {
-        return yield* Effect.tryPromise(() => fetch(request, environment, context));
-      }
       const observed = observeBrowserCost(environment.DB);
       let coordinatorCalls = 0;
       const coordinator = environment.USER_TRANSACTION_COORDINATOR;
@@ -71,12 +70,14 @@ const wrap =
       const elapsed = performance.now() - started;
       const cpu = process.cpuUsage(cpuStarted);
       const encoded = yield* Schema.encodeEffect(recordCodec)({
-        operation: operation.id,
+        operation: operation?.id ?? transportOperation(path),
         status: response.status,
         latencyMilliseconds: elapsed,
         hostProcessCpuMilliseconds: (cpu.user + cpu.system) / microsecondsPerMillisecond,
         ...observed.cost(),
         coordinatorCalls,
+        serverTiming: response.headers.get("server-timing") ?? "",
+        recoveryBatches: Option.fromNullishOr(response.headers.get("fidy-recovery-batches")),
         costBoundary: "direct Core D1 binding only; coordinator/provider work excluded",
         timingBoundary:
           "native integration fixture; host-process CPU excludes workerd and is not Worker CPU",
@@ -84,6 +85,19 @@ const wrap =
       yield* Effect.sync(() => process.stdout.write(`INFRA_REQUEST ${encoded}\n`));
       return response;
     }).pipe(Effect.orDie, Effect.runPromise);
+// These transports are outside the canonical catalog. Never retain arbitrary paths or query values.
+const transportOperation = (path: string): string => {
+  switch (path) {
+    case "/web/session/binding":
+      return "browser.sessionBinding";
+    case "/web/consent":
+      return "browser.consent";
+    case "/web/oauth/connections":
+      return "browser.oauthConnections";
+    default:
+      return "transport.unmapped";
+  }
+};
 const factory = core.makeCoreWorker;
 const originalFetch = coreWorker.fetch;
 const executeWork = canonical.executeCanonicalWork;
@@ -115,6 +129,12 @@ const measureOwner = <A, E, R>(
       hostProcessCpuMilliseconds: (cpu.user + cpu.system) / microsecondsPerMillisecond,
       ...observed.cost(),
       coordinatorCalls: 0,
+      serverTiming: Option.isSome(response)
+        ? (response.value.headers.get("server-timing") ?? "")
+        : "",
+      recoveryBatches: Option.isSome(response)
+        ? Option.fromNullishOr(response.value.headers.get("fidy-recovery-batches"))
+        : Option.none(),
       costBoundary: "held canonical owner D1 binding; transport admission excluded",
       timingBoundary:
         "owner integration fixture; host-process CPU excludes workerd and is not Worker CPU",

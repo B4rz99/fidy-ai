@@ -158,6 +158,7 @@ it("resamples OAuth authority at canonical commit using the invocation Clock whi
       const live = yield* Clock.Clock;
       const invoke = (clock: Clock.Clock): Effect.Effect<Response> =>
         executeCanonicalWork({
+          completion: Option.none(),
           db: fixture.db,
           subject: fixture.subject,
           current: fixture.current,
@@ -251,6 +252,7 @@ it("resamples OAuth authority after a native canonical abort before classifying 
       const live = yield* Clock.Clock;
       const clock = clockAt({ live, current: fixture.current, read: () => instant });
       const response = yield* executeCanonicalWork({
+        completion: Option.none(),
         db: aborted,
         subject: fixture.subject,
         current: fixture.current,

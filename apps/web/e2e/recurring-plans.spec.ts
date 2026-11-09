@@ -1524,7 +1524,10 @@ const checkMobileCaptureText = (page: Page): Effect.Effect<void, Cause.UnknownEr
     for (const field of fields) {
       yield* Effect.tryPromise(() => expectPayment(field).toHaveCSS("font-size", "16px"));
     }
+    const currency = capture.getByText("Moneda · USD", { exact: true });
+    yield* Effect.tryPromise(() => expectPayment(currency).toHaveCSS("font-size", "14px"));
     yield* Effect.tryPromise(() => page.evaluate(enlargeRecurringCaptureText));
+    yield* Effect.tryPromise(() => expectPayment(currency).toHaveCSS("font-size", "28px"));
     for (const field of fields) {
       yield* Effect.tryPromise(() => expectPayment(field).toHaveCSS("font-size", "32px"));
     }
@@ -1546,6 +1549,7 @@ test("capturing recurring income preserves its Currency and direction", ({ page,
         expectPayment(capture.getByRole("combobox", { name: "Moneda", exact: true })).toHaveCount(0)
       );
       yield* checkMobileCaptureText(page);
+      yield* Effect.tryPromise(() => chooseDate(page, "Fecha", "2026-10-31"));
       yield* Effect.tryPromise(() =>
         expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("20,5")
       );

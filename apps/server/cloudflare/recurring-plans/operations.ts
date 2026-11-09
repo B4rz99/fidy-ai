@@ -1,3 +1,10 @@
+import {
+  type CanonicalBrowserQueryFinalizer,
+  type CanonicalBrowserRead,
+  type CanonicalReadCompletion,
+} from "../canonical-admission/contract";
+
+import { prepareCanonicalBrowserQueryFinalization } from "../canonical-admission/operations";
 import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import { Effect, Option, Schema } from "effect";
 
@@ -29,27 +36,70 @@ import { oauthMutationReview } from "../oauth-confirmation/operations";
 import { type RecurringAuditWork, type RecurringEditWork } from "./contract";
 import { snapshotCompletions } from "./internal/snapshot";
 import { workspaceValue } from "./internal/query";
+import { prepareBoundWorkspace } from "./internal/bound-workspace";
 import { outcome, validReversal, validateReferences } from "./internal/mutation";
 import { audit, credentialUse } from "./internal/audit";
-import { readDocument, writeDocument } from "./internal/store";
+import { readAuthorizedDocument, readDocument, writeDocument } from "./internal/store";
 
 const operation = "recurringPlans.applyRecurringEdit";
+
+const recurringQueryAccounting = ({
+  db,
+  subject,
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+  current: number;
+}>): ReadonlyArray<D1PreparedStatement> => [
+  ...credentialUse({ db, subject, current }),
+  audit({
+    work: { db, subject, current },
+    operation: "recurringPlans.getRecurringWorkspace",
+    outcome: "accepted",
+  }),
+  prepareChangedRowAssertion({ db, scope: "recurring_plan" }),
+];
+
+const recurringFinalization = ({
+  db,
+  subject,
+  completion,
+}: Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+  completion: Option.Option<CanonicalReadCompletion>;
+}>): Option.Option<CanonicalBrowserQueryFinalizer> =>
+  Option.isSome(completion) && "id" in subject
+    ? Option.some(
+        prepareCanonicalBrowserQueryFinalization({
+          db,
+          subject,
+          completion: completion.value,
+          accounting: (current) => recurringQueryAccounting({ db, subject, current }),
+        })
+      )
+    : Option.none();
+
+/** Prepare the existing browser observation without an independent storage submission. */
+export const prepareBoundRecurringWorkspace: (request: Request) => CanonicalBrowserRead = (
+  request
+) => prepareBoundWorkspace(request);
 
 /** Observational canonical read. Only credential use and metadata Audit are written. */
 export const browseRecurringPlans = ({
   db,
   subject,
   request,
-}: Readonly<{ db: D1Database; subject: QueryCaller; request: Request }>): Effect.Effect<Response> =>
+  completion,
+}: Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+  request: Request;
+  completion: Option.Option<CanonicalReadCompletion>;
+}>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = transactionNow();
-    if (!(yield* Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current })))) {
-      return transactionFailure({
-        code: "unauthenticated",
-        status: 401,
-        message: "Presenta una credencial vigente.",
-      });
-    }
     const query = Schema.decodeUnknownOption(RecurringWorkspaceQuery)(
       Object.fromEntries(new URL(request.url).searchParams)
     );
@@ -67,28 +117,35 @@ export const browseRecurringPlans = ({
         message: "Selecciona un mes anterior.",
       });
     }
-    const document = yield* readDocument({ db, userId: subject.userId });
+    const selected = yield* readAuthorizedDocument({ db, subject, current });
+    if (Option.isNone(selected)) {
+      return transactionFailure({
+        code: "unauthenticated",
+        status: 401,
+        message: "Presenta una credencial vigente.",
+      });
+    }
+    const document = selected.value;
+    const final = recurringFinalization({ db, subject, completion });
     const view = yield* workspaceValue({
+      finalization: Option.map(final, (value) => value.finalization),
       db,
       userId: subject.userId,
       document,
       query: query.value,
     });
     const data = yield* Schema.encodeEffect(Schema.toCodecJson(RecurringWorkspace))(view);
-    yield* Effect.tryPromise({
-      try: () =>
-        db.batch([
-          ...credentialUse({ db, subject, current }),
-          audit({
-            work: { db, subject, current },
-            operation: "recurringPlans.getRecurringWorkspace",
-            outcome: "accepted",
-          }),
-          prepareChangedRowAssertion({ db, scope: "recurring_plan" }),
-        ]),
-      catch: boundaryFailure,
+    if (Option.isNone(final)) {
+      yield* Effect.tryPromise({
+        try: () => db.batch([...recurringQueryAccounting({ db, subject, current })]),
+        catch: boundaryFailure,
+      });
+    }
+    const response = Response.json({ data, next: [] }, { headers: transactionNoStore });
+    return Option.match(final, {
+      onNone: () => response,
+      onSome: (value) => value.present(response),
     });
-    return Response.json({ data, next: [] }, { headers: transactionNoStore });
   }).pipe(Effect.orElseSucceed(() => transactionUnavailable()));
 
 /** Prepare, never commit, a revision-bound User mutation inside the existing canonical unit. */

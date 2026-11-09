@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
@@ -363,6 +363,19 @@ const recentHistory = recentTransactions.map(({ category, ...transaction }) => (
   revision: 0,
 }));
 
+const recentInspectionRoute = (route: Route): Promise<void> => {
+  const transaction = recentHistory.find((item) => route.request().url().endsWith(`/${item.id}`));
+  return route.fulfill({
+    contentType: "application/json",
+    body: response({
+      ...transaction,
+      presentation: { kind: "independent" },
+      reconciliation: { kind: "independent" },
+      sources: [],
+    }),
+  });
+};
+
 const installRecentHistory = Effect.fnUntraced(function* (page: Page) {
   yield* Effect.tryPromise(() =>
     page.route(`${apiOrigin}/categories`, (route) =>
@@ -380,6 +393,7 @@ const installRecentHistory = Effect.fnUntraced(function* (page: Page) {
       })
     )
   );
+  yield* Effect.tryPromise(() => page.route(`${apiOrigin}/transactions/*`, recentInspectionRoute));
 });
 
 test("a recent dashboard Transaction opens history on its local date", ({ page }) =>

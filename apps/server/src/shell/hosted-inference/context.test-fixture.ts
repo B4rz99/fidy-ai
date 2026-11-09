@@ -9,6 +9,7 @@ export const hostedInitialTextContext = (text: string): HostedInitialTextContext
     sections: [
       {
         _tag: "AssistantPolicy",
+        channel: "web",
         user: {
           serviceMarket: "CO",
           locale: "es-CO",

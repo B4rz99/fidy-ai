@@ -9,16 +9,16 @@ import {
   ArrowRight01Icon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
-import { useNavigate } from "@tanstack/react-router";
+import { lazyRouteComponent, useNavigate } from "@tanstack/react-router";
 import { Option } from "effect";
-import { type JSX, useState } from "react";
+import { type JSX, Suspense, useState } from "react";
+import { PendingRead } from "@/ui/components/pending-read";
 import { Button } from "@/ui/components/button";
 import { Badge } from "@/ui/components/badge";
 import { WorkspaceColumns, WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { WorkspacePanel } from "@/ui/components/workspace-panel";
 import { BudgetBalance } from "@/ui/components/budget-meter";
 import { type BudgetStatus, budgetFigures, defaultBudgetGroup } from "./presentation";
-import { BudgetEditor } from "./editor";
 import { BudgetRow } from "./row";
 import { BudgetTotals } from "./totals";
 import { UnbudgetedSpending } from "./unbudgeted-spending";
@@ -32,6 +32,8 @@ import {
   monthShift,
   monthTitle,
 } from "./model";
+
+const BudgetEditor = lazyRouteComponent(() => import("./editor"), "BudgetEditor");
 
 const expandedRowLimit = 50;
 
@@ -126,26 +128,28 @@ const BudgetPanel = ({
     {Option.match(controller.draft, {
       onNone: () => <BudgetSummary report={props.report} user={props.user} />,
       onSome: (draft) => (
-        <BudgetEditor
-          key={`${draft.category.id}:${Option.isSome(draft.groupCategoryIds) ? "group" : "category"}`}
-          draft={draft}
-          month={props.month}
-          groups={groups}
-          groupCurrencies={props.report.statuses.map((status) => ({
-            group: groupFor({ status, categories: props.categories }),
-            currency: status.budget.cap.currency,
-          }))}
-          disabled={controller.disabled}
-          onClose={controller.closeEditor}
-          onSubmit={controller.write}
-          onRemove={controller.remove}
-          onRefresh={controller.refresh}
-          saveState={
-            controller.writeAction === "delete" && controller.saveState !== "saved"
-              ? controller.saveState
-              : "idle"
-          }
-        />
+        <Suspense fallback={<PendingRead label="Cargando configuración" />}>
+          <BudgetEditor
+            key={`${draft.category.id}:${Option.isSome(draft.groupCategoryIds) ? "group" : "category"}`}
+            draft={draft}
+            month={props.month}
+            groups={groups}
+            groupCurrencies={props.report.statuses.map((status) => ({
+              group: groupFor({ status, categories: props.categories }),
+              currency: status.budget.cap.currency,
+            }))}
+            disabled={controller.disabled}
+            onClose={controller.closeEditor}
+            onSubmit={controller.write}
+            onRemove={controller.remove}
+            onRefresh={controller.refresh}
+            saveState={
+              controller.writeAction === "delete" && controller.saveState !== "saved"
+                ? controller.saveState
+                : "idle"
+            }
+          />
+        </Suspense>
       ),
     })}
   </WorkspacePanel>
@@ -412,3 +416,6 @@ const workspaceGroups = (props: WorkspaceProps): ReadonlyArray<string> => [
     ),
   ]),
 ];
+
+BudgetWorkspace.preloadInteractions = (): Promise<void> =>
+  Promise.resolve(BudgetEditor.preload?.()).then(() => undefined);

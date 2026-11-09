@@ -40,6 +40,7 @@ jobs:
       BANCOLOMBIA_SANDBOX_CLIENT_ID: ${{ vars.BANCOLOMBIA_SANDBOX_CLIENT_ID }}
       BANCOLOMBIA_SANDBOX_CERTIFICATE_ID: ${{ vars.BANCOLOMBIA_SANDBOX_CERTIFICATE_ID }}
       RELEASE_GIT_SHA: ${{ github.sha }}
+      RELEASE_ATTEMPT_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       ISOLATE_SCHEMA_CUTOVER: ${{ inputs.isolate_schema_cutover && 'true' || 'false' }}
       SCHEMA_CUTOVER_PUBLIC_VERSION_ID: ${{ inputs.schema_cutover_public_version_id }}
       SCHEMA_CUTOVER_CORE_VERSION_ID: ${{ inputs.schema_cutover_core_version_id }}
@@ -318,8 +319,18 @@ jobs:
         if: ${{ !inputs.isolate_schema_cutover && (always() && steps.promote.outcome == 'success') }}
         working-directory: infra/cloudflare
         run: |
+          set -euo pipefail
           for attempt in {1..3}; do
-            if bun verify-production-smoke.ts promoted; then exit 0; fi
+            if bun verify-production-smoke.ts promoted | tee "$RUNNER_TEMP/fidy-post-smoke.log"; then
+              if grep -Fxq 'Production identity, routing and independent edge verification passed; D1 synthetic work and OAuth availability deferred: daily quota exhausted.' "$RUNNER_TEMP/fidy-post-smoke.log"; then
+                echo 'd1_quota_deferred=true' >> "$GITHUB_OUTPUT"
+              elif grep -Fxq 'Production smoke passed.' "$RUNNER_TEMP/fidy-post-smoke.log"; then
+                echo 'd1_quota_deferred=false' >> "$GITHUB_OUTPUT"
+              else
+                exit 1
+              fi
+              exit 0
+            fi
             echo "Normal-traffic smoke not confirmed ($attempt/3)."
             sleep 3
           done
@@ -381,6 +392,7 @@ jobs:
         if: ${{ !inputs.isolate_schema_cutover }}
         env:
           SITE_PUBLIC_ORIGIN: https://fidyapp.com
+          SITE_D1_QUOTA_DEFERRED: ${{ steps.post_smoke.outputs.d1_quota_deferred }}
         run: >-
           bun run --cwd apps/site test:browser e2e/agent-readiness.spec.ts
           --grep 'negotiates complete|keeps missing pages|honors Accept|does not reuse|keeps unsafe methods|publishes a parseable|verifies public OAuth'

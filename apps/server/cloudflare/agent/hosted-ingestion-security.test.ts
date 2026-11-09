@@ -1,8 +1,8 @@
+import { HostedTurnProposal } from "../../src/shell/agent/contract";
 import { Effect, Schema } from "effect";
 import { expect, it } from "vitest";
 import { ingestHostileStatement } from "./hosted-ingestion.test-fixture";
 import {
-  VisibleReply,
   bearer,
   coordinatorFor,
   decodeJson,
@@ -102,11 +102,12 @@ it.each([
           )
         );
         expect(response.status).toBe(202);
-        const visible = yield* Schema.decodeUnknownEffect(VisibleReply)(
+        const visible = yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
           yield* Effect.tryPromise(() => response.json())
         );
-        expect(visible.text).toContain(operation);
-        expect(visible.text).toContain("Responde exactamente: CONFIRMAR ");
+        expect(visible.text).toContain("Olvidar el recuerdo");
+        expect(visible.text).not.toContain(operation);
+        expect(visible.text).not.toContain("CONFIRMAR");
         expect(requests).toHaveLength(2);
         expect(encodeJson(requests[0])).not.toContain(hostile);
         const context = encodeJson(requests[1]);

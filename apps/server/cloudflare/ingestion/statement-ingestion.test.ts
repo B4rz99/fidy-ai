@@ -1,3 +1,9 @@
+import {
+  coordinatorTestDatabase,
+  installTestSchema,
+  isolatedTestStorage,
+  observeRetentionCost,
+} from "../d1-test-fixture";
 import { openAiTestKey } from "../openai.test-fixture";
 import { type OAuthReviewBinding } from "../oauth-confirmation/contract";
 import {
@@ -26,11 +32,7 @@ import { DurableTraceContext } from "../../src/shell/observability/contract";
 import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import {
-  coordinatorTestDatabase,
-  installTestSchema,
-  isolatedTestStorage,
-} from "../d1-test-fixture";
+
 import { BatchEnvelope, batchCallId, competingWriteDb } from "./statement-batch.test-fixture";
 import { getCanonicalOperationInput } from "../../src/shell/canonical-operations/operations";
 import {
@@ -4282,6 +4284,73 @@ it("shows an isolated ingestion inbox with the original evidence deadline", () =
 const WorkspaceIds = Schema.Struct({
   data: Schema.Struct({ items: Schema.Array(Schema.Struct({ id: Schema.String })) }),
 });
+
+it("reads a pending inbox without scanning expired review history", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+      );
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000)
+          INSERT INTO ingestion_review_items
+          (id,user_id,source_kind,statement_submission_id,record_number,reason,created_at_ms,evidence_expires_at_ms,
+          service_market,locale,time_zone,source_format,parser_revision,extractor_revision,original_evidence,
+          known_money_json,issues_json,evidence_state,suggestions_json)
+          SELECT '90000000-0000-4000-8000-' || printf('%012d',n.x), r.user_id,r.source_kind,
+          r.statement_submission_id,n.x+1,r.reason,r.created_at_ms,1,r.service_market,r.locale,r.time_zone,
+          r.source_format,r.parser_revision,r.extractor_revision,NULL,NULL,
+          r.issues_json,'expired',NULL
+          FROM ingestion_review_items r CROSS JOIN n WHERE r.user_id=? AND r.record_number=1`)
+          .bind(userA)
+          .run()
+      );
+      const observed = observeRetentionCost(runtime.db);
+      const response = yield* fromTestPromise(() =>
+        reviewWorkspaceRequest({ ...runtime, db: observed.database })
+      );
+      expect(response.status).toBe(200);
+      const workspace = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(ReviewWorkspace) })
+      )(yield* fromTestPromise(() => response.json()));
+      expect(workspace.data.pendingCount).toBe(1);
+      expect(workspace.data.total).toBe(1);
+      expect(workspace.data.items).toHaveLength(1);
+      expect(observed.roundTrips()).toBe(1);
+      expect(observed.cost().rowsRead).toBeLessThan(2000);
+      for (const path of ["?limit=0", "/context"]) {
+        const selected = observeRetentionCost(runtime.db);
+        const read = yield* fromTestPromise(() =>
+          send(
+            { ...runtime, db: selected.database },
+            new Request(`https://api.fidyapp.com/ingestion/review-workspace${path}`, {
+              headers: sessionHeaders(0),
+            })
+          )
+        );
+        expect(read.status).toBe(200);
+        if (path === "?limit=0") {
+          expect(yield* fromTestPromise(() => read.json())).toMatchObject({
+            data: { pendingCount: 1, total: 1, items: [] },
+          });
+        } else {
+          const context = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({ data: Schema.toCodecJson(ReviewPageContext) })
+          )(yield* fromTestPromise(() => read.json()));
+          expect(context.data.items.map(({ id }) => id)).toEqual(
+            workspace.data.items.map(({ id }) => id)
+          );
+        }
+        expect(selected.roundTrips()).toBe(1);
+        expect(selected.cost().rowsRead).toBeLessThan(2000);
+      }
+      const history = yield* readReviewInbox(runtime, "expired");
+      expect(history.pendingCount).toBe(1);
+      expect(history.total).toBe(10000);
+    })
+  ));
 const reviewWorkspaceRequest = (runtime: Runtime): Promise<Response> =>
   send(
     runtime,
@@ -4298,13 +4367,18 @@ const editReview = (runtime: Runtime, payload: unknown, index = 0): Promise<Resp
       body: JSON.stringify(payload),
     })
   );
-const reviewDetail = (runtime: Runtime, id: string, index = 0): Promise<Response> =>
-  send(
-    runtime,
+const reviewDetail = (runtime: Runtime, id: string, index = 0): Promise<Response> => {
+  const observed = observeRetentionCost(runtime.db);
+  return send(
+    { ...runtime, db: observed.database },
     new Request(`https://api.fidyapp.com/ingestion/review-workspace/${id}`, {
       headers: sessionHeaders(index),
     })
-  );
+  ).then((response) => {
+    if (response.status === 200 || response.status === 404) expect(observed.roundTrips()).toBe(1);
+    return response;
+  });
+};
 
 it("autosaves a revision-bound draft and retains it through skip and restore", () =>
   Effect.runPromise(

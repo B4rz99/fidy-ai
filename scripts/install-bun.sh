@@ -3,21 +3,26 @@ set -euo pipefail
 platform="$(uname -s)"
 architecture="$(uname -m)"
 case "$platform/$architecture" in
-  Darwin/arm64) archive=bun-darwin-aarch64; digest=c240d7f0ccb90c263a849fcdb09b7ee62630d921348ed6aafda86b9d577bc510 ;;
-  Darwin/x86_64) archive=bun-darwin-x64; digest=50a3491f73abc2fe81673171a85762d3bc2cc1680ccecadd983de99adf77977e ;;
-  Linux/aarch64) archive=bun-linux-aarch64; digest=baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e ;;
-  Linux/x86_64) archive=bun-linux-x64; digest=bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c ;;
-  MINGW*/aarch64|MSYS*/aarch64) archive=bun-windows-aarch64; digest=2d57a0eec0cb44d95c918c3f9734f60455a1306ae5085d76fc68f44e3ee30d09 ;;
-  MINGW*/x86_64|MSYS*/x86_64) archive=bun-windows-x64; digest=cd2c0fccc78f3ede1f50ca827a15f063eda13d4d150a3d0674f4f6e323d864a5 ;;
+  Darwin/arm64) archive=bun-darwin-aarch64; asset=665260236; digest=c240d7f0ccb90c263a849fcdb09b7ee62630d921348ed6aafda86b9d577bc510 ;;
+  Darwin/x86_64) archive=bun-darwin-x64; asset=665261039; digest=50a3491f73abc2fe81673171a85762d3bc2cc1680ccecadd983de99adf77977e ;;
+  Linux/aarch64) archive=bun-linux-aarch64; asset=665259460; digest=baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e ;;
+  Linux/x86_64) archive=bun-linux-x64; asset=665259752; digest=bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c ;;
+  MINGW*/aarch64|MSYS*/aarch64) archive=bun-windows-aarch64; asset=665259874; digest=2d57a0eec0cb44d95c918c3f9734f60455a1306ae5085d76fc68f44e3ee30d09 ;;
+  MINGW*/x86_64|MSYS*/x86_64) archive=bun-windows-x64; asset=665265163; digest=cd2c0fccc78f3ede1f50ca827a15f063eda13d4d150a3d0674f4f6e323d864a5 ;;
   *) printf 'Unsupported Bun installation platform. See apps/cli/ARCHITECTURE.md.\n' >&2; exit 1 ;;
 esac
 install_directory="${1:-$HOME/.fidy/bun-38afee6c8}"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
-curl --fail --silent --show-error --location --retry 2 --retry-all-errors --retry-max-time 120 \
-  --connect-timeout 15 --max-time 600 \
-  "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/$archive.zip" \
-  -o "$temporary_directory/bun.zip"
+download_archive() {
+  curl --fail --silent --show-error --location --retry 2 --retry-all-errors --retry-max-time 120 \
+    --connect-timeout 15 --max-time 600 "$@" -o "$temporary_directory/bun.zip"
+}
+if ! download_archive "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/$archive.zip"; then
+  printf 'Bun release download unavailable; using the official release asset API.\n' >&2
+  download_archive --header 'Accept: application/octet-stream' \
+    "https://api.github.com/repos/oven-sh/bun/releases/assets/$asset"
+fi
 if command -v sha256sum >/dev/null; then
   actual="$(sha256sum "$temporary_directory/bun.zip" | cut -d ' ' -f 1)"
 else

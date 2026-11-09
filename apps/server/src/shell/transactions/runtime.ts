@@ -5,6 +5,7 @@ import { matchesRouteTemplate } from "~/shell/public-http/operations";
 
 const implemented = [
   "transactions.createTransaction",
+  "transactions.updateTransactions",
   "transactions.listTransactions",
   "transactions.searchTransactions",
   "transactions.getTransaction",

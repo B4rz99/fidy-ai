@@ -742,7 +742,7 @@ it.each([
             name: "fidy_proactivity",
             language: "es",
             approval: "approved",
-            body: "Fidy: {{1}}",
+            body: "Fidy te avisa: {{1}} Más en Fidy.",
           }),
         };
         const harness = proactivityWorkflowHarness({
@@ -861,7 +861,9 @@ it.each([
               now: morning.epochMilliseconds,
             })
           ).text
-        ).toBe(`Fidy: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`);
+        ).toBe(
+          `Fidy te avisa: ${offer.disclosure.text} Responde a este mensaje con «Sí» para activar estos avisos o «No» para rechazarlos. Más en Fidy.`
+        );
         expect(provider).toHaveBeenCalledOnce();
       })
     )
@@ -2005,8 +2007,13 @@ it("installed category generation atomically materializes two Budget events and 
           ])
         );
         expect(Option.isSome(yield* findInsightRecipient({ db, userId }))).toBe(true);
-        expect(Option.isSome(yield* findProactivityReport({ db, userId, id: group.id }))).toBe(
-          true
+        const report = Option.getOrThrow(
+          yield* findProactivityReport({ db, userId, id: group.id })
+        );
+        expect(report.text).toEqual(
+          Option.some(
+            "Llevas 110 pesos de los 100 pesos de tu presupuesto de Otros para octubre de 2026. Alcanzaste el 80% y el 100%."
+          )
         );
         const provider = vi.fn(() =>
           Promise.resolve(
@@ -2020,7 +2027,7 @@ it("installed category generation atomically materializes two Budget events and 
           KAPSO_API_KEY: "test-key",
           WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
           PROACTIVITY_TEMPLATE_JSON:
-            '{"name":"fidy_proactivity","language":"es","body":"Fidy: {{1}}","approval":"approved"}',
+            '{"name":"fidy_proactivity","language":"es","body":"Fidy te avisa: {{1}} Más en Fidy.","approval":"approved"}',
         };
         yield* executeProactivityWork({
           environment,
@@ -2084,8 +2091,8 @@ it("installed category generation atomically materializes two Budget events and 
         expect(Option.getOrThrow(Option.getOrThrow(EffectArray.last(transcripts))).id).toBe(
           first.id
         );
-        expect(first.text).toContain("80% y 100%");
-        expect(first.text).toContain("110 COP");
+        expect(first.text).toContain("80% y el 100%");
+        expect(first.text).toContain("110 pesos");
         expect(provider).toHaveBeenCalledOnce();
         yield* executeProactivityWork({
           environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
@@ -2224,7 +2231,12 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
         WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
         PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
           Schema.fromJsonString(ProactivityTemplateConfiguration)
-        )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
+        )({
+          name: "fidy_proactivity",
+          language: "es",
+          approval: "approved",
+          body: "Fidy te avisa: {{1}} Más en Fidy.",
+        }),
       };
       yield* executeProactivityWork({
         environment,
@@ -2233,7 +2245,7 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
         work: { kind: "proactivity-generate", version: 1, userId },
       });
       const report = Option.getOrThrow(yield* findProactivityReport({ db, userId, id: group.id }));
-      expect(Option.getOrThrow(report.text)).toContain("110 COP");
+      expect(Option.getOrThrow(report.text)).toContain("110 pesos");
       yield* Effect.tryPromise(() =>
         db.batch([
           prepareInsightRecipient({
@@ -2851,6 +2863,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
         expect(http.status).toBe(200);
         expect(yield* Effect.tryPromise(snapshot)).toEqual(before);
         const hosted = yield* executeCanonicalWork({
+          completion: Option.none(),
           db,
           subject,
           current: DateTime.nowUnsafe().epochMilliseconds,
@@ -2885,6 +2898,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
         503
       );
       const failure = yield* executeCanonicalWork({
+        completion: Option.none(),
         db,
         subject,
         current: DateTime.nowUnsafe().epochMilliseconds,

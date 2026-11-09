@@ -50,14 +50,28 @@ export const readReviewDetail = ({
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
 
 /** Project the same revision and expiry policy for an inbox row and an individual read. */
-export const projectReviewDetail = ({
-  db,
-  userId,
+export const projectReviewDetail = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    row: typeof ReviewRow.Type;
+    current: number;
+  }>
+): Effect.Effect<ReviewDetail, ReviewUnavailable> =>
+  projectReviewDetailFromSnapshot({
+    row: input.row,
+    current: input.current,
+    categorize: (captures) => categorizeCaptures({ db: input.db, userId: input.userId, captures }),
+  });
+
+export const projectReviewDetailFromSnapshot = ({
   row,
   current,
+  categorize,
 }: Readonly<{
-  db: D1Database;
-  userId: string;
+  categorize: (
+    captures: Parameters<typeof categorizeCaptures>[0]["captures"]
+  ) => ReturnType<typeof categorizeCaptures>;
   row: typeof ReviewRow.Type;
   current: number;
 }>): Effect.Effect<ReviewDetail, ReviewUnavailable> =>
@@ -74,7 +88,7 @@ export const projectReviewDetail = ({
             Schema.decodeEffect(reviewDraftJson)(json)
           ).pipe(Effect.map((values) => Option.fromUndefinedOr(values[0])))
         : Option.none();
-    const suggestions = yield* suggestReviewCategory({ db, userId, draft: retainedSuggestions });
+    const suggestions = yield* suggestReviewCategory({ categorize, draft: retainedSuggestions });
     const item = yield* projectReviewSummary({ row, current });
     return { item, revision: row.revision, draft, suggestions };
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));
@@ -124,28 +138,24 @@ export const projectReviewSummary = ({
 
 /** Resolve current Category instructions without altering retained extraction facts or User drafts. */
 const suggestReviewCategory = ({
-  db,
-  userId,
+  categorize,
   draft,
 }: Readonly<{
-  db: D1Database;
-  userId: string;
+  categorize: (
+    captures: Parameters<typeof categorizeCaptures>[0]["captures"]
+  ) => ReturnType<typeof categorizeCaptures>;
   draft: Option.Option<ReviewDraft>;
 }>): Effect.Effect<Option.Option<ReviewDraft>, ReviewUnavailable> =>
   Effect.gen(function* () {
     if (Option.isNone(draft) || Option.isNone(draft.value.direction)) return draft;
     const suggestion = draft.value;
-    const categories = yield* categorizeCaptures({
-      db,
-      userId,
-      captures: [
-        {
-          caller: suggestion.categoryId,
-          counterparty:
-            suggestion.counterparty === "" ? Option.none() : Option.some(suggestion.counterparty),
-          direction: draft.value.direction.value,
-        },
-      ],
-    });
+    const categories = yield* categorize([
+      {
+        caller: suggestion.categoryId,
+        counterparty:
+          suggestion.counterparty === "" ? Option.none() : Option.some(suggestion.counterparty),
+        direction: draft.value.direction.value,
+      },
+    ]);
     return Option.some({ ...suggestion, categoryId: Option.fromUndefinedOr(categories[0]) });
   }).pipe(Effect.mapError(() => new ReviewUnavailable()));

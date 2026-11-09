@@ -1,9 +1,8 @@
-import { telemetryTraceHeader } from "@fidy/server/browser-transport";
 import {
-  ResourceLimited,
-  TelemetryTraceId,
   connectionBrowserPaths,
-} from "@fidy/server/browser-bootstrap";
+  telemetryTraceHeader,
+  telemetryTraceIdPatternSource,
+} from "@fidy/server/browser-transport";
 import {
   Cause,
   Clock,
@@ -14,7 +13,6 @@ import {
   Function,
   Layer,
   Option,
-  Schema,
   type Scope,
   Semaphore,
   Stream,
@@ -87,11 +85,16 @@ const maximumResourceRetries = 6;
 const canonicalTransferConcurrency = 2;
 const maximumResourceDelaySeconds = 5;
 const millisecondsPerSecond = 1_000;
-const RetrySeconds = Schema.NumberFromString.check(
-  Schema.isInt(),
-  Schema.isGreaterThan(0),
-  Schema.isLessThanOrEqualTo(maximumResourceDelaySeconds)
-);
+const retrySeconds = (input: unknown): Option.Option<number> => {
+  if (typeof input !== "string") return Option.none();
+  const value = Number(input);
+  return Number.isInteger(value) && value > 0 && value <= maximumResourceDelaySeconds
+    ? Option.some(value)
+    : Option.none();
+};
+const traceIdPattern = new RegExp(telemetryTraceIdPatternSource, "u");
+const traceId = (input: unknown): Option.Option<string> =>
+  typeof input === "string" && traceIdPattern.test(input) ? Option.some(input) : Option.none();
 const redirectStatusMinimum = 300;
 const redirectStatusMaximumExclusive = 400;
 const noContentStatus = 204;
@@ -107,14 +110,14 @@ const diagnosticsRequest = (
 const projectResponseHeaders = (
   response: HttpClientResponse.HttpClientResponse
 ): Headers.Headers => {
-  const retry = Schema.decodeUnknownOption(RetrySeconds)(response.headers["retry-after"]);
+  const retry = retrySeconds(response.headers["retry-after"]);
   const values: Array<readonly [string, string]> = [];
   for (const name of safeResponseHeaders) {
     const value = Option.fromUndefinedOr(response.headers[name]);
     if (Option.isSome(value)) values.push([name, value.value]);
   }
   if (Option.isSome(retry)) values.push(["retry-after", String(retry.value)]);
-  const trace = Schema.decodeUnknownOption(TelemetryTraceId)(response.headers[traceResponseHeader]);
+  const trace = traceId(response.headers[traceResponseHeader]);
   if (Option.isSome(trace)) values.push([telemetryTraceHeader, trace.value]);
   return Headers.fromInput(values);
 };
@@ -287,14 +290,22 @@ const resourceRefusalDelay = (
 ): Effect.Effect<Option.Option<number>> =>
   Effect.gen(function* () {
     if (response.status !== resourceLimitedStatus) return Option.none();
-    const seconds = Schema.decodeUnknownOption(RetrySeconds)(response.headers["retry-after"]);
+    const seconds = retrySeconds(response.headers["retry-after"]);
     if (Option.isNone(seconds)) return Option.none();
+    const receivedAt = yield* Clock.currentTimeMillis;
     const body = yield* response.json.pipe(Effect.option);
     if (Option.isNone(body)) return Option.none();
-    const refusal = Schema.decodeOption(Schema.toCodecJson(ResourceLimited))(body.value);
-    return Option.isSome(refusal)
-      ? Option.some(seconds.value * millisecondsPerSecond)
-      : Option.none();
+    const loaded = yield* Effect.tryPromise(() => import("./browser-http-refusal")).pipe(
+      Effect.option
+    );
+    if (Option.isNone(loaded) || !loaded.value.isUnadmittedResourceRefusal(body.value)) {
+      return Option.none();
+    }
+    // Loading the decoder counts toward the existing Retry-After wait and absolute deadline.
+    const decodedAt = yield* Clock.currentTimeMillis;
+    return Option.some(
+      Math.max(0, seconds.value * millisecondsPerSecond - Math.max(0, decodedAt - receivedAt))
+    );
   });
 
 /** A declared resource refusal proves non-admission, unlike a transport failure or uncertain 5xx. */
@@ -315,7 +326,7 @@ const maximumDiagnosticMilliseconds = 86_400_000;
 const maximumDiagnosticAttempts = 14;
 type TransportObservation = {
   attempts: number;
-  traceId: Option.Option<typeof TelemetryTraceId.Type>;
+  traceId: Option.Option<string>;
   statusClass: Option.Option<"2xx" | "3xx" | "4xx" | "5xx">;
   deadlineExceeded: boolean;
 };
@@ -347,9 +358,7 @@ const observeResponse = (
   observation: TransportObservation,
   response: HttpClientResponse.HttpClientResponse
 ): void => {
-  observation.traceId = Schema.decodeUnknownOption(TelemetryTraceId)(
-    response.headers[traceResponseHeader]
-  );
+  observation.traceId = traceId(response.headers[traceResponseHeader]);
   observation.statusClass = responseStatusClass(response.status);
 };
 

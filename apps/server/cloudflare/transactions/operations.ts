@@ -1,3 +1,4 @@
+import { prepareGroupCorrection as ownerPrepareGroupCorrection } from "./internal/group-correction";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
 import { prepareBoundTransactionRead as ownerPrepareBoundRead } from "./internal/bound-history";
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
@@ -20,6 +21,7 @@ import type {
 } from "./contract";
 import { readDashboardTransactions as ownerReadDashboardTransactions } from "./internal/dashboard-read";
 import {
+  prepareBoundPlanningTransactions as ownerPrepareBoundPlanningTransactions,
   readPlanningTransactionSnapshot as ownerReadPlanningTransactionSnapshot,
   readPlanningTransactions as ownerReadPlanningTransactions,
 } from "./internal/planning-read";
@@ -40,6 +42,7 @@ import {
   findTransaction as ownerFindCapturedTransaction,
   readBrowserTransactionPage as ownerReadBrowserTransactionPage,
   readPrivacyTransactions as ownerReadPrivacyTransactions,
+  prepareBrowserTransactionPage as prepareInitialPage,
 } from "./internal/transaction-history";
 import {
   correctionInput as ownerCorrectionInput,
@@ -232,6 +235,11 @@ export const readPlanningTransactionSnapshot: typeof ownerReadPlanningTransactio
   input
 ) => ownerReadPlanningTransactionSnapshot(input);
 
+/** Prepare effective matching facts and owner-selected references without an independent submission. */
+export const prepareBoundPlanningTransactions: typeof ownerPrepareBoundPlanningTransactions = (
+  input
+) => ownerPrepareBoundPlanningTransactions(input);
+
 /** Complete bounded month identities, without transferring financial facts to a peer. */
 export const readPlanningTransactionMonths = ({
   db,
@@ -263,3 +271,11 @@ export const prepareReviewedCapture: typeof ownerPrepareReviewedCapture = (input
 export const readBrowserTransactionPage = (
   input: Parameters<typeof ownerReadBrowserTransactionPage>[0]
 ): ReturnType<typeof ownerReadBrowserTransactionPage> => ownerReadBrowserTransactionPage(input);
+
+/** Compose the existing initial history page and Audit in bootstrap's final snapshot. */
+export const prepareBrowserTransactionPage: typeof prepareInitialPage = (input) =>
+  prepareInitialPage(input);
+
+/** Prepare an explicit revision-checked selection for one all-or-nothing correction. */
+export const prepareGroupCorrection: typeof ownerPrepareGroupCorrection = (input) =>
+  ownerPrepareGroupCorrection(input);

@@ -9,6 +9,9 @@ describe("Explicit currency Money", () => {
     ["KWD", "0.001", "KWD 0,001"],
     ["JPY", "1", "JPY 1"],
     ["USD", "9007199254740993.12", "USD 9.007.199.254.740.993,12"],
+    ["COP", "-524000", "COP -524.000,00"],
+    ["USD", "-12.50", "USD -12,50"],
+    ["USD", "-0.01", "USD -0,01"],
   ])("identifies %s once while preserving exact precision", (currency, amount, expected) => {
     expect(
       formatMoneyWithCode({

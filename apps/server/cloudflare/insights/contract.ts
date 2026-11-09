@@ -154,18 +154,17 @@ export const ProactivityDeliveryWork = Schema.Union([
 ]);
 export type ProactivityDeliveryWork = typeof ProactivityDeliveryWork.Type;
 
-/** Insights owns the deterministic Workflow locator; it is a status hint, never delivery authority. */
-export const ProactivityWorkflowId = Schema.TemplateLiteral([
-  "weekly-",
-  UserId,
-  "-",
-  Schema.Union([
-    WeeklySummaryWork.fields.kind,
-    WeeklyQuestionWork.fields.kind,
-    CategoryDeliveryWork.fields.kind,
+/** Deterministic status hints, never authority. Category IDs omit the long kind to fit Cloudflare's 100-character limit; weekly identities remain stable. */
+export const ProactivityWorkflowId = Schema.Union([
+  Schema.TemplateLiteral([
+    "weekly-",
+    UserId,
+    "-",
+    Schema.Union([WeeklySummaryWork.fields.kind, WeeklyQuestionWork.fields.kind]),
+    "-",
+    WeeklyQuestionWork.fields.id,
   ]),
-  "-",
-  WeeklyQuestionWork.fields.id,
+  Schema.TemplateLiteral(["proactivity-", UserId, "-", CategoryDeliveryWork.fields.id]),
 ]);
 /** The private operational projection exposes only a validated locator and bounded timing metadata. */
 export const ProactivityWorkObservation = Schema.Struct({

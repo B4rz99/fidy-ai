@@ -1,4 +1,4 @@
-import { Currency, currencyMetadata } from "@fidy/server/client";
+import { Currency, currencyMetadata } from "@fidy/server/money";
 import { BigDecimal, Schema } from "effect";
 
 const ExactDecimal = Schema.NonEmptyString.pipe(Schema.decodeTo(Schema.BigDecimalFromString));
@@ -79,15 +79,19 @@ const currencyAmount = ({
           maximumDigits: digits,
         }).format(remainder < 0n ? -remainder : remainder);
   // Preserve negative zero's Locale sign placement when rounding a negative amount to zero.
-  return formatter
-    .formatToParts(whole === 0n && BigDecimal.isNegative(decimal) ? -0 : whole)
+  const parts = formatter.formatToParts(
+    whole === 0n && BigDecimal.isNegative(decimal) ? -0 : whole
+  );
+  const formatted = parts
     .map((part) => {
+      if (currencyDisplay === "code" && part.type === "currency") return "";
       if (part.type === "fraction") return fraction;
       return currencyDisplay === "code" && part.type === "literal"
-        ? part.value.replaceAll("\u00a0", " ")
+        ? part.value.replaceAll(/\s/gu, "")
         : part.value;
     })
     .join("");
+  return currencyDisplay === "code" ? `${currency} ${formatted}` : formatted;
 };
 
 type MoneyOptions = Readonly<{
@@ -115,7 +119,7 @@ export const formatMoney = ({ locale, money }: MoneyOptions): string =>
     compact: false,
   });
 
-/** Unambiguous Money for surfaces that mix currencies with a shared symbol. */
+/** Currency code followed by the signed value, without an ambiguous currency symbol. */
 export const formatMoneyWithCode = ({ locale, money }: MoneyOptions): string =>
   currencyAmount({
     amount: money.amount,

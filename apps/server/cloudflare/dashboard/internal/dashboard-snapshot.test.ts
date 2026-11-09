@@ -199,6 +199,7 @@ it.each([
           vi.setSystemTime(after);
           const facts = Option.getOrThrow(
             yield* loadDashboardFacts({
+              finalization: Option.none(),
               db,
               userId,
               initial,
@@ -253,9 +254,9 @@ it.each(["context", "revision", "consent"] as const)(
               return <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
                 Effect.runPromiseWith(services)(
                   Effect.gen(function* () {
+                    const attempt = ++batches;
                     const result = yield* Effect.tryPromise(() => target.batch<Row>(statements));
-                    batches++;
-                    if (batches === 1) {
+                    if (attempt === 1) {
                       if (change === "context") {
                         yield* Effect.tryPromise(() =>
                           db
@@ -297,6 +298,7 @@ it.each(["context", "revision", "consent"] as const)(
         expect(
           Option.isNone(
             yield* loadDashboardFacts({
+              finalization: Option.none(),
               db: changing,
               userId,
               initial,
@@ -320,6 +322,7 @@ it("refuses changed context before releasing even a default-sized financial snap
       expect(
         Option.isNone(
           yield* loadDashboardFacts({
+            finalization: Option.none(),
             db,
             userId,
             initial,
@@ -363,6 +366,7 @@ it("withholds the entire financial snapshot for malformed inherited cap precisio
       expect(
         Option.isNone(
           yield* loadDashboardFacts({
+            finalization: Option.none(),
             db,
             userId,
             initial,
@@ -409,6 +413,7 @@ it("retains native Budget capacity enforcement and reads the complete maximum se
       yield* Effect.tryPromise(() => db.batch(statements.slice(0, 128)));
       const facts = Option.getOrThrow(
         yield* loadDashboardFacts({
+          finalization: Option.none(),
           db,
           userId,
           initial,

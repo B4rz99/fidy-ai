@@ -50,7 +50,7 @@ export {
   ConnectionContinuationReview,
 } from "~/shell/connections/contract";
 export { ResourceLimited } from "~/shell/public-http/contract";
-export { TelemetryTraceId } from "~/shell/observability/contract";
+export { TelemetryTraceId } from "~/shell/observability/trace/contract";
 export {
   ActivePATList,
   ActivePATMetadata,

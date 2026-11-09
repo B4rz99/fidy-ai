@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { DashboardCatalogEntry, WidgetId } from "@/transport/client";
+import { DashboardCatalogEntry, WidgetId } from "@/transport/dashboard-contract";
 
 export const DashboardDragSourceData = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("widget"), widgetId: WidgetId, label: Schema.String }),

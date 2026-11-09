@@ -2,6 +2,7 @@ import { Schema, Struct } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import {
   CreateTransactionInput,
+  TransactionInspection as FinancialInspection,
   RestoredTransactionPair,
   Transaction,
   TransactionId,
@@ -11,7 +12,7 @@ import {
   TransactionSearchQuery,
   UpdateTransactionInput,
 } from "~/core/transactions/contract";
-import { SourceAttestation } from "~/core/source-attestation/contract";
+import { SourceAttestation, SourceAttestationKind } from "~/core/source-attestation/contract";
 import {
   NotFound,
   OperationResponse,
@@ -20,6 +21,22 @@ import {
   createdStatus,
 } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
+
+const CaptureSource = Schema.Struct({
+  transactionId: TransactionId,
+  kinds: Schema.Array(SourceAttestationKind).check(
+    Schema.isMaxLength(SourceAttestation.members.length)
+  ),
+});
+/** Adds bounded capture kinds without exposing retained source material. */
+export const TransactionInspection = FinancialInspection.mapFields(
+  (fields) => ({
+    ...fields,
+    sources: Schema.Array(CaptureSource).check(Schema.isMaxLength(2)),
+  }),
+  { unsafePreserveChecks: true }
+).annotate({ identifier: "TransactionInspection" });
+export type TransactionInspection = typeof TransactionInspection.Type;
 
 const read = operationPolicy({
   access: userOwnedAgentScoped("read"),
@@ -43,6 +60,26 @@ const destructiveWrite = operationPolicy({
 const TransactionQueryParameters = TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey));
 const UpdateTransactionParams = Schema.Struct({ id: TransactionId });
 
+/** Resource bound for one revision-checked group correction, independent of UI selection. */
+export const maximumCorrectionRecords = 4096;
+export const UpdateTransactionsInput = Schema.Struct({
+  transactions: Schema.NonEmptyArray(
+    Schema.Struct({
+      id: TransactionId,
+      expectedRevision: UpdateTransactionInput.fields.expectedRevision,
+    })
+  ).check(
+    Schema.isMaxLength(maximumCorrectionRecords),
+    Schema.makeFilter(
+      (records) => new Set(records.map((record) => record.id)).size === records.length
+    )
+  ),
+  changes: UpdateTransactionInput.fields.changes,
+}).annotate({ identifier: "UpdateTransactionsInput" });
+export const UpdateTransactionsResult = Schema.Struct({
+  updated: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: maximumCorrectionRecords })),
+});
+
 /** Successful create response shared by canonical consumers that present the stored Transaction. */
 export const CreateTransactionResponse = OperationResponse(Transaction);
 
@@ -53,6 +90,18 @@ export const CreateTransactionResponse = OperationResponse(Transaction);
 export const TransactionListResponse = OperationResponse(Schema.Array(Transaction));
 
 export const TransactionsGroup = HttpApiGroup.make("transactions")
+  .add(
+    HttpApiEndpoint.post("updateTransactions", "/transactions/corrections", {
+      payload: UpdateTransactionsInput,
+      success: OperationResponse(UpdateTransactionsResult),
+      error: [NotFound, ValidationFailed, ResourceLimited],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Apply the same supplied corrections to an explicit selection of owned Transactions in one all-or-nothing save. Supply every selected id and its observed revision; missing, foreign, deleted, duplicate or stale selections never partially change history. Omitted fields retain each Transaction's existing value. SourceAttestations remain unchanged."
+      )
+      .annotateMerge(destructiveWrite)
+  )
   .add(
     HttpApiEndpoint.post("createTransaction", "/transactions", {
       payload: CreateTransactionInput,
@@ -92,12 +141,12 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
   .add(
     HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
       params: Schema.Struct({ id: TransactionId }),
-      success: OperationResponse(TransactionPresentation),
+      success: OperationResponse(TransactionInspection),
       error: [NotFound, ResourceLimited],
     })
       .annotate(
         OpenApi.Description,
-        "Fetch one owned Transaction by id. Independent records return directly; either member of a linked pair succeeds and explains the earliest-created visible Transaction. Unknown, deleted, and another user's ids all answer not_found."
+        "Fetch one owned Transaction by id. Independent records return directly; either member of a linked pair succeeds and explains the earliest-created visible Transaction. The reconciliation field exposes both retained originals for review before unlinking. Unknown, deleted, and another user's ids all answer not_found."
       )
       .annotateMerge(read)
   )

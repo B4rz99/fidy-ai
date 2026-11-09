@@ -27,6 +27,7 @@ import {
   isPATCaller,
   liveTransactionAuthority,
   liveTransactionCredential,
+  maximumTransactionGroupInputBytes,
   maximumTransactionInputBytes,
   refusedCredentialResponse,
   rejectBatchEnvelope,
@@ -425,7 +426,10 @@ const oversizedChild = (
   index: number,
   operation: CanonicalOperationId
 ): Option.Option<Extract<CallStep, { _tag: "Response" }>> =>
-  childInputBytes(call) > maximumChildInputBytes
+  childInputBytes(call) >
+  (operation === "transactions.updateTransactions"
+    ? maximumTransactionGroupInputBytes
+    : maximumChildInputBytes)
     ? Option.some({
         _tag: "Response",
         response: batchRejection({

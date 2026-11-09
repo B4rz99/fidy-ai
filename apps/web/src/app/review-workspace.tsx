@@ -5,7 +5,6 @@ import { useMatch, useRouterState } from "@tanstack/react-router";
 import { Option } from "effect";
 import { useSession } from "@/session/session-context";
 import { type JSX, Suspense, useState } from "react";
-import { DestinationPreload } from "./destination-preload";
 
 /** Keep the visited inbox in its authentication lifetime, including its evidence expiry timers. */
 export const RetainedReviewWorkspace = (): JSX.Element => {
@@ -46,7 +45,7 @@ const VisitedReviewWorkspace = (): JSX.Element => {
           filter={current.value.status ?? "pending"}
           page={current.value.offset ?? 0}
         >
-          <DestinationPreload />
+          {null}
         </ReviewWorkspace>
       </Suspense>
     </div>

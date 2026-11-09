@@ -1,8 +1,11 @@
+import { lazyRouteComponent } from "@tanstack/react-router";
 import { formatMoneyWithCode } from "@/transport/money";
+import { type CaptureHistoryVersion, ManualCaptureContext } from "./manual-capture-context";
 import { TransactionPeriodControls } from "./period-controls";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { Toaster, toast } from "sonner";
-import { use, useState } from "react";
+import { Suspense, use, useState } from "react";
+import { PendingRead } from "@/ui/components/pending-read";
 import type { TransactionCorrections } from "./corrections";
 import { TransactionCorrectionContext } from "./correction-context";
 import type { JSX, ReactNode, RefCallback } from "react";
@@ -11,6 +14,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { FilterHorizontalIcon } from "@hugeicons/core-free-icons";
 import { Array, DateTime, Option } from "effect";
 import { Button } from "@/ui/components/button";
+import { SelectionScopeDialog } from "@/ui/components/selection-scope-dialog";
+import { SelectionSummary } from "@/ui/components/selection-summary";
 import { Input } from "@/ui/components/input";
 import { CalendarField } from "@/ui/components/calendar-field";
 import { Label } from "@/ui/components/label";
@@ -18,14 +23,17 @@ import { CategoryVisual } from "@/ui/components/category-visual";
 import { TransactionContextPanel, TransactionSurface } from "@/ui/components/transactions";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { TransactionDateFilter } from "./date-filter";
-import { type FidyClient, maximumAtomicBatchCalls } from "@/transport/client";
-import { BulkTransactionCorrection } from "./bulk-correction";
-import { TransactionDetail } from "./detail";
+import { type FidyClient } from "@/transport/client";
 import { TransactionSummary } from "./summary";
+import {
+  emptyTransactionFilters,
+  matchesTransactionFilters,
+  transactionSearchLimit,
+  useTransactionFilters,
+} from "./view-state";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
-import { TransactionCapture } from "./capture";
-import type { TransactionPanel } from "./panel-state";
+import { type TransactionPanel, reconciliationFinished, reconciliationLocked } from "./panel-state";
 import type { HistoryState } from "./history";
 import {
   type Category,
@@ -35,8 +43,20 @@ import {
   presentTransactionRows,
 } from "./presentation";
 
+const BulkTransactionCorrection = lazyRouteComponent(
+  () => import("./bulk-correction"),
+  "BulkTransactionCorrection"
+);
+const TransactionDetail = lazyRouteComponent(() => import("./detail"), "TransactionDetail");
+const ManualCapturePanel = lazyRouteComponent(
+  () => import("./manual-capture-panel"),
+  "ManualCapturePanel"
+);
+
 type WorkspaceProps = Readonly<{
+  generation: number;
   locate: Option.Option<string>;
+  captureHistoryVersion: Option.Option<CaptureHistoryVersion>;
   apiClient: FidyClient;
   categories: ReadonlyArray<Category>;
   currentUser: Pick<CurrentUser, "locale" | "timeZone">;
@@ -63,7 +83,7 @@ type WorkspaceFilters = Readonly<{
   categoryId: string;
   date: string;
 }>;
-const emptyLocalFilters = { search: "", direction: "all", categoryId: "all" };
+const emptyLocalFilters = emptyTransactionFilters;
 const emptyFilters: WorkspaceFilters = { ...emptyLocalFilters, date: "" };
 const hasFilters = (filters: WorkspaceFilters): boolean =>
   filters.search.trim() !== "" ||
@@ -71,25 +91,6 @@ const hasFilters = (filters: WorkspaceFilters): boolean =>
   filters.categoryId !== "all" ||
   filters.date !== "";
 type FilterTool = "category";
-const matchesFilters = (
-  transaction: Transaction,
-  filters: WorkspaceFilters,
-  timeZone: string
-): boolean => {
-  const text =
-    `${Option.getOrElse(transaction.counterparty, () => "")} ${Option.getOrElse(transaction.notes, () => "")}`.toLocaleLowerCase(
-      "es-CO"
-    );
-  return (
-    text.includes(filters.search.trim().toLocaleLowerCase("es-CO")) &&
-    (filters.direction === "all" || transaction.direction === filters.direction) &&
-    (filters.categoryId === "all" || transaction.categoryId === filters.categoryId) &&
-    (filters.date === "" ||
-      DateTime.formatIsoDate(
-        DateTime.setZone(transaction.occurredAt, DateTime.zoneMakeNamedUnsafe(timeZone))
-      ) === filters.date)
-  );
-};
 const CategoryFilter = ({
   categories,
   value,
@@ -156,6 +157,9 @@ const panelLocked = (panel: TransactionPanel): boolean => {
       return panel.status === "saving";
     case "Detail":
       if (panel.mode._tag === "Deleting") return panel.mode.status !== "idle";
+      if (panel.mode._tag === "Reconciling") {
+        return reconciliationLocked(panel.mode);
+      }
       return false;
     case "Summary":
       return false;
@@ -167,55 +171,40 @@ type PanelProps = WorkspaceProps &
     onPanel: (panel: TransactionPanel) => void;
     renderPanel: (content: JSX.Element) => JSX.Element;
   }>;
-const CapturePanel = ({
-  panel,
-  onPanel,
-  renderPanel,
-  ...props
-}: PanelProps &
-  Readonly<{
-    panel: Extract<TransactionPanel, { _tag: "Capture" }>;
-  }>): JSX.Element => (
-  <TransactionCapture
-    currency={Option.none()}
-    initial={{}}
-    direction={Option.none()}
-    disabled={false}
-    categories={props.categories}
-    onCancel={Option.some(() => onPanel({ _tag: "Summary" }))}
-    renderForm={(form) =>
-      renderPanel(
-        <section className="flex flex-col gap-6">
-          <header className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Registrar transacción</h2>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={panel.status === "saving"}
-              onClick={() => onPanel({ _tag: "Summary" })}
-              aria-label="Cerrar registro"
-            >
-              ×
-            </Button>
-          </header>
-          {form}
-        </section>
-      )
-    }
-    apiClient={props.apiClient}
-    timeZone={props.currentUser.timeZone}
-    status={panel.status}
-    onStatus={(status) => onPanel({ _tag: "Capture", status })}
-    onCheckHistory={props.onRefresh}
-    onCreated={(transaction) => {
-      toast.success("Transacción registrada", {
-        description: `${formatMoneyWithCode({ money: transaction.money, locale: props.currentUser.locale })} · ${Option.getOrElse(transaction.counterparty, () => "Contraparte no identificada")} · ${formatOccurrence({ locale: props.currentUser.locale, timeZone: props.currentUser.timeZone, occurredAt: transaction.occurredAt })}`,
-      });
-      onPanel({ _tag: "Summary" });
-      props.onRefresh();
-    }}
-  />
-);
+const CapturePanel = ({ onPanel, renderPanel, ...props }: PanelProps): JSX.Element => {
+  const corrections = use(TransactionCorrectionContext);
+  return renderPanel(
+    <ManualCapturePanel
+      apiClient={props.apiClient}
+      categories={props.categories}
+      currentUser={props.currentUser}
+      version={Option.getOrElse(props.captureHistoryVersion, () => ({ month: "", generation: 0 }))}
+      editable={props.editable}
+      waiting={Option.exists(corrections, (owner) => owner.status === "recovering")}
+      onClose={() => onPanel({ _tag: "Summary" })}
+      onRefresh={props.onRefresh}
+      onCreated={(transaction) => {
+        toast.success("Transacción registrada", {
+          description: `${formatMoneyWithCode({ money: transaction.money, locale: props.currentUser.locale })} · ${Option.getOrElse(transaction.counterparty, () => "Contraparte no identificada")} · ${formatOccurrence({ locale: props.currentUser.locale, timeZone: props.currentUser.timeZone, occurredAt: transaction.occurredAt })}`,
+        });
+      }}
+    />
+  );
+};
+const closeTransactionPanel = (
+  panel: TransactionPanel,
+  onPanel: (panel: TransactionPanel) => void,
+  onRefresh: () => void
+): void => {
+  onPanel({ _tag: "Summary" });
+  if (
+    panel._tag === "Detail" &&
+    panel.mode._tag === "Reconciling" &&
+    reconciliationFinished(panel.mode)
+  ) {
+    onRefresh();
+  }
+};
 const DetailPanel = ({
   panel,
   onPanel,
@@ -225,10 +214,11 @@ const DetailPanel = ({
   Readonly<{
     panel: Extract<TransactionPanel, { _tag: "Detail" }>;
   }>): JSX.Element => {
+  const corrections = use(TransactionCorrectionContext);
   const transaction = Option.fromNullishOr(
     props.transactions.find((record) => record.id === panel.id)
   );
-  const close = (): void => onPanel({ _tag: "Summary" });
+  const close = (): void => closeTransactionPanel(panel, onPanel, props.onRefresh);
   if (Option.isNone(transaction)) {
     return renderPanel(
       <div className="flex flex-col gap-3">
@@ -249,6 +239,7 @@ const DetailPanel = ({
       locale={props.currentUser.locale}
       timeZone={props.currentUser.timeZone}
       editable={props.editable}
+      inspectable={props.readOnly !== true}
       mode={panel.mode}
       onMode={(mode) => onPanel({ ...panel, mode })}
       onClose={close}
@@ -256,7 +247,10 @@ const DetailPanel = ({
       onDeleted={() => {
         toast.success("Transacción eliminada");
         close();
-        props.onRefresh();
+        Option.match(corrections, {
+          onNone: props.onRefresh,
+          onSome: (owner) => owner.refreshAfterMutation(),
+        });
       }}
     />
   );
@@ -300,10 +294,7 @@ const BulkPanel = (
     return props.renderPanel(
       <section aria-label="Selección de transacciones" className="flex flex-col gap-5">
         <h2 className="text-xl font-semibold">Editar varias transacciones</h2>
-        <p>
-          Selecciona las transacciones que quieres corregir. Puedes elegir hasta{" "}
-          {maximumAtomicBatchCalls}.
-        </p>
+        <p>Selecciona las transacciones que quieres corregir.</p>
         <p aria-live="polite">{selected.length} seleccionadas</p>
         <SelectedTransactions selected={selected} categories={props.categories} />
         <Button
@@ -321,7 +312,10 @@ const BulkPanel = (
   return (
     <BulkTransactionCorrection
       renderForm={props.renderPanel}
-      transactions={panel.transactions}
+      transactions={Array.map(
+        panel.transactions,
+        (selected) => props.transactions.find((record) => record.id === selected.id) ?? selected
+      )}
       categories={props.categories}
       timeZone={props.currentUser.timeZone}
       onCancel={close}
@@ -340,9 +334,27 @@ const scopeLabel = (props: WorkspaceProps): string => {
   return props.readOnly ? "en el historial guardado" : `en ${props.period.monthLabel}`;
 };
 const WorkspacePanel = (props: PanelProps): JSX.Element => {
-  if (props.panel._tag === "Bulk") return <BulkPanel {...props} panel={props.panel} />;
-  if (props.panel._tag === "Capture") return <CapturePanel {...props} panel={props.panel} />;
-  if (props.panel._tag === "Detail") return <DetailPanel {...props} panel={props.panel} />;
+  if (props.panel._tag === "Bulk") {
+    return (
+      <Suspense fallback={<PendingRead label="Cargando edición" />}>
+        <BulkPanel {...props} panel={props.panel} />
+      </Suspense>
+    );
+  }
+  if (props.panel._tag === "Capture") {
+    return (
+      <Suspense fallback={<PendingRead label="Cargando formulario" />}>
+        <CapturePanel {...props} />
+      </Suspense>
+    );
+  }
+  if (props.panel._tag === "Detail") {
+    return (
+      <Suspense fallback={<PendingRead label="Cargando detalle" />}>
+        <DetailPanel {...props} panel={props.panel} />
+      </Suspense>
+    );
+  }
   return props.renderPanel(
     <TransactionSummary
       scope={scopeLabel(props)}
@@ -454,6 +466,7 @@ const TransactionFilters = ({
       <Input
         type="search"
         aria-label="Buscar transacciones"
+        maxLength={transactionSearchLimit}
         placeholder="Buscar transacciones"
         value={filters.search}
         disabled={disabled}
@@ -492,17 +505,84 @@ const bulkIds = (panel: TransactionPanel): ReadonlyArray<string> => {
   if (panel.stage === "selecting") return panel.ids;
   return panel.transactions.map((record) => record.id);
 };
-const bulkSelection = (
-  panel: TransactionPanel,
-  onPanel: (panel: TransactionPanel) => void,
-  transactions: ReadonlyArray<Transaction>
-): React.ComponentProps<typeof TransactionLedger>["selection"] => {
+const selectedTransactionItems = (
+  props: WorkspaceProps,
+  selected: ReadonlySet<string>,
+  visible: ReadonlyArray<Transaction>
+): React.ComponentProps<typeof SelectionSummary>["items"] => {
+  const visibleIds = new Set<string>(visible.map((record) => record.id));
+  return presentTransactionRows({
+    transactions: props.transactions.filter((record) => selected.has(record.id)),
+    categories: props.categories,
+    locale: props.currentUser.locale,
+    timeZone: props.currentUser.timeZone,
+    counterpartyFallback: "Contraparte no identificada",
+  }).map((record) => ({
+    id: record.id,
+    label: record.counterpartyLabel,
+    description: `${record.transactionTypeLabel} · ${record.moneyText} · ${record.occurredOnText}`,
+    hidden: !visibleIds.has(record.id),
+  }));
+};
+type BulkSelectionProps = Readonly<{
+  panel: TransactionPanel;
+  onPanel: (panel: TransactionPanel) => void;
+  props: WorkspaceProps;
+  visible: ReadonlyArray<Transaction>;
+  disabled: boolean;
+}>;
+const TransactionSelectionSummary = ({
+  panel,
+  onPanel,
+  props,
+  visible,
+  disabled,
+}: BulkSelectionProps): JSX.Element => {
+  const ids = bulkIds(panel);
+  const selected = new Set(ids);
+  return (
+    <SelectionSummary
+      showClear={false}
+      clearFocusId="transaction-type-filter"
+      items={selectedTransactionItems(props, selected, visible)}
+      label={`${ids.length} seleccionadas`}
+      disabled={disabled || panel._tag !== "Bulk" || panel.stage !== "selecting"}
+      onClear={() => onPanel({ _tag: "Bulk", ids: [], stage: "selecting" })}
+      onRemove={(id) => {
+        if (panel._tag === "Bulk" && panel.stage === "selecting") {
+          onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
+        }
+      }}
+    />
+  );
+};
+const bulkSelection = ({
+  panel,
+  onPanel,
+  props,
+  visible,
+  disabled,
+}: BulkSelectionProps): React.ComponentProps<typeof TransactionLedger>["selection"] => {
+  const transactions = props.transactions;
   const ids = bulkIds(panel);
   const selected = new Set(ids);
   return {
+    summary: <TransactionSelectionSummary {...{ panel, onPanel, props, visible, disabled }} />,
     active: panel._tag === "Bulk",
     ids,
-    limit: maximumAtomicBatchCalls,
+    allSelected: visible.every((record) => selected.has(record.id)),
+    onSelectAll: () => {
+      if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
+      onPanel({
+        ...panel,
+        ids: [...new Set([...panel.ids, ...visible.map((record) => record.id)])],
+      });
+    },
+    onClear: () => {
+      if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
+      document.getElementById("transaction-type-filter")?.focus();
+      onPanel({ ...panel, ids: [] });
+    },
     onContinue: () => {
       if (panel._tag === "Bulk" && panel.stage === "selecting") {
         beginBulkEditing(
@@ -515,7 +595,7 @@ const bulkSelection = (
       if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
       if (selected.has(id)) {
         onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
-      } else if (panel.ids.length < maximumAtomicBatchCalls) {
+      } else {
         onPanel({ ...panel, ids: [...panel.ids, id] });
       }
     },
@@ -552,15 +632,16 @@ const renderCategoryCell = (
 const ledgerDisabled = (panel: TransactionPanel): boolean =>
   panelLocked(panel) ||
   (panelEditing(panel) && panel._tag !== "Detail") ||
-  (panel._tag === "Detail" && panel.mode._tag === "Deleting");
+  (panel._tag === "Detail" &&
+    (panel.mode._tag === "Deleting" || panel.mode._tag === "Reconciling"));
 const WorkspaceContext = ({
   panel,
-  onPanel,
+  onClose,
   children,
   busy,
 }: Readonly<{
   panel: TransactionPanel;
-  onPanel: (panel: TransactionPanel) => void;
+  onClose: () => void;
   children: JSX.Element;
   busy: boolean;
 }>): JSX.Element => (
@@ -568,7 +649,7 @@ const WorkspaceContext = ({
     active={panel._tag !== "Summary" && !(panel._tag === "Bulk" && panel.stage === "selecting")}
     identity={panel._tag === "Detail" ? `${panel.id}:${panel.mode._tag}` : panel._tag}
     locked={panelLocked(panel) || busy}
-    onClose={() => onPanel({ _tag: "Summary" })}
+    onClose={onClose}
     title={panelTitle(panel)}
   >
     {children}
@@ -595,8 +676,15 @@ const refreshLocked = (
     onSome: (owner) =>
       owner.status === "saving" ||
       owner.status === "recovering" ||
-      (panelEditing(panel) && owner.status === "idle"),
+      owner.status === "refreshing" ||
+      (panelEditing(panel) && !owner.locked),
   });
+const correctionPending = (corrections: Option.Option<TransactionCorrections>): boolean =>
+  Option.exists(
+    corrections,
+    (owner) =>
+      owner.status === "saving" || owner.status === "recovering" || owner.status === "refreshing"
+  );
 const WorkspaceContent = ({
   props,
   panel,
@@ -609,11 +697,9 @@ const WorkspaceContent = ({
   onTool,
 }: WorkspaceContentProps): JSX.Element => {
   const corrections = use(TransactionCorrectionContext);
-  const correctionBusy = Option.exists(
-    corrections,
-    (owner) => owner.status === "saving" || owner.status === "recovering"
-  );
+  const correctionBusy = correctionPending(corrections);
   const locked = panelLocked(panel) || correctionBusy;
+  const closePanel = (): void => closeTransactionPanel(panel, onPanel, props.onRefresh);
   return (
     <div data-transaction-slot="transaction-columns">
       <div data-transaction-slot="transaction-records">
@@ -633,7 +719,7 @@ const WorkspaceContent = ({
           readOnly={props.readOnly === true}
           canEdit={props.editable}
           onEdit={() => onPanel(selectionPanel(panel))}
-          selection={bulkSelection(panel, onPanel, props.transactions)}
+          selection={bulkSelection({ panel, onPanel, props, visible, disabled: locked })}
           locate={props.locate}
           rows={rows}
           locale={props.currentUser.locale}
@@ -644,7 +730,7 @@ const WorkspaceContent = ({
         />
         <ContinuationControl {...props} editing={panelEditing(panel)} />
       </div>
-      <WorkspaceContext panel={panel} onPanel={onPanel} busy={correctionBusy}>
+      <WorkspaceContext panel={panel} onClose={closePanel} busy={correctionBusy}>
         <WorkspacePanel
           {...props}
           panel={panel}
@@ -701,11 +787,7 @@ const ContinuationControl = (
         </p>
       ) : null}
       {props.continuation === "failure" ? (
-        <Button
-          variant="outline"
-          disabled={props.editing || (!props.editable && props.readOnly !== true)}
-          onClick={props.onRetryMore}
-        >
+        <Button variant="outline" disabled={props.editing} onClick={props.onRetryMore}>
           {continuationLabels[props.continuation]}
         </Button>
       ) : (
@@ -732,10 +814,115 @@ const WorkspacePeriod = ({
     </p>
   </>
 );
-export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
+const CaptureNotice = ({
+  panel,
+  onPanel,
+}: Pick<WorkspaceContentProps, "panel" | "onPanel">): JSX.Element => {
+  const capture = use(ManualCaptureContext);
+  if (
+    panel._tag === "Capture" ||
+    !Option.exists(capture, (owner) => Option.isSome(owner.attempt))
+  ) {
+    return <></>;
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-3 px-4 py-2">
+      <p>Hay un borrador por revisar. El guardado original sigue sin confirmar.</p>
+      <Button variant="outline" onClick={() => onPanel({ _tag: "Capture", status: "uncertain" })}>
+        Ver borrador
+      </Button>
+    </div>
+  );
+};
+const capturePanelStatus = (
+  panel: TransactionPanel,
+  capture: React.ContextType<typeof ManualCaptureContext>
+): TransactionPanel =>
+  panel._tag === "Capture" && Option.isSome(capture)
+    ? { _tag: "Capture", status: capture.value.status }
+    : panel;
+const useWorkspacePanel = (
+  generation: number
+): Readonly<{ panel: TransactionPanel; onPanel: (panel: TransactionPanel) => void }> => {
+  const capture = use(ManualCaptureContext);
+  const defaultPanel: TransactionPanel = Option.exists(
+    capture,
+    (owner) => owner.status === "uncertain"
+  )
+    ? { _tag: "Capture", status: "uncertain" }
+    : { _tag: "Summary" };
+  const [interaction, setInteraction] = useState<
+    Readonly<{ generation: number; panel: TransactionPanel }>
+  >({ generation, panel: defaultPanel });
+  if (interaction.generation !== generation) {
+    setInteraction({ generation, panel: defaultPanel });
+  }
+  const panel: TransactionPanel =
+    interaction.generation === generation ? interaction.panel : defaultPanel;
+  const onPanel = (next: TransactionPanel): void => setInteraction({ generation, panel: next });
+  return { panel: capturePanelStatus(panel, capture), onPanel };
+};
+type PeriodChoice = Readonly<{ kind: "date" | "month"; value: string }>;
+const usePeriodSelection = (
+  source: WorkspaceProps,
+  panel: TransactionPanel,
+  onPanel: (panel: TransactionPanel) => void
+): Readonly<{ props: WorkspaceProps; confirmation: JSX.Element }> => {
+  const [pending, setPending] = useState<Option.Option<PeriodChoice>>(Option.none);
+  const count = bulkIds(panel).length;
+  const apply = (next: PeriodChoice): void => {
+    if (next.kind === "date") source.dateFilter.onChange(next.value);
+    else if (Option.isSome(source.monthFilter)) source.monthFilter.value.onChange(next.value);
+  };
+  const request = (next: PeriodChoice): void => {
+    const replacesPeriod = Option.exists(source.monthFilter, ({ value }) =>
+      next.kind === "month"
+        ? next.value !== value
+        : next.value !== "" && !next.value.startsWith(`${value}-`)
+    );
+    const replacesDestination =
+      next.kind === "date" &&
+      Option.isSome(source.locate) &&
+      next.value !== source.dateFilter.value;
+    if (count > 0 && (replacesPeriod || replacesDestination)) setPending(Option.some(next));
+    else apply(next);
+  };
+  return {
+    props: {
+      ...source,
+      dateFilter: { ...source.dateFilter, onChange: (value) => request({ kind: "date", value }) },
+      monthFilter: Option.map(source.monthFilter, (month) => ({
+        ...month,
+        onChange: (value: string) => request({ kind: "month", value }),
+      })),
+    },
+    confirmation: (
+      <SelectionScopeDialog
+        returnFocusId="transaction-type-filter"
+        open={Option.isSome(pending)}
+        count={count}
+        onKeep={() => setPending(Option.none())}
+        onDiscard={() => {
+          if (Option.isNone(pending)) return;
+          onPanel({ _tag: "Summary" });
+          apply(pending.value);
+          setPending(Option.none());
+        }}
+      />
+    ),
+  };
+};
+export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
-  const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
-  const [localFilters, setFilters] = useState(emptyLocalFilters);
+  const { panel: activePanel, onPanel } = useWorkspacePanel(source.generation);
+  const { props, confirmation } = usePeriodSelection(source, activePanel, onPanel);
+  const month = Option.getOrElse(
+    Option.map(props.monthFilter, (filter) => filter.value),
+    () => "history"
+  );
+  const { filters: localFilters, change: setFilters } = useTransactionFilters(
+    `${props.readOnly ? "privacy" : month}:${props.currentUser.timeZone}`
+  );
   const filters = {
     ...localFilters,
     date: props.dateFilter.value,
@@ -743,10 +930,9 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const onFilters = (next: WorkspaceFilters): void => {
     setFilters({ search: next.search, direction: next.direction, categoryId: next.categoryId });
     props.dateFilter.onChange(next.date);
-    if (panel._tag === "Bulk") onPanel({ _tag: "Summary" });
   };
   const visible = props.transactions.filter((transaction) =>
-    matchesFilters(transaction, filters, props.currentUser.timeZone)
+    matchesTransactionFilters({ transaction, filters, timeZone: props.currentUser.timeZone })
   );
   const rows = presentTransactionRows({
     transactions: visible,
@@ -755,11 +941,12 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
     timeZone: props.currentUser.timeZone,
     counterpartyFallback: "Contraparte no identificada",
   });
-  const editing = panelEditing(panel);
+  const editing = panelEditing(activePanel);
   return (
     <>
+      {confirmation}
       <Toaster position="bottom-right" richColors />
-      <TransactionSurface panelOpen={panelEditing(panel) || panel._tag === "Detail"}>
+      <TransactionSurface panelOpen={panelEditing(activePanel) || activePanel._tag === "Detail"}>
         <WorkspaceHeader
           disabled={editing || (!props.editable && !props.readOnly)}
           readOnly={props.readOnly}
@@ -767,12 +954,13 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
         />
         <WorkspacePeriod props={props} disabled={editing || (!props.editable && !props.readOnly)} />
         {props.queryNotice}
+        <CaptureNotice panel={activePanel} onPanel={onPanel} />
         <ContinuationNotice {...props} />
         <WorkspaceContent
           onTool={() => setTool(tool === "closed" ? "category" : "closed")}
           tool={tool}
           props={props}
-          panel={panel}
+          panel={activePanel}
           onPanel={onPanel}
           filters={filters}
           onFilters={onFilters}
@@ -783,3 +971,10 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
     </>
   );
 };
+
+TransactionWorkspace.preloadInteractions = (): Promise<void> =>
+  Promise.all([
+    BulkTransactionCorrection.preload?.(),
+    TransactionDetail.preload?.(),
+    ManualCapturePanel.preload?.(),
+  ]).then(() => undefined);

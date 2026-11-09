@@ -1,3 +1,4 @@
+import { dashboardTargetAcceptsKnownSource } from "./drag-presentation";
 import { Option } from "effect";
 import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
 import type { DashboardGesture } from "./editor-model";
@@ -20,7 +21,8 @@ export const dashboardTargetAcceptsSource = ({
 }: Readonly<{
   source: Option.Option<DashboardDragSource>;
   target: DashboardDropTarget;
-}>): boolean => Option.isSome(source) && !isOwnEdge(source.value, target);
+}>): boolean =>
+  Option.isSome(source) && dashboardTargetAcceptsKnownSource({ source: source.value, target });
 
 const existingWidgetGesture = (
   source: Extract<DashboardDragSource, { readonly kind: "widget" }>,

@@ -1,6 +1,10 @@
-import { DateTime, Option, Schema } from "effect";
+import { Option, Schema } from "effect";
 import { TranscriptText } from "../../../src/core/agent/contract";
-import { encodeMoneyAmount } from "../../../src/core/_shared/money";
+import {
+  formatWhatsAppCategory as categoryText,
+  formatWhatsAppLocalDate as localDateText,
+  formatWhatsAppMoney as moneyText,
+} from "../../../src/shell/channels/whatsapp/operations";
 import { CreateTransactionResponse } from "../../../src/shell/transactions/contract";
 
 const captured = Schema.toCodecJson(CreateTransactionResponse);
@@ -18,9 +22,9 @@ export const transactionReceipt = ({
   const result = Schema.decodeUnknownOption(captured)(output);
   if (Option.isNone(result)) return Option.none();
   const transaction = result.value.data;
-  return Option.map(DateTime.setZoneNamed(transaction.occurredAt, timeZone), (local) =>
+  return Option.map(localDateText({ date: transaction.occurredAt, timeZone }), (date) =>
     TranscriptText.make(
-      `Registré ${encodeMoneyAmount(transaction.money.amount)} ${transaction.money.currency} con fecha ${DateTime.formatIsoDate(local)}. Referencia: ${transaction.id}.`
+      `Registré ${transaction.direction === "inflow" ? "un ingreso" : "un gasto"} de ${moneyText(transaction.money)} en ${Option.getOrElse(categoryText(transaction.categoryId), () => "la categoría elegida")}, del ${date}.`
     )
   );
 };

@@ -24,7 +24,11 @@ import {
   fixtureWorker as coreWorker,
   makeFixtureWorker as makeCoreWorker,
 } from "../../apps/server/cloudflare/core-worker.test-fixture";
-import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
+import {
+  type ReleaseMetadata,
+  resolveDeploymentConfiguration,
+  resolveStateBackend,
+} from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
 import {
   SyntheticBindings,
@@ -330,6 +334,26 @@ describe("Core smoke adapter", () => {
 });
 
 describe("Deployment configuration", () => {
+  it("changes candidate version tags when retrying the same immutable release", () => {
+    const configuration = (releaseAttemptId: string): ReleaseMetadata =>
+      Result.getOrThrow(
+        resolveDeploymentConfiguration({
+          contractDigest,
+          development: false,
+          gitRevision,
+          releaseAttemptId,
+          stage: "production",
+        })
+      );
+    const first = configuration("42379674321-1");
+    const retry = configuration("42379674321-2");
+    const next = configuration("42379674322-1");
+    expect(first.versionTag).not.toBe(retry.versionTag);
+    expect(first.versionTag).not.toBe(next.versionTag);
+    expect(retry.gitRevision).toBe(first.gitRevision);
+    expect(retry.contractDigest).toBe(first.contractDigest);
+  });
+
   it("selects remote state only for the supported Production stage", () => {
     expect(resolveStateBackend({ development: true, stage: "dev-test" })).toBe("local");
     expect(resolveStateBackend({ development: false, stage: "production" })).toBe("cloudflare");
@@ -342,6 +366,7 @@ describe("Deployment configuration", () => {
       contractDigest: "",
       development: true,
       gitRevision: "",
+      releaseAttemptId: "",
       stage: "dev-test",
     });
 
@@ -350,6 +375,7 @@ describe("Deployment configuration", () => {
       expect(configuration.success).toEqual({
         contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
         gitRevision: "0000000000000000000000000000000000000000",
+        versionTag: "development",
       });
     }
   });
@@ -361,25 +387,52 @@ describe("Deployment configuration", () => {
     {
       contractDigest: "0000000000000000000000000000000000000000000000000000000000000000",
       gitRevision,
+      releaseAttemptId: "42379674321-1",
       stage: "production",
     },
   ])("rejects an unsupported or unidentifiable remote deployment", (input) => {
-    const configuration = resolveDeploymentConfiguration({ development: false, ...input });
+    const configuration = resolveDeploymentConfiguration({
+      development: false,
+      releaseAttemptId: "42379674321-1",
+      ...input,
+    });
 
     expect(Result.isFailure(configuration)).toBe(true);
   });
+
+  it.each(["", "0-1", "1-0", "1", "1-1/extra", "1-1000000", "1\n-1"])(
+    "rejects an invalid release attempt %j before remote deployment",
+    (releaseAttemptId) => {
+      expect(
+        Result.isFailure(
+          resolveDeploymentConfiguration({
+            contractDigest,
+            development: false,
+            gitRevision,
+            releaseAttemptId,
+            stage: "production",
+          })
+        )
+      ).toBe(true);
+    }
+  );
 
   it("accepts exact immutable Production metadata", () => {
     const configuration = resolveDeploymentConfiguration({
       contractDigest,
       development: false,
       gitRevision,
+      releaseAttemptId: "42379674321-1",
       stage: "production",
     });
 
     expect(Result.isSuccess(configuration)).toBe(true);
     if (Result.isSuccess(configuration)) {
-      expect(configuration.success).toEqual({ contractDigest, gitRevision });
+      expect(configuration.success).toEqual({
+        contractDigest,
+        gitRevision,
+        versionTag: "release-42379674321-1",
+      });
     }
   });
 });

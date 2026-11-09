@@ -1,3 +1,4 @@
+import { type HostedTurnConfirmation } from "~/shell/agent/contract";
 import {
   Data,
   type DateTime,
@@ -37,21 +38,34 @@ export const InsightTemplateConfiguration = Schema.Struct({
 });
 export type InsightTemplateConfiguration = typeof InsightTemplateConfiguration.Type;
 
+export const proactivityTemplateBody = "Fidy te avisa: {{1}} Más en Fidy.";
+
 /** Complete approved category messages use one positional parameter, never clipped financial facts. */
 export const ProactivityTemplateConfiguration = Schema.Struct({
   name: InsightTemplateConfiguration.fields.name,
   language: Schema.Literal("es"),
   approval: Schema.Literal("approved"),
-  body: Schema.Literal("Fidy: {{1}}"),
+  body: Schema.Literal(proactivityTemplateBody),
 });
-const maximumProactivityParameterLength = 1018;
+const maximumProactivityLength = 1024;
+const maximumProactivityParameterLength =
+  maximumProactivityLength - proactivityTemplateBody.replace("{{1}}", "").length;
+/** Meta rejects line breaks, tabs and five consecutive spaces even in approved text parameters. */
+export const ProactivityTemplateParameter = Schema.String.check(
+  Schema.isMaxLength(maximumProactivityParameterLength),
+  Schema.makeFilter((text) => !/[\r\n\t]| {5}/u.test(text))
+);
 /** Frozen template identity and complete visible body; a later configuration cannot re-render it. */
 export const PreparedProactivityTemplate = Schema.Struct({
   name: ProactivityTemplateConfiguration.fields.name,
   language: Schema.Literal("es"),
-  parameter: Schema.String.check(Schema.isMaxLength(maximumProactivityParameterLength)),
+  parameter: ProactivityTemplateParameter,
   text: TranscriptText,
-}).check(Schema.makeFilter((value) => value.text === `Fidy: ${value.parameter}`));
+}).check(
+  Schema.makeFilter(
+    (value) => value.text === proactivityTemplateBody.replace("{{1}}", () => value.parameter)
+  )
+);
 export type PreparedProactivityTemplate = typeof PreparedProactivityTemplate.Type;
 export type ProactivityTemplateSender = Readonly<{
   prepare: (
@@ -72,7 +86,7 @@ export const WeeklyQuestionTemplateConfiguration = Schema.Struct({
   name: InsightTemplateConfiguration.fields.name,
   language: Schema.Literal("es"),
   approval: Schema.Literal("approved"),
-  body: Schema.Literal("Fidy: {{1}}"),
+  body: Schema.Literal(proactivityTemplateBody),
 });
 export const WeeklyQuestionOffer = Schema.Struct({
   id: ConsentRecordId,
@@ -290,6 +304,7 @@ export type WhatsAppDelivery = {
     readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
     readonly destination: WhatsAppDestination;
     readonly text: TranscriptText;
+    readonly confirmation: Option.Option<typeof HostedTurnConfirmation.Type>;
     /** Opaque attempt correlation forwarded unchanged to lifecycle webhooks. */
     readonly opaqueCallbackData: Option.Option<
       DisclosureDeliveryCorrelationToken | HostedDeliveryCorrelationToken

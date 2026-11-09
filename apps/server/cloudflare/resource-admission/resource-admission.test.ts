@@ -193,6 +193,27 @@ const verifyPersistedRestart = Effect.gen(function* () {
 });
 
 describe("Cloudflare resource admission", () => {
+  it("returns only committed caller results in order without exposing admission internals", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => makeMiniflare());
+        const database = yield* fromTestPromise(() => prepareDatabase(runtime));
+        const authority = makeAuthority(database, [rollingPolicy("source:read:v1", "source")], {
+          read: () => epochMs(10_000),
+        });
+        const receipt = yield* admit(
+          authority,
+          { id: "read-receipt", charges: [charge("source:read:v1", "source:read")] },
+          [database.prepare("SELECT 42 AS first"), database.prepare("SELECT 7 AS second")]
+        );
+        expect(receipt.grantId).toBe("read-receipt");
+        expect(receipt.results.map((row) => row.results)).toEqual([
+          [{ first: 42 }],
+          [{ second: 7 }],
+        ]);
+      })
+    ));
+
   it(
     "admits only the burst limit across concurrent Worker instances",
     () =>

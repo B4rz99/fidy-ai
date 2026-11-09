@@ -141,6 +141,14 @@ export type RecurringDocument = Omit<
         Partial<Readonly<{ replacement: RecurringPlanInput }>>
     >;
   }>;
+/** Calculation facts covering the requested months and retained occurrence dates.
+ * This selection is not a complete editing ledger; publication retains its own document.
+ */
+export type RecurringSchedule = Pick<
+  RecurringDocument,
+  "plans" | "exceptions" | "fulfillments" | "excludedTransactionIds"
+>;
+
 export const RecurringEdit = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("create"),

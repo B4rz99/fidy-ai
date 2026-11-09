@@ -6,7 +6,7 @@ import { afterEach, expect, vi } from "vitest";
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { makeFidyClient } from "@/transport/client";
 import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
-import { transactionHistory } from "./history";
+import { type HistoryState, transactionHistory } from "./history";
 
 const firstId = "25000000-0000-4000-8000-000000000001";
 const secondId = "25000000-0000-4000-8000-000000000002";
@@ -34,7 +34,30 @@ afterEach(() => {
 const advance = Effect.fnUntraced(function* (milliseconds: number = 0) {
   yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(milliseconds));
 });
-const fixture = Effect.fnUntraced(function* () {
+const readFixturePage = (
+  records: ReadonlyArray<typeof initialRecord>,
+  paginated: boolean,
+  later: boolean
+): unknown => ({
+  data: paginated ? records.slice(later ? 1 : 0, later ? 2 : 1) : records,
+  next:
+    paginated && !later
+      ? [
+          {
+            tool: "transactions.listTransactions",
+            hint: "Continue browsing the next page of your FinancialRecord.",
+            args: {
+              query: {
+                from: "2026-10-01T00:00:00.000Z",
+                to: "2026-11-01T00:00:00.000Z",
+                cursor: `${initialRecord.occurredAt}|${initialRecord.createdAt}|${firstId}`,
+              },
+            },
+          },
+        ]
+      : [],
+});
+const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
   vi.useFakeTimers();
   const records = [record(firstId), record(secondId)];
   const sent: Array<{ path: string; body: string }> = [];
@@ -64,10 +87,13 @@ const fixture = Effect.fnUntraced(function* () {
       } else {
         yield* Effect.sleep(behavior.readDelay);
         if (behavior.failRead) status = 503;
-        data = {
-          data: path.endsWith("categories") ? [{ id: categoryId, label: "Restaurantes" }] : records,
-          next: [],
-        };
+        data = path.endsWith("categories")
+          ? { data: [{ id: categoryId, label: "Restaurantes" }], next: [] }
+          : readFixturePage(
+              records,
+              paginated,
+              request.urlParams.params.some(([key]) => key === "cursor")
+            );
       }
       return HttpClientResponse.fromWeb(
         request,
@@ -95,6 +121,7 @@ const fixture = Effect.fnUntraced(function* () {
     .query("categories", "listCategories", workspaceQueryRetention)
     .pipe(revalidateWorkspaceQuery);
   const history = transactionHistory({
+    initialPages: 1,
     apiClient: client,
     firstPage,
     period,
@@ -130,6 +157,8 @@ const fixture = Effect.fnUntraced(function* () {
     behavior,
     dispose,
     records,
+    history: (): HistoryState => registry.get(history.state),
+    more: (): void => registry.set(history.action, "more"),
     saved: (): number => saved,
   };
 });
@@ -155,6 +184,64 @@ it.effect("admits one revision-bound Correction synchronously and rereads after 
     ).toEqual({ expectedRevision: 1, changes: { counterparty: "Updated" } });
     expect(test.view().locked).toBe(false);
     expect(test.saved()).toBe(1);
+  })
+);
+
+it.effect("automatically rereads after a rejected Correction without replaying the write", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    test.behavior.write = "rejected";
+    test.behavior.readDelay = 50;
+    test.view().submit({
+      kind: "single",
+      origin: "editor",
+      transaction: test.transaction,
+      changes: { notes: "Nota sin guardar" },
+    });
+    yield* advance();
+    expect(test.view().locked).toBe(true);
+    expect(test.view().status).toBe("refreshing");
+    yield* advance(50);
+    expect(test.view().locked).toBe(false);
+    expect(test.view().status).toBe("recovered");
+    expect(test.sent).toHaveLength(1);
+    expect(test.saved()).toBe(0);
+    yield* advance(100);
+    expect(test.sent).toHaveLength(1);
+  })
+);
+
+it.effect("rejected recovery retains later history pages until their fresh reads complete", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(true);
+    test.more();
+    yield* advance();
+    const history = test.history().query;
+    if (history._tag !== "Ready") throw new Error("Missing history");
+    const later = history.value.data[1];
+    if (later === undefined) throw new Error("Missing later Transaction");
+    test.behavior.write = "rejected";
+    test.behavior.readDelay = 50;
+    test.view().submit({
+      kind: "single",
+      origin: "editor",
+      transaction: later,
+      changes: { notes: "Retained" },
+    });
+    yield* advance();
+    const pending = test.history().query;
+    expect(
+      pending._tag === "Ready" && pending.value.data.some((item) => item.id === secondId)
+    ).toBe(true);
+    yield* advance(50);
+    expect(test.view().locked).toBe(true);
+    yield* advance(50);
+    expect(test.view().locked).toBe(false);
+    const refreshed = test.history().query;
+    expect(
+      refreshed._tag === "Ready" && refreshed.value.data.some((item) => item.id === secondId)
+    ).toBe(true);
+    expect(test.sent).toHaveLength(1);
   })
 );
 
@@ -211,7 +298,7 @@ it.effect(
         transactions: [test.transaction, test.transaction],
         changes: { counterparty: "Duplicate" },
       });
-      expect(test.view().status).toBe("rejected");
+      expect(test.view().status).toBe("refreshing");
       expect(test.sent).toHaveLength(0);
       test.view().recover();
       yield* advance();
@@ -221,7 +308,7 @@ it.effect(
         transaction: { ...test.transaction, revision: 0 },
         changes: { counterparty: "Stale" },
       });
-      expect(test.view().status).toBe("rejected");
+      expect(test.view().status).toBe("refreshing");
       expect(test.sent).toHaveLength(0);
       test.view().recover();
       yield* advance();
@@ -233,20 +320,15 @@ it.effect(
       });
       yield* advance();
       expect(test.sent).toHaveLength(1);
-      expect(test.sent[0]?.path).toBe("/operations/atomic-batch");
+      expect(test.sent[0]?.path).toBe("/transactions/corrections");
       expect(
         yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(test.sent[0]?.body ?? "")
       ).toMatchObject({
-        calls: [
-          {
-            operation: "transactions.updateTransaction",
-            input: { params: { id: firstId }, payload: { expectedRevision: 1 } },
-          },
-          {
-            operation: "transactions.updateTransaction",
-            input: { params: { id: secondId }, payload: { expectedRevision: 1 } },
-          },
+        transactions: [
+          { id: firstId, expectedRevision: 1 },
+          { id: secondId, expectedRevision: 1 },
         ],
+        changes: { counterparty: "Together" },
       });
       expect(test.view().status).toBe("uncertain");
     })
@@ -301,6 +383,7 @@ it.live("reading and disposing history does not initialize the correction transp
     });
     const categories = client.query("categories", "listCategories", workspaceQueryRetention);
     const history = transactionHistory({
+      initialPages: 1,
       apiClient: client,
       firstPage,
       period,

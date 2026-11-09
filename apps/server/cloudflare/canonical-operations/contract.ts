@@ -172,6 +172,19 @@ const PAT = {
 } as const;
 /** Live caller authority paired with the exact work admitted; this envelope is not a canonical mutation. */
 export const CanonicalWorkAdmission = Schema.Union([
+  Schema.TaggedStruct("WebSessionQueryWork", {
+    ...WebSession,
+    work: CanonicalWork.check(
+      Schema.makeFilter(
+        (work) =>
+          work._tag === "Query" &&
+          ["dashboard.getDashboardView", "recurringPlans.getRecurringWorkspace"].includes(
+            work.operation
+          )
+      )
+    ),
+    leaseId: Schema.String.check(Schema.isUUID()),
+  }),
   Schema.TaggedStruct("WebSessionWork", { ...WebSession, work: CanonicalWork }),
   Schema.TaggedStruct("PATWork", { ...PAT, work: CanonicalWork }),
 ]);

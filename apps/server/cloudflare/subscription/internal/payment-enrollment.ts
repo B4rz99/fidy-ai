@@ -2,7 +2,7 @@ import { preparePredicateAssertion } from "../../../src/shell/sql-assertions/ope
 import { verifiedEmailQuery } from "../../email-authentication/operations";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { paymentEnrollmentTransport } from "../../../src/shell/subscription/runtime";
-import { authenticateWebSession } from "../../web-session/operations";
+import { authenticateWebSession, prepareBrowserSessionLookup } from "../../web-session/operations";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { freshSessionQuery } from "../../../src/shell/web-session/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -283,6 +283,39 @@ const authority = (
         subject: { _tag: "User", userId: subject.value.userId },
         requirement: "active",
       }),
+    })
+      .first()
+      .then((row) => decodeRow(Session, row));
+  });
+
+const availabilityAuthority = (
+  request: Request,
+  db: D1Database,
+  current: number
+): Promise<Option.Option<typeof Session.Type>> =>
+  prepareBrowserSessionLookup({ request, current, mounted: true }).then((lookup) => {
+    if (Option.isNone(lookup)) return Option.none();
+    const fresh = freshSessionQuery({
+      subject: {
+        sql: `SELECT id AS sessionId,userId FROM (${lookup.value.statement.sql})`,
+        params: lookup.value.statement.params,
+      },
+      current,
+    });
+    const statement = protectConsentStatement({
+      statement: {
+        sql: `SELECT s.id AS session_id,s.user_id,u.timeZone,NULL AS email_address
+        FROM (SELECT id,userId AS user_id FROM (${fresh.sql})) AS s
+        JOIN identity_user_context AS u ON u.userId=s.user_id WHERE 1=1`,
+        params: fresh.params,
+      },
+      subject: { _tag: "Owner", column: "s.user_id" },
+      requirement: "active",
+    });
+    return prepareUserContext({
+      db,
+      userSelection: fresh,
+      statement,
     })
       .first()
       .then((row) => decodeRow(Session, row));
@@ -1187,9 +1220,15 @@ export const paymentEnrollmentWork = ({
     }
     return Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      const session = yield* waitFor(() => authority(request, environment.DB, now));
-      if (Option.isNone(session)) return invalid(unauthorizedStatus);
       const transport = paymentEnrollmentTransport(new URL(request.url).pathname);
+      const session = yield* waitFor(() =>
+        Option.isSome(transport) &&
+        transport.value.operation === "availability" &&
+        request.method === transport.value.method
+          ? availabilityAuthority(request, environment.DB, now)
+          : authority(request, environment.DB, now)
+      );
+      if (Option.isNone(session)) return invalid(unauthorizedStatus);
       if (Option.isNone(transport) || request.method !== transport.value.method) return invalid();
       if (transport.value.operation === "availability") {
         const availability = EnrollmentAvailability.make({

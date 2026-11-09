@@ -93,6 +93,7 @@ export const DashboardDragHandle = ({
     <button
       aria-label={label}
       aria-pressed={isDragging}
+      data-dashboard-source={JSON.stringify(source)}
       disabled={disabled}
       className="inline-flex size-8 touch-none items-center justify-center rounded-md border bg-background text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       ref={(element) => {
@@ -156,6 +157,8 @@ export const DashboardDropZone = ({
     return (
       <section
         aria-label={label}
+        data-dashboard-target={JSON.stringify(target)}
+        data-dashboard-depth={depth}
         className={`dashboard-drop-zone pointer-events-none absolute z-20 h-16 ${position} ${active ? "dashboard-drop-active" : ""}`}
         ref={ref}
       >
@@ -166,6 +169,8 @@ export const DashboardDropZone = ({
   return (
     <section
       aria-label={label}
+      data-dashboard-target={JSON.stringify(target)}
+      data-dashboard-depth={depth}
       className={`dashboard-drop-zone pointer-events-none absolute z-20 ${widgetTargetClass[target.edge]} ${active ? "dashboard-drop-active" : ""}`}
       ref={ref}
     >

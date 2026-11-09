@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: Fidy
-description: Brand foundations and approved public website and application patterns for Fidy.
+description: Durable visual foundations and reusable design patterns for Fidy.
 colors:
   brand-green: "#88CC20"
   primary: "{colors.brand-green}"
@@ -11,13 +11,12 @@ colors:
   secondary: "#FAE3D9"
   neutral: "#FFFAF6"
   surface: "#FFFFFF"
-  on-surface: "#000000"
+  on-surface: "#141414"
   text-secondary: "#514D48"
   heading-accent: "{colors.brand-green}"
   focus: "#141414"
-  border: "#E3D7CE"
-  demo-timestamp: "#62695C"
-  demo-placeholder: "#6B6862"
+  border: "#DED6CE"
+  border-control: "#76716B"
   success: "#C5DFA5"
   warning: "#F5DFA0"
   error: "#F0B4AE"
@@ -35,6 +34,8 @@ colors:
   dark-raised: "#2E2E2E"
   dark-deep: "#141414"
   dark-border: "#606060"
+  dark-border-control: "#858585"
+  dark-focus: "#FFF6EF"
   dark-text: "#FFF6EF"
   dark-text-secondary: "#C7C7C7"
   dark-heading-accent: "{colors.brand-green}"
@@ -75,7 +76,7 @@ typography:
     fontWeight: 600
     lineHeight: 1.5
     letterSpacing: 0em
-  demo-label:
+  caption:
     fontFamily: Poppins
     fontSize: 12px
     fontWeight: 400
@@ -123,163 +124,104 @@ components:
 
 ## Overview
 
-Fidy makes personal finance feel clear, approachable, and under control. Expressive
-Poppins typography, warm peach surfaces, confident black text, and purposeful green
-accents give the product its character. The experience should feel calm and capable,
-with enough personality to make financial organization approachable.
+Fidy makes personal finance feel clear, approachable, and under control. Poppins
+typography, warm peach surfaces, confident ink text, and purposeful lime accents
+give the product its character. The experience is calm, capable, and comfortable
+to read, with personality supplied by the original wordmark and tití artwork.
 
-Fidy is an agent-first personal finance product for Colombia. Financial records,
-budgets, and hallazgos share one system, usable through conversation, the web
-application, and a person's own authorized agents. Product explanations should make
-those relationships tangible through examples.
+### Scope
 
-### Scope and authority
+This document defines the shared visual language for the public website and
+application: tokens, hierarchy, surfaces, components, and interaction treatments.
+Keep changes here when they establish a reusable design rule. Feature workflows,
+API contracts, component APIs, file ownership, test procedures, approval history,
+and individual screen geometry belong in their respective specifications or code.
+An implementation change alone does not establish a design-system rule.
 
-This edition records the approved public landing, its feature detail pages, and the transaction workspace.
-Brand colors, typography, and voice are foundations for future product design. The
-marketing layouts and illustrative dashboards are not specifications for the
-application's working screens. Preserve existing application conventions until those
-screens receive their own design decisions.
+The frontmatter records the palette and reusable public-site scale. Application
+screens use the same visual foundations with the comfortable density below.
+[Shared tokens](design/tokens.css) and the local `/ui-reference.html` component
+reference provide the implemented treatments. Domain language is defined in
+[GLOSSARY.md](GLOSSARY.md); application boundaries belong in
+[ARCHITECTURE.md](apps/web/ARCHITECTURE.md).
 
-The tokens define reusable defaults; the sections below explain their roles and
-responsive exceptions. The implementation contains additional illustration-specific
-values that are not new system tokens. Update this document with approved changes to
-the shared visual language, rather than treating every CSS value as a universal rule.
+### Voice and brand assets
 
-The approved light and Grafito themes, pastel accents, financial color conventions,
-icon family, and comfortable application density are defined below. These establish
-design defaults; existing application screens still need a deliberate implementation
-and review. The approved transaction workspace and shared application patterns are recorded below; other screen compositions remain deliberate design work.
+Use Colombian Spanish (`es-CO`). Marketing can say “tu plata”; financial
+explanations use precise domain terms. Use “hallazgos” in visible Spanish copy.
+Explain outcomes and authorized access plainly. Product claims, prices, and
+availability must reflect actual product decisions.
 
-### Voice
-
-Use Colombian Spanish (`es-CO`) in the product. Marketing can say “tu plata”; precise
-financial explanations use transactions, categories, budgets, and their actual
-relationships. Use “hallazgos” in visible Spanish copy instead of “insights.” Refer to
-[GLOSSARY.md](GLOSSARY.md) for domain definitions.
-
-Show COP clearly where currency would otherwise be ambiguous, with Colombian number
-formatting such as `$28.000 COP`. Explain what an agent can do and what access the user
-authorizes. Claims about channels, privacy, integrations, pricing, or availability
-must match the current product decisions. Launch prices and temporary registration
-behavior belong in product content, not permanent design tokens.
+Use the supplied wordmark, coin, tití, and pastel ceiba artwork without redrawing
+or changing their proportions. Preserve clear space and keep illustrations clear
+of controls and financial text. Use the coin as a restrained brand motif.
 
 ## Colors
 
-Black provides the strongest hierarchy. Off-white is the default canvas; peach creates
-warm, broad section changes. The original brand green marks important actions and selected accents.
-White surfaces help illustrative financial records stand out.
+Light uses a warm off-white canvas, white surfaces, peach section changes, and
+ink text. Grafito is the dark palette: neutral graphite surfaces, warm white text,
+and the same lime accents. Distinguish nested surfaces through tone. Offer Light,
+Dark, and System; follow the system by default and remember an explicit choice
+consistently across the product.
 
-Use `heading-accent` for the large green headline emphasis. Use `text-secondary` for
-supporting prose. The approved lime is shared by actions and progress accents; original artwork retains its supplied colors. Supporting colors use the pastel
-family; muted dark text and structural neutrals remain available for legibility.
+Brand green is exactly `#88CC20` in both themes. Primary actions use ink labels,
+`#79B91B` on hover, and `#6BA414` when pressed. Their border is ink in Light and
+matches the fill in Grafito. Supporting chromatic accents are pastel. Use muted
+foregrounds for supporting text, and distinguish control borders from quieter
+decorative dividers.
 
-Keep normal text at a contrast ratio of at least 4.5:1 and large text at least 3:1,
-except for the explicitly accepted landing slogan treatment below.
-Check the actual foreground/background pair, including tinted chat bubbles. The two
-demo text colors preserve readability for timestamps and the illustrated composer.
-Pair color with labels, selection states, or icons when it carries meaning.
+### Contrast and meaning
 
-### Token implementation and approved reconciliation
+Normal text needs at least 4.5:1 contrast and large text at least 3:1. Check each
+actual foreground/background pair in both themes. Pastel indicators use dark
+text; alerts and status badges use their paired semantic foreground and subtle
+background. Pair state colors with labels or meaningful icons.
 
-`design/tokens.css` is the runtime source for the shared v1.1 tokens. Both
-`apps/site/src/styles/global.css` and `apps/web/src/index.css` import it. Theme values
-use `light-dark()` under each surface's existing color-scheme owner; the application
-maps them to its existing shadcn/Tailwind semantic names. The frontmatter above is a
-design reference, not a separate generated stylesheet. Do not copy the source JSON
-into another runtime token registry.
+The homepage slogan “Tu vida, más tranquila” retains its approved lime-on-peach
+treatment without a backing band. That pair is approximately 1.59:1 and is an
+accepted contrast debt, limited to the light homepage slogan. It does not relax
+contrast requirements for other text, controls, pages, or themes.
 
-The source is the approved `fidy-tokens-v1.1.json` (Library
-`libfile_8abe371f29748191824ff88284e72d1f`), reconciled with the later decisions:
+| Role        | Treatment               | Meaning                      |
+| ----------- | ----------------------- | ---------------------------- |
+| Success     | Sage / semantic green   | Confirmed successful outcome |
+| Warning     | Butter / semantic amber | Attention or uncertainty     |
+| Error       | Coral / semantic red    | Failure or exceeded limit    |
+| Information | Sky / semantic blue     | Explanation or guidance      |
+| Pending     | Lavender                | Awaiting review              |
 
-- Primary default is exactly sRGB `#88CC20` in both themes. Hover is `#79B91B`,
-  pressed is `#6BA414`, and labels use ink `#141414`. Primary buttons have a solid
-  border: ink in light mode and their fill color in dark mode.
-- The slogan “Tu vida, más tranquila” is lime in both themes with no backing band.
-  This supersedes the JSON's graphite highlight. Its light peach contrast is about
-  1.59:1 and is an explicitly accepted exception, not an accessibility compliance claim.
-  The user explicitly approved a narrowly scoped test exception in #1524. Axe still
-  scans the entire document in both themes. Only the homepage light `h1 > em`,
-  its exact slogan markup, and the `#88CC20` / `#FAE3D9` pair may be accepted.
-  The report retains the raw failing node as an attachment and annotation. A guard
-  test rejects other rules, pages, themes, elements, text and color pairs, including
-  another failing node in the same violation. This is an accepted design debt,
-  not a contrast fix or a claim of WCAG AA compliance. Do not lower thresholds,
-  exclude the element from axe, or disable contrast checks globally.
-- Control borders (`#76716B` / `#858585`) differ from decorative dividers
-  (`#DED6CE` / `#606060`). Outline buttons consume the control tokens.
-- Primary and outline buttons use explicit interaction and disabled colors. Focus uses
-  a 2px external outline with a 2px gap exposing the adjacent surface. Existing named
-  subtle-focus and destructive treatments retain their distinct behavior.
-- Alerts and state badges pair semantic foregrounds with their matching subtle fill
-  for success, warning and information; destructive alerts use the error pair.
-  Keep labels/icons. The existing pastel categorical charts, pending state and
-  destructive action treatment retain their separate semantics.
-- The JSON typography scale, 4–48px spacing steps, 8/12/20px radii and motion/target
-  dimensions are available as `--fidy-type-*`, `--fidy-space-*`, `--fidy-radius-*`,
-  `--fidy-motion-*` and `--fidy-touch-target` tokens. Existing approved responsive
-  typography, pill buttons and 24px pricing cards take precedence over replacing
-  screen geometry with the proposed scale. Applying that alternative scale needs
-  a separate composition decision. Poppins remains unchanged.
+Ordinary spending is not an error. Destructive actions and error feedback have
+distinct roles even when both use the coral family.
 
-Shared app controls therefore change color, states and borders; no authenticated
-screen layout is redesigned. The UI reference renders the same components for review.
-The logo uses the supplied rounded backing and coin/$ artwork without redrawing;
-the original tití artwork is placed beside the hero phone and at the desktop closing.
-At narrow widths the mascot must stay clear of controls and financial text.
+### Financial graphics
 
-`@shadcn/lint` 0.2.1 discovers theme utilities from `components.json` and the imported
-CSS `@theme` declarations. Its built-in rules enforce token use and component ownership;
-they do not validate token contrast or CSS literals. The design-token tests run with
-`lint:rules` and check the primary identity, semantic contrast, control borders and
-focus pairs. No rule is disabled to admit the new palette.
+Use the six `chart-*` pastels for categorical data. Keep a Category's color stable
+across screens, periods, and label changes. A single series uses one color.
+Labels, markers, and contrasting boundaries distinguish adjacent pastel regions.
+Category emojis are permitted in category-grouped spending charts; full names and
+exact values must remain available through keyboard, touch, and assistive text.
+Other chart groupings retain readable text labels.
 
-### Themes and semantic accents
+Balances and totals use the main foreground. Income and expenses have explicit
+signs or direction labels. Budget progress uses lime within the limit, butter
+when a product-defined warning applies, and coral when exceeded. Unallocated
+income in a Budget summary may use green; negative allocation uses the semantic
+error pair. Preserve labels for available, remaining, and exceeded amounts.
 
-Light retains the original off-white canvas and peach sections. Dark uses neutral graphite
-surfaces with warm text, lime headline emphasis, and brand-green actions. Distinguish nested product
-surfaces by tone; light peach messages and budget cards can remain luminous within
-a dark illustration. Keep the landing hero background flat.
-Offer Light, Dark, and System, following the system by default and remembering the
-user's explicit choice. Apply the chosen theme to feature detail pages as well.
-
-Supporting chromatic accents are pastel. Brand green (`#88CC20`) is the explicit
-exception for primary actions and progress in both themes. Neutrals provide readable text, borders,
-and dark backgrounds. Never apply pastel text directly to a pale surface without
-checking contrast. Use dark text on pastel fills in both themes.
-
-| Role        | Token         | Example                        |
-| ----------- | ------------- | ------------------------------ |
-| Success     | `success`     | Transaction saved              |
-| Warning     | `warning`     | Budget approaching its limit   |
-| Error       | `error`       | Save failed or budget exceeded |
-| Information | `information` | An explanatory message         |
-| Pending     | `pending`     | A record needing review        |
-
-Pair every state with a label or icon. Color alone cannot communicate an error,
-selection, or financial outcome. A normal expense is not an error.
-
-### Financial graphics and figures
-
-Use the six `chart-*` colors for categorical data. A category retains its assigned
-color across screens and periods. A single series uses one color; do not alternate
-colors between bars of the same series merely for decoration. Use labels, markers,
-and contrasting boundaries so adjacent pastel regions remain distinguishable.
-
-Balances and totals use the main text color. Income and expenses use explicit signs
-and labels, with optional pastel indicators nearby. Distinguish spending, budget
-limits, and remaining amounts. Budget progress uses brand green within its limit, butter
-when the product's warning condition applies, and coral after exceeding it; design
-must not invent the numerical warning threshold.
-
-Use tabular digits and align comparable amounts. Show currency where needed and
-preserve the domain's precision; formatting must not change a financial value.
+Use Colombian number formatting, tabular digits, and aligned comparable amounts.
+Show Currency explicitly wherever a symbol is ambiguous; Budget figures use
+Currency codes. Preserve exact fractional precision and keep different Currencies
+separate. Charts start quantitative bars at zero and expose exact values without
+relying on color or hover alone.
 
 ## Typography
 
-Use Poppins, locally bundled with its license; Arial and sans-serif are fallbacks.
-Headings use weight 600. Body copy uses 400, and action labels use 600. Reserve heavier
-weights for financial figures or deliberate emphasis within product illustrations.
+Use Poppins with Arial and sans-serif fallbacks. Headings and action labels use
+600; body text uses 400. Keep headline tracking tight and body tracking neutral.
+Use the small set of roles consistently rather than accumulating one-off sizes.
+Lead sections with their actual heading; decorative eyebrows are not a default.
+
+The public-site display scale is:
 
 | Role                        | Above 1100px | 701–1100px | Up to 700px |
 | --------------------------- | ------------ | ---------- | ----------- |
@@ -288,604 +230,135 @@ weights for financial figures or deliberate emphasis within product illustration
 | Component title             | 24px         | 24px       | 22px        |
 | Body                        | 16px         | 16px       | 16px        |
 | Secondary text and controls | 14px         | 14px       | 14px        |
-| Demo labels                 | 12px         | 12px       | 12px        |
+| Captions                    | 12px         | 12px       | 12px        |
 
-In the application at widths up to 900px, editable text—including search, amount,
-counterparty and notes—uses at least 1rem (16 CSS pixels at the default root size).
-This takes precedence over compact control typography. Preserve text enlargement,
-user-controlled browser zoom, input modes and accessible labels; controls must grow
-with their text. Labels and buttons retain their existing type hierarchy.
-
-Use this small hierarchy consistently across sections. Eyebrows are not part of the
-default section pattern: lead with the actual heading. Compact text inside scaled
-product illustrations is a special case, not a size to reuse for functional controls.
-Keep headline tracking tight and body tracking neutral. Let text wrap naturally at
-narrow widths; preserve intentional hero line breaks only where they remain readable.
+Application screens use 16px reading text and a smaller heading hierarchy than
+the landing. Editable text uses at least 1rem on compact layouts to preserve
+readability and avoid focus zoom. Small illustration labels are not a precedent
+for functional inputs. Allow wrapping, text enlargement, and browser zoom;
+controls grow with their labels.
 
 ## Layout
 
-Use spacious sections, aligned content edges, and grids with a clear reading order.
-The standard content width is capped at 1240px, with 48px side gutters. Gutters reduce
-to 24px at 1000px and 20px at 700px. The existing wide-screen treatment permits a 1320px
-cap from 1600px. These are public-site layout rules.
+Use aligned content edges, a clear reading order, and the 4–48px spacing scale.
+Keep related controls close and separate larger groups through whitespace and
+subtle dividers. Let content determine when columns collapse.
 
-Standard sections have 104px vertical padding on desktop and 65px on mobile. The hero
-and closing sections have their own composition. Use the spacing tokens for recurring
-relationships; illustration geometry may need optical adjustments.
+Public-site content normally caps at 1240px, expanding to 1320px on wide screens.
+Gutters step from 48px to 24px to 20px. Standard section spacing is 104px on desktop
+and 65px on mobile. These spacious marketing proportions do not transfer to
+application data screens.
 
-Collapse the main navigation into its menu at 1100px before labels become cramped.
-Stack the hero at 900px. Other grids collapse according to their content needs.
-Buttons and their arrows stay together; important actions must not become awkward
-multi-line fragments. Feature tabs may scroll horizontally on narrow screens while
-the page itself stays within the viewport.
+Application layouts use comfortable controls around 44–48px and record rows
+around 56–64px as starting sizes. Keep amounts scannable and actions reachable.
+Contextual editing planes sit beside the main content on wide screens and become
+accessible full-width sheets when space is limited. Maintain a clear relationship
+between a panel, its heading, and the content it affects.
 
-Interactive demonstrations reserve their space. Changing a conversation, selected
-feature, or example record must not resize the phone or unexpectedly displace nearby
-content. Keep the phone compact and the floating budget card legible. The current
-short conversations should fit without requiring an internal scroll to understand
-their outcome. On wide layouts, vertically center the FAQ heading beside its list.
-
-Review mobile, intermediate, and desktop widths, including 390px, 715px, and 1440px.
-Check between breakpoints and with enlarged text, not only at those sample sizes.
-
-### Application density
-
-Use a comfortable application layout: 16px reading text, 44–48px controls, and
-56–64px transaction rows as starting sizes. Allow rows and controls to grow for
-wrapped text and zoom. Keep amounts easy to scan and actions easy to reach. The
-landing's oversized headings and section spacing do not transfer to data screens.
+Wrap toolbars and long labels. On narrow screens, tables may become unboxed
+entries when that preserves the information hierarchy. Dense charts may scroll
+locally; the page stays within the viewport. Respect safe areas and short
+viewports. Keep important actions and explanatory feedback reachable with zoom.
+Reserve illustration space so changing examples does not displace nearby content.
 
 ## Elevation & Depth
 
-Use background changes, spacing, and thin borders for most hierarchy. Reserve layered
-surfaces and shadows for product demonstrations and genuinely floating UI.
+Build hierarchy with continuous canvases, adjacent tonal planes, aligned edges,
+whitespace, and thin dividers. Ordinary data and form sections are unboxed;
+avoid rounded perimeter cards or shadows around every section.
 
-Ordinary data and form screens use a continuous base canvas and adjacent section planes, with visual grouping established through whitespace, aligned edges, typography and subtle dividers. Do not wrap sections or page panels in card containers, rounded perimeter borders or shadows; reserve elevation for genuine overlays such as menus and dialogs, not contextual page panels. Functional controls may retain rounded shapes. This change does not alter the separately approved Dashboard geometry. Illustrative product compositions are not a precedent for ordinary application data or form surfaces.
-
-The phone uses a soft `0 28px 60px #312E251F` shadow; the floating budget card uses
-`0 12px 30px #0000000C`. These establish a foreground object without making every
-section a raised card. The slight phone tilt and overlapping card belong to the hero
-illustration, not ordinary form or data surfaces.
+Dashboard widgets and public pricing retain their card treatments. These are
+specific composition families, not a default container for application content.
+Reserve functional elevation for floating surfaces such as menus, dialogs, and
+the Agent conversation. Product illustrations may use soft shadows and overlap
+to establish a foreground object.
 
 ## Shapes
 
-Use pill-shaped primary actions, compact selection controls, and softly rounded
-product surfaces. The radius tokens are recurring choices, not a requirement to give
-every surface a different radius. Pricing cards use 24px corners. Existing illustrated
-chat, phone, and dashboard geometry may retain their specific radii.
-
-Use the supplied Fidy wordmark. Preserve its proportions and clear
-space; do not reconstruct the logo using ordinary text. The logo's coin is a brand
-motif, not a decoration to repeat throughout every section.
+Primary public-site actions and compact choice triggers use pills. Application
+forms also use softly rounded rectangular controls, with 12px as the shared
+control radius. Keep related controls consistent in shape across interaction
+states. Use the radius scale deliberately; public pricing cards use 24px corners.
+Screen-specific geometry does not create a new global radius.
 
 ## Components
 
-### Icons
+### Actions and focus
 
-Use Hugeicons through the installed React packages, with the outline family and a
-consistent 1.5px stroke. Default to 20px in controls and 24px for standalone icons.
-Let icons inherit readable text color; pastel backgrounds can provide emphasis.
-Decorative icons are hidden from assistive technology, and icon-only buttons have
-an accessible name and a sufficient hit area. Base UI supplies component behavior;
-Hugeicons supplies the icon artwork.
+Lime identifies the primary action. Outline and text treatments provide quieter
+alternatives; dark pills remain available for public pricing and closing sections.
+Selection, hover, pressed, disabled, and keyboard-focus states remain distinct.
+Selection changes emphasis without changing control geometry or label weight.
 
-### Forms and states
+Focus uses a contrasting 2px external outline with a 2px gap exposing the adjacent
+surface. Keep disabled labels readable. Loading preserves control dimensions and
+uses separate feedback when needed. Icon-only actions need an accessible name and
+a comfortable hit area.
 
-Use persistent labels for amount, category, date, and other transaction fields.
-Place helper text and errors beside the affected field. A placeholder is an example,
-not a replacement for its label. Focus has a visible contrasting outline.
+Destructive actions, including their confirmation initiators, normally use coral
+fill and a contrasting dark label; hover and focus preserve that meaning. Neutral
+cancellation stays neutral. Approved quieter variants use semantic red text or an
+outline: Settings initiators and Transactions deletion review use these variants.
+These exceptions do not redefine all destructive controls.
 
-Loading preserves the control's dimensions and identifies the action in progress.
-Pending reads and view code do not render skeletons or placeholder layouts. Prepare destination
-code and display data ahead of navigation, and retain loaded information during background
-refreshes and pagination. Pending reads retain a screen-reader status without adding visible
-layout. Submission,
-payment settlement and external approval retain their action-specific feedback; errors and empty
-results keep their distinct recovery and explanation.
-Disabled controls remain readable and explain unavailable actions when necessary.
-Destructive actions (deactivation, revocation, deletion, unlinking, reversal, stopping or pausing
-tracking) use the shared `Button` destructive variant, including the action that opens a confirmation.
-Hover and keyboard focus keep the destructive fill. Cancelling an ordinary edit remains neutral.
-Calendar selection and focused days use a single coral/red button surface; the day cell never adds
-a second today background. Grafito is the sole dark palette in both the app and UI reference.
+### Inputs, choices, and calendars
 
-Disabled destructive buttons retain the shared coral fill and contrasting dark destructive label;
-they remain non-interactive until their prerequisite is met.
-On failure, keep entered values and offer a useful correction or retry. Confirm
-success only after the operation succeeds. Empty states explain what is missing and
-offer the next relevant action; they are distinct from loading and network failure.
-Use the semantic pastel family for feedback with readable text and meaningful icons.
+Use persistent labels, nearby helper text, and field-local errors. Placeholders
+provide examples. Preserve entered values on failure and offer useful recovery.
+Short single-choice menus show the selected option; long lists add search and an
+explicit empty result. Multi-choice controls remain visibly distinct.
 
-### Navigation and actions
+Calendars use Spanish labels, clear selected-day and today treatments, visible
+focus, and readable disabled days. Numeric fields preserve local grouping and
+decimal separators. Date fields use an unambiguous local-date presentation.
 
-Keep the logo, navigation, and primary action visually distinct. The compact menu
-has an explicit open state, keyboard support, and a predictable close interaction.
-Green pill buttons identify the main entry action; dark pills work within pricing
-and closing compositions. Secondary actions use a quieter underlined text link.
-Keep arrow icons aligned with their labels and visible focus separate from hover.
+### Lists, navigation, and panels
 
-### Product exploration
+Use consistent row alignment, comfortable spacing, and subtle separators.
+Wrap names and notes without hiding amounts or actions. Selection and hover make
+row interaction clear without changing financial meaning.
 
-Feature tabs pair a clear title and short explanation with a concrete product view.
-Each feature can lead to a dedicated page with deeper examples. Support arrow-key
-navigation and an identifiable selected tab. The view should explain how the feature
-helps the user, including how authorized agents participate where relevant.
+Keep the logo, navigation, and primary action distinct. Compact navigation has a
+clear open state and predictable dismissal. Menus, disclosures, tabs, and sheets
+support keyboard operation and visible selection. Panels provide a named close
+action, focus entry and return, and Escape dismissal where appropriate.
 
-Conversation, dashboard, and correction demonstrations use clearly identified example
-data. Controls update that local example and make the result visible. Financial
-figures stay aligned and distinguish recorded spending, budget limits, and remaining
-amounts. Avoid implying that illustrative controls save real transactions.
+### Feedback and conversation
 
-### Pricing and questions
+Keep loading, empty, failure, uncertain outcome, and confirmed success visually
+and verbally distinct. Retain loaded content during refreshes and pagination;
+pending reads do not introduce skeletons or placeholder layouts. Preserve an
+accessible pending status. Action submissions and external approvals keep their
+own feedback. Never present an unconfirmed result as success.
 
-Pricing uses a prominent amount, explicit currency and billing period, and a clear
-selected period. Explain recurring billing beside the decision. Retrieve current
-amounts and terms from the product's approved content.
+The Agent conversation uses a floating nonmodal surface. User messages have lime
+emphasis; assistant text stays plain and readable. Separate the composer from the
+scrolling history, respect the reader's scroll position, and make returning to
+the latest message explicit. Confirmation and recovery actions remain legible
+within short and narrow viewports. Demonstrations clearly use example data.
 
-FAQs use direct user questions, restrained separators, and an obvious disclosure
-control. Preserve keyboard behavior and readable expanded answers. Privacy statements
-must describe actual behavior; design polish is not a reason to invent assurances.
+### Icons and motion
 
-### Motion
+Use Hugeicons outline with a consistent 1.5px stroke, normally 20px in controls and
+24px standalone. Icons inherit readable foregrounds; pastel backing can supply
+emphasis. Hide decorative icons from assistive technology. Category emojis in
+charts and the supplied brand artwork are intentional exceptions to the icon family.
 
-Motion connects an action to its result and gives the landing a measured sense of
-life. Prefer finite opacity and transform transitions; keep layout dimensions stable.
-
-| Interaction           | Current reference                     |
-| --------------------- | ------------------------------------- |
-| Section entrance      | 500ms, short upward movement and fade |
-| Hero content sequence | 60ms stagger                          |
-| Phone entrance        | 600ms                                 |
-| Conversation bubble   | 280ms, 550ms between message starts   |
-| Feature panel change  | 220ms, 6px upward movement            |
-
-The entrance curve is `cubic-bezier(0.23, 1, 0.32, 1)`. Conversation timing is for a
-readable demonstration, not a required delay in the working application. Selection
-feedback should respond immediately. Switching examples restarts the relevant sequence
-and cancels interrupted animations; it does not replay unrelated sections.
-
-Keyboard feature changes are immediate. With reduced motion, entrances use a short
-160ms fade without movement or stagger; retain immediate state changes and remove
-unnecessary travel. Avoid continuous decorative loops. Clean up animations when their
-view leaves, and preserve focus during state changes and dialog dismissal.
+Motion explains an action and its result. Prefer finite opacity and transform
+transitions with stable layout. Shared control timings are 150ms for fast feedback
+and 200ms for standard transitions. Selection feedback is immediate. Honor reduced
+motion by removing unnecessary travel, stagger, and decorative mascot movement.
+Avoid continuous decorative loops and preserve focus through state changes.
 
 ## Do's and Don'ts
 
-- Use the established typography roles and section rhythm; avoid accumulating one-off
-  font sizes or decorative eyebrows.
-- Show concrete product behavior and clear outcomes; avoid vague AI promises.
-- Make conversation, the web application, and authorized agents visible in the product
-  story without turning every section into technical documentation.
-- Preserve stable demo geometry; do not enlarge the phone simply to accommodate a
-  longer example or move the floating card casually.
-- Keep the page spacious and readable at intermediate widths; do not force desktop
-  grids into insufficient space.
-- Keep financial meaning explicit in text; do not rely on color alone.
-- Treat detailed application layouts as open design work; apply the documented
-  themes, semantic colors, icons, and density without inventing product behavior.
-
-Implementation reference: [public-site landing](apps/site/src/pages/index.astro).
-Application foundation: [shared theme](apps/web/src/index.css) and
-[UI primitives](apps/web/src/ui/components/). Review the local `/ui-reference.html` page
-before extending screen layouts.
-Document format: [DESIGN.md specification](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).
-
-## Signed-in transaction workspace
-
-The approved transaction reference establishes the layout, while the shared Fidy
-tokens above establish its visual language. Use Poppins, brand-green primary actions
-with dark text, warm off-white and peach surfaces, and readable dark icons on pastel
-indicators. Normal spending is not an error. Use the supplied wordmark and the shared
-button, input, radius, and focus conventions; do not introduce a separate application
-palette or font.
-
-The sidebar is 240px wide; the desktop detail/summary rail is 384px wide with a
-shared full-height divider. Comfortable rows use 16px text and group by long local
-dates with currency-specific daily net totals. The right rail shows transaction
-identity above correction fields, and a detailed summary when browsing. Preserve
-this composition when applying the shared light and Grafito theme tokens.
-
-Below 768px, application navigation uses the landing's floating, dismissible menu
-instead of a scrolling horizontal navigation bar. Transaction names and categories
-wrap when necessary. Columns share their alignment across rows, with Tipo visible
-from a 481px ledger width (521px viewport with the phone gutters) and a separate Categoría column from 600px. Smaller ledgers
-stack identity and amount below 400px; phone toolbars fill their available rows.
-
-The summary omits the transaction-count footer and supporting subtitle. First and
-last transaction dates use `dd-mm-yyyy`. A COP-only summary omits repeated currency
-codes and its currency heading; mixed-currency summaries retain separate labeled
-groups and explicit codes so amounts remain unambiguous. Exact fractional precision
-is preserved in every case.
-
-Transaction filters, sorting, capture, and single/bulk correction use the same
-dismissible radio-menu pattern. Columns uses checkbox items in that same menu.
-Toolbar filter triggers use the compact labels Transacciones and Categorías; the
-menus retain the full option labels. Fecha opens a Spanish calendar immediately, with day
-selection and an explicit clear action. Editar varias enables selection before
-replacing the summary with a shared correction form. Unchanged fields retain each
-record's value; corrections use the canonical atomic batch limit and observed
-revisions, and uncertain saves are never retried automatically.
-
-Transaction amounts display locale-aware currency symbols rather than currency
-codes. Canonical Money retains its currency and exact amount. Selecting a ledger
-identity or amount opens correction directly. Search expands in the header without
-changing filter visibility. Form dates and Fecha share one Spanish calendar.
-
-## Application components and patterns
-
-The approved transaction workspace is the working application reference. New views
-reuse its controls, geometry, interaction feedback, and shared light/Grafito tokens.
-The landing remains the reference for public-site composition. A working screen
-may have a different content layout; it does not introduce its own palette, font,
-control radius, calendar, or dropdown appearance.
-
-### Shared component ownership
-
-Import components directly from `@/ui/components/<file>`, without a barrel or a
-feature-private import. Components receive values, accessible labels, children,
-and callbacks. Features own canonical queries, mutations, revision checks,
-selection limits, filtering, and save outcomes. A dropdown selection is an intent;
-the shared component never decides whether or how to persist it.
-
-| Pattern           | Shared implementation                                        | Contract                                                                                                                                                                                              |
-| ----------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single choice     | `choice-dropdown.tsx`: `ChoiceDropdown`                      | Outline pill, optional leading visual, explicit accessible label, selected radio item, shared keyboard and dismissal behavior. `width` selects full-width fields or automatic-width toolbar controls. |
-| Inline choice     | `choice-dropdown.tsx`: `InlineChoiceDropdown`                | Plain icon and label, no pill or chevron. Hover, focus, and open feedback reveal interactivity. Uses the same radio menu; the feature decides what selection does.                                    |
-| Choice menu       | `choice-dropdown.tsx`: `ChoiceMenuOptions`                   | Shared radio options for composed triggers; Columns retains checkbox items in the same `DropdownMenu` primitive.                                                                                      |
-| Searchable choice | `searchable-choice-dropdown.tsx`: `SearchableChoiceDropdown` | Outline choice trigger with Base UI Combobox search, keyboard selection, and empty results. Use for long currency lists.                                                                              |
-| Decimal draft     | `amount-input.tsx`: `AmountInput`                            | Decimal-only `Input`, end caret on click, full/content width. Caller owns monetary validation.                                                                                                        |
-| Financial summary | `financial-summary-card.tsx`: `FinancialSummaryCard`         | Formatted top amount, label, semantic allocation treatment, responsive typography, and caller-owned content. No financial arithmetic.                                                                 |
-| Budget indicators | `budget-meter.tsx`: `BudgetMeter`, `BudgetBalance`           | Brand-green spending progress, coral exceeded cap, readable available/overage figures.                                                                                                                |
-| Calendar          | `calendar-field.tsx`: `CalendarField`                        | Spanish single-day calendar opens immediately. The caller supplies the IANA time zone and ISO local date; fields display `dd-mm-yyyy`. Required dates cannot be cleared.                              |
-| Header search     | `header-search.tsx`: `HeaderSearch`                          | Replaces Buscar with a focused input. Escape closes the input while retaining the query. Query and open state belong to the caller.                                                                   |
-| Indicators        | `icon-indicator.tsx`: `IconIndicator`, `DirectionIndicator`  | Hugeicons outline at 1.5px, readable dark icons on semantic pastel fills. Named plain/category/category-large/direction treatments replace per-view dimensions. Adjacent text conveys meaning.        |
-| Page header       | `workspace-layout.tsx`: `WorkspaceHeader`                    | 24px Poppins title, aligned actions, 20px gutters. Actions become a two-column grid on phones. Context and actions are caller-supplied.                                                               |
-| Record controls   | `workspace-layout.tsx`: `RecordToolbar`                      | One wrapping control flow, compact horizontal padding, consistent 8px gaps. Filters and actions share the available row.                                                                              |
-| Content and rail  | `workspace-layout.tsx`: `WorkspaceColumns`                   | Explicit default viewport variant: 384px rail from 1280px. Container variant: 24rem rail at 75rem available width and current text scale; stacked below.                                              |
-| Responsive panel  | `workspace-panel.tsx`: `WorkspacePanel`                      | Desktop rail, stacked browsing summary, full-screen sheet for active work on smaller screens. The caller supplies title, description, close action, and save lock.                                    |
-
-The application shell already owns the shared wordmark, sidebar, and floating
-phone navigation. Reuse that shell for signed-in views rather than copying it
-into each feature. `Button`, `Input`, `Label`, `Alert`, `Empty`, and
-the overlay primitives remain the base controls; preserve their named variants,
-focus rings, comfortable hit areas, and disabled treatments.
-
-Category-to-illustration mapping stays with its feature; an indicator never assigns
-or infers canonical Category identity. Financial values use the existing exact
-Money formatter at the transport presentation seam. UI components accept formatted
-text and never round, add, or reinterpret canonical amounts. Keep comparable amounts
-aligned with tabular digits, explicit currency where ambiguous, and direction icons
-next to compact amounts when their separate type column is hidden.
-
-### Enforcement and reference
-
-`/ui-reference.html#patterns` starts with a compact interactive reference for dropdowns,
-dates, clickable rows with independent category selection, status badges, and pointer/keyboard
-focus. It uses the actual shared components and local state; it never accesses account data.
-Check these examples in light/Grafito, at phone width, and with Tab, Enter, Space, and Escape.
-
-`/ui-reference.html` demonstrates the shared tokens, control states, search,
-choice menus, calendar, indicators, and workspace composition using local example
-data. Extend this reference when approving a new reusable treatment, including
-keyboard behavior, light/Grafito appearance, and narrow layouts.
-
-`bun run lint:ui` runs only the built-in `@shadcn/lint` rules from `.oxlintrc.ui.json`.
-The root lint configuration extends this same policy, and the required CI Workspace Gate
-runs it through the static verification group. No custom design-system lint rules are used.
-The six rules reject raw colors, arbitrary non-layout values, component restyling, inline
-styles, unknown classes, and unreadable component classes.
-
-Existing CSS selector hooks are listed explicitly for class-existence checking because the
-installed linter cannot discover all separately imported stylesheets. Shared component owners
-may define styles and forward classes. The dashboard's canonical split weights are a scoped
-inline-style exception: its existing helper emits only the `--dashboard-weight` custom property.
-Feature views otherwise cannot use inline styling. New selector exceptions or shared component
-changes require reviewing their rendered reference; a clean lint result does not prove that a
-view selected the correct component or implemented row behavior. `no-restyle` contracts reserve component
-colors, typography, shape, focus, and control spacing for the UI owner. Pages may
-place controls; use component props and named variants for their appearance, or
-put surrounding spacing on a parent. Shared implementations can define their own
-styles inside `src/ui/components`; that exception is not permission for a view to
-copy a control and restyle it.
-
-Approved design changes update the shared component, its reference example, and
-this document together. Lint enforces configured styling rules; rendered interaction
-and responsive checks still verify behavior and composition. The transaction
-workspace remains a regression reference while these components are reused elsewhere.
-
-Selecting any transaction identity, type, or amount opens correction directly;
-switching records remains possible while no save is pending. Selecting a category
-from the desktop ledger uses an inline menu and saves that correction directly,
-without opening the panel. Income/expense icons precede compact amounts below the
-481px ledger threshold. Category triggers highlight on hover and while open.
-
-### Dashboard Budget configuration
-
-Budget Widgets retain the Dashboard's approved card geometry. Personalizar exposes an accessible
-configuration action alongside rename and remove; a missing monthly Budget also offers a direct
-choice action and navigation to Presupuestos. The configuration dialog uses the shared modal focus
-and dismissal behavior, labeled single-choice menu, outline cancellation and green save action.
-It lists existing current-month Category/Currency pairs, keeps financial values in their original
-Currency, and preserves the Widget's custom title and position. The category label and explicit
-Currency remain visible independently of that title. A missing target never silently switches to
-another Budget. The dialog fits phone viewports and scrolls within the available height.
-
-The interactive `/ui-reference.html#dashboard` example uses synthetic local selection only and
-renders the same dialog and choice primitives in Light and Grafito.
-
-### Compact management tables
-
-Active-token management uses the shared `Table` with one row per token: name and safe short code,
-permissions, creation, last use, expiration, and action. Use `density="compact"` on `TableHead`
-and `TableCell` for 14px text, 8px horizontal padding, and 12px body-cell vertical padding.
-Show localized short Spanish dates without times; retain the full UTC instant in each `time` element’s
-`dateTime` attribute. Use “Nunca” for tokens that have never been used and wrap names readably.
-At 900px and below, matching the compact application shell, replace Settings management tables with
-named native lists of unboxed entries,
-headings, and definition lists. Keep list markers for browser/assistive-technology semantics, and hide
-the inactive representation with `display: none`. Both representations share metadata formatting,
-commands and confirmation state; desktop tables retain their native display. Wrap long names and
-permissions. Expiration and individual actions remain visible without horizontal scrolling. One-token
-deactivation confirmation stays beneath its token, as a full-width table row or inside its mobile
-list item. Default table density remains unchanged.
-
-### Floating Agent conversation
-
-The signed-in shell exposes a green, circular Agent launcher at the bottom right, with a comfortable
-48px target and safe-area clearance. It opens a non-modal chat above the launcher, using
-`ChatWindow` and `ChatComposer` from `ui/components/chat.tsx`. The panel fits the viewport on phones,
-uses existing Fidy surface, border and focus tokens, and supports Escape, a labeled close action,
-and reduced motion. It leaves the underlying workspace usable.
-
-AI Elements `Conversation` and `Message` live in `ui/components/ai-elements`, adapted to the local
-aliases, Hugeicons and branded controls. Conversation scrolling stays immediate, honors a reader's
-position, and offers a labeled jump-to-latest control. User entries use lime-tinted bubbles in light
-mode and canonical lime with ink text in Grafito; assistant text
-stays plain and readable. Enter sends, Shift+Enter inserts a line, and composing IME text cannot send.
-The feature owns the draft, bounded session-only history and pending status. Delivery acknowledgement
-happens automatically after a reply renders in the open, visible panel; ordinary replies have no
-confirmation button or success footer. A failed acknowledgement offers a connection retry for the
-same reply. Closing the panel preserves its state and never acknowledges a hidden reply. The UI advertises
-only text capabilities supported by the existing Agent endpoint.
-
-The approved panel uses a full-width header divider, a lime sparkle mark, “Agente Fidy”,
-a theme control backed by the existing application preference, and a circular close action.
-The composer stays outside the scrolling conversation with a side-by-side text field and Send
-button, followed by the credential-safety reminder. Send, confirmation and recovery actions use the
-scoped control radius, not pills. Short viewports compact header/composer spacing while retaining
-a named Chat scrollport (`chat-conversation-scroll`). At heights up to 500px, native fixed, sticky popover collision shifting keeps an 8px viewport inset even when the background document scrolls, allowing the panel to overlap the application header without becoming modal; ordinary portrait and desktop anchoring is unchanged. This lets the host explanation and confirmation each be reviewed. The empty state offers “Revisar mis gastos”,
-“Ver mis presupuestos”, and “Consultar recurrentes”; these fill the draft and never submit it.
-Waiting uses a quiet sparkle/dots treatment; uncertain execution uses warning colors, while
-failed delivery and quota feedback use information colors. Recovery remains an explicit action.
-Quota preserves the existing editable draft and explicit retry contract, with no invented reset time.
-The `/ui-reference.html#chat` examples exercise the actual message, starter, composer and feedback
-components entirely locally, without invoking the agent or representing a real pending operation.
-
-Recurring lifecycle changes show the host's readable plan name, action and effective date with
-an explicit “Confirmar cambio” button. Only server-issued confirmation metadata can enable that
-action; assistant prose cannot. The opaque one-use command remains in mounted state and is not
-shown in chat history. Delivery acknowledgement remains automatic and separate from mutation approval.
-
-### Financial workspace components
-
-Use `AmountInput` for decimal drafts. It composes `Input`, refuses letters, places the caret at the end on click, and offers full or content width. Its controlled `onValueChange` preserves Colombian grouping and decimal separators; features retain exact parsing, Currency precision, and command ownership.
-
-The Budget workspace uses explicit Currency codes instead of symbols in group figures, Category amounts, monthly totals and summaries. Group headings retain the code when collapsed; editable caps show it beside the input and include it in the accessible name. Keep Colombian number formatting and exact nominal amounts without conversion.
-
-Use `SearchableChoiceDropdown` for long single-choice lists. It composes the shadcn Base UI Combobox pattern with the existing outline pill trigger, an accessible search input, keyboard selection, dismissal, and an explicit empty result. Short lists retain `ChoiceDropdown` or summary currency pills. Both the Budget group editor and large summary currency lists share this searchable control.
-
-Use `FinancialSummaryCard` for a formatted top amount, label, positive/negative treatment, and child summary content. It adapts typography to available width and formatted text length without calculating Money. Its approved Budget exception uses green for income not yet assigned to the spending plan; ordinary balances and totals remain main text. Negative allocation uses the paired error-subtle background and error foreground in each theme. Income remains recorded income, with no progress bar or implied income plan. Preserve Disponible, restantes, and excedido wording.
-
-`BudgetMeter` uses brand green within the cap and semantic coral when exceeded, without invented warning thresholds. `BudgetBalance` pairs semantic treatment with explicit available/overage text. Empty states and save feedback compose the installed `Empty` and `Alert` primitives.
-
-`WorkspaceColumns variant="container"` switches between stacked content and the 24rem rail at 75rem of available workspace width, measured at the current root text size. `WorkspacePanel` shares that measurement for the rail/sheet decision. The default viewport variant remains for existing Transactions layouts. Features own table geometry; they do not override shared rail positioning or summary typography. Category pencil icons beside labels follow the approved Dashboard customization stroke of 2px; ordinary icons remain 1.5px.
-
-The UI reference includes editable, disabled, and invalid amounts, searchable choices, both financial card treatments, and spending meters. Verify keyboard behavior, light and Grafito palettes, narrow width, and enlarged text when changing these owners.
-
-### Approved review workspace
-
-`ui/components/review-workspace.tsx` and its stylesheet own the approved Por revisar
-composition: page-local filters, independent row selection, retained source beside the
-editable draft, deadline notices, save feedback and the individual Confirmar action.
-Features keep command authority, serialized autosave, revisions and expiry suppression.
-The history surface preserves skip, restore and Undo without adding bulk confirmation.
-
-Incomplete rows expose an available source reference and a short “Original sin confirmar”
-fragment, separate from editable Transaction facts. Page-local search covers displayed data and
-available fragments, with visible scope guidance and no search-word highlighting. Selection and
-open controls reuse the source reference and describe the unconfirmed fragment. Missing fragments
-and expired originals have explicit text; expired fragments disappear from search and accessible
-descriptions as well as the visible list. Email references include the retained receipt date/time.
-When an email has no excerpt, its row directs the User to search the opened original; that search
-filters loaded lines without highlighting and states its scope explicitly. Fallback element numbers keep their unfiltered page position
-when local filters change, including on later pages.
-
-The pattern composes the actual Input, Currency selector, category choices, calendar and
-time controls. `CalendarField appearance="review"` changes only the compact Spanish date
-label; the default calendar appearance and timezone behavior remain shared. Narrow screens
-stack the source and form and give category its full row. `/ui-reference.html` includes the
-review owners in both themes. Created history entries offer “Ver transacción”, navigating to its
-current month in Transacciones and scrolling to its ordinary list row. Preserve the unselected list
-and normal summary; opening details or correction requires a separate User action. The action remains
-available after original evidence expires, while missing or inaccessible Transactions receive an
-explicit unavailable state without claiming the record still exists. Manual reprocessing has no UI or callable review endpoint;
-read recovery for original material and uncertain command results remains available.
-
-### Approved browser access composition
-
-The login composition was approved separately from the landing. `/login` uses the supplied coin-i
-wordmark, cotton-top tamarin artwork and approved pastel Ceiba PNG, with one continuous canvas.
-The desktop slogan and mascot sit beside the access form; phones retain the logo, theme control
-and form. The supplied slogan remains brand green without a backing band; it is a display-only
-approved treatment, never a contrast exception for functional labels. The application accessibility
-checks must continue to report this contrast debt rather than suppressing unrelated failures.
-
-`ui/components/access.tsx` and `access.css` own these approved access controls and layout. The
-principal offers Google and Microsoft with their original multicolor artwork and 400-weight
-Poppins labels, plus verified email and WhatsApp. Detail steps place a neutral Hugeicons icon
-beside their title, a top back action without underlining, and three accessible icon-only
-alternative methods below; there are no visible names beneath those icons. Primary actions and
-inputs use the approved 12px shape and comfortable hit areas. Other application controls retain
-their existing variants. `/ui-reference.html#access` demonstrates the actual shared controls.
-
-Access follows system appearance until a manual choice, stored only as the schema-validated
-`fidy-theme-v1` preference. Both themes preserve the exact brand green. Reduced motion removes
-entrance and mascot motion. Functional text uses the shared readable foreground tokens.
-
-The view never supplies example credentials, countdowns or approval decisions. Pairing expiry and
-mailbox resend availability derive from server responses. The eight-consonant public pairing code
-is distinct from the 24-character mailbox proof; private verifier, drafts and proof consumption
-remain with their existing mounted authentication owner. Changing methods discards that attempt.
-A generic server refusal cannot be described as a confirmed WhatsApp rejection; the terminal view
-therefore retains the generic explanation.
-
-Web signup uses the separately approved composition on the same canvas: “Crea tu cuenta”,
-“Elige cómo crear tu cuenta.”, one treatment-acceptance checkbox with the inline public privacy
-policy link, Google/Microsoft actions and the return to login. It omits the explanatory data-use
-paragraph. The checkbox starts unchecked; both providers wait for loaded, current Consent and
-explicit acceptance. The native checkbox keeps visible focus, a readable label and the approved
-20px shape. `AccessConsent` and the access reference share the same controlled checkbox;
-the reference toggles signup providers locally without sending acceptance or creating an account.
-Disabled signup providers use the approved subdued outline treatment. Removing the
-UI paragraph does not change the server disclosure or historical Consent evidence.
-
-Provider waiting, consent loading/refusal, one-time recovery and WhatsApp association review
-remain real additional states using the same access surface, pending separate visual review if
-further composition changes are requested.
-
-### Invalid institution connection link recovery
-
-`/connections/continue` uses the approved Guiada composition when the public attempt reference is
-missing or malformed: the supplied Fidy wordmark and bank-connection context sit above a continuous
-canvas. A concise unusable-link explanation and the lime “Volver a Fidy” action sit beside a
-“Cómo continuar” guide. The guide asks the User to return to the originating Fidy conversation and
-request another connection link; it does not start a ConnectionAttempt automatically.
-
-Desktop uses two columns separated by a thin vertical divider, a 28px title and 14px guide copy.
-At 700px and below, the guide stacks after the action with a horizontal divider, the title becomes
-24px and the action fills the available width. Poppins, shared Light/Grafito tokens, the original
-wordmark, pill action and flat surfaces match the rest of the product. No error card, decorative
-icon, shadow or success claim is added. The same visible action leads to Transactions with a browser
-session and to sign-in without one; the destination retains its own access checks.
-
-### Approved Transactions composition (24 October 2026)
-
-Library `libfile_a81df1bfa6788191b330de877fc0bbb7` v5 owns the approved Transactions composition. `ui/components/transactions.tsx` and its scoped CSS own the continuous workspace planes, controls, contextual rail and type toggle; `/ui-reference.html` includes these controls. The feature retains canonical queries, local filters, continuation, revision-checked corrections and atomic batches. Category and Type keep the original ledger-wide grid/subgrid and 600/481/400px thresholds.
-
-The rail replaces the summary while editing. Below 1050px the active panel takes the content area, preserving application navigation. It has nonmodal dialog semantics, focus entry/return and Escape dismissal unless a write is locked. Manual capture offers optional Category (automatic assignment by default) and Notes; Counterparty is bounded to 120 characters and Notes to 500. COP, local-day semantics, per-Currency Money and uncertain-write recovery remain owned by the existing contracts. Manual capture exposes a searchable Moneda selector with COP as the initial choice; the amount label says “Monto” without repeating that choice. Currency changes preserve the draft and update precision guidance without conversion. Capture from a RecurringPlan displays its fixed Currency. Confirmed registration feedback includes exact Money with an explicit Currency code. Manual creation says “Registrar”; editing save actions say “Guardar”; deletion confirms “Eliminar” and retains irreversibility and source-retention disclosure. Shell and theme remain owned by the coordinated Dashboard change.
-
-The approved v5 Transactions `.danger` treatment is an explicit exception to the generic destructive-fill rule above: both the action opening deletion review and its final “Eliminar” confirmation use transparent fill, the approved neutral line border and readable red text in light/Grafito, with the existing visible keyboard focus. This exception is scoped to `ui/components/transactions.css`; other destructive flows keep the shared destructive variant.
-
-## Approved Dashboard and application navigation
-
-The separately approved Dashboard reference is Library `libfile_3810ef5dde2481918fb3b0700d74cf8e` version 5. Its fictitious amounts are composition examples, never application data. The application shell uses the original wordmark, supplied tití and pastel ceiba PNG in the sidebar, Hugeicons outline navigation, and `Logout02Icon` for functional logout. Mobile retains the assistant in the header beside theme and hides its trigger while the compact menu is open. The shared `theme.ts` adapter follows the system until a schema-validated manual `fidy-theme-v1` choice; access and authenticated views use the same preference.
-
-Dashboard cards retain canonical Widget configuration and layout. The spending chart remains vertical Recharts bars with exact-money tooltips and separate Currency series. Metrics keep Ingresos and Gastos per Currency, without conversion or net. Budget cards retain spent/cap progress and available/reached/exceeded states. Recent Transactions keep the configured ten latest records, their original order, local-date groups and ledger category/direction visuals; partial groups do not claim daily totals. Mixed currencies use the existing unambiguous Money formatter.
-
-Category-grouped spending uses a Category emoji below each bar instead of category-name ticks or a separate legend. This is a scoped exception to the Hugeicons convention, approved in #1657. Emojis and pastel bar colors follow stable Category identity, including when a label changes; an unknown Category uses a neutral tag emoji. Keep bar heights proportional from zero, independent of emoji size. Full category names and exact Money remain available through hover, keyboard navigation and touch selection, with a screen-reader alternative. Dense charts retain readable emoji spacing through local horizontal scrolling at narrow widths and enlarged text; the page itself must not overflow. Day and month groupings retain text ticks. Preserve the approved card, currency badge, period footer, and light/Grafito treatments.
-
-`ui/components/application.tsx`, `application.css`, `dashboard.tsx` and `dashboard.css` own the approved shell and card treatments. `/ui-reference.html#dashboard` renders their synthetic examples. The existing Dashboard editing owner, directional drag targets, touch behavior, resize, per-gesture persistence and explicit reread recovery remain authoritative. The static prototype's move-to-end and range demos are not application behavior. Existing saved layouts remain unchanged.
-
-### Recurrentes: continuous workspace and contextual plane
-
-The recurring workspace uses the same continuous canvas, typography, aligned edges and hairline dividers as Transactions and Review. Monthly totals, occurrence groups, calendar and plan management are not enclosed in cards. Preserve separate currencies and movement kinds, unknown amounts, historical states, and all existing planning actions.
-
-The global header spans the entire workspace and retains the base canvas color, including “Nuevo recurrente” and the theme control. The contrasting right-hand contextual plane begins strictly below that header. On narrow screens the editor becomes a full-width accessible sheet with close and theme controls. Closing restores focus without submitting changes. The monthly navigation shows only the localized month and year with previous/next controls: no “Hoy” or substitute shortcut. Use Hugeicons and the existing Fidy tokens in both themes.
-
-The component ownership is `src/ui/components/recurring.tsx` and `recurring.css`; `src/ui/recurring-reference.tsx` demonstrates the composition. Feature code owns data and interactions, not a separate visual token system.
-
-Occurrence details show the current plan lifecycle in a compact row above the occurrence's own
-tracking status. `RecurringPlanStatus` and `RecurringPlanBadge` share the lifecycle labels and
-semantic treatments with plan management. Active plans offer the coral destructive “Pausar plan”;
-paused plans offer the lime “Reanudar plan”; stopped plans offer neither. Explain a pause as
-“No aparecerán nuevas fechas de este plan mientras esté pausado. Los registros existentes se conservan.”
-Confirmed pause/resume keeps the detail open and names the affected plan and resulting state in
-accessible success feedback. The planning owner retains that feedback when an occurrence disappears
-from the projection or the panel closes; pending, rejected and uncertain writes remain distinct.
-
-Linked Transaction entries show Counterparty, exact signed Money, local date and direction in the
-occurrence detail. Category and Notes appear inline when present, with long content wrapping.
-There is no separate Transaction-opening action. Each linked entry offers the shared coral
-“Desvincular transacción” action and an inline confirmation explaining that only this date's
-tracking is removed; the Transaction remains in history. Manual marks retain their separate
-“Revertir” action. Unavailable or invalidated associations remain reviewable without contributing
-to completed totals.
-
-## Settings workspace
-
-Cuenta, Privacidad and Accesos use the approved continuous canvas: a 40px desktop
-title, peach icon circles, section dividers and the existing habitat sidebar. The
-light and Grafito themes share the same composition. Privacy rights contact and
-manual token creation use dedicated rails from 1280px: 422px for Privacy with 28px
-insets, and 384px for token creation. Below that width they stack in document order.
-Phone headings, icon circles and gutters compact without
-hiding security explanations, confirmation, result or recovery states.
-
-Settings controls retain the shared tokens, focus and disabled states with a
-50px target and 10px radius supplied by the Settings UI owner. Inputs and the token
-duration dropdown use a 52px target; the dropdown retains the same rectangular
-shape rather than the shared default pill. Privacy status chips use 30px height
-and 14px text; access status chips use 36px height and 16px text with a decorative
-status dot. Shared semantic foreground/background and state labels remain unchanged.
-The scoped reference includes these controls and the Privacy rail. Desktop Privacy
-spacing is compacted without removing safety copy or clipping expanded results. Destructive
-initiators use the named `destructive-outline` and `destructive-text` Button
-variants with the semantic error foreground; final destructive confirmations
-retain their existing treatment. These variants are demonstrated in the UI
-reference. Individual and bulk actions stay distinct. The selected Settings
-subsection uses a lime dot and weight in the nested navigation tree.
-
-## Subscription and payment workspace
-
-The approved #1552 composition uses the application shell, a full-width heading divider and
-a contextual rail beginning below that heading. The overview has unboxed period choices, one
-method choice with separate, equally rounded buttons, small gaps and narrow-width wrapping,
-followed by an explicit Continue action. Selection changes the green border and fill, not the
-button geometry or label weight. No period is selected on entry.
-Period controls stay transparent when selected or hovered, retaining the lime selection underline,
-text hover emphasis and shared keyboard focus. Prices include their canonical Currency code and omit
-only an empty fractional part; nonzero fractional amounts retain their exact currency precision.
-The payment form replaces the overview rather than appearing beneath it; phones put its chosen
-amount above the fields. Nequi approval, DaviPlata entry/OTP and payment outcomes are alternative
-states, not simultaneous forms. Source availability never presents as payment approval.
-
-`src/ui/components/subscription.css` owns the continuous planes, 50px controls, 52px inputs,
-icon circles, separators and responsive treatment, using existing theme and state tokens.
-`SubscriptionInputDecoration` adds the approved decorative leading field icons only on narrow
-screens, leaving the desktop fields icon-free and keeping the shared Input behavior unchanged.
-`/ui-reference.html#subscription` demonstrates the actual shared controls with local, non-payment
-examples; synthetic browser captures exercise the complete application composition in both themes.
-Canonical offers and status supply every real price, period and billing attempt. There are no
-invented invoices, stored-card details or next-charge dates.
-
-Issue #1650 extends this composition with cancellation of future Subscription renewals. Keep the
-control and its inline review on the continuous canvas beside canonical standing and billing
-history. Both the initiator and confirmation use the shared filled destructive Button; backing
-out remains neutral. Controls wrap long labels and grow with enlarged text. The review explains
-future renewals, the paid-through date, reusable payment-source detachment and retained billing
-history without promising a refund or reversal of a charge already started.
-
-Only a canonical response confirms cancellation. Results distinguish local detachment, pending provider annulment
-and verified provider annulment; uncertain and unavailable states reuse the Subscription semantic
-feedback icons and pastel treatments. Explicit recovery rereads status without replaying the
-cancellation. Initial status reads retain a screen-reader pending status; background reads retain existing
-content. The confirmation label and control dimensions remain stable while separate feedback names
-submission or status refresh accurately. Back restores focus to the initiator; completed and uncertain requests move focus
-to their result or recovery message. Keep these states usable in Light and Grafito, at mobile,
-intermediate and desktop widths, and with enlarged text.
-
-### Linking recurring occurrences
-
-The linking workspace uses the shared application shell, flat search/results plane and 384px
-review rail. The full-height divider stays on the outer rail; review content sticks independently
-within the viewport and scrolls when needed, including beside later result rows. On smaller screens, selecting a candidate opens the shared full-screen review sheet.
-Search covers canonical effective Transaction history, with optional local date bounds, direction,
-Currency and exact amount. Search is explicitly applied with Buscar; the result scope and whether
-another bounded page exists remain visible. The applied exact Money stays in the scope label while
-a different amount draft is edited. Amount drafts use the shared control with Colombian separators.
-
-`TransactionCandidate` renders comfortable, keyboard-activatable rows with Counterparty, local date,
-notes, direction and exact Money. Selection highlights a row and opens review without linking.
-The review shows occurrence context, selected facts, partial/complete settlement and any manual
-tracking replacement. Only the explicit Vincular transacción action requests the association.
-The shared component reference includes a selectable candidate in light and Grafito.
+- Reuse the shared palette, type roles, shapes, and interaction states across screens.
+- Keep financial meaning explicit in labels, Currency, and exact figures.
+- Use flat workspace planes; reserve cards and elevation for their defined roles.
+- Preserve readable text, contrast, focus, and reachable actions in both themes and
+  at narrow widths, intermediate widths, and enlarged text.
+- Use concrete product explanations and actual states; avoid invented assurances.
+- Add lasting visual decisions here. Keep feature behavior, implementation notes,
+  temporary exceptions, and delivery history with the relevant code, issue, or PR.
+
+Document format: [Google DESIGN.md specification](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).

@@ -1,3 +1,4 @@
+import type { CanonicalReadCompletion } from "../canonical-admission/contract";
 import type { Effect, Option } from "effect";
 import type {
   ApplyDashboardEditCanonicalInput,
@@ -28,12 +29,13 @@ export type DashboardMutationCall = {
 }[keyof DashboardInputs];
 
 /**
- * The catalog requires live caller authority only. Document calls additionally require dispatch
- * through that same User's coordinator, holding its turn until committed readback is complete.
+ * Queries retain live caller authority and native snapshot consistency. Mutations additionally
+ * require the same User's coordinator through committed readback.
  */
 export type DashboardRequest = Readonly<{
   db: D1Database;
   request: Request;
+  completion: Option.Option<CanonicalReadCompletion>;
 }> &
   (
     | Readonly<{ operation: DashboardQueryOperation; subject: QueryCaller }>

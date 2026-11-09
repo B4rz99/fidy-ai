@@ -1,3 +1,4 @@
+import { HostedTurnConfirmation } from "~/shell/agent/contract";
 import {
   DisclosureDeliveryCorrelationToken,
   type DisclosureDeliveryFailureReason,
@@ -37,6 +38,8 @@ import { classifyKapsoMetaFailureCode } from "./kapso-failure";
 import { type OutboundHttpService } from "~/shell/outbound-http/operations";
 import { okStatus } from "~/shell/public-http/contract";
 
+const maximumReplyButtonTitleLength = 20;
+
 const hmacSha256Bytes = 32;
 
 const minimumWebhookSecretLength = 16;
@@ -63,6 +66,18 @@ const RawTextMessage = Schema.Struct({
   ...rawMessageFields,
   type: Schema.Literal("text"),
   text: Schema.Struct({ body: TranscriptText }),
+});
+
+const RawConfirmationMessage = Schema.Struct({
+  ...rawMessageFields,
+  type: Schema.Literal("interactive"),
+  interactive: Schema.Struct({
+    type: Schema.Literal("button_reply"),
+    button_reply: Schema.Struct({
+      id: HostedTurnConfirmation.fields.command,
+      title: Schema.String.check(Schema.isMaxLength(maximumReplyButtonTitleLength)),
+    }),
+  }),
 });
 
 const RawVoiceMessage = Schema.Struct({
@@ -92,7 +107,13 @@ const RawDocumentMessage = Schema.Struct({
 });
 
 const RawKapsoEvent = Schema.Struct({
-  message: Schema.Union([RawTextMessage, RawVoiceMessage, RawImageMessage, RawDocumentMessage]),
+  message: Schema.Union([
+    RawTextMessage,
+    RawConfirmationMessage,
+    RawVoiceMessage,
+    RawImageMessage,
+    RawDocumentMessage,
+  ]),
   conversation: Schema.Struct({
     phone_number: Model.optionalOption(Schema.String),
     business_scoped_user_id: Model.optionalOption(WhatsAppBusinessScopedUserId),
@@ -276,6 +297,9 @@ const projectInboundContent = (
   message: typeof RawKapsoEvent.Type.message
 ): WhatsAppInboundContent => {
   if (message.type === "text") return { _tag: "Text", text: message.text.body };
+  if (message.type === "interactive") {
+    return { _tag: "Text", text: TranscriptText.make(message.interactive.button_reply.id) };
+  }
   if (message.type === "image") {
     return { _tag: "Image", mediaId: message.image.id, caption: message.image.caption };
   }

@@ -44,7 +44,7 @@ const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
   };
   return (
     <form onSubmit={submit} className="grid gap-4 border-t pt-4">
-      <fieldset disabled={disabled} className="grid gap-4">
+      <fieldset disabled={disabled} className="grid min-w-0 gap-4">
         <h3 className="font-medium">Marcar solo en recurrentes</h3>
         <p className="text-sm text-muted-foreground">
           Actualiza únicamente el seguimiento de este recurrente. No crea una transacción ni
@@ -137,7 +137,7 @@ export const OccurrenceDetails = (props: Props): JSX.Element => {
           seguimiento; no elimina transacciones.
         </p>
       ) : null}
-      <Button variant="outline" disabled={disabled} onClick={props.link}>
+      <Button contentLayout="wrap" variant="outline" disabled={disabled} onClick={props.link}>
         Vincular transacción existente
       </Button>
       <PaymentCapture {...props} />

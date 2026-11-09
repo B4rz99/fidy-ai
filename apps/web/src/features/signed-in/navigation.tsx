@@ -57,12 +57,9 @@ export const SignedInNavigation = ({
   prepareNavigation: (destination: string) => void;
 }>): JSX.Element => {
   const { authentication } = useSession();
-  const privacy = useRouterState({
-    select: (state) => state.location.pathname === "/settings/privacy",
-  });
-  const transactions = useRouterState({
-    select: (state) => state.location.pathname === "/app/transactions",
-  });
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const privacy = pathname === "/settings/privacy";
+  const transactions = pathname === "/app/transactions";
   const { sessionBinding } = useRouter().options.context;
   const signedIn = authentication !== "expired" && sessionBinding !== "none";
   const count = transactions ? (
@@ -89,9 +86,12 @@ export const SignedInNavigation = ({
           {link.to === "/app/needs-review" && signedIn && !privacy ? count : null}
         </Link>
       ))}
-      <SettingsNavigation />
+      <SettingsNavigation prepareNavigation={prepareNavigation} />
       <Link
         to="/upgrade"
+        onPointerEnter={() => prepareNavigation("/upgrade")}
+        onPointerDownCapture={() => prepareNavigation("/upgrade")}
+        onFocus={() => prepareNavigation("/upgrade")}
         onClick={dismissCompactNavigation}
         className="application-navigation-link"
         activeProps={{ className: "application-navigation-active" }}

@@ -135,6 +135,14 @@ await test("the web command enforces feature privacy and permits feature publica
     "src/features/example/internal/value.ts": "export const value = 1;",
   };
   assert.equal(inspect("web", files).status, 0);
+  const prepared = inspect("web", {
+    ...files,
+    "src/app/routes.tsx":
+      'import { prepare } from "@/features/example/code"; export const route = prepare;',
+    "src/features/example/code.ts":
+      'export const prepare = () => import("@/features/example/internal/value");',
+  });
+  assert.equal(prepared.status, 0, prepared.output);
   const rejected = inspect("web", {
     ...files,
     "src/app/routes.tsx":

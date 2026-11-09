@@ -1,3 +1,8 @@
+import { preloadBudgetScreen } from "@/features/budgets/code";
+import { preloadTransactionList } from "@/features/transactions/code";
+import { preloadDashboardView } from "@/features/dashboard/code";
+import { preloadRecurringScreen } from "@/features/recurring/code";
+import { preloadSubscriptionScreen } from "@/features/subscription/code";
 import { TransactionCaptureFeature } from "@/features/transactions/feature";
 import { Effect } from "effect";
 import { lazyRouteComponent } from "@tanstack/react-router";
@@ -16,6 +21,7 @@ export const destinationCodePreloads = [
     load: (): Promise<unknown> =>
       Effect.runPromise(
         Effect.gen(function* () {
+          yield* Effect.tryPromise(preloadBudgetScreen);
           yield* Effect.tryPromise(() => Promise.resolve(BudgetRoute.preload?.()));
           const { BudgetsFeature } = yield* Effect.tryPromise(
             () => import("@/features/budgets/feature")
@@ -29,6 +35,7 @@ export const destinationCodePreloads = [
     load: (): Promise<unknown> =>
       Effect.runPromise(
         Effect.gen(function* () {
+          yield* Effect.tryPromise(preloadRecurringScreen);
           yield* Effect.tryPromise(() => Promise.resolve(RecurringRoute.preload?.()));
           yield* Effect.tryPromise(() =>
             Promise.all([RecurringWorkspace.preload?.(), TransactionCaptureFeature.preload()])
@@ -36,12 +43,19 @@ export const destinationCodePreloads = [
         })
       ),
   },
-  { path: "/app/dashboard", load: (): Promise<unknown> => import("./dashboard-page") },
-  { path: "/app/transactions", load: (): Promise<unknown> => import("./transactions-page") },
+  {
+    path: "/app/dashboard",
+    load: (): Promise<unknown> => Promise.all([import("./dashboard-page"), preloadDashboardView()]),
+  },
+  {
+    path: "/app/transactions",
+    load: (): Promise<unknown> =>
+      Promise.all([import("./transactions-page"), preloadTransactionList()]),
+  },
   { path: "/settings/account", load: (): Promise<unknown> => import("./account-page") },
   { path: "/settings/access", load: (): Promise<unknown> => import("./access-page") },
   { path: "/settings/privacy", load: (): Promise<unknown> => import("@/features/privacy/feature") },
-  { path: "/upgrade", load: (): Promise<unknown> => import("@/features/subscription/feature") },
+  { path: "/upgrade", load: preloadSubscriptionScreen },
 ] as const;
 
 export const preloadDestinationCode = (path: string): Promise<unknown> =>

@@ -1,7 +1,9 @@
+import type { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { DateTime, Option } from "effect";
-import type { CanonicalSuccess } from "@/transport/client";
+import { AsyncResult, Atom } from "effect/reactivity";
+import type { CanonicalSuccess, FidyApiGroups, FidyClient } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { useReviewPageExpiry } from "./expiry";
 import { reviewContextKey } from "./query-keys";
@@ -11,6 +13,44 @@ import type { Filter } from "./view-navigation";
 export type SourceContext =
   CanonicalSuccess<"ingestion.getReviewPageContext">["data"]["items"][number];
 export type PageContexts = ReadonlyMap<string, SourceContext>;
+
+type ContextEndpoint = HttpApiEndpoint.WithIdentifier<
+  HttpApiGroup.Endpoints<HttpApiGroup.WithIdentifier<FidyApiGroups, "ingestion">>,
+  "getReviewPageContext"
+>;
+type ContextQuery = Atom.Atom<
+  AsyncResult.AsyncResult<
+    CanonicalSuccess<"ingestion.getReviewPageContext">,
+    HttpApiEndpoint.Errors<ContextEndpoint>
+  >
+>;
+const emptyContext: ContextQuery = Atom.make(
+  AsyncResult.success<CanonicalSuccess<"ingestion.getReviewPageContext">>({
+    data: { items: [] },
+    next: [],
+  })
+);
+export const reviewPageContextQuery = ({
+  client,
+  filter,
+  page,
+  ids,
+}: Readonly<{
+  client: FidyClient;
+  filter: Filter;
+  page: number;
+  ids: ReadonlyArray<string>;
+}>): ContextQuery => {
+  if (ids.length === 0) return emptyContext;
+  return client.query("ingestion", "getReviewPageContext", {
+    query: {
+      status: Option.some(filter),
+      offset: page === 0 ? Option.none() : Option.some(page),
+    },
+    reactivityKeys: ["ingestion-review", reviewContextKey, `review-page:${ids.join(",")}`],
+    timeToLive: "400 millis",
+  });
+};
 
 /** Page-local source evidence stays in the authentication registry and expires independently of drafts. */
 export const useReviewPageContext = ({
@@ -28,18 +68,7 @@ export const useReviewPageContext = ({
   refresh: () => void;
 }> => {
   const client = useRouter().options.context.apiClient;
-  const query = client.query("ingestion", "getReviewPageContext", {
-    query: {
-      status: Option.some(filter),
-      offset: page === 0 ? Option.none() : Option.some(page),
-    },
-    reactivityKeys: [
-      "ingestion-review",
-      reviewContextKey,
-      `review-page:${items.map((item) => item.id).join(",")}`,
-    ],
-    timeToLive: "400 millis",
-  });
+  const query = reviewPageContextQuery({ client, filter, page, ids: items.map((item) => item.id) });
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   const entries = state._tag === "Ready" ? state.value.data.items : [];

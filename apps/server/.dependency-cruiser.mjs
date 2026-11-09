@@ -29,7 +29,7 @@ export default {
       comment:
         "The explicit browser publications re-publishes only final owner declarations and explicit browser-safe operations (#615).",
       from: {
-        path: "^src/(client|browser-bootstrap|browser-transport)\\.ts$",
+        path: "^src/(client|browser-bootstrap|browser-transport|browser-http)\\.ts$",
       },
       to: {
         path: "^src/",
@@ -40,7 +40,7 @@ export default {
           "^src/core/_shared/money\\.ts$",
           "^src/core/_shared/context\\.ts$",
           "^src/shell/api\\.ts$",
-          "^src/shell/observability/contract\\.ts$",
+          "^src/shell/observability/trace/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/(agent|canonical-operations|processing-consent|connections|dashboard|email-authentication|oauth-agents|operations|public-http|quotas|subscription|tokens|web-authentication|web-session|browser-transport)/contract\\.ts$",
           "^src/shell/canonical-policy/operations\\.ts$",
@@ -57,7 +57,7 @@ export default {
         path: "^(src/(core|shell)/|cloudflare/)",
       },
       to: {
-        path: "^src/(client|browser-bootstrap|browser-transport)\\.ts$",
+        path: "^src/(client|browser-bootstrap|browser-transport|browser-http)\\.ts$",
       },
     },
     {
@@ -242,7 +242,10 @@ export default {
         "Source outside portable owners reaches shell declarations only through the package client publication; application landmarks are not additional client seams.",
       from: {
         path: "^src/",
-        pathNot: ["^src/(core|shell)/", "^src/(client|browser-bootstrap|browser-transport)\\.ts$"],
+        pathNot: [
+          "^src/(core|shell)/",
+          "^src/(client|browser-bootstrap|browser-transport|browser-http)\\.ts$",
+        ],
       },
       to: {
         path: "^src/shell/",

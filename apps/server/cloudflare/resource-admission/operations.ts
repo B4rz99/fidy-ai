@@ -17,6 +17,7 @@ import {
   type ResourceAdmissionPolicyKey,
   ResourceAdmissionRefused,
   type ResourceAdmissionRequest,
+  type ResourceAdmissionResult,
   type ResourceAdmissionScopeKey,
   type ResourceAdmissionTransition,
   ResourceAdmissionUnavailable,
@@ -49,9 +50,6 @@ type ResolvedCharge =
       }>);
 
 const isSafeEpoch = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
-
-const invalidRequestDefect = (): Effect.Effect<never> =>
-  Effect.die(new TypeError("Invalid resource admission request"));
 
 const resolveCharge = (
   policies: ReadonlyArray<ResourceAdmissionPolicy>,
@@ -247,24 +245,50 @@ export const admitResource = dual<
   ) => (
     config: ResourceAdmissionAuthorityConfig
   ) => Effect.Effect<
-    ResourceAdmissionGrant,
+    ResourceAdmissionResult,
     ResourceAdmissionRefused | ResourceAdmissionUnavailable
   >,
   (
     config: ResourceAdmissionAuthorityConfig,
     request: ResourceAdmissionRequest
   ) => Effect.Effect<
-    ResourceAdmissionGrant,
+    ResourceAdmissionResult,
     ResourceAdmissionRefused | ResourceAdmissionUnavailable
   >
 >(2, (config, request) =>
   Effect.suspend(() => {
     const prepared = prepareResourceAdmission(config, request);
     return executeBatch(config.database, [...prepared.statements, ...request.statements]).pipe(
-      Effect.as({ grantId: prepared.grantId })
+      Effect.map((rows) => ({
+        grantId: prepared.grantId,
+        results: rows.slice(prepared.statements.length),
+      }))
     );
   })
 );
+
+/** Prepare completion inside an owner's final native unit; no capacity is released before commit. */
+export const prepareOutstandingResourceRelease = dual<
+  (
+    request: ReleaseOutstandingWorkRequest
+  ) => (config: ResourceAdmissionAuthorityConfig) => ReadonlyArray<D1PreparedStatement>,
+  (
+    config: ResourceAdmissionAuthorityConfig,
+    request: ReleaseOutstandingWorkRequest
+  ) => ReadonlyArray<D1PreparedStatement>
+>(2, (config, request) => {
+  const releasedAtEpochMs = config.nowEpochMs();
+  if (!isSafeEpoch(releasedAtEpochMs)) throw new TypeError("Invalid resource completion time");
+  return [
+    config.database
+      .prepare(`UPDATE resource_admission_events
+      SET released_at_epoch_ms = ?
+      WHERE grant_id = ? AND dimension = 'outstanding_work'
+        AND released_at_epoch_ms IS NULL`)
+      .bind(releasedAtEpochMs, request.grantId),
+    ...request.statements,
+  ];
+});
 
 /** Release outstanding occupancy with the caller's completion statements in the same D1 batch. */
 export const releaseOutstandingResource = dual<
@@ -277,25 +301,14 @@ export const releaseOutstandingResource = dual<
     config: ResourceAdmissionAuthorityConfig,
     request: ReleaseOutstandingWorkRequest
   ) => Effect.Effect<void, ResourceAdmissionUnavailable>
->(2, (config, request) => {
-  const releasedAtEpochMs = config.nowEpochMs();
-  if (!isSafeEpoch(releasedAtEpochMs)) return invalidRequestDefect();
-  return executeBatch(config.database, [
-    config.database
-      .prepare(
-        `UPDATE resource_admission_events
-           SET released_at_epoch_ms = ?
-           WHERE grant_id = ?
-             AND dimension = 'outstanding_work'
-             AND released_at_epoch_ms IS NULL`
-      )
-      .bind(releasedAtEpochMs, request.grantId),
-    ...request.statements,
-  ]).pipe(
-    Effect.mapError(() => new ResourceAdmissionUnavailable({ reason: "authority_unavailable" })),
-    Effect.asVoid
-  );
-});
+>(2, (config, request) =>
+  Effect.suspend(() =>
+    executeBatch(config.database, [...prepareOutstandingResourceRelease(config, request)]).pipe(
+      Effect.mapError(() => new ResourceAdmissionUnavailable({ reason: "authority_unavailable" })),
+      Effect.asVoid
+    )
+  )
+);
 
 /** Charge bounded attempt pressure even when the subsequent atomic work admission is refused. */
 export const admitResourceWithAttemptPressure = dual<

@@ -1338,6 +1338,7 @@ CREATE TABLE memory_audit (user_id TEXT,occurred_at_ms INTEGER);
   });
 const cancel = (db: D1Database, now: number, subjectUser = userId): Effect.Effect<Response> =>
   executeCanonicalWork({
+    completion: Option.none(),
     db,
     subject: { id: enrollmentId, userId: subjectUser, digest: new Uint8Array(32) },
     current: now,
@@ -1367,6 +1368,7 @@ it("cancels a paid Subscription through a write-scoped PAT", () =>
           .run()
       );
       const response = yield* executeCanonicalWork({
+        completion: Option.none(),
         db,
         subject: {
           patId: paymentRequestId,
@@ -2214,6 +2216,7 @@ it("refuses cancellation with a read-only PAT without changing renewal work or r
       );
       const before = yield* cancellationEffects(db);
       const response = yield* executeCanonicalWork({
+        completion: Option.none(),
         db,
         subject: {
           patId: enrollmentId,
@@ -2300,6 +2303,7 @@ ${consentHistoryTestSchema};`)
           confirmation: Option.Option<OAuthConfirmationWork>
         ): Effect.Effect<Response> =>
           executeCanonicalWork({
+            completion: Option.none(),
             db,
             subject,
             current: dueAt + 1,

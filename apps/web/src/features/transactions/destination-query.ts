@@ -15,6 +15,7 @@ export const transactionDestinationQuery = ({
   client.query("transactions", "getTransaction", {
     params: { id },
     timeToLive: "400 millis",
+    reactivityKeys: ["transaction-detail"],
   });
 export const destinationMonth = ({
   transaction,

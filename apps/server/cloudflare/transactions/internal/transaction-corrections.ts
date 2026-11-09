@@ -12,6 +12,7 @@ import { boundedJsonBody } from "../../http/operations";
 import {
   type CanonicalCaller,
   type TransactionBoundaryFailure,
+  type TransactionMutationOperation,
   type TransactionRefusal,
   acceptedHostedStatement,
   acceptedOAuthStatement,
@@ -75,14 +76,20 @@ export const correctionInput = (
 
 const retain = <A>(value: Option.Option<A>, previous: A): A =>
   Option.getOrElse(value, () => previous);
-const invalidCorrection = (input: typeof Input.Type, current: number): boolean =>
+export const invalidCorrection = ({
+  input,
+  current,
+}: Readonly<{ input: typeof Input.Type; current: number }>): boolean =>
   Object.keys(input.changes).length === 0 ||
   (input.changes.occurredAt !== undefined &&
     DateTime.toEpochMillis(input.changes.occurredAt) > current);
-const replaceFacts = (
-  previous: StoredTransaction,
-  changes: typeof Input.Type.changes
-): Option.Option<StoredTransaction> =>
+export const replaceFacts = ({
+  previous,
+  changes,
+}: Readonly<{
+  previous: StoredTransaction;
+  changes: typeof Input.Type.changes;
+}>): Option.Option<StoredTransaction> =>
   Schema.decodeOption(Transaction)({
     id: previous.id,
     direction: retain(Option.fromUndefinedOr(changes.direction), previous.direction),
@@ -168,37 +175,37 @@ const changeStatements = (
   ];
 };
 
-const auditStatements = ({
+export const auditStatements = ({
   db,
   subject,
   current,
   correctionId,
+  operation,
 }: Readonly<{
   db: D1Database;
   subject: CanonicalCaller;
   current: number;
   correctionId: string;
+  operation: TransactionMutationOperation;
 }>): ReadonlyArray<D1PreparedStatement> => {
   if (isHostedCaller(subject)) {
     return [
       acceptedHostedStatement({
         db,
         subject,
-        operation: "transactions.updateTransaction",
+        operation,
         current,
       }),
     ];
   }
   if (isOAuthCaller(subject)) {
-    return [
-      acceptedOAuthStatement({ db, subject, operation: "transactions.updateTransaction", current }),
-    ];
+    return [acceptedOAuthStatement({ db, subject, operation, current })];
   }
   return isPATCaller(subject)
     ? acceptedPATStatements({
         db,
         subject,
-        operation: "transactions.updateTransaction",
+        operation,
         current,
       })
     : [
@@ -207,7 +214,7 @@ const auditStatements = ({
           id: transactionId(),
           userId: subject.userId,
           caller: { _tag: "WebSession", id: subject.id },
-          operation: "transactions.updateTransaction",
+          operation,
           outcome: "success",
           current,
           afterOwnerWrite: true,
@@ -262,11 +269,15 @@ const observeCorrection = (
     };
   });
 
-const correctionEvidence = (
-  previous: StoredTransaction,
-  updated: StoredTransaction,
-  changes: typeof Input.Type.changes
-): Effect.Effect<Evidence, Schema.SchemaError> =>
+export const correctionEvidence = ({
+  previous,
+  updated,
+  changes,
+}: Readonly<{
+  previous: StoredTransaction;
+  updated: StoredTransaction;
+  changes: typeof Input.Type.changes;
+}>): Effect.Effect<Evidence, Schema.SchemaError> =>
   Effect.gen(function* () {
     const fields = Object.keys(changes);
     return {
@@ -317,6 +328,7 @@ const preparedCorrection = ({
           subject,
           current,
           correctionId: evidence.id,
+          operation: "transactions.updateTransaction",
         }),
       ],
     },
@@ -344,7 +356,7 @@ export const prepareCorrection = (
     if (Option.isNone(Schema.decodeOption(TransactionId)(id))) {
       return refuse({ outcome: "not_found", message: missingTransactionMessage });
     }
-    if (invalidCorrection(input, current)) {
+    if (invalidCorrection({ input, current })) {
       return refuse({ outcome: "validation_failed", message: emptyChangeMessage });
     }
     const live = yield* Effect.tryPromise({
@@ -359,11 +371,15 @@ export const prepareCorrection = (
     if (owned.value.revision !== input.expectedRevision) {
       return refuse({ outcome: "validation_failed", message: staleCorrectionMessage });
     }
-    const updated = replaceFacts(owned.value, input.changes);
+    const updated = replaceFacts({ previous: owned.value, changes: input.changes });
     if (Option.isNone(updated)) {
       return refuse({ outcome: "validation_failed", message: invalidTransactionMessage });
     }
-    const evidence = yield* correctionEvidence(owned.value, updated.value, input.changes);
+    const evidence = yield* correctionEvidence({
+      previous: owned.value,
+      updated: updated.value,
+      changes: input.changes,
+    });
     return preparedCorrection({
       correction,
       previous: owned.value,

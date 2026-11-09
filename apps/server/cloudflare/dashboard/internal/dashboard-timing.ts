@@ -24,7 +24,14 @@ export const makeDashboardTiming = (
           )
         : work,
     respond: (response) => {
-      if (!enabled || response.status !== successfulStatus || phases.size !== 3) return response;
+      if (
+        !enabled ||
+        response.status !== successfulStatus ||
+        !phases.has("projection") ||
+        !phases.has("audit")
+      ) {
+        return response;
+      }
       const headers = new Headers(response.headers);
       headers.append(
         "server-timing",

@@ -2820,12 +2820,17 @@ it("confirms a hosted Transaction deletion exactly once and retains the hidden o
           })
         );
       const response = yield* Effect.tryPromise(() => send("Elimina la transacción de prueba"));
+      const proposed = yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+        yield* Effect.tryPromise(() => response.clone().json())
+      );
       const challenge = yield* Effect.tryPromise(() =>
         acknowledgeVisibleReply({ db, index: 0, response })
       );
-      expect(challenge).toContain("transactions.deleteTransaction");
-      expect(challenge).toContain(id);
-      const command = challenge.split("Responde exactamente: ")[1] ?? "";
+      expect(challenge).toContain("Eliminar el gasto de 2.500 pesos");
+      expect(challenge).not.toContain("transactions.deleteTransaction");
+      expect(challenge).not.toContain(id);
+      expect(challenge).not.toContain("CONFIRMAR");
+      const command = proposed.confirmation?.command ?? "";
       expect(command).toMatch(/^CONFIRMAR [0-9a-f]{64}$/u);
       expect(
         yield* Effect.tryPromise(() =>
@@ -2840,7 +2845,7 @@ it("confirms a hosted Transaction deletion exactly once and retains the hidden o
         yield* Effect.tryPromise(() =>
           acknowledgeVisibleReply({ db, index: 0, response: confirmed })
         )
-      ).toBe("Operación confirmada.");
+      ).toBe("Listo, apliqué los cambios.");
       expect(requests).toBe(1);
       expect(
         yield* Effect.tryPromise(() =>
@@ -2972,7 +2977,7 @@ it("a recurring lifecycle challenge exposes a readable browser review and confir
         yield* Effect.tryPromise(() =>
           acknowledgeVisibleReply({ db, index: 0, response: confirmed })
         )
-      ).toBe("Operación confirmada.");
+      ).toBe("Listo, apliqué los cambios.");
       expect(yield* readBrowserConfirmation(metadata)).toEqual(Option.none());
       const workspaceResponse = yield* executeCanonicalQuery({
         db,

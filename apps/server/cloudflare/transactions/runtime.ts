@@ -19,7 +19,7 @@ import {
   registeredConnectionInstitutionIds,
 } from "../../src/shell/connections/contract";
 import { measureErasureRecovery, withErasureRecovery } from "../erasure/runtime";
-import { ErasureUnavailable } from "../erasure-store/contract";
+import { type ErasureStore, ErasureUnavailable } from "../erasure-store/contract";
 import {
   executeErasureAdmission,
   executeErasureContinuation,
@@ -56,7 +56,7 @@ import { makeWebSessionErasureStores } from "../web-session/runtime";
 import { makeWhatsappErasureStores } from "../whatsapp/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureOriginals, makeErasureStore } from "../erasure-store/runtime";
-import type { ErasureStore } from "../erasure-store/contract";
+
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import { executeConsentRenewal, executeConsentWithdrawal } from "../consent/operations";
@@ -225,6 +225,14 @@ const executeCanonicalAdmission = (
     return yield* executeCanonicalWork({
       db: environment.DB,
       work: admission.work,
+      completion:
+        admission._tag === "WebSessionQueryWork" &&
+        admission.work._tag === "Query" &&
+        ["dashboard.getDashboardView", "recurringPlans.getRecurringWorkspace"].includes(
+          admission.work.operation
+        )
+          ? Option.some({ leaseId: admission.leaseId })
+          : Option.none(),
       subject: admissionSubject(admission),
       current: yield* Clock.currentTimeMillis,
       bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),

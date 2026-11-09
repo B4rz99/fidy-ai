@@ -1,9 +1,13 @@
+import type { CanonicalReadFinalization } from "../../canonical-admission/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import {
   RecurringWorkspace,
   type RecurringWorkspaceQuery,
 } from "../../../src/shell/recurring-plans/contract";
-import { type RecurringDocument } from "../../../src/core/recurring-plans/contract";
+import {
+  type RecurringDocument,
+  type RecurringSchedule,
+} from "../../../src/core/recurring-plans/contract";
 import {
   filterRecurring,
   planAt,
@@ -23,24 +27,26 @@ import {
 import type {
   PlanningTransactionFacts,
   PlanningTransactionRange,
+  PlanningTransactionSnapshot,
 } from "../../transactions/contract";
 
 import { linkedTransactionIds, planningFact } from "./facts";
-import { RecurringPlanningUnavailable } from "../contract";
+import { RecurringPlanningUnavailable, type RecurringReadProjection } from "../contract";
+import { workspaceMonths } from "./read-projection";
 import { displayDocument } from "./display";
 import { type Transaction } from "../../../src/core/transactions/contract";
 
 type Query = typeof RecurringWorkspaceQuery.Type;
 const monthLength = 7;
-const previousMonth = (month: string): string =>
+export const previousMonth = (month: string): string =>
   DateTime.formatIsoDateUtc(
     DateTime.subtract(DateTime.makeUnsafe(`${month}-01`), { months: 1 })
   ).slice(0, monthLength);
 const checkedDocument = ({
   document,
   transactions,
-}: Readonly<{ document: RecurringDocument; transactions: ReadonlyArray<Transaction> }>): Readonly<{
-  document: RecurringDocument;
+}: Readonly<{ document: RecurringSchedule; transactions: ReadonlyArray<Transaction> }>): Readonly<{
+  document: RecurringSchedule;
   invalid: ReadonlyArray<string>;
 }> => {
   const invalid = document.fulfillments
@@ -71,13 +77,14 @@ type ProjectionWork = Readonly<{
   document: RecurringDocument;
   month: string;
   now: DateTime.Utc;
+  finalization: Option.Option<CanonicalReadFinalization>;
 }>;
 type AutomaticProjection = Readonly<{
-  document: RecurringDocument;
+  document: RecurringSchedule;
   complete: boolean;
   matches: (typeof RecurringWorkspace.Type)["matches"];
 }>;
-const matchingRange = (month: string): PlanningTransactionRange => {
+export const matchingRange = (month: string): PlanningTransactionRange => {
   const start = DateTime.makeUnsafe(`${month}-01`);
   return {
     from: DateTime.formatIso(DateTime.subtract(start, { days: 4 })),
@@ -90,7 +97,7 @@ const automaticFromFacts = ({
   now,
   selection,
 }: Readonly<{
-  document: RecurringDocument;
+  document: RecurringSchedule;
   month: string;
   now: DateTime.Utc;
   selection: Option.Option<PlanningTransactionFacts>;
@@ -139,20 +146,14 @@ const workspaceMatching = ({
   document,
   month,
   prior,
-  now,
-}: ProjectionWork & Readonly<{ prior: string }>): Effect.Effect<
-  Readonly<{
-    preferences: UserPreferences;
-    transactions: ReadonlyArray<Transaction>;
-    invalid: ReadonlyArray<string>;
-    earlier: AutomaticProjection;
-    matched: AutomaticProjection;
-  }>,
+  finalization,
+}: Omit<ProjectionWork, "now"> & Readonly<{ prior: string }>): Effect.Effect<
+  PlanningTransactionSnapshot<UserPreferences>,
   RecurringPlanningUnavailable | Schema.SchemaError
 > =>
   Effect.gen(function* () {
-    const owner = yield* Schema.decodeEffect(UserId)(userId);
     const observed = yield* readPlanningTransactionSnapshot({
+      finalization,
       db,
       userId,
       ranges: document.plans.length === 0 ? [] : [matchingRange(prior), matchingRange(month)],
@@ -160,7 +161,7 @@ const workspaceMatching = ({
       snapshot: {
         statement: prepareUserContext({
           db,
-          userId: owner,
+          userId: yield* Schema.decodeEffect(UserId)(userId),
           statement: {
             sql: "SELECT locale, timeZone FROM identity_user_context",
             params: [],
@@ -171,26 +172,7 @@ const workspaceMatching = ({
       },
     });
     if (Option.isNone(observed)) return yield* new RecurringPlanningUnavailable();
-    const checked = checkedDocument({ document, transactions: observed.value.selected });
-    const projection = (selected: string, index: number): AutomaticProjection =>
-      automaticFromFacts({
-        document: checked.document,
-        month: selected,
-        now,
-        selection: observed.value.ranges[index] ?? Option.none(),
-      });
-    return {
-      preferences: observed.value.snapshot,
-      transactions: [
-        ...observed.value.selected,
-        ...observed.value.ranges.flatMap((range) =>
-          Option.isSome(range) ? range.value.transactions : []
-        ),
-      ],
-      invalid: checked.invalid,
-      earlier: projection(prior, 0),
-      matched: projection(month, 1),
-    };
+    return observed.value;
   });
 
 /** Reuse date conversion only within this projection; never retain live facts between reads. */
@@ -199,7 +181,7 @@ export const automaticMatches = ({
   items,
   transactions,
 }: Readonly<{
-  document: RecurringDocument;
+  document: RecurringSchedule;
   items: Parameters<typeof recurringMatchCandidates>[0]["items"];
   transactions: ReadonlyArray<Transaction>;
 }>): ReturnType<typeof uniqueRecurringMatches> => {
@@ -221,26 +203,117 @@ type WorkspaceWork = Readonly<{
   userId: string;
   document: RecurringDocument;
   query: Query;
+  finalization: Option.Option<CanonicalReadFinalization>;
 }>;
 export const workspaceValue = ({
   db,
   userId,
   document,
   query,
+  finalization,
 }: WorkspaceWork): Effect.Effect<
   typeof RecurringWorkspace.Type,
   RecurringPlanningUnavailable | Schema.SchemaError
 > =>
   Effect.gen(function* () {
     const now = yield* DateTime.now;
-    const prior = query.previousMonth ?? previousMonth(query.month);
-    const { preferences, transactions, earlier, matched, invalid } = yield* workspaceMatching({
+    const observed = yield* workspaceMatching({
       db,
       userId,
       document,
       month: query.month,
-      prior,
+      prior: query.previousMonth ?? previousMonth(query.month),
+      finalization,
+    });
+    return yield* workspaceFromSnapshot({ document, query, now, observed });
+  });
+
+const projectWorkspaceSnapshot = ({
+  document,
+  query,
+  now,
+  observed,
+}: Readonly<{
+  document: RecurringSchedule;
+  query: Query;
+  now: DateTime.Utc;
+  observed: PlanningTransactionSnapshot<UserPreferences>;
+}>): Readonly<{
+  preferences: UserPreferences;
+  transactions: ReadonlyArray<Transaction>;
+  invalid: ReadonlyArray<string>;
+  earlier: AutomaticProjection;
+  matched: AutomaticProjection;
+}> => {
+  const checked = checkedDocument({ document, transactions: observed.selected });
+  const projection = (selected: string, index: number): AutomaticProjection =>
+    automaticFromFacts({
+      document: checked.document,
+      month: selected,
       now,
+      selection: observed.ranges[index] ?? Option.none(),
+    });
+  return {
+    preferences: observed.snapshot,
+    transactions: [
+      ...observed.selected,
+      ...observed.ranges.flatMap((range) => (Option.isSome(range) ? range.value.transactions : [])),
+    ],
+    invalid: checked.invalid,
+    earlier: projection(query.previousMonth ?? previousMonth(query.month), 0),
+    matched: projection(query.month, 1),
+  };
+};
+
+export const workspaceFromSnapshot = (
+  input: Readonly<{
+    document: RecurringDocument;
+    query: Query;
+    now: DateTime.Utc;
+    observed: PlanningTransactionSnapshot<UserPreferences>;
+  }>
+): Effect.Effect<typeof RecurringWorkspace.Type, Schema.SchemaError> =>
+  workspaceFromFacts({
+    ...input,
+    editing: displayDocument({ document: input.document, compact: input.query.view === "compact" }),
+  });
+
+export const workspaceFromReadProjection = ({
+  projection,
+  ...input
+}: Readonly<{
+  projection: RecurringReadProjection;
+  query: Query;
+  now: DateTime.Utc;
+  observed: PlanningTransactionSnapshot<UserPreferences>;
+}>): Effect.Effect<
+  typeof RecurringWorkspace.Type,
+  Schema.SchemaError | RecurringPlanningUnavailable
+> =>
+  workspaceMonths(input.query).every((month) => projection.months.includes(month))
+    ? workspaceFromFacts({ ...input, document: projection.schedule, editing: projection.editing })
+    : Effect.fail(new RecurringPlanningUnavailable());
+
+const workspaceFromFacts = ({
+  document,
+  editing,
+  query,
+  now,
+  observed,
+}: Readonly<{
+  document: RecurringSchedule;
+  editing: RecurringDocument;
+  query: Query;
+  now: DateTime.Utc;
+  observed: PlanningTransactionSnapshot<UserPreferences>;
+}>): Effect.Effect<typeof RecurringWorkspace.Type, Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const prior = query.previousMonth ?? previousMonth(query.month);
+    const { preferences, transactions, earlier, matched, invalid } = projectWorkspaceSnapshot({
+      document,
+      query,
+      now,
+      observed,
     });
     const previous = filterRecurring({
       items: projectRecurringMonth({ document: earlier.document, month: prior, now }),
@@ -252,7 +325,7 @@ export const workspaceValue = ({
       filters: query,
     });
     return yield* Schema.decodeEffect(Schema.toType(RecurringWorkspace))({
-      document: displayDocument({ document, compact: query.view === "compact" }),
+      document: editing,
       month: query.month,
       today: DateTime.formatIsoDate(
         DateTime.makeZonedUnsafe(now, { timeZone: preferences.timeZone })
@@ -273,7 +346,7 @@ export const workspaceValue = ({
   });
 
 const matchedProjection = (
-  document: RecurringDocument,
+  document: RecurringSchedule,
   matches: AutomaticProjection["matches"]
 ): AutomaticProjection => ({
   complete: true,
@@ -296,7 +369,7 @@ const matchedProjection = (
   },
 });
 
-const earliestMonth = (document: RecurringDocument, month: string): string =>
+const earliestMonth = (document: RecurringSchedule, month: string): string =>
   document.plans
     .reduce(
       (first, plan) => (plan.revisions[0].from < first ? plan.revisions[0].from : first),
@@ -305,10 +378,10 @@ const earliestMonth = (document: RecurringDocument, month: string): string =>
     .slice(0, monthLength);
 
 const retainedOccurrencePlan = (
-  document: RecurringDocument,
-  plan: RecurringDocument["plans"][number],
+  document: RecurringSchedule,
+  plan: RecurringSchedule["plans"][number],
   date: string
-): RecurringDocument["plans"][number]["revisions"][number]["plan"] =>
+): RecurringSchedule["plans"][number]["revisions"][number]["plan"] =>
   document.exceptions.find((entry) => entry.planId === plan.id && entry.date === date)
     ?.replacement ?? planAt({ plan, date });
 
@@ -318,8 +391,8 @@ const transactionSummaries = ({
   invalid,
 }: Readonly<{
   transactions: ReadonlyArray<Transaction>;
-  marks: RecurringDocument["fulfillments"];
-  invalid: RecurringDocument["fulfillments"];
+  marks: RecurringSchedule["fulfillments"];
+  invalid: RecurringSchedule["fulfillments"];
 }>): (typeof RecurringWorkspace.Type)["linkedTransactions"] => {
   const ids = new Set([...marks, ...invalid].map((mark) => mark.transactionId));
   return [...new Map(transactions.map((transaction) => [transaction.id, transaction])).values()]

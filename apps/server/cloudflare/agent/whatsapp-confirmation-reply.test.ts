@@ -1,7 +1,57 @@
-import { Effect } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { expect, it } from "vitest";
-import { reply, setup } from "./hosted-turn.test-fixture";
-import { exerciseTurn, successfulCapability } from "./whatsapp-capabilities.test-fixture";
+import { now, reply, setup, users } from "./hosted-turn.test-fixture";
+import {
+  exerciseTurn,
+  successfulCapability,
+  toolReply,
+} from "./whatsapp-capabilities.test-fixture";
+
+it("reviews and saves one explicit Transaction group through exact WhatsApp confirmation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const occurredAt = DateTime.formatIso(yield* DateTime.now);
+      const selected: Array<{ id: string; expectedRevision: number }> = [];
+      for (const counterparty of ["Grupo A", "Grupo B"]) {
+        const output = yield* successfulCapability({
+          db,
+          operation: "transactions.createTransaction",
+          input: {
+            payload: {
+              money: { amount: "10000", currency: "COP" },
+              direction: "outflow",
+              categoryId: "10000000-0000-4000-8000-000000000016",
+              counterparty,
+              occurredAt,
+            },
+          },
+        });
+        const { data } = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Struct({ id: Schema.String, revision: Schema.Int }) })
+        )(output);
+        selected.push({ id: data.id, expectedRevision: data.revision });
+      }
+      const output = yield* successfulCapability({
+        db,
+        operation: "transactions.updateTransactions",
+        input: {
+          payload: { transactions: selected, changes: { notes: "Corrección confirmada" } },
+        },
+      });
+      expect(output).toMatchObject({ data: { updated: 2 } });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM transactions WHERE user_id = ? AND notes = 'Corrección confirmada' AND revision = 1"
+            )
+            .bind(users[0])
+            .first<number>("count")
+        )
+      ).toBe(2);
+    })
+  ));
 
 it("does not present a consumed confirmation as approval for a new WhatsApp update", () =>
   Effect.runPromise(
@@ -43,7 +93,7 @@ it("does not present a consumed confirmation as approval for a new WhatsApp upda
           Promise.resolve(reply(`Para actualizar el presupuesto, responde *${command}*.`)),
       });
       expect(result.sent).toEqual([
-        "No preparé una confirmación válida para estos cambios. No uses códigos anteriores; vuelve a solicitar la operación.",
+        "No pude preparar esos cambios. Vuelve a pedirlos para revisarlos antes de confirmar.",
       ]);
       expect(
         yield* Effect.tryPromise(() =>
@@ -63,9 +113,34 @@ it("does not present a consumed confirmation as approval for a new WhatsApp upda
 
 it.each([
   {
+    generated: "### Tu presupuesto\n**Restaurantes:** 300.000 pesos.\n* Total: **300.000 pesos**",
+    delivered: "Tu presupuesto\nRestaurantes: 300.000 pesos.\n- Total: 300.000 pesos",
+  },
+  {
+    generated: JSON.stringify({
+      source: "transcript_assistant",
+      text: "Tienes Pro. No hay una suscripción de pago que cancelar.",
+    }),
+    delivered: "Tienes Pro. No hay una suscripción de pago que cancelar.",
+  },
+  {
+    generated:
+      '```json\n{"source":"transcript_assistant","text":"**Tienes Pro.** No hay una suscripción de pago que cancelar."}\n```',
+    delivered: "Tienes Pro. No hay una suscripción de pago que cancelar.",
+  },
+  {
+    generated: `**CONFIR**MAR ${"a".repeat(64)}`,
+    delivered:
+      "No pude preparar esos cambios. Vuelve a pedirlos para revisarlos antes de confirmar.",
+  },
+  {
+    generated: "12.500 * 2 = 25.000 pesos; 2,50 USD.",
+    delivered: "12.500 * 2 = 25.000 pesos; 2,50 USD.",
+  },
+  {
     generated: `Responde CONFIRMAR ${"a".repeat(64)} para continuar.`,
     delivered:
-      "No preparé una confirmación válida para estos cambios. No uses códigos anteriores; vuelve a solicitar la operación.",
+      "No pude preparar esos cambios. Vuelve a pedirlos para revisarlos antes de confirmar.",
   },
   {
     generated: "Las operaciones sensibles requieren la confirmación del host.",
@@ -84,6 +159,127 @@ it.each([
           generate: () => Promise.resolve(reply(generated)),
         });
         expect(result.sent).toEqual([delivered]);
+      })
+    )
+);
+
+it("describes a budget confirmation in Spanish without exposing the operation, JSON or category identity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const result = yield* exerciseTurn({
+        db,
+        text: "Quiero un presupuesto de 300 mil pesos para restaurantes.",
+        messageId: "wamid.budget-friendly-confirmation",
+        generate: () =>
+          Promise.resolve(
+            toolReply({
+              operation: "operations.executeAtomicBatch",
+              input: {
+                payload: {
+                  calls: [
+                    {
+                      callId: "70000000-0000-4000-8000-000000000001",
+                      operation: "budgets.createBudget",
+                      input: {
+                        payload: {
+                          categoryId: "10000000-0000-4000-8000-000000000001",
+                          cap: { amount: "300000", currency: "COP" },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            })
+          ),
+      });
+      expect(result.sent).toHaveLength(1);
+      const text = result.sent[0];
+      expect(text).toContain("Restaurantes");
+      expect(text).toContain("300.000");
+      expect(text).not.toContain("budgets.createBudget");
+      expect(text).not.toContain("categoryId");
+      expect(text).not.toContain("10000000-0000-4000-8000-000000000001");
+      expect(text).not.toContain('{"');
+      expect(text).not.toMatch(/CONFIRMAR [a-f0-9]{64}/u);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT count(*) AS total FROM budgets").first())
+      ).toEqual({ total: 0 });
+    })
+  ));
+
+it.each([
+  { batch: false, standing: true },
+  { batch: true, standing: true },
+  { batch: false, standing: false },
+])(
+  "explains missing paid access before offering cancellation, including a batch: %s",
+  ({ batch, standing }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        if (standing) {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("UPDATE users SET trial_started_at_ms=?,trial_ends_at_ms=? WHERE id=?")
+              .bind(now(), now() + 604800000, users[0])
+              .run()
+          );
+        }
+        const result = yield* exerciseTurn({
+          db,
+          text: "Quiero cancelar la suscripción de Fidy.",
+          messageId: "wamid.cancel-without-paid-subscription",
+          generate: () =>
+            Promise.resolve(
+              toolReply(
+                batch
+                  ? {
+                      operation: "operations.executeAtomicBatch",
+                      input: {
+                        payload: {
+                          calls: [
+                            {
+                              callId: "70000000-0000-4000-8000-000000000001",
+                              operation: "subscription.cancelSubscription",
+                              input: {},
+                            },
+                            {
+                              callId: "70000000-0000-4000-8000-000000000002",
+                              operation: "budgets.createBudget",
+                              input: {
+                                payload: {
+                                  categoryId: "10000000-0000-4000-8000-000000000001",
+                                  cap: { amount: "300000", currency: "COP" },
+                                },
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    }
+                  : { operation: "subscription.cancelSubscription", input: {} }
+              )
+            ),
+        });
+        expect(result.sent).toEqual([
+          standing
+            ? "No tienes una suscripción de pago que cancelar." +
+              (batch ? " No apliqué ningún cambio." : "")
+            : "No pude consultar tu suscripción. Inténtalo de nuevo.",
+        ]);
+        expect(result.confirmationCommands).toEqual([]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS total FROM budgets").first()
+          )
+        ).toEqual({ total: 0 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS total FROM hosted_confirmations").first()
+          )
+        ).toEqual({ total: 0 });
       })
     )
 );

@@ -25,6 +25,19 @@ narrow Ingestion and maintenance capabilities. Infrastructure owns bindings, not
 Production Core uses default execution near the incoming request. Staging requires the exact
 Core version to omit placement metadata; live settings cannot establish a candidate's configuration.
 
+Core consumes build-generated hosted tool parameters instead of converting every operation to a
+provider schema at startup. Statement parsing loads its bundled CSV/XLSX implementation only after
+bounded source admission; ordinary API reads do not initialize those engines. Runtime authority,
+input validation and parser resource limits remain with their existing owners.
+
+Canonical catalog reflection reads operation identity and policy eagerly, while input, response
+and partial-suggestion codec derivation is suspended until use. Typed input helpers resolve the
+bound catalog at codec use rather than module initialization. Shared suggestion helpers do not
+import the API assembly. Telemetry uses build-generated canonical ids, methods and routes with
+exact catalog freshness checks; those labels confer no request authority. The full Core composition
+still imports its dispatcher and background implementations; these changes do not make Core load
+only the requested feature.
+
 ## 2. Ownership and publication
 
 An owner exposes declarations through `contract.ts`, behavior through `operations.ts`, and
@@ -93,12 +106,33 @@ Browser User responses can carry the bounded Category display catalog through it
 published projection seam, with live browser credential evidence checked after that read. These
 projections do not add a generic batching transport or bypass admission, Consent or write guards.
 
+Transactions declares `updateTransactions` for an explicit revision-bound selection sharing one
+Correction. The owner reads only those same-User originals, prepares each record's correction
+evidence, and commits set-based writes and one metadata-only operation Audit through the canonical
+mutation unit. Exact affected-row assertions roll back incomplete writes. The 4096-record and
+512KiB HTTP bounds protect one unit of work; the browser has no checkbox cap. OAuth group
+approval observes and rechecks the selected originals, linked partners, effective facts,
+Reconciliation membership and precedence inputs through the same snapshot owner as individual
+correction, so changes to any financial premise invalidate pending approval. The generic atomic
+batch remains limited to twelve canonical operations, independently of this selection size.
+
 Queries share an observational owner implementation. Individual and atomic-batch mutations share
 the User-scoped mutation unit. Dedicated browser/proof transports retain separate declarations and
 authority; using one does not confer canonical, agent or batch privileges.
 See [ADR 0029](../../docs/adr/0029-atomic-batch-accountability-boundaries.md).
 
 ### Hosted MCP and OAuth development authority
+
+Browser OAuthConnection listing resolves the exact mounted cookie once and rechecks that live
+session in a bounded native snapshot containing the connection page and its latest three outcomes
+per connection. Audit selection requires the existing User/connection/time index rather than a
+broad User-history scan. Identity-only listing remains available after Processing Consent withdrawal;
+request pressure and fresh-session requirements for revocation remain independent.
+
+PAT and OAuth activity indexes contain only credential calls with the corresponding credential
+identifier. Other browser and hosted calls retain their complete Audit records without updating
+unrelated activity indexes. Index replacement bounds the inspected history and destination entries
+before any schema change; it never rebuilds the Audit table or changes its append-only guards.
 
 MCP projects canonical capabilities under a separately identifiable OAuthConnection. It uses the
 same owner behavior, User coordination, Consent, accounting and Audit boundaries as other clients.
@@ -125,6 +159,17 @@ Transaction page uses User-timezone month bounds and is omitted if the combined 
 exceed the existing 64KiB web-auth response limit. Omission falls back to the ordinary canonical
 page read. This is one bounded document-entry request; burst, concurrency, lease duration, refusal
 responses and later canonical authorization checks remain unchanged.
+
+Payment enrollment availability composes its exact mounted cookie, session freshness, active
+Consent and User context in one native read. Core delegates binding verification to that read;
+availability does not fetch a mailbox credential. Other enrollment operations retain their existing
+ingress and commit checks. The available-method response remains uncached.
+
+OAuthConnection listing composes its User resource admission, bounded connection/activity selection
+and outstanding-work completion in the final native batch. The ingress source grant and exact
+mounted-cookie lookup share the preceding native unit. Cleanup remains idempotent when the final reply is lost;
+no recovery generation, credential or page result is reused across transactions. Invalid listing
+queries retain their User attempt charge. Mutations keep their separate admission and coordination.
 
 ## 4. Subject, proof, and provider boundaries
 
@@ -176,12 +221,30 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+Group Corrections use the existing credential-neutral Audit projection with the exact browser
+session and accepted/rejected outcome. The original Audit history and table remain in place;
+adding this operation requires no Audit rebuild.
+The canonical Transaction detail query returns linked originals alongside the effective facts in
+the same authorized, audited snapshot. Bounded SourceAttestation capture kinds explain
+how each original was obtained without returning retained source material. Original selection remains same-User and bounded to the
+exact pair even while the effective projection is being repaired; unlink uses the existing
+canonical mutation and returns both restored originals. Ordinary history remains effective-only.
+
 Dashboard deduplicates requested chart intervals before calling Transactions' bounded multi-interval
 reader. Wider selections first count bounded projection rows at one fact revision. Compatible ranges
 expand native batches beyond four intervals only within a raw-result budget; larger working sets
 retain four-interval chunks. Every group retains current Consent, projection readiness and fresh
-recovery fencing; revision disagreement refuses the complete read. The same User coordinator turn,
-admission lease and final authority/Audit checks still cover the whole view.
+recovery fencing. HTTP document/view reads execute directly in Core, retaining the admission lease
+and final live authority/Audit checks. Mounted browser views compose their bounded document,
+calendar context and Category selection with exact-cookie/Consent admission in its native unit.
+The dependent financial projection retains a second fresh fence, source/context revision assertions,
+final Audit, allowance standing and lease release. This reuses the same view interpretation and
+projection owners as other callers; no query, response cache or storage migration is introduced.
+Every financial snapshot asserts the exact source document
+and captured calendar context; later snapshots also assert the planned financial revision inside
+the native transaction. A conflict aborts that unit and withholds the complete view without a retry
+or accepted final accounting. A concurrent Correction can commit without waiting for the view.
+Mutations and held hosted execution retain User coordination.
 
 Erasure composes each owner's bounded deletion and SQL authorization under User coordination.
 An independent registry fences ordinary activity after database restoration until reconciliation.
@@ -227,6 +290,13 @@ copied or invented command cannot be presented as approval for a new operation.
 WhatsApp may repair one invalid model output after successful queries, retaining their tool results
 and remaining call budget. Repair is unavailable once a mutation has started; it cannot replay
 owner effects or replace host confirmation.
+Proactivity uses an exact reviewed Spanish body with enough fixed provider text. Frozen delivery
+evidence includes that complete body; its length budget includes the wrapper. Native category
+Consent choices use the compact `p:` prefix while retaining the category, exact offer identity,
+decision, authenticated originating chat and verified disclosure checks.
+Meta text parameters reject line breaks, tabs and five consecutive spaces. Disclosures and their
+fixed choices use single paragraphs; disclosure presentation changes receive new revisions and
+matching content hashes. Frozen evidence retains the exact transmitted text without transport rewriting.
 When inference is refused by provider quota or availability, or its single invalid-output repair
 is exhausted before any mutation attempt, WhatsApp
 stages one fixed failure reply through its ordinary delivery evidence. It makes no result or commit
@@ -273,11 +343,13 @@ independently, retains phase-specific operational evidence and reports aggregate
 remaining phase has run. Interruption stops progression. Durable grant claims and cleanup checkpoints
 remain separate from provider I/O, and unknown authorization outcomes do not authorize replay.
 
-Dashboard view timing headers carry request-local numeric metadata only. The Core coordinator hop
-contains the coordinator queue and execution; execution contains source/context selection,
-financial projection and final owner Audit/accounting phases. Coordinator recovery R2/D1/SQL
-measurements use a distinct Dashboard prefix, so they do not overwrite outer Core measurements.
-These spans overlap hierarchically. Workers production clocks advance at I/O boundaries; CPU-only
+Dashboard view timing headers carry request-local numeric metadata only. Direct HTTP reads report
+source/context selection, financial projection and owner Audit/accounting inside Core's canonical
+path and recovery R2/D1/SQL spans. Held coordinator reads additionally report hop, queue and execution;
+their recovery measurements use a distinct Dashboard prefix. These spans overlap hierarchically.
+When browser source selection shares admission, its I/O belongs to `canonical-admission`; there
+is no separate `dashboard-source` duration to add or interpret as eliminated work.
+Workers production clocks advance at I/O boundaries; CPU-only
 decoding, aggregation and encoding require a separate native CPU profile, not zero-duration claims.
 
 ## 8. Evidence and test boundaries

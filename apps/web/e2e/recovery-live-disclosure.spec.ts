@@ -26,11 +26,10 @@ const pendingClipboard = (): void => {
       readText: (): Promise<string> => Promise.resolve(value),
       writeText: (next: string): Promise<void> => {
         value = next;
-        return next === ""
-          ? Promise.resolve()
-          : new Promise((resolve) => {
-              window.addEventListener("finish-recovery-copy", () => resolve(), { once: true });
-            });
+        if (next === "") return Promise.resolve();
+        const pending = Promise.withResolvers<void>();
+        window.addEventListener("finish-recovery-copy", () => pending.resolve(), { once: true });
+        return pending.promise;
       },
     },
   });

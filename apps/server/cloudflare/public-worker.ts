@@ -49,13 +49,9 @@ import {
 } from "./runtime/release-smoke/contract";
 import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
-import {
-  canonicalMethods,
-  canonicalOperation,
-  canonicalRoute,
-  sharedStorageRead,
-} from "./routing/operations";
+import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
 import { type ErasureRegistryNamespace, erasureRegistryName } from "./erasure/contract";
+import { sharedStorageRead } from "./routing/runtime";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
 import { connectionCallbackPath } from "./connections/contract";
 import { recoveryIsolationResponse } from "./release-isolation/operations";

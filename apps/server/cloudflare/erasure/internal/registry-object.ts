@@ -20,7 +20,14 @@ export const registryBody = (
   const { object, value } = input;
   const response = new Response(value);
   return {
-    ...object,
+    key: object.key,
+    version: object.version,
+    etag: object.etag,
+    httpEtag: object.httpEtag,
+    size: object.size,
+    uploaded: object.uploaded,
+    checksums: object.checksums,
+    storageClass: object.storageClass,
     writeHttpMetadata: (headers) => object.writeHttpMetadata(headers),
     body: Option.getOrThrow(Option.fromNullOr(response.body)),
     get bodyUsed() {

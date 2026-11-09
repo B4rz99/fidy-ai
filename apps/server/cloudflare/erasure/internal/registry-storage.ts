@@ -151,6 +151,6 @@ export const registryStorage = (storage: Storage): ErasureRegistry => {
         storage.sql.exec("DELETE FROM erasure_registry WHERE key=?", key);
         return storage.sync();
       }),
-    list: (options = {}) => list(storage, options),
+    list: (options) => list(storage, options),
   };
 };

@@ -109,8 +109,8 @@ const prepare = (input: Configuration): Effect.Effect<typeof Row.Type, ErasureUn
 const isClaimed = (input: { value: string; object: R2Object; record: typeof Row.Type }): boolean =>
   input.value === `publishing:${input.record.target}:migrating` &&
   input.object.customMetadata?.purpose === purpose &&
-  input.object.customMetadata?.sourceGeneration === input.record.source &&
-  input.object.customMetadata?.targetGeneration === input.record.target;
+  input.object.customMetadata.sourceGeneration === input.record.source &&
+  input.object.customMetadata.targetGeneration === input.record.target;
 
 const claim = (
   input: Configuration,

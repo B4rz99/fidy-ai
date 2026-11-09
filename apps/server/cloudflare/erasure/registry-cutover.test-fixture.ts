@@ -2,7 +2,6 @@ import { Effect, Schema } from "effect";
 import { registryCutover } from "./internal/registry-cutover";
 import { makeErasureRegistryOwner, withErasureRecovery } from "./runtime";
 import type { ErasureRegistryNamespace } from "./contract";
-import { ErasureRegistryTransport, UserTransactionCoordinator } from "../core-worker";
 
 const Command = Schema.Literals([
   "migrate",
@@ -15,31 +14,7 @@ const Command = Schema.Literals([
 ]);
 type Environment = Readonly<{ DB: D1Database; ERASURE_BUCKET: R2Bucket }>;
 
-export class DeployedRegistryFixture extends UserTransactionCoordinator {
-  constructor(
-    state: DurableObjectState,
-    environment: ConstructorParameters<typeof UserTransactionCoordinator>[1] &
-      Readonly<{ ROOT_COORDINATOR: ErasureRegistryNamespace }>
-  ) {
-    super(
-      {
-        id: { name: undefined, equals: state.id.equals.bind(state.id) },
-        storage: state.storage,
-        waitUntil: state.waitUntil.bind(state),
-      },
-      { ...environment, ERASURE_REGISTRY_COORDINATOR: environment.ROOT_COORDINATOR }
-    );
-  }
-}
-export class DeployedTransportFixture extends ErasureRegistryTransport {
-  constructor(
-    context: ConstructorParameters<typeof ErasureRegistryTransport>[0],
-    environment: ConstructorParameters<typeof ErasureRegistryTransport>[1] &
-      Readonly<{ ROOT_COORDINATOR: ErasureRegistryNamespace }>
-  ) {
-    super(context, { ...environment, ERASURE_REGISTRY_COORDINATOR: environment.ROOT_COORDINATOR });
-  }
-}
+export { DeployedRegistryFixture, DeployedTransportFixture } from "../core-worker.test-fixture";
 
 /** Fault injection stays at real native storage boundaries, inside this fixture only. */
 export class RegistryCutoverFixture {
@@ -100,7 +75,8 @@ export class RegistryCutoverFixture {
         return controller.registry
           .put("recovery/generation", "12740000-0000-4000-8000-000000000088")
           .then(() => Response.json(null));
-      default:
+      case "migrate":
+      case "claim-loss":
         return Effect.runPromise(controller.migrate).then((value) => Response.json(value));
     }
   }

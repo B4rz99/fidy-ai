@@ -230,7 +230,7 @@ export const registryClient = (target: Pick<Fetcher, "fetch">): ErasureRegistry 
     ),
   list: (options) =>
     Effect.runPromise(
-      remoteRequest(target, { action: "list", options: options ?? {} }, page).pipe(
+      remoteRequest(target, { action: "list", options }, page).pipe(
         Effect.map((value): R2Objects => {
           const objects = value.objects.map(registryObject);
           return value.truncated

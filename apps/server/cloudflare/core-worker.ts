@@ -11,7 +11,7 @@ import {
   withErasureRecovery,
   withErasureRegistry,
 } from "./erasure/runtime";
-import { sharedStorageRead } from "./routing/operations";
+import { sharedStorageRead } from "./routing/runtime";
 import type { ProviderEnvironment } from "./provider-authentication/contract";
 import type { ProactivityDeliveryWork, ProactivityEnvironment } from "./insights/contract";
 import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./maintenance/contract";
@@ -365,8 +365,7 @@ const isRegistryObject = (state: CoordinatorState, environment: CoreEnvironment)
   const namespace = environment.ERASURE_REGISTRY_COORDINATOR;
   return (
     namespace?.idFromName !== undefined &&
-    state.id.equals !== undefined &&
-    state.id.equals(namespace.idFromName(erasureRegistryName))
+    state.id.equals?.(namespace.idFromName(erasureRegistryName)) === true
   );
 };
 

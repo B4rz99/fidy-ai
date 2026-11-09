@@ -72,7 +72,7 @@ const approvalFixture = (): Promise<D1Database> =>
 const approvalStatement = (
   db: D1Database,
   id: string,
-  { channel, current = approvalTime }: Readonly<{ channel: "proved" | "recovery"; current: number }>
+  { channel, current }: Readonly<{ channel: "proved" | "recovery"; current: number }>
 ): D1PreparedStatement =>
   channel === "proved"
     ? prepareProvedBrowserPairingApproval({
@@ -89,10 +89,7 @@ const approvalStatement = (
 const approvePairing = (
   db: D1Database,
   id: string,
-  {
-    channel,
-    current = approvalTime,
-  }: Readonly<{ channel: "proved" | "recovery" | "whatsapp"; current: number }>
+  { channel, current }: Readonly<{ channel: "proved" | "recovery" | "whatsapp"; current: number }>
 ): Promise<boolean> =>
   Effect.runPromise(
     Effect.gen(function* () {

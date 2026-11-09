@@ -261,6 +261,13 @@ See [ADR 0032](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-que
 
 ## 3. Browser authentication
 
+The session observer retains one entry containing the lifetime and its original observation,
+including receipt time. Bound and Rechecking are distinct lifecycle states sharing that entry;
+checking presentation is derived from the lifecycle. Initial anonymous `none` is a valid binding.
+Visible-page, persisted-pageshow and transport recheck hints coalesce while a read is pending,
+without scheduling a trailing read. Same-binding resume restores the same mounted workspace
+without replacing its entry or refreshing its initial hydration.
+
 A direct-browser 401 asks the session owner to recheck its immutable binding. A still-live matching
 session retains its registry and ordinary navigation; a changed or absent binding retires the old
 lifetime, and a failed check blocks access. This distinguishes payment freshness refusals from

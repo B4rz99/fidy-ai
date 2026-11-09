@@ -205,6 +205,13 @@ const closeProviderPopup = (popup: Window): void => {
     popup.close();
   }
 };
+const retainedHandoffPairing = (
+  input: ControllerInput,
+  active: ActiveAttempt
+): Option.Option<Pairing> =>
+  Option.isSome(input.handoffReference) && !active.completionRequested
+    ? active.pairing
+    : Option.none();
 const clearAttempt = (
   active: ActiveAttempt,
   pairing: Option.Option<Pairing> = Option.none()
@@ -401,12 +408,7 @@ const guardedCommand = <Value extends AttemptCommand>(
             ? Effect.void
             : Effect.sync(() => {
                 const state = failureState(active, cause);
-                clearAttempt(
-                  active,
-                  Option.isSome(input.handoffReference) && !active.completionRequested
-                    ? active.pairing
-                    : Option.none()
-                );
+                clearAttempt(active, retainedHandoffPairing(input, active));
                 input.setState(state);
               })
         )
@@ -424,12 +426,7 @@ const refuseExpiredAttempt = (input: ControllerInput, active: ActiveAttempt): bo
   const state: ProviderViewState = {
     status: active.completionRequested ? "uncertain" : "refused",
   };
-  clearAttempt(
-    active,
-    Option.isSome(input.handoffReference) && !active.completionRequested
-      ? active.pairing
-      : Option.none()
-  );
+  clearAttempt(active, retainedHandoffPairing(input, active));
   input.setState(state);
   return true;
 };
@@ -473,12 +470,7 @@ const providerAdmission = (
       ) {
         return Option.none();
       }
-      clearAttempt(
-        active,
-        Option.isSome(input.handoffReference) && !active.completionRequested
-          ? active.pairing
-          : Option.none()
-      );
+      clearAttempt(active, retainedHandoffPairing(input, active));
       active.completionRequested = false;
       active.phase = "starting";
       return Option.some({ generation: active.generation, phase: active.phase });
@@ -516,12 +508,7 @@ const makeProviderController = (originalInput: ControllerInput): ProviderControl
       awaitChatApproval(input, active, code)
     ),
     clear: (restartable = false) =>
-      clearAttempt(
-        active,
-        restartable && Option.isSome(input.handoffReference) && !active.completionRequested
-          ? active.pairing
-          : Option.none()
-      ),
+      clearAttempt(active, restartable ? retainedHandoffPairing(input, active) : Option.none()),
     cancellation: () => ({ status: active.completionRequested ? "uncertain" : "cancelled" }),
     stage: (value, binding) => {
       if (!admission.matches(binding) || active.phase !== "starting") return false;

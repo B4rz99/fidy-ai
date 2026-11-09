@@ -108,6 +108,7 @@ TransactionsPage.prepareEntry = ({
       if (AsyncResult.isSuccess(status) && !status.waiting && status.value.status === "Granted") {
         return {
           preparation: TransactionsPage.preloadData({
+            destinationMode: cause === "stay" ? "cached" : "fresh",
             search,
             apiClient: context.apiClient,
             registry: context.registry,

@@ -3,7 +3,7 @@ import { type AsyncResult, Atom } from "effect/reactivity";
 import { type CanonicalInput, type CanonicalSuccess, type FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import type { HistoryState } from "./history";
+import type { HistoryCommand, HistoryState } from "./history";
 import type { Transaction } from "./presentation";
 
 type Revision = Pick<Transaction, "id" | "revision">;
@@ -46,8 +46,8 @@ type Input = Readonly<{
   firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, PageFailure>;
   categories: Query<CanonicalSuccess<"categories.listCategories">, unknown>;
   history: Atom.Atom<HistoryState>;
-  historyAction: Atom.Writable<Option.Option<void>, "more" | "retry" | "reset" | "refresh">;
-  saved: (kind: Correction["kind"]) => void;
+  historyAction: Atom.Writable<Option.Option<void>, HistoryCommand>;
+  saved: (transactions: ReadonlyArray<Transaction>) => void;
 }>;
 type Work = Effect.Effect<void>;
 type Owner = Input & {
@@ -182,8 +182,12 @@ const prepare = (correction: Correction): Option.Option<Write> => {
 };
 const write = Effect.fnUntraced(function* (owner: Owner, command: Write) {
   const client = yield* owner.client;
-  if (command.kind === "single") yield* client.transactions.updateTransaction(command.input);
-  else yield* client.transactions.updateTransactions(command.input);
+  if (command.kind === "single") {
+    const result = yield* client.transactions.updateTransaction(command.input);
+    return [result.data];
+  }
+  yield* client.transactions.updateTransactions(command.input);
+  return [];
 });
 const rejected = (cause: Cause.Cause<unknown>): boolean => {
   const failure = Cause.findErrorOption(cause);
@@ -224,8 +228,12 @@ const submit = (owner: Owner, correction: Correction): void => {
         }
         return;
       }
-      owner.saved(command.value.kind);
+      if (command.value.kind === "single") owner.saved(result.value);
       yield* reread(owner, generation, "saved");
+      if (command.value.kind === "bulk" && live(owner, generation)) {
+        const records = yield* readSavedSelection(owner, command.value.input.payload.transactions);
+        if (live(owner, generation)) owner.saved(records);
+      }
     })
   );
 };
@@ -260,6 +268,20 @@ const refreshedHistory = (owner: Owner): Effect.Effect<boolean> =>
     observe(owner.get.once(owner.history));
     return Effect.sync(unsubscribe);
   });
+const readSavedSelection = (
+  owner: Owner,
+  selected: CanonicalInput<"transactions.updateTransactions">["payload"]["transactions"]
+): Effect.Effect<ReadonlyArray<Transaction>> =>
+  Effect.gen(function* () {
+    if (!(yield* refreshedHistory(owner))) return [];
+    const { query } = owner.get.once(owner.history);
+    if (query._tag !== "Ready") return [];
+    const revisions = new Map(selected.map(({ id, expectedRevision }) => [id, expectedRevision]));
+    return query.value.data.filter(({ id, revision }) => {
+      const previous = revisions.get(id);
+      return previous !== undefined && revision > previous;
+    });
+  });
 const reread = (
   owner: Owner,
   generation: number,
@@ -276,7 +298,7 @@ const reread = (
     const categories = owner.get.once(owner.categories);
     const firstPage = owner.get.once(owner.firstPage);
     owner.get.refresh(owner.categories);
-    owner.get.set(owner.historyAction, reason === "saved" ? "reset" : "refresh");
+    owner.get.set(owner.historyAction, "refresh");
     const results = yield* Effect.all([
       nextResult(owner, owner.categories, categories),
       nextResult(owner, owner.firstPage, firstPage),

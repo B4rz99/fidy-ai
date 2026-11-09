@@ -123,6 +123,23 @@ continuation and editing lifetimes; clearing a day retains the month. Visible sc
 summary counts identify the period and loaded coverage. Dashboard recent entries link to their
 Transaction's local day in this route. Read-only privacy history retains its independent unbounded
 query and local day filter.
+
+Transactions keeps search, direction, Category and visited page depth in a schema-versioned
+browser history entry bound to the displayed session and calendar month/time zone. Back/Forward
+and same-tab reload restore that view without adding private search text to the URL; a copied URL
+or fresh navigation starts a new view. Clearing filters is explicit. Restoration automatically
+reads at most twenty pages, with ordinary continuation available beyond that bound. Canonical
+query atoms remain the only record owners; history stores no Transaction records, credentials or
+access decisions. Changed or malformed session-bound state falls back to the default view.
+Successful Corrections refresh the visited depth and explain when the confirmed Transaction no
+longer matches; recovery retains the visited depth and filters. Router scroll
+restoration applies to Transactions only and keys positions by session and history entry.
+A narrow browser adapter reapplies the Router's saved scroll once restored pages render; it
+captures the entry position on mount and applies it once, leaving later interaction untouched.
+Same-month navigation restores the entry’s page depth through the mounted history owner, keeping
+bulk selection and canonical query owners alive. Correction refreshes retain the loaded projection and ledger until all visited pages
+settle; pending or failed rereads block edits. Only the editing panel resets on a new generation.
+
 Review history links to Transactions with a validated Transaction identity. After fresh entry
 Consent, its canonical lookup resolves the current effective identity and occurrence month in the
 User's time zone. The ordinary month list remains unselected with its summary; a commit ref scrolls

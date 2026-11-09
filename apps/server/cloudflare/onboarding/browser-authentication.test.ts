@@ -2474,44 +2474,59 @@ it("does not send a pairing proof when its credential changes after delivery dis
     })
   ));
 
+const admitMailboxDelivery = (
+  kind: "browser-pairing-email" | "email-replacement"
+): Effect.Effect<
+  {
+    db: D1Database;
+    sendRequest: SendWorkerRequest;
+    pairing: { pairingId: string; privateVerifier: string };
+    token: string;
+    work: { id: string; deadline: number };
+  },
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+    yield* Effect.tryPromise(() => seedUser());
+    const pairing = yield* emailAdmissionPairing(sendRequest);
+    const token = "D".repeat(43);
+    yield* Effect.tryPromise(() => seedWebSession(db, token));
+    if (kind === "browser-pairing-email") {
+      expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(202);
+    } else {
+      expect(
+        (yield* Effect.tryPromise(() =>
+          replacementRequest(sendRequest, token)("/email/replacement", {
+            candidateEmail: "next@example.test",
+          })
+        )).status
+      ).toBe(200);
+    }
+    const work = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ id: Schema.String, deadline: Schema.Finite })
+    )(
+      yield* Effect.tryPromise(() =>
+        (kind === "browser-pairing-email"
+          ? db
+              .prepare(
+                "SELECT email_work_id AS id, email_expires_at_ms AS deadline FROM browser_login_pairings WHERE id = ?"
+              )
+              .bind(pairing.pairingId)
+          : db.prepare("SELECT work_id AS id, expires_at_ms AS deadline FROM email_replacements")
+        ).first()
+      )
+    );
+    return { db, sendRequest, pairing, token, work };
+  });
+
 it.each(["browser-pairing-email", "email-replacement"] as const)(
   "does not send %s mail when discovery crosses its original deadline",
   (kind) =>
     Effect.runPromise(
       Effect.gen(function* () {
         vi.useFakeTimers({ toFake: ["Date"] });
-        const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
-        yield* Effect.tryPromise(() => seedUser());
-        const token = "V".repeat(43);
-        yield* Effect.tryPromise(() => seedWebSession(db, token));
-        const pairing = yield* emailAdmissionPairing(sendRequest);
-        if (kind === "browser-pairing-email") {
-          expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(202);
-        } else {
-          expect(
-            (yield* Effect.tryPromise(() =>
-              replacementRequest(sendRequest, token)("/email/replacement", {
-                candidateEmail: "next@example.test",
-              })
-            )).status
-          ).toBe(200);
-        }
-        const work = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ id: Schema.String, deadline: Schema.Finite })
-        )(
-          yield* Effect.tryPromise(() =>
-            (kind === "browser-pairing-email"
-              ? db
-                  .prepare(
-                    "SELECT email_work_id AS id, email_expires_at_ms AS deadline FROM browser_login_pairings WHERE id = ?"
-                  )
-                  .bind(pairing.pairingId)
-              : db.prepare(
-                  "SELECT work_id AS id, expires_at_ms AS deadline FROM email_replacements"
-                )
-            ).first()
-          )
-        );
+        const { db, pairing, work } = yield* admitMailboxDelivery(kind);
         const raced = afterDeliveryRead(db, () => {
           vi.setSystemTime(work.deadline);
           return Promise.resolve();
@@ -2548,60 +2563,63 @@ const mailSettlementRefusal = {
     "CREATE TRIGGER refuse_mail_settlement BEFORE UPDATE OF state ON email_replacements WHEN NEW.state = 'awaiting_proof' BEGIN SELECT RAISE(ABORT, 'settlement unavailable'); END",
 };
 
-it.each(
-  (
-    [
-      ["browser-pairing-email", "accepted", "awaiting_proof", true, 200, 0],
-      ["browser-pairing-email", "lost-response", "ambiguous", false, 400, 0],
-      ["browser-pairing-email", "settlement-failure", "sending", true, 400, 1],
-      ["browser-pairing-email", "rate-limited", "rejected", false, 400, 0],
-      ["email-replacement", "accepted", "awaiting_proof", true, 200, 0],
-      ["email-replacement", "lost-response", "ambiguous", false, 400, 0],
-      ["email-replacement", "settlement-failure", "sending", true, 400, 1],
-      ["email-replacement", "rate-limited", "rejected", false, 400, 0],
-    ] as const
-  ).map(([kind, outcome, state, retainsProof, completeStatus, failedActivities]) => ({
-    kind,
-    outcome,
-    expected: { state, retainsProof, completeStatus, failedActivities },
-  }))
-)(
+it.each([
+  {
+    kind: "browser-pairing-email",
+    outcome: "accepted",
+    expected: {
+      state: "awaiting_proof",
+      retainsProof: true,
+      completeStatus: 200,
+      failedActivities: 0,
+    },
+  },
+  {
+    kind: "browser-pairing-email",
+    outcome: "lost-response",
+    expected: { state: "ambiguous", retainsProof: false, completeStatus: 400, failedActivities: 0 },
+  },
+  {
+    kind: "browser-pairing-email",
+    outcome: "settlement-failure",
+    expected: { state: "sending", retainsProof: true, completeStatus: 400, failedActivities: 1 },
+  },
+  {
+    kind: "browser-pairing-email",
+    outcome: "rate-limited",
+    expected: { state: "rejected", retainsProof: false, completeStatus: 400, failedActivities: 0 },
+  },
+  {
+    kind: "email-replacement",
+    outcome: "accepted",
+    expected: {
+      state: "awaiting_proof",
+      retainsProof: true,
+      completeStatus: 200,
+      failedActivities: 0,
+    },
+  },
+  {
+    kind: "email-replacement",
+    outcome: "lost-response",
+    expected: { state: "ambiguous", retainsProof: false, completeStatus: 400, failedActivities: 0 },
+  },
+  {
+    kind: "email-replacement",
+    outcome: "settlement-failure",
+    expected: { state: "sending", retainsProof: true, completeStatus: 400, failedActivities: 1 },
+  },
+  {
+    kind: "email-replacement",
+    outcome: "rate-limited",
+    expected: { state: "rejected", retainsProof: false, completeStatus: 400, failedActivities: 0 },
+  },
+] as const)(
   "keeps duplicate $kind delivery bounded and secret-free after $outcome",
   ({ kind, outcome, expected }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
-        yield* Effect.tryPromise(() => seedUser());
-        const pairing = yield* emailAdmissionPairing(sendRequest);
-        const token = "D".repeat(43);
-        yield* Effect.tryPromise(() => seedWebSession(db, token));
-        if (kind === "browser-pairing-email") {
-          expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(202);
-        } else {
-          expect(
-            (yield* Effect.tryPromise(() =>
-              replacementRequest(sendRequest, token)("/email/replacement", {
-                candidateEmail: "next@example.test",
-              })
-            )).status
-          ).toBe(200);
-        }
-        const work = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ id: Schema.String, deadline: Schema.Finite })
-        )(
-          yield* Effect.tryPromise(() =>
-            (kind === "browser-pairing-email"
-              ? db
-                  .prepare(
-                    "SELECT email_work_id AS id, email_expires_at_ms AS deadline FROM browser_login_pairings WHERE id = ?"
-                  )
-                  .bind(pairing.pairingId)
-              : db.prepare(
-                  "SELECT work_id AS id, expires_at_ms AS deadline FROM email_replacements"
-                )
-            ).first()
-          )
-        );
+        const { db, sendRequest, pairing, token, work } = yield* admitMailboxDelivery(kind);
         if (outcome === "settlement-failure") {
           yield* Effect.tryPromise(() => db.prepare(mailSettlementRefusal[kind]).run());
         }

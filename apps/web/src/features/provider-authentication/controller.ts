@@ -285,6 +285,11 @@ const executeStart = (
     }
     yield* executeCompletion(input, active, Option.none());
   });
+const claimCompletion = (active: ActiveAttempt): boolean => {
+  if (active.completionRequested) return false;
+  active.completionRequested = true;
+  return true;
+};
 const executeCompletion = (
   input: ControllerInput,
   active: ActiveAttempt,
@@ -297,9 +302,8 @@ const executeCompletion = (
     input.setState({ status: "waiting" });
     const client = yield* input.webAuthClient;
     if (active.generation !== current) return;
-    if (active.completionRequested) return;
+    if (!claimCompletion(active)) return;
     const provider = active.provider;
-    active.completionRequested = true;
     const result = yield* providerClient(client, provider).complete({
       payload: {
         ...proof(pairing.value),

@@ -263,6 +263,15 @@ intended public proof. Provider contact email cannot use this mailbox path. The 
 references cannot establish a session, and pairing material does not enter URLs, unrelated browser
 state, or static artifacts.
 
+Every browser-pairing poll carries the private verifier and may consume an approved pairing,
+including one last observed pending. A lost, malformed or timed-out redemption response therefore
+ends automatic polling with explicit uncertain feedback. Only an explicit fresh attempt creates
+another pairing; the old proof is discarded. The original pairing deadline bounds waits and
+requests. Terminal feedback, cancellation and method switching interrupt polling and mailbox work,
+discard staged proofs and fence late replies. Mailbox commands synchronously check their current
+phase and deadline before dispatch. The existing bounded transport diagnostics own request outcomes;
+the feature adds no proof-bearing telemetry.
+
 The web uses the server's canonical authentication paths and session authority. It does not implement
 identity resolution, proof verification, PAT issuance, Consent decisions, or recovery authority.
 Security-sensitive browser actions use the server-established fresh-session requirement.

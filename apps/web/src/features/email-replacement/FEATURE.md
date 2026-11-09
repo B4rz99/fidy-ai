@@ -12,6 +12,10 @@ The mounted form accepts a candidate mailbox, requests a code, and shows the can
 
 Candidate mailbox and proof remain transient form/controller state and are discarded on disposal. Neither enters navigation, browser storage, or shared query results. Server email authentication owns proof delivery, consumption, credential replacement and authority checks.
 
+A failed request restores the entered candidate within the mounted feature. An unresolved completion retains only a private admission flag in the authentication registry and one bounded, versioned session-storage marker containing the public session binding. The marker carries no mailbox or proof and survives document reload. A definitive result removes only that session’s marker. Another authenticated binding can begin a separately reviewed task without deleting foreign recovery metadata; before completion can overwrite the marker, a fresh declared session-binding read must match the mounted owner and current generation. If that read or marker retention fails, completion is not submitted. Back, navigation, and restored documents discard drafts and retire callbacks without claiming that submitted server work was cancelled.
+
+Native completion refreshes its decision instant after proof reads and hashing, before preparing the guarded credential swap. Original work/proof deadlines and fresh-session requirements are checked at that instant; a preflight cannot renew them.
+
 ## Verification
 
 Current-artifact regression, 2026-10-12, trunk baseline `9aafe8db54`: the real public Core/D1 browser replacement journey passed in 5.5 seconds using ordinary assertion deadlines. The test used an isolated verified-email User and synthetic external delivery, then verified completion and private proof disposal. The current focused React audit also passed the email controller/feature checks within its 54-check run; two replacement refusal/resource checks passed within the four-check Worker/D1 rerun. This establishes current local integration and refusal evidence, without replacing a production mailbox or proving real mail delivery under representative load.

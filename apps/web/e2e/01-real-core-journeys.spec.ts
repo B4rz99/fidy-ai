@@ -564,7 +564,70 @@ const submitReplacementTwice = (page: Page, label: string): Promise<void> =>
     form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
-test("keeps replacement locked after an undecodable completion without replaying the mutation", ({
+const expectReplacementAdmissionOnly = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(yield* fromPlaywright(page.evaluate(retainedSecretCount))).toBe(1);
+      expect(
+        yield* fromPlaywright(
+          page.evaluate(() => sessionStorage.getItem("fidy:email-replacement-admission-v1"))
+        )
+      ).toMatch(/^\{"version":1,"binding":"[0-9a-f-]{36}"\}$/u);
+    })
+  );
+const restoreReplacementDocument = (page: Page): Promise<void> =>
+  page
+    .evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })))
+    .then(() =>
+      page.evaluate(() => {
+        window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+      })
+    );
+const expectUnresolvedReplacement = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(
+        expect(page.getByText("No pudimos confirmar el cambio de correo")).toBeVisible()
+      );
+      yield* fromPlaywright(
+        expect(page.getByText("El código no es válido", { exact: true })).toHaveCount(0)
+      );
+      yield* fromPlaywright(
+        expect(
+          page.getByRole("button", {
+            name: /Cambiar correo|Solicitar código de nuevo|Usar otro correo/u,
+          })
+        ).toHaveCount(0)
+      );
+      yield* fromPlaywright(expect(page.getByLabel("Nuevo correo")).toHaveCount(0));
+      yield* fromPlaywright(expect(page.getByLabel("Código de verificación")).toHaveCount(0));
+    })
+  );
+test("preserves the entered replacement candidate after a request failure", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(signInThroughCore({ page, request, deferFreshEntry: true }));
+      yield* fromPlaywright(
+        page.route(`${api}/email/replacement`, (route) => route.fulfill({ status: 503, json: {} }))
+      );
+      yield* fromPlaywright(page.goto("/settings/account"));
+      yield* fromPlaywright(page.getByLabel("Nuevo correo").fill("Retry@example.test"));
+      yield* fromPlaywright(
+        page.getByRole("button", { name: "Enviar código", exact: true }).click()
+      );
+      yield* fromPlaywright(
+        expect(
+          page.getByText("No pudimos confirmar la solicitud. Puedes solicitar el código de nuevo.")
+        ).toBeVisible()
+      );
+      yield* fromPlaywright(
+        expect(page.getByLabel("Nuevo correo")).toHaveValue("Retry@example.test")
+      );
+      yield* fromPlaywright(restoreReplacementDocument(page));
+      yield* fromPlaywright(expect(page.getByLabel("Nuevo correo")).toHaveValue(""));
+    })
+  ));
+test("keeps replacement locked after an undecodable completion through reload until fresh pairing", ({
   page,
   request,
 }) =>
@@ -597,23 +660,17 @@ test("keeps replacement locked after an undecodable completion without replaying
       const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
       yield* fromPlaywright(page.getByLabel("Código de verificación").fill(code));
       yield* fromPlaywright(submitReplacementTwice(page, "Código de verificación"));
-      yield* fromPlaywright(
-        expect(page.getByText("No pudimos confirmar el cambio de correo")).toBeVisible()
-      );
+      yield* fromPlaywright(expectUnresolvedReplacement(page));
       expect(completed).toEqual([{ candidateEmail: "mixed@example.test", combinedCode: code }]);
-      yield* fromPlaywright(
-        expect(page.getByText("El código no es válido", { exact: true })).toHaveCount(0)
-      );
-      yield* fromPlaywright(
-        expect(
-          page.getByRole("button", {
-            name: /Cambiar correo|Solicitar código de nuevo|Usar otro correo/u,
-          })
-        ).toHaveCount(0)
-      );
-      expect(
-        yield* fromPlaywright(page.evaluate(() => localStorage.length + sessionStorage.length))
-      ).toBe(0);
+      yield* fromPlaywright(page.reload());
+      yield* fromPlaywright(expectUnresolvedReplacement(page));
+      expect(requested).toHaveLength(1);
+      expect(completed).toHaveLength(1);
+      yield* fromPlaywright(expectReplacementAdmissionOnly(page));
+      yield* fromPlaywright(signInThroughCore({ page, request, deferFreshEntry: true }));
+      yield* fromPlaywright(page.goto("/settings/account"));
+      yield* fromPlaywright(expect(page.getByLabel("Nuevo correo")).toBeVisible());
+      yield* fromPlaywright(expectReplacementAdmissionOnly(page));
     })
   ));
 const openReplacementProof = (page: Page): Promise<void> =>
@@ -633,7 +690,48 @@ const openReplacementProof = (page: Page): Promise<void> =>
     })
   );
 
-for (const departure of ["back", "unmount"] as const) {
+test("does not submit replacement when its unresolved admission cannot be retained", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(signInThroughCore({ page, request, deferFreshEntry: true }));
+      yield* fromPlaywright(openReplacementProof(page));
+      let completions = 0;
+      yield* fromPlaywright(
+        page.route(`${api}/web/email/replacement/verify`, (route) => {
+          completions++;
+          return route.fulfill({ status: 200, json: { data: { status: "replaced" }, next: [] } });
+        })
+      );
+      yield* fromPlaywright(
+        page.evaluate(() => {
+          const original = Storage.prototype.setItem;
+          Storage.prototype.setItem = function (this: Storage, key: string, value: string): void {
+            if (key === "fidy:email-replacement-admission-v1") {
+              throw new DOMException("Unavailable", "SecurityError");
+            }
+            original.call(this, key, value);
+          };
+        })
+      );
+      yield* fromPlaywright(
+        page.getByLabel("Código de verificación").fill("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ")
+      );
+      yield* fromPlaywright(
+        page.getByRole("button", { name: "Cambiar correo", exact: true }).click()
+      );
+      yield* fromPlaywright(
+        expect(
+          page.getByText("No pudimos iniciar el cambio de correo", { exact: true })
+        ).toBeVisible()
+      );
+      expect(completions).toBe(0);
+      expect(yield* fromPlaywright(page.evaluate(retainedSecretCount))).toBe(0);
+    })
+  ));
+for (const departure of ["back", "unmount", "restoration"] as const) {
   test(`retains replacement uncertainty after ${departure} during completion and rejects the late acknowledgement`, ({
     page,
     request,
@@ -669,12 +767,14 @@ for (const departure of ["back", "unmount"] as const) {
         yield* fromPlaywright(entered.promise);
         if (departure === "back") {
           yield* fromPlaywright(page.getByRole("button", { name: "Volver", exact: true }).click());
-        } else {
+        } else if (departure === "unmount") {
           yield* fromPlaywright(page.getByRole("link", { name: "Accesos", exact: true }).click());
           yield* fromPlaywright(
             expect(page.getByRole("heading", { name: "Accesos", exact: true })).toBeVisible()
           );
           yield* fromPlaywright(page.getByRole("link", { name: "Cuenta", exact: true }).click());
+        } else {
+          yield* fromPlaywright(restoreReplacementDocument(page));
         }
         yield* fromPlaywright(
           expect(page.getByText("No pudimos confirmar el cambio de correo")).toBeVisible()
@@ -687,9 +787,7 @@ for (const departure of ["back", "unmount"] as const) {
         yield* fromPlaywright(expect(page.getByLabel("Nuevo correo")).toHaveCount(0));
         yield* fromPlaywright(expect(page.getByLabel("Código de verificación")).toHaveCount(0));
         expect(completions).toBe(1);
-        expect(
-          yield* fromPlaywright(page.evaluate(() => localStorage.length + sessionStorage.length))
-        ).toBe(0);
+        yield* fromPlaywright(expectReplacementAdmissionOnly(page));
       })
     ));
 }

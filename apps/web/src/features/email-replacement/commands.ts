@@ -1,5 +1,10 @@
 import type { EmailReplacementViewState } from "./view";
-import { Cause, Effect, Exit, Option, Predicate, Schema } from "effect";
+import {
+  clearReplacementAdmission,
+  restoreReplacementAdmission,
+  retainReplacementAdmission,
+} from "./admission";
+import { Cause, Context, Effect, Exit, Option, Predicate, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import {
   EmailAddress,
@@ -8,9 +13,10 @@ import {
   EmailReplacementInvalidApi,
   EmailVerificationCode,
   type FidyClient,
+  type WebAuthClient,
 } from "@/transport/client";
 
-type Work = Effect.Effect<void>;
+type Work = (get: Atom.FnContext) => Effect.Effect<void>;
 type Dispatch = (input: void | typeof Atom.Interrupt) => void;
 type Owner = {
   apiClient: FidyClient;
@@ -21,6 +27,8 @@ type Owner = {
   publish: (state: EmailReplacementViewState) => void;
   uncertain: boolean;
   onUncertain: (uncertain: boolean) => void;
+  binding: string;
+  webAuthClient: WebAuthClient;
 };
 type Intent = Readonly<{ owner: Owner; dispatch: Dispatch; generation: number }>;
 export type ReplacementActions = Readonly<{
@@ -58,13 +66,19 @@ const failureState = (
       return { _tag: "InvalidCode", candidateEmail };
     }
   }
-  return completing ? { _tag: "Uncertain" } : { _tag: "Editing", feedback: "request-unavailable" };
+  return completing
+    ? { _tag: "Uncertain" }
+    : { _tag: "Editing", feedback: "request-unavailable", draftEmail: candidateEmail };
 };
-const runRequest = (owner: Owner, dispatch: Dispatch, candidateEmail: EmailAddressType): void => {
+const runRequest = (
+  { owner, dispatch }: Pick<Intent, "owner" | "dispatch">,
+  candidateEmail: EmailAddressType,
+  draftEmail: string
+): void => {
   owner.generation += 1;
   const generation = owner.generation;
   change(owner, { _tag: "Requesting", candidateEmail });
-  owner.pending = Option.some(
+  owner.pending = Option.some(() =>
     Effect.gen(function* () {
       const result = yield* Effect.exit(
         Effect.gen(function* () {
@@ -75,11 +89,14 @@ const runRequest = (owner: Owner, dispatch: Dispatch, candidateEmail: EmailAddre
         })
       );
       if (!live(owner, generation)) return;
+      const next: EmailReplacementViewState = Exit.isSuccess(result)
+        ? { _tag: "AwaitingCode", candidateEmail }
+        : failureState(result.cause, candidateEmail, false);
       change(
         owner,
-        Exit.isSuccess(result)
-          ? { _tag: "AwaitingCode", candidateEmail }
-          : failureState(result.cause, candidateEmail, false)
+        next._tag === "Editing" && next.feedback === "request-unavailable"
+          ? { ...next, draftEmail }
+          : next
       );
     })
   );
@@ -92,13 +109,13 @@ const request = ({ owner, dispatch, generation }: Intent, candidateEmail: string
     change(owner, { _tag: "Editing", feedback: "invalid-candidate" });
     return;
   }
-  runRequest(owner, dispatch, candidate.value);
+  runRequest({ owner, dispatch }, candidate.value, candidateEmail);
 };
 const repeat = (owner: Owner, dispatch: Dispatch, generation: number): void => {
   if (!live(owner, generation)) return;
   const current = owner.state;
   if (current._tag === "AwaitingCode" || current._tag === "InvalidCode") {
-    runRequest(owner, dispatch, current.candidateEmail);
+    runRequest({ owner, dispatch }, current.candidateEmail, current.candidateEmail);
   }
 };
 const setUncertain = (owner: Owner, uncertain: boolean): void => {
@@ -116,22 +133,34 @@ const complete = ({ owner, dispatch, generation }: Intent, combinedCode: string)
     change(owner, { _tag: "InvalidCode", candidateEmail });
     return;
   }
-  setUncertain(owner, true);
   change(owner, { _tag: "Completing", candidateEmail });
-  owner.pending = Option.some(
+  owner.pending = Option.some((get) =>
     Effect.gen(function* () {
+      let submitted = false;
       const result = yield* Effect.exit(
         Effect.gen(function* () {
+          const context = yield* get.result(owner.webAuthClient.runtime, {
+            suspendOnWaiting: true,
+          });
+          const authentication = Context.get(context, owner.webAuthClient);
+          const observation = yield* authentication.browserSession.binding({ query: {} });
+          if (!live(owner, generation)) return yield* Effect.interrupt;
+          if (observation.binding !== owner.binding || !retainReplacementAdmission(owner.binding)) {
+            return yield* Effect.fail(undefined);
+          }
+          setUncertain(owner, true);
           const client = yield* owner.apiClient;
+          submitted = true;
           return yield* client.emailAuthentication.completeEmailReplacement({
             payload: { candidateEmail, combinedCode: code.value },
           });
         })
       );
       if (!live(owner, generation)) return;
-      const next = Exit.isSuccess(result)
-        ? { _tag: "Replaced" as const }
-        : failureState(result.cause, candidateEmail, true);
+      let next: EmailReplacementViewState = { _tag: "PreparationUnavailable" };
+      if (Exit.isSuccess(result)) next = { _tag: "Replaced" };
+      else if (submitted) next = failureState(result.cause, candidateEmail, true);
+      if (next._tag !== "Uncertain") clearReplacementAdmission(owner.binding);
       setUncertain(owner, next._tag === "Uncertain");
       change(owner, next);
     })
@@ -151,10 +180,17 @@ const restart = (owner: Owner, dispatch: Dispatch, generation: number): void => 
   change(owner, _tag === "Completing" ? { _tag: "Uncertain" } : editing);
 };
 const mount = (owner: Owner, dispatch: Dispatch): (() => void) => {
-  owner.active = true;
-  if (owner.state._tag === "Disposed") {
-    change(owner, owner.uncertain ? { _tag: "Uncertain" } : editing);
-  }
+  const resume = (): void => {
+    owner.active = true;
+    const admission = restoreReplacementAdmission(owner.binding);
+    if (admission === "unavailable") {
+      change(owner, { _tag: "PreparationUnavailable" });
+      return;
+    }
+    setUncertain(owner, owner.uncertain || admission === "uncertain");
+    change(owner, owner.uncertain ? { _tag: "Uncertain" } : { ...editing });
+  };
+  resume();
   const dispose = (): void => {
     owner.active = false;
     retire(owner, dispatch);
@@ -164,9 +200,14 @@ const mount = (owner: Owner, dispatch: Dispatch): (() => void) => {
     dispose();
     owner.publish({ _tag: "Disposed" });
   };
+  const restored = (event: PageTransitionEvent): void => {
+    if (event.persisted) resume();
+  };
   window.addEventListener("pagehide", hide);
+  window.addEventListener("pageshow", restored);
   return (): void => {
     window.removeEventListener("pagehide", hide);
+    window.removeEventListener("pageshow", restored);
     dispose();
   };
 };
@@ -175,23 +216,33 @@ export const makeReplacement = ({
   publish,
   uncertain,
   onUncertain,
-}: Pick<Owner, "apiClient" | "publish" | "uncertain" | "onUncertain">): Replacement => {
+  binding,
+  webAuthClient,
+}: Pick<
+  Owner,
+  "apiClient" | "publish" | "uncertain" | "onUncertain" | "binding" | "webAuthClient"
+>): Replacement => {
   const owner: Owner = {
     apiClient,
     publish,
     state: uncertain ? { _tag: "Uncertain" } : editing,
     uncertain,
     onUncertain,
+    binding,
+    webAuthClient,
     active: false,
     generation: 0,
     pending: Option.none(),
   };
   const atom = apiClient.runtime.fn<void>()(
-    () =>
+    (_input, get) =>
       Effect.suspend(() => {
         const pending = owner.pending;
         owner.pending = Option.none();
-        return Option.match(pending, { onNone: () => Effect.interrupt, onSome: (work) => work });
+        return Option.match(pending, {
+          onNone: () => Effect.interrupt,
+          onSome: (work) => work(get),
+        });
       }),
     { concurrent: false }
   );

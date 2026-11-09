@@ -9,14 +9,21 @@ const incompleteReplacement = Atom.make(false).pipe(Atom.keepAlive);
 
 export const useEmailReplacement = (): ReplacementActions &
   Readonly<{ state: EmailReplacementViewState; lifecycleRef: RefCallback<HTMLElement> }> => {
-  const apiClient = useRouter().options.context.apiClient;
+  const { apiClient, webAuthClient, sessionBinding: binding } = useRouter().options.context;
   const uncertain = useAtomValue(incompleteReplacement);
   const onUncertain = useAtomSet(incompleteReplacement);
   const [state, setState] = useState<EmailReplacementViewState>(
     uncertain ? { _tag: "Uncertain" } : { _tag: "Editing", feedback: "none" }
   );
   const [interaction] = useState(() =>
-    makeReplacement({ apiClient, publish: setState, uncertain, onUncertain })
+    makeReplacement({
+      apiClient,
+      webAuthClient,
+      publish: setState,
+      uncertain,
+      onUncertain,
+      binding,
+    })
   );
   const dispatch = useAtomSet(interaction.atom);
   const lifecycleRef = useCallback<RefCallback<HTMLElement>>(

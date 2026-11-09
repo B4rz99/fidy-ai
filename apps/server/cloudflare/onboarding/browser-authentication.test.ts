@@ -1249,6 +1249,107 @@ it("refuses an expired replacement proof without renewing the work or consuming 
     })
   ));
 
+it.each(["proof", "freshness"] as const)(
+  "refuses replacement when %s expires during completion preflight",
+  (deadline) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        let armed = false;
+        let afterDeadline = 0;
+        const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
+          setup(undefined, undefined, {
+            worker: coreWorker,
+            accessIssuer: "https://example.cloudflareaccess.com",
+            publication: Option.none(),
+            database: (database) =>
+              new Proxy(database, {
+                get(target, property, receiver): unknown {
+                  if (property === "prepare") {
+                    return (query: string): D1PreparedStatement => {
+                      const statement = target.prepare(query);
+                      if (!armed || !query.includes("SELECT user_id, work_id, proof_digest")) {
+                        return statement;
+                      }
+                      return new Proxy(statement, {
+                        get(prepared, method, preparedReceiver): unknown {
+                          if (method === "bind") {
+                            return (...values: unknown[]): D1PreparedStatement => {
+                              const bound = prepared.bind(...values);
+                              return new Proxy(bound, {
+                                get(boundTarget, boundMethod, boundReceiver): unknown {
+                                  if (boundMethod === "first") {
+                                    return (): Promise<unknown> =>
+                                      boundTarget.first().then((proof) => {
+                                        armed = false;
+                                        vi.setSystemTime(afterDeadline);
+                                        return proof;
+                                      });
+                                  }
+                                  return Reflect.get(boundTarget, boundMethod, boundReceiver);
+                                },
+                              });
+                            };
+                          }
+                          return Reflect.get(prepared, method, preparedReceiver);
+                        },
+                      });
+                    };
+                  }
+                  return Reflect.get(target, property, receiver);
+                },
+              }),
+          })
+        );
+        yield* Effect.tryPromise(seedUser);
+        const token = "V".repeat(43);
+        const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
+        const request = replacementRequest(sendRequest, token);
+        yield* Effect.tryPromise(() =>
+          request("/email/replacement", { candidateEmail: "deadline@example.test" })
+        );
+        const combinedCode = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+        afterDeadline = started + (deadline === "proof" ? 2_000 : 600_001);
+        if (deadline === "proof") {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("UPDATE email_replacements SET proof_expires_at_ms = ?")
+              .bind(started + 1_000)
+              .run()
+          );
+        }
+        const before = yield* Effect.tryPromise(() =>
+          db.prepare("SELECT * FROM email_replacements").first()
+        );
+        armed = true;
+        const response = yield* Effect.tryPromise(() =>
+          request("/web/email/replacement/verify", {
+            candidateEmail: "deadline@example.test",
+            combinedCode,
+          })
+        );
+        expect(response.status).toBe(deadline === "proof" ? 400 : 401);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT address FROM verified_email_credentials").first()
+          )
+        ).toEqual({ address: "person@example.test" });
+        expect(
+          yield* Effect.tryPromise(() => db.prepare("SELECT * FROM email_replacements").first())
+        ).toEqual(before);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT count(*) AS count FROM audit_entries WHERE record_type = 'session_call' AND outcome = 'replaced'"
+              )
+              .first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    )
+);
+
 it("requires fresh pairing when the initiating session is revoked before the guarded replacement commit", () =>
   Effect.runPromise(
     Effect.gen(function* () {

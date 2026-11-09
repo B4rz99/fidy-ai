@@ -311,6 +311,7 @@ const redeemProof = (
         );
         return false;
       }
+      const commitTime = yield* Clock.currentTimeMillis;
       const committed = yield* attempt(() =>
         commitReplacement(db, {
           workId: proof.value.work_id,
@@ -318,7 +319,7 @@ const redeemProof = (
           sessionId: session.id,
           publicCode,
           candidateEmail,
-          current,
+          current: commitTime,
         })
       );
       if (committed.length === 3 && committed.every((result) => result.meta.changes === 1)) {
@@ -327,35 +328,35 @@ const redeemProof = (
       if (committed.length !== 3 || committed.some((result) => result.meta.changes !== 0)) {
         return yield* Effect.fail(undefined);
       }
-      const live = yield* attempt(() => hasFreshSession(db, session));
+      const live = yield* hasFreshSession(db, session);
       if (!live) return "fresh-required";
-      yield* attempt(() => recordRejected(db, session, current));
+      yield* attempt(() => recordRejected(db, session, commitTime));
       return false;
     })
   );
 
 const FreshSession = Schema.Struct({ fresh: Schema.Literals([0, 1]) });
-const hasFreshSession = (db: D1Database, session: SessionSubject): Promise<boolean> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const current = yield* Clock.currentTimeMillis;
-      const query = freshSessionQuery({
-        subject: {
-          sql: "SELECT ? AS sessionId, ? AS userId",
-          params: [session.id, session.user_id],
-        },
-        current,
-      });
-      const raw = yield* attempt(() =>
-        db
-          .prepare(`SELECT EXISTS (${query.sql}) AS fresh`)
-          .bind(...query.params)
-          .first()
-      );
-      const result = yield* Schema.decodeUnknownEffect(FreshSession)(raw);
-      return result.fresh === 1;
-    })
-  );
+const hasFreshSession = (db: D1Database, session: SessionSubject): Effect.Effect<boolean, void> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const query = freshSessionQuery({
+      subject: {
+        sql: "SELECT ? AS sessionId, ? AS userId",
+        params: [session.id, session.user_id],
+      },
+      current,
+    });
+    const raw = yield* attempt(() =>
+      db
+        .prepare(`SELECT EXISTS (${query.sql}) AS fresh`)
+        .bind(...query.params)
+        .first()
+    );
+    const result = yield* Schema.decodeUnknownEffect(FreshSession)(raw).pipe(
+      Effect.mapError(() => undefined)
+    );
+    return result.fresh === 1;
+  });
 
 type SessionSubject = { readonly id: string; readonly user_id: string };
 

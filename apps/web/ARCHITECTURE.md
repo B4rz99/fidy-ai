@@ -319,9 +319,15 @@ completion use the canonical typed client with no-store requests. Neither value 
 storage, or application-wide state.
 The mounted replacement owner serializes request and completion, binds every intent and reply to its
 local generation, and submits the captured candidate assertion. Uniform Pending does not certify
-admission or delivery. Completion uncertainty retains only a private admission flag in the existing
-authentication registry until a definitive result or fresh sign-in; route disposal clears drafts and
-interrupts waiting without claiming to cancel a submitted server commit.
+admission or delivery. Completion uncertainty retains a private admission flag in the existing
+authentication registry and one bounded, versioned session-storage marker containing only the public
+session binding. Reload preserves the unresolved lock; a definitive result removes only its own marker.
+Another authenticated binding can begin a new task without deleting foreign recovery metadata. Before marker
+overwrite and completion, the existing declared binding read must match the owner’s binding and
+current generation. An unavailable observation or marker persistence refuses the completion POST.
+Route disposal and document restoration clear drafts and retire callbacks without claiming to cancel a
+submitted server commit. A failed request restores its entered candidate only within the mounted
+feature lifetime.
 
 `/settings/privacy` independently reads Processing Consent and records explicit authenticated
 withdrawal through the server-declared browser client. It remains accessible without ordinary

@@ -9,7 +9,8 @@ import type { EmailAddress } from "@/transport/client";
 import { Spinner } from "@/ui/components/spinner";
 
 export type EmailReplacementViewState =
-  | Readonly<{ _tag: "Editing"; feedback: "none" | "invalid-candidate" | "request-unavailable" }>
+  | Readonly<{ _tag: "Editing"; feedback: "none" | "invalid-candidate" }>
+  | Readonly<{ _tag: "Editing"; feedback: "request-unavailable"; draftEmail: string }>
   | Readonly<{ _tag: "Requesting"; candidateEmail: EmailAddress }>
   | Readonly<{ _tag: "AwaitingCode"; candidateEmail: EmailAddress }>
   | Readonly<{ _tag: "Completing"; candidateEmail: EmailAddress }>
@@ -17,6 +18,7 @@ export type EmailReplacementViewState =
   | Readonly<{ _tag: "FreshPairingRequired" }>
   | Readonly<{ _tag: "Replaced" }>
   | Readonly<{ _tag: "Uncertain" }>
+  | Readonly<{ _tag: "PreparationUnavailable" }>
   | Readonly<{ _tag: "Disposed" }>;
 
 type EmailReplacementViewProps = Readonly<{
@@ -28,8 +30,11 @@ type EmailReplacementViewProps = Readonly<{
   restart: () => void;
 }>;
 
-const ReplacementForm = ({ request }: Pick<EmailReplacementViewProps, "request">): JSX.Element => {
-  const [candidateEmail, setCandidateEmail] = useState("");
+const ReplacementForm = ({
+  request,
+  draftEmail,
+}: Pick<EmailReplacementViewProps, "request"> & Readonly<{ draftEmail: string }>): JSX.Element => {
+  const [candidateEmail, setCandidateEmail] = useState(draftEmail);
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     request(candidateEmail);
@@ -143,7 +148,10 @@ const EditingForm = ({
         </AlertDescription>
       </Alert>
     ) : null}
-    <ReplacementForm request={request} />
+    <ReplacementForm
+      request={request}
+      draftEmail={state.feedback === "request-unavailable" ? state.draftEmail : ""}
+    />
   </>
 );
 const ReplacementWaiting = ({
@@ -185,9 +193,30 @@ const replacementContent = ({
 const replacementOutcome = (
   state: Extract<
     EmailReplacementViewState,
-    { _tag: "FreshPairingRequired" | "Uncertain" | "Disposed" | "Replaced" }
+    {
+      _tag:
+        | "FreshPairingRequired"
+        | "Uncertain"
+        | "Disposed"
+        | "Replaced"
+        | "PreparationUnavailable";
+    }
   >
 ): JSX.Element => {
+  if (state._tag === "PreparationUnavailable") {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>No pudimos iniciar el cambio de correo</AlertTitle>
+        <AlertDescription>
+          Vuelve a abrir esta página o inicia sesión de nuevo antes de intentar otro cambio.{" "}
+          <a className="underline" href="/login?resume=account">
+            Ir a vinculación
+          </a>
+          .
+        </AlertDescription>
+      </Alert>
+    );
+  }
   if (state._tag === "FreshPairingRequired") {
     return (
       <Alert variant="destructive">

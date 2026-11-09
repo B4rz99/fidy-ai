@@ -1,3 +1,4 @@
+import { noLaterReadyPairing } from "./approval-order";
 import {
   BrowserLoginPairingId,
   BrowserLoginPublicCodeSymbols,
@@ -177,6 +178,7 @@ export const approveBrowserPairing = ({
       bsuid: caller.value.businessScopedUserId,
     });
     if (Option.isNone(user)) return invalid();
+    const ordering = noLaterReadyPairing({ sql: "w.userId", params: [] }, "p", input.receivedAtMs);
     const result = yield* attempt(() =>
       prepareWhatsAppIdentity({
         db,
@@ -189,9 +191,7 @@ export const approveBrowserPairing = ({
                 AND p.wrong_attempts < 5
                 AND p.expires_at_ms > ? AND p.expires_at_ms > ?
                 AND ? >= (p.created_at_ms / 1000) * 1000
-                AND NOT EXISTS (SELECT 1 FROM browser_login_pairings AS ready
-                  WHERE ready.state = 'ready' AND ready.user_id = w.userId
-                    AND ready.expires_at_ms > ? AND ready.rowid >= p.rowid)
+                AND ${ordering.sql}
               ) AS incoming WHERE browser_login_pairings.id=incoming.pairing_id AND browser_login_pairings.approval_message_id IS NULL`,
             params: [
               input.portfolioId,
@@ -202,7 +202,7 @@ export const approveBrowserPairing = ({
               input.receivedAtMs,
               input.occurredAtMs,
               input.occurredAtMs,
-              input.receivedAtMs,
+              ...ordering.params,
             ],
           },
           subject: { _tag: "User", userId: user.value },

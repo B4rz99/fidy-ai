@@ -4,7 +4,10 @@ import type { setup } from "./journey.test-fixture";
 
 const successStatus = 200;
 const redirectStatus = 303;
-const mockGoogleToken = (authorization: URL): Effect.Effect<void, Cause.UnknownError> =>
+const mockGoogleToken = (
+  authorization: URL,
+  subject: string
+): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     const { generateKeyPair, exportJWK, SignJWT } = yield* Effect.tryPromise(() => import("jose"));
     const keys = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
@@ -13,7 +16,7 @@ const mockGoogleToken = (authorization: URL): Effect.Effect<void, Cause.UnknownE
       new SignJWT({ nonce: authorization.searchParams.get("nonce"), email: "person@example.test" })
         .setProtectedHeader({ alg: "RS256", kid: "chat" })
         .setIssuer("https://accounts.google.com")
-        .setSubject("chat-provider-user")
+        .setSubject(subject)
         .setAudience("test-client")
         .setIssuedAt()
         .setExpirationTime("5m")
@@ -40,7 +43,8 @@ const mockGoogleToken = (authorization: URL): Effect.Effect<void, Cause.UnknownE
   });
 export const authenticateChatProvider = Effect.fn(function* (
   journey: Awaited<ReturnType<typeof setup>>,
-  reference: string
+  reference: string,
+  subject: string = "chat-provider-user"
 ): Effect.fn.Return<void, Cause.UnknownError | Schema.SchemaError> {
   const disclosureResponse = yield* Effect.tryPromise(() =>
     journey.send("/web/providers/disclosure")
@@ -61,7 +65,7 @@ export const authenticateChatProvider = Effect.fn(function* (
     Schema.Struct({ authorizationUrl: Schema.String })
   )(yield* Effect.tryPromise(() => start.json()));
   const authorization = new URL(result.authorizationUrl);
-  yield* mockGoogleToken(authorization);
+  yield* mockGoogleToken(authorization, subject);
   expect(
     (yield* Effect.tryPromise(() =>
       journey.send(

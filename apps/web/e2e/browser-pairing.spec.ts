@@ -968,6 +968,65 @@ test("discards an in-flight verifier when switching methods and starts email onl
     })
   ));
 
+/** Exercise the public SPA history boundary without replacing the document or React root. */
+const navigatePairingRoute = (page: Page, path: string): Promise<void> =>
+  page.evaluate((destination) => {
+    window.history.pushState({}, "", destination);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, path);
+
+test("disposes the mounted pairing owner before an outstanding redemption replies", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(page.clock.install());
+      const { events, pendingRoutes } = yield* wait(installSlowdownRoutes(page));
+      let interruptedRequests = 0;
+      page.on("requestfailed", (request) => {
+        if (request.url().endsWith("/web/pairings/redeem")) interruptedRequests += 1;
+      });
+      yield* wait(openBrowserLogin(page));
+      // The marker survives same-document navigation, proving React owns disposal.
+      yield* wait(
+        page.evaluate(() =>
+          document.documentElement.setAttribute("data-disposal-document", "original")
+        )
+      );
+      yield* wait(page.getByRole("button", { name: "WhatsApp", exact: true }).click());
+      yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
+      yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
+      yield* wait(expect.poll(() => pendingRoutes.length).toBe(1));
+      yield* wait(navigatePairingRoute(page, "/missing-pairing-disposed"));
+      yield* wait(expect(page.getByText(publicCode, { exact: true })).toHaveCount(0));
+      yield* wait(
+        Option.getOrThrow(Option.fromUndefinedOr(pendingRoutes[0])).fulfill({
+          status: successStatus,
+          contentType: "application/json",
+          body: json({ status: "authenticated" }),
+        })
+      );
+      yield* wait(expect.poll(() => interruptedRequests).toBe(1));
+      yield* wait(page.clock.runFor(retiredPollAdvanceMilliseconds));
+      yield* wait(expect(page).toHaveURL(/\/missing-pairing-disposed$/u));
+      yield* wait(
+        expect(page.getByRole("heading", { name: "Página no encontrada" })).toBeVisible()
+      );
+      expect(events).toEqual(["start", "redeem-1"]);
+      expect(
+        yield* wait(
+          page.evaluate(() => document.documentElement.getAttribute("data-disposal-document"))
+        )
+      ).toBe("original");
+      expect(yield* wait(page.evaluate(retainedSecretCount))).toBe(0);
+      // A new mount remains unauthenticated and requires explicit fresh initiation.
+      yield* wait(navigatePairingRoute(page, "/login"));
+      yield* wait(expect(page.getByRole("heading", { name: "Entra a tu Fidy" })).toBeVisible());
+      expect(events).toEqual(["start", "redeem-1"]);
+      yield* wait(page.getByRole("button", { name: "WhatsApp", exact: true }).click());
+      yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
+      expect(events).toEqual(["start", "redeem-1", "start"]);
+    })
+  ));
+
 const emailCooldownSeconds = 60;
 const secondMilliseconds = 1000;
 /** Let intercepted polling I/O finish before advancing its bounded HTTP deadline again. */

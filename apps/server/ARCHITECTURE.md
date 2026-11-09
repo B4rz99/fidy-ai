@@ -193,6 +193,9 @@ Browser Login owns pairing order through immutable native insertion rowids. Ever
 rechecks its candidate against the same User's live ready pairing in its guarded write; only a newer
 candidate can replace it. Supersession invalidates the replaced ready pairing in that same native
 unit, including rollback with the originating proof. Creation alone does not supersede approval.
+Browser Login retains separate User attribution through pairing retirement for erasure of the pairing
+and associated provider evidence. Its erasure-only publication grants no authentication authority;
+the live pairing User binding and lifecycle continue to govern approval and redemption.
 See [ADR 0009](../../docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.md) and the
 [browser authentication feature](../web/src/features/provider-authentication/FEATURE.md).
 

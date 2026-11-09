@@ -1,27 +1,25 @@
 import { Key01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { JSX } from "react";
-import type { BackupRecoveryCode } from "@/transport/client";
+import type { JSX, ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 
 export type RotationState =
   | Readonly<{ _tag: "Idle" }>
+  | Readonly<{ _tag: "Reviewing" }>
   | Readonly<{ _tag: "Rotating" }>
-  | Readonly<{ _tag: "Disclosed"; code: BackupRecoveryCode; copied: boolean }>
+  | Readonly<{ _tag: "Disclosed"; copied: boolean }>
   | Readonly<{ _tag: "Failed" }>
   | Readonly<{ _tag: "FreshSessionRequired" }>;
 
 const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
   <div className="flex flex-col gap-4">
-    {state._tag === "Disclosed" ? (
+    {state._tag === "Reviewing" ? (
       <Alert>
-        <AlertTitle>Guárdalo ahora</AlertTitle>
-        <AlertDescription className="flex flex-col gap-3">
-          <span>
-            Este código se muestra una sola vez. Guárdalo fuera de Fidy y no lo compartas.
-          </span>
-          <code className="break-all text-base font-semibold">{state.code}</code>
+        <AlertTitle>Revisa antes de continuar</AlertTitle>
+        <AlertDescription>
+          Confirmar invalida el código anterior de inmediato. El código nuevo se mostrará una sola
+          vez. Guárdalo fuera de Fidy antes de salir de esta página.
         </AlertDescription>
       </Alert>
     ) : null}
@@ -56,7 +54,21 @@ const RotationAction = (props: {
   state: RotationState;
   onStart: () => void;
   onCopy: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
 }): JSX.Element => {
+  if (props.state._tag === "Reviewing") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button contentLayout="wrap" onClick={props.onConfirm} type="button">
+          Confirmar código nuevo
+        </Button>
+        <Button contentLayout="wrap" onClick={props.onCancel} type="button" variant="outline">
+          Cancelar
+        </Button>
+      </div>
+    );
+  }
   if (props.state._tag === "FreshSessionRequired") {
     return (
       <div>
@@ -95,10 +107,16 @@ export const BackupRecoveryRotationPresentation = ({
   state,
   onStart,
   onCopy,
+  onConfirm,
+  onCancel,
+  disclosure,
 }: Readonly<{
   state: RotationState;
   onStart: () => void;
   onCopy: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  disclosure: ReactNode;
 }>): JSX.Element => (
   <section aria-label="Recuperación" className="settings-section">
     <div className="settings-section-icon" aria-hidden="true">
@@ -113,7 +131,14 @@ export const BackupRecoveryRotationPresentation = ({
       </p>
       <div className="settings-section-actions">
         <RotationFeedback state={state} />
-        <RotationAction onCopy={onCopy} onStart={onStart} state={state} />
+        {disclosure}
+        <RotationAction
+          onCopy={onCopy}
+          onStart={onStart}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+          state={state}
+        />
       </div>
     </div>
   </section>

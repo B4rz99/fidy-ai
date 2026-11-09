@@ -1,9 +1,9 @@
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, type Redacted, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
 
 export type RotateBackupRecoveryCommand = Readonly<{
-  onRotated: (code: BackupRecoveryCode) => void;
+  onRotated: (code: Redacted.Redacted<BackupRecoveryCode>) => void;
   onFailed: () => void;
   onFreshSessionRequired: () => void;
 }>;
@@ -24,9 +24,7 @@ export const makeRotateCommand = ({
       Effect.gen(function* () {
         const client = yield* apiClient;
         const response = yield* client.recovery.rotateBackupRecoveryCode();
-        yield* Effect.sync(() =>
-          command.onRotated(Redacted.value(response.data.backupRecoveryCode))
-        );
+        yield* Effect.sync(() => command.onRotated(response.data.backupRecoveryCode));
       }).pipe(
         Effect.catch((error) =>
           Effect.sync(

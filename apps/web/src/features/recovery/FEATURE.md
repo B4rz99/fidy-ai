@@ -10,9 +10,20 @@ Capability and verification map for `/settings/recovery`. Product requirements r
 
 ## Behaviour
 
-An explicit click requests canonical backup-code rotation under a fresh WebSession. Rotation invalidates the preceding code immediately. The raw replacement is disclosed in one mounted view, with an explicit copy action. A changed React identity drops that disclosure; sensitive clipboard ownership handles clearing. Failed clipboard writes do not report “Copiado”.
+An explicit click opens a local review describing immediate invalidation and one-time disclosure.
+Review and cancellation issue no request. Confirm synchronously closes admission before requesting
+canonical backup-code rotation under the bound fresh WebSession; repeated callbacks from that review
+cannot request another rotation. The server snapshots the current credential revision and guards its
+replacement and metadata Audit in one native D1 batch. A concurrent credential change refuses the
+stale request. Freshness remains separate: independent valid requests can rotate again without
+consuming or extending the session's original freshness window.
 
-The canonical command is serialized and consumes the response through a terminal callback rather than retaining its raw code in shared Atom results. A stale session requests new sign-in. Other failures disclose no code and offer another rotation; only the latest visibly disclosed code should be used. The server owns fresh authority, proof replacement and retained security evidence.
+The replacement remains redacted in private mounted state and reaches the raw-code presenter and
+explicit clipboard action only during disclosure. Generic presentation state has no raw code.
+Navigation/remount drops the disclosure; sensitive clipboard ownership retains its existing
+matching cleanup and ten-minute copy lifetime. Failed clipboard writes do not report “Copiado”.
+The server continues to own fresh authority, proof replacement and retained security evidence.
+Support refusal remains non-enumerating and does not invent a retained rejected case.
 
 ## Verification
 

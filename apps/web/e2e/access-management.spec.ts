@@ -297,6 +297,132 @@ test("narrow Accesos permits keyboard grant review and restores the draft for ed
     })
   ));
 
+const editReviewedGrant = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  const name = page.getByLabel("Nombre", { exact: true });
+  yield* Effect.tryPromise(() => name.fill("  Primer agente  "));
+  yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Crear token", exact: true }).click()
+  );
+  const review = page.getByRole("region", { name: "Revisión del token" });
+  const oldConfirm = yield* Effect.tryPromise(() =>
+    review.getByRole("button", { name: "Confirmar y crear token", exact: true }).elementHandle()
+  );
+  yield* Effect.tryPromise(() => review.getByRole("button", { name: "Editar" }).click());
+  yield* Effect.tryPromise(() => name.fill("  Agente editado  "));
+  yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).uncheck());
+  yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Escritura:/u }).check());
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: /^Duración del token:/u }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("menuitemradio", { name: "7 días", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Crear token", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => expect(review).toContainText("Agente editado"));
+  yield* Effect.tryPromise(() => expect(review).toContainText("Escritura"));
+  yield* Effect.tryPromise(() => expect(review).not.toContainText("Lectura"));
+  yield* Effect.tryPromise(() => expect(review).toContainText("Vencimiento estimado"));
+  yield* Effect.tryPromise(() =>
+    expect(review).toContainText(
+      "El vencimiento exacto se calculará al crear el token, 7 días después."
+    )
+  );
+  return { review, oldConfirm };
+});
+const checkReviewedIssuance = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => installAccess(page));
+  yield* Effect.tryPromise(() => installIssuance(page));
+  const submissions: unknown[] = [];
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/pats`, (route) => {
+      if (route.request().method() === "POST") {
+        submissions.push(route.request().postDataJSON());
+      }
+      return route.fallback();
+    })
+  );
+  const { review, oldConfirm } = yield* editReviewedGrant(page);
+  const reviewExpiresAt = yield* Effect.tryPromise(() =>
+    review.locator("time").getAttribute("datetime")
+  );
+  if (oldConfirm !== null) {
+    yield* Effect.tryPromise(() =>
+      oldConfirm.evaluate((button) =>
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      )
+    );
+  }
+  expect(submissions).toHaveLength(0);
+  yield* Effect.tryPromise(() =>
+    review
+      .getByRole("button", { name: "Confirmar y crear token", exact: true })
+      .evaluate((button) => {
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      })
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText(disclosedBearer, { exact: true })).toBeVisible()
+  );
+  expect(submissions).toEqual([
+    {
+      requestId: expect.stringMatching(/^[\da-f-]{36}$/u),
+      grant: {
+        recipientLabel: "Agente editado",
+        scopes: ["write"],
+        lifetimeDays: 7,
+        reviewExpiresAt,
+      },
+    },
+  ]);
+});
+test("Accesos issues only the newly reviewed grant once after permission and lifetime edits", ({
+  page,
+}) => Effect.runPromise(checkReviewedIssuance(page)));
+
+const checkPagehideActions = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => installAccess(page));
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  const name = page.getByLabel("Nombre", { exact: true });
+  yield* Effect.tryPromise(() => name.fill("Agente anterior"));
+  yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
+  yield* Effect.tryPromise(() =>
+    name.evaluate((input) => {
+      if (!(input instanceof HTMLInputElement)) return;
+      const form = input.form;
+      window.dispatchEvent(new PageTransitionEvent("pagehide"));
+      input.select();
+      input.setRangeText("Acción anterior");
+      input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      form?.requestSubmit();
+    })
+  );
+  yield* Effect.tryPromise(() => expect(name).toHaveValue(""));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("checkbox", { name: /^Lectura:/u })).not.toBeChecked()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("region", { name: "Revisión del token" })).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")))
+  );
+  yield* Effect.tryPromise(() => name.fill("Nueva revisión"));
+  yield* Effect.tryPromise(() => page.getByRole("checkbox", { name: /^Lectura:/u }).check());
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Crear token", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("region", { name: "Revisión del token" })).toContainText("Nueva revisión")
+  );
+});
+test("Accesos refuses pending draft actions after pagehide clears the task", ({ page }) =>
+  Effect.runPromise(checkPagehideActions(page)));
+
 test("temporary MCP list failure offers retry without asking to sign in", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {

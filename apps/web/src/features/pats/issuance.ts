@@ -70,16 +70,16 @@ const beginReview = (
     Effect.runSync(DateTime.now),
     Duration.days(state.lifetimeDays)
   );
-  return {
+  return Object.freeze({
     _tag: "Reviewing",
-    grant: {
+    grant: Object.freeze({
       recipientLabel: PATRecipientLabel.make(state.recipientLabel.trim()),
-      scopes: PATScopes.make(state.scopes),
+      scopes: PATScopes.make(Object.freeze([...state.scopes])),
       lifetimeDays: state.lifetimeDays,
       reviewExpiresAt,
-    },
+    }),
     requestId: makeManualPATRequestId(),
-  };
+  });
 };
 
 /** Presentation receives no request identity or User-bound handoff data. */
@@ -152,19 +152,20 @@ type IssuanceOwner = Readonly<{
   clear: () => void;
 }>;
 type Issue = (command: Issuance) => Promise<Exit.Exit<void, never>>;
+type CreationBinding = Readonly<{ owner: IssuanceOwner; state: ManualPATCreationState }>;
 const confirmPAT = (
-  { current, lifetime, change, clear }: IssuanceOwner,
+  { owner: { current, lifetime, change, clear }, state: previous }: CreationBinding,
   issue: Issue,
   clipboard: SensitiveClipboard
 ): void => {
-  const previous = current.value;
   const owner = lifetime;
-  if (!owner.active || previous._tag !== "Reviewing") return;
+  if (!owner.active || current.value !== previous || previous._tag !== "Reviewing") return;
   const generation = owner.generation;
   const { grant, requestId } = previous;
+  const issuing = { _tag: "Issuing" as const, grant, requestId };
   const live = (): boolean =>
-    owner.active && owner.generation === generation && current.value._tag === "Issuing";
-  change({ _tag: "Issuing", grant, requestId });
+    owner.active && owner.generation === generation && current.value === issuing;
+  change(issuing);
   const fail = (userId: Option.Option<string>): void => {
     if (!live()) return;
     change(
@@ -207,18 +208,20 @@ const confirmPAT = (
   );
 };
 const creationActions = (
-  owner: IssuanceOwner,
+  binding: CreationBinding,
   issue: Issue,
   clipboard: SensitiveClipboard
 ): PATCreationActions => {
-  const { current, change, clear } = owner;
+  const { owner, state } = binding;
+  const { current, lifetime, change, clear } = owner;
+  const live = (): boolean => lifetime.active && current.value === state;
   return {
     update: (draft) => {
-      if (current.value._tag === "Editing") change(draft);
+      if (live() && state._tag === "Editing") change(draft);
     },
     review: () => {
-      if (current.value._tag !== "Editing") return;
-      const draft = { ...current.value, recipientLabel: current.value.recipientLabel.trim() };
+      if (!live() || state._tag !== "Editing") return;
+      const draft = { ...state, recipientLabel: state.recipientLabel.trim() };
       if (
         Schema.is(PATRecipientLabel)(draft.recipientLabel) &&
         Schema.is(PATScopes)(draft.scopes)
@@ -227,35 +230,39 @@ const creationActions = (
       }
     },
     edit: () => {
-      const previous = current.value;
-      if (previous._tag === "Reviewing") {
+      if (!live()) return;
+      if (state._tag === "Reviewing") {
         change({
           _tag: "Editing",
-          recipientLabel: previous.grant.recipientLabel,
-          scopes: previous.grant.scopes,
-          lifetimeDays: previous.grant.lifetimeDays,
+          recipientLabel: state.grant.recipientLabel,
+          scopes: state.grant.scopes,
+          lifetimeDays: state.grant.lifetimeDays,
         });
-      } else if (previous._tag === "IdentityConfirmation") {
-        change({ _tag: "Editing", ...previous.draft });
+      } else if (state._tag === "IdentityConfirmation") {
+        change({ _tag: "Editing", ...state.draft });
       }
     },
-    confirm: () => confirmPAT(owner, issue, clipboard),
+    confirm: () => {
+      if (live()) confirmPAT(binding, issue, clipboard);
+    },
     retry: () => {
-      const previous = current.value;
-      if (previous._tag === "IssueFailed") change({ ...previous, _tag: "Reviewing" });
+      if (!live()) return;
+      if (state._tag === "IssueFailed") change({ ...state, _tag: "Reviewing" });
     },
     confirmIdentity: () => {
-      const previous = current.value;
-      if (previous._tag !== "IdentityConfirmation") return;
-      if (preservePATDraft({ userId: previous.userId, draft: previous.draft })) {
+      if (!live()) return;
+      if (state._tag !== "IdentityConfirmation") return;
+      if (preservePATDraft({ userId: state.userId, draft: state.draft })) {
         window.location.assign("/login?resume=pat");
-      } else change({ ...previous, preservationFailed: true });
+      } else change({ ...state, preservationFailed: true });
     },
-    reset: clear,
+    reset: () => {
+      if (live()) clear();
+    },
     copy: (onCopied) => {
-      const previous = current.value;
-      if (previous._tag === "Issued") {
-        clipboard.copy(Redacted.value(previous.issued.bearer), onCopied);
+      if (!live()) return;
+      if (state._tag === "Issued") {
+        clipboard.copy(Redacted.value(state.issued.bearer), onCopied);
       }
     },
   };
@@ -273,7 +280,7 @@ const makeIssuanceOwner = (
   const clear = (): void => {
     const previous = current.value;
     if (previous._tag === "Issued") clipboard.clear(Redacted.value(previous.issued.bearer));
-    change(initialState);
+    change({ ...initialState });
   };
   return { current, lifetime, change, clear };
 };
@@ -329,5 +336,9 @@ export const usePATIssuance = ({
     (node) => mountIssuance(owner, initialDraft)(node),
     [owner, initialDraft]
   );
-  return { state: display(state), lifecycleRef, actions: creationActions(owner, issue, clipboard) };
+  return {
+    state: display(state),
+    lifecycleRef,
+    actions: creationActions({ owner, state }, issue, clipboard),
+  };
 };

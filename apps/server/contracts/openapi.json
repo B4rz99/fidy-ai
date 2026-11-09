@@ -2979,6 +2979,37 @@
         ],
         "type": "object"
       },
+      "EmailReplacementUnavailableApiEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "replacement_unavailable"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "enum": [
+                  "No pudimos confirmar el cambio de correo. Comprueba tu correo al iniciar sesión."
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
       "EmailReplacementUnsupportedMediaTypeApiEncoded": {
         "additionalProperties": false,
         "properties": {
@@ -17703,7 +17734,7 @@
     },
     "/email/replacement": {
       "post": {
-        "description": "Use after the User confirms replacing their verified email; sends a verification code to the candidate address.",
+        "description": "Request verification of a replacement mailbox after User confirmation. Pending may mean existing work was preserved; it does not prove admission or delivery.",
         "operationId": "emailAuthentication.requestEmailReplacement",
         "parameters": [],
         "requestBody": {
@@ -26007,11 +26038,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UnavailableEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/EmailReplacementUnavailableApiEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UnavailableEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "Unavailable"
+            "description": "EmailReplacementUnavailableApi | Unavailable"
           }
         },
         "security": [

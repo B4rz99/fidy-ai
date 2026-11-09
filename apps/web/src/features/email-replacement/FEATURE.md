@@ -10,7 +10,7 @@ An established verified EmailCredential can be replaced after fresh browser pair
 
 The mounted form accepts a candidate mailbox, requests a code, and shows the candidate while awaiting proof. Completion submits the normalized candidate assertion alongside the combined code through the canonical typed client. The server compares that candidate with its exact live work again at credential commit; a suppressed request for another mailbox cannot use the earlier mailbox’s proof. Candidate mismatch retains the same non-enumerating invalid-proof response. The proof field clears immediately on submission. Invalid proof retains the candidate and offers resend or another mailbox. Missing or stale authority directs the User to browser pairing. Transport or malformed responses report an uncertain result rather than successful replacement or invalid proof, and advise checking sign-in before another change.
 
-Candidate mailbox and proof remain transient form/controller state. Neither enters navigation, browser storage, or shared query results. Server email authentication owns proof delivery, consumption, credential replacement and authority checks.
+Candidate mailbox and proof remain transient form/controller state and are discarded on disposal. Neither enters navigation, browser storage, or shared query results. Server email authentication owns proof delivery, consumption, credential replacement and authority checks.
 
 ## Verification
 
@@ -27,6 +27,6 @@ Two actual Worker/D1 checks also passed for malformed replacement work, revoked/
 Production replacement remains untested. Do not rotate the User's real mailbox as an audit fixture. Repeat timing checks under representative load before treating the earlier timeout as resolved performance evidence.
 
 ```sh
-bun run --cwd apps/web test src/features/email-replacement
+bun run --cwd apps/web test src/features/email-replacement/commands.test.ts
 BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser 01-real-core-journeys.spec.ts --grep 'replaces a verified EmailCredential' --workers=1 --timeout=120000
 ```

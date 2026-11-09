@@ -317,6 +317,11 @@ Security-sensitive browser actions use the server-established fresh-session requ
 `/settings/account` keeps candidate mailbox and proof only in mounted form state. Both initiation and
 completion use the canonical typed client with no-store requests. Neither value enters a URL, browser
 storage, or application-wide state.
+The mounted replacement owner serializes request and completion, binds every intent and reply to its
+local generation, and submits the captured candidate assertion. Uniform Pending does not certify
+admission or delivery. Completion uncertainty retains only a private admission flag in the existing
+authentication registry until a definitive result or fresh sign-in; route disposal clears drafts and
+interrupts waiting without claiming to cancel a submitted server commit.
 
 `/settings/privacy` independently reads Processing Consent and records explicit authenticated
 withdrawal through the server-declared browser client. It remains accessible without ordinary

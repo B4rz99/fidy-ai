@@ -22,6 +22,9 @@ const runFixture = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.run
 const opaqueProofEncodedLength = 43;
 const minimumPollIntervalMilliseconds = 5000;
 const advancePastExpiryMilliseconds = 2_000;
+const uncertainPollAdvanceMilliseconds = 16_000;
+const retiredPollAdvanceMilliseconds = 60_000;
+const expiredEmailAdvanceMilliseconds = 7_000;
 const frozenExpiryClock = DateTime.makeUnsafe("2026-10-02T00:00:00Z");
 const frozenPairingExpiry = DateTime.formatIso(DateTime.add(frozenExpiryClock, { seconds: 6 }));
 const successStatus = 200;
@@ -533,6 +536,72 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
       yield* wait(finishRealPairing({ page, context, request, session }));
     })
   ));
+type LostRedemptionFixture = {
+  redeems: number;
+  replayStatus: number;
+  replayCookie: Option.Option<string>;
+};
+const loseCommittedRedemption = (
+  route: Route,
+  request: APIRequestContext,
+  fixture: LostRedemptionFixture
+): Promise<void> =>
+  runFixture(
+    Effect.gen(function* () {
+      fixture.redeems += 1;
+      const committed = yield* wait(route.fetch());
+      expect(committed.status()).toBe(successStatus);
+      expect(committed.headers()["set-cookie"]).toContain("__Host-fidy_session=");
+      const replay = yield* wait(
+        request.post(`${apiOrigin}/web/pairings/redeem`, {
+          headers: { origin: appOrigin, "content-type": "application/json" },
+          data: route.request().postData() ?? "",
+        })
+      );
+      fixture.replayStatus = replay.status();
+      fixture.replayCookie = Option.fromUndefinedOr(replay.headers()["set-cookie"]);
+      yield* wait(route.abort("connectionreset"));
+    })
+  );
+
+test("keeps a committed redemption uncertain after losing its response without disclosing another session", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture: LostRedemptionFixture = {
+        redeems: 0,
+        replayStatus: 0,
+        replayCookie: Option.none(),
+      };
+      yield* wait(installAcceptanceClock(page));
+      yield* wait(
+        page.route("**/web/pairings/redeem", (route) =>
+          loseCommittedRedemption(route, request, fixture)
+        )
+      );
+      yield* wait(openBrowserLogin(page));
+      yield* wait(page.getByRole("button", { name: "WhatsApp", exact: true }).click());
+      const code = yield* wait(visiblePairingCode(page));
+      expect(
+        (yield* wait(
+          request.post(`${operatorOrigin}/approve?code=${code}&pairingUncertain=true`)
+        )).status()
+      ).toBe(noContentStatus);
+      yield* wait(advanceAcceptancePoll({ page, milliseconds: minimumPollIntervalMilliseconds }));
+      yield* wait(
+        expect(page.getByRole("heading", { name: "No pudimos confirmar el acceso" })).toBeVisible()
+      );
+      expect(fixture.replayStatus).toBe(invalidStatus);
+      expect(fixture.replayCookie).toEqual(Option.none());
+      yield* wait(page.clock.fastForward(retiredPollAdvanceMilliseconds));
+      expect(fixture.redeems).toBe(1);
+      expect(page.url()).toMatch(/\/login$/u);
+      yield* wait(expect(page.getByText(invalidPairingMessage)).not.toBeVisible());
+    })
+  ));
+
 test("a SupportRecoveryCase approves the browser-private pairing through the real Core", ({
   page,
   request,
@@ -671,6 +740,58 @@ test("honors server slowdown before showing the generic terminal refusal", ({ pa
       expect(pendingRoutes).toHaveLength(2);
     })
   ));
+test("ends a failed start without retaining a pending login task or automatically starting again", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let starts = 0;
+      yield* wait(page.clock.install());
+      yield* wait(
+        page.route("**/web/pairings", (route) => {
+          starts += 1;
+          return route.abort("connectionreset");
+        })
+      );
+      yield* wait(openBrowserLogin(page));
+      yield* wait(page.getByRole("button", { name: "WhatsApp", exact: true }).click());
+      yield* wait(
+        expect(page.getByRole("heading", { name: "Acceso no autorizado" })).toBeVisible()
+      );
+      yield* wait(page.clock.fastForward(retiredPollAdvanceMilliseconds));
+      expect(starts).toBe(1);
+      yield* wait(
+        page.getByRole("button", { name: "Iniciar otra solicitud", exact: true }).click()
+      );
+      yield* wait(expect.poll(() => starts).toBe(2));
+    })
+  ));
+
+test("does not replay a timed-out redemption and offers only a fresh login attempt", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(page.clock.install());
+      const { events, pendingRoutes } = yield* wait(installSlowdownRoutes(page));
+      yield* wait(openBrowserLogin(page));
+      yield* wait(page.getByRole("button", { name: "WhatsApp", exact: true }).click());
+      yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
+      yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
+      yield* wait(expect.poll(() => pendingRoutes.length).toBe(1));
+      yield* wait(page.clock.fastForward(uncertainPollAdvanceMilliseconds));
+      yield* wait(
+        expect(page.getByRole("heading", { name: "No pudimos confirmar el acceso" })).toBeVisible()
+      );
+      yield* wait(page.clock.fastForward(retiredPollAdvanceMilliseconds));
+      expect(events).toEqual(["start", "redeem-1"]);
+      yield* wait(expect(page.getByText(invalidPairingMessage)).not.toBeVisible());
+      yield* wait(
+        page.getByRole("button", { name: "Iniciar otra solicitud", exact: true }).click()
+      );
+      yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
+      expect(events).toEqual(["start", "redeem-1", "start"]);
+    })
+  ));
+
 const installExpiringPairingRoutes = (
   page: Page,
   counts: { start: number; redeem: number }
@@ -697,7 +818,9 @@ const installExpiringPairingRoutes = (
     )
     .then(() => Promise.resolve());
 
-test("stops at pairing expiry after a timed-out poll without creating a replacement", ({ page }) =>
+test("stops at pairing expiry during a dispatched poll without creating a replacement", ({
+  page,
+}) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const counts = { start: 0, redeem: 0 };
@@ -714,6 +837,38 @@ test("stops at pairing expiry after a timed-out poll without creating a replacem
       yield* wait(expect(page.getByRole("heading", { name: "El código venció" })).toBeVisible());
       expect(counts.start).toBe(1);
       expect(counts.redeem).toBe(1);
+    })
+  ));
+
+test("retires an email request at the pairing's original deadline", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const counts = { start: 0, redeem: 0 };
+      let emailRequests = 0;
+      let interruptedRequests = 0;
+      yield* wait(page.clock.install({ time: "2026-10-01T00:00:00Z" }));
+      yield* wait(page.clock.pauseAt(DateTime.toEpochMillis(frozenExpiryClock)));
+      yield* wait(installExpiringPairingRoutes(page, counts));
+      page.on("requestfailed", (request) => {
+        if (request.url().endsWith("/web/email/authentication/start")) interruptedRequests += 1;
+      });
+      yield* wait(
+        page.route("**/web/email/authentication/start", () => {
+          emailRequests += 1;
+        })
+      );
+      yield* wait(openBrowserLogin(page));
+      yield* wait(page.getByRole("button", { name: "Correo verificado", exact: true }).click());
+      yield* wait(page.getByLabel("Correo verificado").fill(emailLoginAddress));
+      yield* wait(page.getByRole("button", { name: "Enviar código", exact: true }).click());
+      yield* wait(expect.poll(() => emailRequests).toBe(1));
+      yield* wait(page.clock.fastForward(expiredEmailAdvanceMilliseconds));
+      yield* wait(expect(page.getByRole("heading", { name: "El código venció" })).toBeVisible());
+      yield* wait(expect.poll(() => interruptedRequests).toBe(1));
+      expect(counts.start).toBe(1);
+      yield* wait(page.clock.fastForward(retiredPollAdvanceMilliseconds));
+      expect(emailRequests).toBe(1);
+      yield* wait(expect(page.getByRole("heading", { name: "El código venció" })).toBeVisible());
     })
   ));
 
@@ -778,9 +933,9 @@ test("discards an in-flight verifier when switching methods and starts email onl
       yield* wait(expect(page.getByRole("heading", { name: "Entra con tu correo" })).toBeVisible());
       yield* wait(
         Option.getOrThrow(Option.fromUndefinedOr(pendingRoutes[0])).fulfill({
-          status: invalidStatus,
+          status: successStatus,
           contentType: "application/json",
-          body: json({ error: { code: "pairing_invalid", message: invalidPairingMessage } }),
+          body: json({ status: "authenticated" }),
         })
       );
       yield* wait(page.clock.runFor(slowdownDelayMilliseconds));

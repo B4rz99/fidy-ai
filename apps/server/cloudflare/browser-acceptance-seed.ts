@@ -18,6 +18,7 @@ const otherTransactionId = "24000000-0000-4000-8000-000000000262";
 const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const recoveryUserId = "24000000-0000-4000-8000-000000000311";
 export const pairingUserId = "24000000-0000-4000-8000-000000000321";
+export const pairingUncertainUserId = "24000000-0000-4000-8000-000000001895";
 export const dashboardUserId = "24000000-0000-4000-8000-000000000351";
 export const budgetEditingUserId = "24000000-0000-4000-8000-000000000491";
 export const budgetUserId = "24000000-0000-4000-8000-000000000371";
@@ -308,6 +309,12 @@ await seedIdentity({
   bsuid: "CO.Pairing",
   email: "vinculacion@example.com",
   consentId: "24000000-0000-4000-8000-000000000322",
+});
+await seedIdentity({
+  userId: pairingUncertainUserId,
+  bsuid: "CO.PairingUncertain",
+  email: "vinculacion-incierta@example.com",
+  consentId: "24000000-0000-4000-8000-000000001896",
 });
 await db
   .prepare(

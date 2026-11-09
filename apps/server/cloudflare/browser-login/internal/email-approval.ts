@@ -94,6 +94,9 @@ export const prepareProvedApproval = ({
     .prepare(
       `UPDATE browser_login_pairings SET state = 'ready', user_id = (SELECT userId FROM (${subject.sql}))
    WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ?
-     AND EXISTS (SELECT 1 FROM (${subject.sql}))`
+     AND wrong_attempts < 5 AND EXISTS (SELECT 1 FROM (${subject.sql}))
+     AND NOT EXISTS (SELECT 1 FROM browser_login_pairings AS ready
+       WHERE ready.state = 'ready' AND ready.user_id = (SELECT userId FROM (${subject.sql}))
+         AND ready.expires_at_ms > ? AND ready.rowid >= browser_login_pairings.rowid)`
     )
-    .bind(...subject.params, pairingId, current, ...subject.params);
+    .bind(...subject.params, pairingId, current, ...subject.params, ...subject.params, current);

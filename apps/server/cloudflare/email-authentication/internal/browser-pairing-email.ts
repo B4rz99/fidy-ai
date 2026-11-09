@@ -258,7 +258,7 @@ const approveEmailPairing = (
             .bind(workId),
         ])
       ),
-      (bound) => bound[0]?.meta.changes === 1 && bound[1]?.meta.changes === 1
+      (bound) => (bound[0]?.meta.changes ?? 0) > 0 && bound[1]?.meta.changes === 1
     )
   );
 };

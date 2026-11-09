@@ -229,7 +229,11 @@ const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
         .bind(assertionScope),
       db.prepare("DELETE FROM sql_assertions WHERE scope=?").bind(assertionScope),
     ])
-    .then((pairing) => pairing.every((entry) => entry.meta.changes === 1));
+    .then(
+      (pairing) =>
+        (pairing[0]?.meta.changes ?? 0) > 0 &&
+        pairing.slice(1).every((entry) => entry.meta.changes === 1)
+    );
 };
 
 const configuredAccess = (config: {

@@ -740,6 +740,33 @@ test("honors server slowdown before showing the generic terminal refusal", ({ pa
       expect(pendingRoutes).toHaveLength(2);
     })
   ));
+test("ends a failed start without retaining a pending login task or automatically starting again", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let starts = 0;
+      yield* wait(page.clock.install());
+      yield* wait(
+        page.route("**/web/pairings", (route) => {
+          starts += 1;
+          return route.abort("connectionreset");
+        })
+      );
+      yield* wait(openBrowserLogin(page));
+      yield* wait(page.getByRole("button", { name: "WhatsApp", exact: true }).click());
+      yield* wait(
+        expect(page.getByRole("heading", { name: "Acceso no autorizado" })).toBeVisible()
+      );
+      yield* wait(page.clock.fastForward(retiredPollAdvanceMilliseconds));
+      expect(starts).toBe(1);
+      yield* wait(
+        page.getByRole("button", { name: "Iniciar otra solicitud", exact: true }).click()
+      );
+      yield* wait(expect.poll(() => starts).toBe(2));
+    })
+  ));
+
 test("does not replay a timed-out redemption and offers only a fresh login attempt", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {

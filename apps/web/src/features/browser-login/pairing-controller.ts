@@ -462,12 +462,13 @@ const makePairingEmailActions = ({
   const requestEmail = (email: VerifiedEmailAddress): void => {
     if (emailBusy.current) return;
     const send = (): void => {
+      if (!canRequestEmail(latestState.current)) return;
       emailBusy.current = true;
       controller.stageEmail(email);
       runRequestEmail({ onStateChange: changeState });
     };
     if (latestState.current._tag === "Idle") begin(send);
-    else if (canRequestEmail(latestState.current)) send();
+    else send();
   };
   const resendEmail = (): void => {
     if (

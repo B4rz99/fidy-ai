@@ -222,8 +222,7 @@ it.live(
     Effect.gen(function* () {
       const { router, registry, requests, finishPreparation } = entryFixture(Option.some(0));
       const { TransactionsPage } = yield* Effect.tryPromise(() => import("./transactions-page"));
-      const cancelled = new AbortController();
-      cancelled.abort();
+      const cancelled = AbortSignal.abort();
       try {
         const retired = yield* Effect.tryPromise(() =>
           TransactionsPage.prepareEntry({
@@ -231,7 +230,7 @@ it.live(
             search: {},
             cause: "enter",
             preload: false,
-            signal: cancelled.signal,
+            signal: cancelled,
           })
         );
         yield* Effect.tryPromise(() => Promise.resolve(retired?.preparation));

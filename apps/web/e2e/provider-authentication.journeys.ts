@@ -1172,7 +1172,7 @@ const enterWhatsAppSignup = ({
       page.getByLabel("Acepto el tratamiento de datos descrito").check()
     );
     // Provider exchange is network work; observe its real callback before asserting the review UI.
-    yield* Effect.tryPromise(() =>
+    const [returned] = yield* Effect.tryPromise(() =>
       Promise.all([
         page.context().waitForEvent("response", {
           predicate: (response) =>
@@ -1182,6 +1182,12 @@ const enterWhatsAppSignup = ({
         page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click(),
       ])
     );
+    const popup = returned.frame().page();
+    if (!popup.isClosed()) {
+      yield* Effect.tryPromise(() =>
+        popup.waitForEvent("close", { timeout: providerCallbackTimeoutMilliseconds })
+      );
+    }
   });
 const nativeTimestampPrecisionMs = 1000;
 const nativeTimestampPollMilliseconds = 100;
@@ -1392,7 +1398,10 @@ export const expiredAssociationJourney = ({
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("button", { name: "Vincular y volver a WhatsApp" })).toBeVisible()
       );
-      yield* Effect.tryPromise(() => page.clock.fastForward(expiredPairingAdvance));
+      const reviewTime = yield* Effect.tryPromise(() =>
+        page.evaluate(() => performance.timeOrigin + performance.now())
+      );
+      yield* Effect.tryPromise(() => page.clock.setSystemTime(reviewTime + expiredPairingAdvance));
       const openings = yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Vincular y volver a WhatsApp" }).evaluate((button) => {
           const open = window.open;

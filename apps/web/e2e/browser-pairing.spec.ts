@@ -485,11 +485,12 @@ const finishRealPairing = ({
     })
   );
 
-test("redeems a real pairing approved out of band and obtains a real WebSession", ({
-  context,
-  page,
-  request,
-}) =>
+type NativePairingFixture = Readonly<{
+  page: Page;
+  context: BrowserContext;
+  request: APIRequestContext;
+}>;
+const redeemRealPairing = ({ context, page, request }: NativePairingFixture): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* wait(installAcceptanceClock(page));
@@ -535,7 +536,7 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
       expect(yield* wait(otherTransaction.text())).not.toContain("OTHER-USER-PRIVATE");
       yield* wait(finishRealPairing({ page, context, request, session }));
     })
-  ));
+  );
 type LostRedemptionFixture = {
   redeems: number;
   replayStatus: number;
@@ -564,10 +565,7 @@ const loseCommittedRedemption = (
     })
   );
 
-test("keeps a committed redemption uncertain after losing its response without disclosing another session", ({
-  page,
-  request,
-}) =>
+const loseRealRedemption = ({ page, request }: NativePairingFixture): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture: LostRedemptionFixture = {
@@ -600,12 +598,9 @@ test("keeps a committed redemption uncertain after losing its response without d
       expect(page.url()).toMatch(/\/login$/u);
       yield* wait(expect(page.getByText(invalidPairingMessage)).not.toBeVisible());
     })
-  ));
+  );
 
-test("a SupportRecoveryCase approves the browser-private pairing through the real Core", ({
-  page,
-  request,
-}) =>
+const approveRecoveryPairing = ({ page, request }: NativePairingFixture): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* wait(installAcceptanceClock(page));
@@ -648,7 +643,23 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
       expect(yield* wait(page.evaluate(retainedSecretCount))).toBe(0);
     })
-  ));
+  );
+test.describe("native browser pairing", () => {
+  test.describe.configure({ mode: "default" });
+  test(
+    "redeems a real pairing approved out of band and obtains a real WebSession",
+    redeemRealPairing
+  );
+  test(
+    "keeps a committed redemption uncertain after losing its response without disclosing another session",
+    loseRealRedemption
+  );
+  test(
+    "a SupportRecoveryCase approves the browser-private pairing through the real Core",
+    approveRecoveryPairing
+  );
+});
+
 const slowdownDelayMilliseconds = 10000;
 const pendingRequestAdvanceMilliseconds = 6000;
 const installSlowdownRoutes = (page: Page): Promise<{ events: string[]; pendingRoutes: Route[] }> =>

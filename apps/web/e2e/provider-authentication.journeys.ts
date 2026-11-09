@@ -773,7 +773,7 @@ export const pendingRedemptionJourney = ({
       );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Lo guardé" }).evaluate((button) => {
-          button.click();
+          button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
           button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         })
       );
@@ -1213,7 +1213,7 @@ const sendPreparedConfirmation = ({
           if (openings === 1) button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
           return open(...args);
         };
-        button.click();
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         window.open = open;
         return openings;
       })
@@ -1327,7 +1327,7 @@ export const duplicateProviderActionJourney = ({
               button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
               return open(...args);
             };
-            button.click();
+            button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
           })
       );
       yield* Effect.tryPromise(() => expect.poll(() => starts).toBe(1));
@@ -1361,7 +1361,9 @@ const shortenPairingLifetime = (route: Route, page: Page): Promise<void> =>
       const pairing = yield* Schema.decodeUnknownEffect(StartedBrowserLoginPairing)(
         yield* Effect.tryPromise(() => response.json())
       );
-      const now = yield* Effect.tryPromise(() => page.evaluate(() => Date.now()));
+      const now = yield* Effect.tryPromise(() =>
+        page.evaluate(() => performance.timeOrigin + performance.now())
+      );
       const body = yield* Schema.encodeEffect(StartedBrowserLoginPairing)({
         ...pairing,
         expiresAt: DateTime.makeUnsafe(now + shortPairingLifetime),
@@ -1399,7 +1401,7 @@ export const expiredAssociationJourney = ({
             openings += 1;
             return open(...args);
           };
-          button.click();
+          button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
           window.open = open;
           return openings;
         })

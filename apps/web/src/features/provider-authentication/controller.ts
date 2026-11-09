@@ -128,7 +128,7 @@ const awaitProviderVerification = (
         if (result.status === "pending" && popupClosed) return yield* Effect.fail("cancelled");
       }
     })
-  );
+  ).pipe(Effect.mapError((error) => (error === "cancelled" ? error : ("rejected" as const))));
 
 const proof = (
   pairing: Pairing
@@ -413,7 +413,7 @@ const guardedCommand = <Value extends AttemptCommand>(
 const refuseExpiredAttempt = (input: ControllerInput, active: ActiveAttempt): boolean => {
   if (
     Option.isNone(active.pairing) ||
-    DateTime.toEpochMillis(active.pairing.value.expiresAt) > Date.now()
+    DateTime.toEpochMillis(active.pairing.value.expiresAt) > Effect.runSync(Clock.currentTimeMillis)
   ) {
     return false;
   }

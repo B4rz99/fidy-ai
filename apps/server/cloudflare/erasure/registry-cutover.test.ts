@@ -120,13 +120,17 @@ const platform = Effect.gen(function* () {
             })
           )
       ),
-    root: (url: string, body: string): Effect.Effect<Pick<Response, "status" | "json">> =>
+    root: (
+      url: string,
+      body: string,
+      name: string = erasureRegistryName
+    ): Effect.Effect<Pick<Response, "status" | "json">> =>
       native(() =>
         runtime
           .getDurableObjectNamespace("ROOT_COORDINATOR")
           .then((namespace) =>
             namespace
-              .getByName(erasureRegistryName)
+              .getByName(name)
               .fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body })
           )
       ),
@@ -175,6 +179,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const read = encode({ action: "get", key: generationKey });
         const before = yield* fixture.root("https://erasure-registry.invalid/metadata", read);
         expect(before.status).toBe(200);
+        expect(
+          (yield* fixture.root("https://erasure-registry.invalid/metadata", read, replacement))
+            .status
+        ).toBe(503);
         const current = yield* Clock.currentTimeMillis;
         expect(
           (yield* fixture.root(

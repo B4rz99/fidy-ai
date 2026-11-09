@@ -16,7 +16,7 @@ import {
 } from "../../../src/core/email-authentication/contract";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
-import { deliveryState, sendThroughResend } from "./proof-delivery";
+import { type ProviderCertainty, sendClaimedProof } from "./proof-delivery";
 
 const Outbox = Schema.Struct({ id: Schema.String.check(Schema.isUUID()) });
 const Pending = Schema.Struct({
@@ -170,7 +170,7 @@ type Send = (
   to: EmailAddress,
   code: EmailVerificationCode,
   coordinates: Readonly<{ id: string; parent: unknown }>
-) => Promise<"succeeded" | "rejected" | "ambiguous">;
+) => Promise<ProviderCertainty>;
 
 const findPendingProof = (
   db: D1Database,
@@ -226,8 +226,8 @@ export const deliverBrowserPairingEmail =
         const combinedCode = yield* Schema.decodeEffect(EmailVerificationCode)(
           `${publicCode}-${secret}`
         ).pipe(Effect.orDie);
-        const current = yield* Clock.currentTimeMillis;
         const proofDigest = yield* attempt(() => digest(secret));
+        const current = yield* Clock.currentTimeMillis;
         const pairing = pendingBrowserPairingQuery({
           subject: {
             sql: "SELECT browser_pairing_email_proofs.id AS pairingId",
@@ -239,6 +239,10 @@ export const deliverBrowserPairingEmail =
           db
             .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_state = 'sending', email_public_code = ?, email_proof_digest = ?, email_proof_expires_at_ms = ?
       WHERE email_work_id IS NOT NULL AND email_work_id = ? AND email_state = 'awaiting_delivery' AND email_expires_at_ms > ?
+        AND EXISTS (SELECT 1 FROM verified_email_credentials AS v
+          WHERE v.user_id = browser_pairing_email_proofs.email_user_id
+            AND v.address = browser_pairing_email_proofs.email_address
+            AND v.verified_at_ms = browser_pairing_email_proofs.email_credential_verified_at_ms)
         AND EXISTS (${pairing.sql})`)
             .bind(
               publicCode,
@@ -255,7 +259,7 @@ export const deliverBrowserPairingEmail =
         const outcome = yield* attempt(() =>
           send(pending.value.email_address, combinedCode, { id, parent: workTraceParent(trace) })
         );
-        const nextState = outcome === "succeeded" ? "awaiting_proof" : outcome;
+        const nextState = outcome === "accepted" ? "awaiting_proof" : outcome;
         yield* settlePairingDelivery(db, id, nextState);
       }).pipe(
         observeWorkerExecution({
@@ -270,16 +274,13 @@ export const deliverBrowserPairingEmail =
 const sendPairingProof =
   (environment: Pick<BrowserPairingEmailEnvironment, "RESEND_API_KEY">): Send =>
   (to, code, { id, parent }) =>
-    sendThroughResend({
+    sendClaimedProof({
       parent,
       purpose: "browser-pairing-approval",
       environment,
       to,
       combinedCode: code,
       id,
-    }).then((result) => {
-      const outcome = deliveryState(result);
-      return outcome === "awaiting_proof" ? "succeeded" : outcome;
     });
 
 type DeliveryActivity = (

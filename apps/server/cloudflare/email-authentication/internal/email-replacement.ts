@@ -343,7 +343,7 @@ const replacementAdapter = ({
       try: () => startProof(db, { session, candidateEmail, workId, current }),
       catch: () => new ReplacementDatabaseUnavailable({ operation: "request" }),
     }).pipe(
-      Effect.tap(() => Effect.sync(() => onAccepted(workId))),
+      Effect.tap(() => Effect.exit(Effect.sync(() => onAccepted(workId)))),
       Effect.orDie
     );
   },

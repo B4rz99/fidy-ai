@@ -209,7 +209,7 @@ export const startBrowserPairingEmail = (input: {
         current,
         workId,
       });
-      input.onAccepted(workId);
+      yield* Effect.exit(Effect.sync(() => input.onAccepted(workId)));
       return pending();
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
   );

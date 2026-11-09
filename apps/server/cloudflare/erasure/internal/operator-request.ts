@@ -8,6 +8,8 @@ import {
   ErasureOperatorAction,
   type ErasureOperatorConfiguration,
   type ErasureOperatorEnvironment,
+  ErasureRegistryMigration,
+  erasureRegistryName,
 } from "../contract";
 import { authenticateOperator } from "./operator";
 import { ErasureUnavailable } from "../../erasure-store/contract";
@@ -44,33 +46,89 @@ export const operatorRequest = (
     if (Option.isNone(action)) return reply(invalidStatus);
     const current = yield* Clock.currentTimeMillis;
     if (operator.value.expiresAtMs <= current) return reply(unauthorizedStatus);
-    const command = action.value;
+    return yield* dispatchOperator({
+      ...input,
+      command: action.value,
+      operator: operator.value,
+      current,
+    });
+  }).pipe(Effect.orElseSucceed(() => reply(unavailableStatus)));
+
+const dispatchOperator = (
+  input: Readonly<{
+    request: Request;
+    environment: ErasureOperatorEnvironment;
+    http: OutboundHttpService;
+    command: typeof ErasureOperatorAction.Type;
+    operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;
+    current: number;
+  }>
+): Effect.Effect<Response, ErasureUnavailable | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const { command, operator, current } = input;
+    if (command.action === "MigrateRegistry") {
+      return yield* forwardMigration({
+        environment: input.environment,
+        request: input.request,
+        operator,
+        current,
+      });
+    }
     if (command.action === "Initialize") return yield* initializeRegistry(input.environment);
     if (command.action === "Restore") {
       return yield* restoreNext({
         ...input,
-        operator: operator.value,
+        operator,
         signal: input.request.signal,
       });
     }
     if (command.action === "ReleaseRestore") {
       return yield* releaseRestore({
         ...input,
-        operator: operator.value,
+        operator,
         signal: input.request.signal,
       });
     }
     return yield* forwardCommand({
       ...input,
       command,
-      operator: operator.value,
+      operator,
       current,
     });
-  }).pipe(Effect.orElseSucceed(() => reply(unavailableStatus)));
+  });
+
+const forwardMigration = (
+  input: Readonly<{
+    environment: ErasureOperatorEnvironment;
+    request: Request;
+    operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;
+    current: number;
+  }>
+): Effect.Effect<Response, Schema.SchemaError | ErasureUnavailable> =>
+  Effect.gen(function* () {
+    const namespace = input.environment.ERASURE_REGISTRY_COORDINATOR;
+    if (namespace === undefined) return reply(unavailableStatus);
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(ErasureRegistryMigration))({
+      deadlineMs: Math.min(input.current + admissionLifetimeMs, input.operator.expiresAtMs),
+      authority: { permission: "titular.erase", ...input.operator },
+    });
+    return yield* Effect.tryPromise({
+      try: () =>
+        namespace.getByName(erasureRegistryName, { locationHint: "enam" }).fetch(
+          new Request("https://erasure-registry.invalid/migrate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body,
+            signal: input.request.signal,
+          })
+        ),
+      catch: () => new ErasureUnavailable(),
+    });
+  });
 
 type UserCommand = Exclude<
   typeof ErasureOperatorAction.Type,
-  { action: "Restore" | "ReleaseRestore" | "Initialize" }
+  { action: "Restore" | "ReleaseRestore" | "Initialize" | "MigrateRegistry" }
 >;
 const forwardCommand = (
   input: Readonly<{
@@ -97,6 +155,7 @@ const forwardCommand = (
         input.environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId).fetch(
           new Request(`https://coordinator.internal/${path}`, {
             method: "POST",
+            headers: { "content-type": "application/json" },
             body,
             signal: input.request.signal,
           })
@@ -108,7 +167,7 @@ const forwardCommand = (
 const commandPath = (
   command: Exclude<
     typeof ErasureOperatorAction.Type,
-    { action: "Restore" | "ReleaseRestore" | "Initialize" }
+    { action: "Restore" | "ReleaseRestore" | "Initialize" | "MigrateRegistry" }
   >
 ): string => {
   switch (command.action) {
@@ -123,7 +182,7 @@ const commandPath = (
 const commandBody = (
   command: Exclude<
     typeof ErasureOperatorAction.Type,
-    { action: "Restore" | "ReleaseRestore" | "Initialize" }
+    { action: "Restore" | "ReleaseRestore" | "Initialize" | "MigrateRegistry" }
   >,
   admission: Readonly<{
     userId: string;

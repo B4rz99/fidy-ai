@@ -20,6 +20,60 @@ afterAll(() => storage.dispose());
 const userId = "12740000-0000-4000-8000-000000000001";
 const generation = "12740000-0000-4000-8000-000000000088";
 
+it("rechecks separate metadata on every unit and refuses its loss without falling back to raw storage", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      const { bucket: registry } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
+      yield* Effect.tryPromise(() => registry.put("recovery/generation", "initial"));
+      const guarded = withErasureRecovery({
+        DB: db,
+        ERASURE_BUCKET: bucket,
+        ERASURE_REGISTRY: registry,
+      }).DB;
+      const read = (): Promise<unknown> =>
+        guarded
+          .prepare("SELECT generation FROM erasure_control WHERE kind='published'")
+          .first("generation");
+      expect(yield* Effect.tryPromise(read)).toBe("initial");
+      yield* Effect.tryPromise(() => registry.put("recovery/generation", generation));
+      expect((yield* Effect.result(Effect.tryPromise(read)))._tag).toBe("Failure");
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE erasure_control SET generation=? WHERE kind='published'")
+          .bind(generation)
+          .run()
+      );
+      expect(yield* Effect.tryPromise(read)).toBe(generation);
+      yield* Effect.tryPromise(() => registry.delete("recovery/generation"));
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE erasure_control SET generation='initial' WHERE kind='published'").run()
+      );
+      expect(
+        (yield* Effect.result(
+          Effect.tryPromise(() =>
+            guarded
+              .prepare(
+                "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+              )
+              .bind(userId)
+              .run()
+          )
+        ))._tag
+      ).toBe("Failure");
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT count(*) AS n FROM users").first("n"))
+      ).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          bucket.get("recovery/generation").then((object) => object?.text())
+        )
+      ).toBe("initial");
+    })
+  ));
+
 it("a release-pinned generation accepts restored state that a fresh external fence refuses", () =>
   Effect.runPromise(
     Effect.gen(function* () {

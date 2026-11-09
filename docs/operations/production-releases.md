@@ -471,6 +471,28 @@ or instances, routes, configuration, secrets, web assets, or external effects. K
 resource changes additive and compatible with stable code; otherwise fix forward with explicit
 operator action.
 
+### Independent erasure metadata handoff
+
+Deploy and verify the metadata-aware Core, User coordinators, ForwardedEmail and Ingress before
+invoking the existing Titular erasure endpoint with `{"action":"MigrateRegistry"}`. This requires
+the existing human operator Access assertion for the distinct erasure audience. Do not substitute
+a dashboard session, service token or public browser credential. Allow Cloudflare's deferred Durable
+Object code-update window to converge before transferring authority; Worker traffic identity alone
+does not prove every previously resident object has loaded new code.
+
+The action supports an empty registry only: no retained erasure requests, recovery cases, restore
+control or restore members. It checks those conditions itself; a refusal does not authorize deleting
+retained evidence. Private R2 originals are outside the transfer. `Complete` confirms the fresh native
+checkpoint matches the independent authority. `AwaitingRestore` requires the existing Restore and
+ReleaseRestore procedures; repeating migration cannot retag an old database. A failed or lost
+response may be retried to observe status, but must never trigger manual generation edits.
+
+After successful handoff, keep the R2 transfer witness and the independent SQLite namespace. A
+rollback to R2-only code fails closed and cannot recover the new authority. Fix forward using
+metadata-aware code and the retained independent registry; code rollback does not reverse this
+state transition. Complete metadata and journal loss requires recovery of that independent state,
+not first-release initialization or a new migration.
+
 Cloudflare documentation: [Worker version rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/),
 [deployable versions](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/list/),
 and [deployment create API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/create/).

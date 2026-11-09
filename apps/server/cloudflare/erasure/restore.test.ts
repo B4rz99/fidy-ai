@@ -1,3 +1,4 @@
+import type { ErasureRegistry } from "./contract";
 import { ErasureOperatorReceipt } from "../../src/core/erasure/contract";
 import { it as effectIt } from "@effect/vitest";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -7,7 +8,11 @@ import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { afterEach, expect, vi } from "vitest";
 import { fixtureNativeHttpClient } from "../core-worker.test-fixture";
 import { installRetentionTestSchema } from "../d1-test-fixture";
-import { nativeErasurePlatform, seedPersonalClasses } from "./native.test-fixture";
+import {
+  nativeErasurePlatform,
+  seedPersonalClasses,
+  separatedErasurePlatform,
+} from "./native.test-fixture";
 import type { ErasureUnavailable } from "../erasure-store/contract";
 import { resumeErasureCases } from "./operations";
 import { handleErasureOperator, withErasureRecovery } from "./runtime";
@@ -108,7 +113,7 @@ const expiredUser = "12740000-0000-4000-8000-000000000083";
 const seedExpiredCase = (
   db: D1Database,
   current: number,
-  bucket: R2Bucket
+  bucket: ErasureRegistry
 ): Effect.Effect<number, Schema.SchemaError | Cause.UnknownError | ErasureUnavailable> =>
   Effect.gen(function* () {
     // A supported snapshot can still contain completed metadata whose independent
@@ -264,8 +269,62 @@ const admitNativeDeletion = (
     )).reference;
   });
 
-const verifyRestore = Effect.gen(function* () {
-  const platform = yield* nativeErasurePlatform;
+const initializeFixture = Effect.fn(function* (
+  input: Readonly<{
+    registry: ErasureRegistry;
+    rawErasure: R2Bucket;
+    separated: boolean;
+    send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError>;
+  }>
+) {
+  yield* Effect.tryPromise(() => input.registry.delete("recovery/generation"));
+  if (input.separated) {
+    yield* Effect.tryPromise(() => input.rawErasure.put("recovery/generation", "initial"));
+    expect((yield* input.send({ action: "Initialize" })).status).toBe(503);
+    expect(yield* Effect.tryPromise(() => input.registry.head("recovery/generation"))).toBeNull();
+    expect(
+      yield* Effect.tryPromise(() =>
+        input.rawErasure.get("recovery/generation").then((object) => object?.text())
+      )
+    ).toBe("initial");
+    yield* Effect.tryPromise(() => input.rawErasure.delete("recovery/generation"));
+  }
+  expect((yield* input.send({ action: "Initialize" })).status).toBe(204);
+  const privateBody = "x".repeat(80000);
+  for (const id of [userId, foreignUser]) {
+    yield* Effect.tryPromise(() =>
+      input.rawErasure.put(`users/${id}/private-original`, privateBody)
+    );
+  }
+  return privateBody;
+});
+
+const verifyPrivateDisposition = Effect.fn(function* (
+  input: Readonly<{
+    rawErasure: R2Bucket;
+    registry: ErasureRegistry;
+    privateBody: string;
+    separated: boolean;
+  }>
+) {
+  expect(
+    yield* Effect.tryPromise(() => input.rawErasure.head(`users/${userId}/private-original`))
+  ).toBeNull();
+  expect(
+    yield* Effect.tryPromise(() =>
+      input.rawErasure.get(`users/${foreignUser}/private-original`).then((object) => object?.text())
+    )
+  ).toBe(input.privateBody);
+  if (input.separated) {
+    expect(
+      (yield* Effect.result(Effect.tryPromise(() => input.registry.list({ prefix: "users/" }))))
+        ._tag
+    ).toBe("Failure");
+  }
+});
+
+const verifyRestore = Effect.fn(function* (separated: boolean) {
+  const platform = yield* separated ? separatedErasurePlatform : nativeErasurePlatform;
   let native = yield* Effect.tryPromise(() => platform.acquire());
   const current = yield* Clock.currentTimeMillis;
   for (const db of [native.db, native.snapshot]) {
@@ -317,7 +376,7 @@ const verifyRestore = Effect.gen(function* () {
         ),
     ])
   );
-  const erasedAt = yield* seedExpiredCase(native.snapshot, current, native.registry);
+  const erasedAt = yield* seedExpiredCase(native.snapshot, current, native.metadata);
   const { publicKey, privateKey } = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
   const jwk = {
     ...(yield* Effect.tryPromise(() => exportJWK(publicKey))),
@@ -356,7 +415,8 @@ const verifyRestore = Effect.gen(function* () {
             request,
             environment: {
               DB: native.db,
-              ERASURE_BUCKET: native.registry,
+              ERASURE_BUCKET: native.rawErasure,
+              ...(separated ? { ERASURE_REGISTRY: native.metadata } : {}),
               ERASURE_REQUIRED: "true",
               CLOUDFLARE_ACCESS_ISSUER: issuer,
               CLOUDFLARE_ACCESS_AUDIENCE: "recovery-only",
@@ -453,8 +513,12 @@ const verifyRestore = Effect.gen(function* () {
   );
   expect((yield* send({ action: "Initialize" }, forgedAssertion, "candidate")).status).toBe(401);
   expect((yield* send({ action: "Restore", userId })).status).toBe(400);
-  yield* Effect.tryPromise(() => native.registry.delete("recovery/generation"));
-  expect((yield* send({ action: "Initialize" }, token, "candidate")).status).toBe(204);
+  const privateBody = yield* initializeFixture({
+    registry: native.metadata,
+    rawErasure: native.rawErasure,
+    separated,
+    send: (command) => send(command, token, "candidate"),
+  });
   reference = yield* admitNativeDeletion(native.coordinator);
   expect((yield* send({ action: "Initialize" }, token, "candidate")).status).toBe(503);
   yield* Effect.tryPromise(() =>
@@ -523,14 +587,21 @@ const verifyRestore = Effect.gen(function* () {
   expect((yield* send({ action: "Receipt", userId, reference })).status).toBe(200);
   expect(
     (yield* Effect.tryPromise(() =>
-      native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
+      native.rawErasure.list({ prefix: `users/${userId}/held-records/${reference}/` })
     )).objects.length
   ).toBe(0);
+  yield* verifyPrivateDisposition({
+    rawErasure: native.rawErasure,
+    registry: native.metadata,
+    privateBody,
+    separated,
+  });
   yield* verifyProcessorEvidence(send);
   native = yield* Effect.tryPromise(() => platform.restoreSnapshot());
   const guarded = withErasureRecovery({
     DB: native.db,
-    ERASURE_BUCKET: native.registry,
+    ERASURE_BUCKET: native.rawErasure,
+    ...(separated ? { ERASURE_REGISTRY: native.metadata } : {}),
     ERASURE_REQUIRED: "true",
   }).DB;
   expect(
@@ -591,7 +662,7 @@ const verifyRestore = Effect.gen(function* () {
   });
   expect(
     (yield* Effect.tryPromise(() =>
-      native.registry.list({ prefix: `users/${userId}/held-records/${reference}/` })
+      native.rawErasure.list({ prefix: `users/${userId}/held-records/${reference}/` })
     )).objects.length
   ).toBe(0);
 
@@ -609,7 +680,12 @@ const verifyRestore = Effect.gen(function* () {
 effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
   it.effect(
     "reapplies erased scope to an older native database before releasing ordinary access",
-    () => verifyRestore,
+    () => verifyRestore(false),
+    { timeout: 60000 }
+  );
+  it.effect(
+    "restores through separate metadata while deleting only the affected User's raw private files",
+    () => verifyRestore(true),
     { timeout: 60000 }
   );
 });

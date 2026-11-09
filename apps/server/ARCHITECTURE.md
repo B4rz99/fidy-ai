@@ -248,6 +248,21 @@ Mutations and held hosted execution retain User coordination.
 
 Erasure composes each owner's bounded deletion and SQL authorization under User coordination.
 An independent registry fences ordinary activity after database restoration until reconciliation.
+The reserved `erasure-registry-v1` object in the existing coordinator namespace owns this metadata
+in its independent SQLite storage; it never constructs User work.
+Existing query declarations and browser data GET transports execute canonical HTTP in that same
+object; commands, User coordination and admission policies retain their existing owners. Each
+protected D1 unit reads the current registry generation and asserts it inside its native transaction.
+Other executors reach the same metadata through a bounded private binding. ForwardedEmail receives
+only the named metadata transport entrypoint, without the coordinator namespace. No generation or response
+cache grants authority. Private original bytes remain in R2.
+
+The authenticated `MigrateRegistry` operator action performs an empty-only handoff from the original
+R2 registry. It refuses retained cases and native restore state, claims the R2 generation with its
+captured ETag, publishes the SQLite authority durably, then attempts one conditional D1 checkpoint.
+The native journal grants that final attempt once; a retry only observes an already published result.
+Uncertain or restored checkpoints require existing restore/release reconciliation. The retained R2
+transfer witness prevents first-release initialization after complete independent metadata loss.
 Fresh authenticated account deletion fences new activity and waits for confirmed upload settlement
 before removing owner records and User file prefixes. Minimal independent markers protect restoration;
 external acknowledgments remain distinct from verified cleanup. Metadata outlives supported backups,

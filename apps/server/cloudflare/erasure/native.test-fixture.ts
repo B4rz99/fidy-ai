@@ -1,5 +1,7 @@
+import { makeRemoteErasureRegistry } from "./runtime";
+import type { ErasureRegistry } from "./contract";
 import { coordinatorTestDatabase } from "../d1-test-fixture";
-import { Effect, FileSystem, Option, type Scope } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 
@@ -12,6 +14,8 @@ type NativeBindings = Readonly<{
   snapshot: D1Database;
   originals: R2Bucket;
   registry: R2Bucket;
+  metadata: ErasureRegistry;
+  rawErasure: R2Bucket;
   coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
 }>;
 const build = (): Effect.Effect<string> =>
@@ -30,7 +34,7 @@ const build = (): Effect.Effect<string> =>
     return yield* wait(() => output.text());
   });
 const create = (
-  input: Readonly<{ directory: string; module: string; restored: boolean }>
+  input: Readonly<{ directory: string; module: string; restored: boolean; separated: boolean }>
 ): Miniflare =>
   new Miniflare({
     resourcePersistencePath: input.directory,
@@ -40,13 +44,25 @@ const create = (
           name: "titular-erasure",
           type: "worker",
           compatibilityDate: "2026-09-08",
-          exports: { UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" } },
+          exports: {
+            UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" },
+            ErasureRegistryFixture: { type: "durable-object", storage: "sqlite" },
+          },
           env: {
             DB: { type: "d1", id: input.restored === true ? "titular-before" : "titular-erasure" },
             SNAPSHOT_DB: { type: "d1", id: "titular-before" },
             EMAIL_BUCKET: { type: "r2", name: "erasure-originals" },
             STATEMENT_STAGING_BUCKET: { type: "r2", name: "erasure-originals" },
             ERASURE_BUCKET: { type: "r2", name: "erasure-registry" },
+            ...(input.separated
+              ? {
+                  ERASURE_REGISTRY_COORDINATOR: {
+                    type: "durable-object" as const,
+                    worker: "titular-erasure",
+                    exportName: "ErasureRegistryFixture",
+                  },
+                }
+              : {}),
             ERASURE_REQUIRED: { type: "text", value: "true" },
             USER_TRANSACTION_COORDINATOR: {
               type: "durable-object",
@@ -64,17 +80,40 @@ const create = (
       },
     ],
   });
-const bindings = (runtime: Miniflare): Promise<NativeBindings> =>
+const bindings = (runtime: Miniflare, separated: boolean): Promise<NativeBindings> =>
   Promise.all([
     coordinatorTestDatabase({ runtime, binding: "DB" }),
     coordinatorTestDatabase({ runtime, binding: "SNAPSHOT_DB" }),
-    runtime.getBindings<{ EMAIL_BUCKET: R2Bucket; ERASURE_BUCKET: R2Bucket }>(),
+    runtime.getBindings<{
+      EMAIL_BUCKET: R2Bucket;
+      ERASURE_BUCKET: R2Bucket;
+    }>(),
     runtime.getDurableObjectNamespace("USER_TRANSACTION_COORDINATOR"),
   ]).then(([db, snapshot, buckets, namespace]) => ({
     db,
     snapshot,
     originals: buckets.EMAIL_BUCKET,
     registry: buckets.ERASURE_BUCKET,
+    metadata: separated
+      ? makeRemoteErasureRegistry({
+          fetch: (input, init) => {
+            const request = new Request(input, init);
+            return request
+              .text()
+              .then((body) =>
+                runtime.getDurableObjectNamespace("ERASURE_REGISTRY_COORDINATOR").then((owner) =>
+                  owner.getByName("fixture-registry").fetch(request.url, {
+                    method: request.method,
+                    headers: Object.fromEntries(request.headers),
+                    body,
+                  })
+                )
+              )
+              .then(replayNativeResponse);
+          },
+        })
+      : buckets.ERASURE_BUCKET,
+    rawErasure: buckets.ERASURE_BUCKET,
     coordinator: {
       getByName: (name): Pick<Fetcher, "fetch"> => ({
         fetch: (input, init) => {
@@ -94,24 +133,14 @@ const bindings = (runtime: Miniflare): Promise<NativeBindings> =>
     },
   }));
 
-export const nativeErasurePlatform: Effect.Effect<
-  Readonly<{
-    acquire: () => Promise<NativeBindings>;
-    advanceClock: (milliseconds: number) => Promise<void>;
-    restart: () => Promise<NativeBindings>;
-    restoreSnapshot: () => Promise<NativeBindings>;
-    restoreLive: () => Promise<NativeBindings>;
-  }>,
-  never,
-  FileSystem.FileSystem | Scope.Scope
-> = Effect.gen(function* () {
+const platform = Effect.fn(function* (separated: boolean) {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectory({ prefix: "fidy-erasure-" }).pipe(Effect.orDie);
   const module = yield* build();
   let restored = false;
-  let runtime = create({ directory, module, restored });
-  const initial = yield* wait(() => bindings(runtime));
-  yield* wait(() => initial.registry.put("recovery/generation", "initial"));
+  let runtime = create({ directory, module, restored, separated });
+  const initial = yield* wait(() => bindings(runtime, separated));
+  yield* wait(() => initial.metadata.put("recovery/generation", "initial"));
   yield* Effect.addFinalizer(() =>
     wait(() => runtime.dispose()).pipe(
       Effect.ensuring(fs.remove(directory, { recursive: true, force: true }).pipe(Effect.orDie))
@@ -120,12 +149,12 @@ export const nativeErasurePlatform: Effect.Effect<
   const replace = (next: boolean): Promise<NativeBindings> =>
     runtime.dispose().then(() => {
       restored = next;
-      runtime = create({ directory, module, restored });
-      return bindings(runtime);
+      runtime = create({ directory, module, restored, separated });
+      return bindings(runtime, separated);
     });
   return {
-    acquire: () => bindings(runtime),
-    advanceClock: (milliseconds) =>
+    acquire: (): Promise<NativeBindings> => bindings(runtime, separated),
+    advanceClock: (milliseconds: number): Promise<void> =>
       runtime
         .dispatchFetch("http://fixture/__fixture/clock", {
           method: "POST",
@@ -137,11 +166,14 @@ export const nativeErasurePlatform: Effect.Effect<
             throw new Error("Native fixture clock advance failed");
           }
         }),
-    restoreSnapshot: () => replace(true),
-    restoreLive: () => replace(false),
-    restart: () => replace(restored),
+    restoreSnapshot: (): Promise<NativeBindings> => replace(true),
+    restoreLive: (): Promise<NativeBindings> => replace(false),
+    restart: (): Promise<NativeBindings> => replace(restored),
   };
 });
+
+export const nativeErasurePlatform = platform(false);
+export const separatedErasurePlatform = platform(true);
 
 const replayNativeResponse = (
   response: Readonly<{

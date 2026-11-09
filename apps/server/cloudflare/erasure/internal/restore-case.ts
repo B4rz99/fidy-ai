@@ -1,5 +1,9 @@
 import { Clock, Effect, Option, Schema } from "effect";
-import { type ErasureRecoveryConfiguration, ErasureRestoreAdmission } from "../contract";
+import {
+  type ErasureRecoveryConfiguration,
+  type ErasureRegistry,
+  ErasureRestoreAdmission,
+} from "../contract";
 import { type ErasureStore, ErasureUnavailable } from "../../erasure-store/contract";
 import { RecoveryCase } from "./recovery-case";
 import { expectedGeneration } from "./generation";
@@ -9,7 +13,7 @@ const admissionLifetimeMs = 5000;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
 const readMarker = (
-  input: Readonly<{ bucket: R2Bucket; key: string; maximumBytes: number }>
+  input: Readonly<{ bucket: ErasureRegistry; key: string; maximumBytes: number }>
 ): Effect.Effect<string, ErasureUnavailable> =>
   Effect.gen(function* () {
     const object = yield* io(() => input.bucket.get(input.key));

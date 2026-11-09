@@ -12,8 +12,15 @@ export const initializeRegistry = (
   environment: ErasureOperatorEnvironment
 ): Effect.Effect<Response, ErasureUnavailable> =>
   Effect.gen(function* () {
-    const bucket = Option.fromUndefinedOr(environment.ERASURE_BUCKET);
+    const bucket = Option.fromUndefinedOr(
+      environment.ERASURE_REGISTRY ?? environment.ERASURE_BUCKET
+    );
     if (Option.isNone(bucket)) return yield* new ErasureUnavailable();
+    const legacy = environment.ERASURE_BUCKET;
+    if (environment.ERASURE_REGISTRY !== undefined && legacy !== undefined) {
+      const page = yield* io(() => legacy.list({ limit: 1 }));
+      if (page.objects.length !== 0) return yield* new ErasureUnavailable();
+    }
     yield* initializeRegistryStorage({
       mode: "FirstRelease",
       query: (statement) => io(() => environment.DB.prepare(statement).first()),

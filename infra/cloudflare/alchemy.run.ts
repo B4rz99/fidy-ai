@@ -2,6 +2,7 @@ import type { ErasureRegistryInitialization } from "../../apps/server/cloudflare
 import { prepareLocalErasureRegistry } from "../../apps/server/cloudflare/erasure/operations";
 import { ErasureUnavailable } from "../../apps/server/cloudflare/erasure-store/contract";
 import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -295,21 +296,6 @@ export default Alchemy.Stack(
       ? yield* initializeLocalErasureRegistry({ database, bucket: erasureBucket })
       : "true";
     const emailQueue = yield* Cloudflare.Queues.Queue("ForwardedEmailQueue");
-    yield* Cloudflare.Worker("ForwardedEmail", {
-      main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
-      observability: freeTierWorkerObservability,
-      compatibility: { date: "2026-09-08" },
-      crons: ["*/5 * * * *"],
-      env: {
-        DB: database,
-        EMAIL_BUCKET: emailBucket,
-        ERASURE_BUCKET: erasureBucket,
-        ERASURE_REQUIRED: erasureRequired,
-        EMAIL_QUEUE: emailQueue,
-        RELEASE_GIT_SHA: releaseMetadata.gitRevision,
-      },
-      workersDev: false,
-    });
 
     const statementExtractionQueue = yield* Cloudflare.Queues.Queue("StatementExtractionQueue");
     const statementExtractionWorkflow = Cloudflare.Workflow("StatementExtractionWorkflowV1", {
@@ -448,6 +434,9 @@ export default Alchemy.Stack(
           Config.withDefault("2")
         ),
         STATEMENT_EXTRACTION_WORKFLOW: statementExtractionWorkflow,
+        ERASURE_REGISTRY_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
+          className: "UserTransactionCoordinator",
+        }),
         USER_TRANSACTION_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
           className: "UserTransactionCoordinator",
         }),
@@ -598,6 +587,23 @@ export default Alchemy.Stack(
       settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 0 },
     });
 
+    yield* Cloudflare.Worker("ForwardedEmail", {
+      main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
+      observability: freeTierWorkerObservability,
+      compatibility: { date: "2026-09-08" },
+      crons: ["*/5 * * * *"],
+      env: {
+        DB: database,
+        EMAIL_BUCKET: emailBucket,
+        ERASURE_BUCKET: erasureBucket,
+        ERASURE_REQUIRED: erasureRequired,
+        ERASURE_REGISTRY_TRANSPORT: Cloudflare.WorkerEntrypoint(core, "ErasureRegistryTransport"),
+        EMAIL_QUEUE: emailQueue,
+        RELEASE_GIT_SHA: releaseMetadata.gitRevision,
+      },
+      workersDev: false,
+    });
+
     const ingress = yield* Cloudflare.Worker("Ingress", {
       main: "../../apps/server/cloudflare/public-worker.ts",
       version: production ? { traffic: 0, tag: releaseMetadata.versionTag } : undefined,
@@ -623,6 +629,17 @@ export default Alchemy.Stack(
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: production ? productionTopology.ingress.workersDev : true,
+    });
+
+    yield* ingress.bind`erasure-registry`({
+      bindings: [
+        Output.map(core.workerName, (scriptName) => ({
+          type: "durable_object_namespace" as const,
+          name: "ERASURE_REGISTRY_COORDINATOR",
+          className: "UserTransactionCoordinator",
+          scriptName,
+        })),
+      ],
     });
 
     const web = yield* Cloudflare.Website.StaticSite("Web", {

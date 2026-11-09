@@ -1,13 +1,15 @@
 import { BackupRecoveryRotationPresentation, type RotationState } from "./view";
-import { useAtomSet } from "@effect/atom-react";
+import { RegistryContext, useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option, Redacted } from "effect";
+import { Atom, type AtomRegistry } from "effect/reactivity";
 import {
   type Dispatch,
   type JSX,
   type RefCallback,
   type SetStateAction,
   useCallback,
+  useContext,
   useRef,
   useState,
 } from "react";
@@ -16,7 +18,9 @@ import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { authenticationEndedEvent } from "@/session/authentication-channel";
 import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
-import { makeRotateCommand } from "./command";
+import { type RotateBackupRecoveryCommand, makeRotateCommand } from "./command";
+
+const rotationUnresolved = Atom.make(false).pipe(Atom.keepAlive);
 
 type DisclosureState =
   | Exclude<RotationState, { _tag: "Disclosed" }>
@@ -39,20 +43,63 @@ const RecoveryDisclosure = ({
   </Alert>
 );
 
-type RecoveryOwner = { current: DisclosureState; active: boolean };
+type RecoveryOwner = {
+  current: DisclosureState;
+  active: boolean;
+  setState: Dispatch<SetStateAction<DisclosureState>>;
+};
+
+const publish = (owner: RecoveryOwner, next: DisclosureState): void => {
+  if (!owner.active) return;
+  owner.current = next;
+  owner.setState(next);
+};
+
+const confirmRotation = (
+  owner: RecoveryOwner,
+  review: DisclosureState,
+  operation: Readonly<{
+    registry: AtomRegistry.AtomRegistry;
+    rotate: (command: RotateBackupRecoveryCommand) => void;
+  }>
+): void => {
+  if (
+    !owner.active ||
+    review._tag !== "Reviewing" ||
+    owner.current !== review ||
+    operation.registry.get(rotationUnresolved)
+  ) {
+    return;
+  }
+  const submitting = { _tag: "Rotating" } as const;
+  operation.registry.set(rotationUnresolved, true);
+  publish(owner, submitting);
+  const complete = (next: DisclosureState): void => {
+    if (owner.active && owner.current === submitting) {
+      if (next._tag !== "Uncertain") operation.registry.set(rotationUnresolved, false);
+      publish(owner, next);
+    } else if (next._tag === "Disclosed") Redacted.wipeUnsafe(next.code);
+  };
+  operation.rotate({
+    onRotated: (code) => complete({ _tag: "Disclosed", code, copied: false }),
+    onUncertain: () => complete({ _tag: "Uncertain" }),
+    onUnauthenticated: () => complete({ _tag: "Unauthenticated" }),
+    onFreshSessionRequired: () => complete({ _tag: "FreshSessionRequired" }),
+  });
+};
 
 const mountRecoveryTask =
   (
     owner: RecoveryOwner,
     clipboard: SensitiveClipboard,
-    setState: Dispatch<SetStateAction<DisclosureState>>
+    requiresObservation: boolean
   ): RefCallback<HTMLDivElement> =>
   (node) => {
     if (node === null) return;
     owner.active = true;
     if (owner.current._tag === "Disposed") {
-      owner.current = { _tag: "Idle" };
-      setState(owner.current);
+      owner.current = requiresObservation ? { _tag: "Uncertain" } : { _tag: "Idle" };
+      owner.setState(owner.current);
     }
     const dispose = (): void => {
       owner.active = false;
@@ -65,7 +112,7 @@ const mountRecoveryTask =
     };
     const hide = (): void => {
       dispose();
-      setState({ _tag: "Disposed" });
+      owner.setState({ _tag: "Disposed" });
     };
     window.addEventListener("pagehide", hide);
     window.addEventListener(authenticationEndedEvent, hide);
@@ -78,46 +125,30 @@ const mountRecoveryTask =
 
 /** Mounted disclosure view; replacing its React identity irreversibly drops the code state. */
 const MountedRecoveryTask = ({ apiClient, clipboard }: RotationViewProps): JSX.Element => {
-  const [state, setState] = useState<DisclosureState>({ _tag: "Idle" });
-  const owner = useRef<RecoveryOwner>({ current: state, active: false }).current;
+  const registry = useContext(RegistryContext);
+  const [state, setState] = useState<DisclosureState>(() =>
+    registry.get(rotationUnresolved) ? { _tag: "Uncertain" } : { _tag: "Idle" }
+  );
+  const owner = useRef<RecoveryOwner>({ current: state, active: false, setState }).current;
   const lifecycleRef = useCallback<RefCallback<HTMLDivElement>>(
-    (node) => mountRecoveryTask(owner, clipboard, setState)(node),
-    [owner, clipboard]
+    (node) => mountRecoveryTask(owner, clipboard, registry.get(rotationUnresolved))(node),
+    [owner, clipboard, registry]
   );
   const [rotateAtom] = useState(() => makeRotateCommand({ apiClient }));
   const rotate = useAtomSet(rotateAtom);
-  const publish = (next: DisclosureState): void => {
-    if (!owner.active) return;
-    owner.current = next;
-    setState(next);
-  };
   const review = (): void => {
-    if (!owner.active || owner.current._tag !== "Idle") return;
-    publish({ _tag: "Reviewing" });
+    if (!owner.active || owner.current._tag !== "Idle" || registry.get(rotationUnresolved)) return;
+    publish(owner, { _tag: "Reviewing" });
   };
   const cancel = (): void => {
     if (!owner.active || state._tag !== "Reviewing" || owner.current !== state) return;
-    publish({ _tag: "Idle" });
+    publish(owner, { _tag: "Idle" });
   };
-  const confirm = (): void => {
-    if (!owner.active || state._tag !== "Reviewing" || owner.current !== state) return;
-    const submitting = { _tag: "Rotating" } as const;
-    publish(submitting);
-    const complete = (next: DisclosureState): void => {
-      if (owner.active && owner.current === submitting) publish(next);
-      else if (next._tag === "Disclosed") Redacted.wipeUnsafe(next.code);
-    };
-    rotate({
-      onRotated: (code) => complete({ _tag: "Disclosed", code, copied: false }),
-      onUncertain: () => complete({ _tag: "Uncertain" }),
-      onUnauthenticated: () => complete({ _tag: "Unauthenticated" }),
-      onFreshSessionRequired: () => complete({ _tag: "FreshSessionRequired" }),
-    });
-  };
+  const confirm = (): void => confirmRotation(owner, state, { registry, rotate });
   const copyCode = (): void => {
     if (!owner.active || state._tag !== "Disclosed" || owner.current !== state) return;
     clipboard.copy(Redacted.value(state.code), () => {
-      if (owner.active && owner.current === state) publish({ ...state, copied: true });
+      if (owner.active && owner.current === state) publish(owner, { ...state, copied: true });
     });
   };
   const view: RotationState =

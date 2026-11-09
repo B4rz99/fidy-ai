@@ -23,9 +23,14 @@ cannot clear unrelated newer text.
 
 A lost, malformed or unavailable rotation result is Uncertain rather than retry permission. It
 reveals no code, does not claim that the preceding code remains valid and offers fresh sign-in.
-The Uncertain task offers no repeat action. Fresh sign-in leads to a new mounted task and explicit
-review; that later rotation is a new replacement, never redisclosure or replay. Missing authentication and expired session
-freshness retain distinct sign-in guidance.
+The Uncertain task offers no repeat action. A private non-secret admission marker remains in the
+existing authentication registry while a submitted result is unresolved or Uncertain. Leaving and
+returning through same-document navigation cannot clear it. Only a definitive result delivered to
+the live task clears that marker; authentication replacement or a new document's authoritative
+session observation creates a fresh registry. Raw code never enters that registry. Fresh sign-in
+leads to a new mounted task and explicit review; that later rotation is a new replacement, never
+redisclosure or replay. Missing authentication and expired session freshness retain distinct sign-in
+guidance.
 The server continues to own fresh authority, proof replacement and retained security evidence.
 Support refusal remains non-enumerating and does not invent a retained rejected case.
 
@@ -33,7 +38,8 @@ Support refusal remains non-enumerating and does not invent a retained rejected 
 
 The built-browser recovery journey uses isolated Users and the actual public/Core/D1 rotation,
 with controlled transport loss or malformed responses only after a successful native commit. It
-covers review/cancel admission, duplicate Confirm, uncertain outcomes, fresh same-User sign-in,
+covers review/cancel admission, duplicate Confirm, uncertainty retained across same-document
+navigation, fresh same-User sign-in,
 mounted disclosure disposal, denied clipboard acknowledgement and late completions after departure
 or owner replacement. Provider-authentication journeys retain fresh-session refusal and recovery
 rotation through the same review step.

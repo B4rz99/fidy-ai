@@ -78,6 +78,22 @@ const confirmTwice = (button: HTMLButtonElement): void => {
   button.click();
 };
 
+const revisitUncertainRecovery = (page: Page): Promise<void> =>
+  page
+    .getByRole("link", { name: "Accesos", exact: true })
+    .first()
+    .click()
+    .then(() => page.getByRole("link", { name: "Cuenta", exact: true }).first().click())
+    .then(() =>
+      expect(page.getByText("No pudimos confirmar el código nuevo.", { exact: true })).toBeVisible({
+        timeout: 5_000,
+      })
+    )
+    .then(() => expect(page.getByRole("button", { name: "Crear un código nuevo" })).toHaveCount(0))
+    .then(() =>
+      expect(page.getByRole("button", { name: "Confirmar código nuevo" })).toHaveCount(0)
+    );
+
 test("discloses a real rotated recovery code only in its mounted settings view", ({
   page,
   request,
@@ -179,6 +195,8 @@ for (const mode of ["lost", "malformed"] as const) {
         yield* Effect.tryPromise(() => expect(page.locator("code")).toHaveCount(0));
         expect(rotations).toBe(1);
         expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
+        yield* Effect.tryPromise(() => revisitUncertainRecovery(page));
+        expect(rotations).toBe(1);
         yield* Effect.tryPromise(() => page.unroute(rotationPattern));
         yield* Effect.tryPromise(() =>
           page.getByRole("link", { name: "Iniciar sesión", exact: true }).click()
@@ -198,6 +216,42 @@ for (const mode of ["lost", "malformed"] as const) {
       })
     ));
 }
+
+test("leaving during rotation retains uncertainty when the settings task remounts", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInWithVerifiedEmailThroughCore({
+          page,
+          request,
+          email: "recovery-disposal@example.com",
+        })
+      );
+      yield* Effect.tryPromise(() => page.goto("/settings/account"));
+      const held = yield* Effect.tryPromise(() => holdRotation(page));
+      yield* Effect.tryPromise(() => startRotation(page));
+      yield* Effect.tryPromise(() => held.started);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Accesos", exact: true }).first().click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Cuenta", exact: true }).first().click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("No pudimos confirmar el código nuevo.", { exact: true })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => held.finish());
+      yield* Effect.tryPromise(() => expect(page.locator("code")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Crear un código nuevo" })).toHaveCount(0)
+      );
+    })
+  ));
 
 test("leaving the document fences a late committed rotation response", ({ page, request }) =>
   Effect.runPromise(

@@ -41,7 +41,7 @@ const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
       </Alert>
     ) : null}
     {state._tag === "Uncertain" ? (
-      <Alert variant="destructive">
+      <Alert variant="warning">
         <AlertTitle>No pudimos confirmar el código nuevo.</AlertTitle>
         <AlertDescription>
           El cambio puede haberse completado y el código anterior puede haber dejado de funcionar.

@@ -2,7 +2,7 @@ import { redeemBrowserPairing } from "../browser-login/operations";
 import { freshSessionQuery } from "../../src/shell/web-session/operations";
 import { Clock, Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { authenticateWebSession, logoutWebSession } from "./operations";
 
 const databases = isolatedTestDatabases();
@@ -12,6 +12,130 @@ const sessionA = "20000000-0000-4000-8000-000000000001";
 const tokenA = "a".repeat(43);
 const cookieRequest = (cookie: string): Request =>
   new Request("https://api.fidyapp.com/user", { headers: { cookie } });
+
+const readyPairing = Effect.fn(function* (db: D1Database) {
+  yield* Effect.tryPromise(() => installTestSchema({ db }));
+  const pairingId = "30000000-0000-4000-8000-000000000001";
+  const privateVerifier = "q".repeat(43);
+  const current = yield* Clock.currentTimeMillis;
+  const verifierDigest = new Uint8Array(
+    yield* Effect.tryPromise(() =>
+      crypto.subtle.digest("SHA-256", new TextEncoder().encode(privateVerifier))
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    db.batch([
+      db
+        .prepare(
+          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',?)"
+        )
+        .bind(userA, current),
+      db
+        .prepare(
+          "INSERT INTO browser_login_pairings(id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES(?,'ABCD-EFGH',?,?,'ready',?,?)"
+        )
+        .bind(pairingId, verifierDigest, userA, current, current + 600_000),
+    ])
+  );
+  return (): Effect.Effect<Response> =>
+    redeemBrowserPairing({
+      db,
+      request: new Request("https://api.fidyapp.com/web/pairings/redeem", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pairingId, privateVerifier }),
+      }),
+    });
+});
+
+it("issues one exact-User browser session under competing claims and never rediscloses it on replay", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      const redeem = yield* readyPairing(db);
+      const responses = yield* Effect.all([redeem(), redeem()], { concurrency: 2 });
+      expect(responses.map(({ status }) => status).sort()).toEqual([200, 400]);
+      const winner = responses.find(({ status }) => status === 200);
+      const cookie = winner?.headers.get("set-cookie")?.split(";")[0];
+      expect(cookie).toBeDefined();
+      const current = yield* Clock.currentTimeMillis;
+      const session = yield* Effect.tryPromise(() =>
+        authenticateWebSession({
+          db,
+          request: cookieRequest(cookie ?? ""),
+          current,
+          freshness: "fresh",
+        })
+      );
+      expect(Option.map(session, ({ userId }) => userId)).toEqual(Option.some(userA));
+      expect(responses.find(({ status }) => status === 400)?.headers.get("set-cookie")).toBeNull();
+      const replay = yield* redeem();
+      expect(replay.status).toBe(400);
+      expect(replay.headers.get("set-cookie")).toBeNull();
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM web_sessions").first()
+        )
+      ).toEqual({ count: 1 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT state,user_id FROM browser_login_pairings").first()
+        )
+      ).toEqual({ state: "consumed", user_id: userA });
+    })
+  ));
+
+it("rolls back pairing consumption when session insertion fails and lets its owner claim after repair", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      const redeem = yield* readyPairing(db);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_session_insert BEFORE INSERT ON web_sessions BEGIN SELECT RAISE(ABORT,'session_insert_failed'); END"
+          )
+          .run()
+      );
+      const refused = yield* redeem();
+      expect(refused.status).toBe(400);
+      expect(refused.headers.get("set-cookie")).toBeNull();
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT state,user_id FROM browser_login_pairings").first()
+        )
+      ).toEqual({ state: "ready", user_id: userA });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM web_sessions").first()
+        )
+      ).toEqual({ count: 0 });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_session_insert").run());
+      const accepted = yield* redeem();
+      expect(accepted.status).toBe(200);
+      const cookie = accepted.headers.get("set-cookie")?.split(";")[0];
+      const current = yield* Clock.currentTimeMillis;
+      const session = yield* Effect.tryPromise(() =>
+        authenticateWebSession({
+          db,
+          request: cookieRequest(cookie ?? ""),
+          current,
+          freshness: "fresh",
+        })
+      );
+      expect(Option.map(session, ({ userId }) => userId)).toEqual(Option.some(userA));
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT state FROM browser_login_pairings").first()
+        )
+      ).toEqual({ state: "consumed" });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM web_sessions").first()
+        )
+      ).toEqual({ count: 1 });
+    })
+  ));
 
 it("authenticates only one live browser credential and refuses duplicate cookies without renewing it", () =>
   Effect.runPromise(

@@ -121,6 +121,7 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
     .query("categories", "listCategories", workspaceQueryRetention)
     .pipe(revalidateWorkspaceQuery);
   const history = transactionHistory({
+    initialPages: 1,
     apiClient: client,
     firstPage,
     period,
@@ -382,6 +383,7 @@ it.live("reading and disposing history does not initialize the correction transp
     });
     const categories = client.query("categories", "listCategories", workspaceQueryRetention);
     const history = transactionHistory({
+      initialPages: 1,
       apiClient: client,
       firstPage,
       period,

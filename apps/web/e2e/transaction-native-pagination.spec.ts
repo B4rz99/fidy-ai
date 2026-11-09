@@ -40,8 +40,6 @@ test("real Core/D1 history persists correction and confirmed deletion on the nex
         expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() => reloadTransactionsThroughCore(page));
-      yield* expectHistoryCount(page, firstPageSize);
-      yield* Effect.tryPromise(() => loadContinuation(page));
       yield* expectHistoryCount(page, retainedRecords);
       yield* Effect.tryPromise(() => laterRecord.click());
       yield* Effect.tryPromise(() =>
@@ -63,13 +61,9 @@ test("real Core/D1 history persists correction and confirmed deletion on the nex
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Transacción eliminada", { exact: true })).toBeVisible()
       );
-      yield* expectHistoryCount(page, firstPageSize);
-      yield* Effect.tryPromise(() => loadContinuation(page));
       yield* expectHistoryCount(page, retainedRecords - 1);
       yield* Effect.tryPromise(() => expect(laterRecord).toHaveCount(0));
       yield* Effect.tryPromise(() => reloadTransactionsThroughCore(page));
-      yield* expectHistoryCount(page, firstPageSize);
-      yield* Effect.tryPromise(() => loadContinuation(page));
       yield* expectHistoryCount(page, retainedRecords - 1);
       yield* Effect.tryPromise(() => expect(laterRecord).toHaveCount(0));
     })

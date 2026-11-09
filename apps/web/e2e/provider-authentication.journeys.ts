@@ -1,3 +1,4 @@
+import { retainedSecretCount } from "./browser-storage-fixture";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
 import { advanceAcceptancePoll, installAcceptanceClock } from "./acceptance-clock";
@@ -315,7 +316,6 @@ const redirectSubject = (
   return route.fulfill({ status: redirectStatus, headers: { location: callback.href } });
 };
 
-const retainedSecretCount = (): number => localStorage.length + sessionStorage.length;
 const returningSessionPolicies = (
   configuration: ProviderJourneyConfiguration,
   {

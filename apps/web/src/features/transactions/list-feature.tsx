@@ -5,15 +5,20 @@ import { PendingRead } from "@/ui/components/pending-read";
 import { TransactionLocationNotice } from "./location-notice";
 import { TransactionDestination } from "./destination";
 import { destinationMonth, transactionDestinationQuery } from "./destination-query";
-import { type TransactionSearch, selectedTransactionPeriod, transactionMonth } from "./period";
+import { TransactionSearch, selectedTransactionPeriod, transactionMonth } from "./period";
+import {
+  matchesTransactionFilters,
+  readTransactionView,
+  rememberTransactionPages,
+} from "./view-state";
 import { transactionFirstPage } from "./query";
 import { prepareQuery } from "@/transport/query-preparation";
 import type { AtomRegistry } from "effect/reactivity";
 import type { FidyClient } from "@/transport/client";
 import { workspaceCategoriesQuery, workspaceProfileQuery } from "@/transport/workspace-query";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
-import { DateTime, Effect, Option } from "effect";
+import { type RegisteredRouter, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { type RefCallback, Suspense, useState } from "react";
 import { toast } from "sonner";
 import { TransactionCorrectionContext } from "./correction-context";
@@ -22,7 +27,8 @@ import type { JSX, ReactNode } from "react";
 
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
-import { type HistoryState, transactionHistory } from "./history";
+import { type HistoryCommand, type HistoryState, transactionHistory } from "./history";
+import { useTransactionScrollRestoration } from "./scroll-restoration";
 import {
   type Category,
   type CurrentMonthPeriod,
@@ -219,53 +225,127 @@ type TransactionQueries = Readonly<{
   >;
   history: HistoryState;
   corrections: TransactionCorrections;
+  mount: () => () => void;
   onMore: () => void;
   onRetryMore: () => void;
 }>;
+const notifySavedCorrection = (
+  router: RegisteredRouter,
+  period: CurrentMonthPeriod,
+  transactions: ReadonlyArray<Transaction>
+): void => {
+  const { filters } = readTransactionView({
+    state: router.latestLocation.state,
+    binding: router.options.context.sessionBinding,
+    scope: `${transactionMonth(period)}:${period.timeZone}`,
+  });
+  const search = Schema.decodeOption(TransactionSearch)(router.latestLocation.search);
+  const date = Option.getOrElse(
+    Option.map(search, (value) => value.date ?? ""),
+    () => ""
+  );
+  const excluded = transactions.filter(
+    (record) =>
+      !matchesTransactionFilters({
+        transaction: record,
+        filters: { ...filters, date },
+        timeZone: period.timeZone,
+      }) ||
+      DateTime.toEpochMillis(record.occurredAt) < DateTime.toEpochMillis(period.from) ||
+      DateTime.toEpochMillis(record.occurredAt) >= DateTime.toEpochMillis(period.to)
+  ).length;
+  let description = Option.none<string>();
+  if (excluded === 1) {
+    description = Option.some("La transacción guardada ya no coincide con tus filtros.");
+  } else if (excluded > 1) {
+    description = Option.some(
+      `${excluded} transacciones guardadas ya no coinciden con tus filtros.`
+    );
+  }
+  toast.success("Cambios guardados", { description: Option.getOrUndefined(description) });
+};
+const mountTransactionView = ({
+  router,
+  scope,
+  corrections,
+  restore,
+}: Readonly<{
+  router: RegisteredRouter;
+  scope: string;
+  corrections: TransactionCorrections;
+  restore: (command: HistoryCommand) => void;
+}>): (() => void) => {
+  let entry = router.latestLocation.state.__TSR_index;
+  const disposeCorrections = corrections.mount();
+  const unsubscribe = router.subscribe("onResolved", ({ toLocation }) => {
+    if (toLocation.pathname !== "/app/transactions" || toLocation.state.__TSR_index === entry) {
+      return;
+    }
+    entry = toLocation.state.__TSR_index;
+    const view = readTransactionView({
+      state: toLocation.state,
+      binding: router.options.context.sessionBinding,
+      scope,
+    });
+    restore({ restorePages: view.pages });
+  });
+  return () => {
+    unsubscribe();
+    disposeCorrections();
+  };
+};
 const useTransactionQueries = (
   period: TransactionQueries["period"],
   locate: Option.Option<string>
 ): TransactionQueries => {
   const router = useRouter();
-  const [categories] = useState(
-    () => workspaceCategoriesQuery(router.options.context.apiClient).view
-  );
+  const client = router.options.context.apiClient;
+  const scope = `${transactionMonth(period)}:${period.timeZone}`;
+  const [categories] = useState(() => workspaceCategoriesQuery(client).view);
   const [transactions] = useState(() =>
     transactionFirstPage({
-      client: router.options.context.apiClient,
+      client,
       period,
     })
   );
   const [historyResource] = useState(() =>
     transactionHistory({
-      apiClient: router.options.context.apiClient,
+      apiClient: client,
       firstPage: transactions,
       period: { from: period.from, to: period.to },
       locate,
+      initialPages: readTransactionView({
+        state: router.latestLocation.state,
+        binding: router.options.context.sessionBinding,
+        scope,
+      }).pages,
     })
   );
   const [correctionOwner] = useState(() =>
     makeTransactionCorrections({
-      client: router.options.context.apiClient,
+      client,
       firstPage: transactions,
       categories,
       history: historyResource.state,
       historyAction: historyResource.action,
-      saved: () => toast.success("Cambios guardados"),
+      saved: (transactions) => notifySavedCorrection(router, period, transactions),
     })
   );
   const corrections = useAtomValue(correctionOwner);
-  const categoryState = useAtomValue(categories).pipe(presentCanonicalQuery);
   const history = useAtomValue(historyResource.state);
-  const transactionState = history.query;
   const dispatch = useAtomSet(historyResource.action);
   return {
-    categoryState,
+    categoryState: useAtomValue(categories).pipe(presentCanonicalQuery),
     period,
-    transactionState,
+    transactionState: history.query,
     history,
     corrections,
-    onMore: () => dispatch("more"),
+    mount: () => mountTransactionView({ router, scope, corrections, restore: dispatch }),
+    onMore: () => {
+      if (history.continuation !== "available") return;
+      rememberTransactionPages({ router, scope, pages: history.loadedPages + 1 });
+      dispatch("more");
+    },
     onRetryMore: () => dispatch("retry"),
   };
 };
@@ -306,9 +386,16 @@ type TransactionResourceProps = Readonly<{
 }>;
 const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
   const queries = useTransactionQueries(props.period, props.locate);
+  useTransactionScrollRestoration(
+    Option.isNone(props.locate) &&
+      queries.categoryState._tag === "Ready" &&
+      queries.transactionState._tag === "Ready" &&
+      !queries.transactionState.waiting &&
+      (queries.history.continuation === "complete" || queries.history.continuation === "available")
+  );
   const { corrections } = queries;
   const [lifetime] = useState<RefCallback<HTMLDivElement>>(
-    () => (): ReturnType<RefCallback<HTMLDivElement>> => corrections.mount()
+    () => (): ReturnType<RefCallback<HTMLDivElement>> => queries.mount()
   );
   return (
     <TransactionCorrectionContext value={Option.some(corrections)}>
@@ -401,7 +488,8 @@ const ReadyTransactionResources = ({
   return (
     <Suspense fallback={<TransactionListView state={{ _tag: "Loading" }} />}>
       <TransactionWorkspace
-        key={`${corrections.workspaceGeneration}:${Option.getOrElse(locate, () => "browse")}`}
+        key={Option.getOrElse(locate, () => "browse")}
+        generation={corrections.workspaceGeneration}
         locate={locate}
         captureHistoryVersion={Option.some({
           month: dateFilter.month,
@@ -454,7 +542,7 @@ const TransactionPeriodView = ({
   const period = selectedTransactionPeriod({ search, now, timeZone: currentUser.timeZone });
   const month = transactionMonth(period);
   const change = (next: TransactionSearch): void => {
-    navigate({ to: "/app/transactions", search: next }).catch(() => undefined);
+    navigate({ to: "/app/transactions", search: next, state: true }).catch(() => undefined);
   };
   return (
     <TransactionResources
@@ -571,18 +659,21 @@ export const TransactionListFeature = ({
 }: Readonly<{
   children: ReactNode;
 }>): JSX.Element => <CurrentUserQuery>{children}</CurrentUserQuery>;
-/** Prepare the same first-page resource after fresh entry authority, before the ordinary tree mounts. */
-TransactionListFeature.preloadData = ({
-  apiClient,
-  registry,
-  signal,
-  search,
-}: Readonly<{
+type TransactionPreparation = Readonly<{
   apiClient: FidyClient;
+  destinationMode: "cached" | "fresh";
   registry: AtomRegistry.AtomRegistry;
   signal: AbortSignal;
   search: TransactionSearch;
-}>): Promise<void> =>
+}>;
+/** Prepare the same first-page resource after entry authority, before the ordinary tree mounts. */
+TransactionListFeature.preloadData = ({
+  apiClient,
+  destinationMode,
+  registry,
+  signal,
+  search,
+}: TransactionPreparation): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const profile = workspaceProfileQuery(apiClient);
@@ -607,7 +698,7 @@ TransactionListFeature.preloadData = ({
           prepareQuery({
             registry,
             query: destination,
-            options: { mode: "fresh", signal: Option.some(signal) },
+            options: { mode: destinationMode, signal: Option.some(signal) },
           })
         );
         const record = presentCanonicalQuery(registry.get(destination));

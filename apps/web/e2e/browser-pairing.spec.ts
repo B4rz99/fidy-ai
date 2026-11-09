@@ -1,3 +1,4 @@
+import { retainedSecretCount } from "./browser-storage-fixture";
 import { playwright } from "./playwright-runtime";
 import { advanceAcceptancePoll, installAcceptanceClock } from "./acceptance-clock";
 import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
@@ -192,11 +193,7 @@ const expectVerifierIsBrowserEphemeral = (page: Page): Promise<void> =>
       expect(page.url()).not.toContain(privateVerifier);
       expect(yield* wait(page.locator("html").textContent())).not.toContain(pairingId);
       expect(yield* wait(page.locator("html").textContent())).not.toContain(privateVerifier);
-      expect(
-        yield* wait(
-          page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))
-        )
-      ).toEqual({ local: 0, session: 0 });
+      expect(yield* wait(page.evaluate(retainedSecretCount))).toBe(0);
       expect(yield* wait(page.evaluate(() => caches.keys()))).toEqual([]);
       yield* wait(
         expect(page.getByRole("link", { name: "Abrir WhatsApp" })).not.toHaveAttribute(
@@ -394,11 +391,7 @@ test("approves email login with the private browser verifier without exposing ma
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       expect(attempts()).toBe(2);
       expect(page.url()).not.toContain(emailLoginCode);
-      expect(
-        yield* wait(
-          page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))
-        )
-      ).toEqual({ local: 0, session: 0 });
+      expect(yield* wait(page.evaluate(retainedSecretCount))).toBe(0);
     })
   ));
 type BrowserCookie = Awaited<ReturnType<BrowserContext["cookies"]>>[number];
@@ -584,7 +577,7 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       yield* wait(reloadTransactionsThroughCore(page));
       yield* wait(expect(page.getByText("Recuperación Fidy").first()).toBeVisible());
       expect(page.url()).not.toContain("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
-      expect(yield* wait(page.evaluate(() => localStorage.length + sessionStorage.length))).toBe(0);
+      expect(yield* wait(page.evaluate(retainedSecretCount))).toBe(0);
     })
   ));
 const slowdownDelayMilliseconds = 10000;

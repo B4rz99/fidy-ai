@@ -25,6 +25,12 @@ import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { TransactionDateFilter } from "./date-filter";
 import { type FidyClient } from "@/transport/client";
 import { TransactionSummary } from "./summary";
+import {
+  emptyTransactionFilters,
+  matchesTransactionFilters,
+  transactionSearchLimit,
+  useTransactionFilters,
+} from "./view-state";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
 import { type TransactionPanel, reconciliationFinished, reconciliationLocked } from "./panel-state";
@@ -48,6 +54,7 @@ const ManualCapturePanel = lazyRouteComponent(
 );
 
 type WorkspaceProps = Readonly<{
+  generation: number;
   locate: Option.Option<string>;
   captureHistoryVersion: Option.Option<CaptureHistoryVersion>;
   apiClient: FidyClient;
@@ -76,7 +83,7 @@ type WorkspaceFilters = Readonly<{
   categoryId: string;
   date: string;
 }>;
-const emptyLocalFilters = { search: "", direction: "all", categoryId: "all" };
+const emptyLocalFilters = emptyTransactionFilters;
 const emptyFilters: WorkspaceFilters = { ...emptyLocalFilters, date: "" };
 const hasFilters = (filters: WorkspaceFilters): boolean =>
   filters.search.trim() !== "" ||
@@ -84,25 +91,6 @@ const hasFilters = (filters: WorkspaceFilters): boolean =>
   filters.categoryId !== "all" ||
   filters.date !== "";
 type FilterTool = "category";
-const matchesFilters = (
-  transaction: Transaction,
-  filters: WorkspaceFilters,
-  timeZone: string
-): boolean => {
-  const text =
-    `${Option.getOrElse(transaction.counterparty, () => "")} ${Option.getOrElse(transaction.notes, () => "")}`.toLocaleLowerCase(
-      "es-CO"
-    );
-  return (
-    text.includes(filters.search.trim().toLocaleLowerCase("es-CO")) &&
-    (filters.direction === "all" || transaction.direction === filters.direction) &&
-    (filters.categoryId === "all" || transaction.categoryId === filters.categoryId) &&
-    (filters.date === "" ||
-      DateTime.formatIsoDate(
-        DateTime.setZone(transaction.occurredAt, DateTime.zoneMakeNamedUnsafe(timeZone))
-      ) === filters.date)
-  );
-};
 const CategoryFilter = ({
   categories,
   value,
@@ -478,6 +466,7 @@ const TransactionFilters = ({
       <Input
         type="search"
         aria-label="Buscar transacciones"
+        maxLength={transactionSearchLimit}
         placeholder="Buscar transacciones"
         value={filters.search}
         disabled={disabled}
@@ -798,11 +787,7 @@ const ContinuationControl = (
         </p>
       ) : null}
       {props.continuation === "failure" ? (
-        <Button
-          variant="outline"
-          disabled={props.editing || (!props.editable && props.readOnly !== true)}
-          onClick={props.onRetryMore}
-        >
+        <Button variant="outline" disabled={props.editing} onClick={props.onRetryMore}>
           {continuationLabels[props.continuation]}
         </Button>
       ) : (
@@ -856,6 +841,27 @@ const capturePanelStatus = (
   panel._tag === "Capture" && Option.isSome(capture)
     ? { _tag: "Capture", status: capture.value.status }
     : panel;
+const useWorkspacePanel = (
+  generation: number
+): Readonly<{ panel: TransactionPanel; onPanel: (panel: TransactionPanel) => void }> => {
+  const capture = use(ManualCaptureContext);
+  const defaultPanel: TransactionPanel = Option.exists(
+    capture,
+    (owner) => owner.status === "uncertain"
+  )
+    ? { _tag: "Capture", status: "uncertain" }
+    : { _tag: "Summary" };
+  const [interaction, setInteraction] = useState<
+    Readonly<{ generation: number; panel: TransactionPanel }>
+  >({ generation, panel: defaultPanel });
+  if (interaction.generation !== generation) {
+    setInteraction({ generation, panel: defaultPanel });
+  }
+  const panel: TransactionPanel =
+    interaction.generation === generation ? interaction.panel : defaultPanel;
+  const onPanel = (next: TransactionPanel): void => setInteraction({ generation, panel: next });
+  return { panel: capturePanelStatus(panel, capture), onPanel };
+};
 type PeriodChoice = Readonly<{ kind: "date" | "month"; value: string }>;
 const usePeriodSelection = (
   source: WorkspaceProps,
@@ -908,16 +914,15 @@ const usePeriodSelection = (
 };
 export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
-  const capture = use(ManualCaptureContext);
-  const [panel, setPanel] = useState<TransactionPanel>(() =>
-    Option.exists(capture, (owner) => owner.status === "uncertain")
-      ? { _tag: "Capture", status: "uncertain" }
-      : { _tag: "Summary" }
+  const { panel: activePanel, onPanel } = useWorkspacePanel(source.generation);
+  const { props, confirmation } = usePeriodSelection(source, activePanel, onPanel);
+  const month = Option.getOrElse(
+    Option.map(props.monthFilter, (filter) => filter.value),
+    () => "history"
   );
-  const onPanel = setPanel;
-  const activePanel = capturePanelStatus(panel, capture);
-  const [localFilters, setFilters] = useState(emptyLocalFilters);
-  const { props, confirmation } = usePeriodSelection(source, panel, onPanel);
+  const { filters: localFilters, change: setFilters } = useTransactionFilters(
+    `${props.readOnly ? "privacy" : month}:${props.currentUser.timeZone}`
+  );
   const filters = {
     ...localFilters,
     date: props.dateFilter.value,
@@ -927,7 +932,7 @@ export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
     props.dateFilter.onChange(next.date);
   };
   const visible = props.transactions.filter((transaction) =>
-    matchesFilters(transaction, filters, props.currentUser.timeZone)
+    matchesTransactionFilters({ transaction, filters, timeZone: props.currentUser.timeZone })
   );
   const rows = presentTransactionRows({
     transactions: visible,

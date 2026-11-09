@@ -198,7 +198,7 @@ export const PATPairingView = ({
     return (
       <Card>
         <CardContent>
-          <Alert>
+          <Alert variant="warning">
             <AlertTitle>No pudimos confirmar la autorización</AlertTitle>
             <AlertDescription>
               La solicitud puede haberse autorizado. Revisa tus tokens en Accesos y desactiva el

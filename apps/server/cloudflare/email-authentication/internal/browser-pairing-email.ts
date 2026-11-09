@@ -214,8 +214,16 @@ export const startBrowserPairingEmail = (input: {
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
   );
 
-const rejectWrongEmailProof = (db: D1Database, workId: string): Promise<void> =>
-  Effect.runPromise(
+const rejectWrongEmailProof = (
+  db: D1Database,
+  input: { workId: string; publicCode: string; current: number }
+): Promise<void> => {
+  const { workId, publicCode, current } = input;
+  const pairing = pendingBrowserPairingQuery({
+    subject: { sql: "SELECT browser_pairing_email_proofs.id AS pairingId", params: [] },
+    current,
+  });
+  return Effect.runPromise(
     attempt(() =>
       db
         .prepare(`UPDATE browser_login_pairings AS browser_pairing_email_proofs SET email_wrong_attempts = email_wrong_attempts + 1,
@@ -223,11 +231,17 @@ const rejectWrongEmailProof = (db: D1Database, workId: string): Promise<void> =>
     email_proof_digest = CASE WHEN email_wrong_attempts + 1 >= 5 THEN NULL ELSE email_proof_digest END,
     email_public_code = CASE WHEN email_wrong_attempts + 1 >= 5 THEN NULL ELSE email_public_code END,
     email_proof_expires_at_ms = CASE WHEN email_wrong_attempts + 1 >= 5 THEN NULL ELSE email_proof_expires_at_ms END
-    WHERE email_work_id IS NOT NULL AND email_work_id = ? AND email_state = 'awaiting_proof' AND email_wrong_attempts < 5`)
-        .bind(workId)
+    WHERE email_work_id IS NOT NULL AND email_work_id = ? AND email_state = 'awaiting_proof' AND email_wrong_attempts < 5
+      AND email_public_code = ? AND email_proof_expires_at_ms > ? AND email_expires_at_ms > ?
+      AND EXISTS (${pairing.sql})
+      AND EXISTS (SELECT 1 FROM verified_email_credentials AS v
+        WHERE v.user_id = email_user_id AND v.address = email_address
+          AND v.verified_at_ms = email_credential_verified_at_ms)`)
+        .bind(workId, publicCode, current, current, ...pairing.params)
         .run()
     ).pipe(Effect.asVoid)
   );
+};
 
 const approveEmailPairing = (
   db: D1Database,
@@ -279,51 +293,54 @@ export const completeBrowserPairingEmail = (input: {
       const { request, db } = input;
       const proof = yield* attempt(() => readProof(request, Complete));
       if (Option.isNone(proof)) return invalid();
-      {
-        const expiresAt = yield* provePendingBrowserPairing({
-          db,
-          pairingId: proof.value.pairingId,
-          privateVerifier: proof.value.privateVerifier,
-        }).pipe(Effect.mapError(() => undefined));
-        if (Option.isNone(expiresAt)) return invalid();
-        const current = yield* Clock.currentTimeMillis;
-        const publicCode = proof.value.combinedCode.slice(0, publicCodeLength);
-        const raw = yield* attempt(() =>
-          db
-            .prepare(`SELECT proof_digest, wrong_attempts, work_id
+      const expiresAt = yield* provePendingBrowserPairing({
+        db,
+        pairingId: proof.value.pairingId,
+        privateVerifier: proof.value.privateVerifier,
+      }).pipe(Effect.mapError(() => undefined));
+      if (Option.isNone(expiresAt)) return invalid();
+      const current = yield* Clock.currentTimeMillis;
+      const publicCode = proof.value.combinedCode.slice(0, publicCodeLength);
+      const raw = yield* attempt(() =>
+        db
+          .prepare(`SELECT proof_digest, wrong_attempts, work_id
       FROM (SELECT rowid,id AS pairing_id,email_work_id AS work_id,email_user_id AS user_id,email_address,email_credential_verified_at_ms AS credential_verified_at_ms,email_state AS state,email_public_code AS public_code,email_proof_digest AS proof_digest,email_proof_expires_at_ms AS proof_expires_at_ms,email_expires_at_ms AS expires_at_ms,email_generation AS generation,email_wrong_attempts AS wrong_attempts,email_last_requested_at_ms AS last_requested_at_ms,email_dispatch_attempted_at_ms AS dispatch_attempted_at_ms FROM browser_login_pairings WHERE email_work_id IS NOT NULL) AS browser_pairing_email_proofs WHERE pairing_id = ? AND public_code = ?
         AND state = 'awaiting_proof' AND proof_expires_at_ms > ? AND expires_at_ms > ?`)
-            .bind(proof.value.pairingId, publicCode, current, current)
-            .first()
+          .bind(proof.value.pairingId, publicCode, current, current)
+          .first()
+      );
+      if (raw === null) return invalid();
+      const row = Schema.decodeUnknownOption(EmailProofRow)(raw);
+      if (Option.isNone(row)) return unavailable();
+      const candidateDigest = yield* attempt(() =>
+        digest(proof.value.combinedCode.slice(secretOffset))
+      );
+      const decisionAt = yield* Clock.currentTimeMillis;
+      if (!equalDigest(row.value.proof_digest, candidateDigest)) {
+        yield* attempt(() =>
+          rejectWrongEmailProof(db, {
+            workId: row.value.work_id,
+            publicCode,
+            current: decisionAt,
+          })
         );
-        if (raw === null) return invalid();
-        const row = Schema.decodeUnknownOption(EmailProofRow)(raw);
-        if (Option.isNone(row)) return unavailable();
-        if (
-          !equalDigest(
-            row.value.proof_digest,
-            yield* attempt(() => digest(proof.value.combinedCode.slice(secretOffset)))
-          )
-        ) {
-          yield* attempt(() => rejectWrongEmailProof(db, row.value.work_id));
-          return invalid();
-        }
-        if (
-          !(yield* attempt(() =>
-            approveEmailPairing(db, {
-              pairingId: proof.value.pairingId,
-              workId: row.value.work_id,
-              publicCode,
-              current,
-            })
-          ))
-        ) {
-          return invalid();
-        }
-        return Response.json(
-          { status: "pairing_approved" },
-          { headers: { "cache-control": "no-store" } }
-        );
+        return invalid();
       }
+      if (
+        !(yield* attempt(() =>
+          approveEmailPairing(db, {
+            pairingId: proof.value.pairingId,
+            workId: row.value.work_id,
+            publicCode,
+            current: decisionAt,
+          })
+        ))
+      ) {
+        return invalid();
+      }
+      return Response.json(
+        { status: "pairing_approved" },
+        { headers: { "cache-control": "no-store" } }
+      );
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
   );

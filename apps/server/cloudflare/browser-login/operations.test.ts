@@ -4,6 +4,7 @@ import { afterAll, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { retainedRecoveryPairingsQuery } from "../recovery/operations";
 import { makeWebSessionErasureStores } from "../web-session/runtime";
+import { makeBrowserLoginErasureStores } from "./runtime";
 import {
   approveBrowserPairing,
   prepareProvedBrowserPairingApproval,
@@ -316,6 +317,57 @@ const redeem = (db: D1Database, privateVerifier: string): Promise<Response> =>
       }),
     })
   );
+
+it("erases superseded WhatsApp approval metadata only for the requested User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(approvalFixture);
+      expect(
+        yield* Effect.tryPromise(() =>
+          approvePairing(db, pairingId, { channel: "whatsapp", current: approvalTime })
+        )
+      ).toBe(true);
+      expect(
+        yield* Effect.tryPromise(() =>
+          approvePairing(db, newerPairing, { channel: "whatsapp", current: approvalTime })
+        )
+      ).toBe(true);
+      const reference = "pairing-erasure";
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,?,'Draining')"
+            )
+            .bind(reference, approvalUser, approvalTime),
+          db
+            .prepare(
+              "INSERT INTO erasure_steps(request_id,store_id) VALUES(?,'browser_login_pairings')"
+            )
+            .bind(reference),
+          db.prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?").bind(reference),
+        ])
+      );
+      const store = Option.getOrThrow(Option.fromUndefinedOr(makeBrowserLoginErasureStores(db)[0]));
+      expect(
+        (yield* Effect.result(
+          store.remove({ reference, userId: "10000000-0000-4000-8000-000000000002" })
+        ))._tag
+      ).toBe("Failure");
+      expect((yield* Effect.tryPromise(() => pairingStates(db))).length).toBe(2);
+      expect(yield* store.remove({ reference, userId: approvalUser })).toBe(true);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM browser_login_pairings WHERE approval_user_id=?"
+            )
+            .bind(approvalUser)
+            .first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
 
 it("invalidates the fifth wrong verifier without pacing it or extending expiry", () =>
   Effect.runPromise(

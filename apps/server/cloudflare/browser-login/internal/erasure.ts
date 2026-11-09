@@ -15,17 +15,17 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     quiescence: { _tag: "Synchronous" },
 
     candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM browser_login_pairings r WHERE r.user_id=?",
-      params: [userId],
+      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM browser_login_pairings r WHERE r.user_id=? OR r.approval_user_id=?",
+      params: [userId, userId],
     }),
     remaining: (userId) => ({
-      sql: "SELECT 1 FROM browser_login_pairings r WHERE r.user_id=?",
-      params: [userId],
+      sql: "SELECT 1 FROM browser_login_pairings r WHERE r.user_id=? OR r.approval_user_id=?",
+      params: [userId, userId],
     }),
     remove: (scope) => [
       {
-        sql: "DELETE FROM browser_login_pairings AS r WHERE r.user_id=? AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
-        params: [scope.userId, scope.rowRefsJson],
+        sql: "DELETE FROM browser_login_pairings AS r WHERE (r.user_id=? OR r.approval_user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
+        params: [scope.userId, scope.userId, scope.rowRefsJson],
       },
     ],
   },

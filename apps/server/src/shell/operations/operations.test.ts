@@ -26,7 +26,10 @@ it("keeps mailbox-proof replacement out of atomic batches", () => {
       callId,
       operation: "emailAuthentication.completeEmailReplacement",
       input: {
-        payload: { combinedCode: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ" },
+        payload: {
+          candidateEmail: "new@example.test",
+          combinedCode: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
+        },
       },
     })._tag
   ).toBe("None");

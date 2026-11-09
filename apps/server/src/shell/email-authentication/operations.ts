@@ -55,7 +55,7 @@ export const completeEmailReplacement = ({
 > =>
   Effect.gen(function* () {
     const mutation = yield* EmailReplacementMutation;
-    if (!(yield* mutation.complete(caller.resolved.subjectUserId, input.payload.combinedCode))) {
+    if (!(yield* mutation.complete(caller.resolved.subjectUserId, input.payload))) {
       return yield* EmailReplacementInvalidApi.make({ error: emailReplacementInvalidBody.error });
     }
     return { data: { status: "replaced" }, next: [] } as const;

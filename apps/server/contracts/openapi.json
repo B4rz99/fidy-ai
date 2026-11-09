@@ -25386,11 +25386,15 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "candidateEmail": {
+                    "$ref": "#/components/schemas/EmailAddressEncoded"
+                  },
                   "combinedCode": {
                     "$ref": "#/components/schemas/EmailVerificationCode"
                   }
                 },
                 "required": [
+                  "candidateEmail",
                   "combinedCode"
                 ],
                 "type": "object"

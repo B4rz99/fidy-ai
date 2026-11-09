@@ -106,7 +106,7 @@ const makeComplete = (apiClient: FidyClient): ReplacementCommand<CompleteCommand
         const client = yield* apiClient;
         const result = yield* Effect.result(
           client.emailAuthentication.completeEmailReplacement({
-            payload: { combinedCode: decoded.value },
+            payload: { candidateEmail, combinedCode: decoded.value },
           })
         );
         yield* Effect.sync(() => {

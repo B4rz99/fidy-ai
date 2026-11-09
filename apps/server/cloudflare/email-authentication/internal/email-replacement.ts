@@ -262,22 +262,21 @@ export const completeEmailReplacement = ({
 
 const redeemProof = (
   db: D1Database,
-  input: {
+  input: CompleteEmailReplacementPayload & {
     session: { readonly id: string; readonly user_id: string };
-    combinedCode: string;
     current: number;
   }
 ): Promise<boolean> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { session, combinedCode, current } = input;
+      const { session, candidateEmail, combinedCode, current } = input;
       const publicCode = combinedCode.slice(0, proofPublicLength);
       const raw = yield* attempt(() =>
         db
           .prepare(`SELECT user_id, work_id, proof_digest FROM email_replacements
       WHERE user_id = ? AND session_id = ? AND state = 'awaiting_proof'
-        AND public_code = ? AND proof_expires_at_ms > ? AND expires_at_ms > ?`)
-          .bind(session.user_id, session.id, publicCode, current, current)
+        AND candidate_email = ? AND public_code = ? AND proof_expires_at_ms > ? AND expires_at_ms > ?`)
+          .bind(session.user_id, session.id, candidateEmail, publicCode, current, current)
           .first()
       );
       const proof = Schema.decodeUnknownOption(Proof)(raw);
@@ -303,6 +302,7 @@ const redeemProof = (
             userId: session.user_id,
             sessionId: session.id,
             publicCode,
+            candidateEmail,
             current,
           })
         )
@@ -347,10 +347,10 @@ const replacementAdapter = ({
       Effect.orDie
     );
   },
-  complete: (subject, combinedCode) =>
+  complete: (subject, proof) =>
     subject === session.user_id
       ? Effect.tryPromise({
-          try: () => redeemProof(db, { session, combinedCode, current }),
+          try: () => redeemProof(db, { session, ...proof, current }),
           catch: () => new ReplacementDatabaseUnavailable({ operation: "complete" }),
         }).pipe(Effect.orDie)
       : Effect.die("Email replacement subject mismatch"),
@@ -416,10 +416,11 @@ const commitReplacement = (
     userId: string;
     sessionId: string;
     publicCode: string;
+    candidateEmail: CompleteEmailReplacementPayload["candidateEmail"];
     current: number;
   }
 ): Promise<D1Result[]> => {
-  const { workId, userId, sessionId, publicCode, current } = input;
+  const { workId, userId, sessionId, publicCode, candidateEmail, current } = input;
   const session = freshSessionQuery({
     subject: { sql: "SELECT r.session_id AS sessionId, r.user_id AS userId", params: [] },
     current,
@@ -432,7 +433,7 @@ const commitReplacement = (
           SELECT candidate_email FROM email_replacements WHERE work_id = ?), verified_at_ms = ?
         WHERE user_id = ? AND EXISTS (SELECT 1 FROM email_replacements AS r
           WHERE r.work_id = ? AND r.user_id = ? AND r.session_id = ?
-            AND r.state = 'awaiting_proof' AND r.public_code = ?
+            AND r.state = 'awaiting_proof' AND r.public_code = ? AND r.candidate_email = ?
             AND r.proof_expires_at_ms > ? AND r.expires_at_ms > ?
             AND EXISTS (${session.sql})
             AND verified_email_credentials.address = r.prior_email
@@ -445,6 +446,7 @@ const commitReplacement = (
             userId,
             sessionId,
             publicCode,
+            candidateEmail,
             current,
             current,
             ...session.params

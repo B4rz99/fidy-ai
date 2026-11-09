@@ -43,6 +43,7 @@ const emailReplacementFreshError = {
 
 /** Body accepted by the first-party browser replacement-completion endpoint. */
 export const CompleteEmailReplacementPayload = Schema.Struct({
+  candidateEmail: EmailAddress,
   combinedCode: EmailVerificationCode,
 });
 export type CompleteEmailReplacementPayload = typeof CompleteEmailReplacementPayload.Type;
@@ -261,7 +262,7 @@ export type EmailDeliveryPortService = {
 /** Cloudflare's transaction adapter; the canonical implementation owns the operation result. */
 export type EmailReplacementMutationService = Readonly<{
   request: (subject: UserId, candidate: EmailAddress) => Effect.Effect<void>;
-  complete: (subject: UserId, combinedCode: string) => Effect.Effect<boolean>;
+  complete: (subject: UserId, proof: CompleteEmailReplacementPayload) => Effect.Effect<boolean>;
 }>;
 
 /** Trusted static subject query carries exact pairingId/userId for live same-User composition. */

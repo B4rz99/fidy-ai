@@ -285,6 +285,17 @@ and uncertain completion discard private proof and explain fresh sign-in; no mut
 recovery redisclosure. Authentication can succeed after Consent withdrawal while ordinary work
 remains gated. Personal and work/school Microsoft accounts are accepted; initial WhatsApp linking is installed under #1091.
 
+The mounted task synchronously reserves a start before opening its blank popup, and reserves
+association acceptance and recovery acknowledgement before their effects. This closes repeated-action
+races independently of rendered controls. Each action belongs to its exact local generation and
+phase; retaining an earlier action cannot accept a later review or redeem a different attempt.
+Provider and chat observation share the original pairing expiry and mounted polling cadence.
+An eligible WhatsApp-handoff retry retains its original private pairing and deadline. Completion
+is latched before dispatch, and late responses, recovery disclosure and redemption navigation are
+fenced after cancellation, restart or disposal. A lost completion remains uncertain and requires
+fresh login; preparing a popup or WhatsApp message never supplies authenticated native approval.
+Provider identity, disclosure validation and atomic proof consumption remain server-owned.
+
 The single `/login` route composes provider and channel/mailbox Browser Login as mutually exclusive mounted steps. Both Google and Microsoft are visible choices. Switching methods disposes private attempt state without changing the validated public continuation. Every successful method loads a new destination document to restore strict opener isolation. One shared allowlisted destination decoder preserves CLI, OAuth review, institution continuation, PAT review and Account settings; no caller-supplied redirect is accepted.
 
 The optional channel/mailbox Browser Login begins at `/login`. The browser retains the private verifier while WhatsApp

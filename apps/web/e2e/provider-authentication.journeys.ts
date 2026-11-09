@@ -9,7 +9,8 @@ import {
 } from "./real-core-fixture";
 import { invokeRecoveryOperator } from "../../cli/test/recovery-operator.test-fixture";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
-import { type Cause, Clock, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
+import { StartedBrowserLoginPairing } from "@fidy/server/client";
 
 export type ProviderJourneyConfiguration = Readonly<{
   provider: "google" | "microsoft";
@@ -96,7 +97,10 @@ const holdProviderStatus = (
 ): Effect.Effect<HeldStatus, Cause.UnknownError> =>
   Effect.gen(function* () {
     let release = Option.none<() => Promise<void>>();
+    let retained = false;
     const hold = (route: Route): Promise<void> => {
+      if (retained) return route.continue();
+      retained = true;
       const retainResponse = (response: APIResponse): void => {
         expect(response.status()).toBe(successStatus);
         release = Option.some(route.fulfill.bind(route, { response }));
@@ -121,9 +125,6 @@ const retryStalledProvider = ({
     outcome: string;
   }>): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() =>
-      page.unroute(`**/web/providers/${configuration.provider}/status`)
-    );
     yield* Effect.tryPromise(() => context.unroute(configuration.authorizationPattern));
     yield* Effect.tryPromise(() =>
       context.route(configuration.authorizationPattern, (route) =>
@@ -287,15 +288,17 @@ export const stalledProviderJourney = ({
           ? "No se completó el acceso. Puedes iniciar un nuevo intento."
           : "Cancelaste el acceso.";
       yield* Effect.tryPromise(() => expect(page.getByText(message)).toBeVisible());
-      yield* Effect.tryPromise(held.release);
-      yield* Effect.tryPromise(() => page.clock.runFor(lateResponseAdvance));
-      yield* Effect.tryPromise(() => expect(page.getByText(message)).toBeVisible());
       expect(
         (yield* Effect.tryPromise(() => context.cookies())).some(
           (cookie) => cookie.name === "__Host-fidy_session"
         )
       ).toBe(false);
       yield* retryStalledProvider({ page, context, configuration, outcome });
+      yield* Effect.tryPromise(held.release);
+      yield* Effect.tryPromise(() => page.clock.runFor(lateResponseAdvance));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
+      );
     })
   );
 
@@ -753,7 +756,13 @@ export const pendingRedemptionJourney = ({
           redirectSubject(configuration, `pending-redemption-${configuration.provider}`, route)
         )
       );
-      yield* Effect.tryPromise(() => page.route("**/web/pairings/redeem", pendingRedemption));
+      let redemptions = 0;
+      yield* Effect.tryPromise(() =>
+        page.route("**/web/pairings/redeem", (route) => {
+          redemptions += 1;
+          return pendingRedemption(route);
+        })
+      );
       yield* Effect.tryPromise(() => openSignup(page));
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
@@ -762,8 +771,14 @@ export const pendingRedemptionJourney = ({
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
       );
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Lo guardé" }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Lo guardé" }).evaluate((button) => {
+          button.click();
+          button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        })
+      );
       yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
+      expect(redemptions).toBe(1);
       expect(
         (yield* Effect.tryPromise(() => context.cookies())).some(
           (cookie) => cookie.name === "__Host-fidy_session"
@@ -1188,10 +1203,26 @@ const sendPreparedConfirmation = ({
         Clock.currentTimeMillis.pipe(Effect.map((now) => now - reviewVisibleAt))
       );
     const returned = context.waitForEvent("page");
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Vincular y volver a WhatsApp" }).click()
+    const pagesBeforeApproval = context.pages().length;
+    const openings = yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular y volver a WhatsApp" }).evaluate((button) => {
+        const open = window.open;
+        let openings = 0;
+        window.open = (...args): ReturnType<typeof open> => {
+          openings += 1;
+          if (openings === 1) button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+          return open(...args);
+        };
+        button.click();
+        window.open = open;
+        return openings;
+      })
     );
+    expect(openings).toBe(1);
     const whatsapp = yield* Effect.tryPromise(() => returned);
+    yield* Effect.tryPromise(() =>
+      expect.poll(() => context.pages().length).toBe(pagesBeforeApproval + 1)
+    );
     yield* Effect.tryPromise(() => whatsapp.waitForURL("https://wa.me/12056871742?**"));
     const preparedText = new URL(whatsapp.url()).searchParams.get("text") ?? "";
     expect(preparedText).toContain(`Vincular ${configuration.label}:`);
@@ -1258,5 +1289,232 @@ export const whatsappLinkSignupJourney = ({
           (cookie) => cookie.name === "__Host-fidy_session"
         )
       ).toBe(true);
+    })
+  );
+
+export const duplicateProviderActionJourney = ({
+  configuration,
+  page,
+  context,
+}: ProviderJourney & Readonly<{ configuration: ProviderJourneyConfiguration }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let pairings = 0;
+      let starts = 0;
+      let popups = 0;
+      page.on("popup", () => {
+        popups += 1;
+      });
+      page.on("request", (request) => {
+        const path = new URL(request.url()).pathname;
+        if (path === "/web/pairings") pairings += 1;
+        if (path === `/web/providers/${configuration.provider}/start`) starts += 1;
+      });
+      yield* Effect.tryPromise(() =>
+        context.route(configuration.authorizationPattern, pendingProvider)
+      );
+      yield* Effect.tryPromise(() => openSignup(page));
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Acepto el tratamiento de datos descrito").check()
+      );
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("button", { name: `Continuar con ${configuration.label}` })
+          .evaluate((button) => {
+            const open = window.open;
+            window.open = (...args): ReturnType<typeof open> => {
+              window.open = open;
+              button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+              return open(...args);
+            };
+            button.click();
+          })
+      );
+      yield* Effect.tryPromise(() => expect.poll(() => starts).toBe(1));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Esperando confirmación…")).toBeVisible()
+      );
+      expect(pairings).toBe(1);
+      expect(popups).toBe(1);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cancelar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText(`Si sigue abierta, cierra la ventana de ${configuration.label}.`)
+        ).toBeVisible()
+      );
+      expect(
+        (yield* Effect.tryPromise(() => context.cookies())).some(
+          (cookie) => cookie.name === "__Host-fidy_session"
+        )
+      ).toBe(false);
+    })
+  );
+
+const shortPairingLifetime = 5_000;
+const expiredPairingAdvance = 6_000;
+const shortenPairingLifetime = (route: Route, page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const response = yield* Effect.tryPromise(() => route.fetch());
+      const pairing = yield* Schema.decodeUnknownEffect(StartedBrowserLoginPairing)(
+        yield* Effect.tryPromise(() => response.json())
+      );
+      const now = yield* Effect.tryPromise(() => page.evaluate(() => Date.now()));
+      const body = yield* Schema.encodeEffect(StartedBrowserLoginPairing)({
+        ...pairing,
+        expiresAt: DateTime.makeUnsafe(now + shortPairingLifetime),
+      });
+      yield* Effect.tryPromise(() => route.fulfill({ response, json: body }));
+    })
+  );
+export const expiredAssociationJourney = ({
+  configuration,
+  page,
+  context,
+  request,
+}: ProviderJourney & Readonly<{ configuration: ProviderJourneyConfiguration }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => installAcceptanceClock(page));
+      yield* Effect.tryPromise(() =>
+        context.route(configuration.authorizationPattern, (route) =>
+          redirectSubject(configuration, `expired-review-${configuration.provider}`, route)
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        page.route("**/web/pairings", (route) => shortenPairingLifetime(route, page))
+      );
+      yield* enterWhatsAppSignup({ page, request, configuration });
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Vincular y volver a WhatsApp" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.clock.fastForward(expiredPairingAdvance));
+      const openings = yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Vincular y volver a WhatsApp" }).evaluate((button) => {
+          const open = window.open;
+          let openings = 0;
+          window.open = (...args): ReturnType<typeof open> => {
+            openings += 1;
+            return open(...args);
+          };
+          button.click();
+          window.open = open;
+          return openings;
+        })
+      );
+      expect(openings).toBe(0);
+      yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
+      expect(
+        (yield* Effect.tryPromise(() => context.cookies())).some(
+          (cookie) => cookie.name === "__Host-fidy_session"
+        )
+      ).toBe(false);
+    })
+  );
+
+const holdCommittedCompletion = (
+  page: Page,
+  provider: ProviderJourneyConfiguration["provider"]
+): Effect.Effect<HeldStatus & Readonly<{ completions: () => number }>, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    let release = Option.none<() => Promise<void>>();
+    let completions = 0;
+    const hold = (route: Route): Promise<void> => {
+      completions += 1;
+      return route.fetch().then((response) => {
+        expect(response.status()).toBe(successStatus);
+        release = Option.some(() => route.fulfill({ response }));
+      });
+    };
+    yield* Effect.tryPromise(() => page.route(`**/web/providers/${provider}/complete`, hold));
+    return {
+      ready: () => Option.isSome(release),
+      release: () => Option.getOrThrow(release)(),
+      completions: () => completions,
+    };
+  });
+const leaveDispatchedCompletion = (
+  page: Page,
+  outcome: "cancel" | "leave"
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    if (outcome === "cancel") {
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cancelar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("La cuenta podría haberse creado", { exact: false })).toBeVisible()
+      );
+    } else {
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Opciones de inicio de sesión" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Iniciar sesión", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Correo verificado", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Entra con tu correo" })).toBeVisible()
+      );
+    }
+  });
+export const lateCompletionJourney = ({
+  configuration,
+  page,
+  context,
+  outcome,
+}: ProviderJourney &
+  Readonly<{
+    configuration: ProviderJourneyConfiguration;
+    outcome: "cancel" | "leave";
+  }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let redemptions = 0;
+      page.on("request", (request) => {
+        if (new URL(request.url()).pathname === "/web/pairings/redeem") redemptions += 1;
+      });
+      yield* Effect.tryPromise(() =>
+        context.route(configuration.authorizationPattern, (route) =>
+          redirectSubject(
+            configuration,
+            `late-complete-${outcome}-${configuration.provider}`,
+            route
+          )
+        )
+      );
+      const held = yield* holdCommittedCompletion(page, configuration.provider);
+      yield* Effect.tryPromise(() => openSignup(page));
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Acepto el tratamiento de datos descrito").check()
+      );
+      yield* continueAfterProviderCallback(page, configuration);
+      yield* Effect.tryPromise(() => expect.poll(held.ready).toBe(true));
+      yield* leaveDispatchedCompletion(page, outcome);
+      yield* Effect.tryPromise(held.release);
+      yield* Effect.tryPromise(() => page.clock.runFor(lateResponseAdvance));
+      expect(held.completions()).toBe(1);
+      expect(redemptions).toBe(0);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Código de recuperación", { exact: true })).toHaveCount(0)
+      );
+      if (outcome === "cancel") {
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Ir a iniciar sesión" })).toBeVisible()
+        );
+      } else {
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("heading", { name: "Entra con tu correo" })).toBeVisible()
+        );
+      }
+      expect(
+        (yield* Effect.tryPromise(() => context.cookies())).some(
+          (cookie) => cookie.name === "__Host-fidy_session"
+        )
+      ).toBe(false);
     })
   );

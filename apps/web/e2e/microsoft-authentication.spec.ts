@@ -1,7 +1,10 @@
 import { playwright } from "./playwright-runtime";
 import {
   denialAndCancellationJourney,
+  duplicateProviderActionJourney,
+  expiredAssociationJourney,
   isolateProviderSource,
+  lateCompletionJourney,
   signupJourney,
   whatsappAssociationJourney,
   whatsappLinkSignupJourney,
@@ -42,3 +45,23 @@ playwright.test(
   ({ page, context, request }) =>
     whatsappLinkSignupJourney({ configuration, page, context, request })
 );
+
+playwright.test(
+  "repeated provider actions in the opening gesture admit one popup and one attempt",
+  ({ page, context, request }) =>
+    duplicateProviderActionJourney({ configuration, page, context, request })
+);
+
+playwright.test(
+  "association review cannot renew the original browser proof lifetime",
+  ({ page, context, request }) =>
+    expiredAssociationJourney({ configuration, page, context, request })
+);
+
+for (const outcome of ["cancel", "leave"] as const) {
+  playwright.test(
+    `a committed completion arriving after ${outcome} cannot restore recovery or redeem`,
+    ({ page, context, request }) =>
+      lateCompletionJourney({ configuration, page, context, request, outcome })
+  );
+}

@@ -63,7 +63,7 @@ export const PrivacyTransactions = (): JSX.Element => {
     <Suspense fallback={<PrivacyPending />}>
       <TransactionWorkspace
         captureHistoryVersion={Option.none()}
-        key={history.generation}
+        generation={history.generation}
         readOnly
         locate={Option.none()}
         monthFilter={Option.none()}

@@ -17,6 +17,9 @@ import {
 } from "@/transport/client";
 
 type Work = (get: Atom.FnContext) => Effect.Effect<void>;
+type BindingFailure = Effect.Error<
+  ReturnType<Context.Service.Shape<WebAuthClient>["browserSession"]["binding"]>
+>;
 type Dispatch = (input: void | typeof Atom.Interrupt) => void;
 type Owner = {
   apiClient: FidyClient;
@@ -122,7 +125,25 @@ const setUncertain = (owner: Owner, uncertain: boolean): void => {
   owner.uncertain = uncertain;
   owner.onUncertain(uncertain);
 };
-const complete = ({ owner, dispatch, generation }: Intent, combinedCode: string): void => {
+const prepareCompletion = (
+  { owner, generation }: Intent,
+  get: Atom.FnContext
+): Effect.Effect<Context.Service.Shape<FidyClient>, BindingFailure | void> =>
+  Effect.gen(function* () {
+    const context = yield* get.result(owner.webAuthClient.runtime, { suspendOnWaiting: true });
+    const authentication = Context.get(context, owner.webAuthClient);
+    const observation = yield* authentication.browserSession.binding({ query: {} });
+    if (!live(owner, generation) || observation.binding !== owner.binding) {
+      return yield* Effect.fail(undefined);
+    }
+    const client = yield* owner.apiClient;
+    if (!live(owner, generation)) return yield* Effect.interrupt;
+    if (!retainReplacementAdmission(owner.binding)) return yield* Effect.fail(undefined);
+    setUncertain(owner, true);
+    return client;
+  });
+const complete = (intent: Intent, combinedCode: string): void => {
+  const { owner, dispatch, generation } = intent;
   const state = owner.state;
   if (!live(owner, generation) || (state._tag !== "AwaitingCode" && state._tag !== "InvalidCode")) {
     return;
@@ -136,30 +157,23 @@ const complete = ({ owner, dispatch, generation }: Intent, combinedCode: string)
   change(owner, { _tag: "Completing", candidateEmail });
   owner.pending = Option.some((get) =>
     Effect.gen(function* () {
-      let submitted = false;
+      const prepared = yield* Effect.exit(prepareCompletion(intent, get));
+      if (!live(owner, generation)) return;
+      if (Exit.isFailure(prepared)) {
+        clearReplacementAdmission(owner.binding);
+        setUncertain(owner, false);
+        change(owner, { _tag: "PreparationUnavailable" });
+        return;
+      }
       const result = yield* Effect.exit(
-        Effect.gen(function* () {
-          const context = yield* get.result(owner.webAuthClient.runtime, {
-            suspendOnWaiting: true,
-          });
-          const authentication = Context.get(context, owner.webAuthClient);
-          const observation = yield* authentication.browserSession.binding({ query: {} });
-          if (!live(owner, generation)) return yield* Effect.interrupt;
-          if (observation.binding !== owner.binding || !retainReplacementAdmission(owner.binding)) {
-            return yield* Effect.fail(undefined);
-          }
-          setUncertain(owner, true);
-          const client = yield* owner.apiClient;
-          submitted = true;
-          return yield* client.emailAuthentication.completeEmailReplacement({
-            payload: { candidateEmail, combinedCode: code.value },
-          });
+        prepared.value.emailAuthentication.completeEmailReplacement({
+          payload: { candidateEmail, combinedCode: code.value },
         })
       );
       if (!live(owner, generation)) return;
-      let next: EmailReplacementViewState = { _tag: "PreparationUnavailable" };
-      if (Exit.isSuccess(result)) next = { _tag: "Replaced" };
-      else if (submitted) next = failureState(result.cause, candidateEmail, true);
+      const next = Exit.isSuccess(result)
+        ? { _tag: "Replaced" as const }
+        : failureState(result.cause, candidateEmail, true);
       if (next._tag !== "Uncertain") clearReplacementAdmission(owner.binding);
       setUncertain(owner, next._tag === "Uncertain");
       change(owner, next);

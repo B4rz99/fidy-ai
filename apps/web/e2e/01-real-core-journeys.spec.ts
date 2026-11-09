@@ -707,12 +707,19 @@ test("does not submit replacement when its unresolved admission cannot be retain
       );
       yield* fromPlaywright(
         page.evaluate(() => {
-          const original = Storage.prototype.setItem;
+          const session = window.sessionStorage;
+          const writeSession = session.setItem.bind(session);
+          const local = window.localStorage;
+          const writeLocal = local.setItem.bind(local);
           Storage.prototype.setItem = function (this: Storage, key: string, value: string): void {
-            if (key === "fidy:email-replacement-admission-v1") {
-              throw new DOMException("Unavailable", "SecurityError");
+            if (this === session) {
+              if (key === "fidy:email-replacement-admission-v1") {
+                throw new DOMException("Unavailable", "SecurityError");
+              }
+              writeSession(key, value);
+              return;
             }
-            original.call(this, key, value);
+            writeLocal(key, value);
           };
         })
       );

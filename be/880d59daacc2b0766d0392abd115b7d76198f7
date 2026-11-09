@@ -1,0 +1,19 @@
+apps/web/e2e/transaction-pagination.spec.ts
+  s_617e4709660962::t_f8fc954886c6b3 855-856,861-863
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be880d59daacc2b0766d0392abd115b7d76198f7",
+  "prompts": {},
+  "sessions": {
+    "s_617e4709660962": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d57bef93d808",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

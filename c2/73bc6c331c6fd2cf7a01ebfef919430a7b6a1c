@@ -1,0 +1,14 @@
+apps/web/src/features/transactions/corrections.ts
+  h_c6d49c804e0ad2 312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c273bc6c331c6fd2cf7a01ebfef919430a7b6a1c",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

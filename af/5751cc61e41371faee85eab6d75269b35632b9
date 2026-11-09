@@ -1,0 +1,60 @@
+apps/web/src/features/transactions/scroll-restoration.ts
+  s_617e4709660962::t_fe18472131a7ba 1-23
+apps/web/src/features/transactions/view-state.ts
+  s_617e4709660962::t_c5549c4934a13e 1,26,31-38,49-53,55,60,83-91,116
+  s_617e4709660962::t_f2f436ffeed5cb 4,8,14-25,27-28,30,110-114,117,120-121
+  s_617e4709660962::t_1f41bf924e2557 43,45,59,61-80
+  s_617e4709660962::t_898abf1fb9d1d3 44
+  s_617e4709660962::t_dbaa3c11bc9d98 6,13,29,115
+  s_617e4709660962::t_612e6bd02b4dab 7,41,54,56-58,81-82,118-119
+  s_617e4709660962::t_fd49fb5262c4e3 5,9
+  s_617e4709660962::t_bd15953dc00ac4 2-3,48,98-99,105-106
+  s_617e4709660962::t_d0a617b5ad8d08 10-12,39-40,42,46-47,92-97,100-104
+  s_617e4709660962::t_8dff3434a857e6 107-109
+apps/web/src/features/transactions/workspace.tsx
+  s_617e4709660962::t_c6ba9b95fb5bd5 802-807
+  s_617e4709660962::t_7cdaeb0e307dda 26-31,55,84,470,724,778-798,801,819
+apps/web/e2e/transaction-pagination.spec.ts
+  s_617e4709660962::t_a26148e01f1960 241,300
+  s_617e4709660962::t_c6ba9b95fb5bd5 197-223,225,245,258,268,276,286,291,305
+  s_617e4709660962::t_a617078140bec5 16-22,180-196,224,226-240,242-244,246-257,259-267,269-275,277-285,287-290,292-299,301-304,306-317,586,609,686
+apps/web/e2e/transactions-approved.spec.ts
+  s_617e4709660962::t_a26148e01f1960 608-618
+  s_617e4709660962::t_e70b89fb85392f 24-36,557-607,619-724,813-886
+.oxlintrc.json
+  s_617e4709660962::t_4ca944407d9af3 183-187
+apps/web/ARCHITECTURE.md
+  s_617e4709660962::t_91c50da70d2175 126-142
+apps/web/src/app/routes.ts
+  s_617e4709660962::t_2daff5c7e9b745 406-409
+apps/web/src/features/transactions/corrections.test.ts
+  s_617e4709660962::t_9c4cf59eb051ce 124,391
+apps/web/src/features/transactions/corrections.ts
+  s_617e4709660962::t_eed314f3b76f29 10,14,57-58,203-212,255,307,312
+apps/web/src/features/transactions/history.ts
+  s_617e4709660962::t_30f0af93c92387 18,22,26,29,140-151,154,156-158,160,162,164,166-174,186,192,194,208,218,220,225,227
+apps/web/src/features/transactions/list-feature.tsx
+  s_617e4709660962::t_6bf8bbb513fb9d 8-13,20-27,37,237-271,277-279,282,288,292-296,301,306,313,315,318-322,363-369,465-466,515,520,524
+apps/web/src/features/transactions/privacy-view.tsx
+  s_617e4709660962::t_add1141fb9e3e4 66
+apps/web/src/features/transactions/query.test.ts
+  s_617e4709660962::t_e436905580d407 148
+apps/web/src/transport/client.ts
+  s_617e4709660962::t_a3e2289a9e1031 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "af5751cc61e41371faee85eab6d75269b35632b9",
+  "prompts": {},
+  "sessions": {
+    "s_617e4709660962": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1bb55-e6f3-7301-8ea7-d57bef93d808",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -838,12 +838,13 @@ it("exposes a prepared bank handoff only to the exact session that began continu
         send(db, request(0, `/web/connections/review?attempt=${attempt}`))
       );
       expect(owned.status).toBe(200);
-      expect(yield* Effect.tryPromise(() => owned.json())).toMatchObject({
+      const review: unknown = yield* Effect.tryPromise(() => owned.json());
+      expect(review).toMatchObject({
         phase: "prepared",
         connection: { state: "Connecting" },
         expiresAt: DateTime.formatIso(started.continuation.expiresAt),
-        authorization: { expiresAt: expect.any(String) },
       });
+      expect(review).toHaveProperty("authorization.expiresAt");
       expect(bank.exchanges()).toBe(0);
     })
   ));

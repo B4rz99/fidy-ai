@@ -3,13 +3,8 @@ import { PendingRead } from "@/ui/components/pending-read";
 import { Key01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { DateTime, Option } from "effect";
-import { type JSX, type ReactNode, useState } from "react";
-import {
-  type ActivePATList,
-  type ActivePATMetadata,
-  type TokenShortId,
-  patScopeCopy,
-} from "@/transport/client";
+import { type JSX, type ReactNode, type RefCallback } from "react";
+import { type ActivePATList, type ActivePATMetadata, patScopeCopy } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
@@ -22,18 +17,8 @@ import {
   TableRow,
 } from "@/ui/components/table";
 import { formatPATDate } from "./presentation";
+import { type PATManagementActions, type PATManagementTask } from "./management";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
-
-export type RevokeActivePATCommand = Readonly<{
-  shortId: TokenShortId;
-  onRevoked: () => void;
-  onFailed: () => void;
-}>;
-
-export type RevokeAllActivePATsCommand = Readonly<{
-  onRevoked: (revokedCount: number) => void;
-  onFailed: () => void;
-}>;
 
 export type ActivePATManagementState =
   | Readonly<{ _tag: "Initial" }>
@@ -51,8 +36,6 @@ export type ActivePATManagementState =
       refreshing: boolean;
       refreshFailed: boolean;
     }>;
-
-type Selection = TokenShortId | "all";
 
 const patDetails = (
   pat: ActivePATMetadata
@@ -171,8 +154,8 @@ const OneRevocationControl = (
     {...props}
     confirmation={
       <p>
-        ¿Quieres desactivar el token <strong>{props.pat.recipientLabel}</strong>? Dejará de
-        funcionar de inmediato.
+        ¿Quieres desactivar el token <strong>{props.pat.recipientLabel}</strong> (
+        <code>{props.pat.shortId}</code>)? Dejará de funcionar de inmediato.
       </p>
     }
     confirmLabel="Sí, desactivar"
@@ -244,68 +227,11 @@ const AllRevocationControl = (props: RevocationActionProps): JSX.Element => (
   />
 );
 
-type RevocationState =
-  | Readonly<{ _tag: "Idle"; notice: Option.Option<string> }>
-  | Readonly<{
-      _tag: "Confirming";
-      selection: Selection;
-      notice: Option.Option<string>;
-    }>
-  | Readonly<{ _tag: "Revoking"; selection: Selection }>;
-
-type RevocationController = Readonly<{
-  state: RevocationState;
-  select: (selection: Selection) => void;
-  cancel: () => void;
-  revokeOne: (shortId: TokenShortId) => void;
-  revokeAll: () => void;
-}>;
-
-const useRevocationController = (input: {
-  readonly revokeOne: (command: RevokeActivePATCommand) => void;
-  readonly revokeAll: (command: RevokeAllActivePATsCommand) => void;
-}): RevocationController => {
-  const [state, setState] = useState<RevocationState>({ _tag: "Idle", notice: Option.none() });
-  const complete = (message: string): void => {
-    setState({ _tag: "Idle", notice: Option.some(message) });
-  };
-  const fail = (selection: Selection, message: string): void => {
-    setState({ _tag: "Confirming", selection, notice: Option.some(message) });
-  };
-  const revokeOne = (shortId: TokenShortId): void => {
-    setState({ _tag: "Revoking", selection: shortId });
-    input.revokeOne({
-      shortId,
-      onRevoked: () => complete("Token desactivado. Dejó de funcionar de inmediato."),
-      onFailed: () =>
-        fail(
-          shortId,
-          "No pudimos desactivar el token. Vuelve a cargar la página e inténtalo de nuevo."
-        ),
-    });
-  };
-  const revokeAll = (): void => {
-    setState({ _tag: "Revoking", selection: "all" });
-    input.revokeAll({
-      onRevoked: (count) =>
-        complete(
-          count === 1 ? "Se desactivó 1 token activo." : `Se desactivaron ${count} tokens activos.`
-        ),
-      onFailed: () =>
-        fail(
-          "all",
-          "No pudimos desactivar todos los tokens. Vuelve a cargar la página e inténtalo de nuevo."
-        ),
-    });
-  };
-  return {
-    state,
-    select: (selection) => setState({ _tag: "Confirming", selection, notice: Option.none() }),
-    cancel: () => setState({ _tag: "Idle", notice: Option.none() }),
-    revokeOne,
-    revokeAll,
-  };
-};
+type RevocationController = Readonly<{ state: PATManagementTask; actions: PATManagementActions }>;
+const selectedAll = (state: PATManagementTask): boolean =>
+  (state._tag === "Reviewing" || state._tag === "Revoking") && state.target._tag === "All";
+const locked = (state: PATManagementTask): boolean =>
+  state._tag !== "Ready" && state._tag !== "Reviewing";
 
 const PATTableHeader = (): JSX.Element => (
   <>
@@ -336,21 +262,19 @@ const ReadyPATs = ({
   refreshFailed,
 }: Readonly<{
   pats: ActivePATList["pats"];
-  controller: ReturnType<typeof useRevocationController>;
+  controller: RevocationController;
   refreshing: boolean;
   refreshFailed: boolean;
 }>): JSX.Element => {
-  const selected = controller.state._tag === "Idle" ? undefined : controller.state.selection;
-  const revoking = controller.state._tag === "Revoking";
-  const disabled = revoking || refreshing || refreshFailed;
+  const disabled = locked(controller.state) || refreshing || refreshFailed;
   const rows = pats.map((pat) => ({
     pat,
-    cancel: controller.cancel,
-    disabled,
-    revoke: (): void => controller.revokeOne(pat.shortId),
-    revoking: revoking && selected === pat.shortId,
-    select: (): void => controller.select(pat.shortId),
-    selected: selected === pat.shortId,
+    cancel: controller.actions.cancel,
+    disabled: disabled || controller.state._tag === "Reviewing",
+    revoke: controller.actions.confirm,
+    revoking: false,
+    select: (): void => controller.actions.reviewOne(pat.shortId),
+    selected: false,
   }));
   return (
     <>
@@ -391,7 +315,7 @@ const PATQueryContent = ({
   controller,
 }: Readonly<{
   state: ActivePATManagementState;
-  controller: ReturnType<typeof useRevocationController>;
+  controller: RevocationController;
 }>): JSX.Element => {
   if (state._tag === "Initial") {
     return <PendingRead label="Cargando tokens activos" />;
@@ -450,48 +374,114 @@ const ActivePATHeading = ({
     {state._tag === "Ready" ? (
       <div
         className={
-          controller.state._tag !== "Idle" && controller.state.selection === "all"
-            ? "settings-access-confirmation"
-            : "settings-access-bulk"
+          selectedAll(controller.state) ? "settings-access-confirmation" : "settings-access-bulk"
         }
       >
         <AllRevocationControl
-          cancel={controller.cancel}
-          disabled={controller.state._tag === "Revoking" || state.refreshing || state.refreshFailed}
-          revoke={controller.revokeAll}
-          revoking={controller.state._tag === "Revoking" && controller.state.selection === "all"}
-          select={() => controller.select("all")}
-          selected={controller.state._tag !== "Idle" && controller.state.selection === "all"}
+          cancel={controller.actions.cancel}
+          disabled={
+            locked(controller.state) ||
+            state.refreshing ||
+            state.refreshFailed ||
+            (controller.state._tag === "Reviewing" && !selectedAll(controller.state))
+          }
+          revoke={controller.actions.confirm}
+          revoking={controller.state._tag === "Revoking" && selectedAll(controller.state)}
+          select={controller.actions.reviewAll}
+          selected={selectedAll(controller.state)}
         />
       </div>
     ) : null}
   </div>
 );
 
-/** Shows active-only metadata; revocation flows receive no bearer. */
+const outcomeMessage = (state: PATManagementTask): Option.Option<string> => {
+  if (state._tag === "Revoking") return Option.none();
+  if (state._tag === "Uncertain" || state._tag === "Refreshing") {
+    return Option.some(
+      "No recibimos un resultado confirmado. Actualiza los tokens antes de revisar otra desactivación. La actualización no repite la solicitud."
+    );
+  }
+  return Option.map(state.outcome, (outcome) => {
+    switch (outcome._tag) {
+      case "One":
+        return `Token desactivado. Dejó de funcionar de inmediato. Identificador: ${outcome.shortId}.`;
+      case "All":
+        return outcome.revokedCount === 1
+          ? "Se desactivó 1 token activo."
+          : `Se desactivaron ${outcome.revokedCount} tokens activos.`;
+      case "Observed": {
+        if (outcome.target._tag === "All") {
+          return "La lista está actualizada. El resultado de la desactivación anterior y su cantidad siguen sin confirmar; la lista no confirma el cierre de autorizaciones pendientes.";
+        }
+        return outcome.active
+          ? "El token figura activo. El resultado de la desactivación anterior sigue sin confirmar."
+          : "El token ya no figura activo. Esto no confirma el resultado de la desactivación anterior.";
+      }
+      case "Refused":
+        return {
+          Authority:
+            "No se admitió la desactivación. Confirma tu identidad antes de revisar otra solicitud.",
+          Consent:
+            "No se admitió la desactivación. Revisa tu autorización de tratamiento en Privacidad.",
+          NotFound: "No se encontró ese token. Actualiza la lista antes de revisar otra solicitud.",
+          Limited:
+            "No se admitió la desactivación por el límite de solicitudes. Espera antes de revisar otra solicitud.",
+          Input: "No se admitió la desactivación. Actualiza la lista y revisa la solicitud.",
+        }[outcome.reason];
+    }
+  });
+};
+
+/** Shows active-only metadata and distinguishes command receipts from current observations. */
 export const ActivePATManagementView = ({
   state,
-  revokeOne,
-  revokeAll,
+  task,
+  actions,
+  lifecycleRef,
 }: Readonly<{
   state: ActivePATManagementState;
-  revokeOne: (command: RevokeActivePATCommand) => void;
-  revokeAll: (command: RevokeAllActivePATsCommand) => void;
+  task: PATManagementTask;
+  actions: PATManagementActions;
+  lifecycleRef: RefCallback<HTMLElement>;
 }>): JSX.Element => {
-  const controller = useRevocationController({ revokeOne, revokeAll });
+  const controller = { state: task, actions };
   return (
-    <section aria-labelledby="active-pats-title" className="settings-access-section">
+    <section
+      aria-labelledby="active-pats-title"
+      className="settings-access-section"
+      ref={lifecycleRef}
+    >
       <ActivePATHeading state={state} controller={controller} />
-      {controller.state._tag !== "Revoking" &&
-        Option.match(controller.state.notice, {
-          onNone: () => null,
-          onSome: (notice) => (
-            <Alert aria-live="polite">
-              <AlertTitle>Tokens de acceso</AlertTitle>
-              <AlertDescription>{notice}</AlertDescription>
-            </Alert>
-          ),
-        })}
+      {Option.match(outcomeMessage(task), {
+        onNone: () => null,
+        onSome: (notice) => (
+          <Alert aria-live="polite">
+            <AlertTitle>
+              {task._tag === "Uncertain" || task._tag === "Refreshing"
+                ? "Desactivación sin confirmar"
+                : "Tokens de acceso"}
+            </AlertTitle>
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
+        ),
+      })}
+      {(task._tag === "Reviewing" || task._tag === "Revoking") && task.target._tag === "One" ? (
+        <OneRevocationControl
+          pat={task.target.pat}
+          selected
+          disabled={
+            task._tag === "Revoking" ||
+            state._tag !== "Ready" ||
+            state.refreshing ||
+            state.refreshFailed
+          }
+          revoking={task._tag === "Revoking"}
+          select={actions.confirm}
+          cancel={actions.cancel}
+          revoke={actions.confirm}
+        />
+      ) : null}
       <PATQueryContent controller={controller} state={state} />
     </section>
   );

@@ -444,6 +444,11 @@ Fidy never handles or stores access/refresh credentials.
 
 `/settings/access` composes independent mounted owners for manual PAT management, one-time PAT issuance and external MCP connections. Obsolete PAT and agent settings aliases are removed. The application owns composition and disposal; each feature retains its canonical client and command authority. MCP rows show declared name, approved Spanish permissions, absolute expiration and status, while duplicate names remain separate through canonical identity. Pagination belongs to the router and server resources/commands belong to the authentication registry. Individual and aggregate revocation remain separate for PATs and MCP connections. Successful commands invalidate their own list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails. The mounted manual PAT issuance module encloses review, request identity, command outcomes and same-User draft continuation. Presentation receives display state and User actions. Issued PAT bearer disclosure remains in its private child owner and is cleared when the combined page leaves the authentication lifetime; late command completion cannot restore it.
 
+Mounted PAT management owns one synchronous single/all revocation gate and retains its exact
+review independently of metadata row changes. Command receipts and current query observations stay
+separate: uncertainty permits explicit metadata recovery, never mutation replay. Authentication
+retirement and disposal fence actions and completions and interrupt owned command/recovery waits.
+
 Manual PAT review captures an immutable normalized grant and one request identity. Task actions bind
 to the rendered state and active mounted owner; editing, clearing or replacing the review invalidates
 older actions, even when the choices later match. Confirmation synchronously admits one exact

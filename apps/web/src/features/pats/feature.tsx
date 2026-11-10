@@ -1,23 +1,14 @@
-import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { Effect, Option } from "effect";
-import { Atom, Reactivity } from "effect/reactivity";
-import { workspaceQueryRetention } from "@/transport/workspace-query";
-import { type JSX, type ReactNode, useState } from "react";
+import { Option } from "effect";
+import { type JSX, type ReactNode } from "react";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { type BrowserAuthentication, useSession } from "@/session/session-context";
-import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { ManualPATCreation } from "./creation";
-import { activePATReactivityKey } from "./presentation";
-import {
-  type ActivePATManagementState,
-  ActivePATManagementView,
-  type RevokeActivePATCommand,
-  type RevokeAllActivePATsCommand,
-} from "./management-view";
+import { usePATManagement } from "./management";
+import { type ActivePATManagementState, ActivePATManagementView } from "./management-view";
 
 type PATManagementContentProps = Readonly<{
   children: (
@@ -29,8 +20,7 @@ type PATManagementContentProps = Readonly<{
   authentication: BrowserAuthentication;
   apiClient: FidyClient;
   resuming: boolean;
-  revoke: (command: RevokeActivePATCommand) => void;
-  revokeAll: (command: RevokeAllActivePATsCommand) => void;
+  management: ReturnType<typeof usePATManagement>;
 }>;
 
 const PATManagementContent = ({
@@ -41,8 +31,7 @@ const PATManagementContent = ({
   authentication,
   apiClient,
   resuming,
-  revoke,
-  revokeAll,
+  management,
 }: PATManagementContentProps): JSX.Element => (
   <SensitiveClipboardBoundary
     className={Option.some("min-w-0")}
@@ -62,8 +51,9 @@ const PATManagementContent = ({
         tokens: (
           <ActivePATManagementView
             state={activePATState}
-            revokeAll={revokeAll}
-            revokeOne={revoke}
+            task={management.task}
+            actions={management.actions}
+            lifecycleRef={management.lifecycleRef}
           />
         ),
         creation: (
@@ -74,63 +64,15 @@ const PATManagementContent = ({
   </SensitiveClipboardBoundary>
 );
 
-const makeRevokeActivePATCommand = (
-  apiClient: FidyClient
-): Atom.AtomResultFn<RevokeActivePATCommand, void, never> =>
-  apiClient.runtime.fn<RevokeActivePATCommand>()(
-    (command) =>
-      Effect.gen(function* () {
-        const client = yield* apiClient;
-        yield* Reactivity.mutation(
-          client.pats.revokePAT({ params: { shortId: command.shortId } }),
-          [activePATReactivityKey]
-        );
-        yield* Effect.sync(command.onRevoked);
-      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
-    { concurrent: false }
-  );
-
-const makeRevokeAllActivePATsCommand = (
-  apiClient: FidyClient
-): Atom.AtomResultFn<RevokeAllActivePATsCommand, void, never> =>
-  apiClient.runtime.fn<RevokeAllActivePATsCommand>()(
-    (command) =>
-      Effect.gen(function* () {
-        const client = yield* apiClient;
-        const response = yield* Reactivity.mutation(client.pats.revokeAllPATs({}), [
-          activePATReactivityKey,
-        ]);
-        yield* Effect.sync(() => command.onRevoked(response.data.revokedCount));
-      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
-    { concurrent: false }
-  );
-
-const activePATListing = Atom.family((apiClient: FidyClient) =>
-  apiClient
-    .query("pats", "listPATs", {
-      ...workspaceQueryRetention,
-      reactivityKeys: [activePATReactivityKey],
-    })
-    .pipe(
-      Atom.swr({
-        staleTime: 0,
-        revalidateOnMount: true,
-        revalidateOnFocus: "always",
-        focusSignal: Atom.windowFocusSignal,
-      })
-    )
-);
-
 /** Pairing never receives a bearer; manual disclosure expires with the mounted view. */
 export const PATManagementFeature = ({
   children,
 }: Pick<PATManagementContentProps, "children">): JSX.Element => {
   const router = useRouter();
   const { authentication } = useSession();
-  const [activePATs] = useState(() => activePATListing(router.options.context.apiClient));
-  const activePATResult = useAtomValue(activePATs);
-  const refreshActivePATs = useAtomRefresh(activePATs);
-  const queryState = presentCanonicalQuery(activePATResult);
+  const management = usePATManagement(router.options.context.apiClient);
+  const queryState = management.query;
+  const refreshActivePATs = management.actions.refresh;
   let activePATState: ActivePATManagementState = {
     _tag: queryState._tag === "Initial" && !queryState.waiting ? "Initial" : "Loading",
   };
@@ -151,23 +93,20 @@ export const PATManagementFeature = ({
       refreshFailed: Option.isSome(queryState.refreshFailure),
     };
   }
-  const [revokeAtom] = useState(() => makeRevokeActivePATCommand(router.options.context.apiClient));
-  const [revokeAllAtom] = useState(() =>
-    makeRevokeAllActivePATsCommand(router.options.context.apiClient)
-  );
-  const revoke = useAtomSet(revokeAtom);
-  const revokeAll = useAtomSet(revokeAllAtom);
   const resuming = useRouterState({ select: (state) => state.location.search.resume === "pat" });
   return (
     <PATManagementContent
       activePATState={activePATState}
       refreshPATs={refreshActivePATs}
-      refreshing={queryState.waiting}
+      refreshing={
+        (management.task._tag !== "Uncertain" && queryState.waiting) ||
+        management.task._tag === "Revoking" ||
+        management.task._tag === "Refreshing"
+      }
       authentication={authentication}
       apiClient={router.options.context.apiClient}
       resuming={resuming}
-      revoke={revoke}
-      revokeAll={revokeAll}
+      management={management}
     >
       {children}
     </PATManagementContent>

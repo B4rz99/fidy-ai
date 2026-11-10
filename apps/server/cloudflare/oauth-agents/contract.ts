@@ -9,6 +9,9 @@ import {
 import { oauthResource } from "../../src/shell/oauth-agents/contract";
 import { PATScopes } from "../../src/core/tokens/contract";
 
+/** OAuth bootstrap work could not complete; no credential outcome is implied. */
+export class BootstrapUnavailable extends Data.TaggedError("BootstrapUnavailable") {}
+
 /** OAuth-owned live caller facts could not be read; this is unavailable, not a dead credential. */
 export class OAuthQueryCallerUnavailable extends Data.TaggedError("OAuthQueryCallerUnavailable") {}
 

@@ -1,3 +1,4 @@
+import { BootstrapUnavailable } from "./contract";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -38,7 +39,6 @@ import { handleMcpRequest } from "../mcp/runtime";
 import { token } from "./operations";
 import {
   type BootstrapInvalid,
-  BootstrapUnavailable,
   invalidRequest,
   registerClient,
   startAuthorization,

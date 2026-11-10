@@ -1,3 +1,4 @@
+import type { BootstrapUnavailable } from "../contract";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Clock, Effect, type PlatformError, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
@@ -15,7 +16,7 @@ import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
 import { digestBytes, newId, newSecret, secretDigest } from "../../secret-material/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import { BootstrapInvalid, type BootstrapUnavailable, dbWork } from "./bootstrap";
+import { BootstrapInvalid, dbWork } from "./bootstrap";
 import { oauthResponse } from "./response";
 import { forwardRefresh } from "./refresh";
 

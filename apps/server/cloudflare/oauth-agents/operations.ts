@@ -1,3 +1,4 @@
+import { BootstrapUnavailable } from "./contract";
 import { Clock, Effect, Option, Redacted, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
 import {
@@ -11,7 +12,7 @@ import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
 import { secretDigest } from "../secret-material/operations";
 import { awaitRequestAbort } from "../http/operations";
 import { exchangeToken } from "./internal/exchange";
-import { BootstrapUnavailable, invalidRequest } from "./internal/bootstrap";
+import { invalidRequest } from "./internal/bootstrap";
 
 import type { OAuthRefreshAdmission, OAuthRevocationAdmission } from "./contract";
 import { revokeConnections } from "./internal/revocation";

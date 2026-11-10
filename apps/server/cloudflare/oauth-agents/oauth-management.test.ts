@@ -1,3 +1,4 @@
+import { BootstrapUnavailable } from "./contract";
 import { authenticateBoundWebSession } from "../web-session/operations";
 import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { observeRetentionCost } from "../d1-test-fixture";
@@ -7,7 +8,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { reviewRequest } from "./internal/review";
 import { handleOAuthRequest } from "./runtime";
 import { manageConnections } from "./internal/management";
-import { BootstrapUnavailable } from "./internal/bootstrap";
 import { OAuthReviewChoice } from "../../src/shell/oauth-agents/contract";
 import { makeAudit } from "../../src/shell/audit/runtime";
 import {

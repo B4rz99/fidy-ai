@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { use, useState } from "react";
 import type { JSX, ReactNode, RefCallback } from "react";
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
 import type { Atom } from "effect/reactivity";
@@ -20,12 +20,16 @@ export const ManualCaptureProvider = ({
   const retention = useAtomValue(retentionResource);
   return Option.match(retention.resource, {
     onNone: () => (
-      <ManualCaptureAttachment retention={retention} timeZone={timeZone}>
+      <ManualCaptureAttachment retentionResource={retentionResource} timeZone={timeZone}>
         {null}
       </ManualCaptureAttachment>
     ),
     onSome: (resource) => (
-      <ManualCaptureTask resource={resource} retention={retention} timeZone={timeZone}>
+      <ManualCaptureTask
+        resource={resource}
+        retentionResource={retentionResource}
+        timeZone={timeZone}
+      >
         {children}
       </ManualCaptureTask>
     ),
@@ -33,23 +37,30 @@ export const ManualCaptureProvider = ({
 };
 const ManualCaptureAttachment = ({
   timeZone,
-  retention,
+  retentionResource,
   children,
 }: Readonly<{
   timeZone: string;
-  retention: CaptureRetention;
+  retentionResource: Atom.Atom<CaptureRetention>;
   children: ReactNode;
 }>): JSX.Element => {
   const { apiClient } = useRouter().options.context;
+  const registry = use(RegistryContext);
   const [mounted] = useState<RefCallback<HTMLDivElement>>(
     () =>
-      (node: Parameters<RefCallback<HTMLDivElement>>[0]): ReturnType<RefCallback<HTMLDivElement>> =>
-        node === null
-          ? undefined
-          : retention.mount(
-              { client: apiClient, timeZone, initial: emptyCaptureDraft(timeZone) },
-              timeZone
-            )
+      (
+        node: Parameters<RefCallback<HTMLDivElement>>[0]
+      ): ReturnType<RefCallback<HTMLDivElement>> => {
+        if (node === null) return undefined;
+        const releaseRetention = registry.mount(retentionResource);
+        const releaseTask = registry
+          .get(retentionResource)
+          .mount({ client: apiClient, timeZone, initial: emptyCaptureDraft(timeZone) }, timeZone);
+        return () => {
+          releaseTask();
+          releaseRetention();
+        };
+      }
   );
   return (
     <div className="contents" ref={mounted}>
@@ -59,12 +70,12 @@ const ManualCaptureAttachment = ({
 };
 const ManualCaptureTask = ({
   resource,
-  retention,
+  retentionResource,
   timeZone,
   children,
 }: Readonly<{
   resource: Atom.Atom<TransactionCaptureTask>;
-  retention: CaptureRetention;
+  retentionResource: Atom.Atom<CaptureRetention>;
   timeZone: string;
   children: ReactNode;
 }>): JSX.Element => {
@@ -72,7 +83,11 @@ const ManualCaptureTask = ({
   const [check, setCheck] = useState<Option.Option<CaptureHistoryVersion>>(() => Option.none());
   const identity = task.locked || Option.isSome(task.attempt) ? task.timeZone : timeZone;
   return (
-    <ManualCaptureAttachment key={identity} timeZone={timeZone} retention={retention}>
+    <ManualCaptureAttachment
+      key={identity}
+      timeZone={timeZone}
+      retentionResource={retentionResource}
+    >
       <ManualCaptureContext
         value={Option.some({
           ...task,

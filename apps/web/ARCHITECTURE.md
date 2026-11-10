@@ -586,6 +586,9 @@ The capture-owned mounted task retains the draft, synchronous create admission, 
 Transaction and immutable uncertain attempt above month/history-generation workspace remounts
 and same-User profile time-zone replacement. Admitted drafts and resumed uncertain attempts keep
 their original date and time zone; an explicit clear initializes the next intent in the current zone.
+The committed attachment mounts and reads its retention Atom from the current authentication registry,
+so a render-time snapshot disposed before route commit cannot strand history behind empty capture
+initialization. The attachment releases that mount with its task when disposed.
 Parents consume derived placement observations and guarded actions; they cannot set capture status.
 The public form slot receives only an owner component with public capture inputs; that component
 resolves the task privately, so element props do not publish recovery or admission controls.

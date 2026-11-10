@@ -1,4 +1,4 @@
-import { Deferred, Effect, Exit, Option } from "effect";
+import { Array, Deferred, Effect, Exit, Option } from "effect";
 import { type AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 type Query<A, E> = Atom.Atom<AsyncResult.AsyncResult<A, E>>;

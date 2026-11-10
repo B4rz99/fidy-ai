@@ -2029,7 +2029,7 @@ it.each(["key", "adapter"] as const)(
             )
             .all();
         const before = (yield* Effect.tryPromise(custody)).results;
-        expect(before[0]?.envelope).toMatch(/^v1\./u);
+        expect(before[0]).toMatchObject({ envelope: expect.stringMatching(/^v1\./u) });
         yield* recoverConnections({
           db,
           key: missing === "key" ? Option.none() : Option.some(Redacted.make("A".repeat(43))),
@@ -2158,9 +2158,11 @@ it("rejects a late cleanup result while a replacement lease retains the encrypte
         const custody = (): Promise<D1Result> =>
           db.prepare("SELECT envelope,cleaned_at_ms,cleanup_claim FROM connection_grants").all();
         const retained = (yield* Effect.tryPromise(custody)).results;
-        expect(retained[0]?.envelope).toMatch(/^v1\./u);
-        expect(retained[0]?.cleaned_at_ms).toBeNull();
-        expect(retained[0]?.cleanup_claim).not.toEqual(oldClaim?.cleanup_claim);
+        expect(retained[0]).toMatchObject({
+          envelope: expect.stringMatching(/^v1\./u),
+          cleaned_at_ms: null,
+        });
+        expect(retained[0]).not.toMatchObject({ cleanup_claim: oldClaim?.cleanup_claim });
         yield* Deferred.succeed(finish, undefined);
         expect(Exit.isFailure(yield* Fiber.await(old))).toBe(true);
         expect((yield* Effect.tryPromise(custody)).results).toEqual(retained);

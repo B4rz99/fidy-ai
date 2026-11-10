@@ -155,24 +155,39 @@ type PairingViewProps = Readonly<{
   pairing: BrowserLoginPairing;
   choose: (method: AccessMethod | "principal") => void;
 }>;
+const terminalPairingCopy = {
+  Expired: {
+    heading: "El código venció",
+    message: "La solicitud de acceso ya no está activa. Genera otro código para continuar.",
+    action: "Generar otro código",
+  },
+  Invalid: {
+    heading: "Acceso no autorizado",
+    message: invalidPairingMessage,
+    action: "Iniciar otra solicitud",
+  },
+  Uncertain: {
+    heading: "No pudimos confirmar el acceso",
+    message:
+      "La solicitud pudo haberse completado. Para continuar, inicia otra solicitud de acceso.",
+    action: "Iniciar otra solicitud",
+  },
+} as const;
 const TerminalStatus = ({ method, pairing, choose }: PairingViewProps): JSX.Element => {
   const { state } = pairing;
-  const expired = state._tag === "Expired";
+  if (state._tag !== "Expired" && state._tag !== "Invalid" && state._tag !== "Uncertain") {
+    return <></>;
+  }
+  const copy = terminalPairingCopy[state._tag];
   return (
     <>
-      <AccessHeading method={method}>
-        {expired ? "El código venció" : "Acceso no autorizado"}
-      </AccessHeading>
-      <p data-access-intro="">
-        {expired
-          ? "La solicitud de acceso ya no está activa. Genera otro código para continuar."
-          : invalidPairingMessage}
-      </p>
+      <AccessHeading method={method}>{copy.heading}</AccessHeading>
+      <p data-access-intro="">{copy.message}</p>
       {state._tag === "Expired" && method === "whatsapp" ? (
         <AccessCode code={state.publicCode} expired />
       ) : null}
       <AccessAction kind="primary" onClick={() => choose(method)}>
-        {expired ? "Generar otro código" : "Iniciar otra solicitud"}
+        {copy.action}
       </AccessAction>
     </>
   );
@@ -222,7 +237,9 @@ const WhatsAppStatus = ({ pairing }: Pick<PairingViewProps, "pairing">): JSX.Ele
 const PairingContent = (props: PairingViewProps): JSX.Element => {
   const { method, pairing } = props;
   const { state } = pairing;
-  if (state._tag === "Invalid" || state._tag === "Expired") return <TerminalStatus {...props} />;
+  if (state._tag === "Invalid" || state._tag === "Expired" || state._tag === "Uncertain") {
+    return <TerminalStatus {...props} />;
+  }
   if (method === "whatsapp") return <WhatsAppStatus pairing={pairing} />;
   if (
     state._tag === "AwaitingApproval" &&

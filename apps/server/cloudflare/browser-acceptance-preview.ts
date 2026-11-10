@@ -31,6 +31,7 @@ import {
   navigationIdentities,
   oauthOperationUserId,
   paginationUserId,
+  pairingUncertainUserId,
   pairingUserId,
   prepareBrowserAssessment,
   privacyErasureUserId,
@@ -473,6 +474,7 @@ const fixtureIdentities = [
   { key: "firstDaviplata", userId: firstDaviplataUserId },
   { key: "subscriptionReflow", userId: subscriptionReflowUserId },
   { key: "pairing", userId: pairingUserId },
+  { key: "pairingUncertain", userId: pairingUncertainUserId },
 ];
 const approvedFixtureUser = (parameters: URLSearchParams): string =>
   Array.findFirst(fixtureIdentities, ({ key }) => parameters.get(key) === "true").pipe(

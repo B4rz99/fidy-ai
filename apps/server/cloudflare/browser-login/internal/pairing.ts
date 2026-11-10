@@ -1,3 +1,4 @@
+import { noLaterReadyPairing } from "./approval-order";
 import {
   BrowserLoginPairingId,
   BrowserLoginPublicCodeSymbols,
@@ -177,6 +178,11 @@ export const approveBrowserPairing = ({
       bsuid: caller.value.businessScopedUserId,
     });
     if (Option.isNone(user)) return invalid();
+    const ordering = noLaterReadyPairing({
+      userId: { sql: "w.userId", params: [] },
+      candidate: "p",
+      current: input.receivedAtMs,
+    });
     const result = yield* attempt(() =>
       prepareWhatsAppIdentity({
         db,
@@ -186,8 +192,11 @@ export const approveBrowserPairing = ({
             sql: `UPDATE browser_login_pairings SET approval_portfolio_id=incoming.portfolio_id,approval_message_id=incoming.message_id,approval_user_id=incoming.user_id FROM (SELECT ? AS portfolio_id,? AS message_id,p.id AS pairing_id,w.userId AS user_id FROM browser_login_pairings AS p
               JOIN identity_associations AS w ON w.businessPortfolioId = ? AND w.businessScopedUserId = ?
               WHERE p.public_code = ? AND p.state = 'pending_approval'
+                AND p.wrong_attempts < 5
                 AND p.expires_at_ms > ? AND p.expires_at_ms > ?
-                AND ? >= (p.created_at_ms / 1000) * 1000) AS incoming WHERE browser_login_pairings.id=incoming.pairing_id AND browser_login_pairings.approval_message_id IS NULL`,
+                AND ? >= (p.created_at_ms / 1000) * 1000
+                AND ${ordering.sql}
+              ) AS incoming WHERE browser_login_pairings.id=incoming.pairing_id AND browser_login_pairings.approval_message_id IS NULL`,
             params: [
               input.portfolioId,
               input.messageId,
@@ -197,6 +206,7 @@ export const approveBrowserPairing = ({
               input.receivedAtMs,
               input.occurredAtMs,
               input.occurredAtMs,
+              ...ordering.params,
             ],
           },
           subject: { _tag: "User", userId: user.value },
@@ -340,6 +350,7 @@ const delayPoll = ({
   decision: Extract<ReturnType<typeof decideBrowserLoginRedemption>, { _tag: "SlowDown" }>;
 }): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
+    const retryAfterSeconds = Math.min(decision.retryAfterSeconds, maximumPollSeconds);
     yield* attempt(() =>
       db
         .prepare(
@@ -352,11 +363,11 @@ const delayPoll = ({
       {
         error: {
           code: "rate_limited",
-          retryAfterSeconds: decision.retryAfterSeconds,
+          retryAfterSeconds,
         },
       },
       HTTP_RATE_LIMITED,
-      { "retry-after": String(decision.retryAfterSeconds) }
+      { "retry-after": String(retryAfterSeconds) }
     );
   });
 

@@ -28,6 +28,7 @@ export type BrowserLoginPairingViewState =
     }>
   | Readonly<{ _tag: "Authenticated" }>
   | Readonly<{ _tag: "Invalid" }>
+  | Readonly<{ _tag: "Uncertain" }>
   | Readonly<{ _tag: "Expired"; publicCode: string }>;
 
 type StartPairingCommand = Readonly<{
@@ -75,7 +76,7 @@ const requestPairingPoll = (
   client: DirectWebAuthClient,
   pairing: StartedPairing,
   remainingMilliseconds: number
-): Effect.Effect<Option.Option<PollAttempt>> =>
+): Effect.Effect<PollAttempt> =>
   client.browserLogin
     .redeemPairing({
       payload: {
@@ -88,7 +89,9 @@ const requestPairingPoll = (
         onFailure: classifyPollFailure,
         onSuccess: (value): PollAttempt => ({ _tag: "Success", value }),
       }),
-      Effect.timeoutOption(Math.max(1, Math.min(remainingMilliseconds, pollTimeoutMilliseconds)))
+      Effect.catchDefect(() => Effect.succeed({ _tag: "Transport" } as const)),
+      Effect.timeoutOption(Math.max(1, Math.min(remainingMilliseconds, pollTimeoutMilliseconds))),
+      Effect.map(Option.getOrElse((): PollAttempt => ({ _tag: "Transport" })))
     );
 
 type PollLoopInput = Readonly<{
@@ -102,6 +105,8 @@ type PollLoopInput = Readonly<{
 type TerminalPollFailure = Extract<PollFailure, { _tag: "Invalid" | "Transport" }>;
 const isTerminalPollFailure = (result: PollAttempt): result is TerminalPollFailure =>
   result._tag === "Invalid" || result._tag === "Transport";
+const terminalPollState = (failure: TerminalPollFailure): BrowserLoginPairingViewState =>
+  failure._tag === "Transport" ? { _tag: "Uncertain" } : invalidState;
 
 const pollBrowserLoginPairing = Effect.fn("BrowserLoginPairing.poll")(function* (
   input: PollLoopInput
@@ -120,14 +125,14 @@ const pollBrowserLoginPairing = Effect.fn("BrowserLoginPairing.poll")(function* 
       yield* Effect.sync(() => onStateChange({ _tag: "Expired", publicCode: pairing.publicCode }));
       return;
     }
-    const polled = yield* requestPairingPoll(client, pairing, remainingBeforePoll);
-    if (Option.isNone(polled)) {
-      intervalSeconds *= 2;
-      continue;
+    const result = yield* requestPairingPoll(client, pairing, remainingBeforePoll);
+    const remainingAfterPoll = expiresAtEpochMillis - DateTime.toEpochMillis(yield* DateTime.now);
+    if (remainingAfterPoll <= 0) {
+      yield* Effect.sync(() => onStateChange({ _tag: "Expired", publicCode: pairing.publicCode }));
+      return;
     }
-    const result = polled.value;
     if (isTerminalPollFailure(result)) {
-      yield* Effect.sync(() => onStateChange(invalidState));
+      yield* Effect.sync(() => onStateChange(terminalPollState(result)));
       return;
     }
     if (result._tag === "SlowDown") {
@@ -427,6 +432,16 @@ type PairingEmailActions = Pick<
   BrowserLoginPairing,
   "requestEmail" | "resendEmail" | "completeEmail"
 >;
+type WaitingPairing = Extract<BrowserLoginPairingViewState, { _tag: "AwaitingApproval" }>;
+const canRequestEmail = (state: BrowserLoginPairingViewState): state is WaitingPairing =>
+  state._tag === "AwaitingApproval" &&
+  state.emailStep === "ready" &&
+  state.expiresAt > Effect.runSync(Clock.currentTimeMillis);
+const canSubmitEmailCode = (state: BrowserLoginPairingViewState): state is WaitingPairing =>
+  state._tag === "AwaitingApproval" &&
+  (state.emailStep === "code" || state.emailStep === "rejected") &&
+  state.expiresAt > Effect.runSync(Clock.currentTimeMillis);
+
 const makePairingEmailActions = ({
   controller,
   latestState,
@@ -447,17 +462,18 @@ const makePairingEmailActions = ({
   const requestEmail = (email: VerifiedEmailAddress): void => {
     if (emailBusy.current) return;
     const send = (): void => {
+      if (!canRequestEmail(latestState.current)) return;
       emailBusy.current = true;
       controller.stageEmail(email);
       runRequestEmail({ onStateChange: changeState });
     };
     if (latestState.current._tag === "Idle") begin(send);
-    else if (latestState.current._tag === "AwaitingApproval") send();
+    else send();
   };
   const resendEmail = (): void => {
     if (
       emailBusy.current ||
-      latestState.current._tag !== "AwaitingApproval" ||
+      !canSubmitEmailCode(latestState.current) ||
       latestState.current.emailRetryAt > Effect.runSync(Clock.currentTimeMillis)
     ) {
       return;
@@ -468,7 +484,7 @@ const makePairingEmailActions = ({
     }
   };
   const completeEmail = (combinedCode: VerifiedEmailCombinedCode): void => {
-    if (emailBusy.current || latestState.current._tag !== "AwaitingApproval") return;
+    if (emailBusy.current || !canSubmitEmailCode(latestState.current)) return;
     emailBusy.current = true;
     controller.stageCombinedCode(combinedCode);
     runCompleteEmail({ onStateChange: changeState });
@@ -484,12 +500,15 @@ type PairingPresentation = Readonly<{
   pairingState: BrowserLoginPairingViewState;
   changeState: EmailCommand["onStateChange"];
 }>;
-const usePairingPresentation = (): PairingPresentation => {
+const isRetiredPairing = (state: BrowserLoginPairingViewState): boolean =>
+  state._tag === "Invalid" || state._tag === "Expired" || state._tag === "Uncertain";
+const usePairingPresentation = (retire: () => void): PairingPresentation => {
   const latestState = useRef<BrowserLoginPairingViewState>({ _tag: "Idle" });
   const startBusy = useRef(false);
   const emailBusy = useRef(false);
   const [pairingState, setPairingState] = useState<BrowserLoginPairingViewState>({ _tag: "Idle" });
   const changeState = (next: BrowserLoginPairingViewState): void => {
+    if (isRetiredPairing(next)) retire();
     if (next._tag !== "Starting") startBusy.current = false;
     if (
       next._tag !== "AwaitingApproval" ||
@@ -519,10 +538,10 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
   const [controller] = useState(() =>
     makeBrowserLoginPairingController(router.options.context.webAuthClient)
   );
-  const { latestState, admitStart, emailBusy, pairingState, changeState } =
-    usePairingPresentation();
   const { startPairing, runRequestEmail, runCompleteEmail, runLogout, clear, mounted } =
     usePairingExecution(controller);
+  const { latestState, admitStart, emailBusy, pairingState, changeState } =
+    usePairingPresentation(clear);
   const state: BrowserLoginPairingViewState =
     authentication === "signed-in" ? { _tag: "Authenticated" } : pairingState;
 
@@ -542,7 +561,8 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
     runLogout({ onLoggedOut: completeLogout });
   };
   const restart = (): void => {
-    controller.clear();
+    if (!isRetiredPairing(latestState.current)) return;
+    clear();
     changeState({ _tag: "Idle" });
     replaceAuthenticationLifetime();
   };

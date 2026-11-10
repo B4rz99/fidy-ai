@@ -428,6 +428,22 @@ it.each([
   )
 );
 
+it("refuses surrounding whitespace in the exact prepared invitation confirmation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { journey, proof, confirmationText } = yield* reviewedInvitation(false);
+      yield* whatsappMessages.advanceClock(2000);
+      expect((yield* whatsappMessages.sendChat(journey, ` ${confirmationText} `)).status).toBe(409);
+      expect(
+        (yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)))
+          .status
+      ).toBe(400);
+      expect(
+        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
+      ).toEqual([]);
+    })
+  ));
+
 it("refuses a second private browser claiming an already bound invitation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -625,40 +641,70 @@ it("allows only one completion under concurrent approval", () =>
     })
   ));
 
-it("invalidates the prior review when the same private browser retries provider authentication", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { journey, reference, proof, confirmationText } = yield* reviewedInvitation(false);
-      yield* authenticateChatProvider(journey, reference);
-      const review = yield* Effect.tryPromise(() =>
-        journey
-          .send("/web/providers/google/status", journey.pairing)
-          .then((response) => response.json())
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({
-                status: Schema.String,
-                associationCode: Schema.String,
-                confirmationText: Schema.String,
-              })
+it.each(["awaiting", "confirmed", "denied"] as const)(
+  "invalidates the prior %s review when the same private browser retries provider authentication",
+  (decision) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { journey, reference, proof, confirmationText } = yield* reviewedInvitation(false);
+        const original = yield* Effect.tryPromise(() =>
+          journey.db
+            .prepare("SELECT expires_at_ms FROM whatsapp_signup_invitations WHERE id=?")
+            .bind(reference)
+            .first()
+        );
+        if (decision !== "awaiting") {
+          yield* whatsappMessages.advanceClock(2000);
+          expect(
+            (yield* whatsappMessages.sendChat(
+              journey,
+              decision === "confirmed"
+                ? confirmationText
+                : confirmationText.replace(/^Vincular /u, "No vincular ")
+            )).status
+          ).toBe(200);
+        }
+        yield* authenticateChatProvider(journey, reference);
+        const review = yield* Effect.tryPromise(() =>
+          journey
+            .send("/web/providers/google/status", journey.pairing)
+            .then((response) => response.json())
+            .then(
+              Schema.decodeUnknownPromise(
+                Schema.Struct({
+                  status: Schema.String,
+                  associationCode: Schema.String,
+                  confirmationText: Schema.String,
+                })
+              )
             )
+        );
+        expect(review.status).toBe("awaiting_association");
+        expect(review.associationCode).not.toBe(proof.associationCode);
+        expect(
+          yield* Effect.tryPromise(() =>
+            journey.db
+              .prepare("SELECT expires_at_ms FROM whatsapp_signup_invitations WHERE id=?")
+              .bind(reference)
+              .first()
           )
-      );
-      expect(review.status).toBe("awaiting_association");
-      expect(review.associationCode).not.toBe(proof.associationCode);
-      yield* whatsappMessages.advanceClock(2000);
-      expect((yield* whatsappMessages.sendChat(journey, confirmationText)).status).toBe(409);
-      expect((yield* whatsappMessages.sendChat(journey, review.confirmationText)).status).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/complete", {
-            ...journey.pairing,
-            associationCode: review.associationCode,
-          })
-        )).status
-      ).toBe(200);
-    })
-  ));
+        ).toEqual(original);
+        yield* whatsappMessages.advanceClock(2000);
+        expect((yield* whatsappMessages.sendChat(journey, confirmationText)).status).toBe(409);
+        expect((yield* whatsappMessages.sendChat(journey, review.confirmationText)).status).toBe(
+          200
+        );
+        expect(
+          (yield* Effect.tryPromise(() =>
+            journey.send("/web/providers/google/complete", {
+              ...journey.pairing,
+              associationCode: review.associationCode,
+            })
+          )).status
+        ).toBe(200);
+      })
+    )
+);
 
 it("does not replace an established WhatsAppIdentity when a different chat requests linking", () =>
   Effect.runPromise(

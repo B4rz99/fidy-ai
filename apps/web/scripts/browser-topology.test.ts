@@ -63,7 +63,7 @@ beforeAll(
         yield* Effect.forEach(
           ["1/2", "2/2"],
           (shard) => listTests("playwright.config.ts", "shared", [`--shard=${shard}`]),
-          { concurrency: 2 }
+          { concurrency: 1 }
         );
         yield* listTests("playwright.cli.config.ts", "cli");
       })

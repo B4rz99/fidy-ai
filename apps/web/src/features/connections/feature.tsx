@@ -131,7 +131,7 @@ const ExpiringReview = ({
               : `Conectar ${review.institutionName}`}
           </h1>
         </CardTitle>
-        <CardDescription>{preparationMessage[review.phase]}</CardDescription>
+        {expired ? null : <CardDescription>{preparationMessage[review.phase]}</CardDescription>}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p>No compartas claves bancarias, documentos de identidad ni números de cuenta en Fidy.</p>

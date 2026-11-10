@@ -1,5 +1,9 @@
 import type { APIRequestContext, Page, Route } from "@playwright/test";
-import { ConnectInstitutionResult, ConnectionAttemptReference } from "@fidy/server/client";
+import {
+  ConnectInstitutionResult,
+  ConnectionAttemptReference,
+  ConnectionContinuationReview,
+} from "@fidy/server/client";
 import { type Cause, Clock, Effect, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
@@ -477,6 +481,63 @@ test("hands off through Core only after browser proof, refuses replay and keeps 
           Schema.Struct({ data: Schema.Struct({ state: Schema.Literal("Connecting") }) })
         )(yield* Effect.tryPromise(() => inspected.json()))
       ).toEqual({ data: { state: "Connecting" } });
+    })
+  ));
+
+const retainPreparingReview = (
+  page: Page,
+  continuation: Continuation
+): Effect.Effect<void, BrowserFailure> =>
+  Effect.gen(function* () {
+    const response = yield* Effect.tryPromise(() =>
+      continuation.session.get(`${api}/web/connections/review?attempt=${continuation.attempt}`)
+    );
+    const review = yield* Schema.decodeUnknownEffect(
+      Schema.toCodecJson(ConnectionContinuationReview)
+    )(yield* Effect.tryPromise(() => response.json()));
+    if (review.phase !== "ready") throw new Error("Expected an initial Connection review");
+    const preparing = yield* Schema.encodeEffect(Schema.toCodecJson(ConnectionContinuationReview))({
+      ...review,
+      phase: "preparing",
+    });
+    yield* Effect.tryPromise(() =>
+      page.route(`${api}/web/connections/review?**`, staleReview(JSON.stringify(preparing)))
+    );
+  });
+
+test("expires a retained preparing review without offering disabled status recovery", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
+      const browserNow = (yield* Clock.currentTimeMillis) - browserClockLagMilliseconds;
+      yield* Effect.tryPromise(() => page.clock.setSystemTime(browserNow));
+      yield* selectScenario(request, "ready");
+      const continuation = yield* startConnection({ page, request });
+      yield* retainPreparingReview(page, continuation);
+      yield* Effect.tryPromise(() => page.goto(continuation.path));
+      const preparing = page.getByText(
+        "Estamos preparando la autorización. Consulta el estado; no repitas la solicitud.",
+        { exact: true }
+      );
+      yield* Effect.tryPromise(() => expect(preparing).toBeVisible());
+      const deadline = yield* Schema.decodeUnknownEffect(Schema.DateTimeUtcFromString)(
+        yield* Effect.tryPromise(() => page.locator("time").getAttribute("datetime"))
+      );
+      yield* Effect.tryPromise(() =>
+        page.clock.fastForward(deadline.epochMilliseconds - browserNow + 1)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText(
+          "La solicitud venció. Inicia una nueva conexión."
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Consultar estado", exact: true })).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() => expect(preparing).toHaveCount(0));
     })
   ));
 

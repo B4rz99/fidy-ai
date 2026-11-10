@@ -52,7 +52,7 @@ const makeSource = (period: Period): Atom.Atom<Result> => {
   ).pipe(Atom.setIdleTTL(workspaceQueryRetention.timeToLive));
   return forwardFreshQuery({
     query: source,
-    source: remote,
+    sources: [remote],
     before: (registry) => registry.set(initial, Option.none()),
   });
 };
@@ -60,7 +60,7 @@ const makeSource = (period: Period): Atom.Atom<Result> => {
 // so its collectible view must not be the weak family's only reference to that owner.
 const sources = Atom.family(makeSource);
 const views = Atom.family((source: Atom.Atom<Result>) =>
-  forwardFreshQuery({ query: source.pipe(revalidateWorkspaceQuery), source })
+  forwardFreshQuery({ query: source.pipe(revalidateWorkspaceQuery), sources: [source] })
 );
 /** One canonical page owner; the fresh bootstrap handoff is retired on explicit refresh. */
 export const transactionFirstPage = ({

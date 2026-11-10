@@ -76,7 +76,7 @@ const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
   );
   return forwardFreshQuery({
     query: source,
-    source: remote,
+    sources: [remote],
     before: (registry) => registry.set(initialMetadata(client), Option.none()),
   });
 });
@@ -107,7 +107,7 @@ export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.
   (client: FidyClient) =>
     forwardFreshQuery({
       query: workspaceMetadataQuery(client).pipe(revalidateWorkspaceQuery),
-      source: workspaceMetadataQuery(client),
+      sources: [workspaceMetadataQuery(client)],
     })
 );
 /** The browser's metadata projection supplies taxonomy; other transports can read it separately. */
@@ -147,13 +147,13 @@ const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.
         refresh(individual);
       }
     );
-    return forwardFreshQuery({ query: source, source: [metadata, individual] });
+    return forwardFreshQuery({ query: source, sources: [metadata, individual] });
   }
 );
 const workspaceCategoriesView = Atom.family((client: FidyClient) =>
   forwardFreshQuery({
     query: workspaceCategoriesSource(client).pipe(revalidateWorkspaceQuery),
-    source: workspaceCategoriesSource(client),
+    sources: [workspaceCategoriesSource(client)],
   })
 );
 export const workspaceCategoriesQuery = (

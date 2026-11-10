@@ -1,4 +1,4 @@
-import { Array, Deferred, Effect, Exit, Option } from "effect";
+import { Deferred, Effect, Exit, Option } from "effect";
 import { type AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
 type Query<A, E> = Atom.Atom<AsyncResult.AsyncResult<A, E>>;
@@ -106,15 +106,14 @@ export const makeFreshQuery = <R, ER, A, E>(
 export const forwardFreshQuery = <A, E>(
   options: Readonly<{
     query: Query<A, E>;
-    source: Query<unknown, unknown> | ReadonlyArray<Query<unknown, unknown>>;
+    sources: ReadonlyArray<Query<unknown, unknown>>;
   }> &
     (Readonly<{}> | Readonly<{ before: (registry: AtomRegistry.AtomRegistry) => void }>)
 ): Query<A, E> => {
-  const { query, source } = options;
+  const { query, sources } = options;
   freshReads.set(query, (registry) =>
     Effect.suspend(() => {
       if ("before" in options) options.before(registry);
-      const sources = Array.isArray(source) ? source : [source];
       return Effect.forEach(sources, (query) => readFreshQuery({ registry, query })).pipe(
         Effect.map((results) => results.every(Boolean))
       );

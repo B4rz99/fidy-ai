@@ -1,4 +1,4 @@
-import { Effect, Exit, Fiber, Schema } from "effect";
+import { Cause, Effect, Exit, Fiber, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { type PairingClient, PollingDelayed } from "./contract";
 import { makeLoginFixture, privateProof, rawBearer, request, started } from "./login.test-fixture";
@@ -75,6 +75,11 @@ it.effect("does not replay a claimed bearer or report a failed save as success",
     yield* TestClock.adjust("5 seconds");
     const exit = yield* Fiber.await(fiber);
     expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(Cause.findErrorOption(exit.cause)).toMatchObject({
+        value: { reason: "ClaimStorageFailed" },
+      });
+    }
     expect(fixture.claims).toHaveLength(1);
   })
 );

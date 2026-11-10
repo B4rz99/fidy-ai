@@ -2,10 +2,10 @@ import { TestClock } from "effect/testing";
 import { type LoginDependencies } from "../login/contract";
 import { IssuedPAT, StartedPATPairing } from "@fidy/server/client";
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { type Credential, SavedGrant, apiOrigin } from "../credential/contract";
 import { type CommandDependencies, PublicOutput } from "./contract";
-import { formatFailure, formatOutput, runCommand } from "./operations";
+import { formatCommandFailure, formatFailure, formatOutput, runCommand } from "./operations";
 
 const secretLength = 43;
 const secret = `fin_abcd1234_${"s".repeat(secretLength)}`;
@@ -176,3 +176,135 @@ const makeLoginFixture = (): Readonly<{
     },
   };
 };
+
+it.effect("interrupted saving settles local persistence without success output or rollback", () =>
+  Effect.gen(function* () {
+    const fixture = makeLoginFixture();
+    const saving = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+    const output: Array<PublicOutput> = [];
+    let local = Option.none<Credential>();
+    let clears = 0;
+    const dependencies: CommandDependencies = {
+      ...fixture.dependencies,
+      store: {
+        load: Effect.suspend(() => Effect.succeed(local)),
+        save: (credential) =>
+          Deferred.succeed(saving, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+            Effect.andThen(
+              Effect.sync(() => {
+                local = Option.some(credential);
+              })
+            )
+          ),
+        clear: Effect.sync(() => {
+          clears += 1;
+          local = Option.none();
+        }),
+      },
+      readLine: () => Effect.die("unexpected prompt"),
+      emit: (event) =>
+        Effect.sync(() => {
+          output.push(event);
+        }),
+    };
+    const fiber = yield* runCommand(
+      ["login", "--recipient", "Mi agente", "--scopes", "read", "--lifetime", "7", "--no-browser"],
+      dependencies
+    ).pipe(Effect.forkChild);
+    yield* TestClock.adjust("5 seconds");
+    yield* Deferred.await(saving);
+    const interrupted = yield* Fiber.interrupt(fiber).pipe(
+      Effect.forkChild({ startImmediately: true })
+    );
+    yield* Deferred.succeed(release, undefined);
+    yield* Fiber.join(interrupted);
+    const exit = yield* Fiber.await(fiber);
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+      expect(Cause.findErrorOption(exit.cause)).toMatchObject({
+        value: { reason: "LoginSaveInterrupted" },
+      });
+      for (const json of [false, true]) {
+        const failure = formatCommandFailure(exit.cause, json);
+        expect(failure.interrupted).toBe(true);
+        expect(failure.message).toContain("puede haberse guardado");
+        expect(failure.message).toContain("fidy status");
+        expect(failure.message).not.toContain(secret);
+        expect(failure.message).not.toContain(privateProof);
+        if (json) {
+          expect(JSON.parse(failure.message)).toMatchObject({ code: "LoginSaveInterrupted" });
+        }
+      }
+    }
+    expect(output.some((event) => event._tag === "LoggedIn")).toBe(false);
+    expect(clears).toBe(0);
+    yield* runCommand(["status"], dependencies);
+    expect(output.at(-1)).toMatchObject({ _tag: "LocalStatus", availability: "expired" });
+  })
+);
+
+it.effect(
+  "a cancelled dispatched claim reports possible consumption through process presentation",
+  () =>
+    Effect.gen(function* () {
+      const fixture = makeLoginFixture();
+      const dispatched = yield* Deferred.make<void>();
+      let claims = 0;
+      const output: Array<PublicOutput> = [];
+      const fiber = yield* runCommand(
+        [
+          "login",
+          "--recipient",
+          "Mi agente",
+          "--scopes",
+          "read",
+          "--lifetime",
+          "7",
+          "--no-browser",
+        ],
+        {
+          ...fixture.dependencies,
+          pairing: {
+            ...fixture.dependencies.pairing,
+            claim: () =>
+              Effect.sync(() => {
+                claims += 1;
+              }).pipe(
+                Effect.andThen(Deferred.succeed(dispatched, undefined)),
+                Effect.andThen(Effect.never)
+              ),
+          },
+          readLine: () => Effect.die("unexpected prompt"),
+          emit: (event) =>
+            Effect.sync(() => {
+              output.push(event);
+            }),
+        }
+      ).pipe(Effect.forkChild);
+      yield* TestClock.adjust("5 seconds");
+      yield* Deferred.await(dispatched);
+      yield* Fiber.interrupt(fiber);
+      const exit = yield* Fiber.await(fiber);
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        for (const json of [false, true]) {
+          const failure = formatCommandFailure(exit.cause, json);
+          expect(failure.interrupted).toBe(true);
+          expect(failure.message).toContain("No se puede confirmar si el servidor entregó");
+          expect(failure.message).toContain("revoca");
+          expect(failure.message).not.toContain(secret);
+          expect(failure.message).not.toContain(privateProof);
+          if (json) {
+            expect(JSON.parse(failure.message)).toMatchObject({ code: "ClaimAmbiguous" });
+          }
+        }
+      }
+      yield* TestClock.adjust("10 minutes");
+      expect(claims).toBe(1);
+      expect(output.some((event) => event._tag === "LoggedIn")).toBe(false);
+      expect(fixture.saved).toHaveLength(0);
+    })
+);

@@ -1,5 +1,5 @@
 import { PATScope, patLifetimeDayOptions } from "@fidy/server/client";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Cause, DateTime, Effect, Option, Schema } from "effect";
 import { CliFailure } from "../credential/contract";
 import { login } from "../login/operations";
 import { type CommandDependencies, PublicOutput } from "./contract";
@@ -140,4 +140,24 @@ export const formatFailure = ({
         Schema.fromJsonString(Schema.Struct({ code: Schema.String, message: Schema.String }))
       )({ code: reason, message }) + "\n"
     : message + "\n";
+};
+
+/** Projects process failure without exposing raw causes, retaining interruption certainty. */
+export const formatCommandFailure = (
+  cause: Cause.Cause<unknown>,
+  json: boolean
+): Readonly<{
+  message: string;
+  interrupted: boolean;
+}> => {
+  const failure = Cause.findErrorOption(cause).pipe(
+    Option.filter((error): error is CliFailure => error instanceof CliFailure)
+  );
+  const interrupted =
+    Cause.hasInterrupts(cause) || Option.exists(failure, (error) => error.reason === "Cancelled");
+  const reason = Option.match(failure, {
+    onNone: (): CliFailure["reason"] => (interrupted ? "Cancelled" : "TransportUnavailable"),
+    onSome: (error) => error.reason,
+  });
+  return { message: formatFailure({ reason, json }), interrupted };
 };

@@ -1,6 +1,6 @@
 import { StartedPATPairing } from "@fidy/server/client";
 import { expect, it } from "@effect/vitest";
-import { Effect, Fiber, Schema } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { type PairingClient, PollingDelayed } from "./contract";
 import { CliFailure } from "../credential/contract";
@@ -125,6 +125,41 @@ it.effect("even schema-valid remote expiry and cadence cannot create unbounded w
     yield* TestClock.adjust("15 seconds");
     expect(yield* Fiber.join(fiber)).toMatchObject({ failure: { reason: "ClaimAmbiguous" } });
     expect(attempts).toBe(1);
+    expect(fixture.saved).toHaveLength(0);
+  })
+);
+
+it.effect("interruption after claim dispatch preserves uncertain consumption without replay", () =>
+  Effect.gen(function* () {
+    const fixture = makeLoginFixture();
+    const dispatched = yield* Deferred.make<void>();
+    let consumed = 0;
+    const fiber = yield* login(request, () => Effect.void, {
+      ...fixture.dependencies,
+      pairing: {
+        ...fixture.dependencies.pairing,
+        claim: () =>
+          Effect.sync(() => {
+            consumed += 1;
+          }).pipe(
+            Effect.andThen(Deferred.succeed(dispatched, undefined)),
+            Effect.andThen(Effect.never)
+          ),
+      },
+    }).pipe(Effect.forkChild);
+    yield* TestClock.adjust("5 seconds");
+    yield* Deferred.await(dispatched);
+    yield* Fiber.interrupt(fiber);
+    const exit = yield* Fiber.await(fiber);
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+      expect(Cause.findErrorOption(exit.cause)).toMatchObject({
+        value: { reason: "ClaimAmbiguous" },
+      });
+    }
+    yield* TestClock.adjust("10 minutes");
+    expect(consumed).toBe(1);
     expect(fixture.saved).toHaveLength(0);
   })
 );

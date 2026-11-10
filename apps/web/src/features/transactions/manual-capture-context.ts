@@ -2,7 +2,11 @@ import { createContext } from "react";
 import { Option } from "effect";
 import type { TransactionCaptureTask } from "./capture-task";
 
-export type CaptureHistoryVersion = Readonly<{ month: string; generation: number }>;
+export type CaptureHistoryVersion = Readonly<{
+  month: string;
+  timeZone: string;
+  generation: number;
+}>;
 export type ManualCapture = TransactionCaptureTask &
   Readonly<{
     check: Option.Option<CaptureHistoryVersion>;

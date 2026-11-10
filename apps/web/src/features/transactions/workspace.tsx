@@ -178,7 +178,11 @@ const CapturePanel = ({ onPanel, renderPanel, ...props }: PanelProps): JSX.Eleme
       apiClient={props.apiClient}
       categories={props.categories}
       currentUser={props.currentUser}
-      version={Option.getOrElse(props.captureHistoryVersion, () => ({ month: "", generation: 0 }))}
+      version={Option.getOrElse(props.captureHistoryVersion, () => ({
+        month: "",
+        timeZone: props.currentUser.timeZone,
+        generation: 0,
+      }))}
       editable={props.editable}
       waiting={Option.exists(corrections, (owner) => owner.status === "recovering")}
       onClose={() => onPanel({ _tag: "Summary" })}

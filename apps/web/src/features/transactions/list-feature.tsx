@@ -493,6 +493,7 @@ const ReadyTransactionResources = ({
         locate={locate}
         captureHistoryVersion={Option.some({
           month: dateFilter.month,
+          timeZone: currentUser.timeZone,
           generation: history.generation,
         })}
         readOnly={false}
@@ -573,24 +574,20 @@ const TransactionPeriod = (
   }>
 ): JSX.Element => {
   const search = useSearch({ from: "/independent-application/app/transactions" });
-  return (
-    <ManualCaptureProvider timeZone={props.currentUser.timeZone}>
-      {search.transaction === undefined ? (
-        <TransactionPeriodView {...props} search={search} locate={Option.none()} />
-      ) : (
-        <TransactionDestination key={search.transaction} id={search.transaction}>
-          {(transaction) => (
-            <TransactionPeriodView
-              {...props}
-              search={{
-                month: destinationMonth({ transaction, timeZone: props.currentUser.timeZone }),
-              }}
-              locate={Option.some(transaction.id)}
-            />
-          )}
-        </TransactionDestination>
+  return search.transaction === undefined ? (
+    <TransactionPeriodView {...props} search={search} locate={Option.none()} />
+  ) : (
+    <TransactionDestination key={search.transaction} id={search.transaction}>
+      {(transaction) => (
+        <TransactionPeriodView
+          {...props}
+          search={{
+            month: destinationMonth({ transaction, timeZone: props.currentUser.timeZone }),
+          }}
+          locate={Option.some(transaction.id)}
+        />
       )}
-    </ManualCaptureProvider>
+    </TransactionDestination>
   );
 };
 const profileCurrent = ({
@@ -642,13 +639,15 @@ const CurrentUserQuery = ({
               waiting={state.waiting}
             />
           ) : null}
-          <TransactionPeriod
-            key={state.value.data.timeZone}
-            currentUser={state.value.data}
-            profileCurrent={profileCurrent(state)}
-          >
-            {children}
-          </TransactionPeriod>
+          <ManualCaptureProvider timeZone={state.value.data.timeZone}>
+            <TransactionPeriod
+              key={state.value.data.timeZone}
+              currentUser={state.value.data}
+              profileCurrent={profileCurrent(state)}
+            >
+              {children}
+            </TransactionPeriod>
+          </ManualCaptureProvider>
         </>
       );
   }

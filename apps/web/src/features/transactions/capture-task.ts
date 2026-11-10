@@ -26,13 +26,14 @@ export type TransactionCaptureTask = Readonly<{
   attempt: Option.Option<CaptureDraft>;
   change: (draft: CaptureDraft) => void;
   submit: (submission: Submission) => void;
-  restart: (draft: CaptureDraft) => void;
+  restart: (input: Readonly<{ draft: CaptureDraft; timeZone: string }>) => void;
   resume: () => void;
   mount: () => () => void;
 }>;
 type Input = Readonly<{ client: FidyClient; initial: CaptureDraft; timeZone: string }>;
-type Owner = Omit<Input, "initial"> & {
+type Owner = Omit<Input, "initial" | "timeZone"> & {
   get: Atom.AtomContext;
+  timeZone: string;
   status: Status;
   draft: CaptureDraft;
   created: Option.Option<Created>;
@@ -81,11 +82,12 @@ const present = (owner: Owner): TransactionCaptureTask => ({
     notify(owner);
   },
   submit: (submission) => submit(owner, submission),
-  restart: (draft) => {
+  restart: ({ draft, timeZone }) => {
     if (!owner.active || owner.status === "saving") return;
     owner.generation += 1;
     owner.status = "editing";
     owner.draft = draft;
+    owner.timeZone = timeZone;
     owner.created = Option.none();
     owner.attempt = Option.none();
     notify(owner);

@@ -1,7 +1,7 @@
 import { expectFinancialLabels } from "./financial-form-text";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, DateTime, Effect, type Schema } from "effect";
-import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
+import { apiOrigin, installCategories, installUser, makeUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
@@ -452,6 +452,168 @@ const midnightCaptureJourney = (page: Page): Journey =>
 test("manual capture uses a fresh local day after cancellation and confirmed save while preserving an uncertain draft", ({
   page,
 }) => Effect.runPromise(midnightCaptureJourney(page)));
+
+type ProfileCaptureFixture = Readonly<{
+  pending: Array<Route>;
+  periods: Array<string>;
+  profile: { timeZone: string };
+}>;
+const profileCaptureFixture = (
+  page: Page
+): Effect.Effect<ProfileCaptureFixture, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    yield* installWorkspace(page);
+    yield* setCaptureTime(page, "2026-10-25T02:00:00.000Z");
+    const fixture = {
+      pending: Array<Route>(),
+      periods: Array<string>(),
+      profile: { timeZone: "America/Bogota" },
+    };
+    yield* wait(() =>
+      page.route(`${apiOrigin}/user`, (route) =>
+        route.fulfill({
+          contentType: "application/json",
+          body: response(makeUser(fixture.profile)),
+        })
+      )
+    );
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions?*`, (route) => {
+        fixture.periods.push(new URL(route.request().url()).searchParams.get("from") ?? "");
+        return route.fulfill({ contentType: "application/json", body: response([row(1)]) });
+      })
+    );
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions`, (route) => {
+        fixture.pending.push(route);
+      })
+    );
+    return fixture;
+  });
+const replaceCaptureProfile = (page: Page, fixture: ProfileCaptureFixture): Journey =>
+  Effect.gen(function* () {
+    fixture.profile.timeZone = "Asia/Tokyo";
+    yield* setCaptureTime(page, "2026-10-25T02:00:06.000Z");
+    yield* wait(() => page.evaluate(() => window.dispatchEvent(new Event("visibilitychange"))));
+    yield* wait(() => expect.poll(() => fixture.periods).toContain("2026-09-30T15:00:00.000Z"));
+  });
+const acknowledgeCapture = (route: Route, occurredAt: string): Journey =>
+  wait(() =>
+    route.fulfill({
+      status: createdStatus,
+      contentType: "application/json",
+      body: response({
+        ...row(2),
+        money: { amount: "12345.67", currency: "COP" },
+        occurredAt,
+        counterparty: undefined,
+        notes: undefined,
+      }),
+    })
+  );
+const captureInCurrentZone = (page: Page, fixture: ProfileCaptureFixture): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Fecha: 25-10-2026", exact: true })).toBeVisible()
+    );
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("12345,67"));
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    yield* wait(() => expect.poll(() => fixture.pending.length).toBe(2));
+    const fresh = fixture.pending[1];
+    if (fresh === undefined) throw new Error("Missing fresh create");
+    expect(fresh.request().postDataJSON()).toMatchObject({
+      occurredAt: "2026-10-24T15:00:00.000Z",
+    });
+    yield* acknowledgeCapture(fresh, "2026-10-24T15:00:00.000Z");
+  });
+const replacedProfileCaptureJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    const fixture = yield* profileCaptureFixture(page);
+    yield* openCapture(page);
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    yield* wait(() => expect.poll(() => fixture.pending.length).toBe(1));
+    yield* replaceCaptureProfile(page, fixture);
+    yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Guardando…", exact: true })).toBeDisabled()
+    );
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("12345,67"));
+    const pending = fixture.pending[0];
+    if (pending === undefined) throw new Error("Missing original create");
+    expect(pending.request().postDataJSON()).toMatchObject({
+      occurredAt: "2026-10-24T05:00:00.000Z",
+    });
+    yield* acknowledgeCapture(pending, "2026-10-24T05:00:00.000Z");
+    yield* wait(() =>
+      expect(page.getByText("Transacción guardada.", { exact: true })).toBeVisible()
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
+    );
+    yield* wait(() =>
+      expect(page.getByText("Transacción registrada", { exact: true })).toHaveCount(0)
+    );
+    expect(fixture.pending).toHaveLength(1);
+    yield* captureInCurrentZone(page, fixture);
+  });
+test("a pending manual capture retains admission across a live profile time zone replacement and a new intent adopts the current zone", ({
+  page,
+}) => Effect.runPromise(replacedProfileCaptureJourney(page)));
+
+const replacedUnknownCaptureJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    const fixture = yield* profileCaptureFixture(page);
+    yield* openCapture(page);
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    yield* wait(() => expect.poll(() => fixture.pending.length).toBe(1));
+    const original = fixture.pending[0];
+    if (original === undefined) throw new Error("Missing original create");
+    yield* wait(() => original.abort("failed"));
+    yield* wait(() =>
+      expect(page.getByText("Guardado sin confirmar", { exact: true })).toBeVisible()
+    );
+    const resume = page.getByRole("button", {
+      name: "No la encontré · editar borrador",
+      exact: true,
+    });
+    yield* wait(() =>
+      page.getByRole("button", { name: "Actualizar historial", exact: true }).click()
+    );
+    yield* wait(() => expect(resume).toBeEnabled());
+    yield* replaceCaptureProfile(page, fixture);
+    yield* wait(() =>
+      expect(page.getByText("Guardado sin confirmar", { exact: true })).toBeVisible()
+    );
+    yield* wait(() => expect(resume).toBeDisabled());
+    yield* wait(() =>
+      expect(page.getByRole("region", { name: "Datos del intento", exact: true })).toContainText(
+        "24-10-2026"
+      )
+    );
+    expect(fixture.pending).toHaveLength(1);
+    yield* wait(() =>
+      page.getByRole("button", { name: "Actualizar historial", exact: true }).click()
+    );
+    yield* wait(() => expect(resume).toBeEnabled());
+    yield* wait(() => resume.click());
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("12345,67"));
+    expect(fixture.pending).toHaveLength(1);
+    yield* wait(() =>
+      page.getByRole("button", { name: "Registrar como nueva transacción", exact: true }).click()
+    );
+    yield* wait(() => expect.poll(() => fixture.pending.length).toBe(2));
+    const fresh = fixture.pending[1];
+    if (fresh === undefined) throw new Error("Missing explicit new create");
+    expect(fresh.request().postDataJSON()).toMatchObject({
+      occurredAt: "2026-10-24T05:00:00.000Z",
+    });
+    yield* acknowledgeCapture(fresh, "2026-10-24T05:00:00.000Z");
+  });
+test("an Unknown manual capture survives profile replacement and requires inspection in the new zone before an explicit new submission with its original date context", ({
+  page,
+}) => Effect.runPromise(replacedUnknownCaptureJourney(page)));
 
 const uncertainCaptureJourney = (page: Page): Journey =>
   Effect.gen(function* () {

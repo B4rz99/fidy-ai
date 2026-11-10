@@ -583,7 +583,9 @@ The Budget summary shows recorded monthly income and all effective expenses, inc
 ### Manual Transaction capture recovery
 
 The capture-owned mounted task retains the draft, synchronous create admission, safe committed
-Transaction and immutable uncertain attempt above month/history-generation workspace remounts.
+Transaction and immutable uncertain attempt above month/history-generation workspace remounts
+and same-User profile time-zone replacement. Admitted drafts and resumed uncertain attempts keep
+their original date and time zone; an explicit clear initializes the next intent in the current zone.
 Parents consume derived placement observations and guarded actions; they cannot set capture status.
 The public form slot receives only an owner component with public capture inputs; that component
 resolves the task privately, so element props do not publish recovery or admission controls.
@@ -592,7 +594,7 @@ Callback defects cannot reopen create or replace a confirmed save with uncertain
 form fences presentation callbacks immediately on replacement; disposing the task also interrupts
 local work without claiming that a sent create was rolled back. Refreshing history
 never resubmits a capture. Recovery requires an explicit reread of the current month's
-history and Categories, with fresh successful observations before offering resume.
+history and Categories, with fresh successful observations in the current time zone before offering resume.
 The User compares the attempt with history; matching fields or an absent loaded row
 cannot prove a write outcome. Resuming edits the retained draft while the original
 attempt remains readable, and a separate submission creates a new Transaction.

@@ -104,18 +104,21 @@ const ManualCaptureEditor = ({
     />
   </>
 );
+const historyInspected = (capture: ManualCapture, props: Props): boolean =>
+  props.editable &&
+  Option.exists(
+    capture.check,
+    (version) =>
+      version.month === props.version.month &&
+      version.timeZone === props.version.timeZone &&
+      version.generation < props.version.generation
+  );
 const CaptureContent = ({
   capture,
   props,
 }: Readonly<{ capture: ManualCapture; props: Props }>): JSX.Element => {
   const uncertain = capture.uncertain;
-  const checked =
-    props.editable &&
-    Option.exists(
-      capture.check,
-      (version) =>
-        version.month === props.version.month && version.generation < props.version.generation
-    );
+  const checked = historyInspected(capture, props);
   const close = (): void => {
     if (Option.isNone(capture.attempt)) capture.clear();
     props.onClose();

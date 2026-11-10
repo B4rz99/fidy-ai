@@ -56,7 +56,7 @@ it.each([
   {
     decision: "resolve",
     expired: false,
-    name: "recovery after consumption",
+    name: "recovery after consumption beyond original confirmation expiry",
     checkpoint: "consumed",
     refusal: "none",
   },

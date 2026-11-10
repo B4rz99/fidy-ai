@@ -906,10 +906,37 @@ export const confirmStatementWithRecovery = ({
     if (checkpoint === "none") return yield* confirm(db);
     const interrupted = yield* confirm(confirmationOutage({ db, checkpoint }));
     expect(interrupted.status).toBe(503);
+    const reservation = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        consumed_turn_id: TranscriptTurnId,
+        consumed_at_ms: Schema.Int,
+        expires_at_ms: Schema.Int,
+      })
+    )(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT consumed_turn_id,consumed_at_ms,expires_at_ms FROM hosted_confirmations WHERE consumed_turn_id IS NOT NULL"
+          )
+          .first()
+      )
+    );
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(now() + 135_001);
+    vi.setSystemTime(now() + (checkpoint === "consumed" ? 600_001 : 135_001));
     try {
-      return yield* resumeInterruptedStatement({ db, bucket, inference, deliver });
+      if (checkpoint === "consumed") expect(now()).toBeGreaterThan(reservation.expires_at_ms);
+      const recovered = yield* resumeInterruptedStatement({ db, bucket, inference, deliver });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT consumed_turn_id,consumed_at_ms,expires_at_ms FROM hosted_confirmations WHERE consumed_turn_id=?"
+            )
+            .bind(reservation.consumed_turn_id)
+            .first()
+        )
+      ).toEqual(reservation);
+      return recovered;
     } finally {
       vi.useRealTimers();
     }

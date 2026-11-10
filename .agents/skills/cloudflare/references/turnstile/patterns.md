@@ -5,7 +5,7 @@
 ### Basic Form (Implicit Rendering)
 
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>

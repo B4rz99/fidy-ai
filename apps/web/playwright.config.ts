@@ -8,14 +8,6 @@ const normalAssertionMilliseconds = 5_000;
 const browserWorkers = 2;
 const performanceCases =
   /returns from .+ with its review form and original already available|returns to .+ from cached data while refreshing|switches between visited review tabs/u;
-const performancePartitions: Readonly<Record<string, RegExp>> = {
-  "1/2":
-    /returns from .+ with its review form and original already available|returns to Transacciones from cached data while refreshing/u,
-  "2/2":
-    /returns to (Presupuestos|Recurrentes|Tablero) from cached data while refreshing|switches between visited review tabs/u,
-};
-const performanceSelection =
-  performancePartitions[process.env.BROWSER_TEST_SHARD ?? ""] ?? performanceCases;
 const normalStartupMilliseconds = 120_000;
 const measurementStartupMilliseconds = 600_000;
 const viteBuild = measuringBrowserCost
@@ -37,7 +29,8 @@ export default defineConfig({
     {
       name: "performance",
       testMatch: ["needs-review.spec.ts", "workspace-navigation.spec.ts"],
-      grep: performanceSelection,
+      // Dependency discovery must be identical across shards to preserve the browser partition.
+      grep: performanceCases,
       dependencies: ["admission"],
       workers: 1,
     },

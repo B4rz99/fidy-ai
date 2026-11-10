@@ -125,8 +125,10 @@ const confirm = (
   Effect.gen(function* () {
     const { code, decision } = choice;
     const event = input.inbound.event;
+    const reviewAttemptId = handoff.review_attempt_id;
     const reply = Option.getOrElse(event.replyToMessageId, () => "");
     if (
+      reviewAttemptId === null ||
       handoff.review_code !== code ||
       handoff.review_message_id === null ||
       reply !== handoff.review_message_id ||
@@ -148,7 +150,7 @@ const confirm = (
             handoff.id,
             code,
             reply,
-            handoff.review_attempt_id,
+            reviewAttemptId,
             input.inbound.receivedAtMs,
             ...currentCaller(input),
             input.inbound.receivedAtMs,

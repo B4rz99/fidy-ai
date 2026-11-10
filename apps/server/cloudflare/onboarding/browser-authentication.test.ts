@@ -3521,7 +3521,9 @@ it.each([
           })
         );
         try {
-          expect((yield* Effect.tryPromise(() => complete(submitted))).status).toBe(400);
+          expect((yield* Effect.tryPromise(() => complete(submitted))).status).toBe(
+            purpose === "replacement" && secret === "correct" ? 401 : 400
+          );
           expect(yield* Effect.tryPromise(() => retained.first())).toEqual({
             attempts: 0,
             state: "awaiting_proof",

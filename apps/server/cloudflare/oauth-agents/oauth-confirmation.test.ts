@@ -310,6 +310,48 @@ it("rolls back native intent consumption with failed Audit and allows only one c
     })
   ));
 
+it("does not replay confirmed mutation when the committed response is lost", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* pendingBudgetDeletion();
+      let loseResponse = true;
+      fixture.interceptQueryResponse(({ response }) => {
+        if (!loseResponse) return Promise.resolve(response);
+        loseResponse = false;
+        return Promise.resolve(new Response("undecodable-delivery", { status: 200 }));
+      });
+      const lost = yield* wait(fixture.call(explicitNativeAccept));
+      expect(yield* wait(lost.json())).toMatchObject({ result: { isError: true } });
+      const replay = yield* wait(fixture.call(explicitNativeAccept));
+      expect(yield* wait(replay.json())).toMatchObject({ result: { isError: true } });
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM budgets WHERE id = ?")
+            .bind(fixture.id)
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM oauth_operation_intents WHERE reference = ?")
+            .bind(fixture.reference)
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM audit_entries WHERE record_type='credential_call' AND operation='budgets.deleteBudget' AND outcome='accepted'"
+            )
+            .first<number>("count(*)")
+        )
+      ).toBe(1);
+    })
+  ));
+
 it.each([
   {
     action: "accept",

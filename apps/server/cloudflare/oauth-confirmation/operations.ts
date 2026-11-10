@@ -1,5 +1,5 @@
 import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
-import { Array as Arr, type Cause, Clock, Effect, Option, Predicate, Schema } from "effect";
+import { Array as Arr, Cause, Clock, Effect, Option, Predicate, Schema } from "effect";
 import { digestBytes, newId } from "../secret-material/operations";
 import { liveOAuthCommitAuthority } from "../../src/shell/oauth-agents/operations";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
@@ -62,12 +62,13 @@ const canonicalJson = (value: Schema.Json): Schema.Json => {
 type ConfirmationPreparation =
   | Readonly<{ _tag: "Review"; review: OAuthNativeReview }>
   | Readonly<{ _tag: "Refused" }>
-  | Readonly<{ _tag: "Prepared"; statements: ReadonlyArray<D1PreparedStatement> }>;
+  | Readonly<{ _tag: "Prepared"; commit: () => Effect.Effect<void, Cause.UnknownError> }>;
 type ConfirmationInput = Readonly<{
   db: D1Database;
   subject: OAuthCaller;
   work: OAuthConfirmationWork;
   binding: OAuthReviewBinding;
+  statements: ReadonlyArray<D1PreparedStatement>;
 }>;
 type IntentWork = Readonly<{
   input: ConfirmationInput;
@@ -92,7 +93,6 @@ const discardIntent = (
       .run()
   ).pipe(Effect.as({ _tag: "Refused" } as const));
 
-/** Only the canonical protected unit executes these statements, together with owner writes/Audit. */
 const consumeIntent = (
   work: IntentWork,
   attempt: NativeDecision
@@ -123,9 +123,22 @@ const consumeIntent = (
       work.current,
       ...work.authority.bindings
     );
+  const statements = [
+    consumed,
+    prepareChangedRowAssertion({ db, scope: "oauth_confirmation" }),
+    ...work.input.statements,
+  ];
+  let pending = true;
   return Effect.succeed({
     _tag: "Prepared",
-    statements: [consumed, prepareChangedRowAssertion({ db, scope: "oauth_confirmation" })],
+    commit: () =>
+      Effect.uninterruptible(
+        Effect.suspend(() => {
+          if (!pending) return Effect.fail(new Cause.UnknownError("OAuth unit already attempted"));
+          pending = false;
+          return Effect.tryPromise(() => db.batch(statements)).pipe(Effect.asVoid);
+        })
+      ),
   });
 };
 
@@ -181,9 +194,10 @@ const issueIntent = (
       : ({ _tag: "Refused" } as const);
   });
 
-/** Issue immutable bounded review or lend single-use consumption to the caller's protected atomic unit.
- * The authorized client asserts the native decision; it does not independently attest human presence.
- * The caller must supply owner-observed bindings and compose their revision guards with all writes and Audit.
+/** Review the original invocation or prepare one attempt of its complete protected native unit.
+ * Supply every owner revision guard, write and required Audit statement before continuing.
+ * The returned commit consumes confirmation with those captured statements or rolls them all back;
+ * it permits one attempt and never attests human presence or confirms delivery of its result.
  */
 export const prepareOAuthConfirmation = (
   input: ConfirmationInput

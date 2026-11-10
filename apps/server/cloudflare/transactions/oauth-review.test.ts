@@ -2,7 +2,7 @@ import { UpdateTransactionsInput } from "../../src/shell/transactions/contract";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { type TransactionCaller } from "../canonical-work/contract";
 import { type PreparedCanonicalMutation } from "../canonical-operations/contract";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
@@ -23,6 +23,7 @@ class TestAdapterFailure extends Data.TaggedError("TestAdapterFailure") {}
 const fromTestPromise = <A>(run: () => Promise<A>): Effect.Effect<A, TestAdapterFailure> =>
   Effect.tryPromise({ try: run, catch: () => new TestAdapterFailure() });
 afterAll(() => Effect.runPromise(fromTestPromise(() => databases.dispose())));
+afterEach(() => vi.useRealTimers());
 const userId = UserId.make("10000000-0000-4000-8000-000000000051");
 const first = "20000000-0000-4000-8000-000000000001";
 const second = "20000000-0000-4000-8000-000000000002";
@@ -242,7 +243,10 @@ const persistedState = (
 const acceptedCommit = (
   db: D1Database,
   mutations: ReadonlyArray<PreparedCanonicalMutation>
-): Effect.Effect<ReadonlyArray<D1PreparedStatement>, Schema.SchemaError | TestAdapterFailure> =>
+): Effect.Effect<
+  () => Effect.Effect<void, TestAdapterFailure>,
+  Schema.SchemaError | TestAdapterFailure
+> =>
   Effect.gen(function* () {
     const binding = mutations.map((mutation) => {
       const review = Option.getOrThrow(mutation.oauthReview);
@@ -287,6 +291,7 @@ const acceptedCommit = (
       db,
       subject,
       binding,
+      statements: [],
       work: { ...work, attempt: { _tag: "Review" } },
     });
     if (issued._tag !== "Review") {
@@ -296,6 +301,10 @@ const acceptedCommit = (
       db,
       subject,
       binding,
+      statements: [
+        ...mutations.flatMap((mutation) => Option.getOrThrow(mutation.oauthReview).guards),
+        ...mutations.flatMap((mutation) => mutation.statements),
+      ],
       work: {
         ...work,
         attempt: {
@@ -308,11 +317,7 @@ const acceptedCommit = (
     if (accepted._tag !== "Prepared") {
       return yield* Effect.die(new Error("Native acceptance refused"));
     }
-    return [
-      ...accepted.statements,
-      ...mutations.flatMap((mutation) => Option.getOrThrow(mutation.oauthReview).guards),
-      ...mutations.flatMap((mutation) => mutation.statements),
-    ];
+    return () => accepted.commit().pipe(Effect.mapError(() => new TestAdapterFailure()));
   });
 
 const correctionRank = (db: D1Database, id = second): D1PreparedStatement =>
@@ -440,12 +445,10 @@ for (const work of ["correction", "group", "unlink"] as const) {
             work !== "unlink"
               ? [correctionMutation]
               : [correctionMutation, yield* prepare(db, "unlink")];
-          const statements = yield* acceptedCommit(db, mutations);
+          const commit = yield* acceptedCommit(db, mutations);
           yield* fromTestPromise(() => premise.change(db));
           const before = yield* persistedState(db);
-          const rejected = yield* fromTestPromise(() => db.batch([...statements])).pipe(
-            Effect.flip
-          );
+          const rejected = yield* commit().pipe(Effect.flip);
           expect(rejected).toBeInstanceOf(TestAdapterFailure);
           expect(yield* persistedState(db)).toEqual(before);
           expect(before.counts[3]).toBe(1);
@@ -478,6 +481,42 @@ for (const work of ["correction", "group", "unlink"] as const) {
     ));
 }
 
+it("requires fresh preparation before retrying a rolled-back native confirmation unit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const mutation = yield* prepare(db, "correction");
+      const commit = yield* acceptedCommit(db, [mutation]);
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER fail_confirmation_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.outcome='accepted' BEGIN SELECT RAISE(ABORT, 'test_confirmation_audit_failure'); END"
+          )
+          .run()
+      );
+      const before = yield* persistedState(db);
+      expect(yield* commit().pipe(Effect.flip)).toBeInstanceOf(TestAdapterFailure);
+      yield* fromTestPromise(() => db.prepare("DROP TRIGGER fail_confirmation_audit").run());
+      expect(yield* commit().pipe(Effect.flip)).toBeInstanceOf(TestAdapterFailure);
+      expect(yield* persistedState(db)).toEqual(before);
+    })
+  ));
+
+it("refuses an expired native unit against database time when the application clock is stale", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const mutation = yield* prepare(db, "correction");
+      const current = yield* Clock.currentTimeMillis;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(current - 300001);
+      const commit = yield* acceptedCommit(db, [mutation]);
+      const before = yield* persistedState(db);
+      expect(yield* commit().pipe(Effect.flip)).toBeInstanceOf(TestAdapterFailure);
+      expect(yield* persistedState(db)).toEqual(before);
+    })
+  ));
+
 it("commits unchanged correction and ordinary unlink with one native acceptance", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -487,8 +526,8 @@ it("commits unchanged correction and ordinary unlink with one native acceptance"
         yield* prepare(db, "correction", { id: third, caller: subject, current }),
         yield* prepare(db, "unlink"),
       ];
-      const statements = yield* acceptedCommit(db, mutations);
-      yield* fromTestPromise(() => db.batch([...statements]));
+      const commit = yield* acceptedCommit(db, mutations);
+      yield* commit();
       expect(yield* persistedState(db)).toEqual({
         transactions: [
           { id: first, notes: "Primero", revision: 0 },

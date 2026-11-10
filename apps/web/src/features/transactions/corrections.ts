@@ -53,7 +53,7 @@ type Input = Readonly<{
   historyAction: Atom.Writable<Option.Option<void>, HistoryCommand>;
   saved: (transactions: ReadonlyArray<Transaction>) => void;
 }>;
-type Work = Effect.Effect<void>;
+type Work = Effect.Effect<void, never, Reactivity.Reactivity>;
 type Owner = Input & {
   get: Atom.AtomContext;
   command: Option.Option<Atom.AtomResultFn<Work, void, never>>;

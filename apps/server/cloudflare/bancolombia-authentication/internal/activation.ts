@@ -309,7 +309,6 @@ export const activate = (
       code: input.code,
       verifier: input.verifier,
     });
-    if (response.status !== successfulResponse) return yield* failed();
     const body = new TextDecoder().decode(response.body);
     const held = yield* Schema.decodeEffect(Schema.fromJsonString(HeldGrant))(body);
     const seconds = Schema.decodeUnknownOption(TokenResponse.fields.expires_in)(held.expires_in);
@@ -330,6 +329,7 @@ export const activate = (
         onSome: (value) => exchangedAt + value * millisecondsPerSecond,
       }),
     });
+    if (response.status !== successfulResponse) return yield* failed();
     const accepted = yield* Schema.decodeEffect(Schema.fromJsonString(TokenResponse))(body);
     yield* validateIdentity(input, accepted, keys);
     const consentBearer = yield* input.consentBearer;

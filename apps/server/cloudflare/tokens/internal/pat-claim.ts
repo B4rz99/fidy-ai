@@ -111,6 +111,7 @@ const pending = (
       : invalid();
   });
 type Claim = Readonly<{
+  proofDigest: Uint8Array;
   pairing: PairingRow & Readonly<{ user_id: string; approved_at_ms: number }>;
   current: number;
   shortId: string;
@@ -129,6 +130,7 @@ const reserveClaim = (db: D1Database, claim: Claim): Effect.Effect<boolean, Caus
           claimPairingGrant({
             pairingId: pairing.id,
             userId: pairing.user_id,
+            proofDigest: claim.proofDigest,
             current,
           }),
 
@@ -156,7 +158,7 @@ const reserveClaim = (db: D1Database, claim: Claim): Effect.Effect<boolean, Caus
 const mint = (
   db: D1Database,
   pairing: PairingRow,
-  current: number
+  { current, proofDigest }: Readonly<{ current: number; proofDigest: Uint8Array }>
 ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     if (
@@ -178,6 +180,7 @@ const mint = (
       if (
         !(yield* reserveClaim(db, {
           pairing: { ...pairing, user_id: userId, approved_at_ms: approvedAt },
+          proofDigest,
           current,
           shortId,
           bearer,
@@ -249,5 +252,5 @@ export const claimPATPairing = ({
     }
     if (decision._tag === "Pending") return yield* pending(db, pairing.value, current);
     if (decision._tag !== "Claim") return invalid();
-    return yield* mint(db, pairing.value, current);
+    return yield* mint(db, pairing.value, { current, proofDigest });
   });

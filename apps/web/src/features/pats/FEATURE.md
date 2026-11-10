@@ -288,3 +288,18 @@ workspace. `/ingestion/review-workspace` also returned 503 (trace
 `15127635bd02bdf4ff389137a094249f`). The earlier populated October view was retained browser
 state and is not evidence of current backend availability. Live financial/access mutations
 remain paused; fresh recurring reads and the post-deployment hosted lookup rerun are blocked.
+
+## Pairing review ownership
+
+The mounted pairing task owns code entry, inspection, exact-grant review, approval and local
+cancellation. Presentation receives display state and User actions; it cannot choose a pairing
+identity or construct an approval request. Route identity binds that task to the public code and
+browser session binding. A replacement code or authentication lifetime discards the previous review.
+Only an explicit approval action submits the retained pairing identity. Loading and inspection
+never approve, and browser review is display evidence rather than a server inspection receipt.
+
+Closing an in-flight review abandons its local result; an already dispatched approval can still
+commit. Late inspection or approval callbacks cannot settle a replacement task. An uncertain
+approval response offers authenticated access metadata/revocation, without claiming rejection,
+client login or automatic retry. The browser holds no private device proof or PAT bearer. Live
+session approval retains the existing policy; recent authentication is not newly required.

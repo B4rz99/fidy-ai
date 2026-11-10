@@ -136,6 +136,13 @@ before any schema change; it never rebuilds the Audit table or changes its appen
 
 MCP projects canonical capabilities under a separately identifiable OAuthConnection. It uses the
 same owner behavior, User coordination, Consent, accounting and Audit boundaries as other clients.
+PAT pairing keeps start, authenticated inspection, explicit live-session approval and private-proof
+poll/claim separate. Inspection does not reserve authority or create a server approval receipt.
+Approval fixes the PAT expiry while retaining the original pairing deadline. Claim's guarded D1
+commit rechecks the exact initiating proof, bound User, both expiries, current Consent and issuance
+capacity before consuming approval, storing a digest-only PAT and appending Audit atomically.
+Repeated claims cannot disclose the bearer again, including after an uncertain response.
+
 OAuth approval, refresh, revocation and sensitive-operation confirmation remain distinct from PAT
 and browser-session authority. Sensitive OAuth operations require one client-native decision,
 bound to the exact operation and consumed atomically; the client assertion is not human attestation.

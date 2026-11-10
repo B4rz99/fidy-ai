@@ -1,77 +1,43 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
 import { Effect, Option, Schema } from "effect";
-import { type Atom } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { type FidyClient, PATPairingPublicCode } from "@/transport/client";
+import { PATPairingPublicCode, type PATPairingReview } from "@/transport/client";
 import { FidyWordmark } from "@/ui/components/wordmark";
 import { Button } from "@/ui/components/button";
-import {
-  type ApprovePATPairingCommand,
-  type InspectPATPairingCommand,
-  PATPairingView,
-} from "./pairing-view";
+import { PATPairingView } from "./pairing-view";
+import { usePATPairing } from "./pairing";
 
-const makeInspectPairingCommand = (
-  apiClient: FidyClient
-): Atom.AtomResultFn<InspectPATPairingCommand, void, never> =>
-  apiClient.runtime.fn<InspectPATPairingCommand>()(
-    (command) =>
-      Effect.gen(function* () {
-        const client = yield* apiClient;
-        const response = yield* client.pats.inspectPATPairing({
-          payload: { publicCode: command.publicCode },
-        });
-        yield* Effect.sync(() => command.onInspected(response.data));
-      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
-    { concurrent: false }
-  );
-
-const makeApprovePairingCommand = (
-  apiClient: FidyClient
-): Atom.AtomResultFn<ApprovePATPairingCommand, void, never> =>
-  apiClient.runtime.fn<ApprovePATPairingCommand>()(
-    (command) =>
-      Effect.gen(function* () {
-        const client = yield* apiClient;
-        yield* client.pats.approvePATPairing({
-          payload: { pairingId: command.pairingId },
-        });
-        yield* Effect.sync(command.onApproved);
-      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
-    { concurrent: false }
-  );
-
-const CLIApproval = ({
-  code,
-}: Readonly<{ code: Option.Option<PATPairingPublicCode> }>): JSX.Element => {
-  const client = useRouter().options.context.apiClient;
-  const [inspectAtom] = useState(() => makeInspectPairingCommand(client));
-  const [approveAtom] = useState(() => makeApprovePairingCommand(client));
-  const inspect = useAtomSet(inspectAtom);
-  const approve = useAtomSet(approveAtom);
-  return Option.isSome(code) ? (
-    <PreselectedApproval code={code.value} inspect={inspect} approve={approve} />
-  ) : (
-    <PATPairingView
-      initialReview={Option.none()}
-      publicCode={Option.none()}
-      inspect={inspect}
-      approve={approve}
-    />
+const PairingTask = ({
+  initialReview,
+  publicCode,
+}: Readonly<{
+  initialReview: Option.Option<PATPairingReview>;
+  publicCode: Option.Option<string>;
+}>): JSX.Element => {
+  const apiClient = useRouter().options.context.apiClient;
+  const { state, actions, lifecycleRef } = usePATPairing({ apiClient, initialReview, publicCode });
+  return (
+    <section ref={lifecycleRef}>
+      <PATPairingView state={state} actions={actions} />
+    </section>
   );
 };
+const CLIApproval = ({
+  code,
+}: Readonly<{ code: Option.Option<PATPairingPublicCode> }>): JSX.Element =>
+  Option.isSome(code) ? (
+    <PreselectedApproval code={code.value} />
+  ) : (
+    <PairingTask initialReview={Option.none()} publicCode={Option.none()} />
+  );
 const PreselectedApproval = ({
   code,
-  inspect,
-  approve,
 }: Readonly<{
   code: PATPairingPublicCode;
-  inspect: (command: InspectPATPairingCommand) => void;
-  approve: (command: ApprovePATPairingCommand) => void;
 }>): JSX.Element => {
   const client = useRouter().options.context.apiClient;
   const [request] = useState(() =>
@@ -97,18 +63,17 @@ const PreselectedApproval = ({
     );
   }
   return (
-    <PATPairingView
+    <PairingTask
       key={code}
       initialReview={Option.some(result.value.data)}
       publicCode={Option.some(code)}
-      inspect={inspect}
-      approve={approve}
     />
   );
 };
 /** Public links select a request; only an explicit approval click grants access. */
 export const CLIConnectionFeature = (): JSX.Element => {
   const search = useSearch({ strict: false });
+  const { sessionBinding } = useRouter().options.context;
   const code = Schema.decodeUnknownOption(PATPairingPublicCode)(search.cliCode);
   return (
     <main className="signed-in-theme flex min-h-svh justify-center bg-background px-5 py-10">
@@ -118,7 +83,10 @@ export const CLIConnectionFeature = (): JSX.Element => {
         <p className="text-sm text-muted-foreground">
           Autoriza únicamente una conexión que hayas iniciado con fidy login.
         </p>
-        <CLIApproval key={Option.getOrElse(code, () => "manual")} code={code} />
+        <CLIApproval
+          key={`${sessionBinding}:${Option.getOrElse(code, () => "manual")}`}
+          code={code}
+        />
       </section>
     </main>
   );

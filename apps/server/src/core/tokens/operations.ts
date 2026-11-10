@@ -159,7 +159,7 @@ const decidePATPairingClaimValue = (input: PATPairingClaimInput): PATPairingClai
       };
 };
 
-/** Decides one claim or poll after the shell has locked and verified one persisted candidate. */
+/** Decides one claim or poll from an observed candidate; the shell must recheck authority in the committing guard. */
 export const decidePATPairingClaim = (
   input: PATPairingClaimInput
 ): Effect.Effect<PATPairingClaimDecision> => Effect.succeed(decidePATPairingClaimValue(input));

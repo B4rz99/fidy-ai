@@ -1,7 +1,7 @@
-import { DateTime, Option, Schema } from "effect";
-import { type FormEvent, type JSX, useState } from "react";
-import type { PATPairingId, PATPairingReview } from "@/transport/client";
-import { PATPairingPublicCode, patScopeCopy } from "@/transport/client";
+import { DateTime, Option } from "effect";
+import { type FormEvent, type JSX } from "react";
+import type { PATPairingReview } from "@/transport/client";
+import { patScopeCopy } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
@@ -9,26 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { Label } from "@/ui/components/label";
 import { Input } from "@/ui/components/input";
 
-export type InspectPATPairingCommand = Readonly<{
-  publicCode: string;
-  onInspected: (review: PATPairingReview) => void;
-  onFailed: () => void;
-}>;
-export type ApprovePATPairingCommand = Readonly<{
-  pairingId: PATPairingId;
-  onApproved: () => void;
-  onFailed: () => void;
-}>;
+import type { PATPairingActions, PATPairingDisplay } from "./pairing";
 
-type PairingState =
-  | Readonly<{ _tag: "Entering"; publicCode: string }>
-  | Readonly<{ _tag: "Inspecting"; publicCode: string }>
-  | Readonly<{ _tag: "Reviewing"; review: PATPairingReview; publicCode: Option.Option<string> }>
-  | Readonly<{ _tag: "Approving"; review: PATPairingReview; publicCode: Option.Option<string> }>
-  | Readonly<{ _tag: "Invalid"; publicCode: Option.Option<string> }>
-  | Readonly<{ _tag: "Approved" }>;
-
-const initialState: PairingState = { _tag: "Entering", publicCode: "" };
 const formatter = new Intl.DateTimeFormat("es-CO", {
   dateStyle: "long",
   timeStyle: "short",
@@ -105,14 +87,10 @@ const PairingReviewCard = ({
   state,
   approve,
   reset,
-  failed,
-  approved,
 }: Readonly<{
-  state: Extract<PairingState, { _tag: "Reviewing" | "Approving" }>;
-  approve: (command: ApprovePATPairingCommand) => void;
+  state: Extract<PATPairingDisplay, { _tag: "Reviewing" | "Approving" }>;
+  approve: () => void;
   reset: () => void;
-  failed: () => void;
-  approved: () => void;
 }>): JSX.Element => {
   const busy = state._tag === "Approving";
   return (
@@ -134,21 +112,16 @@ const PairingReviewCard = ({
           iniciaste esta conexión.
         </p>
         <PairingReviewDetails review={state.review} />
+        {busy ? (
+          <output className="text-sm text-muted-foreground">
+            La autorización enviada puede completarse aunque cierres esta revisión.
+          </output>
+        ) : null}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button disabled={busy} onClick={reset} type="button" variant="outline">
-            Cancelar
+          <Button onClick={reset} type="button" variant="outline">
+            {busy ? "Cerrar revisión" : "Cancelar"}
           </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              approve({
-                pairingId: state.review.pairingId,
-                onApproved: approved,
-                onFailed: failed,
-              })
-            }
-            type="button"
-          >
+          <Button disabled={busy} onClick={approve} type="button">
             {busy ? "Autorizando…" : "Autorizar acceso"}
           </Button>
         </div>
@@ -161,15 +134,17 @@ const PairingCodeSection = ({
   state,
   inspect,
   update,
+  reset,
 }: Readonly<{
-  state: Extract<PairingState, { _tag: "Entering" | "Inspecting" }>;
-  inspect: (publicCode: string) => void;
+  state: Extract<PATPairingDisplay, { _tag: "Entering" | "Inspecting" }>;
+  reset: () => void;
+  inspect: () => void;
   update: (publicCode: string) => void;
 }>): JSX.Element => {
   const busy = state._tag === "Inspecting";
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (!busy && state.publicCode.trim().length > 0) inspect(state.publicCode);
+    if (!busy && state.publicCode.trim().length > 0) inspect();
   };
   return (
     <section className="flex min-w-0 flex-col gap-5">
@@ -201,66 +176,55 @@ const PairingCodeSection = ({
           >
             {busy ? "Buscando…" : "Continuar"}
           </Button>
+          {busy ? (
+            <Button onClick={reset} type="button" variant="outline">
+              Cancelar
+            </Button>
+          ) : null}
         </form>
       </div>
     </section>
   );
 };
 
-/** Requires a fresh session; receives no private pairing proof or PAT bearer. */
 export const PATPairingView = ({
-  inspect,
-  approve,
-  initialReview,
-  publicCode,
-}: Readonly<{
-  initialReview: Option.Option<PATPairingReview>;
-  publicCode: Option.Option<string>;
-  inspect: (command: InspectPATPairingCommand) => void;
-  approve: (command: ApprovePATPairingCommand) => void;
-}>): JSX.Element => {
-  const [state, setState] = useState<PairingState>(() =>
-    Option.isSome(initialReview)
-      ? { _tag: "Reviewing", review: initialReview.value, publicCode }
-      : initialState
-  );
-  const reset = (): void => setState(initialState);
+  state,
+  actions,
+}: Readonly<{ state: PATPairingDisplay; actions: PATPairingActions }>): JSX.Element => {
   if (state._tag === "Invalid") {
-    return <InvalidPairingCard reset={reset} publicCode={state.publicCode} />;
+    return <InvalidPairingCard reset={actions.reset} publicCode={state.publicCode} />;
+  }
+  if (state._tag === "ApprovalUnknown") {
+    return (
+      <Card>
+        <CardContent>
+          <Alert variant="warning">
+            <AlertTitle>No pudimos confirmar la autorización</AlertTitle>
+            <AlertDescription>
+              La solicitud puede haberse autorizado. Revisa tus tokens en Accesos y desactiva el
+              acceso si no quieres conservarlo. Volver a esta página no repite la autorización.
+            </AlertDescription>
+          </Alert>
+          <Button
+            nativeButton={false}
+            render={<a href="/settings/access" aria-label="Revisar accesos" />}
+          >
+            Revisar accesos
+          </Button>
+        </CardContent>
+      </Card>
+    );
   }
   if (state._tag === "Approved") return <ApprovedPairingCard />;
   if (state._tag === "Reviewing" || state._tag === "Approving") {
-    return (
-      <PairingReviewCard
-        approve={(command) => {
-          setState({ ...state, _tag: "Approving" });
-          approve(command);
-        }}
-        approved={() => setState({ _tag: "Approved" })}
-        failed={() => setState({ _tag: "Invalid", publicCode: Option.none() })}
-        reset={reset}
-        state={state}
-      />
-    );
+    return <PairingReviewCard approve={actions.approve} reset={actions.reset} state={state} />;
   }
   return (
     <PairingCodeSection
-      inspect={(value) => {
-        const publicCode = value.trim().toUpperCase();
-        setState({ _tag: "Inspecting", publicCode });
-        inspect({
-          publicCode,
-          onInspected: (review) =>
-            setState({ _tag: "Reviewing", review, publicCode: Option.some(publicCode) }),
-          onFailed: () =>
-            setState({
-              _tag: "Invalid",
-              publicCode: Schema.decodeOption(PATPairingPublicCode)(publicCode),
-            }),
-        });
-      }}
       state={state}
-      update={(publicCode) => setState({ _tag: "Entering", publicCode })}
+      inspect={actions.inspect}
+      update={actions.update}
+      reset={actions.reset}
     />
   );
 };

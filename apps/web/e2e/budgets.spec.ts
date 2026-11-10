@@ -1263,10 +1263,19 @@ test("shows spending in each Currency when no Categories have a budget", ({ page
   Effect.runPromise(checkUnbudgetedCurrencies(page)));
 
 const budgetRevalidationMilliseconds = 6000;
-const checkRetiredCategory = Effect.fn(function* (page: Page) {
+const reassignedReport = {
+  ...report,
+  budgets: report.budgets.map((value) => ({ ...value, groupName: "Nuevo" })),
+  statuses: report.statuses.map((status) => ({
+    ...status,
+    budget: { ...status.budget, groupName: "Nuevo" },
+  })),
+};
+const checkRetiredCategory = Effect.fn(function* (page: Page, reassigned: boolean) {
   yield* Effect.tryPromise(() => installBudgetUser(page));
   yield* Effect.tryPromise(() => installCategories({ page, categories }));
   let removed = false;
+  const replacement = reassigned ? reassignedReport : deletedReport;
   let reads = 0;
   let writes = 0;
   yield* Effect.tryPromise(() =>
@@ -1274,7 +1283,7 @@ const checkRetiredCategory = Effect.fn(function* (page: Page) {
       reads += 1;
       return route.fulfill({
         contentType: "application/json",
-        body: response(removed ? deletedReport : report),
+        body: response(removed ? replacement : report),
       });
     })
   );
@@ -1298,18 +1307,22 @@ const checkRetiredCategory = Effect.fn(function* (page: Page) {
   );
   yield* Effect.tryPromise(() => expect.poll(() => reads).toBeGreaterThan(initialReads));
   yield* Effect.tryPromise(() =>
-    expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveCount(0)
+    expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveCount(reassigned ? 1 : 0)
   );
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Guardar presupuesto", exact: true }).click()
   );
   yield* Effect.tryPromise(() =>
-    expect(page.getByRole("alert")).toContainText("No se pudo guardar")
+    expect(
+      page.getByRole("form", { name: "Configurar presupuesto de Vivienda" }).getByRole("alert")
+    ).toContainText("No se pudo guardar")
   );
   expect(writes).toBe(0);
 });
 test("an open Budget editor cannot write a target removed by a fresh monthly report", ({ page }) =>
-  Effect.runPromise(checkRetiredCategory(page)));
+  Effect.runPromise(checkRetiredCategory(page, false)));
+test("an open Budget editor cannot undo a fresh group reassignment", ({ page }) =>
+  Effect.runPromise(checkRetiredCategory(page, true)));
 
 const checkSameTickSave = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() => installBudgetUser(page));
@@ -1378,6 +1391,13 @@ const checkFailedLocalRead = Effect.fn(function* (page: Page, path: "categories"
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("alert")).toContainText("No pudimos confirmar el guardado")
   );
+  const editor = page.getByRole("form", { name: "Configurar presupuesto de Vivienda" });
+  yield* Effect.tryPromise(() =>
+    expect(editor.getByRole("alert")).toContainText("No pudimos confirmar el guardado")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(editor.getByRole("button", { name: "Guardar presupuesto", exact: true })).toBeDisabled()
+  );
   unavailable = true;
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Actualizar presupuestos", exact: true }).click()
@@ -1403,3 +1423,71 @@ for (const path of ["categories", "user"] as const) {
     page,
   }) => Effect.runPromise(checkFailedLocalRead(page, path)));
 }
+
+const installEditorRefusal = Effect.fn(function* (page: Page, observation: { attempts: number }) {
+  const pending = Promise.withResolvers<void>();
+  const refuse = (route: Route): Promise<void> =>
+    pending.promise.then(() =>
+      route.fulfill({
+        status: 400,
+        json: { error: { code: "validation_failed", message: "Refused", fields: [] }, next: [] },
+      })
+    );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budgets/*`, (route) => {
+      observation.attempts += 1;
+      return observation.attempts === 1 ? refuse(route) : route.abort("failed");
+    })
+  );
+  return pending.resolve;
+});
+
+const checkEditorFeedback = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+  yield* Effect.tryPromise(() => installBudgetUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  yield* Effect.tryPromise(() => installBudgetReport(page));
+  const observation = { attempts: 0 };
+  const release = yield* installEditorRefusal(page, observation);
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  const editor = page.getByRole("form", { name: "Configurar presupuesto de Vivienda" });
+  yield* Effect.tryPromise(() => editor.getByLabel("Presupuesto", { exact: true }).fill("150000"));
+  yield* Effect.tryPromise(() =>
+    editor.getByRole("button", { name: "Guardar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(editor.getByRole("status")).toContainText("Guardando presupuesto")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(editor.getByRole("button", { name: "Guardando…", exact: true })).toBeDisabled()
+  );
+  release();
+  yield* Effect.tryPromise(() =>
+    expect(editor.getByRole("alert")).toContainText("No se pudo guardar")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(editor.getByRole("button", { name: "Guardar presupuesto", exact: true })).toBeEnabled()
+  );
+  yield* Effect.tryPromise(() =>
+    editor.getByRole("button", { name: "Guardar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(editor.getByRole("alert")).toContainText("No pudimos confirmar el guardado")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(editor.getByRole("button", { name: "Guardar presupuesto", exact: true })).toBeDisabled()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      editor.getByRole("button", { name: "Actualizar presupuestos", exact: true })
+    ).toBeEnabled()
+  );
+  expect(observation.attempts).toBe(2);
+  yield* checkAccessibility(page);
+});
+test("the mobile Budget editor distinguishes pending, refused and uncertain saves locally", ({
+  page,
+}) => Effect.runPromise(checkEditorFeedback(page)));

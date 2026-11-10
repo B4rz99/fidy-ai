@@ -259,7 +259,6 @@ const useBudgetWrites = ({
   const { saveState, refreshVersion } = interaction;
   const current = (): Option.Option<BudgetWriteContext> =>
     Option.filter(lifetime.current(), eligibleContext);
-  const disabled = !editable || saveState === "saving" || saveState === "uncertain";
   const refresh = (): void => {
     const context = lifetime.current();
     if (Option.isNone(context) || (pending() && context.value.saveState !== "uncertain")) return;
@@ -269,23 +268,24 @@ const useBudgetWrites = ({
     update({ refreshVersion: refreshVersion + 1, saveState: "idle", draft: Option.none() });
     context.value.refreshQueries();
   };
-  const complete = (outcome: WriteOutcome, command: ValidWrite): void => {
-    if (!lifetime.isCurrent()) return;
-    update(
-      outcome === "saved" ? { saveState: outcome, draft: Option.none() } : { saveState: outcome }
-    );
-    if (outcome === "saved" && command.type !== "delete") {
-      Option.map(lifetime.current(), (context) => context.refreshQueries());
-    }
-  };
   const execute = (command: ValidWrite): void => {
     if (Option.isNone(current()) || pending()) return;
     update({ saveState: "saving", writeAction: command.type === "delete" ? "delete" : "save" });
-    submit({ command, isCurrent: lifetime.isCurrent }, (outcome) => complete(outcome, command));
+    submit({ command, isCurrent: lifetime.isCurrent }, (outcome) => {
+      const context = lifetime.current();
+      if (Option.isNone(context)) return;
+      if (outcome === "saved") lifetime.reset();
+      update(
+        outcome === "saved" ? { saveState: outcome, draft: Option.none() } : { saveState: outcome }
+      );
+      if (outcome === "saved" && command.type !== "delete") {
+        context.value.refreshQueries();
+      }
+    });
   };
   return {
     ...interaction,
-    disabled,
+    disabled: !editable || saveState === "saving" || saveState === "uncertain",
     refresh,
     ...budgetEditActions({
       current,
@@ -294,6 +294,7 @@ const useBudgetWrites = ({
       update,
       month,
       isCurrent: lifetime.isCurrent,
+      retire: lifetime.reset,
     }),
   };
 };
@@ -305,6 +306,7 @@ type EditActionsInput = Readonly<{
   update: (patch: Partial<BudgetInteraction>) => void;
   month: string;
   isCurrent: () => boolean;
+  retire: () => void;
 }>;
 const budgetEditActions = ({
   current,
@@ -313,6 +315,7 @@ const budgetEditActions = ({
   update,
   month,
   isCurrent,
+  retire,
 }: EditActionsInput): Pick<BudgetWrites, "write" | "remove" | "openEditor" | "closeEditor"> => {
   const write = (edit: BudgetEdit): void => {
     if (Option.isNone(current()) || pending()) return;
@@ -350,10 +353,14 @@ const budgetEditActions = ({
       const target = Option.flatMap(context.value.data, (valueData) =>
         currentTarget(value, valueData)
       );
-      if (Option.isSome(target)) update({ draft: target });
+      if (Option.isSome(target)) {
+        retire();
+        update({ draft: target });
+      }
     },
     closeEditor: () => {
       if (isCurrent() && !pending()) {
+        retire();
         update({ draft: Option.none() });
       }
     },
@@ -382,7 +389,9 @@ const currentTarget = (draft: BudgetDraft, data: MonthData): Option.Option<Budge
   const matches = Option.match(draft.budget, {
     onNone: () => budget === undefined,
     onSome: (previous) =>
-      budget?.id === previous.id && budget.cap.currency === previous.cap.currency,
+      budget?.id === previous.id &&
+      budget.cap.currency === previous.cap.currency &&
+      budget.groupName === previous.groupName,
   });
   if (!matches) return Option.none();
   if (!currentGroup(draft, data)) return Option.none();

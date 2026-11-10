@@ -40,9 +40,14 @@ const emailReplacementFreshError = {
   code: "fresh_pairing_required",
   message: "Vincula el navegador de nuevo antes de cambiar tu correo.",
 } as const;
+const emailReplacementUnavailableError = {
+  code: "replacement_unavailable",
+  message: "No pudimos confirmar el cambio de correo. Comprueba tu correo al iniciar sesión.",
+} as const;
 
 /** Body accepted by the first-party browser replacement-completion endpoint. */
 export const CompleteEmailReplacementPayload = Schema.Struct({
+  candidateEmail: EmailAddress,
   combinedCode: EmailVerificationCode,
 });
 export type CompleteEmailReplacementPayload = typeof CompleteEmailReplacementPayload.Type;
@@ -58,7 +63,7 @@ const emailReplacementInvalidFields = {
   }),
 };
 
-/** Generic browser response for an invalid or unavailable replacement proof. */
+/** Non-enumerating response for a definitively invalid replacement proof or candidate assertion. */
 export class EmailReplacementInvalidApi extends Schema.Error<
   EmailReplacementInvalidApi,
   Brand.Brand<"EmailReplacementInvalidApi">
@@ -95,10 +100,24 @@ export class EmailReplacementFreshPairingRequiredApi extends Schema.Error<
   { httpApiStatus: 401 }
 ) {}
 
+export class EmailReplacementUnavailableApi extends Schema.Error<
+  EmailReplacementUnavailableApi,
+  Brand.Brand<"EmailReplacementUnavailableApi">
+>("EmailReplacementUnavailableApi")(
+  {
+    error: Schema.Struct({
+      code: Schema.Literal(emailReplacementUnavailableError.code),
+      message: Schema.Literal(emailReplacementUnavailableError.message),
+    }),
+  },
+  { httpApiStatus: 503 }
+) {}
+
 /** Shared bounded invalid-proof payload used by raw browser handlers. */
 export const emailReplacementInvalidBody = { error: emailReplacementInvalidError } as const;
 /** Shared bounded stale-authority payload used by raw browser handlers. */
 export const emailReplacementFreshBody = { error: emailReplacementFreshError } as const;
+export const emailReplacementUnavailableBody = { error: emailReplacementUnavailableError } as const;
 
 const browserPairingEmailAuthenticationInvalidError = {
   code: "authentication_invalid",
@@ -195,7 +214,7 @@ const requestEmailReplacement = HttpApiEndpoint.post(
 )
   .annotate(
     OpenApi.Description,
-    "Use after the User confirms replacing their verified email; sends a verification code to the candidate address."
+    "Request verification of a replacement mailbox after User confirmation. Pending may mean existing work was preserved; it does not prove admission or delivery."
   )
   // Standalone: the mailbox challenge and outbox share their own atomic unit (ADR 0027).
   .annotate(AtomicBatchEligible, false)
@@ -216,6 +235,7 @@ const completeEmailReplacement = HttpApiEndpoint.post(
     success: OperationResponse(CompletedEmailReplacement),
     error: [
       EmailReplacementInvalidApi,
+      EmailReplacementUnavailableApi,
       EmailReplacementFreshPairingRequiredApi,
       EmailReplacementOriginRejectedApi,
       EmailReplacementPayloadTooLargeApi,
@@ -261,7 +281,13 @@ export type EmailDeliveryPortService = {
 /** Cloudflare's transaction adapter; the canonical implementation owns the operation result. */
 export type EmailReplacementMutationService = Readonly<{
   request: (subject: UserId, candidate: EmailAddress) => Effect.Effect<void>;
-  complete: (subject: UserId, combinedCode: string) => Effect.Effect<boolean>;
+  complete: (
+    subject: UserId,
+    proof: CompleteEmailReplacementPayload
+  ) => Effect.Effect<
+    boolean,
+    EmailReplacementUnavailableApi | EmailReplacementFreshPairingRequiredApi
+  >;
 }>;
 
 /** Trusted static subject query carries exact pairingId/userId for live same-User composition. */

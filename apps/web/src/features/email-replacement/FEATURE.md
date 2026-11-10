@@ -8,9 +8,13 @@ Capability and verification map for `/settings/email`. Product requirements rema
 
 An established verified EmailCredential can be replaced after fresh browser pairing. Provider sign-in with Google or Microsoft does not establish that separate credential. The old verified mailbox remains active until the new proof is accepted.
 
-The mounted form accepts a candidate mailbox, requests a code, and shows the candidate while awaiting proof. Completion submits only the combined code through the canonical typed client. The proof field clears immediately on submission. Invalid proof retains the candidate and offers resend or another mailbox. Missing or stale authority directs the User to browser pairing. Transport or malformed responses report an uncertain result rather than successful replacement or invalid proof, and advise checking sign-in before another change.
+The mounted form accepts a candidate mailbox, requests a code, and shows the candidate while awaiting proof. Completion submits the normalized candidate assertion alongside the combined code through the canonical typed client. The server compares that candidate with its exact live work again at credential commit; a suppressed request for another mailbox cannot use the earlier mailbox’s proof. Candidate mismatch retains the same non-enumerating invalid-proof response. The proof field clears immediately on submission. Invalid proof retains the candidate and offers resend or another mailbox. Missing or stale authority directs the User to browser pairing. Transport or malformed responses report an uncertain result rather than successful replacement or invalid proof, and advise checking sign-in before another change.
 
-Candidate mailbox and proof remain transient form/controller state. Neither enters navigation, browser storage, or shared query results. Server email authentication owns proof delivery, consumption, credential replacement and authority checks.
+Candidate mailbox and proof remain transient form/controller state and are discarded on disposal. Neither enters navigation, browser storage, or shared query results. Server email authentication owns proof delivery, consumption, credential replacement and authority checks.
+
+A failed request restores the entered candidate within the mounted feature. An unresolved completion retains only a private admission flag in the authentication registry and one bounded, versioned session-storage marker containing the public session binding. The marker carries no mailbox or proof and survives document reload. A definitive result removes only that session’s marker. Another authenticated binding can begin a separately reviewed task without deleting foreign recovery metadata; before completion can overwrite the marker, a fresh declared session-binding read must match the mounted owner and current generation. If that read or marker retention fails, completion is not submitted. Back, navigation, and restored documents discard drafts and retire callbacks without claiming that submitted server work was cancelled.
+
+Native completion refreshes its decision instant after proof reads and hashing, before preparing the guarded credential swap. Original work/proof deadlines and fresh-session requirements are checked at that instant; a preflight cannot renew them.
 
 ## Verification
 
@@ -27,6 +31,6 @@ Two actual Worker/D1 checks also passed for malformed replacement work, revoked/
 Production replacement remains untested. Do not rotate the User's real mailbox as an audit fixture. Repeat timing checks under representative load before treating the earlier timeout as resolved performance evidence.
 
 ```sh
-bun run --cwd apps/web test src/features/email-replacement
+bun run --cwd apps/web test src/features/email-replacement/commands.test.ts
 BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser 01-real-core-journeys.spec.ts --grep 'replaces a verified EmailCredential' --workers=1 --timeout=120000
 ```

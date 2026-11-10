@@ -534,7 +534,9 @@ test("replaces a verified EmailCredential through public operations after fixtur
           .click()
       );
       yield* fromPlaywright(
-        expect(page.getByText("Enviamos un código a nuevo@example.com.")).toBeVisible()
+        expect(
+          page.getByText("Si recibes un código para nuevo@example.com, puedes ingresarlo aquí.")
+        ).toBeVisible()
       );
       const delivered = yield* fromPlaywright(
         request.post(`${operator}/email/replacement/deliver`)
@@ -556,6 +558,305 @@ test("replaces a verified EmailCredential through public operations after fixtur
       expect(yield* fromPlaywright(page.evaluate(retainedSecretCount))).toBe(0);
     })
   ));
+const submitReplacementTwice = (page: Page, label: string): Promise<void> =>
+  page.getByLabel(label).evaluate((input) => {
+    const form = input.closest("form");
+    form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+const expectReplacementAdmissionOnly = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(yield* fromPlaywright(page.evaluate(retainedSecretCount))).toBe(1);
+      expect(
+        yield* fromPlaywright(
+          page.evaluate(() => sessionStorage.getItem("fidy:email-replacement-admission-v1"))
+        )
+      ).toMatch(/^\{"version":1,"binding":"[0-9a-f-]{36}"\}$/u);
+    })
+  );
+const restoreReplacementDocument = (page: Page): Promise<void> =>
+  page
+    .evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })))
+    .then(() =>
+      page.evaluate(() => {
+        window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+      })
+    );
+const expectUnresolvedReplacement = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(
+        expect(page.getByText("No pudimos confirmar el cambio de correo")).toBeVisible()
+      );
+      yield* fromPlaywright(
+        expect(page.getByText("El código no es válido", { exact: true })).toHaveCount(0)
+      );
+      yield* fromPlaywright(
+        expect(
+          page.getByRole("button", {
+            name: /Cambiar correo|Solicitar código de nuevo|Usar otro correo/u,
+          })
+        ).toHaveCount(0)
+      );
+      yield* fromPlaywright(expect(page.getByLabel("Nuevo correo")).toHaveCount(0));
+      yield* fromPlaywright(expect(page.getByLabel("Código de verificación")).toHaveCount(0));
+    })
+  );
+test("preserves the entered replacement candidate after a request failure", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(signInThroughCore({ page, request, deferFreshEntry: true }));
+      yield* fromPlaywright(
+        page.route(`${api}/email/replacement`, (route) => route.fulfill({ status: 503, json: {} }))
+      );
+      yield* fromPlaywright(page.goto("/settings/account"));
+      yield* fromPlaywright(page.getByLabel("Nuevo correo").fill("Retry@example.test"));
+      yield* fromPlaywright(
+        page.getByRole("button", { name: "Enviar código", exact: true }).click()
+      );
+      yield* fromPlaywright(
+        expect(
+          page.getByText("No pudimos confirmar la solicitud. Puedes solicitar el código de nuevo.")
+        ).toBeVisible()
+      );
+      yield* fromPlaywright(
+        expect(page.getByLabel("Nuevo correo")).toHaveValue("Retry@example.test")
+      );
+      yield* fromPlaywright(restoreReplacementDocument(page));
+      yield* fromPlaywright(expect(page.getByLabel("Nuevo correo")).toHaveValue(""));
+    })
+  ));
+test("keeps replacement locked after an undecodable completion through reload until fresh pairing", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(signInThroughCore({ page, request, deferFreshEntry: true }));
+      const requested: unknown[] = [];
+      const completed: unknown[] = [];
+      yield* fromPlaywright(
+        page.route(`${api}/email/replacement`, (route) => {
+          requested.push(route.request().postDataJSON());
+          return route.fulfill({ status: 200, json: { data: { status: "pending" }, next: [] } });
+        })
+      );
+      yield* fromPlaywright(
+        page.route(`${api}/web/email/replacement/verify`, (route) => {
+          completed.push(route.request().postDataJSON());
+          return route.fulfill({ status: 200, json: {} });
+        })
+      );
+      yield* fromPlaywright(page.goto("/settings/account"));
+      yield* fromPlaywright(page.getByLabel("Nuevo correo").fill("MIXED@example.test"));
+      yield* fromPlaywright(submitReplacementTwice(page, "Nuevo correo"));
+      yield* fromPlaywright(
+        expect(
+          page.getByText("Si recibes un código para mixed@example.test, puedes ingresarlo aquí.")
+        ).toBeVisible()
+      );
+      expect(requested).toEqual([{ candidateEmail: "mixed@example.test" }]);
+      const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
+      yield* fromPlaywright(page.getByLabel("Código de verificación").fill(code));
+      yield* fromPlaywright(submitReplacementTwice(page, "Código de verificación"));
+      yield* fromPlaywright(expectUnresolvedReplacement(page));
+      expect(completed).toEqual([{ candidateEmail: "mixed@example.test", combinedCode: code }]);
+      yield* fromPlaywright(page.reload());
+      yield* fromPlaywright(expectUnresolvedReplacement(page));
+      expect(requested).toHaveLength(1);
+      expect(completed).toHaveLength(1);
+      yield* fromPlaywright(expectReplacementAdmissionOnly(page));
+      yield* fromPlaywright(signInThroughCore({ page, request, deferFreshEntry: true }));
+      yield* fromPlaywright(page.goto("/settings/account"));
+      yield* fromPlaywright(expect(page.getByLabel("Nuevo correo")).toBeVisible());
+      yield* fromPlaywright(expectReplacementAdmissionOnly(page));
+    })
+  ));
+const openReplacementProof = (page: Page): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(
+        page.route(`${api}/email/replacement`, (route) =>
+          route.fulfill({ status: 200, json: { data: { status: "pending" }, next: [] } })
+        )
+      );
+      yield* fromPlaywright(page.goto("/settings/account"));
+      yield* fromPlaywright(page.getByLabel("Nuevo correo").fill("candidate@example.test"));
+      yield* fromPlaywright(
+        page.getByRole("button", { name: "Enviar código", exact: true }).click()
+      );
+      yield* fromPlaywright(expect(page.getByLabel("Código de verificación")).toBeVisible());
+    })
+  );
+
+test("does not submit replacement when its unresolved admission cannot be retained", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(signInThroughCore({ page, request, deferFreshEntry: true }));
+      yield* fromPlaywright(openReplacementProof(page));
+      let completions = 0;
+      yield* fromPlaywright(
+        page.route(`${api}/web/email/replacement/verify`, (route) => {
+          completions++;
+          return route.fulfill({ status: 200, json: { data: { status: "replaced" }, next: [] } });
+        })
+      );
+      yield* fromPlaywright(
+        page.evaluate(() => {
+          const session = window.sessionStorage;
+          const writeSession = session.setItem.bind(session);
+          const local = window.localStorage;
+          const writeLocal = local.setItem.bind(local);
+          Storage.prototype.setItem = function (this: Storage, key: string, value: string): void {
+            if (this === session) {
+              if (key === "fidy:email-replacement-admission-v1") {
+                throw new DOMException("Unavailable", "SecurityError");
+              }
+              writeSession(key, value);
+              return;
+            }
+            writeLocal(key, value);
+          };
+        })
+      );
+      yield* fromPlaywright(
+        page.getByLabel("Código de verificación").fill("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ")
+      );
+      yield* fromPlaywright(
+        page.getByRole("button", { name: "Cambiar correo", exact: true }).click()
+      );
+      yield* fromPlaywright(
+        expect(
+          page.getByText("No pudimos iniciar el cambio de correo", { exact: true })
+        ).toBeVisible()
+      );
+      expect(completions).toBe(0);
+      expect(yield* fromPlaywright(page.evaluate(retainedSecretCount))).toBe(0);
+    })
+  ));
+for (const departure of ["back", "unmount", "restoration"] as const) {
+  test(`retains replacement uncertainty after ${departure} during completion and rejects the late acknowledgement`, ({
+    page,
+    request,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPlaywright(signInThroughCore({ page, request, deferFreshEntry: true }));
+        yield* fromPlaywright(openReplacementProof(page));
+        const entered = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        const replied = Promise.withResolvers<void>();
+        let completions = 0;
+        yield* fromPlaywright(
+          page.route(`${api}/web/email/replacement/verify`, (route) => {
+            completions++;
+            entered.resolve();
+            return release.promise
+              .then(
+                route.fulfill.bind(route, {
+                  status: 200,
+                  json: { data: { status: "replaced" }, next: [] },
+                })
+              )
+              .finally(replied.resolve);
+          })
+        );
+        yield* fromPlaywright(
+          page.getByLabel("Código de verificación").fill("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ")
+        );
+        yield* fromPlaywright(
+          page.getByRole("button", { name: "Cambiar correo", exact: true }).click()
+        );
+        yield* fromPlaywright(entered.promise);
+        if (departure === "back") {
+          yield* fromPlaywright(page.getByRole("button", { name: "Volver", exact: true }).click());
+        } else if (departure === "unmount") {
+          yield* fromPlaywright(page.getByRole("link", { name: "Accesos", exact: true }).click());
+          yield* fromPlaywright(
+            expect(page.getByRole("heading", { name: "Accesos", exact: true })).toBeVisible()
+          );
+          yield* fromPlaywright(page.getByRole("link", { name: "Cuenta", exact: true }).click());
+        } else {
+          yield* fromPlaywright(restoreReplacementDocument(page));
+        }
+        yield* fromPlaywright(
+          expect(page.getByText("No pudimos confirmar el cambio de correo")).toBeVisible()
+        );
+        release.resolve();
+        yield* fromPlaywright(replied.promise);
+        yield* fromPlaywright(
+          expect(page.getByText("Tu nuevo correo verificado ya está activo.")).toHaveCount(0)
+        );
+        yield* fromPlaywright(expect(page.getByLabel("Nuevo correo")).toHaveCount(0));
+        yield* fromPlaywright(expect(page.getByLabel("Código de verificación")).toHaveCount(0));
+        expect(completions).toBe(1);
+        yield* fromPlaywright(expectReplacementAdmissionOnly(page));
+      })
+    ));
+}
+
+test("keeps the later replacement candidate when a retired request callback finishes", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(signInThroughCore({ page, request, deferFreshEntry: true }));
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const replied = Promise.withResolvers<void>();
+      const candidates: unknown[] = [];
+      yield* fromPlaywright(
+        page.route(`${api}/email/replacement`, (route) => {
+          candidates.push(route.request().postDataJSON());
+          if (candidates.length === 1) {
+            entered.resolve();
+            return release.promise
+              .then(
+                route.fulfill.bind(route, {
+                  status: 200,
+                  json: { data: { status: "pending" }, next: [] },
+                })
+              )
+              .finally(replied.resolve);
+          }
+          return route.fulfill({ status: 200, json: { data: { status: "pending" }, next: [] } });
+        })
+      );
+      yield* fromPlaywright(page.goto("/settings/account"));
+      yield* fromPlaywright(page.getByLabel("Nuevo correo").fill("first@example.test"));
+      yield* fromPlaywright(
+        page.getByRole("button", { name: "Enviar código", exact: true }).click()
+      );
+      yield* fromPlaywright(entered.promise);
+      yield* fromPlaywright(page.getByRole("button", { name: "Volver", exact: true }).click());
+      yield* fromPlaywright(page.getByLabel("Nuevo correo").fill("second@example.test"));
+      yield* fromPlaywright(
+        page.getByRole("button", { name: "Enviar código", exact: true }).click()
+      );
+      const later = page.getByText(
+        "Si recibes un código para second@example.test, puedes ingresarlo aquí."
+      );
+      yield* fromPlaywright(expect(later).toBeVisible());
+      release.resolve();
+      yield* fromPlaywright(replied.promise);
+      yield* fromPlaywright(expect(later).toBeVisible());
+      expect(candidates).toEqual([
+        { candidateEmail: "first@example.test" },
+        { candidateEmail: "second@example.test" },
+      ]);
+      yield* fromPlaywright(
+        expect(
+          page.getByText("Si recibes un código para first@example.test, puedes ingresarlo aquí.")
+        ).toHaveCount(0)
+      );
+    })
+  ));
+
 type EnrollmentSubmission = Readonly<{ status: number; body: unknown }>;
 const captureEnrollmentReply = (
   response: APIResponse,

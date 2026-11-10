@@ -1,45 +1,37 @@
 import type { EmailReplacementViewState } from "./view";
-import { makeComplete, makeRequest } from "./commands";
-import { useAtomSet } from "@effect/atom-react";
+import { type ReplacementActions, makeReplacement } from "./commands";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Atom } from "effect/reactivity";
-import { useState } from "react";
-import type { EmailAddress as EmailAddressType } from "@/transport/client";
+import { type RefCallback, useCallback, useState } from "react";
 
-type EmailReplacementController = Readonly<{
-  state: EmailReplacementViewState;
-  request: (candidateEmail: string) => void;
-  complete: (candidateEmail: EmailAddressType, combinedCode: string) => void;
-  restart: () => void;
-}>;
+const incompleteReplacement = Atom.make(false).pipe(Atom.keepAlive);
 
-export const useEmailReplacement = (): EmailReplacementController => {
-  const router = useRouter();
-  const [state, setState] = useState<EmailReplacementViewState>({ _tag: "Editing" });
-  const [requestAtom] = useState(() =>
-    makeRequest({ apiClient: router.options.context.apiClient })
+export const useEmailReplacement = (): ReplacementActions &
+  Readonly<{ state: EmailReplacementViewState; lifecycleRef: RefCallback<HTMLElement> }> => {
+  const { apiClient, webAuthClient, sessionBinding: binding } = useRouter().options.context;
+  const uncertain = useAtomValue(incompleteReplacement);
+  const onUncertain = useAtomSet(incompleteReplacement);
+  const [state, setState] = useState<EmailReplacementViewState>(
+    uncertain ? { _tag: "Uncertain" } : { _tag: "Editing", feedback: "none" }
   );
-  const [completeAtom] = useState(() =>
-    makeComplete({ apiClient: router.options.context.apiClient })
+  const [interaction] = useState(() =>
+    makeReplacement({
+      apiClient,
+      webAuthClient,
+      publish: setState,
+      uncertain,
+      onUncertain,
+      binding,
+    })
   );
-  const request = useAtomSet(requestAtom.atom);
-  const complete = useAtomSet(completeAtom.atom);
-  return {
-    state,
-    request: (candidateEmail: string): void => {
-      requestAtom.stage({ candidateEmail, onStateChange: setState });
-      request(undefined);
+  const dispatch = useAtomSet(interaction.atom);
+  const lifecycleRef = useCallback<RefCallback<HTMLElement>>(
+    (node) => {
+      if (node === null) return;
+      return interaction.mount(dispatch);
     },
-    complete: (candidateEmail: EmailAddressType, combinedCode: string): void => {
-      completeAtom.stage({ candidateEmail, combinedCode, onStateChange: setState });
-      complete(undefined);
-    },
-    restart: (): void => {
-      requestAtom.clear();
-      completeAtom.clear();
-      request(Atom.Interrupt);
-      complete(Atom.Interrupt);
-      setState({ _tag: "Editing" });
-    },
-  } as const;
+    [interaction, dispatch]
+  );
+  return { state, lifecycleRef, ...interaction.actions(dispatch) };
 };

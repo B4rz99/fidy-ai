@@ -7,8 +7,10 @@ import type { OwnedStatement } from "~/shell/owner-write/contract";
 import {
   EmailAuthenticationGroup,
   type EmailPairingSubject,
+  type EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
   type EmailReplacementMutationService,
+  type EmailReplacementUnavailableApi,
   emailReplacementInvalidBody,
 } from "./contract";
 import { emailPairingAllowsUser as compatibleSubject } from "~/shell/email-authentication/internal/pairing-subject";
@@ -50,12 +52,14 @@ export const completeEmailReplacement = ({
   caller: CanonicalImplementationCaller;
 }>): Effect.Effect<
   CanonicalSuccess<"emailAuthentication.completeEmailReplacement">,
-  EmailReplacementInvalidApi,
+  | EmailReplacementInvalidApi
+  | EmailReplacementUnavailableApi
+  | EmailReplacementFreshPairingRequiredApi,
   EmailReplacementMutation
 > =>
   Effect.gen(function* () {
     const mutation = yield* EmailReplacementMutation;
-    if (!(yield* mutation.complete(caller.resolved.subjectUserId, input.payload.combinedCode))) {
+    if (!(yield* mutation.complete(caller.resolved.subjectUserId, input.payload))) {
       return yield* EmailReplacementInvalidApi.make({ error: emailReplacementInvalidBody.error });
     }
     return { data: { status: "replaced" }, next: [] } as const;

@@ -136,6 +136,7 @@ export const settleAuthorization = (
     const handoff = Option.filter(
       prepared,
       (value) =>
+        now < startedAt + remaining &&
         value.expiresAtMilliseconds > now &&
         value.expiresAtMilliseconds <= input.expiresAtMilliseconds
     );

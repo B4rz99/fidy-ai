@@ -4,7 +4,7 @@ import {
   BudgetMonthLatch,
   type BudgetStatus,
 } from "../../../src/core/budgets/contract";
-import { advanceBudgetLatch } from "../../../src/core/budgets/operations";
+import { advanceBudgetLatch, deriveCurrentBudgetMonth } from "../../../src/core/budgets/operations";
 import type { CurrencyMismatch } from "../../../src/core/_shared/money";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { currentProactivityGrantQuery } from "../../consent/operations";
@@ -32,13 +32,16 @@ const findLatches = (
         input.statuses.map((status) =>
           input.db
             .prepare(
-              "SELECT highest_reached FROM budget_month_latches WHERE user_id=? AND budget_id=? AND from_utc_ms=? AND time_zone=?"
+              `SELECT coalesce(l.highest_reached, 0) AS highest_reached FROM budgets b
+              LEFT JOIN budget_month_latches l ON l.user_id=b.user_id AND l.budget_id=b.id
+                AND l.from_utc_ms=? AND l.time_zone=?
+              WHERE b.user_id=? AND b.id=?`
             )
             .bind(
-              input.userId,
-              status.budget.id,
               status.period.from.epochMilliseconds,
-              status.period.timeZone
+              status.period.timeZone,
+              input.userId,
+              status.budget.id
             )
         )
       )
@@ -47,7 +50,7 @@ const findLatches = (
     return Option.all(
       input.statuses.map((status, index) => {
         const marks = Schema.decodeUnknownOption(Schema.Array(Marks))(rows[index]?.results);
-        if (Option.isNone(marks) || marks.value.length > 1) return Option.none();
+        if (Option.isNone(marks) || marks.value.length !== 1) return Option.none();
         return Option.some({
           budgetId: status.budget.id,
           period: status.period,
@@ -98,7 +101,7 @@ const prepareStatus = ({
   latch: BudgetMonthLatch;
 }>): Effect.Effect<ReadonlyArray<D1PreparedStatement>, Schema.SchemaError | CurrencyMismatch> =>
   Effect.gen(function* () {
-    const timeZone = context.timeZone;
+    const timeZone = status.period.timeZone;
     const budgetId = status.budget.id;
     const from = status.period.from.epochMilliseconds;
     const advanced = yield* advanceBudgetLatch({
@@ -153,6 +156,18 @@ export const reconcileStatuses = (
   }>
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
+    for (const status of input.statuses) {
+      if (status.period.timeZone !== input.context.timeZone) return false;
+      const captured = deriveCurrentBudgetMonth({
+        now: status.period.from,
+        timeZone: status.period.timeZone,
+      });
+      if (
+        captured.from.epochMilliseconds !== status.period.from.epochMilliseconds ||
+        captured.to.epochMilliseconds !== status.period.to.epochMilliseconds
+      )
+        return false;
+    }
     const latches = yield* findLatches(input);
     if (Option.isNone(latches)) return false;
     const writes: Array<D1PreparedStatement> = [];

@@ -235,6 +235,8 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+Budget threshold reconciliation validates the owned Budget and captured monthly boundaries/time zone
+before atomically advancing monotone marks, frozen crossings and publication intent.
 Group Corrections use the existing credential-neutral Audit projection with the exact browser
 session and accepted/rejected outcome. The original Audit history and table remain in place;
 adding this operation requires no Audit rebuild.

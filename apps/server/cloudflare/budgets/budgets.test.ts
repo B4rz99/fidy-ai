@@ -1,10 +1,20 @@
+import { reconcileStatuses } from "./internal/budget-latches";
 import { recordBudgetCall } from "./internal/budget-audit";
 import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type ConsentUnavailable } from "../consent/contract";
 import { type InsightUnavailable, type ProactivityDeliveryWork } from "../insights/contract";
 import { type WorkflowStep } from "cloudflare:workers";
 import { type ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
-import { type Cause, Config, DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
+import {
+  type Cause,
+  BigDecimal,
+  Config,
+  DateTime,
+  Effect,
+  Array as EffectArray,
+  Option,
+  Schema,
+} from "effect";
 import {
   evaluateBudgetAlerts,
   prepareDeleteBudget,
@@ -62,10 +72,10 @@ import {
   BudgetWorkspace,
   UpdateBudgetInput,
 } from "../../src/core/budgets/contract";
-import { IanaTimeZone } from "../../src/core/_shared/context";
-import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
+import { IanaTimeZone, ServiceMarket, Locale } from "../../src/core/_shared/context";
+import { calculateBudgetStatus, deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
 import { Transaction } from "../../src/core/transactions/contract";
-import { encodeMoneyAmount } from "../../src/core/_shared/money";
+import { Money, encodeMoneyAmount } from "../../src/core/_shared/money";
 import { AtomicBatchRejected } from "../../src/shell/operations/contract";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
@@ -3417,4 +3427,55 @@ it(
       })
     ),
   30_000
+);
+
+it.each(["zone", "owner", "period"] as const)(
+  "refuses a crossing report with mismatched %s before retaining intent",
+  (mismatch) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* seedCrossingConsent(db);
+        const response = yield* Effect.tryPromise(() =>
+          send(db, request(0, "/budgets", "POST", payload()))
+        );
+        const created = yield* Schema.decodeUnknownEffect(Created)(
+          yield* Effect.tryPromise(() => response.json())
+        );
+        const now = DateTime.nowUnsafe();
+        const period = deriveCurrentBudgetMonth({
+          now,
+          timeZone: IanaTimeZone.make("America/Bogota"),
+        });
+        const status = yield* calculateBudgetStatus({
+          budget: created.data,
+          period,
+          spent: Money.make({
+            amount: BigDecimal.make(110n, 0),
+            currency: created.data.cap.currency,
+          }),
+        });
+        const userId = UserId.make(users[mismatch === "owner" ? 1 : 0]);
+        expect(
+          yield* reconcileStatuses({
+            db,
+            userId,
+            context: {
+              serviceMarket: ServiceMarket.make("CO"),
+              locale: Locale.make("es-CO"),
+              timeZone: IanaTimeZone.make(mismatch === "zone" ? "UTC" : "America/Bogota"),
+            },
+            statuses: [
+              mismatch === "period"
+                ? { ...status, period: { ...period, to: DateTime.add(period.to, { days: 1 }) } }
+                : status,
+            ],
+          })
+        ).toBe(false);
+        expect(yield* readBudgetCrossingGroups({ db, userId })).toEqual([]);
+        expect(
+          yield* readBudgetCrossings({ db, userId, budgetId: created.data.id, period })
+        ).toEqual([]);
+      })
+    )
 );

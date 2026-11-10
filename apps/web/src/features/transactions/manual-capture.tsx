@@ -21,7 +21,7 @@ export const ManualCaptureProvider = ({
       (node: Parameters<RefCallback<HTMLDivElement>>[0]): ReturnType<RefCallback<HTMLDivElement>> =>
         node === null ? undefined : task.mount()
   );
-  const [check, setCheck] = useState<Option.Option<CaptureHistoryVersion>>(Option.none());
+  const [check, setCheck] = useState<Option.Option<CaptureHistoryVersion>>(() => Option.none());
   return (
     <div className="contents" ref={mounted}>
       <ManualCaptureContext

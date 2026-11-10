@@ -35,7 +35,9 @@ export type DashboardRead = CanonicalSuccess<"dashboard.getDashboardView">;
 type DashboardLoad = Readonly<{
   refresh: (registry: AtomRegistry.AtomRegistry) => DashboardReadAttempt;
   phase: Atom.Atom<DashboardLoadPhase>;
-  result: Atom.Atom<AsyncResult.AsyncResult<DashboardRead, unknown>>;
+  result: Atom.Atom<
+    AsyncResult.AsyncResult<DashboardRead, Effect.Error<ReturnType<typeof loadDashboard>>>
+  >;
 }>;
 
 /** Only declared absence permits initialization. Initialization and reread failures propagate;

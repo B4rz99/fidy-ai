@@ -433,6 +433,18 @@ test("recovers initial load failure and keeps stale budgets read-only until refr
     })
   ));
 
+const checkCleanEditor = Effect.fn(function* (page: Page, category: string) {
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: `Configurar ${category}`, exact: true }).click()
+  );
+  const editor = page.getByRole("form", { name: `Configurar presupuesto de ${category}` });
+  yield* Effect.tryPromise(() => expect(editor.getByRole("status")).toHaveCount(0));
+  yield* Effect.tryPromise(() => expect(editor.getByRole("alert")).toHaveCount(0));
+  yield* Effect.tryPromise(() =>
+    editor.getByRole("button", { name: "Cerrar", exact: true }).click()
+  );
+});
+
 test("saves a monthly cap from the view through real Core and retains it after reload", ({
   page,
   request,
@@ -469,6 +481,7 @@ test("saves a monthly cap from the view through real Core and retains it after r
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Presupuesto de Restaurantes (COP)")).toHaveValue("500000")
       );
+      yield* checkCleanEditor(page, "Restaurantes");
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Presupuesto de Restaurantes (COP)")).toHaveValue("500000")
@@ -1471,6 +1484,14 @@ const checkEditorFeedback = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() =>
     expect(editor.getByRole("button", { name: "Guardar presupuesto", exact: true })).toBeEnabled()
   );
+  yield* Effect.tryPromise(() =>
+    editor.getByRole("button", { name: "Cerrar", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => expect(editor.getByRole("alert")).toHaveCount(0));
+  yield* Effect.tryPromise(() => expect(editor.getByRole("status")).toHaveCount(0));
   yield* Effect.tryPromise(() =>
     editor.getByRole("button", { name: "Guardar presupuesto", exact: true }).click()
   );

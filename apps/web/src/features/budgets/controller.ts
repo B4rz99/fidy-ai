@@ -355,7 +355,7 @@ const budgetEditActions = ({
       );
       if (Option.isSome(target)) {
         retire();
-        update({ draft: target });
+        update({ draft: target, saveState: "idle", writeAction: "save" });
       }
     },
     closeEditor: () => {

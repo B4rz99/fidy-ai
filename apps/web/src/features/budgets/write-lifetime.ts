@@ -10,6 +10,7 @@ export type BudgetWriteContext = Readonly<{
   draft: Option.Option<BudgetDraft>;
   refreshQueries: () => void;
 }>;
+const initialContext = Option.none<BudgetWriteContext>();
 /** Bridge committed read admission to retained event callbacks; disposal only retires local work. */
 export const useBudgetWriteLifetime = (
   context: BudgetWriteContext
@@ -18,7 +19,7 @@ export const useBudgetWriteLifetime = (
   isCurrent: () => boolean;
   reset: () => void;
 }> => {
-  const latest = useRef(Option.none<BudgetWriteContext>());
+  const latest = useRef(initialContext);
   const [owner] = useState(() => {
     let generation = 0;
     return {

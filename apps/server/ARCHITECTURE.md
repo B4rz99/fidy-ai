@@ -237,6 +237,9 @@ Recurring and Planning consume published facts without reimplementing financial 
 Exact Money and historical interpretation context remain intact across these boundaries.
 Budget threshold reconciliation validates the owned Budget and captured monthly boundaries/time zone
 before atomically advancing monotone marks, frozen crossings and publication intent.
+One bounded threshold pass reports Drained, Pending or Unavailable. Canonical financial preflight
+requires Drained; post-commit evaluation remains best effort, and opt-in composes its fence only
+after drained accounting. Exact sampled work versions are acknowledged after crossing commit.
 Group Corrections use the existing credential-neutral Audit projection with the exact browser
 session and accepted/rejected outcome. The original Audit history and table remain in place;
 adding this operation requires no Audit rebuild.

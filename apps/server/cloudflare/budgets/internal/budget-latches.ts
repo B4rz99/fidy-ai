@@ -146,6 +146,18 @@ const prepareStatus = ({
     ];
   });
 
+const matchesCapturedPeriod = (status: BudgetStatus, context: UserContext): boolean => {
+  if (status.period.timeZone !== context.timeZone) return false;
+  const captured = deriveCurrentBudgetMonth({
+    now: status.period.from,
+    timeZone: status.period.timeZone,
+  });
+  return (
+    captured.from.epochMilliseconds === status.period.from.epochMilliseconds &&
+    captured.to.epochMilliseconds === status.period.to.epochMilliseconds
+  );
+};
+
 /** Commit the bounded report's monotone threshold evidence and one pending occurrence per crossing. */
 export const reconcileStatuses = (
   input: Readonly<{
@@ -156,17 +168,8 @@ export const reconcileStatuses = (
   }>
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    for (const status of input.statuses) {
-      if (status.period.timeZone !== input.context.timeZone) return false;
-      const captured = deriveCurrentBudgetMonth({
-        now: status.period.from,
-        timeZone: status.period.timeZone,
-      });
-      if (
-        captured.from.epochMilliseconds !== status.period.from.epochMilliseconds ||
-        captured.to.epochMilliseconds !== status.period.to.epochMilliseconds
-      )
-        return false;
+    if (!input.statuses.every((status) => matchesCapturedPeriod(status, input.context))) {
+      return false;
     }
     const latches = yield* findLatches(input);
     if (Option.isNone(latches)) return false;

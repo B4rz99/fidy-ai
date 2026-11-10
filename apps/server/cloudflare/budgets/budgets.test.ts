@@ -6,8 +6,8 @@ import { type InsightUnavailable, type ProactivityDeliveryWork } from "../insigh
 import { type WorkflowStep } from "cloudflare:workers";
 import { type ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
 import {
-  type Cause,
   BigDecimal,
+  type Cause,
   Config,
   DateTime,
   Effect,
@@ -16,13 +16,13 @@ import {
   Schema,
 } from "effect";
 import {
-  evaluateBudgetAlerts,
   prepareDeleteBudget,
   prepareUpdateBudget,
   readBudgetCaps,
   readBudgetCrossingGroups,
   readBudgetCrossings,
   readBudgetSpending,
+  reconcileBudgetThresholds,
 } from "./operations";
 import {
   UserId,
@@ -72,7 +72,7 @@ import {
   BudgetWorkspace,
   UpdateBudgetInput,
 } from "../../src/core/budgets/contract";
-import { IanaTimeZone, ServiceMarket, Locale } from "../../src/core/_shared/context";
+import { IanaTimeZone, Locale, ServiceMarket } from "../../src/core/_shared/context";
 import { calculateBudgetStatus, deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
 import { Transaction } from "../../src/core/transactions/contract";
 import { Money, encodeMoneyAmount } from "../../src/core/_shared/money";
@@ -1672,7 +1672,7 @@ it("reconciles many Budget latches with bounded trips and preserves frozen cross
             .bind(users[0], current, current),
         ])
       );
-      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Drained");
       const observed = observeRetentionCost(db);
       const capturedResponse = yield* Effect.tryPromise(() =>
         send(
@@ -1706,7 +1706,7 @@ it("reconciles many Budget latches with bounded trips and preserves frozen cross
         "110",
         "110",
       ]);
-      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Drained");
       expect(yield* readBudgetCrossings(input)).toEqual(crossings);
       expect(yield* readBudgetCrossings({ ...input, userId: UserId.make(users[1]) })).toEqual([]);
     })
@@ -1780,7 +1780,9 @@ it.each(["rejected", "unacknowledged"] as const)(
             return value;
           },
         });
-        expect(yield* evaluateBudgetAlerts({ db: failing, userId: users[0] })).toBe(false);
+        expect(yield* reconcileBudgetThresholds({ db: failing, userId: users[0] })).toBe(
+          "Unavailable"
+        );
         expect(lostAcknowledgment).toBe(failure === "unacknowledged");
         const period = deriveCurrentBudgetMonth({
           now,
@@ -1798,7 +1800,7 @@ it.each(["rejected", "unacknowledged"] as const)(
         if (failure === "rejected") {
           yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_period_latch").run());
         }
-        expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+        expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Drained");
         for (const budget of budgets) {
           const input = { db, userId: UserId.make(users[0]), budgetId: budget.id, period };
           const crossings = yield* readBudgetCrossings(input);
@@ -1926,7 +1928,7 @@ it("captures the live Budget grant once for a both-threshold mutation without re
       const group = Option.getOrThrow(EffectArray.head(groups));
       expect(group.grantId).toEqual(Option.some(grantId));
       expect(group.crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
-      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Drained");
       expect(yield* readBudgetCrossingGroups(context)).toEqual(groups);
       const mutation = yield* Effect.exit(
         Effect.tryPromise(() =>
@@ -2527,7 +2529,7 @@ it("drains one month at a time and preserves a concurrently changed work version
             .bind(users[0], current),
         ])
       );
-      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(false);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Pending");
       const remaining = yield* Effect.tryPromise(() =>
         db
           .prepare("SELECT occurred_at_ms FROM budget_evaluation_work WHERE user_id=?")
@@ -2543,9 +2545,9 @@ it("drains one month at a time and preserves a concurrently changed work version
       END`)
           .run()
       );
-      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(false);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Pending");
       yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER change_pending_version").run());
-      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Drained");
     })
   ));
 
@@ -2952,7 +2954,7 @@ it("does not drain another User's pending Budget alerts from a non-request evalu
           .bind(users[0], category, occurredAt, occurredAt)
           .run()
       );
-      expect(yield* evaluateBudgetAlerts({ db, userId: users[1] })).toBe(true);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[1] })).toBe("Drained");
       const thresholds = (): Promise<D1Result<{ threshold: number }>> =>
         db
           .prepare(
@@ -2961,11 +2963,11 @@ it("does not drain another User's pending Budget alerts from a non-request evalu
           .bind(users[0])
           .all<{ threshold: number }>();
       expect((yield* Effect.tryPromise(thresholds)).results).toEqual([]);
-      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Drained");
       expect((yield* Effect.tryPromise(thresholds)).results.map((row) => row.threshold)).toEqual([
         80,
       ]);
-      expect(yield* evaluateBudgetAlerts({ db, userId: users[1] })).toBe(true);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[1] })).toBe("Drained");
       expect((yield* Effect.tryPromise(thresholds)).results.map((row) => row.threshold)).toEqual([
         80,
       ]);
@@ -3479,3 +3481,57 @@ it.each(["zone", "owner", "period"] as const)(
       })
     )
 );
+
+it("retains timestamps beyond the bounded 128-work pass", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const period = deriveCurrentBudgetMonth({
+        now: DateTime.nowUnsafe(),
+        timeZone: IanaTimeZone.make("America/Bogota"),
+      });
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          Array.from({ length: 129 }, (_, index) =>
+            db
+              .prepare("INSERT INTO budget_evaluation_work(user_id,occurred_at_ms) VALUES(?,?)")
+              .bind(users[0], period.from.epochMilliseconds + index)
+          )
+        )
+      );
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Pending");
+      const remaining = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT occurred_at_ms FROM budget_evaluation_work WHERE user_id=?")
+          .bind(users[0])
+          .all()
+      );
+      expect(remaining.results).toEqual([{ occurred_at_ms: period.from.epochMilliseconds + 128 }]);
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Drained");
+    })
+  ));
+
+it("reports unavailable native work evidence instead of an empty drained result", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() => db.prepare("DROP TABLE budget_evaluation_work").run());
+      expect(yield* reconcileBudgetThresholds({ db, userId: users[0] })).toBe("Unavailable");
+      const refused = yield* Effect.tryPromise(() =>
+        send(
+          db,
+          request(0, "/transactions", "POST", {
+            money: { amount: "110", currency: "COP" },
+            direction: "outflow",
+            categoryId: category,
+            occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+          })
+        )
+      );
+      expect(refused.status).toBe(503);
+      const retained = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[0]).all()
+      );
+      expect(retained.results).toEqual([]);
+    })
+  ));

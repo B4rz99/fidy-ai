@@ -44,7 +44,7 @@ import {
 import { resolveOAuthQueryCaller } from "../oauth-agents/operations";
 import { canonicalHostedStatementQueryOwner, canonicalQueryOwner } from "./internal/query-registry";
 import { matchesRouteTemplate } from "../../src/shell/public-http/operations";
-import { evaluateBudgetAlerts } from "../budgets/operations";
+import { reconcileBudgetThresholds } from "../budgets/operations";
 import { unavailableStatement } from "../ingestion/operations";
 import {
   type QueryCaller,
@@ -430,7 +430,8 @@ const executeWork = (
         : input.work.calls.some((child) => Option.exists(rawOperation(child), affectsBudget));
     if (
       budgetWork &&
-      !(yield* evaluateBudgetAlerts({ db: input.db, userId: input.subject.userId }))
+      (yield* reconcileBudgetThresholds({ db: input.db, userId: input.subject.userId })) !==
+        "Drained"
     ) {
       return transactionUnavailable();
     }
@@ -461,7 +462,7 @@ const executeWork = (
         })
       : executeCall({ ...input, work });
     if (result.ok && budgetWork) {
-      yield* evaluateBudgetAlerts({ db: input.db, userId: input.subject.userId });
+      yield* reconcileBudgetThresholds({ db: input.db, userId: input.subject.userId });
     }
     return result;
   });

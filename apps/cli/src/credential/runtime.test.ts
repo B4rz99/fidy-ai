@@ -1,3 +1,4 @@
+import { deepStrictEqual } from "node:assert";
 import { IssuedPAT } from "@fidy/server/client";
 import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
@@ -253,8 +254,8 @@ layer(BunServices.layer)((it) => {
         const second = yield* makeCredentialStore(directory, fixture.native);
         const fiber = yield* first.store.save(credential).pipe(Effect.forkChild);
         yield* Deferred.await(saving);
-        const rejected = yield* second.store.save(credential).pipe(Effect.result);
-        expect(rejected).toMatchObject({ failure: { reason: "StorageUnavailable" } });
+        const rejected = yield* second.store.save(credential).pipe(Effect.exit);
+        deepStrictEqual(rejected, Exit.fail(new CliFailure({ reason: "StorageUnavailable" })));
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(fiber);
         expect(Option.isSome(yield* second.store.load)).toBe(true);

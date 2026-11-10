@@ -1,3 +1,4 @@
+import { deepStrictEqual } from "node:assert";
 import { StartedPATPairing } from "@fidy/server/client";
 import { expect, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect";
@@ -154,9 +155,21 @@ it.effect("interruption after claim dispatch preserves uncertain consumption wit
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
       expect(Cause.hasInterrupts(exit.cause)).toBe(true);
-      expect(Cause.findErrorOption(exit.cause)).toMatchObject({
-        value: { reason: "ClaimAmbiguous" },
-      });
+      expect(exit.cause.reasons.filter(Cause.isFailReason)).toHaveLength(1);
+      deepStrictEqual(
+        exit,
+        Exit.failCause(
+          Cause.fromReasons(
+            exit.cause.reasons.map((reason) =>
+              Cause.isInterruptReason(reason)
+                ? reason
+                : Cause.makeFailReason(new CliFailure({ reason: "ClaimAmbiguous" })).annotate(
+                    Cause.reasonAnnotations(reason)
+                  )
+            )
+          )
+        )
+      );
     }
     yield* TestClock.adjust("10 minutes");
     expect(consumed).toBe(1);

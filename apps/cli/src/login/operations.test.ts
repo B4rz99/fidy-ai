@@ -1,3 +1,4 @@
+import { deepStrictEqual } from "node:assert";
 import { Cause, Effect, Exit, Fiber, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { type PairingClient, PollingDelayed } from "./contract";
@@ -76,9 +77,15 @@ it.effect("does not replay a claimed bearer or report a failed save as success",
     const exit = yield* Fiber.await(fiber);
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
-      expect(Cause.findErrorOption(exit.cause)).toMatchObject({
-        value: { reason: "ClaimStorageFailed" },
-      });
+      deepStrictEqual(
+        exit,
+        Exit.failCause(
+          Cause.annotate(
+            Cause.fail(new CliFailure({ reason: "ClaimStorageFailed" })),
+            Cause.annotations(exit.cause)
+          )
+        )
+      );
     }
     expect(fixture.claims).toHaveLength(1);
   })

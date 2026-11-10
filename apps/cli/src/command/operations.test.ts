@@ -1,9 +1,10 @@
+import { deepStrictEqual } from "node:assert";
 import { TestClock } from "effect/testing";
 import { type LoginDependencies } from "../login/contract";
 import { IssuedPAT, StartedPATPairing } from "@fidy/server/client";
 import { expect, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
-import { type Credential, SavedGrant, apiOrigin } from "../credential/contract";
+import { CliFailure, type Credential, SavedGrant, apiOrigin } from "../credential/contract";
 import { type CommandDependencies, PublicOutput } from "./contract";
 import { formatCommandFailure, formatFailure, formatOutput, runCommand } from "./operations";
 
@@ -224,9 +225,21 @@ it.effect("interrupted saving settles local persistence without success output o
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
       expect(Cause.hasInterrupts(exit.cause)).toBe(true);
-      expect(Cause.findErrorOption(exit.cause)).toMatchObject({
-        value: { reason: "LoginSaveInterrupted" },
-      });
+      expect(exit.cause.reasons.filter(Cause.isFailReason)).toHaveLength(1);
+      deepStrictEqual(
+        exit,
+        Exit.failCause(
+          Cause.fromReasons(
+            exit.cause.reasons.map((reason) =>
+              Cause.isInterruptReason(reason)
+                ? reason
+                : Cause.makeFailReason(new CliFailure({ reason: "LoginSaveInterrupted" })).annotate(
+                    Cause.reasonAnnotations(reason)
+                  )
+            )
+          )
+        )
+      );
       for (const json of [false, true]) {
         const failure = formatCommandFailure({ cause: exit.cause, json });
         expect(failure.interrupted).toBe(true);

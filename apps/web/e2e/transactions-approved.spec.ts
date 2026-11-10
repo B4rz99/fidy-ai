@@ -1918,21 +1918,11 @@ const rejectedBulkJourney = (page: Page): Journey =>
     );
     expect(requests).toHaveLength(1);
     yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).press("Enter"));
-    yield* wait(() => expect.poll(() => requests.length).toBe(2));
-    expect(requests[1]).toEqual({
-      transactions: rows.map((record) => ({
-        id: record.id,
-        expectedRevision: record.revision + 1,
-      })),
-      changes: {
-        categoryId: categories[1]?.id,
-        notes: "Lote sin guardar",
-        money: { amount: "31000", currency: "COP" },
-      },
-    });
+    yield* wait(() => expect(form).toContainText("Ya actualizamos el historial"));
+    expect(requests).toHaveLength(1);
     yield* cancelRecoveredBulk(page);
   });
-test("rejected atomic Correction retains the whole selection and financial fields for an explicit save at fresh revisions", ({
+test("rejected atomic Correction retains the reviewed selection without substituting fresh revisions", ({
   page,
 }) => Effect.runPromise(rejectedBulkJourney(page)));
 

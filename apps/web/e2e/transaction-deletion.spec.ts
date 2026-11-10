@@ -213,7 +213,6 @@ const closedDeletionJourney = (page: Page): Effect.Effect<void, Cause.UnknownErr
         });
       })
     );
-    // Two confirmations in the same browser event turn must consume one local review.
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Eliminar", exact: true }).evaluate((element) => {
         element.dispatchEvent(new MouseEvent("click", { bubbles: true }));

@@ -483,7 +483,7 @@ it.effect("deletion review shares Correction admission and consumes confirmation
     expect(test.sent).toHaveLength(1);
     expect(test.sent[0]?.path).toBe(`/transactions/${firstId}`);
     expect(test.sent[0]?.body).toBe("");
-    test.view().cancelDeletion(); // Panel disposal cancels only unsent intent.
+    test.view().cancelDeletion();
     expect(test.view().locked).toBe(true);
     expect(test.view().reviewDeletion(test.transaction.id)).toBe(false);
     test.view().submit({
@@ -526,7 +526,6 @@ it.effect("recovery waits for a moved identity and refuses stale captured action
       transactions: test.transactions,
       changes: { notes: "Unconfirmed atomic changes" },
     });
-    // The initial request is acknowledged; its list reread no longer contains one member.
     test.records.splice(1, 1);
     test.detail.delay = 50;
     yield* advance();
@@ -556,7 +555,7 @@ for (const outcome of ["missing", "failure"] as const) {
         receipts += 1;
       });
       yield* advance();
-      test.view().cancelDeletion(); // Closing the panel cannot discard submitted uncertainty
+      test.view().cancelDeletion();
       test.records.splice(0, 1);
       test.detail.outcome = outcome;
       test.detail.delay = 50;

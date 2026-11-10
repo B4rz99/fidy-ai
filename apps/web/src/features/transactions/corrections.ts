@@ -397,8 +397,6 @@ const confirmDeletion = (owner: Owner, id: Transaction["id"], onDeleted: () => v
   );
 };
 
-// A refreshed list establishes only the identities it contains. A moved/deleted identity needs
-// its own authenticated canonical observation; a decoded NotFound proves absence, never a receipt.
 const readAffectedIdentities = (owner: Owner): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const history = owner.get.once(owner.history).query;

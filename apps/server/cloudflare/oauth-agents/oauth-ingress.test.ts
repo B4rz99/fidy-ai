@@ -3,6 +3,7 @@ import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { deepStrictEqual } from "node:assert";
 import { afterEach, expect, it, vi } from "vitest";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
+import { OAuthReviewChoice } from "../../src/shell/oauth-agents/contract";
 import { authenticateOAuth } from "./operations";
 import { makeAudit } from "../../src/shell/audit/runtime";
 import {
@@ -1171,9 +1172,9 @@ it("refuses approval when the original request expires after a successful review
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* reviewedFixture();
-      const choice = yield* Schema.decodeEffect(
-        Schema.fromJsonString(Schema.Struct({ requestId: Schema.String }))
-      )(fixture.choice);
+      const choice = yield* Schema.decodeEffect(Schema.fromJsonString(OAuthReviewChoice))(
+        fixture.choice
+      );
       const expiration = yield* wait(
         fixture.db
           .prepare("SELECT expires_at_ms FROM oauth_review_requests WHERE id = ?")

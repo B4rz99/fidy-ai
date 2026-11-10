@@ -1,4 +1,5 @@
 import { retainedSecretCount } from "./browser-storage-fixture";
+import { OAuthConnectionId, OAuthConnectionList } from "@fidy/server/client";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
 import { Effect, Schema } from "effect";
 import type { Cause } from "effect";
@@ -1054,7 +1055,7 @@ const lostCommittedApproval = ({
             const committed = yield* Effect.tryPromise(() => forwardDecision(route));
             expect(committed.status()).toBe(ok);
             const connected = yield* Schema.decodeUnknownEffect(
-              Schema.Struct({ connectionId: Schema.String })
+              Schema.Struct({ connectionId: OAuthConnectionId })
             )(yield* Effect.tryPromise(() => committed.json()));
             connectionId = connected.connectionId;
             yield* Effect.tryPromise(() => unavailableManagement(route));
@@ -1080,9 +1081,9 @@ const lostCommittedApproval = ({
           headers: { origin: app, "x-acceptance-source": reviewSource() },
         })
       );
-      const connections = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ connections: Schema.Array(Schema.Struct({ connectionId: Schema.String })) })
-      )(yield* Effect.tryPromise(() => listed.json()));
+      const connections = yield* Schema.decodeUnknownEffect(OAuthConnectionList)(
+        yield* Effect.tryPromise(() => listed.json())
+      );
       expect(connections.connections.map((connection) => connection.connectionId)).toContain(
         connectionId
       );

@@ -2029,7 +2029,10 @@ it.each(["key", "adapter"] as const)(
             )
             .all();
         const before = (yield* Effect.tryPromise(custody)).results;
-        expect(before[0]).toMatchObject({ envelope: expect.stringMatching(/^v1\./u) });
+        const sealed = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ envelope: Schema.String })
+        )(before[0]);
+        expect(sealed.envelope).toMatch(/^v1\./u);
         yield* recoverConnections({
           db,
           key: missing === "key" ? Option.none() : Option.some(Redacted.make("A".repeat(43))),
@@ -2158,10 +2161,11 @@ it("rejects a late cleanup result while a replacement lease retains the encrypte
         const custody = (): Promise<D1Result> =>
           db.prepare("SELECT envelope,cleaned_at_ms,cleanup_claim FROM connection_grants").all();
         const retained = (yield* Effect.tryPromise(custody)).results;
-        expect(retained[0]).toMatchObject({
-          envelope: expect.stringMatching(/^v1\./u),
-          cleaned_at_ms: null,
-        });
+        const sealed = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ envelope: Schema.String })
+        )(retained[0]);
+        expect(sealed.envelope).toMatch(/^v1\./u);
+        expect(retained[0]).toMatchObject({ cleaned_at_ms: null });
         expect(retained[0]).not.toMatchObject({ cleanup_claim: oldClaim?.cleanup_claim });
         yield* Deferred.succeed(finish, undefined);
         expect(Exit.isFailure(yield* Fiber.await(old))).toBe(true);

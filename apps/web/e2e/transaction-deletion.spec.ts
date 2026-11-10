@@ -192,3 +192,58 @@ for (const outcome of ["rejected", "uncertain"] as const) {
       })
     ));
 }
+
+const identityRecoveryStatus = { missing: 404, unavailable: 503 } as const;
+const closedDeletionJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const { fixture } = yield* installDeletion(page, "uncertain");
+    let lookupSucceeded = false;
+    yield* Effect.tryPromise(() =>
+      page.route(`${apiOrigin}/transactions/${transaction.id}`, (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        return route.fulfill({
+          status: lookupSucceeded
+            ? identityRecoveryStatus.missing
+            : identityRecoveryStatus.unavailable,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: { code: "not_found", message: "Transaction not found" },
+            next: [],
+          }),
+        });
+      })
+    );
+    // Two confirmations in the same browser event turn must consume one local review.
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Eliminar", exact: true }).evaluate((element) => {
+        element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      })
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("alert")).toContainText("No pudimos confirmar si se eliminó")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar detalle", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeDisabled()
+    );
+    const refresh = page.getByRole("button", { name: "Actualizar transacciones", exact: true });
+    yield* Effect.tryPromise(() => refresh.click());
+    yield* Effect.tryPromise(() => expect(refresh).toBeEnabled());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Transacción eliminada", { exact: true })).toHaveCount(0)
+    );
+    expect(fixture.requests).toBe(1);
+    lookupSucceeded = true;
+    yield* Effect.tryPromise(() => refresh.click());
+    yield* Effect.tryPromise(() => expect(refresh).toBeEnabled());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Transacción eliminada", { exact: true })).toHaveCount(0)
+    );
+    expect(fixture.requests).toBe(1);
+  });
+test("closing an uncertain deletion keeps Correction locked until the affected identity is freshly observed", ({
+  page,
+}) => Effect.runPromise(closedDeletionJourney(page)));

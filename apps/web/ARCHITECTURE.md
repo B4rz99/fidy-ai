@@ -603,7 +603,11 @@ reread; the original draft remains bound to its captured revisions. After fresh 
 the User opens a new review before submitting another Correction. Failed refreshes
 retain the draft and lock writes until explicit retry succeeds. Recovery rereads the previously
 loaded history pages while retaining their display, so later-page editing remains mounted until the
-fresh pages settle. Successful saves and explicit uncertain-outcome verification keep their existing
+fresh pages settle. Every admitted mutation retains its affected identities until required Category
+and list loaders have completed fresh canonical reads and loaded history continuation has settled.
+Identities absent from that history are then read directly, sequentially within the canonical batch
+bound; decoded NotFound establishes current absence but cannot attribute a lost deletion receipt.
+A failed direct lookup keeps conflicting writes locked. Successful saves and explicit uncertain-outcome verification keep their existing
 workspace reset. Drafts remain with presentation; single and atomic mutations retain their distinct
 server contracts. Closing an editing panel does not release an uncertain write. Automatic recovery
 uses the existing canonical transport observations; no financial-content telemetry or additional

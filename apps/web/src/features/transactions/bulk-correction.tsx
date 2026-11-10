@@ -208,7 +208,8 @@ const BulkHeading = ({ count }: Readonly<{ count: number }>): JSX.Element => (
 );
 /** Sends one revision-checked atomic correction and never replays an uncertain save. */
 export const BulkTransactionCorrection = (input: BulkProps): JSX.Element => {
-  const [props] = useState(() => input);
+  const [transactions] = useState(() => input.transactions);
+  const props = { ...input, transactions };
   const [draft, setDraft] = useState<BulkDraft>({
     categoryId: "keep",
     direction: "keep",

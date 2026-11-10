@@ -149,3 +149,39 @@ effectIt.effect("denied clipboard access stays silent while the reveal still exp
     expect(expired).toBe(1);
   })
 );
+
+effectIt.effect("late clipboard completion after disposal preserves unrelated newer text", () =>
+  Effect.gen(function* () {
+    const pending = Promise.withResolvers<void>();
+    const started = yield* Deferred.make<void>();
+    const context = yield* Effect.context<never>();
+    const stub = clipboardStub();
+    let copied = 0;
+    const owner = yield* Effect.acquireRelease(Scope.make(), (scope, exit) =>
+      Scope.close(scope, exit)
+    );
+    const clipboard: BrowserClipboard = {
+      readText: stub.clipboard.readText,
+      writeText: (value) => {
+        stub.replace(value);
+        if (value !== "old-recovery-code") return Promise.resolve();
+        Effect.runSyncWith(context)(Deferred.succeed(started, undefined));
+        return pending.promise;
+      },
+    };
+    const command = yield* makeSensitiveClipboard(Option.some(clipboard), "10 minutes").pipe(
+      Scope.provide(owner)
+    );
+    command.copy("old-recovery-code", () => {
+      copied += 1;
+    });
+    yield* Deferred.await(started);
+    yield* Scope.close(owner, Exit.void);
+    stub.replace("new clipboard text");
+    pending.resolve();
+    yield* Effect.tryPromise(() => pending.promise);
+    yield* Effect.yieldNow;
+    expect(copied).toBe(0);
+    expect(stub.read()).toBe("new clipboard text");
+  })
+);

@@ -424,6 +424,191 @@ it("rotates the backup recovery proof under a fresh WebSession", () =>
     })
   ));
 
+const credentialChangingDatabase = (native: D1Database): D1Database => {
+  let rotationPrepared = false;
+  const batch = <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        if (rotationPrepared) {
+          rotationPrepared = false;
+          yield* Effect.tryPromise(() =>
+            native.prepare("UPDATE backup_recovery_credentials SET revision = revision + 1").run()
+          );
+        }
+        return yield* Effect.tryPromise(() => native.batch<Row>(statements));
+      })
+    );
+  return {
+    prepare: (sql): D1PreparedStatement => {
+      if (sql.startsWith("UPDATE backup_recovery_credentials")) rotationPrepared = true;
+      return native.prepare(sql);
+    },
+    batch,
+    exec: native.exec.bind(native),
+    dump: native.dump.bind(native),
+    withSession: native.withSession.bind(native),
+  };
+};
+
+it("refuses recovery rotation when its observed credential changes before commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
+        setup(undefined, undefined, {
+          worker: coreWorker,
+          accessIssuer: "https://example.cloudflareaccess.com",
+          publication: Option.none(),
+          database: credentialChangingDatabase,
+        })
+      );
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+      const token = "R".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const before = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT code_digest,consumed_at_ms FROM backup_recovery_credentials").first()
+      );
+      const response = yield* Effect.tryPromise(() =>
+        sendRequest(
+          new Request("https://api.fidyapp.com/recovery/backup-code/rotate", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${token}`,
+            },
+          })
+        )
+      );
+      expect(response.status).toBe(401);
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+        error: { code: "unauthenticated" },
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT code_digest,consumed_at_ms FROM backup_recovery_credentials").first()
+        )
+      ).toEqual(before);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE operation = 'recovery.rotateBackupRecoveryCode'"
+            )
+            .first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
+it("allows independent rotations under the same fresh session without consuming or extending freshness", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+      const token = "R".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const freshness = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT fresh_until_ms FROM web_sessions").first()
+      );
+      const before = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
+      );
+      for (const _attempt of [1, 2]) {
+        const response = yield* Effect.tryPromise(() =>
+          sendRequest(
+            new Request("https://api.fidyapp.com/recovery/backup-code/rotate", {
+              method: "POST",
+              headers: {
+                origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+                cookie: `__Host-fidy_session=${token}`,
+              },
+            })
+          )
+        );
+        expect(response.status).toBe(200);
+        expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+          data: { status: "rotated" },
+        });
+      }
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT fresh_until_ms FROM web_sessions").first()
+        )
+      ).toEqual(freshness);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT revision,consumed_at_ms FROM backup_recovery_credentials").first()
+        )
+      ).toEqual({ revision: 3, consumed_at_ms: null });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()
+        )
+      ).not.toEqual(before);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE operation = 'recovery.rotateBackupRecoveryCode'"
+            )
+            .first()
+        )
+      ).toEqual({ count: 2 });
+    })
+  ));
+
+it("rolls recovery credential replacement back when its security evidence cannot commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+      const token = "R".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const before = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT code_digest,revision,consumed_at_ms FROM backup_recovery_credentials")
+          .first()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER refuse_rotation_evidence BEFORE INSERT ON audit_entries
+        WHEN NEW.operation = 'recovery.rotateBackupRecoveryCode' BEGIN SELECT RAISE(ABORT, 'test_refusal'); END`)
+          .run()
+      );
+      const response = yield* Effect.tryPromise(() =>
+        sendRequest(
+          new Request("https://api.fidyapp.com/recovery/backup-code/rotate", {
+            method: "POST",
+            headers: {
+              origin: "https://app.fidyapp.com",
+              "Fidy-Session-Binding": "10000000-0000-4000-8000-000000000099",
+              cookie: `__Host-fidy_session=${token}`,
+            },
+          })
+        )
+      );
+      expect(response.status).toBe(503);
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({ status: "unavailable" });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT code_digest,revision,consumed_at_ms FROM backup_recovery_credentials")
+            .first()
+        )
+      ).toEqual(before);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE operation = 'recovery.rotateBackupRecoveryCode'"
+            )
+            .first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
 it("refuses recovery rotation after WebSession freshness expires without changing the proof", () =>
   Effect.runPromise(
     Effect.gen(function* () {

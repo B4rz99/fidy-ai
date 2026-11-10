@@ -434,6 +434,52 @@ await db
   .bind(recoveryDisclosureUserId, recoveryDisclosureDigest, now)
   .run();
 
+const recoveryJourneys = [
+  {
+    userId: "27000000-0000-4000-8000-000000001981",
+    consentId: "27000000-0000-4000-8000-000000001991",
+    key: "lost",
+    code: "23456-789AB-CDEFG-HJKLM-NPQRT",
+  },
+  {
+    userId: "27000000-0000-4000-8000-000000001982",
+    consentId: "27000000-0000-4000-8000-000000001992",
+    key: "malformed",
+    code: "23456-789AB-CDEFG-HJKLM-NPQRU",
+  },
+  {
+    userId: "27000000-0000-4000-8000-000000001983",
+    consentId: "27000000-0000-4000-8000-000000001993",
+    key: "disposal",
+    code: "23456-789AB-CDEFG-HJKLM-NPQRV",
+  },
+  {
+    userId: "27000000-0000-4000-8000-000000001984",
+    consentId: "27000000-0000-4000-8000-000000001994",
+    key: "copy",
+    code: "23456-789AB-CDEFG-HJKLM-NPQRW",
+  },
+];
+await Promise.all(
+  recoveryJourneys.map((recovery) =>
+    seedIdentity({
+      userId: recovery.userId,
+      consentId: recovery.consentId,
+      bsuid: `CO.Recovery.${recovery.key}`,
+      email: `recovery-${recovery.key}@example.com`,
+    })
+      .then(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(recovery.code)))
+      .then((digest) =>
+        db
+          .prepare(
+            "INSERT INTO backup_recovery_credentials(user_id,code_digest,created_at_ms,revision) VALUES(?,?,?,1)"
+          )
+          .bind(recovery.userId, new Uint8Array(digest), now)
+          .run()
+      )
+  )
+);
+
 /** Prepare an isolated navigation workspace before measured work; ordinary regressions use small. */
 export const prepareBrowserAssessment = (): Promise<void> => {
   const dataset = Bun.env.FIDY_ASSESSMENT ?? "small";

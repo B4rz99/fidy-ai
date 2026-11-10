@@ -49,14 +49,16 @@ const writeOwned = (
         const pendingWrite = available.writeText(value);
         return Effect.tryPromise({
           try: () =>
-            pendingWrite.then(() =>
-              active
-                ? undefined
-                : Option.match(latest.current, {
-                    onNone: () => available.writeText(""),
-                    onSome: (owner) => available.writeText(owner.value),
-                  })
-            ),
+            pendingWrite.then(() => {
+              if (active) return;
+              return available.readText().then((current) => {
+                if (current !== value) return;
+                return Option.match(latest.current, {
+                  onNone: () => available.writeText(""),
+                  onSome: (owner) => available.writeText(owner.value),
+                });
+              });
+            }),
           catch: () => new ClipboardAccessFailed(),
         }).pipe(Effect.ensuring(Effect.sync(() => (active = false))));
       }),

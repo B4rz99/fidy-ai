@@ -1,16 +1,13 @@
-import { Effect, Redacted, Schema } from "effect";
+import { Effect, type Redacted } from "effect";
 import type { Atom } from "effect/reactivity";
 import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
 
 export type RotateBackupRecoveryCommand = Readonly<{
-  onRotated: (code: BackupRecoveryCode) => void;
-  onFailed: () => void;
+  onRotated: (code: Redacted.Redacted<BackupRecoveryCode>) => void;
+  onUncertain: () => void;
+  onUnauthenticated: () => void;
   onFreshSessionRequired: () => void;
 }>;
-
-const FreshSessionRequired = Schema.Struct({
-  error: Schema.Struct({ code: Schema.Literal("user_action_required") }),
-});
 
 export const makeRotateCommand = ({
   apiClient,
@@ -24,17 +21,13 @@ export const makeRotateCommand = ({
       Effect.gen(function* () {
         const client = yield* apiClient;
         const response = yield* client.recovery.rotateBackupRecoveryCode();
-        yield* Effect.sync(() =>
-          command.onRotated(Redacted.value(response.data.backupRecoveryCode))
-        );
+        yield* Effect.sync(() => command.onRotated(response.data.backupRecoveryCode));
       }).pipe(
-        Effect.catch((error) =>
-          Effect.sync(
-            Schema.is(FreshSessionRequired)(error)
-              ? command.onFreshSessionRequired
-              : command.onFailed
-          )
-        )
+        Effect.catchTags({
+          UserActionRequired: () => Effect.sync(command.onFreshSessionRequired),
+          Unauthenticated: () => Effect.sync(command.onUnauthenticated),
+        }),
+        Effect.catchCause(() => Effect.sync(command.onUncertain))
       ),
     { concurrent: false }
   );

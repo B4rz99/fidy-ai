@@ -67,6 +67,7 @@ type WorkspaceProps = Readonly<{
   dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
   onRefresh: () => void;
   continuation: HistoryState["continuation"];
+  automaticContinuation: boolean;
   onMore: () => void;
   onRetryMore: () => void;
 }> &
@@ -763,6 +764,7 @@ const ContinuationControl = (
     if (
       element === null ||
       props.continuation !== "available" ||
+      props.automaticContinuation === false ||
       props.editing ||
       (!props.editable && props.readOnly !== true)
     ) {

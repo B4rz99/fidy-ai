@@ -1,9 +1,11 @@
-import { Clock, DateTime, Effect, Layer, Option } from "effect";
+import { Clock, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { afterEach, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
 import { AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
 import { makeFidyClient } from "@/transport/client";
+import { transactionRouteHistory } from "./route-history";
+import { TransactionSearch } from "./period";
 import { transactionHistory } from "./history";
 import { transactionFirstPage, transactionPageInitialValue } from "./query";
 
@@ -163,7 +165,7 @@ it.live(
           })
         );
         expect(reads).toHaveLength(20);
-        registry.set(history.action, "more");
+        registry.set(history.action, registry.get(history.state).more);
         yield* Effect.tryPromise(() =>
           vi.waitFor(() => {
             const state = registry.get(history.state);
@@ -173,8 +175,118 @@ it.live(
           })
         );
         expect(reads).toHaveLength(21);
-        registry.set(history.action, "more");
+        const captured = registry.get(history.state).more;
+        registry.set(history.action, captured);
         yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toHaveLength(22)));
+        registry.set(history.action, captured);
+        yield* Effect.sleep("10 millis");
+        expect(reads).toHaveLength(22);
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    })
+);
+
+it.live(
+  "reset rereads the addressed effective Transaction before selecting its corrected month; failed lookup never means absence",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("window", Object.assign(new EventTarget(), { Uint8Array }));
+      const addressed = "25000000-0000-4000-8000-000000000011";
+      const replacement = "25000000-0000-4000-8000-000000000012";
+      let current = { id: addressed, occurredAt: "2026-09-30T12:00:00Z" };
+      let failLookup = false;
+      const requests: Array<string> = [];
+      const row = (): Record<string, unknown> => ({
+        ...current,
+        categoryId: "24000000-0000-4000-8000-000000000242",
+        money: { amount: "25000", currency: "COP" },
+        direction: "outflow",
+        createdAt: "2026-11-02T12:00:00Z",
+        revision: 1,
+      });
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make((request) => {
+            const lookup = request.url.endsWith(`/${addressed}`);
+            requests.push(
+              lookup
+                ? "lookup"
+                : Option.getOrElse(
+                    UrlParams.getFirst(request.urlParams, "from"),
+                    () => "missing period"
+                  )
+            );
+            if (lookup && failLookup) {
+              return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({})));
+            }
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                Response.json(
+                  lookup
+                    ? {
+                        data: {
+                          ...row(),
+                          presentation: { kind: "independent" },
+                          reconciliation: { kind: "independent" },
+                          sources: [],
+                        },
+                        next: [],
+                      }
+                    : { data: [row()], next: [] }
+                )
+              )
+            );
+          })
+        ),
+      });
+      const history = transactionRouteHistory({
+        client,
+        search: yield* Schema.decodeEffect(TransactionSearch)({ transaction: addressed }),
+        timeZone: "America/Bogota",
+        now: DateTime.makeUnsafe("2026-11-10T12:00:00Z"),
+        initialPages: 1,
+      });
+      expect(requests).toEqual([]);
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(history.state);
+      try {
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(registry.get(history.state).location).toBe("Located"))
+        );
+        expect(requests).toEqual(["lookup", "2026-09-01T05:00:00.000Z"]);
+        current = { id: replacement, occurredAt: "2026-10-02T12:00:00Z" };
+        registry.set(history.action, "reset");
+        expect(registry.get(history.state).location).not.toBe("Located");
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(registry.get(history.state).location).toBe("Located"))
+        );
+        const state = registry.get(history.state);
+        expect(Option.getOrThrow(state.locate)).toBe(replacement);
+        expect(DateTime.formatIso(state.period.from)).toBe("2026-10-01T05:00:00.000Z");
+        expect(requests).toEqual([
+          "lookup",
+          "2026-09-01T05:00:00.000Z",
+          "lookup",
+          "2026-10-01T05:00:00.000Z",
+        ]);
+        failLookup = true;
+        registry.set(history.action, "reset");
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(registry.get(history.state).query._tag).toBe("Failure"))
+        );
+        expect(registry.get(history.state).location).toBe("LookupFailed");
+        expect(requests).toHaveLength(5);
+        failLookup = false;
+        registry.set(history.action, registry.get(history.state).retry);
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(registry.get(history.state).location).toBe("Located"))
+        );
+        expect(requests).toHaveLength(7);
       } finally {
         unmount();
         registry.dispose();

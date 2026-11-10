@@ -2,16 +2,15 @@ import { ManualCaptureProvider } from "./manual-capture";
 import { TransactionWorkspace } from "./workspace-component";
 import { TransactionPeriodControls } from "./period-controls";
 import { PendingRead } from "@/ui/components/pending-read";
+import { TransactionDestinationFailure } from "./destination";
 import { TransactionLocationNotice } from "./location-notice";
-import { TransactionDestination } from "./destination";
-import { destinationMonth, transactionDestinationQuery } from "./destination-query";
+import { transactionDestinationQuery } from "./destination-query";
 import { TransactionSearch, selectedTransactionPeriod, transactionMonth } from "./period";
 import {
   matchesTransactionFilters,
   readTransactionView,
   rememberTransactionPages,
 } from "./view-state";
-import { transactionFirstPage } from "./query";
 import { prepareQuery } from "@/transport/query-preparation";
 import type { AtomRegistry } from "effect/reactivity";
 import type { FidyClient } from "@/transport/client";
@@ -27,7 +26,8 @@ import type { JSX, ReactNode } from "react";
 
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
-import { type HistoryCommand, type HistoryState, transactionHistory } from "./history";
+import { type HistoryCommand, type HistoryState } from "./history";
+import { type TransactionRouteHistory, transactionRouteHistory } from "./route-history";
 import { useTransactionScrollRestoration } from "./scroll-restoration";
 import {
   type Category,
@@ -296,31 +296,13 @@ const mountTransactionView = ({
 };
 const useTransactionQueries = (
   period: TransactionQueries["period"],
-  locate: Option.Option<string>
+  historyResource: TransactionRouteHistory
 ): TransactionQueries => {
   const router = useRouter();
   const client = router.options.context.apiClient;
   const scope = `${transactionMonth(period)}:${period.timeZone}`;
   const [categories] = useState(() => workspaceCategoriesQuery(client).view);
-  const [transactions] = useState(() =>
-    transactionFirstPage({
-      client,
-      period,
-    })
-  );
-  const [historyResource] = useState(() =>
-    transactionHistory({
-      apiClient: client,
-      firstPage: transactions,
-      period: { from: period.from, to: period.to },
-      locate,
-      initialPages: readTransactionView({
-        state: router.latestLocation.state,
-        binding: router.options.context.sessionBinding,
-        scope,
-      }).pages,
-    })
-  );
+  const transactions = historyResource.firstPage;
   const [correctionOwner] = useState(() =>
     makeTransactionCorrections({
       client,
@@ -343,10 +325,15 @@ const useTransactionQueries = (
     mount: () => mountTransactionView({ router, scope, corrections, restore: dispatch }),
     onMore: () => {
       if (history.continuation !== "available") return;
+      if (
+        router.options.context.registry.get(historyResource.state).more.more !== history.more.more
+      ) {
+        return;
+      }
       rememberTransactionPages({ router, scope, pages: history.loadedPages + 1 });
-      dispatch("more");
+      dispatch(history.more);
     },
-    onRetryMore: () => dispatch("retry"),
+    onRetryMore: () => dispatch(history.retry),
   };
 };
 const readyQueryActivity = (
@@ -374,6 +361,7 @@ const readyQueryActivity = (
 type TransactionResourceProps = Readonly<{
   children: ReactNode;
   locate: Option.Option<string>;
+  historyResource: TransactionRouteHistory;
   currentUser: CurrentUser;
   profileCurrent: boolean;
   period: TransactionQueries["period"];
@@ -385,7 +373,7 @@ type TransactionResourceProps = Readonly<{
   }>;
 }>;
 const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
-  const queries = useTransactionQueries(props.period, props.locate);
+  const queries = useTransactionQueries(props.period, props.historyResource);
   useTransactionScrollRestoration(
     Option.isNone(props.locate) &&
       queries.categoryState._tag === "Ready" &&
@@ -405,6 +393,15 @@ const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
     </TransactionCorrectionContext>
   );
 };
+const failedDestination = (queries: TransactionQueries): Option.Option<JSX.Element> =>
+  queries.history.location === "LookupFailed" && queries.transactionState._tag !== "Initial"
+    ? Option.some(
+        <TransactionDestinationFailure
+          state={queries.transactionState}
+          refresh={queries.onRetryMore}
+        />
+      )
+    : Option.none();
 const TransactionResourceContent = (
   props: TransactionResourceProps &
     Readonly<{
@@ -428,6 +425,8 @@ const TransactionResourceContent = (
       />
     );
   }
+  const destinationFailure = failedDestination(props.queries);
+  if (Option.isSome(destinationFailure)) return destinationFailure.value;
   if (transactionState._tag === "Failure") {
     return (
       <FailedTransactionQuery
@@ -499,6 +498,7 @@ const ReadyTransactionResources = ({
         dateFilter={dateFilter}
         monthFilter={Option.some({ value: dateFilter.month, onChange: dateFilter.onMonth })}
         continuation={history.continuation}
+        automaticContinuation={history.location === "None" || history.location === "Located"}
         onMore={onMore}
         onRetryMore={onRetryMore}
         editable={profileCurrent && !corrections.locked && activity._tag === "Current"}
@@ -510,12 +510,7 @@ const ReadyTransactionResources = ({
         queryNotice={
           <>
             <QueryActivityNotice query={activity} monthLabel={presentation.monthLabel} />
-            <TransactionLocationNotice
-              locate={locate}
-              history={history}
-              onMore={onMore}
-              onRetry={onRetryMore}
-            />
+            <TransactionLocationNotice history={history} onMore={onMore} onRetry={onRetryMore} />
           </>
         }
         onRefresh={corrections.recover}
@@ -529,24 +524,41 @@ const TransactionPeriodView = ({
   currentUser,
   profileCurrent,
   search,
-  locate,
 }: Readonly<{
   currentUser: CurrentUser;
   profileCurrent: boolean;
   children: ReactNode;
   search: TransactionSearch;
-  locate: Option.Option<string>;
 }>): JSX.Element => {
   const navigate = useNavigate();
   const [now] = useState(() => Effect.runSync(DateTime.now));
-  const period = selectedTransactionPeriod({ search, now, timeZone: currentUser.timeZone });
+  const router = useRouter();
+  const [historyResource] = useState(() => {
+    const selected = selectedTransactionPeriod({ search, now, timeZone: currentUser.timeZone });
+    return transactionRouteHistory({
+      client: router.options.context.apiClient,
+      search,
+      timeZone: currentUser.timeZone,
+      now,
+      initialPages:
+        search.transaction === undefined
+          ? readTransactionView({
+              state: router.latestLocation.state,
+              binding: router.options.context.sessionBinding,
+              scope: `${transactionMonth(selected)}:${selected.timeZone}`,
+            }).pages
+          : 1,
+    });
+  });
+  const { period, locate } = useAtomValue(historyResource.state);
   const month = transactionMonth(period);
   const change = (next: TransactionSearch): void => {
     navigate({ to: "/app/transactions", search: next, state: true }).catch(() => undefined);
   };
   return (
     <TransactionResources
-      key={`${DateTime.toEpochMillis(period.from)}:${Option.getOrElse(locate, () => "browse")}`}
+      key={`${DateTime.toEpochMillis(period.from)}:${period.timeZone}:${Option.getOrElse(locate, () => "browse")}`}
+      historyResource={historyResource}
       locate={locate}
       currentUser={currentUser}
       profileCurrent={profileCurrent}
@@ -573,23 +585,17 @@ const TransactionPeriod = (
   }>
 ): JSX.Element => {
   const search = useSearch({ from: "/independent-application/app/transactions" });
+  const [now] = useState(() => DateTime.nowUnsafe());
+  const month = transactionMonth(
+    selectedTransactionPeriod({ search, now, timeZone: props.currentUser.timeZone })
+  );
   return (
     <ManualCaptureProvider timeZone={props.currentUser.timeZone}>
-      {search.transaction === undefined ? (
-        <TransactionPeriodView {...props} search={search} locate={Option.none()} />
-      ) : (
-        <TransactionDestination key={search.transaction} id={search.transaction}>
-          {(transaction) => (
-            <TransactionPeriodView
-              {...props}
-              search={{
-                month: destinationMonth({ transaction, timeZone: props.currentUser.timeZone }),
-              }}
-              locate={Option.some(transaction.id)}
-            />
-          )}
-        </TransactionDestination>
-      )}
+      <TransactionPeriodView
+        key={`${search.transaction ?? month}:${props.currentUser.timeZone}`}
+        {...props}
+        search={search}
+      />
     </ManualCaptureProvider>
   );
 };
@@ -688,7 +694,6 @@ TransactionListFeature.preloadData = ({
       if (current._tag !== "Ready" || current.waiting || Option.isSome(current.refreshFailure)) {
         return;
       }
-      let selected = search;
       if (search.transaction !== undefined) {
         const destination = transactionDestinationQuery({
           client: apiClient,
@@ -701,23 +706,14 @@ TransactionListFeature.preloadData = ({
             options: { mode: destinationMode, signal: Option.some(signal) },
           })
         );
-        const record = presentCanonicalQuery(registry.get(destination));
-        if (record._tag !== "Ready" || record.waiting || Option.isSome(record.refreshFailure)) {
-          return;
-        }
-        selected = {
-          month: destinationMonth({
-            transaction: record.value.data,
-            timeZone: current.value.data.timeZone,
-          }),
-        };
       }
-      const period = selectedTransactionPeriod({
-        search: selected,
+      const query = transactionRouteHistory({
+        client: apiClient,
+        search,
         now: DateTime.nowUnsafe(),
         timeZone: current.value.data.timeZone,
-      });
-      const query = transactionFirstPage({ client: apiClient, period });
+        initialPages: 1,
+      }).firstPage;
       yield* Effect.tryPromise(() =>
         prepareQuery({ registry, query, options: { mode: "display", signal: Option.some(signal) } })
       );

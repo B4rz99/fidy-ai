@@ -78,6 +78,7 @@ export const PrivacyTransactions = (): JSX.Element => {
           timeZone: state.value.presentation.timeZone,
         }}
         continuation={history.continuation}
+        automaticContinuation={true}
         onMore={() => dispatch("more")}
         onRetryMore={() => dispatch("retry")}
         onRefresh={() => dispatch("reset")}

@@ -158,7 +158,7 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
     dispose,
     records,
     history: (): HistoryState => registry.get(history.state),
-    more: (): void => registry.set(history.action, "more"),
+    more: (): void => registry.set(history.action, registry.get(history.state).more),
     saved: (): number => saved,
   };
 });

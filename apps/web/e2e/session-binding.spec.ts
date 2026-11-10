@@ -117,6 +117,155 @@ test("retains ordinary navigation when payment availability refuses a live sessi
     })
   ));
 
+const triggerResumeBurst = (): void => {
+  window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  document.dispatchEvent(new Event("visibilitychange"));
+  window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+};
+const isInert = (node: Element): boolean => node.closest("[inert]") !== null;
+const isConnected = (node: Node): boolean => node.isConnected;
+const holdBindingReads = (): Readonly<{
+  route: (route: Route) => Promise<void>;
+  checking: Promise<void>;
+  release: () => void;
+  reads: () => number;
+}> => {
+  const checking = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let reads = 0;
+  return {
+    route: (route) => {
+      reads += 1;
+      checking.resolve();
+      return release.promise.then(() => route.continue());
+    },
+    checking: checking.promise,
+    release: () => release.resolve(),
+    reads: () => reads,
+  };
+};
+
+test("retains an unsaved draft while coalescing same-cookie resume checks", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "+ Registrar", exact: true }).click()
+      );
+      const draft = page.getByLabel("Contraparte (opcional)");
+      yield* Effect.tryPromise(() => draft.fill("Same session private draft"));
+      const retainedInput = yield* Effect.tryPromise(() => draft.elementHandle());
+      const held = holdBindingReads();
+      yield* Effect.tryPromise(() => page.route(`${apiOrigin}/web/session/binding`, held.route));
+      try {
+        yield* Effect.tryPromise(() => page.evaluate(triggerResumeBurst));
+        yield* Effect.tryPromise(() => held.checking);
+        yield* Effect.tryPromise(() => expect(draft).not.toBeVisible());
+        expect(held.reads()).toBe(1);
+        expect(yield* Effect.tryPromise(() => draft.evaluate(isInert))).toBe(true);
+      } finally {
+        held.release();
+      }
+      yield* Effect.tryPromise(() => expect(draft).toBeVisible());
+      yield* Effect.tryPromise(() => expect(draft).toHaveValue("Same session private draft"));
+      expect(yield* Effect.tryPromise(() => retainedInput.evaluate(isConnected))).toBe(true);
+      expect(yield* Effect.tryPromise(() => draft.evaluate(isInert))).toBe(false);
+      expect(held.reads()).toBe(1);
+    })
+  ));
+
+const refuseBindingObservation = (route: Route): Promise<void> =>
+  route.fulfill({
+    status: okStatus,
+    contentType: "application/json",
+    body: JSON.stringify({ binding: 42 }),
+  });
+
+const unavailableBindingReads = (): Readonly<{
+  route: (route: Route) => Promise<void>;
+  reads: () => number;
+}> => {
+  let reads = 0;
+  return {
+    route: (route) => {
+      reads += 1;
+      return refuseBindingObservation(route);
+    },
+    reads: () => reads,
+  };
+};
+
+test("requires reload and removes a protected draft when resume verification fails", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "+ Registrar", exact: true }).click()
+      );
+      const draft = page.getByLabel("Contraparte (opcional)");
+      yield* Effect.tryPromise(() => draft.fill("Unavailable session private draft"));
+      const unavailable = unavailableBindingReads();
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/session/binding`, unavailable.route)
+      );
+      yield* Effect.tryPromise(() => page.evaluate(triggerResumeBurst));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toHaveText(
+          "No pudimos comprobar tu sesión. Recarga para continuar."
+        )
+      );
+      yield* Effect.tryPromise(() => expect(draft).toHaveCount(0));
+      expect(unavailable.reads()).toBe(1);
+      yield* Effect.tryPromise(() => page.evaluate(triggerResumeBurst));
+      yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
+      expect(unavailable.reads()).toBe(1);
+    })
+  ));
+
+const concealDocument = (): void => {
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+  document.dispatchEvent(new Event("visibilitychange"));
+};
+const resumeDocument = (): void => {
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  document.dispatchEvent(new Event("visibilitychange"));
+};
+
+test("retires a hidden draft after the cookie changes before resume", ({
+  page,
+  context,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => page.addInitScript(disableBroadcastChannel));
+      yield* Effect.tryPromise(() => signInThroughCore({ page, request }));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "+ Registrar", exact: true }).click()
+      );
+      const draft = page.getByLabel("Contraparte (opcional)");
+      yield* Effect.tryPromise(() => draft.fill("Hidden retired private draft"));
+      yield* Effect.tryPromise(() => page.evaluate(concealDocument));
+      const other = yield* Effect.tryPromise(() => context.newPage());
+      yield* Effect.tryPromise(() => signInDashboardThroughCore({ page: other, request }));
+      yield* Effect.tryPromise(() => page.evaluate(resumeDocument));
+      yield* Effect.tryPromise(() => expect(draft).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("No pudimos autorizar esta acción.")).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(other.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(other.getByText("No pudimos autorizar esta acción.")).not.toBeVisible()
+      );
+    })
+  ));
+
 test("rejects stale cross-tab drafts and logout", ({ page, context, request }) =>
   Effect.runPromise(
     Effect.gen(function* () {

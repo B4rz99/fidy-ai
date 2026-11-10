@@ -5,97 +5,26 @@ import { MoneyField } from "./money-field";
 import { parseMoneyInput } from "@/transport/money-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import type { Category } from "./presentation";
-import { useAtomSet } from "@effect/atom-react";
-import { Cause, DateTime, Effect, Option, Predicate, Schema } from "effect";
-import * as Atom from "effect/reactivity/Atom";
-import { useRef, useState } from "react";
-import type { FormEvent, JSX } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { Option, Schema } from "effect";
+import { useState } from "react";
+import type { FormEvent, JSX, RefCallback } from "react";
 import { Button } from "@/ui/components/button";
 import { Label } from "@/ui/components/label";
 import { Input } from "@/ui/components/input";
 import { CalendarField } from "@/ui/components/calendar-field";
 import { TransactionTypeToggle } from "@/ui/components/transactions";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
-import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
-import { isCanonicalInput } from "@/transport/canonical-input";
-
-export type CaptureStatus = "idle" | "saving" | "saved" | "failed" | "uncertain";
-
-type CapturedTransaction = CanonicalSuccess<"transactions.createTransaction">["data"];
-
-type CaptureCommand = Readonly<{
-  amount: string;
-  currency: CanonicalInput<"transactions.createTransaction">["payload"]["money"]["currency"];
-  counterparty: string;
-  notes: string;
-  categoryId: Option.Option<Category["id"]>;
-  direction: "inflow" | "outflow";
-  occurredOn: string;
-  timeZone: string;
-  onSaved: (transaction: CapturedTransaction) => void;
-  onFailed: () => void;
-  onUncertain: () => void;
-}>;
-
-const makeCapture = (apiClient: FidyClient): Atom.AtomResultFn<CaptureCommand, void, never> =>
-  apiClient.runtime
-    .fn<CaptureCommand>()(
-      (command) => {
-        const money = parseMoneyInput({ text: command.amount, currency: command.currency });
-        const zoned = DateTime.makeZoned(`${command.occurredOn}T00:00:00.000Z`, {
-          timeZone: command.timeZone,
-          adjustForTimeZone: true,
-        });
-        if (
-          Option.isNone(money) ||
-          Option.isNone(zoned) ||
-          DateTime.formatIsoDate(zoned.value) !== command.occurredOn
-        ) {
-          return Effect.sync(command.onFailed);
-        }
-        const input: CanonicalInput<"transactions.createTransaction"> = {
-          payload: {
-            money: money.value,
-            direction: command.direction,
-            counterparty: Option.fromNullishOr(command.counterparty.trim() || undefined),
-            notes: Option.fromNullishOr(command.notes.trim() || undefined),
-            categoryId: command.categoryId,
-            occurredAt: DateTime.toUtc(zoned.value),
-          },
-        };
-        if (!isCanonicalInput("transactions.createTransaction", input)) {
-          return Effect.sync(command.onFailed);
-        }
-        return Effect.gen(function* () {
-          const client = yield* apiClient;
-          const created = yield* client.transactions.createTransaction(input);
-          yield* Effect.sync(() => command.onSaved(created.data));
-        }).pipe(
-          Effect.catch((failure) =>
-            Effect.sync(
-              Predicate.isTagged(failure, "ValidationFailed") ||
-                Predicate.isTagged(failure, "NotFound") ||
-                Predicate.isTagged(failure, "ResourceLimited")
-                ? command.onFailed
-                : command.onUncertain
-            )
-          ),
-          Effect.catchCause((cause) =>
-            Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(command.onUncertain)
-          )
-        );
-      },
-      { concurrent: false }
-    )
-    .pipe(Atom.keepAlive);
+import type { CanonicalSuccess, FidyClient } from "@/transport/client";
+import { type TransactionCaptureTask, makeTransactionCapture } from "./capture-task";
 
 type CaptureInputsProps = Readonly<{
   amount: string;
   counterparty: string;
-  currency: CaptureCommand["currency"];
+  currency: CaptureDraft["currency"];
   onAmount: (value: string) => void;
   onCounterparty: (value: string) => void;
-  onCurrency: Option.Option<(currency: CaptureCommand["currency"]) => void>;
+  onCurrency: Option.Option<(currency: CaptureDraft["currency"]) => void>;
   disabled: boolean;
   revealErrors: boolean;
 }>;
@@ -161,12 +90,12 @@ const CaptureInputs = ({
 );
 
 const CaptureFeedback = ({
-  status,
+  task,
   onCheckHistory,
-}: Readonly<{ status: CaptureStatus; onCheckHistory: () => void }>): JSX.Element => (
+}: Readonly<{ task: TransactionCaptureTask; onCheckHistory: () => void }>): JSX.Element => (
   <>
-    {status === "saved" ? <output>Transacción guardada.</output> : null}
-    {status === "uncertain" ? (
+    {Option.isSome(task.created) ? <output>Transacción guardada.</output> : null}
+    {task.uncertain ? (
       <div>
         <p role="alert">
           No pudimos confirmar si la transacción se guardó. Actualiza el historial antes de volver a
@@ -180,7 +109,7 @@ const CaptureFeedback = ({
         />
       </div>
     ) : null}
-    {status === "failed" ? (
+    {task.rejected ? (
       <p role="alert">
         No pudimos guardar la transacción. Tus datos siguen en el formulario. Intenta de nuevo.
       </p>
@@ -259,41 +188,43 @@ const CaptureClassification = ({
 type CaptureProps = Readonly<{
   categories: ReadonlyArray<Category>;
   onCancel: Option.Option<() => void>;
-  renderForm: (form: JSX.Element) => JSX.Element;
+  renderForm: (
+    form: JSX.Element,
+    placement: Readonly<{ saving: boolean; uncertain: boolean }>
+  ) => JSX.Element;
   apiClient: FidyClient;
-  onCreated: (transaction: CapturedTransaction) => void;
+  onCreated: (transaction: CanonicalSuccess<"transactions.createTransaction">["data"]) => void;
   timeZone: string;
   onCheckHistory: () => void;
-  status: CaptureStatus;
-  currency: Option.Option<CaptureCommand["currency"]>;
+  onInvalidate: () => void;
+  currency: Option.Option<CaptureDraft["currency"]>;
   initial: Partial<Omit<CaptureDraft, "direction" | "currency">>;
   direction: Option.Option<CaptureDraft["direction"]>;
   disabled: boolean;
-  onStatus: (status: CaptureStatus) => void;
 }>;
-type EditorProps = CaptureProps & Readonly<{ newAttempt: boolean }>;
-const captureLocked = (props: CaptureProps): boolean =>
-  props.disabled || props.status === "saving" || props.status === "uncertain";
+type EditorProps = CaptureProps & Readonly<{ newAttempt: boolean; task: TransactionCaptureTask }>;
+const captureLocked = (props: EditorProps): boolean => props.disabled || props.task.locked;
 const captureCurrencyChange = (
   fixed: CaptureProps["currency"],
-  change: (currency: CaptureCommand["currency"]) => void
+  change: (currency: CaptureDraft["currency"]) => void
 ): CaptureInputsProps["onCurrency"] => (Option.isSome(fixed) ? Option.none() : Option.some(change));
 const CaptureForm = ({
   props,
   draft,
   onDraft,
   onSubmit,
-  currency,
   revealErrors,
+  mounted,
 }: Readonly<{
+  mounted: RefCallback<HTMLFormElement>;
   props: EditorProps;
-  currency: CaptureCommand["currency"];
   draft: CaptureDraft;
   onDraft: (draft: CaptureDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   revealErrors: boolean;
 }>): JSX.Element => (
   <form
+    ref={mounted}
     noValidate
     onSubmit={onSubmit}
     aria-label="Registrar transacción"
@@ -313,7 +244,7 @@ const CaptureForm = ({
         revealErrors={revealErrors}
         amount={draft.amount}
         disabled={captureLocked(props)}
-        currency={currency}
+        currency={draft.currency}
         counterparty={draft.counterparty}
         onCurrency={captureCurrencyChange(props.currency, (currency) =>
           onDraft({ ...draft, currency })
@@ -332,13 +263,13 @@ const CaptureForm = ({
         setNotes={(notes) => onDraft({ ...draft, notes })}
       />
     </fieldset>
-    <CaptureFeedback status={props.status} onCheckHistory={props.onCheckHistory} />
+    <CaptureFeedback task={props.task} onCheckHistory={props.onCheckHistory} />
     <CaptureActions props={props} />
   </form>
 );
 
 const captureSubmitLabel = (props: EditorProps): string => {
-  if (props.status === "saving") return "Guardando…";
+  if (props.task.saving) return "Guardando…";
   return props.newAttempt ? "Registrar como nueva transacción" : "Registrar";
 };
 const CaptureActions = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element => (
@@ -347,7 +278,7 @@ const CaptureActions = ({ props }: Readonly<{ props: EditorProps }>): JSX.Elemen
       <Button
         type="button"
         variant="outline"
-        disabled={props.status === "saving"}
+        disabled={props.task.saving}
         onClick={Option.getOrUndefined(props.onCancel)}
       >
         Cancelar
@@ -359,83 +290,80 @@ const CaptureActions = ({ props }: Readonly<{ props: EditorProps }>): JSX.Elemen
   </div>
 );
 
-const CaptureEditor = ({
-  props,
-  draft,
-  setDraft,
-}: Readonly<{
-  props: EditorProps;
-  draft: CaptureDraft;
-  setDraft: (draft: CaptureDraft) => void;
-}>): JSX.Element => {
-  const [capture] = useState(() => makeCapture(props.apiClient));
-  const submit = useAtomSet(capture);
-  const admission = useRef(false);
+const CaptureEditor = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element => {
   const [attempted, setAttempted] = useState(false);
-  const currency = Option.getOrElse(props.currency, () => draft.currency);
+  const [presentation] = useState(() => ({ active: false }));
+  const [mounted] = useState<RefCallback<HTMLFormElement>>(
+    () =>
+      (
+        node: Parameters<RefCallback<HTMLFormElement>>[0]
+      ): ReturnType<RefCallback<HTMLFormElement>> => {
+        if (node === null) return;
+        presentation.active = true;
+        return (): void => {
+          presentation.active = false;
+        };
+      }
+  );
+  const draft = props.task.draft;
+  const currency = draft.currency;
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     setAttempted(true);
+    if (captureLocked(props)) return;
     if (Option.isNone(parseMoneyInput({ text: draft.amount, currency }))) {
       event.currentTarget.querySelector<HTMLInputElement>("#transaction-amount")?.focus();
       return;
     }
     if (!event.currentTarget.reportValidity()) return;
-    if (admission.current || captureLocked(props)) {
-      return;
-    }
-    admission.current = true;
-    props.onStatus("saving");
-    submit({
-      ...draft,
-      currency,
-      categoryId: Option.fromNullishOr(
-        props.categories.find((category) => category.id === draft.categoryId)
-      ).pipe(Option.map((category) => category.id)),
-      timeZone: props.timeZone,
-      onSaved: (transaction) => {
-        props.onStatus("saved");
-        setAttempted(false);
-        setDraft({ ...draft, amount: "", counterparty: "", notes: "", categoryId: "" });
-        props.onCreated(transaction);
+    props.task.submit({
+      categories: props.categories,
+      onCreated: (created) => {
+        if (presentation.active) props.onCreated(created);
       },
-      onFailed: () => {
-        admission.current = false;
-        props.onStatus("failed");
+      invalidate: () => {
+        if (presentation.active) props.onInvalidate();
       },
-      onUncertain: () => props.onStatus("uncertain"),
     });
   };
   return props.renderForm(
     <CaptureForm
+      mounted={mounted}
       revealErrors={attempted}
       props={props}
       draft={draft}
-      currency={currency}
-      onDraft={setDraft}
+      onDraft={props.task.change}
       onSubmit={onSubmit}
-    />
+    />,
+    { saving: props.task.saving, uncertain: props.task.uncertain }
   );
 };
-
 const LocalCapture = (props: CaptureProps): JSX.Element => {
-  const [draft, setDraft] = useState<CaptureDraft>(() => ({
-    ...emptyCaptureDraft(props.timeZone),
-    direction: Option.getOrElse(props.direction, () => "outflow"),
-    ...props.initial,
-  }));
+  const [resource] = useState(() =>
+    makeTransactionCapture({
+      client: props.apiClient,
+      timeZone: props.timeZone,
+      initial: {
+        ...emptyCaptureDraft(props.timeZone),
+        ...props.initial,
+        currency: Option.getOrElse(props.currency, () => "COP"),
+        direction: Option.getOrElse(props.direction, () => "outflow"),
+      },
+    })
+  );
+  const task = useAtomValue(resource);
+  const [mounted] = useState<RefCallback<HTMLDivElement>>(
+    () =>
+      (node: Parameters<RefCallback<HTMLDivElement>>[0]): ReturnType<RefCallback<HTMLDivElement>> =>
+        node === null ? undefined : task.mount()
+  );
   return (
-    <CaptureEditor props={{ ...props, newAttempt: false }} draft={draft} setDraft={setDraft} />
+    <div className="contents" ref={mounted}>
+      <CaptureEditor props={{ ...props, task, newAttempt: false }} />
+    </div>
   );
 };
-
 export const TransactionCapture = LocalCapture;
-
-export const ControlledTransactionCapture = (
-  props: EditorProps &
-    Readonly<{
-      draft: Readonly<{ value: CaptureDraft; onChange: (draft: CaptureDraft) => void }>;
-    }>
-): JSX.Element => (
-  <CaptureEditor props={props} draft={props.draft.value} setDraft={props.draft.onChange} />
+export const ControlledTransactionCapture = (props: EditorProps): JSX.Element => (
+  <CaptureEditor props={props} />
 );

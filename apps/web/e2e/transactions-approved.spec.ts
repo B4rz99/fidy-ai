@@ -264,6 +264,112 @@ const expectRecoveredCapture = (page: Page): Journey =>
       expect(page.getByRole("button", { name: "Categoría: Transporte", exact: true })).toBeVisible()
     );
   });
+const captureAdmissionJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* installWorkspace(page);
+    const requests: Array<unknown> = [];
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions`, (route) => {
+        requests.push(route.request().postDataJSON());
+        return route.fulfill(
+          requests.length === 1
+            ? {
+                status: 400,
+                contentType: "application/json",
+                body: JSON.stringify({
+                  _tag: "ValidationFailed",
+                  error: { code: "validation_failed", message: "Refused", fields: [] },
+                  next: [],
+                }),
+              }
+            : {
+                status: createdStatus,
+                contentType: "application/json",
+                body: response({ ...row(2), notes: undefined }),
+              }
+        );
+      })
+    );
+    yield* openCapture(page);
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("0"));
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    expect(requests).toHaveLength(0);
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("12345,67"));
+    const form = page.getByRole("form", { name: "Registrar transacción", exact: true });
+    yield* wait(() =>
+      form.evaluate((element: HTMLFormElement) => {
+        element.requestSubmit();
+        element.requestSubmit();
+      })
+    );
+    yield* wait(() =>
+      expect(page.getByRole("alert")).toContainText("No pudimos guardar la transacción")
+    );
+    expect(requests).toHaveLength(1);
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("12345,67"));
+    yield* wait(() => page.getByLabel("Contraparte (opcional)").fill("Tienda corregida"));
+    yield* wait(() =>
+      form.evaluate((element: HTMLFormElement) => {
+        element.requestSubmit();
+        element.requestSubmit();
+      })
+    );
+    yield* wait(() =>
+      expect(page.getByText("Transacción registrada", { exact: true })).toBeVisible()
+    );
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toMatchObject({ counterparty: "Tienda corregida" });
+  });
+test("manual capture keeps invalid drafts request-free and admits one create per synchronous submit after a definite refusal", ({
+  page,
+}) => Effect.runPromise(captureAdmissionJourney(page)));
+
+const replacedCaptureJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* installWorkspace(page);
+    const pending: Array<Route> = [];
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions`, (route) => {
+        pending.push(route);
+      })
+    );
+    yield* wait(() => page.goto("/app/transactions?month=2026-10"));
+    yield* wait(() => page.getByRole("button", { name: "Mes anterior", exact: true }).click());
+    yield* wait(() => expect(page).toHaveURL(/month=2026-09/u));
+    yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("12345,67"));
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    yield* wait(() => expect.poll(() => pending.length).toBe(1));
+    yield* wait(() => page.goBack());
+    yield* wait(() => expect(page).toHaveURL(/month=2026-10/u));
+    yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Guardando…", exact: true })).toBeDisabled()
+    );
+    const request = pending[0];
+    if (request === undefined) throw new Error("Missing pending create");
+    yield* wait(() =>
+      request.fulfill({
+        status: createdStatus,
+        contentType: "application/json",
+        body: response({ ...row(2), notes: undefined }),
+      })
+    );
+    yield* wait(() =>
+      expect(page.getByText("Transacción guardada.", { exact: true })).toBeVisible()
+    );
+    yield* wait(() =>
+      expect(page.getByText("Transacción registrada", { exact: true })).toHaveCount(0)
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
+    );
+    expect(pending).toHaveLength(1);
+  });
+test("a pending manual capture survives browser Back without reopening create or notifying its replaced parent", ({
+  page,
+}) => Effect.runPromise(replacedCaptureJourney(page)));
+
 const uncertainCaptureJourney = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* installWorkspace(page);

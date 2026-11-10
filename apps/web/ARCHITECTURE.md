@@ -582,8 +582,13 @@ The Budget summary shows recorded monthly income and all effective expenses, inc
 
 ### Manual Transaction capture recovery
 
-The mounted Transactions period owner retains a manual capture draft and an immutable
-uncertain attempt above month/history-generation workspace remounts. Refreshing history
+The capture-owned mounted task retains the draft, synchronous create admission, safe committed
+Transaction and immutable uncertain attempt above month/history-generation workspace remounts.
+Parents consume derived placement observations and guarded actions; they cannot set capture status.
+Confirmed save is installed before existing reads are invalidated or presentation callbacks run.
+Callback defects cannot reopen create or replace a confirmed save with uncertainty. The originating
+form fences presentation callbacks immediately on replacement; disposing the task also interrupts
+local work without claiming that a sent create was rolled back. Refreshing history
 never resubmits a capture. Recovery requires an explicit reread of the current month's
 history and Categories, with fresh successful observations before offering resume.
 The User compares the attempt with history; matching fields or an absent loaded row

@@ -837,18 +837,16 @@ const CaptureNotice = ({
 const capturePanelStatus = (
   panel: TransactionPanel,
   capture: React.ContextType<typeof ManualCaptureContext>
-): TransactionPanel =>
-  panel._tag === "Capture" && Option.isSome(capture)
-    ? { _tag: "Capture", status: capture.value.status }
-    : panel;
+): TransactionPanel => {
+  if (panel._tag !== "Capture" || Option.isNone(capture)) return panel;
+  if (capture.value.saving) return { _tag: "Capture", status: "saving" };
+  return { _tag: "Capture", status: capture.value.uncertain ? "uncertain" : "idle" };
+};
 const useWorkspacePanel = (
   generation: number
 ): Readonly<{ panel: TransactionPanel; onPanel: (panel: TransactionPanel) => void }> => {
   const capture = use(ManualCaptureContext);
-  const defaultPanel: TransactionPanel = Option.exists(
-    capture,
-    (owner) => owner.status === "uncertain"
-  )
+  const defaultPanel: TransactionPanel = Option.exists(capture, (owner) => owner.uncertain)
     ? { _tag: "Capture", status: "uncertain" }
     : { _tag: "Summary" };
   const [interaction, setInteraction] = useState<

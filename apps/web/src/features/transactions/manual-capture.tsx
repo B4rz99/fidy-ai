@@ -1,40 +1,55 @@
 import { useState } from "react";
-import type { JSX, ReactNode } from "react";
+import type { JSX, ReactNode, RefCallback } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { useRouter } from "@tanstack/react-router";
 import { Option } from "effect";
 import { emptyCaptureDraft } from "./capture-draft";
-import { ManualCaptureContext, type ManualCaptureState } from "./manual-capture-context";
+import { makeTransactionCapture } from "./capture-task";
+import { type CaptureHistoryVersion, ManualCaptureContext } from "./manual-capture-context";
 
 export const ManualCaptureProvider = ({
   timeZone,
   children,
 }: Readonly<{ timeZone: string; children: ReactNode }>): JSX.Element => {
-  const initial = (): ManualCaptureState => ({
-    draft: emptyCaptureDraft(timeZone),
-    status: "idle",
-    attempt: Option.none(),
-    check: Option.none(),
-  });
-  const [state, setState] = useState(initial);
+  const { apiClient } = useRouter().options.context;
+  const [resource] = useState(() =>
+    makeTransactionCapture({ client: apiClient, timeZone, initial: emptyCaptureDraft(timeZone) })
+  );
+  const task = useAtomValue(resource);
+  const [mounted] = useState<RefCallback<HTMLDivElement>>(
+    () =>
+      (node: Parameters<RefCallback<HTMLDivElement>>[0]): ReturnType<RefCallback<HTMLDivElement>> =>
+        node === null ? undefined : task.mount()
+  );
+  const [check, setCheck] = useState<Option.Option<CaptureHistoryVersion>>(Option.none());
   return (
-    <ManualCaptureContext
-      value={Option.some({
-        ...state,
-        change: (draft) => setState((current) => ({ ...current, draft })),
-        onStatus: (status) =>
-          setState((current) => ({
-            ...current,
-            status,
-            ...(status === "uncertain"
-              ? { attempt: Option.some(current.draft), check: Option.none() }
-              : {}),
-          })),
-        clear: () => setState(initial()),
-        checkHistory: (version) =>
-          setState((current) => ({ ...current, check: Option.some(version) })),
-        resume: () => setState((current) => ({ ...current, status: "idle", check: Option.none() })),
-      })}
-    >
-      {children}
-    </ManualCaptureContext>
+    <div className="contents" ref={mounted}>
+      <ManualCaptureContext
+        value={Option.some({
+          ...task,
+          check,
+          clear: () => {
+            task.restart();
+            setCheck(Option.none());
+          },
+          checkHistory: (version) => setCheck(Option.some(version)),
+          resumeAfterInspection: (version) => {
+            if (
+              !Option.exists(
+                check,
+                (previous) =>
+                  previous.month === version.month && previous.generation < version.generation
+              )
+            ) {
+              return;
+            }
+            task.resume();
+            setCheck(Option.none());
+          },
+        })}
+      >
+        {children}
+      </ManualCaptureContext>
+    </div>
   );
 };

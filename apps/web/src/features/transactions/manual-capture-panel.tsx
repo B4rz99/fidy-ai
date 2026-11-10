@@ -93,16 +93,14 @@ const ManualCaptureEditor = ({
       renderForm={(form) => form}
       apiClient={props.apiClient}
       timeZone={props.currentUser.timeZone}
-      status={capture.status}
-      onStatus={capture.onStatus}
-      draft={{ value: capture.draft, onChange: capture.change }}
+      task={capture}
       newAttempt={Option.isSome(capture.attempt)}
       onCheckHistory={props.onRefresh}
+      onInvalidate={props.onRefresh}
       onCreated={(transaction) => {
         props.onCreated(transaction);
         capture.clear();
         props.onClose();
-        props.onRefresh();
       }}
     />
   </>
@@ -111,7 +109,7 @@ const CaptureContent = ({
   capture,
   props,
 }: Readonly<{ capture: ManualCapture; props: Props }>): JSX.Element => {
-  const uncertain = capture.status === "uncertain";
+  const uncertain = capture.uncertain;
   const checked =
     props.editable &&
     Option.exists(
@@ -132,7 +130,7 @@ const CaptureContent = ({
         <Button
           size="sm"
           variant="ghost"
-          disabled={capture.status === "saving"}
+          disabled={capture.saving}
           onClick={close}
           aria-label="Cerrar registro"
         >
@@ -152,7 +150,7 @@ const CaptureContent = ({
             props.onRefresh();
           }}
           onResume={() => {
-            if (checked) capture.resume();
+            if (checked) capture.resumeAfterInspection(props.version);
           }}
           onDiscard={() => {
             capture.clear();

@@ -14,11 +14,11 @@ type DashboardReadRequest = Readonly<{
   attempt: DashboardReadAttempt;
   claim: () => Option.Option<() => void>;
 }>;
-export type DashboardReadAttempt = Readonly<{ completed: () => boolean }>;
-/** Claim in the actual loader, never on an Atom emission. A superseding invocation
- * cannot certify this attempt, and interruption cannot reach its completion callback.
- * Completed recovery remains valid across later ordinary display refreshes.
+/** Successful completion belongs to the requested new load and remains valid for
+ * this attempt across later ordinary display refreshes. Failed, superseded and
+ * retired loads leave completed() false.
  */
+export type DashboardReadAttempt = Readonly<{ completed: () => boolean }>;
 const makeReadRequest = (): DashboardReadRequest => {
   let completed = false;
   const attempt = { completed: (): boolean => completed };

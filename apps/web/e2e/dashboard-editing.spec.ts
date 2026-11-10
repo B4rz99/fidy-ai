@@ -1,6 +1,6 @@
-import type { BrowserContext, Page, Route } from "@playwright/test";
+import type { BrowserContext, Page, Request, Route } from "@playwright/test";
 import { Effect } from "effect";
-import { apiOrigin, installUser, response } from "./http-fixtures";
+import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
@@ -394,7 +394,6 @@ test("uncertain Dashboard editing requires the explicit refresh, including ident
       );
       yield* Effect.tryPromise(() => expect(handle).toBeDisabled());
       yield* Effect.tryPromise(() => page.route(`${apiOrigin}/dashboard/view`, serveDashboardView));
-      // The query's own failed-read retry must use the editing owner's recovery operation.
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Reintentar actualización del tablero" }).click()
       );
@@ -467,6 +466,13 @@ test("Dashboard discards an unsent successor after an unknown head without inven
     })
   ));
 
+const installEmptyHistory = (page: Page): Promise<void> =>
+  page.route(`${apiOrigin}/transactions**`, (route) =>
+    route.fulfill({ contentType: "application/json", body: response([]) })
+  );
+const isDashboardEditRequest = (request: Request): boolean =>
+  request.url() === `${apiOrigin}/dashboard/edits`;
+
 test("leaving the mounted Dashboard abandons the unsent successor and fences late acknowledgment", ({
   page,
 }) =>
@@ -474,15 +480,26 @@ test("leaving the mounted Dashboard abandons the unsent successor and fences lat
     Effect.gen(function* () {
       const edits: Array<unknown> = [];
       yield* install(page, edits);
+      yield* Effect.tryPromise(() => installEmptyHistory(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
       const acknowledgment = Promise.withResolvers<void>();
       yield* Effect.tryPromise(() =>
         page.route(`${apiOrigin}/dashboard/edits`, heldFailure(acknowledgment.promise, edits))
       );
       yield* Effect.tryPromise(() => removeBothWidgets(page));
       yield* Effect.tryPromise(() => expectEditCount(edits, 1));
-      yield* Effect.tryPromise(() => page.goto("/"));
+      const failedHead = page.waitForEvent("requestfailed", isDashboardEditRequest);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Transacciones", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Transacciones", exact: true })).toBeVisible()
+      );
       acknowledgment.resolve();
-      yield* Effect.tryPromise(() => page.goto("/app/dashboard"));
+      yield* Effect.tryPromise(() => failedHead);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Tablero", exact: true }).click()
+      );
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Personalizar", exact: true }).click()
       );

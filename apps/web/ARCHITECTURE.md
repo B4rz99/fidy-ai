@@ -410,6 +410,22 @@ to restart from the agent.
 
 `/settings/access` composes independent mounted owners for manual PAT management, one-time PAT issuance and external MCP connections. Obsolete PAT and agent settings aliases are removed. The application owns composition and disposal; each feature retains its canonical client and command authority. MCP rows show declared name, approved Spanish permissions, absolute expiration and status, while duplicate names remain separate through canonical identity. Pagination belongs to the router and server resources/commands belong to the authentication registry. Individual and aggregate revocation remain separate for PATs and MCP connections. Successful commands invalidate their own list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails. The mounted manual PAT issuance module encloses review, request identity, command outcomes and same-User draft continuation. Presentation receives display state and User actions. Issued PAT bearer disclosure remains in its private child owner and is cleared when the combined page leaves the authentication lifetime; late command completion cannot restore it.
 
+Manual PAT review captures an immutable normalized grant and one request identity. Task actions bind
+to the rendered state and active mounted owner; editing, clearing or replacing the review invalidates
+older actions, even when the choices later match. Confirmation synchronously admits one exact
+review before canonical work starts. Review expiration remains an estimate; the server grants the
+full selected lifetime from issuance and retains its independent review-age and authority guards.
+
+Manual issuance distinguishes decoded refusal from an unknown outcome. Refused reviews require a
+new review, Consent refusal leads to Privacy, and rate refusal retains its original retry deadline.
+Lost, undecodable, unavailable or consumed-request responses retain the reviewed facts and request
+reference without replay or bearer retrieval. Existing token listing and revocation remain available
+for inspection; a metadata read cannot establish the original command's outcome. Preparing another
+grant is an explicit acknowledged action that returns choices to editing and allocates a new request
+only after another review. Disclosure and clipboard acknowledgements remain bound to their current
+mounted owner and original reveal deadline; leaving or clearing fences later callbacks. The existing
+canonical transport continues to own request timing and safe failure observations.
+
 Sensitive-operation confirmation under #1564 uses a server-owned native MCP form in supported interactive MCP clients, not a web feature or browser handoff. The server owns the exact effect disclosure,
 intent binding and atomic single-use consumption; it trusts the authorized client's response
 without independently attesting human presence, as explicitly accepted in ADR 0033. Unsupported

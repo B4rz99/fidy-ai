@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import {
   type IssuedPAT,
   PATScope,
@@ -6,8 +7,8 @@ import {
   patScopeCopy,
   recipientLabelLimit,
 } from "@/transport/client";
-import { DateTime, Option, Redacted } from "effect";
-import { type FormEvent, type JSX, type RefCallback, useState } from "react";
+import { Clock, DateTime, Effect, Option, Redacted } from "effect";
+import { type FormEvent, type JSX, type RefCallback, useState, useSyncExternalStore } from "react";
 import type { PATCreationActions, PATCreationDisplay, ReviewedManualPATGrant } from "./issuance";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
@@ -244,22 +245,107 @@ const IssuedGrant = ({
   );
 };
 
-const FailedState = ({
-  retry,
+const retryClockMilliseconds = 1_000;
+const subscribeRetryClock = (changed: () => void): (() => void) => {
+  const timer = window.setInterval(changed, retryClockMilliseconds);
+  return () => window.clearInterval(timer);
+};
+const currentRetrySecond = (): number =>
+  Math.floor(Effect.runSync(Clock.currentTimeMillis) / retryClockMilliseconds);
+type RefusalDisplay = Extract<PATCreationDisplay, { _tag: "Refused" }>;
+const refusalDescription = (refusal: RefusalDisplay["refusal"], remaining: number): string => {
+  switch (refusal._tag) {
+    case "ReviewExpired":
+      return "La revisión venció. Revisa de nuevo los permisos y la duración antes de crear el token.";
+    case "Input":
+      return "Revisa el nombre, los permisos y la duración antes de crear el token.";
+    case "Consent":
+      return "Necesitas una autorización de tratamiento vigente para crear el token. Iniciar sesión no la renueva.";
+    case "Authority":
+      return "Inicia sesión para volver a revisar y crear el token.";
+    case "RateLimited":
+      return `Alcanzaste el límite de creación. Espera ${remaining} segundos antes de preparar otra revisión.`;
+  }
+};
+const refusalRecovery = (
+  state: RefusalDisplay,
+  prepareReview: () => void,
+  remaining: number
+): JSX.Element => {
+  if (state.refusal._tag === "Consent") {
+    return (
+      <Button render={<Link to="/settings/privacy" />} variant="outline">
+        Revisar privacidad
+      </Button>
+    );
+  }
+  if (state.refusal._tag === "Authority") {
+    return (
+      <Button render={<Link to="/login" reloadDocument />} variant="outline">
+        Iniciar sesión
+      </Button>
+    );
+  }
+  return (
+    <Button disabled={remaining > 0} onClick={prepareReview} type="button" variant="outline">
+      Revisar de nuevo
+    </Button>
+  );
+};
+const RefusedState = ({
+  state,
+  prepareReview,
 }: Readonly<{
-  retry: () => void;
+  state: Extract<PATCreationDisplay, { _tag: "Refused" }>;
+  prepareReview: () => void;
+}>): JSX.Element => {
+  const now = useSyncExternalStore(subscribeRetryClock, currentRetrySecond);
+  const remaining =
+    state.refusal._tag === "RateLimited"
+      ? Math.max(
+          0,
+          Math.ceil(DateTime.toEpochMillis(state.refusal.retryAt) / retryClockMilliseconds) - now
+        )
+      : 0;
+  return (
+    <div className="flex flex-col gap-4">
+      <Alert variant="destructive">
+        <AlertTitle>No se creó el token</AlertTitle>
+        <AlertDescription>{refusalDescription(state.refusal, remaining)}</AlertDescription>
+      </Alert>
+      {refusalRecovery(state, prepareReview, remaining)}
+    </div>
+  );
+};
+
+const UncertainState = ({
+  state,
+  prepareAnother,
+}: Readonly<{
+  state: Extract<PATCreationDisplay, { _tag: "Uncertain" }>;
+  prepareAnother: () => void;
 }>): JSX.Element => (
-  <div className="flex flex-col gap-4">
-    <Alert variant="destructive">
-      <AlertTitle>No pudimos crear el token</AlertTitle>
+  <section aria-label="Creación sin confirmar" className="flex min-w-0 flex-col gap-4">
+    <Alert variant="warning">
+      <AlertTitle>No pudimos confirmar la creación</AlertTitle>
       <AlertDescription>
-        No se pudo confirmar la creación. Vuelve a la revisión para intentarlo de nuevo.
+        El token puede haberse creado. No volveremos a enviar esta solicitud ni podremos recuperar
+        su token completo. Actualiza los tokens activos y desactiva cualquier acceso que no
+        necesites. La lista no confirma el resultado de esta solicitud, incluso si no aparece ningún
+        token.
       </AlertDescription>
     </Alert>
-    <Button onClick={retry} type="button" variant="outline">
-      Volver a la revisión
+    <p>
+      {state.grant.recipientLabel} · {state.grant.lifetimeDays} días ·{" "}
+      {state.grant.scopes.map((scope) => patScopeCopy[scope].label).join(" · ")}
+    </p>
+    <p className="break-all text-sm text-muted-foreground">
+      Referencia de la solicitud: {state.requestId}
+    </p>
+    <Button onClick={prepareAnother} type="button" variant="outline">
+      Revisé los tokens; preparar otro
     </Button>
-  </div>
+  </section>
 );
 
 const IdentityConfirmationState = ({
@@ -311,8 +397,10 @@ const CreationContent = ({
       );
     case "IdentityConfirmation":
       return <IdentityConfirmationState state={state} actions={actions} />;
-    case "IssueFailed":
-      return <FailedState retry={actions.retry} />;
+    case "Refused":
+      return <RefusedState state={state} prepareReview={actions.prepareReview} />;
+    case "Uncertain":
+      return <UncertainState state={state} prepareAnother={actions.prepareReview} />;
     case "Issued":
       return (
         <IssuedGrant issued={state.issued} copyToClipboard={actions.copy} reset={actions.reset} />

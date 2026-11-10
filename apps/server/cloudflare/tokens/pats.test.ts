@@ -1829,6 +1829,17 @@ it("isolates management by User and immediately refuses revoked and under-scoped
         })
       );
       expect(replay.status).toBe(409);
+      expect(yield* awaitPromise(replay.clone().text())).not.toContain(issued.bearer);
+      expect(
+        yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT (SELECT count(*) FROM pats WHERE request_id = ?) AS grants, (SELECT count(*) FROM consent_history WHERE record_type = 'pat_grant' AND request_id = ?) AS consents, (SELECT count(*) FROM audit_entries WHERE record_type = 'credential_call' AND pat_id IN (SELECT id FROM pats WHERE request_id = ?) AND operation = 'pats.createManualPAT' AND outcome = 'accepted') AS audits"
+            )
+            .bind(payload.requestId, payload.requestId, payload.requestId)
+            .first()
+        )
+      ).toEqual({ grants: 1, consents: 1, audits: 1 });
       expect(yield* awaitPromise(replay.json())).toMatchObject({
         error: {
           code: "user_action_required",

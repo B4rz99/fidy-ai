@@ -85,7 +85,7 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
       const first = requiredGate(gates, 0);
       yield* Deferred.succeed(first, undefined);
-      const baseline = yield* AtomRegistry.getResult(registry, query.result);
+      const baseline = yield* AtomRegistry.getResult(registry, query.result).pipe(Effect.orDie);
       registry.refresh(query.result);
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(2)));
       const attempt = query.refresh(registry);
@@ -97,7 +97,7 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
       yield* Deferred.succeed(fresh, undefined);
       const recovered = yield* AtomRegistry.getResult(registry, query.result, {
         suspendOnWaiting: true,
-      });
+      }).pipe(Effect.orDie);
       expect(recovered.data).toEqual(baseline.data);
       expect(attempt.completed()).toBe(true);
       const superseded = query.refresh(registry);
@@ -111,7 +111,7 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
       yield* Deferred.succeed(replacement, undefined);
       const later = yield* AtomRegistry.getResult(registry, query.result, {
         suspendOnWaiting: true,
-      });
+      }).pipe(Effect.orDie);
       expect(later.data).toEqual(baseline.data);
       expect(superseded.completed()).toBe(false);
       expect(attempt.completed()).toBe(true);
@@ -143,7 +143,7 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
         yield* Deferred.succeed(replacementGate, undefined);
         const current = yield* AtomRegistry.getResult(replacementRegistry, query.result, {
           suspendOnWaiting: true,
-        });
+        }).pipe(Effect.orDie);
         expect(current.data).toEqual(baseline.data);
         expect(retired.completed()).toBe(false);
       } finally {

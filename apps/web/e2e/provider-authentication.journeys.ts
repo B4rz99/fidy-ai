@@ -394,6 +394,9 @@ const staleRecoverySessionJourney = Effect.fn(function* (
     page.getByRole("button", { name: "Crear un código nuevo" }).click()
   );
   yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Confirmar código nuevo" }).click()
+  );
+  yield* Effect.tryPromise(() =>
     expect(page.getByText("Inicia sesión de nuevo", { exact: true })).toBeVisible()
   );
   yield* Effect.tryPromise(() =>
@@ -938,6 +941,9 @@ const verifyRecoveredSecretRotation = Effect.fn(function* (page: Page, backupRec
   yield* Effect.tryPromise(() => page.goto("/settings/account"));
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Crear un código nuevo" }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Confirmar código nuevo" }).click()
   );
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("button", { name: "Copiar código" })).toBeVisible()

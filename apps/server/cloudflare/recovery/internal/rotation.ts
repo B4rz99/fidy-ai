@@ -1,6 +1,6 @@
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
 import { freshSessionExists, freshSessionParams } from "../../../src/shell/web-session/operations";
-import { Clock, DateTime, Effect, Option } from "effect";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
 import { recoveryCodeDigest, sampleRecoveryCode } from "./material";
 import { browserSession, freshBrowserSession } from "../../web-session/operations";
@@ -70,6 +70,16 @@ const rotateFreshSessionProof = (
   usedAt: number
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
+    const retained = yield* attempt(() =>
+      db
+        .prepare("SELECT revision FROM backup_recovery_credentials WHERE user_id = ?")
+        .bind(session.user_id)
+        .first()
+    );
+    const credential = yield* Schema.decodeUnknownEffect(
+      Schema.OptionFromNullOr(Schema.Struct({ revision: Schema.Int }))
+    )(retained).pipe(Effect.orDie);
+    if (Option.isNone(credential)) return noSession();
     const code = sampleRecoveryCode();
     const codeDigest = yield* attempt(() => recoveryCodeDigest(code));
     const rotated = yield* attempt(() =>
@@ -78,12 +88,13 @@ const rotateFreshSessionProof = (
           .prepare(
             `UPDATE backup_recovery_credentials SET code_digest = ?, created_at_ms = ?,
         consumed_at_ms = NULL, revision = revision + 1
-        WHERE user_id = ? AND ${freshSessionExists}`
+        WHERE user_id = ? AND revision = ? AND ${freshSessionExists}`
           )
           .bind(
             codeDigest,
             usedAt,
             session.user_id,
+            credential.value.revision,
             ...freshSessionParams({ session, time: usedAt })
           ),
         db

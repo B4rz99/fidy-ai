@@ -126,7 +126,7 @@ const consumptionStatement = (
       sql: `UPDATE oauth_connections AS oauth_codes SET code_consumed_at_ms = ? WHERE code_digest IS NOT NULL AND code_digest = ? AND id = ?
     AND code_consumed_at_ms IS NULL AND code_expires_at_ms > ? AND code_expires_at_ms > ${databaseCurrentMillis} AND code_challenge = ?
     AND EXISTS (SELECT 1 FROM oauth_connections WHERE id = ? AND user_id = ? AND client_id = ?
-      AND redirect_uri = ? AND resource = ? AND revoked_at_ms IS NULL AND code_expires_at_ms > ? AND code_expires_at_ms > ${databaseCurrentMillis})`,
+      AND redirect_uri = ? AND resource = ? AND revoked_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis})`,
       params: [
         input.current,
         proof.digest,

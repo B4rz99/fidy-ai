@@ -9,6 +9,9 @@ import { PATScopes } from "../../src/core/tokens/contract";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
 import { secretDigest } from "../secret-material/operations";
+import { awaitRequestAbort } from "../http/operations";
+import { exchangeToken } from "./internal/exchange";
+import { BootstrapUnavailable, invalidRequest } from "./internal/bootstrap";
 
 import type { OAuthRefreshAdmission, OAuthRevocationAdmission } from "./contract";
 import { revokeConnections } from "./internal/revocation";
@@ -23,6 +26,27 @@ import {
 import { oauthResponse } from "./internal/response";
 import { queryCallerSnapshot } from "./internal/query-caller";
 import { mcpCallerSnapshot } from "./internal/mcp-caller";
+
+/** Owns one token exchange from the original, unconsumed Request through no-store delivery. Never retry issuance or infer rollback from a lost response. */
+export const token = (
+  input: Readonly<{
+    request: Request;
+    db: D1Database;
+    coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+    admitUser: (userId: string) => Effect.Effect<void, BootstrapUnavailable>;
+  }>
+): Effect.Effect<Response, BootstrapUnavailable> =>
+  Effect.gen(function* () {
+    if (input.request.signal.aborted) return invalidRequest();
+    return yield* exchangeToken({ ...input, current: yield* Clock.currentTimeMillis }).pipe(
+      Effect.raceFirst(awaitRequestAbort(input.request)),
+      Effect.timeoutOrElse({
+        duration: "5 seconds",
+        orElse: () => Effect.fail(new BootstrapUnavailable()),
+      }),
+      Effect.mapError(() => new BootstrapUnavailable())
+    );
+  });
 
 /** Resolve live query capabilities and derived tier without publishing OAuth storage or changing accounting. Canonical owners still recheck authority in protected work. */
 export const resolveOAuthQueryCaller: typeof queryCallerSnapshot = (input) =>

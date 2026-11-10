@@ -1,6 +1,6 @@
 import { Clock, Effect, Option, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
-import { exchangeToken } from "./internal/exchange";
+import { token } from "./operations";
 import {
   TokenFixture,
   approvedFixture,
@@ -36,9 +36,8 @@ it("rechecks code expiration after the token request body finishes", () =>
         monotonicTimeNanos: liveClock.monotonicTimeNanos,
         sleep: (duration) => liveClock.sleep(duration),
       };
-      const response = yield* exchangeToken({
+      const response = yield* token({
         db: fixture.db,
-        current: started,
         request: new Request("https://api.fidyapp.com/oauth/token", {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -156,3 +155,34 @@ it.each([
       })
     )
 );
+
+it("refuses code issuance after the original grant expires according to D1 time", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const current = yield* Clock.currentTimeMillis;
+      vi.spyOn(Date, "now").mockReturnValue(current - 8 * 86400000);
+      const fixture = yield* approvedFixture();
+      yield* wait(
+        fixture.db
+          .prepare("UPDATE oauth_connections SET code_expires_at_ms = ? WHERE id = ?")
+          .bind(current + 60000, fixture.connectionId)
+          .run()
+      );
+      const response = yield* wait(exchangeFixture(fixture));
+      expect(response.status).toBe(400);
+      expect(yield* wait(response.json())).toEqual({ error: "invalid_grant" });
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT code_consumed_at_ms FROM oauth_connections WHERE id = ?")
+            .bind(fixture.connectionId)
+            .first<number>("code_consumed_at_ms")
+        )
+      ).toBeNull();
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM oauth_credentials").first<number>("count(*)")
+        )
+      ).toBe(0);
+    })
+  ));

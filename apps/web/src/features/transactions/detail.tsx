@@ -235,13 +235,14 @@ const ReconciliationPanel = ({
         {...props}
         selectedId={props.selectedId}
         onMode={props.onMode}
-        onCancel={() =>
+        onCancel={() => {
+          if (props.mode.deleting) owner.reviewDeletion(props.transaction.id);
           props.onMode(
             props.mode.deleting
               ? { _tag: "Deleting", status: "idle", original: Option.none() }
               : { _tag: "Editing" }
-          )
-        }
+          );
+        }}
         onHistory={props.onRefresh}
         onDelete={(original) => {
           if (owner.reviewDeletion(original.id)) {

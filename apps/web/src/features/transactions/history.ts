@@ -197,7 +197,7 @@ const locationState = (
   locate: Option.Option<string>
 ): HistoryState["location"] => {
   if (Option.isNone(locate)) return "None";
-  if (current.query._tag === "Failure" || current.continuation === "failure") {
+  if (current.query._tag === "Failure") {
     return "ContinuationFailed";
   }
   if (current.query._tag !== "Ready") return "Locating";
@@ -209,8 +209,10 @@ const readyLocation = (
   locate: string
 ): HistoryState["location"] => {
   if (query.waiting) return "Locating";
-  if (Option.isSome(query.refreshFailure)) return "ContinuationFailed";
   if (query.value.data.some(({ id }) => id === locate)) return "Located";
+  if (Option.isSome(query.refreshFailure) || continuation === "failure") {
+    return "ContinuationFailed";
+  }
   if (continuation === "loading") return "Locating";
   return continuation === "complete" ? "NotFound" : "BoundReached";
 };

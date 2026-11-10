@@ -88,9 +88,11 @@ after twenty total pages; each “Seguir buscando” action admits one further p
 stops location reads and restores ordinary, uncapped scroll browsing. Exhaustion means absence in
 this successful period query, while lookup and continuation failures remain retryable failures.
 Captured continuation actions belong to their exact observation; refresh or replacement invalidates
-them. Ordinary refresh can retain previously read rows as read-only display while fresh pages load
-or fail, without admitting an old-generation append. Mutation recovery still owns affected identity
-and Category rereads; history reset alone does not resolve an uncertain write. Privacy history
+them. Refresh retains previously read rows as read-only display while destination and page rereads are
+pending or fail, without admitting an old-generation append or claiming the old destination is
+Located. Lookup failure remains explicit even when earlier rows are visible. Each generation keeps
+the existing five-second stale-on-focus policy and five-minute source retention. Mutation recovery
+still owns affected identity and Category rereads; history reset alone does not resolve an uncertain write. Privacy history
 retains its independent authorized read-only query and policies. Row reveal remains a DOM commit
 callback and does not move keyboard focus.
 

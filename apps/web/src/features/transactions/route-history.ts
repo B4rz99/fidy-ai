@@ -1,4 +1,4 @@
-import { Data, type DateTime, Effect, Option } from "effect";
+import { Data, DateTime, Effect, Option } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
@@ -6,6 +6,7 @@ import { destinationMonth, transactionDestinationQuery } from "./destination-que
 import { type HistoryCommand, type HistoryState, transactionHistory } from "./history";
 import { type TransactionSearch, selectedTransactionPeriod } from "./period";
 import { transactionFirstPage } from "./query";
+import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import type { CurrentMonthPeriod } from "./presentation";
 
 class Generation extends Data.Class<{
@@ -65,6 +66,25 @@ const destinationForGeneration = (
     )
   );
 };
+const generationSources = (
+  client: FidyClient,
+  generation: number
+): ((selected: CurrentMonthPeriod) => PageAtom) =>
+  Atom.family((selected: CurrentMonthPeriod) =>
+    generation === 0
+      ? transactionFirstPage({ client, period: selected })
+      : client.runtime
+          .atom(
+            Effect.gen(function* () {
+              const api = yield* client;
+              return yield* api.transactions.listTransactions({
+                query: { from: selected.from, to: selected.to, limit: 25 },
+              });
+            })
+          )
+          .pipe(Atom.setIdleTTL(workspaceQueryRetention.timeToLive))
+  );
+
 const makeGeneration = (
   { client, search, timeZone, now }: RouteHistoryInput,
   generation: Generation
@@ -85,18 +105,8 @@ const makeGeneration = (
     const result = get(destination.value);
     return result._tag === "Success" ? Option.some(result.value.data.id) : generation.locate;
   });
-  const sources = Atom.family((selected: CurrentMonthPeriod) =>
-    generation.number === 0
-      ? transactionFirstPage({ client, period: selected })
-      : client.runtime.atom(
-          Effect.gen(function* () {
-            const api = yield* client;
-            return yield* api.transactions.listTransactions({
-              query: { from: selected.from, to: selected.to, limit: 25 },
-            });
-          })
-        )
-  );
+  const sources = generationSources(client, generation.number);
+  const views = Atom.family((source: PageAtom) => source.pipe(revalidateWorkspaceQuery));
   const firstPage = Atom.make((get): AsyncResult.AsyncResult<Page, unknown> => {
     if (Option.isSome(destination)) {
       const result = get(destination.value);
@@ -106,7 +116,8 @@ const makeGeneration = (
       }
       if (result.waiting) return AsyncResult.initial(true);
     }
-    return get(sources(get(period)));
+    const source = sources(get(period));
+    return get(generation.number === 0 ? source : views(source));
   });
   const histories = Atom.family((identity: QueryIdentity) =>
     Atom.make(
@@ -155,7 +166,7 @@ export const transactionRouteHistory = (input: RouteHistoryInput): TransactionRo
           ? "LookupFailed"
           : history.location,
     };
-    return retainHistoryDisplay(current, get.self<RouteHistoryState>(), owner.generation.pages);
+    return retainHistoryDisplay(current, get.self<RouteHistoryState>());
   });
   const action = routeActions({ input, navigation, state });
   return { firstPage, state, action };
@@ -216,16 +227,18 @@ const shouldRetryLookup = (result: AsyncResult.AsyncResult<Page, unknown>): bool
 
 const retainHistoryDisplay = (
   current: RouteHistoryState,
-  previous: Option.Option<RouteHistoryState>,
-  requestedPages: number
+  previous: Option.Option<RouteHistoryState>
 ): RouteHistoryState => {
-  if (Option.isNone(previous) || Option.isSome(current.locate)) return current;
+  if (Option.isNone(previous)) return current;
   const prior = previous.value;
-  if (prior.query._tag !== "Ready" || prior.period !== current.period) return current;
-  if (requestedPages < prior.loadedPages) return current;
+  if (prior.query._tag !== "Ready" || !samePeriod(prior.period, current.period)) return current;
   if (!needsRetainedDisplay(current, prior.loadedPages)) return current;
   return retainPendingDisplay(current, { ...prior, query: prior.query });
 };
+const samePeriod = (left: CurrentMonthPeriod, right: CurrentMonthPeriod): boolean =>
+  left.timeZone === right.timeZone &&
+  DateTime.toEpochMillis(left.from) === DateTime.toEpochMillis(right.from) &&
+  DateTime.toEpochMillis(left.to) === DateTime.toEpochMillis(right.to);
 const needsRetainedDisplay = (current: RouteHistoryState, loadedPages: number): boolean => {
   if (current.query._tag !== "Ready") return true;
   if (current.loadedPages >= loadedPages) return false;

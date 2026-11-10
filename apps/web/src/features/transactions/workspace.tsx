@@ -67,7 +67,7 @@ type WorkspaceProps = Readonly<{
   dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
   onRefresh: () => void;
   continuation: HistoryState["continuation"];
-  automaticContinuation: boolean;
+  location: HistoryState["location"];
   onMore: () => void;
   onRetryMore: () => void;
 }> &
@@ -757,6 +757,12 @@ const continuationLabels = {
   failure: "Reintentar carga de más transacciones",
   available: "Al seguir bajando cargaremos más transacciones.",
 };
+const continuationHint = (props: Pick<WorkspaceProps, "location" | "continuation">): string => {
+  if (props.location === "BoundReached") return "Para cargar otra página, usa «Seguir buscando».";
+  if (props.location === "LookupFailed") return "Reintenta la búsqueda para continuar.";
+  if (props.continuation === "loading") return "";
+  return continuationLabels[props.continuation];
+};
 const ContinuationControl = (
   props: WorkspaceProps & Readonly<{ editing: boolean }>
 ): JSX.Element => {
@@ -764,7 +770,7 @@ const ContinuationControl = (
     if (
       element === null ||
       props.continuation !== "available" ||
-      props.automaticContinuation === false ||
+      (props.location !== "None" && props.location !== "Located") ||
       props.editing ||
       (!props.editable && props.readOnly !== true)
     ) {
@@ -774,7 +780,7 @@ const ContinuationControl = (
   };
   if (props.continuation === "complete") return <></>;
   const continuation =
-    props.continuation === "loading" ? null : <span>{continuationLabels[props.continuation]}</span>;
+    props.continuation === "loading" ? null : <span>{continuationHint(props)}</span>;
   return (
     <div
       ref={attachContinuation}

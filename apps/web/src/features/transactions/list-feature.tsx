@@ -394,7 +394,7 @@ const TransactionResources = (props: TransactionResourceProps): JSX.Element => {
   );
 };
 const failedDestination = (queries: TransactionQueries): Option.Option<JSX.Element> =>
-  queries.history.location === "LookupFailed" && queries.transactionState._tag !== "Initial"
+  queries.history.location === "LookupFailed" && queries.transactionState._tag === "Failure"
     ? Option.some(
         <TransactionDestinationFailure
           state={queries.transactionState}
@@ -489,7 +489,7 @@ const ReadyTransactionResources = ({
       <TransactionWorkspace
         key={Option.getOrElse(locate, () => "browse")}
         generation={corrections.workspaceGeneration}
-        locate={locate}
+        locate={history.location === "Located" ? locate : Option.none()}
         captureHistoryVersion={Option.some({
           month: dateFilter.month,
           generation: history.generation,
@@ -498,7 +498,7 @@ const ReadyTransactionResources = ({
         dateFilter={dateFilter}
         monthFilter={Option.some({ value: dateFilter.month, onChange: dateFilter.onMonth })}
         continuation={history.continuation}
-        automaticContinuation={history.location === "None" || history.location === "Located"}
+        location={history.location}
         onMore={onMore}
         onRetryMore={onRetryMore}
         editable={profileCurrent && !corrections.locked && activity._tag === "Current"}

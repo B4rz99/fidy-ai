@@ -98,6 +98,7 @@ it.live(
       const to = DateTime.makeUnsafe("2026-10-01T05:00:00Z");
       const target = "25000000-0000-4000-8000-000000000021";
       const reads: Array<string> = [];
+      let failPage = false;
       const transport = Layer.succeed(
         HttpClient.HttpClient,
         HttpClient.make((request) => {
@@ -108,6 +109,9 @@ it.live(
           const page = Number(cursor.slice(-2)) + 1;
           const id = `25000000-0000-4000-8000-${String(page).padStart(12, "0")}`;
           reads.push(id);
+          if (failPage) {
+            return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({})));
+          }
           return Effect.succeed(
             HttpClientResponse.fromWeb(
               request,
@@ -181,6 +185,12 @@ it.live(
         registry.set(history.action, captured);
         yield* Effect.sleep("10 millis");
         expect(reads).toHaveLength(22);
+        failPage = true;
+        registry.set(history.action, registry.get(history.state).more);
+        yield* Effect.tryPromise(() =>
+          vi.waitFor(() => expect(registry.get(history.state).continuation).toBe("failure"))
+        );
+        expect(registry.get(history.state).location).toBe("Located");
       } finally {
         unmount();
         registry.dispose();
@@ -277,9 +287,13 @@ it.live(
         failLookup = true;
         registry.set(history.action, "reset");
         yield* Effect.tryPromise(() =>
-          vi.waitFor(() => expect(registry.get(history.state).query._tag).toBe("Failure"))
+          vi.waitFor(() => expect(registry.get(history.firstPage)._tag).toBe("Failure"))
         );
         expect(registry.get(history.state).location).toBe("LookupFailed");
+        const retained = registry.get(history.state).query;
+        if (retained._tag !== "Ready") throw new Error("Missing retained history");
+        expect(Option.isSome(retained.refreshFailure)).toBe(true);
+        expect(retained.value.data[0]?.id).toBe(replacement);
         expect(requests).toHaveLength(5);
         failLookup = false;
         registry.set(history.action, registry.get(history.state).retry);
@@ -292,4 +306,64 @@ it.live(
         registry.dispose();
       }
     })
+);
+
+it.live("reset history preserves the five-second mounted focus revalidation policy", () =>
+  Effect.gen(function* () {
+    const window = Object.assign(new EventTarget(), { Uint8Array });
+    vi.stubGlobal("window", window);
+    vi.stubGlobal("document", { visibilityState: "visible" });
+    let reads = 0;
+    const client = makeFidyClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make((request) => {
+          reads += 1;
+          return Effect.succeed(
+            HttpClientResponse.fromWeb(request, Response.json({ data: [], next: [] }))
+          );
+        })
+      ),
+    });
+    const history = transactionRouteHistory({
+      client,
+      search: { month: "2026-10" },
+      timeZone: "America/Bogota",
+      now: DateTime.makeUnsafe("2026-11-10T12:00:00Z"),
+      initialPages: 1,
+    });
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(history.state);
+    try {
+      yield* Effect.tryPromise(() =>
+        vi.waitFor(() => expect(registry.get(history.state).query._tag).toBe("Ready"))
+      );
+      registry.set(history.action, "reset");
+      yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(2)));
+      yield* Effect.tryPromise(() =>
+        vi.waitFor(() => expect(registry.get(history.state).query._tag).toBe("Ready"))
+      );
+      yield* Effect.tryPromise(() =>
+        vi.waitFor(() => {
+          const current = registry.get(history.firstPage);
+          expect(current._tag).toBe("Success");
+          expect(current.waiting).toBe(false);
+        })
+      );
+      const timestamp = yield* Clock.currentTimeMillis;
+      const clock = vi.spyOn(Date, "now");
+      clock.mockReturnValue(timestamp + 4000);
+      window.dispatchEvent(new Event("visibilitychange"));
+      yield* Effect.sleep("10 millis");
+      expect(reads).toBe(2);
+      clock.mockReturnValue(timestamp + 6000);
+      window.dispatchEvent(new Event("visibilitychange"));
+      yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(3)));
+    } finally {
+      unmount();
+      registry.dispose();
+      vi.restoreAllMocks();
+    }
+  })
 );

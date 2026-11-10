@@ -61,7 +61,5 @@ const RecurringTransactionCapture = (props: CaptureEditorProps): JSX.Element => 
     currency={Option.some(props.currency)}
     direction={Option.some(props.direction)}
     onCancel={Option.none()}
-    onInvalidate={() => {}}
-    renderForm={(form) => form}
   />
 );

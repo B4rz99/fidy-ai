@@ -678,11 +678,19 @@ Recurring manual marks disclose that they change tracking only. Transaction capt
 Transactions-owned form and canonical mutation, preserving the plan's Currency and direction.
 Application composition supplies capture through the published feature interfaces; Recurring does
 not import the Transactions implementation.
-Creation and association are separate explicit actions: a confirmed Transaction and its selected
-manual replacement remain in the authentication registry across presentation changes. Failed links
-retry association of that identity, while uncertain creation blocks another capture and directs
-the User to history and existing-Transaction linking. Association replaces the selected manual mark;
-it does not add financial spending. The existing canonical transport owns request observations.
+Creation and association are separate explicit actions: Recurring retains only a confirmed
+Transaction, its association choices and explicit capture intent identity. The Transactions-owned
+capture task retains admission and its original draft facts in the authentication registry across
+occurrence and month presentation changes. Placement observations disable association choices during
+Saving or Unknown; changed initial or fixed facts replace only an unadmitted draft, and selection
+changes cannot remount an admitted capture. Actual capture disposal
+immediately fences callbacks and interrupts local work, preserving an uncertain create lock without
+claiming rollback. An explicit new capture intent is available only after the created Transaction is
+observed linked. Failed or uncertain association retains that same Transaction and uses the recurring
+owner's current observed document revision after explicit recovery; recovery never repeats creation.
+Association replaces the selected manual mark and does not add financial spending. Drafts and safe
+results remain in memory within the authentication lifetime. The existing canonical transport owns
+request observations.
 
 The `/app/needs-review` feature composes the persistent ingestion inbox, browser-only original
 preview, editable draft and lifecycle history. Canonical query atoms retain server ownership;

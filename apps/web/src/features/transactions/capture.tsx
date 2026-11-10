@@ -6,9 +6,10 @@ import { parseMoneyInput } from "@/transport/money-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import type { Category } from "./presentation";
 import { useAtomValue } from "@effect/atom-react";
-import { Option, Schema } from "effect";
+import { Data, Option, Schema } from "effect";
+import { Atom } from "effect/reactivity";
 import { useState } from "react";
-import type { FormEvent, JSX, RefCallback } from "react";
+import type { FormEvent, JSX, ReactNode, RefCallback } from "react";
 import { Button } from "@/ui/components/button";
 import { Label } from "@/ui/components/label";
 import { Input } from "@/ui/components/input";
@@ -16,7 +17,11 @@ import { CalendarField } from "@/ui/components/calendar-field";
 import { TransactionTypeToggle } from "@/ui/components/transactions";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
-import { type TransactionCaptureTask, makeTransactionCapture } from "./capture-task";
+import {
+  type CaptureRetention,
+  type TransactionCaptureTask,
+  makeCaptureRetention,
+} from "./capture-task";
 
 type CaptureInputsProps = Readonly<{
   amount: string;
@@ -186,6 +191,7 @@ const CaptureClassification = ({
   </>
 );
 type CaptureProps = Readonly<{
+  intentId: string;
   categories: ReadonlyArray<Category>;
   onCancel: Option.Option<() => void>;
   renderForm: (
@@ -202,7 +208,8 @@ type CaptureProps = Readonly<{
   direction: Option.Option<CaptureDraft["direction"]>;
   disabled: boolean;
 }>;
-type EditorProps = CaptureProps & Readonly<{ newAttempt: boolean; task: TransactionCaptureTask }>;
+type EditorProps = Omit<CaptureProps, "intentId"> &
+  Readonly<{ newAttempt: boolean; task: TransactionCaptureTask }>;
 const captureLocked = (props: EditorProps): boolean => props.disabled || props.task.locked;
 const captureCurrencyChange = (
   fixed: CaptureProps["currency"],
@@ -255,7 +262,7 @@ const CaptureForm = ({
       <CaptureClassification
         categories={props.categories}
         occurredOn={draft.occurredOn}
-        timeZone={props.timeZone}
+        timeZone={props.task.timeZone}
         onOccurredOn={(occurredOn) => onDraft({ ...draft, occurredOn })}
         categoryId={draft.categoryId}
         setCategoryId={(categoryId) => onDraft({ ...draft, categoryId })}
@@ -338,32 +345,97 @@ const CaptureEditor = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element
     { saving: props.task.saving, uncertain: props.task.uncertain }
   );
 };
-const LocalCapture = (props: CaptureProps): JSX.Element => {
-  const [resource] = useState(() =>
-    makeTransactionCapture({
-      client: props.apiClient,
-      timeZone: props.timeZone,
-      initial: {
-        ...emptyCaptureDraft(props.timeZone),
-        ...props.initial,
-        currency: Option.getOrElse(props.currency, () => "COP"),
-        direction: Option.getOrElse(props.direction, () => "outflow"),
-      },
-    })
-  );
-  const task = useAtomValue(resource);
+class CaptureIdentity extends Data.Class<Readonly<{ client: FidyClient; intentId: string }>> {}
+const retainedCaptures = Atom.family((_identity: CaptureIdentity) =>
+  makeCaptureRetention().pipe(Atom.keepAlive)
+);
+const captureMeaning = (props: CaptureProps): string =>
+  JSON.stringify([
+    props.timeZone,
+    Option.isSome(props.currency),
+    Option.isSome(props.direction),
+    Option.getOrElse(props.currency, () => "COP"),
+    Option.getOrElse(props.direction, () => "outflow"),
+    props.initial.amount ?? "",
+    props.initial.occurredOn ?? "",
+    props.initial.counterparty ?? "",
+    props.initial.notes ?? "",
+    props.initial.categoryId ?? "",
+  ]);
+const CaptureAttachment = ({
+  props,
+  retention,
+  children,
+}: Readonly<{
+  props: CaptureProps;
+  retention: CaptureRetention;
+  children: ReactNode;
+}>): JSX.Element => {
   const [mounted] = useState<RefCallback<HTMLDivElement>>(
     () =>
       (node: Parameters<RefCallback<HTMLDivElement>>[0]): ReturnType<RefCallback<HTMLDivElement>> =>
-        node === null ? undefined : task.mount()
+        node === null
+          ? undefined
+          : retention.mount(
+              {
+                client: props.apiClient,
+                timeZone: props.timeZone,
+                initial: {
+                  ...emptyCaptureDraft(props.timeZone),
+                  ...props.initial,
+                  currency: Option.getOrElse(props.currency, () => "COP"),
+                  direction: Option.getOrElse(props.direction, () => "outflow"),
+                },
+              },
+              captureMeaning(props)
+            )
   );
   return (
     <div className="contents" ref={mounted}>
-      <CaptureEditor props={{ ...props, task, newAttempt: false }} />
+      {children}
     </div>
   );
 };
-export const TransactionCapture = LocalCapture;
+const RetainedCapture = ({
+  props,
+  intentId,
+}: Readonly<{ props: CaptureProps; intentId: string }>): JSX.Element => {
+  const identity = new CaptureIdentity({ client: props.apiClient, intentId });
+  const retentionResource = retainedCaptures(identity);
+  const retention = useAtomValue(retentionResource);
+  return Option.match(retention.resource, {
+    onNone: () => (
+      <CaptureAttachment props={props} retention={retention}>
+        {null}
+      </CaptureAttachment>
+    ),
+    onSome: (resource) => (
+      <RetainedCaptureEditor props={props} resource={resource} retention={retention} />
+    ),
+  });
+};
+const RetainedCaptureEditor = ({
+  props,
+  resource,
+  retention,
+}: Readonly<{
+  props: CaptureProps;
+  resource: Atom.Atom<TransactionCaptureTask>;
+  retention: CaptureRetention;
+}>): JSX.Element => {
+  const task = useAtomValue(resource);
+  const identity = task.locked
+    ? Option.getOrElse(retention.identity, () => captureMeaning(props))
+    : captureMeaning(props);
+  return (
+    <CaptureAttachment key={identity} props={props} retention={retention}>
+      <CaptureEditor props={{ ...props, task, newAttempt: false }} />
+    </CaptureAttachment>
+  );
+};
+export const TransactionCapture = (props: CaptureProps): JSX.Element => (
+  <RetainedCapture key={props.intentId} props={props} intentId={props.intentId} />
+);
 export const ControlledTransactionCapture = (props: EditorProps): JSX.Element => (
   <CaptureEditor props={props} />
 );

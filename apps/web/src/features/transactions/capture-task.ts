@@ -16,6 +16,7 @@ type Submission = Readonly<{
 type Status = "editing" | "invalid" | "saving" | "saved" | "rejected" | "unknown";
 export type TransactionCaptureTask = Readonly<{
   draft: CaptureDraft;
+  timeZone: string;
   saving: boolean;
   uncertain: boolean;
   rejected: boolean;
@@ -65,6 +66,7 @@ const notify = (owner: Owner): void => {
 };
 const present = (owner: Owner): TransactionCaptureTask => ({
   draft: owner.draft,
+  timeZone: owner.timeZone,
   saving: owner.status === "saving",
   uncertain: owner.status === "unknown",
   rejected: owner.status === "rejected",
@@ -207,4 +209,33 @@ const complete = (
     yield* Effect.sync(() => submission.onCreated(created)).pipe(
       Effect.catchCause(() => Effect.sync(() => reportBrowserDefect("client_defect")))
     );
+  });
+
+export type CaptureRetention = Readonly<{
+  resource: Option.Option<Atom.Atom<TransactionCaptureTask>>;
+  identity: Option.Option<string>;
+  mount: (input: Input, identity: string) => () => void;
+}>;
+type RetainedCapture = Readonly<{
+  identity: string;
+  resource: Atom.Atom<TransactionCaptureTask>;
+  release: () => void;
+}>;
+export const makeCaptureRetention = (): Atom.Atom<CaptureRetention> =>
+  Atom.make((get) => {
+    let current: Option.Option<RetainedCapture> = Option.none();
+    get.addFinalizer(() => Option.map(current, (retained) => retained.release()));
+    const mount = (input: Input, identity: string): (() => void) => {
+      if (
+        Option.isNone(current) ||
+        (!get.once(current.value.resource).locked && current.value.identity !== identity)
+      ) {
+        Option.map(current, (retained) => retained.release());
+        const resource = makeTransactionCapture(input);
+        current = Option.some({ identity, resource, release: get.registry.mount(resource) });
+        get.setSelf({ resource: Option.some(resource), identity: Option.some(identity), mount });
+      }
+      return get.once(Option.getOrThrow(current).resource).mount();
+    };
+    return { resource: Option.none(), identity: Option.none(), mount };
   });

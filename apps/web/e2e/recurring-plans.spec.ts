@@ -1,5 +1,5 @@
 import { analyzeAccessibility } from "./accessibility";
-import type { APIRequestContext, Page, Route } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
 import { type Cause, DateTime, Effect, Schema } from "effect";
 import {
   boundSessionRequests,
@@ -1338,63 +1338,117 @@ const inspectPaymentHistory = ({
     });
   });
 
-test("manual recurring tracking leaves financial totals unchanged and capturing its Transaction replaces the mark once", ({
-  page,
-  request,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({
-          page,
-          request,
-          deferFreshEntry: true,
-          identity: "recurringCapture",
+for (const lostAssociation of [false, true]) {
+  test(
+    lostAssociation
+      ? "a committed association with a lost response retains one created Transaction through explicit recovery"
+      : "manual recurring tracking leaves financial totals unchanged and capturing its Transaction replaces the mark once",
+    ({ page, request }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() =>
+            signInRecurringThroughCore({
+              page,
+              request,
+              deferFreshEntry: true,
+              identity: lostAssociation ? "recurringAssociationLost" : "recurringCapture",
+            })
+          );
+          yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+          yield* createPlan({
+            page,
+            name: "Internet aislado",
+            kind: "expense",
+            currency: "COP",
+            amount: "90000",
+          });
+          yield* createPaymentBudget(page.request);
+          yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+          yield* Effect.tryPromise(() => chooseDate(page, "Fecha real", "2026-10-31"));
+          yield* Effect.tryPromise(() =>
+            page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
+          );
+          yield* Effect.tryPromise(() =>
+            expectPayment(recurringItem(page, /Internet aislado.*Completados/u)).toBeVisible()
+          );
+          yield* inspectPaymentHistory({ request: page.request, count: 0, spent: "0" });
+          yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+          yield* Effect.tryPromise(() =>
+            expectPayment(page.getByRole("dialog")).toContainText("Sin transacción vinculada")
+          );
+          yield* captureMarkedPayment(page);
+          yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
+          yield* recoverCreatedLink(page);
+          if (lostAssociation) yield* loseCreatedLink(page);
+          else {
+            yield* Effect.tryPromise(() =>
+              page.getByRole("button", { name: "Vincular transacción creada", exact: true }).click()
+            );
+            yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+          }
+          yield* Effect.tryPromise(() => page.reload());
+          yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+          yield* Effect.tryPromise(() =>
+            expectPayment(page.getByText("Sin transacción vinculada", { exact: true })).toHaveCount(
+              0
+            )
+          );
+          yield* Effect.tryPromise(() =>
+            expectPayment(page.getByRole("dialog")).toContainText(
+              "Completado en recurrentes: COP 90.000,00"
+            )
+          );
+          yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
+          yield* inspectAndRemoveLinkedPayment(page);
         })
-      );
-      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* createPlan({
-        page,
-        name: "Internet aislado",
-        kind: "expense",
-        currency: "COP",
-        amount: "90000",
+      )
+  );
+}
+
+const loseCreatedLink = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const editRoute = `${apiOrigin}/recurring-plans/edits`;
+    let committed = 0;
+    const loseAssociation = (route: Route): Promise<void> =>
+      route.fetch().then((response) => {
+        if (response.status() === rateLimitedStatus) return route.fulfill({ response });
+        expectPayment(response.status()).toBe(successStatus);
+        committed += 1;
+        return route.abort("failed");
       });
-      yield* createPaymentBudget(page.request);
-      yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
-      yield* Effect.tryPromise(() => chooseDate(page, "Fecha real", "2026-10-31"));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        expectPayment(recurringItem(page, /Internet aislado.*Completados/u)).toBeVisible()
-      );
-      yield* inspectPaymentHistory({ request: page.request, count: 0, spent: "0" });
-      yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
-      yield* Effect.tryPromise(() =>
-        expectPayment(page.getByRole("dialog")).toContainText("Sin transacción vinculada")
-      );
-      yield* captureMarkedPayment(page);
-      yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
-      yield* recoverCreatedLink(page);
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Vincular transacción creada", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
-      yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
-      yield* Effect.tryPromise(() =>
-        expectPayment(page.getByText("Sin transacción vinculada", { exact: true })).toHaveCount(0)
-      );
-      yield* Effect.tryPromise(() =>
-        expectPayment(page.getByRole("dialog")).toContainText(
-          "Completado en recurrentes: COP 90.000,00"
-        )
-      );
-      yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
-      yield* inspectAndRemoveLinkedPayment(page);
-    })
-  ));
+    yield* Effect.tryPromise(() => page.route(editRoute, loseAssociation));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular transacción creada", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("alert")).toContainText("No pudimos confirmar si se guardó")
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByText("Transacción creada. Falta vincularla al recurrente.", { exact: true })
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByRole("button", { name: "Vincular transacción creada", exact: true })
+      ).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Registrar", exact: true })).toHaveCount(0)
+    );
+    expectPayment(committed).toBe(1);
+    yield* Effect.tryPromise(() => page.unroute(editRoute, loseAssociation));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Actualizar recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("alert")).toHaveCount(0));
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByText("Transacción vinculada.", { exact: true })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+  });
 
 const recoverCreatedLink = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -1505,6 +1559,115 @@ test("an uncertain recurring capture stays locked across panel and month changes
     })
   ));
 
+const preparePendingCapture = (
+  page: Page,
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      signInRecurringThroughCore({
+        page,
+        request,
+        deferFreshEntry: true,
+        identity: "recurringCaptureReplaced",
+      })
+    );
+    yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+    yield* createPlan({
+      page,
+      name: "Pago sin respuesta",
+      kind: "expense",
+      currency: "COP",
+      amount: "90000",
+    });
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago sin respuesta/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* nameUncertainCapture(page);
+  });
+type PendingCaptureResponse = Readonly<{ route: Route; response: APIResponse }>;
+const holdCaptureResponse =
+  (pending: Array<PendingCaptureResponse>) =>
+  (route: Route): Promise<void> =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        if (route.request().method() !== "POST") {
+          return yield* Effect.tryPromise(() => route.continue());
+        }
+        const response = yield* Effect.tryPromise(() => route.fetch());
+        if (response.status() === rateLimitedStatus) {
+          return yield* Effect.tryPromise(() => route.fulfill({ response }));
+        }
+        expectPayment(response.status()).toBe(createdStatus);
+        pending.push({ route, response });
+      })
+    );
+const pendingRecurringCapture = (
+  page: Page,
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    yield* preparePendingCapture(page, request);
+    const pending: Array<PendingCaptureResponse> = [];
+    yield* Effect.tryPromise(() =>
+      page.route(`${apiOrigin}/transactions`, holdCaptureResponse(pending))
+    );
+    yield* Effect.tryPromise(() =>
+      page
+        .getByRole("form", { name: "Registrar transacción" })
+        .evaluate((form: HTMLFormElement) => {
+          form.requestSubmit();
+          form.requestSubmit();
+        })
+    );
+    yield* Effect.tryPromise(() => expectPayment.poll(() => pending.length).toBe(1));
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Guardando…", exact: true })).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByRole("button", { name: /^Marca manual que reemplaza:/u })
+      ).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago sin respuesta/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
+    );
+    const release = pending[0];
+    if (release === undefined) throw new Error("Missing committed capture response");
+    yield* Effect.tryPromise(() => release.route.fulfill({ response: release.response })).pipe(
+      Effect.ignoreCause
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("alert")).toContainText(
+        "No pudimos confirmar si la transacción se guardó"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByText("Transacción creada. Falta vincularla al recurrente.", { exact: true })
+      ).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("90000")
+    );
+    expectPayment(pending).toHaveLength(1);
+    yield* inspectCapturedTransactions(page.request, [
+      expect.objectContaining({ money: { amount: "90000", currency: "COP" } }),
+    ]);
+  });
+test("replacing a pending recurring capture fences its late parent result and preserves one uncertain create", ({
+  page,
+  request,
+}) => Effect.runPromise(pendingRecurringCapture(page, request)));
+
 const enlargeRecurringCaptureText = (): void => {
   document.documentElement.style.fontSize = "32px";
 };
@@ -1589,6 +1752,17 @@ const captureMarkedPayment = (page: Page): Effect.Effect<void, Cause.UnknownErro
   Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
       page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("90000")
+    );
+    yield* Effect.tryPromise(() => page.getByLabel("Monto", { exact: true }).fill("80000"));
+    yield* Effect.tryPromise(() => chooseOption(page, "Marca manual que reemplaza", "Ninguno"));
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      chooseOption(page, "Marca manual que reemplaza", "2026-10-31 · COP 90.000,00")
     );
     yield* Effect.tryPromise(() =>
       expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("90000")

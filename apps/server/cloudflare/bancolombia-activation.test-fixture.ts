@@ -29,6 +29,7 @@ const uncertainStatus = 504;
 type Scenario =
   | "ready"
   | "issuer"
+  | "rejected-with-tokens"
   | "missing-identity"
   | "missing-access"
   | "invalid-access"
@@ -102,6 +103,8 @@ const exchangeAccess = (
   if (state.scenario === "invalid-access") return { access_token: false };
   return { access_token: `${state.tokenLabel}synthetic-access` };
 };
+const exchangeStatus = (scenario: Scenario, codeExchange: boolean): number =>
+  codeExchange && scenario === "rejected-with-tokens" ? unavailableStatus : successfulStatus;
 const tokenResponse = (
   request: HttpClientRequest.HttpClientRequest,
   state: State,
@@ -114,18 +117,23 @@ const tokenResponse = (
   if (codeExchange && state.scenario === "uncertain") {
     return new Response(null, { status: uncertainStatus });
   }
-  return Response.json({
-    ...(codeExchange ? exchangeAccess(state) : { access_token: "synthetic-application" }),
-    ...(codeExchange
-      ? {
-          refresh_token: `${state.tokenLabel}synthetic-refresh`,
-          ...(state.scenario === "missing-identity" ? {} : { id_token: identity }),
-        }
-      : {}),
-    expires_in: tokenSeconds,
-    token_type: "Bearer",
-    scope: "accounts",
-  });
+  return Response.json(
+    {
+      ...(codeExchange ? exchangeAccess(state) : { access_token: "synthetic-application" }),
+      ...(codeExchange
+        ? {
+            refresh_token: `${state.tokenLabel}synthetic-refresh`,
+            ...(state.scenario === "missing-identity" ? {} : { id_token: identity }),
+          }
+        : {}),
+      expires_in: tokenSeconds,
+      token_type: "Bearer",
+      scope: "accounts",
+    },
+    {
+      status: exchangeStatus(state.scenario, codeExchange),
+    }
+  );
 };
 const incompletePages = (state: State, request: HttpClientRequest.HttpClientRequest): Response => {
   const second = request.urlParams.params.length > 0;

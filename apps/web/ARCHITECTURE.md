@@ -278,11 +278,24 @@ See [ADR 0032](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-que
 
 ## 3. Browser authentication
 
+The session observer retains one entry containing the lifetime and its original observation,
+including receipt time. Bound and Rechecking are distinct lifecycle states sharing that entry;
+checking presentation is derived from the lifecycle. Initial anonymous `none` is a valid binding.
+Visible-page, persisted-pageshow and transport recheck hints coalesce while a read is pending,
+without scheduling a trailing read. Same-binding resume restores the same mounted workspace
+without replacing its entry or refreshing its initial hydration.
+
 A direct-browser 401 asks the session owner to recheck its immutable binding. A still-live matching
 session retains its registry and ordinary navigation; a changed or absent binding retires the old
 lifetime, and a failed check blocks access. This distinguishes payment freshness refusals from
 session expiry without replaying a refused action. Canonical unauthenticated responses retain their
 explicit authentication-expiration policy, and every protected action keeps its server authority checks.
+
+A mismatched or unavailable binding aborts the original lifetime and its prepared work before
+expiry or reload-required presentation. Retired attachments admit no late bootstrap reply or wake
+hint. Disposal cancels that attachment's work; eligible repeated handoff reads remain restricted to
+the same owner, while canceled or foreign-owner work cannot become a new entry. Anonymous 401
+does not request binding validation.
 
 Provider web signup/login begins at `/login`, discoverable from the public site.
 The mounted Provider Authentication feature owns its private pairing proof, one-time recovery view,

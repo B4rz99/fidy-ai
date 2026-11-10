@@ -496,12 +496,14 @@ const retainPreparingReview = (
       Schema.toCodecJson(ConnectionContinuationReview)
     )(yield* Effect.tryPromise(() => response.json()));
     if (review.phase !== "ready") throw new Error("Expected an initial Connection review");
-    const preparing = yield* Schema.encodeEffect(Schema.toCodecJson(ConnectionContinuationReview))({
+    const preparing = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(ConnectionContinuationReview))
+    )({
       ...review,
       phase: "preparing",
     });
     yield* Effect.tryPromise(() =>
-      page.route(`${api}/web/connections/review?**`, staleReview(JSON.stringify(preparing)))
+      page.route(`${api}/web/connections/review?**`, staleReview(preparing))
     );
   });
 

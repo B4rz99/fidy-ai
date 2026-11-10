@@ -3,9 +3,12 @@ import { freshSessionQuery } from "../../../src/shell/web-session/operations";
 import { prepareEmailReplacementEvidence } from "../../../src/shell/audit/operations";
 import {
   CompleteEmailReplacementPayload,
+  EmailReplacementFreshPairingRequiredApi,
+  EmailReplacementUnavailableApi,
   RequestEmailReplacementPayload,
   emailReplacementFreshBody,
   emailReplacementInvalidBody,
+  emailReplacementUnavailableBody,
 } from "../../../src/shell/email-authentication/contract";
 import {
   EmailReplacementMutation,
@@ -14,7 +17,7 @@ import {
   emailReplacementImplementations,
   permitsFreshBrowserReplacement,
 } from "../../../src/shell/email-authentication/operations";
-import { Clock, Crypto, Data, Effect, Exit, Option, PlatformError, Schema } from "effect";
+import { Clock, Crypto, Data, Effect, Option, PlatformError, Schema } from "effect";
 import { freshBrowserSession } from "../../web-session/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
@@ -59,6 +62,12 @@ const json = (body: object, status: number): Response =>
 const invalid = (): Response => json(emailReplacementInvalidBody, HTTP_INVALID);
 const unavailable = (): Response => json({ status: "unavailable" }, HTTP_UNAVAILABLE);
 const fresh = (): Response => json(emailReplacementFreshBody, HTTP_UNAUTHORIZED);
+const failedCompletion = (failure: unknown): Response => {
+  if (Schema.is(EmailReplacementUnavailableApi)(failure)) {
+    return json(emailReplacementUnavailableBody, HTTP_UNAVAILABLE);
+  }
+  return Schema.is(EmailReplacementFreshPairingRequiredApi)(failure) ? fresh() : invalid();
+};
 const digest = (value: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(value))
@@ -254,30 +263,36 @@ export const completeEmailReplacement = ({
                 onAccepted: () => undefined,
               })
             ),
-            Effect.match({ onSuccess: (result) => json(result, HTTP_OK), onFailure: invalid })
+            Effect.match({
+              onSuccess: (result) => json(result, HTTP_OK),
+              onFailure: failedCompletion,
+            })
           );
       }
-    }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
+    }).pipe(
+      Effect.catchCause(() =>
+        Effect.succeed(json(emailReplacementUnavailableBody, HTTP_UNAVAILABLE))
+      )
+    )
   );
 
 const redeemProof = (
   db: D1Database,
-  input: {
+  input: CompleteEmailReplacementPayload & {
     session: { readonly id: string; readonly user_id: string };
-    combinedCode: string;
     current: number;
   }
-): Promise<boolean> =>
+): Promise<boolean | "fresh-required"> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { session, combinedCode, current } = input;
+      const { session, candidateEmail, combinedCode, current } = input;
       const publicCode = combinedCode.slice(0, proofPublicLength);
       const raw = yield* attempt(() =>
         db
           .prepare(`SELECT user_id, work_id, proof_digest FROM email_replacements
       WHERE user_id = ? AND session_id = ? AND state = 'awaiting_proof'
-        AND public_code = ? AND proof_expires_at_ms > ? AND expires_at_ms > ?`)
-          .bind(session.user_id, session.id, publicCode, current, current)
+        AND candidate_email = ? AND public_code = ? AND proof_expires_at_ms > ? AND expires_at_ms > ?`)
+          .bind(session.user_id, session.id, candidateEmail, publicCode, current, current)
           .first()
       );
       const proof = Schema.decodeUnknownOption(Proof)(raw);
@@ -296,28 +311,52 @@ const redeemProof = (
         );
         return false;
       }
-      const committed = yield* Effect.exit(
-        attempt(() =>
-          commitReplacement(db, {
-            workId: proof.value.work_id,
-            userId: session.user_id,
-            sessionId: session.id,
-            publicCode,
-            current,
-          })
-        )
+      const commitTime = yield* Clock.currentTimeMillis;
+      const committed = yield* attempt(() =>
+        commitReplacement(db, {
+          workId: proof.value.work_id,
+          userId: session.user_id,
+          sessionId: session.id,
+          publicCode,
+          candidateEmail,
+          current: commitTime,
+        })
       );
-      if (
-        Exit.isSuccess(committed) &&
-        committed.value.length === 3 &&
-        committed.value.every((result) => result.meta.changes === 1)
-      ) {
+      if (committed.length === 3 && committed.every((result) => result.meta.changes === 1)) {
         return true;
       }
-      yield* attempt(() => recordRejected(db, session, current));
+      if (committed.length !== 3 || committed.some((result) => result.meta.changes !== 0)) {
+        return yield* Effect.fail(undefined);
+      }
+      const live = yield* hasFreshSession(db, session);
+      if (!live) return "fresh-required";
+      yield* attempt(() => recordRejected(db, session, commitTime));
       return false;
     })
   );
+
+const FreshSession = Schema.Struct({ fresh: Schema.Literals([0, 1]) });
+const hasFreshSession = (db: D1Database, session: SessionSubject): Effect.Effect<boolean, void> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const query = freshSessionQuery({
+      subject: {
+        sql: "SELECT ? AS sessionId, ? AS userId",
+        params: [session.id, session.user_id],
+      },
+      current,
+    });
+    const raw = yield* attempt(() =>
+      db
+        .prepare(`SELECT EXISTS (${query.sql}) AS fresh`)
+        .bind(...query.params)
+        .first()
+    );
+    const result = yield* Schema.decodeUnknownEffect(FreshSession)(raw).pipe(
+      Effect.mapError(() => undefined)
+    );
+    return result.fresh === 1;
+  });
 
 type SessionSubject = { readonly id: string; readonly user_id: string };
 
@@ -347,12 +386,17 @@ const replacementAdapter = ({
       Effect.orDie
     );
   },
-  complete: (subject, combinedCode) =>
+  complete: (subject, proof) =>
     subject === session.user_id
       ? Effect.tryPromise({
-          try: () => redeemProof(db, { session, combinedCode, current }),
-          catch: () => new ReplacementDatabaseUnavailable({ operation: "complete" }),
-        }).pipe(Effect.orDie)
+          try: () => redeemProof(db, { session, ...proof, current }),
+          catch: () => EmailReplacementUnavailableApi.make(emailReplacementUnavailableBody),
+        }).pipe(
+          Effect.filterOrFail(
+            (result) => result !== "fresh-required",
+            () => EmailReplacementFreshPairingRequiredApi.make(emailReplacementFreshBody)
+          )
+        )
       : Effect.die("Email replacement subject mismatch"),
 });
 
@@ -416,53 +460,51 @@ const commitReplacement = (
     userId: string;
     sessionId: string;
     publicCode: string;
+    candidateEmail: CompleteEmailReplacementPayload["candidateEmail"];
     current: number;
   }
 ): Promise<D1Result[]> => {
-  const { workId, userId, sessionId, publicCode, current } = input;
+  const { workId, userId, sessionId, publicCode, candidateEmail, current } = input;
   const session = freshSessionQuery({
     subject: { sql: "SELECT r.session_id AS sessionId, r.user_id AS userId", params: [] },
     current,
   });
-  return Effect.runPromise(
-    attempt(() =>
-      db.batch([
-        db
-          .prepare(`UPDATE verified_email_credentials SET address = (
+  return db.batch([
+    db
+      .prepare(`UPDATE verified_email_credentials SET address = (
           SELECT candidate_email FROM email_replacements WHERE work_id = ?), verified_at_ms = ?
         WHERE user_id = ? AND EXISTS (SELECT 1 FROM email_replacements AS r
           WHERE r.work_id = ? AND r.user_id = ? AND r.session_id = ?
-            AND r.state = 'awaiting_proof' AND r.public_code = ?
+            AND r.state = 'awaiting_proof' AND r.public_code = ? AND r.candidate_email = ?
             AND r.proof_expires_at_ms > ? AND r.expires_at_ms > ?
             AND EXISTS (${session.sql})
             AND verified_email_credentials.address = r.prior_email
-            AND verified_email_credentials.verified_at_ms = r.prior_verified_at_ms)`)
-          .bind(
-            workId,
-            current,
-            userId,
-            workId,
-            userId,
-            sessionId,
-            publicCode,
-            current,
-            current,
-            ...session.params
-          ),
-        db
-          .prepare(`DELETE FROM email_replacements WHERE work_id = ? AND changes() = 1`)
-          .bind(workId),
-        prepareEmailReplacementEvidence({
-          db,
-          id: newId(),
-          userId,
-          sessionId,
-          operation: "completeEmailReplacement",
-          outcome: "replaced",
-          current,
-          afterOwnerWrite: true,
-        }),
-      ])
-    )
-  );
+            AND verified_email_credentials.verified_at_ms = r.prior_verified_at_ms
+            AND NOT EXISTS (SELECT 1 FROM verified_email_credentials AS occupied
+              WHERE occupied.address = r.candidate_email AND occupied.user_id <> r.user_id))`)
+      .bind(
+        workId,
+        current,
+        userId,
+        workId,
+        userId,
+        sessionId,
+        publicCode,
+        candidateEmail,
+        current,
+        current,
+        ...session.params
+      ),
+    db.prepare(`DELETE FROM email_replacements WHERE work_id = ? AND changes() = 1`).bind(workId),
+    prepareEmailReplacementEvidence({
+      db,
+      id: newId(),
+      userId,
+      sessionId,
+      operation: "completeEmailReplacement",
+      outcome: "replaced",
+      current,
+      afterOwnerWrite: true,
+    }),
+  ]);
 };

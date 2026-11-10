@@ -806,7 +806,7 @@ it("replaces one credential only after fresh-session candidate proof and rejects
         (yield* Effect.tryPromise(() =>
           request(
             "/web/email/replacement/verify",
-            { combinedCode: proof },
+            { candidateEmail: "new@example.test", combinedCode: proof },
             { cookie: "F".repeat(43), origin: "https://app.fidyapp.com" }
           )
         )).status
@@ -814,14 +814,21 @@ it("replaces one credential only after fresh-session candidate proof and rejects
       expect(
         (yield* Effect.tryPromise(() =>
           request("/web/email/replacement/verify", {
+            candidateEmail: "new@example.test",
             combinedCode: proof.slice(0, -1) + (proof.endsWith("2") ? "3" : "2"),
           })
         )).status
       ).toBe(400);
       const redemptions = yield* Effect.tryPromise(() =>
         Promise.all([
-          request("/web/email/replacement/verify", { combinedCode: proof }),
-          request("/web/email/replacement/verify", { combinedCode: proof }),
+          request("/web/email/replacement/verify", {
+            candidateEmail: "new@example.test",
+            combinedCode: proof,
+          }),
+          request("/web/email/replacement/verify", {
+            candidateEmail: "new@example.test",
+            combinedCode: proof,
+          }),
         ])
       );
       expect(
@@ -838,7 +845,10 @@ it("replaces one credential only after fresh-session candidate proof and rejects
       ).toEqual([{ data: { status: "replaced" }, next: [] }]);
       expect(
         (yield* Effect.tryPromise(() =>
-          request("/web/email/replacement/verify", { combinedCode: proof })
+          request("/web/email/replacement/verify", {
+            candidateEmail: "new@example.test",
+            combinedCode: proof,
+          })
         )).status
       ).toBe(400);
       expect(
@@ -876,6 +886,77 @@ it("replaces one credential only after fresh-session candidate proof and rejects
         operation: "emailAuthentication.completeEmailReplacement",
         outcome: "replaced",
       });
+    })
+  ));
+
+it("refuses proof for a live candidate when a suppressed replacement candidate is asserted", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+      const token = "J".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const request = replacementRequest(sendRequest, token);
+      const first = yield* Effect.tryPromise(() =>
+        request("/email/replacement", { candidateEmail: "first@example.test" })
+      );
+      expect(yield* Effect.tryPromise(() => first.json())).toEqual({
+        data: { status: "pending" },
+        next: [],
+      });
+      const proof = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+      const liveWork = (): Promise<unknown> =>
+        db
+          .prepare(
+            "SELECT work_id, candidate_email, expires_at_ms, proof_expires_at_ms, wrong_attempts FROM email_replacements"
+          )
+          .first();
+      const before = yield* Effect.tryPromise(liveWork);
+      const suppressed = yield* Effect.tryPromise(() =>
+        request("/email/replacement", { candidateEmail: "second@example.test" })
+      );
+      expect(yield* Effect.tryPromise(() => suppressed.json())).toEqual({
+        data: { status: "pending" },
+        next: [],
+      });
+      const mismatched = yield* Effect.tryPromise(() =>
+        request("/web/email/replacement/verify", {
+          candidateEmail: "second@example.test",
+          combinedCode: proof,
+        })
+      );
+      expect(mismatched.status).toBe(400);
+      expect(yield* Effect.tryPromise(() => mismatched.json())).toMatchObject({
+        error: { code: "verification_invalid" },
+      });
+      expect(yield* Effect.tryPromise(liveWork)).toEqual(before);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT address FROM verified_email_credentials").first()
+        )
+      ).toEqual({ address: "person@example.test" });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE operation = 'emailAuthentication.completeEmailReplacement' AND outcome = 'replaced'"
+            )
+            .first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          request("/web/email/replacement/verify", {
+            candidateEmail: " FIRST@example.test ",
+            combinedCode: proof,
+          })
+        )).status
+      ).toBe(200);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT address FROM verified_email_credentials").first()
+        )
+      ).toEqual({ address: "first@example.test" });
     })
   ));
 
@@ -1025,7 +1106,10 @@ it("keeps the old credential when freshness expires or a candidate is already ow
       vi.setSystemTime(started + 600_000);
       expect(
         (yield* Effect.tryPromise(() =>
-          request("/web/email/replacement/verify", { combinedCode: proof })
+          request("/web/email/replacement/verify", {
+            candidateEmail: "free@example.test",
+            combinedCode: proof,
+          })
         )).status
       ).toBe(401);
       expect(
@@ -1081,7 +1165,10 @@ it("preserves global mailbox ownership when another User claims the candidate af
       );
       expect(
         (yield* Effect.tryPromise(() =>
-          request("/web/email/replacement/verify", { combinedCode: proof })
+          request("/web/email/replacement/verify", {
+            candidateEmail: "claimed@example.test",
+            combinedCode: proof,
+          })
         )).status
       ).toBe(400);
       expect(
@@ -1105,6 +1192,354 @@ it("preserves global mailbox ownership when another User claims the candidate af
       ).toBe(0);
     })
   ));
+
+it("refuses an expired replacement proof without renewing the work or consuming the credential", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(seedUser);
+      const token = "Y".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const request = replacementRequest(sendRequest, token);
+      yield* Effect.tryPromise(() =>
+        request("/email/replacement", { candidateEmail: "expired@example.test" })
+      );
+      const combinedCode = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE email_replacements SET proof_expires_at_ms = created_at_ms - 1").run()
+      );
+      const before = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT expires_at_ms, proof_expires_at_ms, wrong_attempts FROM email_replacements"
+          )
+          .first()
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          request("/web/email/replacement/verify", {
+            candidateEmail: "expired@example.test",
+            combinedCode,
+          })
+        )).status
+      ).toBe(400);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT expires_at_ms, proof_expires_at_ms, wrong_attempts FROM email_replacements"
+            )
+            .first()
+        )
+      ).toEqual(before);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT address FROM verified_email_credentials").first()
+        )
+      ).toEqual({ address: "person@example.test" });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE record_type = 'session_call' AND outcome = 'replaced'"
+            )
+            .first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
+it.each(["proof", "freshness"] as const)(
+  "refuses replacement when %s expires during completion preflight",
+  (deadline) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        let armed = false;
+        let afterDeadline = 0;
+        const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
+          setup(undefined, undefined, {
+            worker: coreWorker,
+            accessIssuer: "https://example.cloudflareaccess.com",
+            publication: Option.none(),
+            database: (database) =>
+              new Proxy(database, {
+                get(target, property, receiver): unknown {
+                  if (property === "prepare") {
+                    return (query: string): D1PreparedStatement => {
+                      const statement = target.prepare(query);
+                      if (!armed || !query.includes("SELECT user_id, work_id, proof_digest")) {
+                        return statement;
+                      }
+                      return new Proxy(statement, {
+                        get(prepared, method, preparedReceiver): unknown {
+                          if (method === "bind") {
+                            return (...values: unknown[]): D1PreparedStatement => {
+                              const bound = prepared.bind(...values);
+                              return new Proxy(bound, {
+                                get(boundTarget, boundMethod, boundReceiver): unknown {
+                                  if (boundMethod === "first") {
+                                    return (): Promise<unknown> =>
+                                      boundTarget.first().then((proof) => {
+                                        armed = false;
+                                        vi.setSystemTime(afterDeadline);
+                                        return proof;
+                                      });
+                                  }
+                                  return Reflect.get(boundTarget, boundMethod, boundReceiver);
+                                },
+                              });
+                            };
+                          }
+                          return Reflect.get(prepared, method, preparedReceiver);
+                        },
+                      });
+                    };
+                  }
+                  return Reflect.get(target, property, receiver);
+                },
+              }),
+          })
+        );
+        yield* Effect.tryPromise(seedUser);
+        const token = "V".repeat(43);
+        const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
+        const request = replacementRequest(sendRequest, token);
+        yield* Effect.tryPromise(() =>
+          request("/email/replacement", { candidateEmail: "deadline@example.test" })
+        );
+        const combinedCode = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+        afterDeadline = started + (deadline === "proof" ? 2_000 : 600_001);
+        if (deadline === "proof") {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("UPDATE email_replacements SET proof_expires_at_ms = ?")
+              .bind(started + 1_000)
+              .run()
+          );
+        }
+        const before = yield* Effect.tryPromise(() =>
+          db.prepare("SELECT * FROM email_replacements").first()
+        );
+        armed = true;
+        const response = yield* Effect.tryPromise(() =>
+          request("/web/email/replacement/verify", {
+            candidateEmail: "deadline@example.test",
+            combinedCode,
+          })
+        );
+        expect(response.status).toBe(deadline === "proof" ? 400 : 401);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT address FROM verified_email_credentials").first()
+          )
+        ).toEqual({ address: "person@example.test" });
+        expect(
+          yield* Effect.tryPromise(() => db.prepare("SELECT * FROM email_replacements").first())
+        ).toEqual(before);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT count(*) AS count FROM audit_entries WHERE record_type = 'session_call' AND outcome = 'replaced'"
+              )
+              .first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    )
+);
+
+it("requires fresh pairing when the initiating session is revoked before the guarded replacement commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let armed = false;
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
+        setup(undefined, undefined, {
+          worker: coreWorker,
+          accessIssuer: "https://example.cloudflareaccess.com",
+          publication: Option.none(),
+          database: (database) =>
+            new Proxy(database, {
+              get(target, property, receiver): unknown {
+                if (property === "batch") {
+                  return (statements: D1PreparedStatement[]): Promise<D1Result[]> => {
+                    if (!armed) return target.batch(statements);
+                    armed = false;
+                    return target
+                      .prepare("UPDATE web_sessions SET revoked_at_ms = 1")
+                      .run()
+                      .then(() => target.batch(statements));
+                  };
+                }
+                return Reflect.get(target, property, receiver);
+              },
+            }),
+        })
+      );
+      yield* Effect.tryPromise(seedUser);
+      const token = "W".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const request = replacementRequest(sendRequest, token);
+      yield* Effect.tryPromise(() =>
+        request("/email/replacement", { candidateEmail: "stale@example.test" })
+      );
+      const combinedCode = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+      armed = true;
+      const response = yield* Effect.tryPromise(() =>
+        request("/web/email/replacement/verify", {
+          candidateEmail: "stale@example.test",
+          combinedCode,
+        })
+      );
+      expect(response.status).toBe(401);
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+        error: { code: "fresh_pairing_required" },
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT address FROM verified_email_credentials").first()
+        )
+      ).toEqual({ address: "person@example.test" });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM email_replacements").first()
+        )
+      ).toEqual({ count: 1 });
+    })
+  ));
+
+it("rolls back the credential swap and proof consumption when required replacement evidence cannot commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(seedUser);
+      const token = "X".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const request = replacementRequest(sendRequest, token);
+      yield* Effect.tryPromise(() =>
+        request("/email/replacement", { candidateEmail: "rollback@example.test" })
+      );
+      const combinedCode = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+      const proof = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT * FROM email_replacements").first()
+      );
+      yield* Effect.tryPromise(() =>
+        db.exec(
+          "CREATE TRIGGER reject_replacement_evidence BEFORE INSERT ON audit_entries WHEN NEW.operation = 'emailAuthentication.completeEmailReplacement' AND NEW.outcome = 'replaced' BEGIN SELECT RAISE(ABORT, 'synthetic evidence refusal'); END"
+        )
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          request("/web/email/replacement/verify", {
+            candidateEmail: "rollback@example.test",
+            combinedCode,
+          })
+        )).status
+      ).toBe(503);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT address FROM verified_email_credentials").first()
+        )
+      ).toEqual({ address: "person@example.test" });
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT * FROM email_replacements").first())
+      ).toEqual(proof);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM audit_entries WHERE record_type = 'session_call' AND operation = 'emailAuthentication.completeEmailReplacement'"
+            )
+            .first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
+it.each(["before", "after", "undecodable"] as const)(
+  "preserves an unavailable replacement outcome when D1 fails %s the commit without replay",
+  (failurePoint) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        let armed = false;
+        let commits = 0;
+        const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
+          setup(undefined, undefined, {
+            worker: coreWorker,
+            accessIssuer: "https://example.cloudflareaccess.com",
+            publication: Option.none(),
+            database: (database) =>
+              new Proxy(database, {
+                get(target, property, receiver): unknown {
+                  if (property === "batch") {
+                    return (statements: D1PreparedStatement[]): Promise<D1Result[]> => {
+                      if (!armed) return target.batch(statements);
+                      commits++;
+                      if (failurePoint === "before") {
+                        return Promise.reject(new Error("unavailable D1 commit"));
+                      }
+                      return target.batch(statements).then(() => {
+                        if (failurePoint === "undecodable") return [];
+                        throw new Error("lost D1 commit acknowledgement");
+                      });
+                    };
+                  }
+                  return Reflect.get(target, property, receiver);
+                },
+              }),
+          })
+        );
+        expect((yield* Effect.tryPromise(seedUser)).status).toBe(200);
+        const token = "Z".repeat(43);
+        yield* Effect.tryPromise(() => seedWebSession(db, token));
+        const request = replacementRequest(sendRequest, token);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            request("/email/replacement", { candidateEmail: "new@example.test" })
+          )).status
+        ).toBe(200);
+        const combinedCode = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+        armed = true;
+        const response = yield* Effect.tryPromise(() =>
+          request("/web/email/replacement/verify", {
+            candidateEmail: "new@example.test",
+            combinedCode,
+          })
+        );
+        expect(response.status).toBe(503);
+        expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+          error: {
+            code: "replacement_unavailable",
+            message:
+              "No pudimos confirmar el cambio de correo. Comprueba tu correo al iniciar sesión.",
+          },
+        });
+        expect(commits).toBe(1);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT address FROM verified_email_credentials").first()
+          )
+        ).toEqual({
+          address: failurePoint !== "before" ? "new@example.test" : "person@example.test",
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM email_replacements").first()
+          )
+        ).toEqual({ count: failurePoint !== "before" ? 0 : 1 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT outcome FROM audit_entries WHERE record_type = 'session_call' AND operation = 'emailAuthentication.completeEmailReplacement'"
+              )
+              .all()
+          )
+        ).toMatchObject({ results: failurePoint !== "before" ? [{ outcome: "replaced" }] : [] });
+      })
+    )
+);
 
 it("bounds replacement delivery across rejected proofs for the same User", () =>
   Effect.runPromise(
@@ -1137,7 +1572,10 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
           for (let attempt = 0; attempt < 5; attempt++) {
             expect(
               (yield* Effect.tryPromise(() =>
-                request("/web/email/replacement/verify", { combinedCode: wrong })
+                request("/web/email/replacement/verify", {
+                  candidateEmail: "other@example.test",
+                  combinedCode: wrong,
+                })
               )).status
             ).toBe(400);
           }

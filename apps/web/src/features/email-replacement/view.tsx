@@ -1,6 +1,6 @@
 import { Mail01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { type FormEvent, type JSX, useState } from "react";
+import { type FormEvent, type JSX, type RefCallback, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
@@ -9,24 +9,32 @@ import type { EmailAddress } from "@/transport/client";
 import { Spinner } from "@/ui/components/spinner";
 
 export type EmailReplacementViewState =
-  | Readonly<{ _tag: "Editing" }>
-  | Readonly<{ _tag: "Requesting" }>
+  | Readonly<{ _tag: "Editing"; feedback: "none" | "invalid-candidate" }>
+  | Readonly<{ _tag: "Editing"; feedback: "request-unavailable"; draftEmail: string }>
+  | Readonly<{ _tag: "Requesting"; candidateEmail: EmailAddress }>
   | Readonly<{ _tag: "AwaitingCode"; candidateEmail: EmailAddress }>
   | Readonly<{ _tag: "Completing"; candidateEmail: EmailAddress }>
-  | Readonly<{ _tag: "Invalid"; candidateEmail: EmailAddress }>
+  | Readonly<{ _tag: "InvalidCode"; candidateEmail: EmailAddress }>
   | Readonly<{ _tag: "FreshPairingRequired" }>
   | Readonly<{ _tag: "Replaced" }>
-  | Readonly<{ _tag: "Unavailable" }>;
+  | Readonly<{ _tag: "Uncertain" }>
+  | Readonly<{ _tag: "PreparationUnavailable" }>
+  | Readonly<{ _tag: "Disposed" }>;
 
 type EmailReplacementViewProps = Readonly<{
   state: EmailReplacementViewState;
   request: (candidateEmail: string) => void;
-  complete: (candidateEmail: EmailAddress, combinedCode: string) => void;
+  complete: (combinedCode: string) => void;
+  repeat: () => void;
+  lifecycleRef: RefCallback<HTMLElement>;
   restart: () => void;
 }>;
 
-const ReplacementForm = ({ request }: Pick<EmailReplacementViewProps, "request">): JSX.Element => {
-  const [candidateEmail, setCandidateEmail] = useState("");
+const ReplacementForm = ({
+  request,
+  draftEmail,
+}: Pick<EmailReplacementViewProps, "request"> & Readonly<{ draftEmail: string }>): JSX.Element => {
+  const [candidateEmail, setCandidateEmail] = useState(draftEmail);
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     request(candidateEmail);
@@ -57,30 +65,33 @@ const ProofForm = ({
   candidateEmail,
   complete,
   invalid,
-  request,
+  repeat,
   restart,
 }: Readonly<{
   candidateEmail: EmailAddress;
   complete: EmailReplacementViewProps["complete"];
   invalid: boolean;
-  request: EmailReplacementViewProps["request"];
+  repeat: () => void;
   restart: () => void;
 }>): JSX.Element => {
   const [combinedCode, setCombinedCode] = useState("");
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    complete(candidateEmail, combinedCode);
+    const submittedCode = combinedCode;
     setCombinedCode("");
+    complete(submittedCode);
   };
   return (
     <form className="flex flex-col gap-4" onSubmit={submit}>
       {invalid ? (
         <Alert variant="destructive">
           <AlertTitle>El código no es válido</AlertTitle>
-          <AlertDescription>Revisa el correo o solicita otro código.</AlertDescription>
+          <AlertDescription>Revisa el código del correo que recibiste.</AlertDescription>
         </Alert>
       ) : null}
-      <p className="text-sm text-muted-foreground">Enviamos un código a {candidateEmail}.</p>
+      <p className="text-sm text-muted-foreground">
+        Si recibes un código para {candidateEmail}, puedes ingresarlo aquí.
+      </p>
       <div className="flex flex-col gap-2">
         <Label htmlFor="replacement-code">Código de verificación</Label>
         <Input
@@ -98,13 +109,8 @@ const ProofForm = ({
       <Button contentLayout="wrap" disabled={combinedCode.length === 0} type="submit">
         Cambiar correo
       </Button>
-      <Button
-        contentLayout="wrap"
-        onClick={() => request(candidateEmail)}
-        type="button"
-        variant="outline"
-      >
-        Reenviar código
+      <Button contentLayout="wrap" onClick={repeat} type="button" variant="outline">
+        Solicitar código de nuevo
       </Button>
       <Button contentLayout="wrap" onClick={restart} type="button" variant="outline">
         Usar otro correo
@@ -127,29 +133,88 @@ const ReplacementUnavailable = (): JSX.Element => (
   </Alert>
 );
 
+const EditingForm = ({
+  request,
+  state,
+}: Pick<EmailReplacementViewProps, "request"> &
+  Readonly<{ state: Extract<EmailReplacementViewState, { _tag: "Editing" }> }>): JSX.Element => (
+  <>
+    {state.feedback !== "none" ? (
+      <Alert variant="destructive">
+        <AlertDescription>
+          {state.feedback === "invalid-candidate"
+            ? "Ingresa un correo válido."
+            : "No pudimos confirmar la solicitud. Puedes solicitar el código de nuevo."}
+        </AlertDescription>
+      </Alert>
+    ) : null}
+    <ReplacementForm
+      request={request}
+      draftEmail={state.feedback === "request-unavailable" ? state.draftEmail : ""}
+    />
+  </>
+);
+const ReplacementWaiting = ({
+  restart,
+}: Pick<EmailReplacementViewProps, "restart">): JSX.Element => (
+  <div className="flex flex-col gap-4">
+    <Button contentLayout="wrap" disabled type="button">
+      <Spinner /> Procesando…
+    </Button>
+    <Button contentLayout="wrap" onClick={restart} type="button" variant="outline">
+      Volver
+    </Button>
+  </div>
+);
 const replacementContent = ({
   complete,
   request,
+  repeat,
   restart,
   state,
-}: EmailReplacementViewProps): JSX.Element => {
-  if (state._tag === "Editing") return <ReplacementForm request={request} />;
+}: Omit<EmailReplacementViewProps, "lifecycleRef">): JSX.Element => {
+  if (state._tag === "Editing") return <EditingForm request={request} state={state} />;
   if (state._tag === "Requesting" || state._tag === "Completing") {
-    return (
-      <Button contentLayout="wrap" disabled type="button">
-        <Spinner /> Procesando…
-      </Button>
-    );
+    return <ReplacementWaiting restart={restart} />;
   }
-  if (state._tag === "AwaitingCode" || state._tag === "Invalid") {
+  if (state._tag === "AwaitingCode" || state._tag === "InvalidCode") {
     return (
       <ProofForm
         candidateEmail={state.candidateEmail}
         complete={complete}
-        invalid={state._tag === "Invalid"}
-        request={request}
+        invalid={state._tag === "InvalidCode"}
+        repeat={repeat}
         restart={restart}
       />
+    );
+  }
+  return replacementOutcome(state);
+};
+const replacementOutcome = (
+  state: Extract<
+    EmailReplacementViewState,
+    {
+      _tag:
+        | "FreshPairingRequired"
+        | "Uncertain"
+        | "Disposed"
+        | "Replaced"
+        | "PreparationUnavailable";
+    }
+  >
+): JSX.Element => {
+  if (state._tag === "PreparationUnavailable") {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>No pudimos iniciar el cambio de correo</AlertTitle>
+        <AlertDescription>
+          Vuelve a abrir esta página o inicia sesión de nuevo antes de intentar otro cambio.{" "}
+          <a className="underline" href="/login?resume=account">
+            Ir a vinculación
+          </a>
+          .
+        </AlertDescription>
+      </Alert>
     );
   }
   if (state._tag === "FreshPairingRequired") {
@@ -166,7 +231,7 @@ const replacementContent = ({
       </Alert>
     );
   }
-  if (state._tag === "Unavailable") {
+  if (state._tag === "Uncertain" || state._tag === "Disposed") {
     return <ReplacementUnavailable />;
   }
   state satisfies Extract<EmailReplacementViewState, { _tag: "Replaced" }>;
@@ -179,8 +244,11 @@ const replacementContent = ({
 };
 
 /** Mailbox proofs stay in transient form state and request bodies. */
-export const EmailReplacementView = (props: EmailReplacementViewProps): JSX.Element => (
-  <section aria-label="Correo de acceso" className="settings-section">
+export const EmailReplacementView = ({
+  lifecycleRef,
+  ...props
+}: EmailReplacementViewProps): JSX.Element => (
+  <section aria-label="Correo de acceso" className="settings-section" ref={lifecycleRef}>
     <div className="settings-section-icon" aria-hidden="true">
       <HugeiconsIcon icon={Mail01Icon} size={30} strokeWidth={1.5} />
     </div>

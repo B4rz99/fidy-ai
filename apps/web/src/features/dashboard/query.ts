@@ -1,10 +1,14 @@
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
-import { Data, Effect, Option, Schema } from "effect";
+import { type Context, Data, Effect, Option, Schema } from "effect";
 import type { AnyRouter } from "@tanstack/react-router";
 import { HttpClientError } from "effect/http";
 import { type AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 
+type Client = Context.Service.Shape<FidyClient>;
+type DashboardError =
+  | Effect.Error<ReturnType<Client["dashboard"]["getDashboardView"]>>
+  | Effect.Error<ReturnType<Client["dashboard"]["initializeDashboard"]>>;
 export type DashboardLoadPhase = "reading" | "initializing" | "reading-initialized";
 type DashboardReadRequest = Readonly<{
   attempt: DashboardReadAttempt;
@@ -35,9 +39,7 @@ export type DashboardRead = CanonicalSuccess<"dashboard.getDashboardView">;
 type DashboardLoad = Readonly<{
   refresh: (registry: AtomRegistry.AtomRegistry) => DashboardReadAttempt;
   phase: Atom.Atom<DashboardLoadPhase>;
-  result: Atom.Atom<
-    AsyncResult.AsyncResult<DashboardRead, Effect.Error<ReturnType<typeof loadDashboard>>>
-  >;
+  result: Atom.Atom<AsyncResult.AsyncResult<DashboardRead, DashboardError>>;
 }>;
 
 /** Only declared absence permits initialization. Initialization and reread failures propagate;
@@ -47,7 +49,7 @@ const loadDashboard = Effect.fnUntraced(function* (
   apiClient: FidyClient,
   setPhase: (phase: DashboardLoadPhase) => void,
   isVisiting: () => boolean
-) {
+): Effect.fn.Return<DashboardRead, DashboardError> {
   setPhase("reading");
   const client = yield* apiClient;
   return yield* client.dashboard.getDashboardView().pipe(

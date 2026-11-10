@@ -1,5 +1,5 @@
 import { openAiTestKey } from "../openai.test-fixture";
-import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { type ConsentUnavailable } from "./contract";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -1001,6 +1001,8 @@ it("refuses renewal when fresh browser authority expires between admission and c
     })
   ));
 
+class LostConsentCommitResponse extends Data.TaggedError("LostConsentCommitResponse") {}
+
 it("reconciles a lost renewal commit response without replacing the exact evidence", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1014,13 +1016,16 @@ it("reconciles a lost renewal commit response without replacing the exact eviden
         deadlineMilliseconds: current + 5000,
         renewal: payload,
       };
+      const runNative = Effect.runPromiseWith(yield* Effect.context<never>());
       const uncertain = new Proxy(db, {
         get(target, key, receiver): unknown {
           if (key === "batch") {
-            return async (statements: D1PreparedStatement[]): Promise<never> => {
-              await target.batch(statements);
-              throw new Error("Synthetic lost commit response");
-            };
+            return (statements: D1PreparedStatement[]): Promise<never> =>
+              runNative(
+                Effect.tryPromise(() => target.batch(statements)).pipe(
+                  Effect.andThen(Effect.fail(new LostConsentCommitResponse()))
+                )
+              );
           }
           const value: unknown = Reflect.get(target, key, receiver);
           return typeof value === "function" ? value.bind(target) : value;

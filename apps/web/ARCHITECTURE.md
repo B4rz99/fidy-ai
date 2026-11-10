@@ -599,7 +599,8 @@ One mounted Transaction Correction module coordinates inline Category edits, ind
 and atomic bulk Corrections for the canonical history resource. It owns synchronous write admission,
 observed revisions and outcomes. A definite save rejection automatically rereads history and Category
 data without replaying the mutation. The editor retains its draft and bulk selection through that
-reread; only an explicit subsequent save submits against the refreshed revisions. Failed refreshes
+reread; the original draft remains bound to its captured revisions. After fresh facts change,
+the User opens a new review before submitting another Correction. Failed refreshes
 retain the draft and lock writes until explicit retry succeeds. Recovery rereads the previously
 loaded history pages while retaining their display, so later-page editing remains mounted until the
 fresh pages settle. Successful saves and explicit uncertain-outcome verification keep their existing

@@ -4,7 +4,7 @@ import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import { PendingRead } from "@/ui/components/pending-read";
 import { TransactionReconciliation } from "./reconciliation";
-import { TransactionCorrectionContext } from "./correction-context";
+import { TransactionCorrectionContext, useTransactionCorrections } from "./correction-context";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
 import { CategoryVisual } from "@/ui/components/category-visual";
@@ -157,21 +157,25 @@ const DetailIdentity = ({
     </div>
   );
 };
-const DetailDeleteAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => (
-  <>
-    {props.editable && props.mode._tag !== "Deleting" && props.mode._tag !== "Reconciling" ? (
-      <Button
-        variant="outline"
-        data-transaction-slot="transaction-danger"
-
-        onClick={() => props.onMode({ _tag: "Deleting", status: "idle", original: Option.none() })}
-      >
-        <HugeiconsIcon icon={Delete02Icon} size={20} aria-hidden="true" />
-        Eliminar transacción
-      </Button>
-    ) : null}
-  </>
-);
+const DetailDeleteAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => {
+  const owner = useTransactionCorrections();
+  return props.editable && props.mode._tag !== "Deleting" && props.mode._tag !== "Reconciling" ? (
+    <Button
+      variant="outline"
+      data-transaction-slot="transaction-danger"
+      onClick={() => {
+        if (owner.reviewDeletion(props.transaction.id)) {
+          props.onMode({ _tag: "Deleting", status: "idle", original: Option.none() });
+        }
+      }}
+    >
+      <HugeiconsIcon icon={Delete02Icon} size={20} aria-hidden="true" />
+      Eliminar transacción
+    </Button>
+  ) : (
+    <></>
+  );
+};
 const detailTitle = (mode: DetailMode): string => {
   if (mode._tag === "Reconciling") return "Revisar vínculo";
   return mode._tag === "Deleting" ? "Eliminar transacción" : "Detalle de transacción";
@@ -187,11 +191,7 @@ const DetailClose = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Elemen
     <Button
       size="sm"
       variant="ghost"
-      onClick={
-        props.mode._tag === "Deleting" && props.mode.status !== "idle"
-          ? props.onRefresh
-          : props.onClose
-      }
+      onClick={props.onClose}
       aria-label="Cerrar detalle"
       disabled={
         relationshipLocked(props.mode) ||
@@ -227,8 +227,9 @@ const ReconciliationPanel = ({
   props,
 }: Readonly<{
   props: InspectedProps & { mode: Extract<DetailMode, { _tag: "Reconciling" }> };
-}>): JSX.Element =>
-  props.renderPanel(
+}>): JSX.Element => {
+  const owner = useTransactionCorrections();
+  return props.renderPanel(
     <DetailFrame props={props}>
       <TransactionReconciliation
         {...props}
@@ -242,29 +243,30 @@ const ReconciliationPanel = ({
           )
         }
         onHistory={props.onRefresh}
-        onDelete={(original) =>
-          props.onMode({ _tag: "Deleting", status: "idle", original: Option.some(original) })
-        }
+        onDelete={(original) => {
+          if (owner.reviewDeletion(original.id)) {
+            props.onMode({ _tag: "Deleting", status: "idle", original: Option.some(original) });
+          }
+        }}
       />
     </DetailFrame>
   );
+};
 const DeletionPanel = ({
   props,
 }: Readonly<{
   props: InspectedProps & { mode: Extract<DetailMode, { _tag: "Deleting" }> };
-}>): JSX.Element =>
-  props.renderPanel(
+}>): JSX.Element => {
+  const owner = useTransactionCorrections();
+  return props.renderPanel(
     <DetailFrame props={props}>
       <TransactionDeletion
-        apiClient={props.apiClient}
         transaction={props.transaction}
         editable={
-          props.editable &&
+          (props.editable || Option.contains(owner.reviewingDeletion, props.transaction.id)) &&
           (Option.isSome(props.mode.original) ||
             (Option.isNone(props.pair) && !props.inspectionWaiting))
         }
-        status={props.mode.status}
-        onStatus={(status) => props.onMode({ ...props.mode, status })}
         onDeleted={props.onDeleted}
         onCancel={() =>
           Option.isSome(props.mode.original) ? props.onRefresh() : props.onMode({ _tag: "Editing" })
@@ -273,6 +275,7 @@ const DeletionPanel = ({
       />
     </DetailFrame>
   );
+};
 // Admission uses the inspected revision; the mounted Correction then owns its draft and
 // canonical history recovery, including revisions newer than that inspection snapshot.
 const useEditingAdmission = (input: InspectedProps): boolean => {

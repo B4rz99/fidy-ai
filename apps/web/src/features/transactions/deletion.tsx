@@ -1,48 +1,10 @@
 import { RefreshButton } from "@/ui/components/refresh-button";
-import { useAtomSet } from "@effect/atom-react";
-import { Cause, Effect, Predicate } from "effect";
-import type * as Atom from "effect/reactivity/Atom";
-import { Reactivity } from "effect/reactivity";
-import { useState } from "react";
+import { Option } from "effect";
 import type { JSX } from "react";
-import type { FidyClient } from "@/transport/client";
+import { useTransactionCorrections } from "./correction-context";
 import { Button } from "@/ui/components/button";
 import type { DeletionStatus } from "./panel-state";
 import type { Transaction } from "./presentation";
-
-type DeletionOutcome = Readonly<{
-  onDeleted: () => void;
-  onRejected: () => void;
-  onUncertain: () => void;
-}>;
-const makeTransactionDeletion = (
-  apiClient: FidyClient,
-  id: Transaction["id"]
-): Atom.AtomResultFn<DeletionOutcome, void, never> =>
-  apiClient.runtime.fn<DeletionOutcome>()((command) =>
-    Effect.gen(function* () {
-      const client = yield* apiClient;
-      yield* client.transactions.deleteTransaction({ params: { id } });
-      yield* Effect.sync(command.onDeleted);
-    }).pipe(
-      Effect.catch((failure) =>
-        Reactivity.invalidate(["transaction-detail"]).pipe(
-          Effect.andThen(
-            Effect.sync(
-              Predicate.isTagged(failure, "ValidationFailed") ||
-                Predicate.isTagged(failure, "NotFound") ||
-                Predicate.isTagged(failure, "ResourceLimited")
-                ? command.onRejected
-                : command.onUncertain
-            )
-          )
-        )
-      ),
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(command.onUncertain)
-      )
-    )
-  );
 
 const DeletionFeedback = ({ status }: Readonly<{ status: DeletionStatus }>): JSX.Element => {
   if (status === "saving") return <output>Eliminando transacción…</output>;
@@ -64,30 +26,29 @@ const DeletionFeedback = ({ status }: Readonly<{ status: DeletionStatus }>): JSX
   return <></>;
 };
 
+const deletionStatus = (
+  status: ReturnType<typeof useTransactionCorrections>["status"]
+): DeletionStatus => {
+  if (status === "recovering" || status === "refreshing") return "saving";
+  return status === "recovered" ? "idle" : status;
+};
 /** Confirms permanent visibility removal; uncertain outcomes require a fresh history read. */
 export const TransactionDeletion = (
   props: Readonly<{
-    apiClient: FidyClient;
     transaction: Transaction;
-    status: DeletionStatus;
     editable: boolean;
-    onStatus: (status: DeletionStatus) => void;
     onDeleted: () => void;
     onCancel: () => void;
     onRefresh: () => void;
   }>
 ): JSX.Element => {
-  const [command] = useState(() => makeTransactionDeletion(props.apiClient, props.transaction.id));
-  const submit = useAtomSet(command);
+  const owner = useTransactionCorrections();
+  const status = deletionStatus(owner.status);
   const confirm = (): void => {
-    if (props.status !== "idle" || !props.editable) return;
-    props.onStatus("saving");
-    submit({
-      onDeleted: props.onDeleted,
-      onRejected: () => props.onStatus("rejected"),
-      onUncertain: () => props.onStatus("uncertain"),
-    });
+    if (!props.editable) return;
+    owner.confirmDeletion(props.transaction.id, props.onDeleted);
   };
+  const admitted = Option.contains(owner.reviewingDeletion, props.transaction.id);
   return (
     <section aria-label="Eliminar transacción" className="flex flex-col gap-4">
       <h3 className="sr-only">¿Eliminar esta transacción?</h3>
@@ -95,8 +56,8 @@ export const TransactionDeletion = (
         Dejará de aparecer en tu historial y en los cálculos. No puedes deshacer esta acción.
         Conservamos los registros de dónde se obtuvo.
       </p>
-      <DeletionFeedback status={props.status} />
-      {props.status === "rejected" || props.status === "uncertain" ? (
+      <DeletionFeedback status={status} />
+      {status === "rejected" || status === "uncertain" ? (
         <RefreshButton
           variant="outline"
           onClick={props.onRefresh}
@@ -104,13 +65,20 @@ export const TransactionDeletion = (
         />
       ) : (
         <div data-transaction-slot="transaction-form-actions transaction-delete-actions">
-          <Button variant="outline" disabled={props.status === "saving"} onClick={props.onCancel}>
+          <Button
+            variant="outline"
+            disabled={status === "saving"}
+            onClick={() => {
+              owner.cancelDeletion();
+              props.onCancel();
+            }}
+          >
             Cancelar
           </Button>
           <Button
             variant="outline"
             data-transaction-slot="transaction-danger"
-            disabled={props.status !== "idle" || !props.editable}
+            disabled={status !== "idle" || !props.editable || !admitted}
             onClick={confirm}
           >
             Eliminar

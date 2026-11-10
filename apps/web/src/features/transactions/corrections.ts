@@ -36,6 +36,10 @@ export type TransactionCorrections = Readonly<{
   submit: (correction: Correction) => void;
   recover: () => void;
   refreshAfterMutation: () => void;
+  reviewingDeletion: Option.Option<Transaction["id"]>;
+  reviewDeletion: (id: Transaction["id"]) => boolean;
+  cancelDeletion: () => void;
+  confirmDeletion: (id: Transaction["id"], onDeleted: () => void) => void;
   mount: () => () => void;
 }>;
 type Client = Context.Service.Shape<FidyClient>;
@@ -57,6 +61,9 @@ type Owner = Input & {
   inlineTransaction: Option.Option<Transaction["id"]>;
   workspaceGeneration: number;
   active: boolean;
+  deletion: Option.Option<Transaction["id"]>;
+  reviewGeneration: number;
+  cancelDeletion: () => void;
   generation: number;
   stopped: Deferred.Deferred<void>;
 };
@@ -82,26 +89,42 @@ export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionC
       inlineTransaction: Option.none(),
       workspaceGeneration: 0,
       active: false,
+      deletion: Option.none(),
+      reviewGeneration: 0,
+      cancelDeletion: () => cancelDeletion(owner),
       generation: 0,
       stopped: Deferred.makeUnsafe<void>(),
     };
     get.addFinalizer(() => dispose(owner));
     return present(owner);
   });
-const present = (owner: Owner): TransactionCorrections => ({
-  status: owner.status,
-  locked: owner.status !== "idle" && owner.status !== "recovered",
-  inlineTransaction: owner.inlineTransaction,
-  workspaceGeneration: owner.workspaceGeneration,
-  submit: (correction) => submit(owner, correction),
-  recover: () => recover(owner, "recovery"),
-  refreshAfterMutation: () => recover(owner, "saved"),
-  mount: () => {
-    owner.active = true;
-    owner.stopped = Deferred.makeUnsafe<void>();
-    return () => dispose(owner);
-  },
-});
+const present = (owner: Owner): TransactionCorrections => {
+  const generation = owner.workspaceGeneration;
+  const reviewGeneration = owner.reviewGeneration;
+  return {
+    status: owner.status,
+    locked:
+      Option.isSome(owner.deletion) || (owner.status !== "idle" && owner.status !== "recovered"),
+    reviewingDeletion: owner.deletion,
+    reviewDeletion: (id) => reviewDeletion(owner, id),
+    cancelDeletion: owner.cancelDeletion,
+    confirmDeletion: (id, onDeleted) => {
+      if (reviewGeneration === owner.reviewGeneration) confirmDeletion(owner, id, onDeleted);
+    },
+    inlineTransaction: owner.inlineTransaction,
+    workspaceGeneration: owner.workspaceGeneration,
+    submit: (correction) => {
+      if (owner.workspaceGeneration === generation) submit(owner, correction);
+    },
+    recover: () => recover(owner, "recovery"),
+    refreshAfterMutation: () => recover(owner, "saved"),
+    mount: () => {
+      owner.active = true;
+      owner.stopped = Deferred.makeUnsafe<void>();
+      return () => dispose(owner);
+    },
+  };
+};
 const notify = (owner: Owner): void => {
   if (owner.active) owner.get.setSelf(present(owner));
 };
@@ -198,8 +221,12 @@ const rejected = (cause: Cause.Cause<unknown>): boolean => {
       Predicate.isTagged(failure.value, "ResourceLimited"))
   );
 };
+const available = (owner: Owner): boolean =>
+  owner.active &&
+  Option.isNone(owner.deletion) &&
+  (owner.status === "idle" || owner.status === "recovered");
 const submit = (owner: Owner, correction: Correction): void => {
-  if (!owner.active || (owner.status !== "idle" && owner.status !== "recovered")) return;
+  if (!available(owner)) return;
   owner.inlineTransaction =
     correction.kind === "single" && correction.origin === "inline"
       ? Option.some(correction.transaction.id)
@@ -317,8 +344,63 @@ const recover = (owner: Owner, reason: "recovery" | "saved"): void => {
   ) {
     return;
   }
+  cancelDeletion(owner);
   const afterRejection = owner.status === "rejected";
   owner.status = afterRejection ? "refreshing" : "recovering";
   notify(owner);
   run(owner, reread(owner, owner.generation, afterRejection ? "rejected" : reason));
+};
+
+const reviewDeletion = (owner: Owner, id: Transaction["id"]): boolean => {
+  if (
+    !owner.active ||
+    Option.isSome(owner.deletion) ||
+    (owner.status !== "idle" && owner.status !== "recovered")
+  ) {
+    return false;
+  }
+  owner.reviewGeneration += 1;
+  owner.deletion = Option.some(id);
+  notify(owner);
+  return true;
+};
+const cancelDeletion = (owner: Owner): void => {
+  owner.reviewGeneration += 1;
+  owner.deletion = Option.none();
+  notify(owner);
+};
+const confirmDeletion = (owner: Owner, id: Transaction["id"], onDeleted: () => void): void => {
+  if (
+    !owner.active ||
+    !Option.contains(owner.deletion, id) ||
+    (owner.status !== "idle" && owner.status !== "recovered")
+  ) {
+    return;
+  }
+  owner.reviewGeneration += 1;
+  owner.deletion = Option.none();
+  owner.inlineTransaction = Option.none();
+  owner.status = "saving";
+  notify(owner);
+  const generation = owner.generation;
+  run(
+    owner,
+    Effect.gen(function* () {
+      const result = yield* Effect.exit(
+        Effect.gen(function* () {
+          const client = yield* owner.client;
+          yield* client.transactions.deleteTransaction({ params: { id } });
+        })
+      );
+      if (!live(owner, generation)) return;
+      if (result._tag === "Failure") {
+        owner.status = rejected(result.cause) ? "rejected" : "uncertain";
+        notify(owner);
+        return;
+      }
+      // Only an acknowledged delete may produce success feedback.
+      onDeleted();
+      yield* reread(owner, generation, "saved");
+    })
+  );
 };

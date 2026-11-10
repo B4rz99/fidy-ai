@@ -412,3 +412,59 @@ it.live("reading and disposing history does not initialize the correction transp
     }
   })
 );
+
+it.effect("deletion review shares Correction admission and consumes confirmation once", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    test.behavior.write = "uncertain";
+    expect(test.view().reviewDeletion(test.transaction.id)).toBe(true);
+    test.view().submit({
+      kind: "single",
+      origin: "editor",
+      transaction: test.transaction,
+      changes: { notes: "Blocked by deletion review" },
+    });
+    expect(test.sent).toHaveLength(0);
+    test.view().confirmDeletion(test.transaction.id, () => {
+      throw new Error("No receipt");
+    });
+    test.view().confirmDeletion(test.transaction.id, () => {
+      throw new Error("Duplicate");
+    });
+    yield* advance();
+    expect(test.sent).toHaveLength(1);
+    expect(test.sent[0]?.path).toBe(`/transactions/${firstId}`);
+    expect(test.sent[0]?.body).toBe("");
+    test.view().cancelDeletion(); // Panel disposal cancels only unsent intent.
+    expect(test.view().locked).toBe(true);
+    expect(test.view().reviewDeletion(test.transaction.id)).toBe(false);
+    test.view().submit({
+      kind: "bulk",
+      transactions: test.transactions,
+      changes: { notes: "Still blocked after closing the panel" },
+    });
+    yield* advance();
+    expect(test.sent).toHaveLength(1);
+  })
+);
+
+it.effect("cancelling unsent deletion retains facts and admits a new Correction", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    test.view().reviewDeletion(test.transaction.id);
+    test.view().cancelDeletion();
+    test.view().confirmDeletion(test.transaction.id, () => {
+      throw new Error("Cancelled review");
+    });
+    expect(test.sent).toHaveLength(0);
+    test.view().submit({
+      kind: "single",
+      origin: "editor",
+      transaction: test.transaction,
+      changes: { notes: "New action" },
+    });
+    yield* advance();
+    expect(test.sent).toHaveLength(1);
+    expect(test.sent[0]?.body).toContain("New action");
+  })
+);

@@ -575,6 +575,68 @@ it("refuses foreign, wrong-state and denied callbacks without exchanging any cod
       });
     })
   ));
+it("does not exchange a code until its one-shot claim and Audit commit together", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, started, callback } = yield* prepareActivation(db);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER fail_claim_audit BEFORE INSERT ON audit_entries WHEN NEW.operation='connections.claimAuthorization' BEGIN SELECT RAISE(ABORT,'synthetic_audit_failure'); END"
+          )
+          .run()
+      );
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT attempt_id FROM connection_grants").all())
+      ).toMatchObject({ results: [] });
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+        data: [{ id: started.connection.id, state: "Connecting" }],
+      });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER fail_claim_audit").run());
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(1);
+      const recovered = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => recovered.json())).toMatchObject({
+        data: [{ id: started.connection.id, state: "Active" }],
+      });
+    })
+  ));
+
+it("retains an older discovery for cleanup without replacing or demoting a newer Connection attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, started, callback } = yield* prepareActivation(db);
+      bank.beforeAccounts(
+        Effect.tryPromise(() => {
+          coordinatorByDatabase.delete(db);
+          return start(db);
+        }).pipe(Effect.asVoid, Effect.orDie)
+      );
+      yield* Effect.tryPromise(() => callback());
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+        data: [{ id: started.connection.id, state: "Connecting" }],
+      });
+      const accounts = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/connections/${started.connection.id}/accounts`))
+      );
+      expect(yield* Effect.tryPromise(() => accounts.json())).toEqual({ data: [], next: [] });
+      yield* sweepConnectionGrants({
+        db,
+        key: Option.some(Redacted.make("A".repeat(43))),
+        bank: Option.some(bank.cleanup),
+      });
+      expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(1);
+    })
+  ));
+
 it("rolls back Accounts and Active authority when the completion Audit cannot commit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2061,6 +2123,32 @@ it("retains known tokens for cleanup even when the exchange omits the required s
           db.prepare("SELECT state,envelope FROM connection_grants").first()
         )
       ).toEqual({ state: "cleanup_required", envelope: null });
+    })
+  ));
+
+it("quarantines recoverable tokens from a rejected exchange without activating or exchanging again", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, started, callback } = yield* prepareActivation(db);
+      bank.scenario("rejected-with-tokens");
+      yield* Effect.tryPromise(() => callback());
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+        data: [{ id: started.connection.id, state: "Action required" }],
+      });
+      const accounts = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/connections/${started.connection.id}/accounts`))
+      );
+      expect(yield* Effect.tryPromise(() => accounts.json())).toEqual({ data: [], next: [] });
+      yield* sweepConnectionGrants({
+        db,
+        key: Option.some(Redacted.make("A".repeat(43))),
+        bank: Option.some(bank.cleanup),
+      });
+      expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(1);
     })
   ));
 

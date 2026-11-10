@@ -421,8 +421,10 @@ The sandbox callback uses the original live WebSession and state digest, never b
 Fidy identity. Its single-use grant claim commits before token exchange, outside provider I/O;
 the User coordinator then settles validated Accounts, Active authority and Audit in one D1 batch.
 `connection_grants` owns claimed/quarantined/active/cleanup-required authority; its recoverable
-credentials use purpose-bound AES-GCM under a separate Core secret. `connection_accounts` retains
-stable Fidy identities across reauthorization and exposes only the currently active grant's exact
+credentials use purpose-bound AES-GCM under a separate Core secret. Recoverable tokens are
+quarantined before response status, token shape, bank identity and complete Account discovery can
+accept or reject activation. A rejected response never authorizes another exchange.
+`connection_accounts` retains stable Fidy identities across reauthorization and exposes only the currently active grant's exact
 Account set. The [Connections adapter](cloudflare/connections/) owns credential custody and recovery.
 
 ## Manual Pro operations

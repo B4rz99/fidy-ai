@@ -198,7 +198,15 @@ const routeActions = ({
       if (!shouldRetryLookup(get(owner.firstPage))) return get.set(resource.action, command);
       get.set(
         navigation,
-        makeGeneration(input, new Generation({ ...current, number: current.number + 1 }))
+        makeGeneration(
+          input,
+          new Generation({
+            number: current.number + 1,
+            pages: current.pages,
+            period: current.period,
+            locate: current.locate,
+          })
+        )
       );
     } else get.set(resource.action, command);
   });

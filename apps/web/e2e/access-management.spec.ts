@@ -915,9 +915,12 @@ const confirmRevocationTwice = (page: Page, all = false): Effect.Effect<void, Ca
         button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       })
   );
+const recoverPATMetadata = (page: Page): Promise<void> =>
+  page.getByRole("button", { name: "Comprobar estado de tokens", exact: true }).click();
 const refreshPATMetadata = (page: Page): Promise<void> =>
   page.getByRole("button", { name: "Actualizar tokens", exact: true }).press("Enter");
 const checkUnknownRevocation = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 1440, height: 1100 }));
   yield* Effect.tryPromise(() => installAccess(page));
   let mutations = 0,
     current = true,
@@ -949,7 +952,7 @@ const checkUnknownRevocation = Effect.fn(function* (page: Page) {
   yield* confirmRevocationTwice(page);
   yield* uncertainRevocation(page);
   failRead = true;
-  yield* Effect.tryPromise(() => refreshPATMetadata(page));
+  yield* Effect.tryPromise(() => recoverPATMetadata(page));
   yield* Effect.tryPromise(() =>
     expect(page.getByText("No pudimos actualizar tus tokens", { exact: true })).toBeVisible()
   );
@@ -958,8 +961,9 @@ const checkUnknownRevocation = Effect.fn(function* (page: Page) {
       page.getByRole("button", { name: "Desactivar todos los tokens", exact: true })
     ).toBeDisabled()
   );
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
   failRead = false;
-  yield* Effect.tryPromise(() => refreshPATMetadata(page));
+  yield* Effect.tryPromise(() => recoverPATMetadata(page));
   yield* Effect.tryPromise(() =>
     expect(
       page.getByText(
@@ -1043,7 +1047,7 @@ const checkAggregateRecovery = Effect.fn(function* (page: Page) {
   yield* confirmRevocationTwice(page, true);
   yield* uncertainRevocation(page);
   fixture.pats = [];
-  yield* Effect.tryPromise(() => refreshPATMetadata(page));
+  yield* Effect.tryPromise(() => recoverPATMetadata(page));
   const unknown = page.getByText(
     "La lista está actualizada. El resultado de la desactivación anterior y su cantidad siguen sin confirmar; la lista no confirma el cierre de autorizaciones pendientes.",
     { exact: true }
@@ -1211,7 +1215,7 @@ const checkRetiredManagement = Effect.fn(function* (page: Page, pending: "mutati
   if (pending === "refresh") {
     yield* uncertainRevocation(page);
     holding = true;
-    yield* Effect.tryPromise(() => refreshPATMetadata(page));
+    yield* Effect.tryPromise(() => recoverPATMetadata(page));
   }
   yield* Effect.tryPromise(() => expect.poll(() => held).toBe(1));
   yield* Effect.tryPromise(() =>
@@ -1267,10 +1271,22 @@ const checkOldMetadataGeneration = Effect.fn(function* (page: Page) {
   );
   yield* Effect.tryPromise(() => expect.poll(() => reads).toBe(1));
   yield* Effect.tryPromise(() =>
-    expect(page.getByRole("button", { name: "Actualizar tokens", exact: true })).toBeEnabled()
+    expect(
+      page.getByRole("button", { name: "Comprobar estado de tokens", exact: true })
+    ).toBeEnabled()
   );
-  yield* Effect.tryPromise(() => refreshPATMetadata(page));
+  yield* Effect.tryPromise(() => recoverPATMetadata(page));
   yield* Effect.tryPromise(() => expect.poll(() => reads).toBe(2));
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Comprobar estado de tokens", exact: true })
+    ).toBeDisabled()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Comprobar estado de tokens", exact: true })
+    ).toHaveText("Comprobando…")
+  );
   oldRead.resolve();
   yield* uncertainRevocation(page);
   yield* Effect.tryPromise(() =>

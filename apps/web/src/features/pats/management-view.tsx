@@ -433,6 +433,39 @@ const outcomeMessage = (state: PATManagementTask): Option.Option<string> => {
   });
 };
 
+const PATManagementFeedback = ({
+  task,
+  actions,
+}: Readonly<{ task: PATManagementTask; actions: PATManagementActions }>): ReactNode =>
+  Option.match(outcomeMessage(task), {
+    onNone: () => null,
+    onSome: (notice) => (
+      <Alert aria-live="polite">
+        <AlertTitle>
+          {task._tag === "Uncertain" || task._tag === "Refreshing"
+            ? "Desactivación sin confirmar"
+            : "Tokens de acceso"}
+        </AlertTitle>
+        <AlertDescription>
+          <p>{notice}</p>
+          {task._tag === "Uncertain" || task._tag === "Refreshing" ? (
+            <Button
+              type="button"
+              variant="outline"
+              contentLayout="wrap"
+              aria-label="Comprobar estado de tokens"
+              aria-busy={task._tag === "Refreshing"}
+              disabled={task._tag === "Refreshing"}
+              onClick={actions.refresh}
+            >
+              {task._tag === "Refreshing" ? "Comprobando…" : "Comprobar estado de tokens"}
+            </Button>
+          ) : null}
+        </AlertDescription>
+      </Alert>
+    ),
+  });
+
 /** Shows active-only metadata and distinguishes command receipts from current observations. */
 export const ActivePATManagementView = ({
   state,
@@ -453,19 +486,7 @@ export const ActivePATManagementView = ({
       ref={lifecycleRef}
     >
       <ActivePATHeading state={state} controller={controller} />
-      {Option.match(outcomeMessage(task), {
-        onNone: () => null,
-        onSome: (notice) => (
-          <Alert aria-live="polite">
-            <AlertTitle>
-              {task._tag === "Uncertain" || task._tag === "Refreshing"
-                ? "Desactivación sin confirmar"
-                : "Tokens de acceso"}
-            </AlertTitle>
-            <AlertDescription>{notice}</AlertDescription>
-          </Alert>
-        ),
-      })}
+      <PATManagementFeedback task={task} actions={actions} />
       {(task._tag === "Reviewing" || task._tag === "Revoking") && task.target._tag === "One" ? (
         <OneRevocationControl
           pat={task.target.pat}

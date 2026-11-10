@@ -861,3 +861,10 @@ there is no splitting into partially committed batches or automatic mutation rep
 Canonical query projection remains observational: retained Ready data, waiting and refreshFailure
 are independent. Route preparation keeps its explicit cached/fresh/display/refresh-display modes
 and nonrejecting completion; preparation completion does not certify a successful new read.
+
+Strict Transaction recovery uses loader-owned request/completion identities in the authenticated
+registry. A requested read forces a new loader invocation, independently of retained display content;
+equal new facts qualify. Failure, supersession, runtime failure and registry retirement settle as
+unsuccessful recovery. History still owns pagination/reset, and Category recovery rereads the metadata
+projection and its canonical fallback before admission can resume. Ordinary route preparation and
+Budget/Recurring refresh policies keep their existing contracts and retention.

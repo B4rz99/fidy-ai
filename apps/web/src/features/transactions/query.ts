@@ -1,4 +1,6 @@
-import { type Context, Data, type DateTime, type Effect, Option, pipe } from "effect";
+import { type Context, Data, type DateTime, Effect, Option, Schema, pipe } from "effect";
+import { HttpClientError } from "effect/http";
+import { forwardFreshQuery, makeFreshQuery } from "@/transport/fresh-query";
 import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient, InitialTransactionPage } from "@/transport/client";
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
@@ -25,22 +27,41 @@ const initialPages = Atom.family((_period: Period): InitialPage =>
 );
 const makeSource = (period: Period): Atom.Atom<Result> => {
   const initial = initialPages(period);
-  const remote = period.client.query("transactions", "listTransactions", {
-    ...workspaceQueryRetention,
-    query: { from: period.from, to: period.to, limit: 25 },
+  const remote = makeFreshQuery({
+    runtime: period.client.runtime,
+    load: period.client
+      .use((client) =>
+        client.transactions.listTransactions({
+          query: { from: period.from, to: period.to, limit: 25 },
+        })
+      )
+      .pipe(
+        Effect.catchIf(
+          (error) => Schema.isSchemaError(error) || HttpClientError.isHttpClientError(error),
+          Effect.die
+        )
+      ),
+    decorate: Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
   });
-  return Atom.readable(
+  const source = Atom.readable(
     (get) => Option.getOrElse(get(initial), () => get(remote)),
     (refresh) => {
       refresh(remote);
       refresh(initial);
     }
   ).pipe(Atom.setIdleTTL(workspaceQueryRetention.timeToLive));
+  return forwardFreshQuery({
+    query: source,
+    source: remote,
+    before: (registry) => registry.set(initial, Option.none()),
+  });
 };
 // Retain the canonical owner in the registry. SWR intentionally removes its own idle TTL,
 // so its collectible view must not be the weak family's only reference to that owner.
 const sources = Atom.family(makeSource);
-const views = Atom.family((source: Atom.Atom<Result>) => source.pipe(revalidateWorkspaceQuery));
+const views = Atom.family((source: Atom.Atom<Result>) =>
+  forwardFreshQuery({ query: source.pipe(revalidateWorkspaceQuery), source })
+);
 /** One canonical page owner; the fresh bootstrap handoff is retired on explicit refresh. */
 export const transactionFirstPage = ({
   client,

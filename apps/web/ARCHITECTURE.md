@@ -37,6 +37,15 @@ and enrollment refusals never gain automatic replay. Cancellation interrupts pac
 in-flight transport. Shared and server state belongs to Effect
 Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
 
+Connection continuation mounts one private task under the validated public attempt and immutable
+session binding. Its synchronous admission gate is consumed before dispatch and never reopened by a
+Ready read, including after an unconfirmed POST. Reads retain the canonical continuation review;
+pending or failed refreshes suppress actions. Disposal retires callbacks and interrupts local work
+without claiming remote rollback. Original attempt and shorter handoff deadlines are checked at
+action time as well as by the mounted expiry subscription, including auxiliary link navigation.
+Bank handoff remains distinct from Connection activation. Existing browser transport diagnostics
+cover these calls; this local admission change adds no telemetry or browser persistence.
+
 The hosted conversation derives its client directly from the existing `HostedTurnApi` declaration.
 It shares the same browser HTTP policy, transfer budget and immutable session binding as the other
 clients, without constructing the canonical API catalog when loaded independently.

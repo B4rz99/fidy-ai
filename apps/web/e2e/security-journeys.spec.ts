@@ -1,10 +1,12 @@
 import { retainedSecretCount } from "./browser-storage-fixture";
 import type { Page, Route } from "@playwright/test";
-import { type Cause, Effect } from "effect";
+import { type Cause, Deferred, Effect, Schema } from "effect";
+import { ApprovePATPairingPayload, PATPairingPublicCodeInput } from "@fidy/server/client";
 import { apiOrigin, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
+const runJourney = <A, E>(work: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(work);
 
 const patId = "24000000-0000-4000-8000-000000000245";
 const pat = {
@@ -185,5 +187,139 @@ test("reviews a PATPairing before approval without receiving its private bearer"
       expect(yield* Effect.tryPromise(() => page.locator("body").textContent())).not.toContain(
         bearer
       );
+    })
+  ));
+
+const settlePairingApproval = ({
+  route,
+  release,
+  approved,
+  originalId,
+}: Readonly<{
+  route: Route;
+  release: Deferred.Deferred<void>;
+  approved: Array<string>;
+  originalId: string;
+}>): Promise<void> =>
+  runJourney(
+    Effect.gen(function* () {
+      const input = yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(ApprovePATPairingPayload)
+      )(route.request().postData());
+      approved.push(input.pairingId);
+      if (input.pairingId === originalId) yield* Deferred.await(release);
+      yield* Effect.tryPromise(() =>
+        route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response({
+            pairingId: input.pairingId,
+            patExpiresAt: "2099-01-08T00:00:00.000Z",
+            claimBy: "2099-01-01T00:00:00.000Z",
+          }),
+        })
+      );
+    })
+  );
+test("abandoning an approval keeps its late response from completing a replacement review", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const originalId = "24000000-0000-4000-8000-000000000246";
+      const replacementId = "24000000-0000-4000-8000-000000000247";
+      const release = yield* Deferred.make<void>();
+      const approved: Array<string> = [];
+      yield* installRoute(page, `${apiOrigin}/pats/pairings/inspect`, (route) => {
+        const input = Schema.decodeUnknownSync(
+          Schema.fromJsonString(Schema.Struct({ publicCode: PATPairingPublicCodeInput }))
+        )(route.request().postData());
+        const replacement = input.publicCode === "JKLM-NPQR";
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response({
+            pairingId: replacement ? replacementId : originalId,
+            recipientLabel: replacement ? "Agente nuevo" : "Agente anterior",
+            scopes: ["read"],
+            lifetimeDays: 7,
+            claimBy: "2099-01-01T00:00:00.000Z",
+          }),
+        });
+      });
+      yield* installRoute(page, `${apiOrigin}/pats/pairings/approve`, (route) =>
+        settlePairingApproval({ route, release, approved, originalId })
+      );
+      yield* Effect.tryPromise(() => page.goto("/connect/cli?cliCode=BCDF-GHJK"));
+      yield* Effect.tryPromise(() => expect(page.getByText("Agente anterior")).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Autorizar acceso" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Autorizando…" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar revisión" }).click());
+      yield* Effect.tryPromise(() => page.getByLabel("Código", { exact: true }).fill("JKLM-NPQR"));
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Continuar" }).click());
+      yield* Effect.tryPromise(() => expect(page.getByText("Agente nuevo")).toBeVisible());
+      const settled = page.waitForResponse(`${apiOrigin}/pats/pairings/approve`);
+      yield* Deferred.succeed(release, undefined);
+      yield* Effect.tryPromise(() => settled);
+      yield* Effect.tryPromise(() => expect(page.getByText("Acceso autorizado")).toHaveCount(0));
+      yield* Effect.tryPromise(() => expect(page.getByText("Agente nuevo")).toBeVisible());
+      expect(approved).toEqual([originalId]);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Autorizar acceso" }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText("Acceso autorizado")).toBeVisible());
+      expect(approved).toEqual([originalId, replacementId]);
+    })
+  ));
+
+test("a lost PAT approval response stays uncertain without replaying or claiming login", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let approvals = 0;
+      yield* installRoute(page, `${apiOrigin}/pats/pairings/inspect`, (route) =>
+        route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: response({
+            pairingId: "24000000-0000-4000-8000-000000000246",
+            recipientLabel: "Agente incierto",
+            scopes: ["read"],
+            lifetimeDays: 7,
+            claimBy: "2099-01-01T00:00:00.000Z",
+          }),
+        })
+      );
+      yield* installRoute(page, `${apiOrigin}/pats/pairings/approve`, (route) => {
+        approvals += 1;
+        return route.abort("failed");
+      });
+      yield* Effect.tryPromise(() => page.goto("/connect/cli?cliCode=BCDF-GHJK"));
+      yield* Effect.tryPromise(() => expect(page.getByText("Agente incierto")).toBeVisible());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Autorizar acceso" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("No pudimos confirmar la autorización")).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Revisar accesos" })).toHaveAttribute(
+          "href",
+          "/settings/access"
+        )
+      );
+      yield* Effect.tryPromise(() => expect(page.getByText("Acceso autorizado")).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("No encontramos ese código")).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Autorizar acceso" })).toHaveCount(0)
+      );
+      expect(approvals).toBe(1);
     })
   ));

@@ -119,13 +119,20 @@ export const approvePairingGrant = ({
 
 /** Consume a single User-bound PATPairing approval under current Consent and issuance limits. */
 export const claimPairingGrant = (
-  input: Readonly<{ pairingId: string; userId: string; current: number }>
+  input: Readonly<{ pairingId: string; userId: string; proofDigest: Uint8Array; current: number }>
 ): OwnedStatement => {
   const protectedClaim = protectConsentStatement({
     statement: {
       sql: `UPDATE pat_pairings SET state = 'claimed' WHERE id = ? AND state = 'approved_awaiting_claim'
-        AND user_id = ? AND approved_at_ms <= ? AND expires_at_ms > ? AND pat_expires_at_ms > ?`,
-      params: [input.pairingId, input.userId, input.current, input.current, input.current],
+        AND user_id = ? AND proof_digest = ? AND approved_at_ms <= ? AND expires_at_ms > ? AND pat_expires_at_ms > ?`,
+      params: [
+        input.pairingId,
+        input.userId,
+        input.proofDigest,
+        input.current,
+        input.current,
+        input.current,
+      ],
     },
     subject: { _tag: "Owner", column: "pat_pairings.user_id" },
     requirement: "unrevoked",

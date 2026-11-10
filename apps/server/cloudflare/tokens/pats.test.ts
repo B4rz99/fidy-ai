@@ -630,6 +630,198 @@ it("refuses a changed paired grant atomically and lets the original proof retry"
     })
   ));
 
+it("refuses a claim when its initiating proof changes before the guarded commit", () =>
+  runTest(
+    Effect.gen(function* () {
+      let beforeCommit = (): Promise<unknown> => Promise.resolve();
+      const { db, send, sessions } = yield* awaitPromise(
+        setup(undefined, (native) => ({
+          prepare: native.prepare.bind(native),
+          exec: native.exec.bind(native),
+          dump: native.dump.bind(native),
+          withSession: native.withSession.bind(native),
+          batch: <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+            beforeCommit().then(() => native.batch<Row>(statements)),
+        }))
+      );
+      const started = yield* Schema.decodeUnknownEffect(Started)(
+        yield* awaitPromise(
+          (yield* awaitPromise(
+            send({
+              path: "/pat-pairings",
+              method: "POST",
+              payload: { recipientLabel: "Original client", scopes: ["read"], lifetimeDays: 7 },
+            })
+          )).json()
+        )
+      );
+      expect(
+        (yield* awaitPromise(
+          send({
+            path: "/pats/pairings/approve",
+            method: "POST",
+            session: sessions[0],
+            payload: { pairingId: started.pairingId },
+          })
+        )).status
+      ).toBe(200);
+      const changedProof = yield* awaitPromise(dig("z".repeat(43)));
+      beforeCommit = (): Promise<unknown> => {
+        beforeCommit = (): Promise<unknown> => Promise.resolve();
+        return db
+          .prepare("UPDATE pat_pairings SET proof_digest = ? WHERE id = ?")
+          .bind(changedProof, started.pairingId)
+          .run();
+      };
+      const denied = yield* awaitPromise(
+        send({
+          path: "/pat-pairings/claim",
+          method: "POST",
+          payload: { pairingId: started.pairingId, privateDeviceCode: started.privateDeviceCode },
+        })
+      );
+      expect(denied.status).toBe(400);
+      expect(yield* awaitPromise(denied.json())).not.toHaveProperty("bearer");
+      expect(yield* awaitPromise(db.prepare("SELECT count(*) AS total FROM pats").first())).toEqual(
+        { total: 0 }
+      );
+      expect(
+        yield* awaitPromise(
+          db.prepare("SELECT state FROM pat_pairings WHERE id = ?").bind(started.pairingId).first()
+        )
+      ).toEqual({ state: "approved_awaiting_claim" });
+      const valid = yield* awaitPromise(
+        send({
+          path: "/pat-pairings/claim",
+          method: "POST",
+          payload: { pairingId: started.pairingId, privateDeviceCode: "z".repeat(43) },
+        })
+      );
+      expect(valid.status).toBe(200);
+    })
+  ));
+
+it("refuses the original pairing deadline before maintenance materializes expiry", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const startedAt = clock();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(startedAt);
+      const started = yield* Schema.decodeUnknownEffect(Started)(
+        yield* awaitPromise(
+          (yield* awaitPromise(
+            send({
+              path: "/pat-pairings",
+              method: "POST",
+              payload: { recipientLabel: "Deadline client", scopes: ["read"] },
+            })
+          )).json()
+        )
+      );
+      expect(
+        (yield* awaitPromise(
+          send({
+            path: "/pats/pairings/approve",
+            method: "POST",
+            session: sessions[0],
+            payload: { pairingId: started.pairingId },
+          })
+        )).status
+      ).toBe(200);
+      vi.setSystemTime(startedAt + 600_000);
+      const refused = yield* awaitPromise(
+        send({
+          path: "/pat-pairings/claim",
+          method: "POST",
+          payload: { pairingId: started.pairingId, privateDeviceCode: started.privateDeviceCode },
+        })
+      );
+      expect(refused.status).toBe(400);
+      expect(yield* awaitPromise(refused.json())).not.toHaveProperty("bearer");
+      expect(
+        yield* awaitPromise(
+          db.prepare("SELECT state FROM pat_pairings WHERE id = ?").bind(started.pairingId).first()
+        )
+      ).toEqual({ state: "approved_awaiting_claim" });
+      expect(yield* awaitPromise(db.prepare("SELECT count(*) AS total FROM pats").first())).toEqual(
+        { total: 0 }
+      );
+    })
+  ));
+
+it.each(["claim-first", "revoke-first"] as const)(
+  "retains one-shot disclosure and current revocation in %s commit order",
+  (order) =>
+    runTest(
+      Effect.gen(function* () {
+        const { db, send, sessions } = yield* awaitPromise(setup());
+        const started = yield* Schema.decodeUnknownEffect(Started)(
+          yield* awaitPromise(
+            (yield* awaitPromise(
+              send({
+                path: "/pat-pairings",
+                method: "POST",
+                payload: { recipientLabel: "Ordered client", scopes: ["read"] },
+              })
+            )).json()
+          )
+        );
+        expect(
+          (yield* awaitPromise(
+            send({
+              path: "/pats/pairings/approve",
+              method: "POST",
+              session: sessions[0],
+              payload: { pairingId: started.pairingId },
+            })
+          )).status
+        ).toBe(200);
+        const claim = (): Promise<Response> =>
+          send({
+            path: "/pat-pairings/claim",
+            method: "POST",
+            payload: { pairingId: started.pairingId, privateDeviceCode: started.privateDeviceCode },
+          });
+        if (order === "claim-first") {
+          const issued = yield* Schema.decodeUnknownEffect(Issued)(
+            yield* awaitPromise((yield* awaitPromise(claim())).json())
+          );
+          expect(
+            (yield* awaitPromise(
+              send({ path: "/categories", method: "GET", bearer: issued.bearer })
+            )).status
+          ).toBe(200);
+          expect(
+            (yield* awaitPromise(send({ path: "/pats", method: "DELETE", session: sessions[0] })))
+              .status
+          ).toBe(200);
+          expect(
+            (yield* awaitPromise(
+              send({ path: "/categories", method: "GET", bearer: issued.bearer })
+            )).status
+          ).toBe(401);
+        } else {
+          expect(
+            (yield* awaitPromise(send({ path: "/pats", method: "DELETE", session: sessions[0] })))
+              .status
+          ).toBe(200);
+        }
+        const refused = yield* awaitPromise(claim());
+        expect(refused.status).toBe(400);
+        expect(yield* awaitPromise(refused.json())).not.toHaveProperty("bearer");
+        expect(
+          yield* awaitPromise(
+            db
+              .prepare("SELECT count(*) AS total FROM pats WHERE pairing_id = ?")
+              .bind(started.pairingId)
+              .first()
+          )
+        ).toEqual({ total: order === "claim-first" ? 1 : 0 });
+      })
+    )
+);
+
 it.each(["fresh", "live"] as const)(
   "releases one scoped bearer after approval by a %s browser session, never on replay",
   (sessionAge) =>

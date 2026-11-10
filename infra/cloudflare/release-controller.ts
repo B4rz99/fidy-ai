@@ -235,12 +235,7 @@ const restoreCore = Effect.fn(function* (
       port,
       snapshot.core.name,
       stable(snapshot.core).versions
-    ).pipe(
-      Effect.match({
-        onFailure: () => false,
-        onSuccess: () => true,
-      })
-    );
+    ).pipe(Effect.isSuccess);
     if (restored) {
       return yield* Effect.fail(
         Error("Public promotion failed; stable Core restored; release failed")

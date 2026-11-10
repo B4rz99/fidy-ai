@@ -384,6 +384,9 @@ for (const stage of ["begin", "handoff", "auxiliary handoff"] as const) {
         );
         if (stage !== "begin") yield* Effect.tryPromise(() => expect(action).toHaveCount(0));
         else yield* Effect.tryPromise(() => expect(action).toBeDisabled());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Consultar estado", exact: true })).toBeDisabled()
+        );
         expect(effects).toBe(0);
       })
     ));

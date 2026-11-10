@@ -8,7 +8,8 @@ import { WorkspaceHeader } from "@/ui/components/workspace-layout";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { type JSX, type MouseEvent, useState, useSyncExternalStore } from "react";
+import { Atom } from "effect/reactivity";
+import { type JSX, type MouseEvent, useState } from "react";
 import { ConnectionAttemptReference, type ConnectionContinuationReview } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
@@ -75,62 +76,50 @@ const BankHandoff = ({
     </a>
   );
 };
-type Deadline = Readonly<{
-  subscribe: (changed: () => void) => () => void;
-  expired: () => boolean;
-  check: () => boolean;
-}>;
-const makeDeadline = (expiresAt: DateTime.Utc): Deadline => {
-  const listeners = new Set<() => void>();
-  const expired = (): boolean =>
-    expiresAt.epochMilliseconds <= Effect.runSync(Clock.currentTimeMillis);
-  const changed = (): void => {
-    for (const listener of listeners) listener();
-  };
-  return {
-    expired,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      const timer = window.setTimeout(
-        changed,
-        Math.max(0, expiresAt.epochMilliseconds - Effect.runSync(Clock.currentTimeMillis))
-      );
-      return () => {
-        listeners.delete(listener);
-        window.clearTimeout(timer);
-      };
-    },
-    check: () => {
-      if (!expired()) return true;
-      changed();
-      return false;
-    },
-  };
-};
 const useExpiry = (
   expiresAt: DateTime.Utc
 ): Readonly<{ expired: boolean; check: () => boolean }> => {
-  const [deadline] = useState(() => makeDeadline(expiresAt));
+  const { webAuthClient: client, registry } = useRouter().options.context;
+  const [expiry] = useState(() => {
+    const timer = client.runtime.atom(
+      Effect.gen(function* () {
+        const current = yield* Clock.currentTimeMillis;
+        yield* Effect.sleep(Math.max(0, expiresAt.epochMilliseconds - current));
+        return true;
+      })
+    );
+    return Atom.writable(
+      (get) =>
+        get(timer).pipe(presentCanonicalQuery)._tag === "Ready" ||
+        expiresAt.epochMilliseconds <= Effect.runSync(Clock.currentTimeMillis),
+      (context, _value: void) => context.setSelf(true)
+    );
+  });
   return {
-    expired: useSyncExternalStore(deadline.subscribe, deadline.expired),
-    check: deadline.check,
+    expired: useAtomValue(expiry),
+    check: () => {
+      if (expiresAt.epochMilliseconds > Effect.runSync(Clock.currentTimeMillis)) return true;
+      registry.set(expiry, undefined);
+      return false;
+    },
   };
 };
 const ExpiringReview = ({
   review,
   busy,
   blocked,
+  expired,
   begin,
   canFollow,
 }: Readonly<{
   review: typeof ConnectionContinuationReview.Type;
   busy: boolean;
   blocked: boolean;
+  expired: boolean;
   begin: () => void;
   canFollow: () => boolean;
 }>): JSX.Element => {
   const expiresAt = continuationDeadline(review);
-  const { expired, check } = useExpiry(expiresAt);
   const disabled = busy || blocked || expired;
   return (
     <Card className="w-full max-w-md">
@@ -155,16 +144,11 @@ const ExpiringReview = ({
         </p>
         {expired ? <p role="alert">La solicitud venció. Inicia una nueva conexión.</p> : null}
         {review.phase === "ready" ? (
-          <Button
-            disabled={disabled}
-            onClick={() => {
-              if (check()) begin();
-            }}
-          >
+          <Button disabled={disabled} onClick={begin}>
             {busy ? "Continuando…" : "Continuar"}
           </Button>
         ) : null}
-        <BankHandoff review={review} disabled={disabled} canFollow={() => check() && canFollow()} />
+        <BankHandoff review={review} disabled={disabled} canFollow={canFollow} />
         <Button variant="outline" render={<Link to="/app/transactions" />}>
           Cancelar y volver a Fidy
         </Button>
@@ -195,31 +179,58 @@ const ReviewNotices = ({
     ) : null}
   </>
 );
+type ReadyContinuation = Extract<ReturnType<typeof useContinuation>["result"], { _tag: "Ready" }>;
+const ContinuationReview = ({
+  task,
+  review,
+}: Readonly<{
+  task: ReturnType<typeof useContinuation>;
+  review: ReadyContinuation;
+}>): JSX.Element => {
+  const { busy, uncertain, submitted, begin, refresh, canFollow } = task;
+  const { value, waiting, refreshFailure } = review;
+  const { expired, check } = useExpiry(continuationDeadline(value));
+  return (
+    <>
+      <ReviewNotices
+        uncertain={uncertain}
+        phase={value.phase}
+        stale={Option.isSome(refreshFailure)}
+      />
+      <ExpiringReview
+        review={value}
+        busy={busy || waiting}
+        expired={expired}
+        blocked={Option.isSome(refreshFailure) || (submitted && value.phase === "ready")}
+        begin={() => {
+          if (check()) begin();
+        }}
+        canFollow={() => check() && canFollow(value)}
+      />
+      <Button
+        variant="outline"
+        disabled={expired || busy || waiting}
+        onClick={() => {
+          if (check()) refresh();
+        }}
+      >
+        Consultar estado
+      </Button>
+    </>
+  );
+};
 const Continuation = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX.Element => {
-  const { result, busy, uncertain, submitted, mounted, begin, refresh, canFollow } =
-    useContinuation(attempt);
+  const task = useContinuation(attempt);
+  const { result, mounted } = task;
   if (result._tag === "Initial") return <PendingRead label="Cargando solicitud" />;
   if (result._tag === "Failure") return <Unavailable attempt={attempt} />;
   return (
     <div ref={mounted} className="flex w-full max-w-md flex-col gap-3">
-      <ReviewNotices
-        uncertain={uncertain}
-        phase={result.value.phase}
-        stale={Option.isSome(result.refreshFailure)}
-      />
-      <ExpiringReview
+      <ContinuationReview
         key={continuationDeadline(result.value).epochMilliseconds}
-        review={result.value}
-        busy={busy || result.waiting}
-        blocked={
-          Option.isSome(result.refreshFailure) || (submitted && result.value.phase === "ready")
-        }
-        begin={begin}
-        canFollow={() => canFollow(result.value)}
+        task={task}
+        review={result}
       />
-      <Button variant="outline" disabled={busy || result.waiting} onClick={refresh}>
-        Consultar estado
-      </Button>
     </div>
   );
 };

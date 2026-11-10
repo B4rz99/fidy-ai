@@ -42,7 +42,8 @@ session binding. Its synchronous admission gate is consumed before dispatch and 
 Ready read, including after an unconfirmed POST. Reads retain the canonical continuation review;
 pending or failed refreshes suppress actions. Disposal retires callbacks and interrupts local work
 without claiming remote rollback. Original attempt and shorter handoff deadlines are checked at
-action time as well as by the mounted expiry subscription, including auxiliary link navigation.
+action time as well as by authentication-registry expiry work, including auxiliary link navigation.
+The same expiry projection disables refresh and removes the bank handoff.
 Bank handoff remains distinct from Connection activation. Existing browser transport diagnostics
 cover these calls; this local admission change adds no telemetry or browser persistence.
 

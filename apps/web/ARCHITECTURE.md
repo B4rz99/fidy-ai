@@ -702,9 +702,13 @@ pending/error controls available instead of blocking the entire route. Pending r
 its retained display while its loader revalidates in the background. Transactions still awaits
 fresh Consent before starting its entry preparation or revealing the destination. Actual destination visits start their display reads. Code preparation does not mark a planning
 workspace as visited.
-Actual Transactions entries refresh the shared Consent source before revealing the destination.
-Its 400 ms idle retention bridges loader-to-React subscription only; every actual entry refreshes
-it, including Back and rapid re-entry. Transaction loader preloads are disabled, so an in-flight
+The Transactions entry preparation/rendering owner selects freshness from the actual loader cause.
+Only its one-use initial observation aged from zero through less than 400 ms, or a router stay in
+the mounted entry, uses cached preparation. Later entries refresh the shared Consent source,
+including Back and rapid re-entry; the 400 ms idle retention alone never admits an entry. The
+router supplies validated search and its signal without choosing cached or fresh access. A retired
+signal prevents entry preparation from consuming the initial observation or starting ordinary work.
+Transaction loader preloads are disabled, so an in-flight
 code-only speculative result cannot satisfy the actual entry; code preparation remains independent.
 The route stores no copy of Consent or product data. Preparation observes the authentication
 registry's existing query and leaves failures there for the ordinary error view. Cached product

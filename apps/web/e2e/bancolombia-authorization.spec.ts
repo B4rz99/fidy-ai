@@ -257,6 +257,25 @@ test("retires a pending bank preparation when another browser session replaces i
     })
   ));
 
+const expireUnknownReady = (page: Page): Effect.Effect<void, BrowserFailure> =>
+  Effect.gen(function* () {
+    const refresh = page.getByRole("button", { name: "Consultar estado", exact: true });
+    const deadline = yield* Schema.decodeUnknownEffect(Schema.DateTimeUtcFromString)(
+      yield* Effect.tryPromise(() => page.locator("time").getAttribute("datetime"))
+    );
+    yield* Effect.tryPromise(() => page.clock.setSystemTime(deadline.epochMilliseconds + 1));
+    yield* Effect.tryPromise(() => refresh.click());
+    yield* Effect.tryPromise(() => expect(refresh).toBeDisabled());
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByText(
+          "No pudimos confirmar el resultado. Esta solicitud venció; no la vuelvas a enviar.",
+          { exact: true }
+        )
+      ).toBeVisible()
+    );
+  });
+
 test("keeps a lost Begin unresolved through old Ready and failed reads, recovering only authoritative handoff", ({
   page,
   request,
@@ -306,6 +325,10 @@ test("keeps a lost Begin unresolved through old Ready and failed reads, recoveri
       recovery.select("live");
       yield* Effect.tryPromise(() => refresh.click());
       yield* Effect.tryPromise(() => expect(handoff).toBeVisible());
+      recovery.select("ready");
+      yield* Effect.tryPromise(() => refresh.click());
+      yield* Effect.tryPromise(() => expect(action).toBeDisabled());
+      yield* expireUnknownReady(page);
       expect(submissions).toBe(1);
     })
   ));
@@ -337,6 +360,11 @@ test("never reopens Begin when a completed submission is followed by an older Re
         page.getByRole("button", { name: "Consultar estado", exact: true }).click()
       );
       yield* Effect.tryPromise(() => expect(action).toBeDisabled());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toHaveText(
+          "La solicitud se envió. Consulta el estado para ver el resultado; no la vuelvas a enviar."
+        )
+      );
       expect(submissions).toBe(1);
     })
   ));

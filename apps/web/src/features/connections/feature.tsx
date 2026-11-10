@@ -156,22 +156,33 @@ const ExpiringReview = ({
     </Card>
   );
 };
+const UncertainNotice = ({ expired }: Readonly<{ expired: boolean }>): JSX.Element => (
+  <p role="alert">
+    {expired
+      ? "No pudimos confirmar el resultado. Esta solicitud venció; no la vuelvas a enviar."
+      : "No pudimos confirmar el resultado. Consulta el estado antes de continuar; no repitas esta solicitud."}
+  </p>
+);
 const ReviewNotices = ({
   uncertain,
+  sent,
+  expired,
   phase,
   stale,
 }: Readonly<{
   uncertain: boolean;
+  sent: boolean;
+  expired: boolean;
   phase: (typeof ConnectionContinuationReview.Type)["phase"];
   stale: boolean;
 }>): JSX.Element => (
   <>
-    {uncertain && phase === "ready" ? (
-      <p role="alert">
-        No pudimos confirmar el resultado. Consulta el estado antes de continuar; no repitas esta
-        solicitud.
-      </p>
+    {sent && !uncertain && !expired && phase === "ready" ? (
+      <output>
+        La solicitud se envió. Consulta el estado para ver el resultado; no la vuelvas a enviar.
+      </output>
     ) : null}
+    {uncertain && phase === "ready" ? <UncertainNotice expired={expired} /> : null}
     {stale ? (
       <p role="alert">
         No pudimos actualizar el estado. La información mostrada puede estar desactualizada.
@@ -194,6 +205,8 @@ const ContinuationReview = ({
     <>
       <ReviewNotices
         uncertain={uncertain}
+        sent={submitted && !busy}
+        expired={expired}
         phase={value.phase}
         stale={Option.isSome(refreshFailure)}
       />

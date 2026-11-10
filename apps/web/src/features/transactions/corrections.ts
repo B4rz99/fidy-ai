@@ -311,7 +311,7 @@ const reread = (
     if (!afterRejection) owner.workspaceGeneration += 1;
     owner.status = statuses.waiting;
     notify(owner);
-    owner.get.set(owner.historyAction, "refresh");
+    owner.get.set(owner.historyAction, "refresh-pages");
     const results = yield* Effect.all(
       [
         readFreshQuery({ registry: owner.get.registry, query: owner.categories }),
@@ -391,7 +391,6 @@ const confirmDeletion = (owner: Owner, id: Transaction["id"], onDeleted: () => v
         notify(owner);
         return;
       }
-      // Only an acknowledged delete may produce success feedback.
       onDeleted();
       yield* reread(owner, generation, "saved");
     })
@@ -408,7 +407,6 @@ const readAffectedIdentities = (owner: Owner): Effect.Effect<boolean> =>
     const missing = owner.affected.filter((id) => !observed.has(id));
     if (missing.length === 0) return true;
     const client = yield* owner.client;
-    // The admitted canonical batch bounds this set. Sequential reads avoid an unbounded fan-out.
     for (const id of missing) {
       if (!(yield* readIdentity(client, id))) return false;
     }

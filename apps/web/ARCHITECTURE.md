@@ -605,6 +605,9 @@ retain the draft and lock writes until explicit retry succeeds. Recovery rereads
 loaded history pages while retaining their display, so later-page editing remains mounted until the
 fresh pages settle. Every admitted mutation retains its affected identities until required Category
 and list loaders have completed fresh canonical reads and loaded history continuation has settled.
+The Correction owner resets continuation navigation without scheduling an ordinary first-page
+refresh; its strict read owns that loader invocation, so a queued display refresh cannot interrupt
+recovery's new first-page read.
 Identities absent from that history are then read directly, sequentially within the canonical batch
 bound; decoded NotFound establishes current absence but cannot attribute a lost deletion receipt.
 A failed direct lookup keeps conflicting writes locked. Successful saves and explicit uncertain-outcome verification keep their existing

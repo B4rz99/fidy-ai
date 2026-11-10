@@ -7,6 +7,7 @@ import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/w
 import { makeFreshQuery } from "@/transport/fresh-query";
 import { makeFidyClient } from "@/transport/client";
 import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
+import { transactionFirstPage } from "./query";
 import { type HistoryState, transactionHistory } from "./history";
 
 const firstId = "25000000-0000-4000-8000-000000000001";
@@ -156,14 +157,7 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
     from: DateTime.makeUnsafe("2026-10-01T00:00:00Z"),
     to: DateTime.makeUnsafe("2026-11-01T00:00:00Z"),
   };
-  const firstPage = makeFreshQuery({
-    runtime: client.runtime,
-    load: Effect.gen(function* () {
-      const api = yield* client;
-      return yield* api.transactions.listTransactions({ query: period });
-    }),
-    decorate: revalidateWorkspaceQuery,
-  });
+  const firstPage = transactionFirstPage({ client, period });
   const categories = makeFreshQuery({
     runtime: client.runtime,
     load: Effect.gen(function* () {

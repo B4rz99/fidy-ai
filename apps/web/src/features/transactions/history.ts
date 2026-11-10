@@ -28,6 +28,7 @@ export type HistoryCommand =
   | "retry"
   | "reset"
   | "refresh"
+  | "refresh-pages"
   | Readonly<{ restorePages: number }>;
 type History = Readonly<{
   state: Atom.Atom<HistoryState>;
@@ -225,12 +226,12 @@ export const transactionHistory = ({
   const action = Atom.fnSync<HistoryCommand>()((command, get): void => {
     const changePages = (pages: number): void => get.set(navigation, { ...get(navigation), pages });
     if (typeof command !== "string") return changePages(command.restorePages);
-    if (command === "reset" || command === "refresh") {
+    if (["reset", "refresh", "refresh-pages"].includes(command)) {
       get.set(navigation, {
         generation: get(navigation).generation + 1,
-        pages: command === "refresh" ? Math.max(1, get(state).loadedPages) : 1,
+        pages: command === "reset" ? 1 : Math.max(1, get(state).loadedPages),
       });
-      get.refresh(firstPage);
+      if (command !== "refresh-pages") get.refresh(firstPage);
     } else if (command === "retry") {
       Option.match(get(state).retryPage, {
         onNone: () => get.refresh(firstPage),

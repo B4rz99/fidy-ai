@@ -1,4 +1,4 @@
-import { Clock, Effect, Exit, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import type { OAuthConfirmationWork, OAuthNativeReview } from "../../oauth-confirmation/contract";
 import { oauthReviewResponse } from "../../oauth-confirmation/operations";
 import { prepareOAuthUnitConfirmation } from "./oauth-confirmation-unit";
@@ -296,14 +296,6 @@ const childStatements = ({
   ];
 };
 
-/**
- * Commit one ordered set of owner-prepared canonical mutations in a single D1 atomic unit and read
- * each committed value back. Each child has its own indexed Audit assertion and a completion assertion;
- * a guard that silently changes no row aborts the whole unit instead of being noticed after a
- * successful commit. The unit never opens a nested D1 unit and never performs provider work; an
- * aborted unit is classified against the same live credential, budgets, and domain premises the
- * individual operations check.
- */
 const unitConfirmation = (
   input: Readonly<{
     db: D1Database;
@@ -311,14 +303,19 @@ const unitConfirmation = (
     current: number;
     mutations: ReadonlyArray<PreparedCanonicalMutation>;
     oauthConfirmation: Option.Option<OAuthConfirmationWork>;
+    statements: ReadonlyArray<D1PreparedStatement>;
   }>
 ): Effect.Effect<
   | CanonicalMutationUnitExecution
-  | Readonly<{ _tag: "Continue"; statements: ReadonlyArray<D1PreparedStatement> }>
+  | Readonly<{ _tag: "Continue"; commit: () => Effect.Effect<void, Cause.UnknownError> }>
 > =>
   Effect.gen(function* () {
     if (isHostedUnitCaller(input.subject) || !isOAuthCaller(input.subject)) {
-      return { _tag: "Continue", statements: [] };
+      return {
+        _tag: "Continue",
+        commit: () =>
+          Effect.tryPromise(() => input.db.batch([...input.statements])).pipe(Effect.asVoid),
+      };
     }
     const prepared = yield* prepareOAuthUnitConfirmation({ ...input, subject: input.subject });
     return prepared._tag === "Refused"
@@ -343,6 +340,14 @@ const hostedFenceStatements = (
 const validUnitSize = (mutations: ReadonlyArray<PreparedCanonicalMutation>): boolean =>
   mutations.length > 0 && mutations.length <= maximumAtomicBatchCalls;
 
+/**
+ * Commit one ordered set of owner-prepared canonical mutations in a single D1 atomic unit and read
+ * each committed value back. Each child has its own indexed Audit assertion and a completion assertion;
+ * a guard that silently changes no row aborts the whole unit instead of being noticed after a
+ * successful commit. The unit never opens a nested D1 unit and never performs provider work; an
+ * aborted unit is classified against the same live credential, budgets, and domain premises the
+ * individual operations check.
+ */
 export const executeCanonicalMutationUnit = ({
   db,
   subject,
@@ -362,22 +367,22 @@ export const executeCanonicalMutationUnit = ({
     Effect.gen(function* () {
       if (!validUnitSize(mutations)) return { _tag: "Unavailable" } as const;
       const commitCurrent = yield* commitInstant(subject, current);
+      const statements = [
+        ...hostedFenceStatements({ db, userId: subject.userId, current, fence: hostedFence }),
+        ...mutations.flatMap((mutation, index) =>
+          childStatements({ db, subject, current: commitCurrent, mutation, index })
+        ),
+      ];
       const confirmation = yield* unitConfirmation({
         db,
         subject,
         current: commitCurrent,
         mutations,
         oauthConfirmation,
+        statements,
       });
       if (confirmation._tag !== "Continue") return confirmation;
-      const statements = [
-        ...confirmation.statements,
-        ...hostedFenceStatements({ db, userId: subject.userId, current, fence: hostedFence }),
-        ...mutations.flatMap((mutation, index) =>
-          childStatements({ db, subject, current: commitCurrent, mutation, index })
-        ),
-      ];
-      const attempt = yield* Effect.exit(Effect.tryPromise(() => db.batch(statements)));
+      const attempt = yield* Effect.exit(confirmation.commit());
       if (Exit.isFailure(attempt)) {
         return yield* classifyUnitCallerAbort({
           db,

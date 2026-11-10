@@ -1261,3 +1261,145 @@ const checkUnbudgetedCurrencies = Effect.fn(function* (page: Page) {
 });
 test("shows spending in each Currency when no Categories have a budget", ({ page }) =>
   Effect.runPromise(checkUnbudgetedCurrencies(page)));
+
+const budgetRevalidationMilliseconds = 6000;
+const checkRetiredCategory = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => installBudgetUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  let removed = false;
+  let reads = 0;
+  let writes = 0;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budget-status?**`, (route) => {
+      reads += 1;
+      return route.fulfill({
+        contentType: "application/json",
+        body: response(removed ? deletedReport : report),
+      });
+    })
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budgets/*`, (route) => {
+      writes += 1;
+      return route.abort("failed");
+    })
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => page.getByLabel("Presupuesto", { exact: true }).fill("150000"));
+  removed = true;
+  const initialReads = reads;
+  yield* Effect.tryPromise(() => page.clock.install());
+  yield* Effect.tryPromise(() => page.clock.fastForward(budgetRevalidationMilliseconds));
+  yield* Effect.tryPromise(() =>
+    page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")))
+  );
+  yield* Effect.tryPromise(() => expect.poll(() => reads).toBeGreaterThan(initialReads));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Presupuesto de Vivienda (COP)")).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Guardar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("alert")).toContainText("No se pudo guardar")
+  );
+  expect(writes).toBe(0);
+});
+test("an open Budget editor cannot write a target removed by a fresh monthly report", ({ page }) =>
+  Effect.runPromise(checkRetiredCategory(page)));
+
+const checkSameTickSave = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => installBudgetUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  yield* Effect.tryPromise(() => installBudgetReport(page));
+  const requests = new Array<unknown>();
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budgets/*`, (route) => {
+      requests.push(route.request().postDataJSON());
+      return route.abort("failed");
+    })
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  const amount = page.getByLabel("Presupuesto de Restaurantes (USD)");
+  yield* Effect.tryPromise(() => amount.fill("75,25"));
+  yield* Effect.tryPromise(() =>
+    amount.locator("xpath=ancestor::form").evaluate((form) => {
+      if (form instanceof HTMLFormElement) {
+        form.requestSubmit();
+        form.requestSubmit();
+      }
+    })
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("alert")).toContainText("No pudimos confirmar el guardado")
+  );
+  expect(requests).toEqual([
+    {
+      categoryId: categories[1]?.id,
+      cap: { amount: "75.25", currency: "USD" },
+      month: "2026-10",
+      groupName: "Alimentación",
+    },
+  ]);
+  yield* Effect.tryPromise(() => expect(amount).toBeDisabled());
+});
+test("same-tick monthly submissions admit one exact Money write", ({ page }) =>
+  Effect.runPromise(checkSameTickSave(page)));
+
+const checkFailedLocalRead = Effect.fn(function* (page: Page, path: "categories" | "user") {
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+  yield* Effect.tryPromise(() => installBudgetUser(page));
+  yield* Effect.tryPromise(() => installCategories({ page, categories }));
+  yield* Effect.tryPromise(() => installBudgetReport(page));
+  let unavailable = false;
+  let writes = 0;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/${path}`, (route) =>
+      unavailable ? route.fulfill({ status: 503 }) : route.fallback()
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/budgets/*`, (route) => {
+      writes += 1;
+      return route.abort("failed");
+    })
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/budgets?month=2026-10"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Configurar Vivienda", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() => page.getByLabel("Presupuesto", { exact: true }).fill("150000"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Guardar presupuesto", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("alert")).toContainText("No pudimos confirmar el guardado")
+  );
+  unavailable = true;
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Actualizar presupuestos", exact: true }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("form", { name: "Configurar presupuesto de Vivienda" })).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("No pudimos confirmar el guardado", { exact: false })).toHaveCount(0)
+  );
+  const amount = page.getByLabel("Presupuesto de Vivienda (COP)");
+  yield* Effect.tryPromise(() => expect(amount).toHaveValue("100000"));
+  yield* Effect.tryPromise(() => expect(amount).toBeDisabled());
+  unavailable = false;
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Reintentar", exact: true }).first().click()
+  );
+  yield* Effect.tryPromise(() => expect(amount).toBeEnabled());
+  expect(writes).toBe(1);
+});
+for (const path of ["categories", "user"] as const) {
+  test(`Refresh discards an uncertain draft while a failed ${path} read still blocks Budget writes`, ({
+    page,
+  }) => Effect.runPromise(checkFailedLocalRead(page, path)));
+}

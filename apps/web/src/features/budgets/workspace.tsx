@@ -144,7 +144,7 @@ const BudgetPanel = ({
             onRemove={controller.remove}
             onRefresh={controller.refresh}
             saveState={
-              controller.writeAction === "delete" && controller.saveState !== "saved"
+              controller.writeAction === "delete" || controller.saveState === "uncertain"
                 ? controller.saveState
                 : "idle"
             }

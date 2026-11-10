@@ -205,12 +205,26 @@ export const BudgetEditor = ({
       groupCurrencies={groupCurrencies}
       disabled={disabled}
       onClose={onClose}
+      onRefresh={onRefresh}
+      saveState={saveState}
       editor={editor}
       onDelete={() => setDeletionStep("reviewing")}
       onRemovalMount={focusRemoval}
     />
   );
 };
+
+const BudgetRecovery = ({
+  saveState,
+  onRefresh,
+}: Pick<EditorProps, "saveState" | "onRefresh">): JSX.Element =>
+  saveState === "uncertain" ? (
+    <Button type="button" variant="outline" onClick={onRefresh}>
+      Actualizar presupuestos
+    </Button>
+  ) : (
+    <></>
+  );
 
 const EditorForm = ({
   draft,
@@ -219,16 +233,17 @@ const EditorForm = ({
   groupCurrencies,
   disabled,
   onClose,
-  editor,
+  editor: { amount, setAmount, currency, setCurrency, group, onGroup, submit },
   onDelete,
   onRemovalMount,
-}: Omit<EditorProps, "onSubmit" | "onRemove" | "onRefresh" | "saveState"> &
+  onRefresh,
+  saveState,
+}: Omit<EditorProps, "onSubmit" | "onRemove"> &
   Readonly<{
     editor: ReturnType<typeof useEditor>;
     onDelete: () => void;
     onRemovalMount: RefCallback<HTMLButtonElement>;
   }>): JSX.Element => {
-  const { amount, setAmount, currency, setCurrency, group, onGroup, submit } = editor;
   return (
     <form
       onSubmit={submit}
@@ -255,6 +270,7 @@ const EditorForm = ({
         ) : null}
         <Button type="submit">{disabled ? "Guardando…" : "Guardar presupuesto"}</Button>
       </fieldset>
+      <BudgetRecovery {...{ saveState, onRefresh }} />
       {Option.isSome(draft.budget) && Option.isNone(draft.groupCategoryIds) ? (
         <Button
           ref={onRemovalMount}

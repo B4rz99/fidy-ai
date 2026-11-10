@@ -1,5 +1,5 @@
 import { OutboundHttpLive } from "../../outbound-http/runtime";
-import { Cause, Context, Effect, Exit, Layer, Option, Redacted } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import type {
   EmailAddress,
@@ -7,7 +7,6 @@ import type {
 } from "../../../src/core/email-authentication/contract";
 import {
   type EmailDeliveryPortService,
-  type EmailSendFailed,
   makeEmailDelivery,
 } from "../../../src/shell/email-authentication/runtime";
 import { makeResendOutboundHttp } from "../../../src/shell/outbound-http/operations";
@@ -20,12 +19,14 @@ import {
 import type { WorkerTraceContinuation } from "../../runtime/telemetry/contract";
 import type { EmailDeliveryEnvironment } from "../contract";
 
+export type ProviderCertainty = "accepted" | "rejected" | "ambiguous";
+
 /**
  * Send one claimed mailbox proof using its retained idempotency identity. The caller must keep
  * mailbox and proof out of Workflow history and settle the returned certainty into owner state;
  * an ambiguous outcome never authorizes another send with a fresh proof.
  */
-export const sendThroughResend = (
+export const sendClaimedProof = (
   input: WorkerTraceContinuation &
     Readonly<{
       purpose: Parameters<EmailDeliveryPortService["send"]>[0]["purpose"];
@@ -34,7 +35,7 @@ export const sendThroughResend = (
       combinedCode: EmailVerificationCode;
       id: string;
     }>
-): Promise<Exit.Exit<void, EmailSendFailed>> =>
+): Promise<ProviderCertainty> =>
   Effect.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
@@ -68,14 +69,12 @@ export const sendThroughResend = (
         parent: input.parent,
       })
     )
-  );
-
-export const deliveryState = (
-  outcome: Exit.Exit<void, EmailSendFailed>
-): "awaiting_proof" | "rejected" | "ambiguous" => {
-  if (Exit.isSuccess(outcome)) return "awaiting_proof";
-  const failure = Cause.findErrorOption(outcome.cause);
-  return Option.isSome(failure) && failure.value.certainty === "rejected"
-    ? "rejected"
-    : "ambiguous";
-};
+  ).then((outcome): ProviderCertainty => {
+    if (Exit.isSuccess(outcome)) return "accepted";
+    return outcome.cause.reasons.length > 0 &&
+      outcome.cause.reasons.every(
+        (reason) => Cause.isFailReason(reason) && reason.error.certainty === "rejected"
+      )
+      ? "rejected"
+      : "ambiguous";
+  });

@@ -11,6 +11,10 @@ import {
   runEmailReplacementWorkflow,
 } from "../email-authentication/runtime";
 import { EmailAddress, EmailVerificationCode } from "../../src/core/email-authentication/contract";
+import {
+  requestEmailReplacement,
+  startBrowserPairingEmail,
+} from "../email-authentication/operations";
 import { observeOperationalHealth } from "../runtime/operational-health/operations";
 import {
   installAuditTestSchema,
@@ -2954,5 +2958,696 @@ it("rolls email admission back when recording its proof fails", () =>
           )
         ).toEqual({ count: 0 });
       }
+    })
+  ));
+
+it.each(["browser-pairing-email", "email-replacement"] as const)(
+  "preserves accepted %s work when its scheduling hint throws",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+        expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+        const token = "H".repeat(43);
+        yield* Effect.tryPromise(() => seedWebSession(db, token));
+        const pairing = yield* emailAdmissionPairing(sendRequest);
+        let accepted = "";
+        const onAccepted = (id: string): void => {
+          accepted = id;
+          throw new Error("scheduling unavailable");
+        };
+        const request = new Request("https://api.fidyapp.com/proof", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `__Host-fidy_session=${token}`,
+          },
+          body: encodeJson(
+            kind === "browser-pairing-email"
+              ? { ...pairing, email: "person@example.test" }
+              : { candidateEmail: "next@example.test" }
+          ),
+        });
+        const response = yield* Effect.tryPromise(() =>
+          (kind === "browser-pairing-email" ? startBrowserPairingEmail : requestEmailReplacement)({
+            db,
+            request,
+            onAccepted,
+          })
+        );
+        expect(response.status).toBe(kind === "browser-pairing-email" ? 202 : 200);
+        const recovered: string[] = [];
+        if (kind === "browser-pairing-email") {
+          yield* dispatchBrowserPairingEmail({
+            DB: db,
+            identity: Option.none(),
+            BROWSER_PAIRING_EMAIL_QUEUE: {
+              send: (work) => {
+                recovered.push(work.id);
+                return Promise.resolve();
+              },
+            },
+          });
+        } else {
+          yield* dispatchEmailReplacement({
+            DB: db,
+            identity: Option.none(),
+            EMAIL_REPLACEMENT_QUEUE: {
+              send: (work) => {
+                recovered.push(work.id);
+                return Promise.resolve();
+              },
+            },
+          });
+        }
+        expect(recovered).toEqual([accepted]);
+      })
+    )
+);
+
+const afterDeliveryRead = (db: D1Database, change: () => Promise<void>): D1Database => {
+  let pending = true;
+  const wrap = (statement: D1PreparedStatement): D1PreparedStatement => ({
+    bind: (...values) => wrap(statement.bind(...values)),
+    first: <Row>(column?: string) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const row =
+            column === undefined
+              ? yield* Effect.tryPromise(() => statement.first<Row>())
+              : yield* Effect.tryPromise(() => statement.first<Row>(column));
+          if (pending) {
+            pending = false;
+            yield* Effect.tryPromise(() => change());
+          }
+          return row;
+        })
+      ),
+    run: statement.run.bind(statement),
+    all: statement.all.bind(statement),
+    raw: statement.raw.bind(statement),
+  });
+  return {
+    prepare: (sql) => wrap(db.prepare(sql)),
+    batch: db.batch.bind(db),
+    exec: db.exec.bind(db),
+    dump: db.dump.bind(db),
+    withSession: db.withSession.bind(db),
+  };
+};
+
+it("does not send a pairing proof when its credential changes after delivery discovery", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() => seedUser());
+      const pairing = yield* emailAdmissionPairing(sendRequest);
+      expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(202);
+      const work = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ email_work_id: Schema.String })
+      )(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT email_work_id FROM browser_login_pairings WHERE id = ?")
+            .bind(pairing.pairingId)
+            .first()
+        )
+      );
+      const raced = afterDeliveryRead(db, () =>
+        db
+          .prepare("UPDATE verified_email_credentials SET verified_at_ms = verified_at_ms + 1")
+          .run()
+          .then(() => undefined)
+      );
+      const send = vi.fn(() => Promise.resolve("succeeded" as const));
+      yield* Effect.tryPromise(() =>
+        deliverBrowserPairingEmail({ db: raced, send })(work.email_work_id)
+      );
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT email_state, email_public_code FROM browser_login_pairings WHERE id = ?"
+            )
+            .bind(pairing.pairingId)
+            .first()
+        )
+      ).toEqual({ email_state: "awaiting_delivery", email_public_code: null });
+    })
+  ));
+
+const admitMailboxDelivery = (
+  kind: "browser-pairing-email" | "email-replacement"
+): Effect.Effect<
+  {
+    db: D1Database;
+    sendRequest: SendWorkerRequest;
+    pairing: { pairingId: string; privateVerifier: string };
+    token: string;
+    work: { id: string; deadline: number };
+  },
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+    yield* Effect.tryPromise(() => seedUser());
+    const pairing = yield* emailAdmissionPairing(sendRequest);
+    const token = "D".repeat(43);
+    yield* Effect.tryPromise(() => seedWebSession(db, token));
+    if (kind === "browser-pairing-email") {
+      expect((yield* emailAdmissionRequest(sendRequest, pairing)).status).toBe(202);
+    } else {
+      expect(
+        (yield* Effect.tryPromise(() =>
+          replacementRequest(sendRequest, token)("/email/replacement", {
+            candidateEmail: "next@example.test",
+          })
+        )).status
+      ).toBe(200);
+    }
+    const work = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ id: Schema.String, deadline: Schema.Finite })
+    )(
+      yield* Effect.tryPromise(() =>
+        (kind === "browser-pairing-email"
+          ? db
+              .prepare(
+                "SELECT email_work_id AS id, email_expires_at_ms AS deadline FROM browser_login_pairings WHERE id = ?"
+              )
+              .bind(pairing.pairingId)
+          : db.prepare("SELECT work_id AS id, expires_at_ms AS deadline FROM email_replacements")
+        ).first()
+      )
+    );
+    return { db, sendRequest, pairing, token, work };
+  });
+
+it.each(["browser-pairing-email", "email-replacement"] as const)(
+  "does not send %s mail when discovery crosses its original deadline",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        const { db, pairing, work } = yield* admitMailboxDelivery(kind);
+        const raced = afterDeliveryRead(db, () => {
+          vi.setSystemTime(work.deadline);
+          return Promise.resolve();
+        });
+        const send = vi.fn(() => Promise.resolve("succeeded" as const));
+        yield* Effect.tryPromise(() =>
+          (kind === "browser-pairing-email" ? deliverBrowserPairingEmail : deliverEmailReplacement)(
+            { db: raced, send }
+          )(work.id)
+        );
+        expect(send).not.toHaveBeenCalled();
+        expect(
+          yield* Effect.tryPromise(() =>
+            (kind === "browser-pairing-email"
+              ? db
+                  .prepare(
+                    "SELECT email_state AS state, email_public_code AS public_code, email_expires_at_ms AS deadline FROM browser_login_pairings WHERE id = ?"
+                  )
+                  .bind(pairing.pairingId)
+              : db.prepare(
+                  "SELECT state, public_code, expires_at_ms AS deadline FROM email_replacements"
+                )
+            ).first()
+          )
+        ).toEqual({ state: "awaiting_delivery", public_code: null, deadline: work.deadline });
+      })
+    )
+);
+
+const mailSettlementRefusal = {
+  "browser-pairing-email":
+    "CREATE TRIGGER refuse_mail_settlement BEFORE UPDATE OF email_state ON browser_login_pairings WHEN NEW.email_state = 'awaiting_proof' BEGIN SELECT RAISE(ABORT, 'settlement unavailable'); END",
+  "email-replacement":
+    "CREATE TRIGGER refuse_mail_settlement BEFORE UPDATE OF state ON email_replacements WHEN NEW.state = 'awaiting_proof' BEGIN SELECT RAISE(ABORT, 'settlement unavailable'); END",
+};
+
+it.each([
+  {
+    kind: "browser-pairing-email",
+    outcome: "accepted",
+    expected: {
+      state: "awaiting_proof",
+      retainsProof: true,
+      completeStatus: 200,
+      failedActivities: 0,
+    },
+  },
+  {
+    kind: "browser-pairing-email",
+    outcome: "lost-response",
+    expected: { state: "ambiguous", retainsProof: false, completeStatus: 400, failedActivities: 0 },
+  },
+  {
+    kind: "browser-pairing-email",
+    outcome: "settlement-failure",
+    expected: { state: "sending", retainsProof: true, completeStatus: 400, failedActivities: 1 },
+  },
+  {
+    kind: "browser-pairing-email",
+    outcome: "rate-limited",
+    expected: { state: "rejected", retainsProof: false, completeStatus: 400, failedActivities: 0 },
+  },
+  {
+    kind: "email-replacement",
+    outcome: "accepted",
+    expected: {
+      state: "awaiting_proof",
+      retainsProof: true,
+      completeStatus: 200,
+      failedActivities: 0,
+    },
+  },
+  {
+    kind: "email-replacement",
+    outcome: "lost-response",
+    expected: { state: "ambiguous", retainsProof: false, completeStatus: 400, failedActivities: 0 },
+  },
+  {
+    kind: "email-replacement",
+    outcome: "settlement-failure",
+    expected: { state: "sending", retainsProof: true, completeStatus: 400, failedActivities: 1 },
+  },
+  {
+    kind: "email-replacement",
+    outcome: "rate-limited",
+    expected: { state: "rejected", retainsProof: false, completeStatus: 400, failedActivities: 0 },
+  },
+] as const)(
+  "keeps duplicate $kind delivery bounded and secret-free after $outcome",
+  ({ kind, outcome, expected }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, sendRequest, pairing, token, work } = yield* admitMailboxDelivery(kind);
+        if (outcome === "settlement-failure") {
+          yield* Effect.tryPromise(() => db.prepare(mailSettlementRefusal[kind]).run());
+        }
+        const messages: string[] = [];
+        let code = "";
+        const provider = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+          const request = new Request(input, init);
+          return request.json().then((value) => {
+            const body = Schema.decodeUnknownSync(Schema.Struct({ text: Schema.String }))(value);
+            code = Schema.decodeUnknownSync(EmailVerificationCode)(
+              /[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){5}/u.exec(
+                body.text
+              )?.[0]
+            );
+            messages.push(request.headers.get("idempotency-key") ?? "missing");
+            if (outcome === "lost-response") {
+              throw new Error(
+                `unobservable acceptance ${code} next@example.test person@example.test`
+              );
+            }
+            return outcome === "rate-limited"
+              ? Response.json({ error: "bounded rate limit" }, { status: 429 })
+              : Response.json({ id: "accepted-message" });
+          });
+        });
+        const logs: unknown[] = [];
+        vi.spyOn(console, "log").mockImplementation((...values) => {
+          logs.push(values);
+        });
+        vi.spyOn(console, "error").mockImplementation((...values) => {
+          logs.push(values);
+        });
+        const history: unknown[] = [];
+        const payload = { kind, version: 1, id: work.id };
+        const run = (): Promise<void> =>
+          (kind === "browser-pairing-email"
+            ? runBrowserPairingEmailWorkflow
+            : runEmailReplacementWorkflow)({
+            environment: { DB: db, RESEND_API_KEY: "synthetic-provider-secret-sentinel" },
+            payload,
+            activity: (name, options, activity) => {
+              expect(options.retries?.limit).toBe(0);
+              return activity().then(
+                (result) => {
+                  expect(result).toBeUndefined();
+                  history.push({ name, options, result });
+                },
+                (error: unknown) => {
+                  history.push({ name, error: String(error) });
+                  throw error;
+                }
+              );
+            },
+          });
+        const results = yield* Effect.tryPromise(() => Promise.allSettled([run(), run()]));
+        expect(results.filter((result) => result.status === "rejected")).toHaveLength(
+          expected.failedActivities
+        );
+        yield* Effect.tryPromise(() => run());
+        expect(provider).toHaveBeenCalledTimes(1);
+        expect(messages).toEqual([work.id]);
+        expect(history).toHaveLength(3);
+        expect(logs.length).toBeGreaterThan(0);
+        const durable = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            state: Schema.String,
+            public_code: Schema.NullOr(Schema.String),
+            proof_digest: Schema.NullOr(Schema.Array(Schema.Int)),
+            deadline: Schema.Finite,
+          })
+        )(
+          yield* Effect.tryPromise(() =>
+            (kind === "browser-pairing-email"
+              ? db
+                  .prepare(
+                    "SELECT email_state AS state, email_public_code AS public_code, email_proof_digest AS proof_digest, email_expires_at_ms AS deadline FROM browser_login_pairings WHERE id = ?"
+                  )
+                  .bind(pairing.pairingId)
+              : db.prepare(
+                  "SELECT state, public_code, proof_digest, expires_at_ms AS deadline FROM email_replacements"
+                )
+            ).first()
+          )
+        );
+        expect(durable.state).toBe(expected.state);
+        expect(durable.deadline).toBe(work.deadline);
+        if (expected.retainsProof) {
+          expect(durable.public_code).toBe(code.slice(0, 9));
+          expect(durable.proof_digest).toHaveLength(32);
+        } else {
+          expect(durable.public_code).toBeNull();
+          expect(durable.proof_digest).toBeNull();
+        }
+        const recorded = encodeJson({ payload, history, logs, durable });
+        for (const secret of [
+          code,
+          code.slice(10),
+          "person@example.test",
+          "next@example.test",
+          "synthetic-provider-secret-sentinel",
+        ]) {
+          expect(recorded).not.toContain(secret);
+        }
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT address FROM verified_email_credentials").first()
+          )
+        ).toEqual({
+          address: "person@example.test",
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT state, user_id FROM browser_login_pairings WHERE id = ?")
+              .bind(pairing.pairingId)
+              .first()
+          )
+        ).toEqual({
+          state: "pending_approval",
+          user_id: null,
+        });
+        const response =
+          kind === "browser-pairing-email"
+            ? yield* Effect.tryPromise(() =>
+                sendRequest(
+                  new Request("https://api.fidyapp.com/web/email/authentication/complete", {
+                    method: "POST",
+                    headers: {
+                      origin: "https://app.fidyapp.com",
+                      "content-type": "application/json",
+                    },
+                    body: encodeJson({ ...pairing, combinedCode: code }),
+                  })
+                )
+              )
+            : yield* Effect.tryPromise(() =>
+                replacementRequest(sendRequest, token)("/web/email/replacement/verify", {
+                  combinedCode: code,
+                })
+              );
+        expect(response.status).toBe(expected.completeStatus);
+      })
+    )
+);
+
+const retainedMailboxProof = (
+  purpose: "pairing" | "replacement"
+): Promise<{
+  db: D1Database;
+  code: string;
+  complete: (combinedCode: string) => Promise<Response>;
+  retained: D1PreparedStatement;
+  deadline: number;
+}> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
+      let code = "";
+      let complete: (combinedCode: string) => Promise<Response>;
+      let retained: D1PreparedStatement;
+      if (purpose === "pairing") {
+        const pairing = yield* emailAdmissionPairing(sendRequest);
+        yield* emailAdmissionRequest(sendRequest, pairing);
+        const work = yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT email_work_id AS id FROM browser_login_pairings WHERE id = ?")
+            .bind(pairing.pairingId)
+            .first<{ id: string }>()
+        );
+        yield* Effect.tryPromise(() =>
+          deliverBrowserPairingEmail({
+            db,
+            send: (_to, received) => {
+              code = received;
+              return Promise.resolve("succeeded");
+            },
+          })(work?.id ?? "")
+        );
+        complete = (combinedCode): Promise<Response> =>
+          sendRequest(
+            new Request("https://api.fidyapp.com/web/email/authentication/complete", {
+              method: "POST",
+              headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+              body: encodeJson({ ...pairing, combinedCode }),
+            })
+          );
+        retained = db
+          .prepare(
+            "SELECT email_wrong_attempts AS attempts, email_state AS state FROM browser_login_pairings WHERE id = ?"
+          )
+          .bind(pairing.pairingId);
+      } else {
+        const token = "K".repeat(43);
+        yield* Effect.tryPromise(() => seedWebSession(db, token));
+        const request = replacementRequest(sendRequest, token);
+        yield* Effect.tryPromise(() =>
+          request("/email/replacement", { candidateEmail: "candidate@example.test" })
+        );
+        code = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+        complete = (combinedCode): Promise<Response> =>
+          request("/web/email/replacement/verify", { combinedCode });
+        retained = db.prepare("SELECT wrong_attempts AS attempts, state FROM email_replacements");
+      }
+      const deadline = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            purpose === "pairing"
+              ? "SELECT email_proof_expires_at_ms AS deadline FROM browser_login_pairings WHERE email_work_id IS NOT NULL"
+              : "SELECT proof_expires_at_ms AS deadline FROM email_replacements"
+          )
+          .first<{ deadline: number }>()
+      );
+      return { db, code, complete, retained, deadline: deadline?.deadline ?? 0 };
+    })
+  );
+
+it.each(["pairing", "replacement"] as const)(
+  "refuses %s proofs after credential revision changes without spending attempts",
+  (purpose) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, code, complete, retained } = yield* Effect.tryPromise(() =>
+          retainedMailboxProof(purpose)
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE verified_email_credentials SET verified_at_ms = verified_at_ms + 1")
+            .run()
+        );
+        const wrong = code.slice(0, -1) + (code.endsWith("2") ? "3" : "2");
+        expect((yield* Effect.tryPromise(() => complete(wrong))).status).toBe(400);
+        expect((yield* Effect.tryPromise(() => complete(code))).status).toBe(400);
+        expect(yield* Effect.tryPromise(() => retained.first())).toEqual({
+          attempts: 0,
+          state: "awaiting_proof",
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT address FROM verified_email_credentials").first()
+          )
+        ).toEqual({
+          address: "person@example.test",
+        });
+      })
+    )
+);
+
+it.each([
+  { purpose: "pairing", secret: "correct" },
+  { purpose: "pairing", secret: "incorrect" },
+  { purpose: "replacement", secret: "correct" },
+  { purpose: "replacement", secret: "incorrect" },
+] as const)(
+  "refuses a $secret $purpose secret when hashing reaches the original deadline",
+  ({ purpose, secret }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        const { db, code, complete, retained, deadline } = yield* Effect.tryPromise(() =>
+          retainedMailboxProof(purpose)
+        );
+        const submitted =
+          secret === "correct" ? code : code.slice(0, -1) + (code.endsWith("2") ? "3" : "2");
+        const originalDigest = crypto.subtle.digest.bind(crypto.subtle);
+        const hashing = vi.spyOn(crypto.subtle, "digest").mockImplementation((algorithm, bytes) =>
+          originalDigest(algorithm, bytes).then((result) => {
+            if (new TextDecoder().decode(bytes) === submitted.slice(10)) {
+              vi.setSystemTime(deadline);
+            }
+            return result;
+          })
+        );
+        try {
+          expect((yield* Effect.tryPromise(() => complete(submitted))).status).toBe(400);
+          expect(yield* Effect.tryPromise(() => retained.first())).toEqual({
+            attempts: 0,
+            state: "awaiting_proof",
+          });
+          expect(
+            yield* Effect.tryPromise(() =>
+              db.prepare("SELECT address FROM verified_email_credentials").first()
+            )
+          ).toEqual({
+            address: "person@example.test",
+          });
+        } finally {
+          hashing.mockRestore();
+        }
+      })
+    )
+);
+
+it("consumes a pairing mailbox proof once under concurrent submissions", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { code, complete, retained } = yield* Effect.tryPromise(() =>
+        retainedMailboxProof("pairing")
+      );
+      const results = yield* Effect.tryPromise(() => Promise.all([complete(code), complete(code)]));
+      expect(
+        results.map((response) => response.status).sort((left, right) => left - right)
+      ).toEqual([200, 400]);
+      expect(yield* Effect.tryPromise(() => retained.first())).toEqual({
+        attempts: 0,
+        state: "approved",
+      });
+    })
+  ));
+
+it.each(["pairing", "replacement"] as const)(
+  "rolls %s proof consumption back when its atomic evidence cannot commit",
+  (purpose) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, code, complete, retained } = yield* Effect.tryPromise(() =>
+          retainedMailboxProof(purpose)
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              purpose === "pairing"
+                ? "CREATE TRIGGER refuse_proof_commit BEFORE UPDATE OF email_state ON browser_login_pairings WHEN NEW.email_state = 'approved' BEGIN SELECT RAISE(ABORT, 'synthetic-proof-refusal'); END"
+                : "CREATE TRIGGER refuse_proof_commit BEFORE INSERT ON audit_entries WHEN NEW.operation = 'emailAuthentication.completeEmailReplacement' AND NEW.outcome = 'replaced' BEGIN SELECT RAISE(ABORT, 'synthetic-proof-refusal'); END"
+            )
+            .run()
+        );
+        expect((yield* Effect.tryPromise(() => complete(code))).status).toBe(
+          purpose === "pairing" ? 503 : 400
+        );
+        expect(yield* Effect.tryPromise(() => retained.first())).toEqual({
+          attempts: 0,
+          state: "awaiting_proof",
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT address FROM verified_email_credentials").first()
+          )
+        ).toEqual({
+          address: "person@example.test",
+        });
+        if (purpose === "pairing") {
+          expect(
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare("SELECT state FROM browser_login_pairings WHERE email_work_id IS NOT NULL")
+                .first()
+            )
+          ).toEqual({ state: "pending_approval" });
+        }
+        yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_proof_commit").run());
+        expect((yield* Effect.tryPromise(() => complete(code))).status).toBe(200);
+      })
+    )
+);
+
+it("refuses an old replacement selector without charging the new work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() => seedUser());
+      const token = "N".repeat(43);
+      yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const request = replacementRequest(sendRequest, token);
+      yield* Effect.tryPromise(() =>
+        request("/email/replacement", { candidateEmail: "first@example.test" })
+      );
+      const oldCode = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+      const wrong = oldCode.slice(0, -1) + (oldCode.endsWith("2") ? "3" : "2");
+      const failures = yield* Effect.tryPromise(() =>
+        Promise.all(
+          Array.from({ length: 5 }, () =>
+            request("/web/email/replacement/verify", { combinedCode: wrong })
+          )
+        )
+      );
+      expect(failures.map((response) => response.status)).toEqual([400, 400, 400, 400, 400]);
+      yield* Effect.tryPromise(() =>
+        request("/email/replacement", { candidateEmail: "second@example.test" })
+      );
+      const currentCode = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
+      expect(
+        (yield* Effect.tryPromise(() =>
+          request("/web/email/replacement/verify", { combinedCode: oldCode })
+        )).status
+      ).toBe(400);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT wrong_attempts, state FROM email_replacements").first()
+        )
+      ).toEqual({
+        wrong_attempts: 0,
+        state: "awaiting_proof",
+      });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          request("/web/email/replacement/verify", { combinedCode: currentCode })
+        )).status
+      ).toBe(200);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT address FROM verified_email_credentials").first()
+        )
+      ).toEqual({
+        address: "second@example.test",
+      });
     })
   ));

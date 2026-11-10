@@ -300,14 +300,16 @@ const redeemProof = (
         yield* attempt(() => recordRejected(db, session, current));
         return false;
       }
-      if (
-        !equalDigest(
-          proof.value.proof_digest,
-          yield* attempt(() => digest(combinedCode.slice(proofSecretOffset)))
-        )
-      ) {
+      const candidateDigest = yield* attempt(() => digest(combinedCode.slice(proofSecretOffset)));
+      const decisionAt = yield* Clock.currentTimeMillis;
+      if (!equalDigest(proof.value.proof_digest, candidateDigest)) {
         yield* attempt(() =>
-          rejectWrongProof(db, { workId: proof.value.work_id, session, current })
+          rejectWrongProof(db, {
+            workId: proof.value.work_id,
+            publicCode,
+            session,
+            current: decisionAt,
+          })
         );
         return false;
       }
@@ -382,7 +384,7 @@ const replacementAdapter = ({
       try: () => startProof(db, { session, candidateEmail, workId, current }),
       catch: () => new ReplacementDatabaseUnavailable({ operation: "request" }),
     }).pipe(
-      Effect.tap(() => Effect.sync(() => onAccepted(workId))),
+      Effect.tap(() => Effect.exit(Effect.sync(() => onAccepted(workId)))),
       Effect.orDie
     );
   },
@@ -424,9 +426,16 @@ const recordRejected = (
 
 const rejectWrongProof = (
   db: D1Database,
-  input: { workId: string; session: SessionSubject; current: number }
+  input: { workId: string; publicCode: string; session: SessionSubject; current: number }
 ): Promise<void> => {
-  const { workId, session, current } = input;
+  const { workId, publicCode, session, current } = input;
+  const authority = freshSessionQuery({
+    subject: {
+      sql: "SELECT email_replacements.session_id AS sessionId, email_replacements.user_id AS userId",
+      params: [],
+    },
+    current,
+  });
   return Effect.runPromise(
     attempt(() =>
       db.batch([
@@ -436,8 +445,22 @@ const rejectWrongProof = (
     proof_digest = CASE WHEN wrong_attempts + 1 >= 5 THEN NULL ELSE proof_digest END,
     public_code = CASE WHEN wrong_attempts + 1 >= 5 THEN NULL ELSE public_code END,
     proof_expires_at_ms = CASE WHEN wrong_attempts + 1 >= 5 THEN NULL ELSE proof_expires_at_ms END
-    WHERE work_id = ? AND state = 'awaiting_proof' AND wrong_attempts < 5`)
-          .bind(workId),
+    WHERE work_id = ? AND state = 'awaiting_proof' AND wrong_attempts < 5
+      AND user_id = ? AND session_id = ? AND public_code = ?
+      AND proof_expires_at_ms > ? AND expires_at_ms > ?
+      AND EXISTS (${authority.sql})
+      AND EXISTS (SELECT 1 FROM verified_email_credentials AS v
+        WHERE v.user_id = email_replacements.user_id AND v.address = prior_email
+          AND v.verified_at_ms = prior_verified_at_ms)`)
+          .bind(
+            workId,
+            session.user_id,
+            session.id,
+            publicCode,
+            current,
+            current,
+            ...authority.params
+          ),
         prepareEmailReplacementEvidence({
           db,
           id: newId(),

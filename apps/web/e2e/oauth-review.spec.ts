@@ -165,6 +165,60 @@ test("built browser returns from established sign-in to a text-only request revi
     })
   ));
 
+const opposingClicks = (firstDecision: string): void => {
+  const buttons = Array.from(document.querySelectorAll("button"));
+  const connect = buttons.find((button) => button.textContent === "Conectar");
+  const cancel = buttons.find((button) => button.textContent === "Cancelar");
+  const selected = firstDecision === "Conectar" ? connect : cancel;
+  const opposing = firstDecision === "Conectar" ? cancel : connect;
+  selected?.click();
+  opposing?.click();
+  selected?.click();
+};
+const assertSingleDecision = (
+  input: Readonly<{ page: Page; request: APIRequestContext; first: string }>
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { page, request, first } = input;
+      const path = yield* beginReview(request, yield* authorization(request));
+      yield* loginFromReview({ page, request, path, identity: "primary" });
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Conectar", exact: true })).toBeEnabled()
+      );
+      const admitted: Array<string> = [];
+      const refuseConnect = (route: Route): Promise<void> => {
+        admitted.push("Conectar");
+        return route.abort();
+      };
+      const confirmCancel = (route: Route): Promise<void> => {
+        admitted.push("Cancelar");
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: '{"cancelled":true}',
+        });
+      };
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/connect", refuseConnect));
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/cancel", confirmCancel));
+      yield* Effect.tryPromise(() => page.evaluate(opposingClicks, first));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", {
+            name: first === "Conectar" ? "Conexión sin confirmar" : "Solicitud cancelada",
+          })
+        ).toBeVisible()
+      );
+      expect(admitted).toEqual([first]);
+    })
+  );
+for (const first of ["Conectar", "Cancelar"]) {
+  test(`OAuth review admits only ${first} when opposing decisions happen in the same tick`, ({
+    page,
+    request,
+  }) => assertSingleDecision({ page, request, first }));
+}
+
 test("built browser approves an exact connection and exchanges its callback code without Fidy bearer storage", ({
   page,
   request,
@@ -846,3 +900,65 @@ const prepareNativeOperation = Effect.fn(function* (request: APIRequestContext, 
   )(yield* Effect.tryPromise(() => reviewResponse.json()));
   return { args, reference: pending.result.requestState };
 });
+
+const frozenChoice = ({
+  page,
+  request,
+}: Readonly<{ page: Page; request: APIRequestContext }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const query = yield* authorization(request);
+      query.set("scope", "read write");
+      const path = yield* beginReview(request, query);
+      yield* loginFromReview({ page, request, path, identity: "primary" });
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(1).uncheck());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "7 días", exact: true }).click()
+      );
+      const expiration = yield* Effect.tryPromise(() =>
+        page
+          .getByRole("complementary", { name: "Duración del acceso" })
+          .locator("time")
+          .first()
+          .getAttribute("dateTime")
+      );
+      const captured = Promise.withResolvers<unknown>();
+      const release = Promise.withResolvers<void>();
+      let calls = 0;
+      const hold = (route: Route): Promise<void> => {
+        calls += 1;
+        captured.resolve(route.request().postDataJSON());
+        return release.promise.then(() => route.abort());
+      };
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/connect", hold));
+      yield* Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Conectar", exact: true }).click()
+        );
+        const choice = yield* Effect.tryPromise(() => captured.promise);
+        expect(choice).toMatchObject({
+          requestId: path.split("/").at(-1),
+          scopes: ["read"],
+          lifetimeDays: 7,
+          expiresAt: expiration,
+        });
+        yield* Effect.tryPromise(() => expect(page.getByRole("checkbox").nth(1)).toBeDisabled());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "90 días", exact: true })).toBeDisabled()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Cancelar", exact: true })).toBeDisabled()
+        );
+        yield* Effect.tryPromise(() => page.evaluate(opposingClicks, "Conectar"));
+        expect(calls).toBe(1);
+      }).pipe(Effect.ensuring(Effect.sync(release.resolve)));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Conexión sin confirmar" })).toBeVisible()
+      );
+    })
+  );
+
+test(
+  "OAuth approval freezes the displayed subset and expiry while admitted work is pending",
+  frozenChoice
+);

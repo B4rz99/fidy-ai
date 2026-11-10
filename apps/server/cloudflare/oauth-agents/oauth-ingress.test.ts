@@ -1167,6 +1167,46 @@ it("refuses expired requests, empty scope choices and arbitrary metadata URLs wi
     })
   ));
 
+it("refuses approval when the original request expires after a successful review without installing a connection or Consent", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* reviewedFixture();
+      const choice = yield* Schema.decodeEffect(
+        Schema.fromJsonString(Schema.Struct({ requestId: Schema.String }))
+      )(fixture.choice);
+      const expiration = yield* wait(
+        fixture.db
+          .prepare("SELECT expires_at_ms FROM oauth_review_requests WHERE id = ?")
+          .bind(choice.requestId)
+          .first<number>("expires_at_ms")
+      );
+      expect(expiration).not.toBeNull();
+      const consentCount = yield* wait(
+        fixture.db.prepare("SELECT count(*) FROM consent_history").first<number>("count(*)")
+      );
+      vi.spyOn(Date, "now").mockReturnValue(expiration ?? 0);
+      const response = yield* wait(
+        fixture.send("/web/oauth/connect", {
+          method: "POST",
+          headers: fixture.headers,
+          body: fixture.choice,
+        })
+      );
+      expect(response.status).toBe(400);
+      expect(yield* wait(response.text())).toBe('{"error":"invalid_request"}');
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM oauth_connections").first<number>("count(*)")
+        )
+      ).toBe(0);
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM consent_history").first<number>("count(*)")
+        )
+      ).toBe(consentCount);
+    })
+  ));
+
 it("discovers the fixed MCP resource and issuer through ingress/Core without purchasing canonical work", () =>
   Effect.runPromise(
     Effect.gen(function* () {

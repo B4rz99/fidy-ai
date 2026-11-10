@@ -413,6 +413,12 @@ within the shorter bank deadline. ResourceLimited non-admission can be paced wit
 request budget; uncertain POST outcomes cannot be replayed. Real sandbox preparation requires a private, same-User profile and a bounded operator test window. Callback credentials, Account discovery and
 activation remain unavailable until the verified institution capsule is installed.
 
+One mounted request-bound review task owns the selected scope subset and duration. Its shared
+synchronous admission gate permits one Conectar or Cancelar decision, including opposing actions
+in the same tick. Admission freezes the displayed choice; later selection callbacks cannot change it
+or acquire another decision. The authentication registry replacement and mounted lifetime bound the
+review task independently of server authority.
+
 Conectar submits the exact reviewed scope subset, duration and absolute expiration through the typed
 origin/CSRF-protected client. Its void command result prevents callback codes from entering Atom result
 state; it immediately navigates to the server-owned registered callback. Fidy never handles or stores

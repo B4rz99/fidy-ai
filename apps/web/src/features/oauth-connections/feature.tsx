@@ -2,63 +2,21 @@ import { PendingRead } from "@/ui/components/pending-read";
 
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, useParams, useRouter, useSearch } from "@tanstack/react-router";
-import { Effect, Option, Schema } from "effect";
-import type { Atom } from "effect/reactivity";
-import { type JSX, useState } from "react";
-import {
-  OAuthRequestId,
-  type OAuthReview,
-  type OAuthReviewChoice,
-  type WebAuthClient,
-} from "@/transport/client";
+import { Option, Schema } from "effect";
+import { type JSX, type RefCallback, useCallback, useState } from "react";
+import { OAuthRequestId, type OAuthReview, type WebAuthClient } from "@/transport/client";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { OAuthState, OAuthWorkspace } from "@/ui/components/oauth-review";
 import { ManagementPage } from "./management-feature";
 import { OAuthReviewView } from "./view";
+import { type ReviewTaskState, initialReviewSelection, makeReviewTask } from "./review-task";
 
 export const OAuthManagementFeature = (): JSX.Element => {
   const search = useSearch({ strict: false });
   const after = Option.fromUndefinedOr(search.after);
   return <ManagementPage key={Option.getOrElse(after, () => "first")} after={after} />;
 };
-type CancelCommand = Readonly<{
-  requestId: string;
-  completed: () => void;
-  failed: () => void;
-  settled: () => void;
-}>;
-const makeCancel = (client: WebAuthClient): Atom.AtomResultFn<CancelCommand, void, never> =>
-  client.runtime.fn<CancelCommand>()(
-    (command) =>
-      client.pipe(
-        Effect.flatMap((api) =>
-          api.oauthReview.cancel({ payload: { requestId: command.requestId } })
-        ),
-        Effect.tap(() => Effect.sync(command.completed)),
-        Effect.asVoid,
-        Effect.catchCause(() => Effect.sync(command.failed)),
-        Effect.ensuring(Effect.sync(command.settled))
-      ),
-    { concurrent: false }
-  );
-type ConnectCommand = Readonly<{
-  choice: OAuthReviewChoice;
-  failed: () => void;
-  settled: () => void;
-}>;
-const makeConnect = (client: WebAuthClient): Atom.AtomResultFn<ConnectCommand, void, never> =>
-  client.runtime.fn<ConnectCommand>()(
-    (command) =>
-      client.pipe(
-        Effect.flatMap((api) => api.oauthReview.connect({ payload: command.choice })),
-        Effect.tap((connected) => Effect.sync(() => window.location.assign(connected.callback))),
-        Effect.asVoid,
-        Effect.catchCause(() => Effect.sync(command.failed)),
-        Effect.ensuring(Effect.sync(command.settled))
-      ),
-    { concurrent: false }
-  );
 const ReviewUnavailable = ({ requestId }: Readonly<{ requestId: string }>): JSX.Element => (
   <OAuthState title="Solicitud no disponible" kind="warning">
     <p>Puede haber vencido o requerir un nuevo inicio de sesión. No se autorizó ningún acceso.</p>
@@ -90,38 +48,46 @@ const LoadingRequest = (): JSX.Element => (
 const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Element => {
   const router = useRouter();
   const result = useReviewedRequest(router.options.context.webAuthClient, requestId);
-  const [cancelled, setCancelled] = useState(false);
-  const [cancelFailed, setCancelFailed] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelAtom] = useState(() => makeCancel(router.options.context.webAuthClient));
-  const runCancel = useAtomSet(cancelAtom);
-  const [connectAtom] = useState(() => makeConnect(router.options.context.webAuthClient));
-  const runConnect = useAtomSet(connectAtom);
-  const [connecting, setConnecting] = useState(false);
-  const [connectFailed, setConnectFailed] = useState(false);
-  const connect = (choice: OAuthReviewChoice): void => {
-    setConnecting(true);
-    setConnectFailed(false);
-    runConnect({
-      choice,
-      failed: () => setConnectFailed(true),
-      settled: () => setConnecting(false),
-    });
-  };
-  const cancel = (): void => {
-    setCancelling(true);
-    setCancelFailed(false);
-    runCancel({
-      requestId,
-      completed: () => setCancelled(true),
-      failed: () => setCancelFailed(true),
-      settled: () => setCancelling(false),
-    });
-  };
-  if (cancelled) return <CancelledRequest />;
   if (result._tag === "Initial") return <LoadingRequest />;
   if (result._tag === "Failure") return <ReviewUnavailable requestId={requestId} />;
-  if (connectFailed) {
+  return (
+    <MountedReviewTask
+      key={result.value.requestId}
+      review={result.value}
+      client={router.options.context.webAuthClient}
+    />
+  );
+};
+const MountedReviewTask = ({
+  review,
+  client,
+}: Readonly<{ review: OAuthReview; client: WebAuthClient }>): JSX.Element => {
+  const [state, setState] = useState<ReviewTaskState>(() => initialReviewSelection(review));
+  const [task] = useState(() => makeReviewTask({ client, initial: state, onChange: setState }));
+  const dispatch = useAtomSet(task.atom);
+  const lifecycleRef = useCallback<RefCallback<HTMLDivElement>>(
+    (node) => {
+      if (node === null) return;
+      return task.mount();
+    },
+    [task]
+  );
+  const actions = task.actions(state, dispatch);
+  return (
+    <div ref={lifecycleRef}>
+      <ReviewTaskContent state={state} actions={actions} />
+    </div>
+  );
+};
+const ReviewTaskContent = ({
+  state,
+  actions,
+}: Readonly<{
+  state: ReviewTaskState;
+  actions: ReturnType<ReturnType<typeof makeReviewTask>["actions"]>;
+}>): JSX.Element => {
+  if (state._tag === "Cancelled") return <CancelledRequest />;
+  if (state._tag === "Uncertain") {
     return (
       <OAuthState title="Conexión sin confirmar" kind="warning">
         <p role="alert">
@@ -131,16 +97,29 @@ const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Elem
       </OAuthState>
     );
   }
+  if (state._tag === "Redirecting") {
+    return (
+      <OAuthState title="Volviendo a tu agente" kind="information">
+        <p>La aprobación se confirmó. Continúa en tu agente para completar la conexión.</p>
+      </OAuthState>
+    );
+  }
+  if (state._tag === "CancellationUnconfirmed") {
+    return (
+      <OAuthState title="Cancelación sin confirmar" kind="warning">
+        <p role="alert">No pudimos confirmar la cancelación de esta solicitud.</p>
+      </OAuthState>
+    );
+  }
   return (
     <OAuthWorkspace title="Conectar con Fidy">
       <OAuthReviewView
-        key={result.value.requestId}
-        review={result.value}
-        cancelling={cancelling}
-        cancelFailed={cancelFailed}
-        cancel={cancel}
-        connecting={connecting}
-        connect={connect}
+        review={state.review}
+        scopes={state.scopes}
+        days={state.days}
+        {...actions}
+        connecting={state._tag === "Connecting"}
+        cancelling={state._tag === "Cancelling"}
       />
     </OAuthWorkspace>
   );

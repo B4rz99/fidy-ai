@@ -45,11 +45,11 @@ const AccessMethods = ({
   const [method, setMethod] = useState<"principal" | "email" | "whatsapp">("principal");
   const choose = (next: AccessMethod | "principal"): void => {
     pairing.cancel();
-    provider.restart();
     if (next === "google" || next === "microsoft") {
       setMethod("principal");
       provider.startLogin(next);
     } else {
+      provider.restart();
       setMethod(next);
       if (next === "whatsapp") pairing.start();
     }

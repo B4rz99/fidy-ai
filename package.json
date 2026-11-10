@@ -61,13 +61,13 @@
     "docs:verify:built": "bun run docs:test && DOCS_BROWSER_PREBUILT=true bun run --cwd apps/docs test:browser"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.10",
-    "@babel/traverse": "8.0.10",
-    "@babel/types": "8.0.10",
+    "@babel/parser": "8.1.0",
+    "@babel/traverse": "8.1.0",
+    "@babel/types": "8.1.0",
     "@effect/platform-bun": "4.0.6",
-    "@effect/tsgo": "0.63.0",
+    "@effect/tsgo": "0.64.1",
     "@playwright/test": "1.64.1",
-    "@shadcn/lint": "0.2.3",
+    "@shadcn/lint": "0.2.5",
     "@types/istanbul-lib-coverage": "2.0.6",
     "bun-types": "1.4.4",
     "effect": "4.0.6",

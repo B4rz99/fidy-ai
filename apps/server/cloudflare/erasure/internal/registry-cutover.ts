@@ -135,7 +135,10 @@ const claim = (
         },
       })
     );
-    if (claimed === null) return yield* new ErasureUnavailable();
+    if (claimed === null) {
+      const settled = yield* source(input.bucket);
+      if (!isClaimed({ ...settled, record })) return yield* new ErasureUnavailable();
+    }
   });
 const publish = (input: Configuration, record: typeof Row.Type, uploaded: number): boolean =>
   input.storage.transactionSync(() => {
@@ -182,7 +185,20 @@ const migrate = (
       try: () => row(input.storage),
       catch: () => new ErasureUnavailable(),
     });
-    const record = Option.isSome(existing) ? existing.value : yield* prepare(input);
+    const record = Option.isSome(existing)
+      ? existing.value
+      : yield* prepare(input).pipe(
+          Effect.catch(() =>
+            Effect.gen(function* () {
+              const concurrent = yield* Effect.try({
+                try: () => row(input.storage),
+                catch: () => new ErasureUnavailable(),
+              });
+              if (Option.isNone(concurrent)) return yield* new ErasureUnavailable();
+              return concurrent.value;
+            })
+          )
+        );
     if (record.phase === "published") return yield* status(input, registry);
     yield* claim(input, record);
     const uploaded = yield* Clock.currentTimeMillis;

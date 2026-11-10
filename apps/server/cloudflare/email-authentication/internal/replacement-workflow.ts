@@ -19,7 +19,7 @@ import {
   EmailVerificationCode,
 } from "../../../src/core/email-authentication/contract";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
-import { deliveryState, sendThroughResend } from "./proof-delivery";
+import { type ProviderCertainty, sendClaimedProof } from "./proof-delivery";
 
 const Pending = Schema.Struct({
   candidate_email: EmailAddress,
@@ -171,7 +171,7 @@ type Send = (
   to: EmailAddress,
   code: EmailVerificationCode,
   coordinates: Readonly<{ id: string; parent: unknown }>
-) => Promise<"succeeded" | "rejected" | "ambiguous">;
+) => Promise<ProviderCertainty>;
 const settleReplacementDelivery = (
   db: D1Database,
   id: string,
@@ -194,21 +194,16 @@ export const deliverEmailReplacement =
   (id: string, parent?: unknown): Promise<void> =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const current = yield* Clock.currentTimeMillis;
-        const pending = yield* attempt(() => findDeliverable(db, id, current));
-        if (
-          Option.isNone(pending) ||
-          pending.value.state !== "awaiting_delivery" ||
-          pending.value.expires_at_ms <= current
-        ) {
-          return;
-        }
+        const observedAt = yield* Clock.currentTimeMillis;
+        const pending = yield* attempt(() => findDeliverable(db, id, observedAt));
+        if (Option.isNone(pending) || pending.value.state !== "awaiting_delivery") return;
         const publicCode = group(symbols(publicSymbols));
         const secret = group(symbols(secretSymbols));
         const code = yield* Schema.decodeEffect(EmailVerificationCode)(
           `${publicCode}-${secret}`
         ).pipe(Effect.orDie);
         const proofDigest = yield* attempt(() => digest(secret));
+        const current = yield* Clock.currentTimeMillis;
         const session = freshSessionQuery({
           subject: {
             sql: "SELECT email_replacements.session_id AS sessionId, email_replacements.user_id AS userId",
@@ -239,7 +234,7 @@ export const deliverEmailReplacement =
         const outcome = yield* attempt(() =>
           send(pending.value.candidate_email, code, { id, parent: workTraceParent(trace) })
         );
-        const state = outcome === "succeeded" ? "awaiting_proof" : outcome;
+        const state = outcome === "accepted" ? "awaiting_proof" : outcome;
         yield* settleReplacementDelivery(db, id, state);
       }).pipe(
         observeWorkerExecution({
@@ -266,16 +261,13 @@ export const runEmailReplacementWorkflow = ({
           db: environment.DB,
           environment,
           send: (to, code, { id, parent }) =>
-            sendThroughResend({
+            sendClaimedProof({
               purpose: "credential-replacement",
               parent,
               environment,
               to,
               combinedCode: code,
               id,
-            }).then((result) => {
-              const outcome = deliveryState(result);
-              return outcome === "awaiting_proof" ? "succeeded" : outcome;
             }),
         })(work.value.id, workTraceParent(work.value)),
       catch: () => undefined,

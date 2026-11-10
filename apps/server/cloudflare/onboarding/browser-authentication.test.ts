@@ -3380,6 +3380,7 @@ it.each([
               )
             : yield* Effect.tryPromise(() =>
                 replacementRequest(sendRequest, token)("/web/email/replacement/verify", {
+                  candidateEmail: "next@example.test",
                   combinedCode: code,
                 })
               );
@@ -3444,7 +3445,10 @@ const retainedMailboxProof = (
         );
         code = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
         complete = (combinedCode): Promise<Response> =>
-          request("/web/email/replacement/verify", { combinedCode });
+          request("/web/email/replacement/verify", {
+            candidateEmail: "candidate@example.test",
+            combinedCode,
+          });
         retained = db.prepare("SELECT wrong_attempts AS attempts, state FROM email_replacements");
       }
       const deadline = yield* Effect.tryPromise(() =>
@@ -3570,9 +3574,7 @@ it.each(["pairing", "replacement"] as const)(
             )
             .run()
         );
-        expect((yield* Effect.tryPromise(() => complete(code))).status).toBe(
-          purpose === "pairing" ? 503 : 400
-        );
+        expect((yield* Effect.tryPromise(() => complete(code))).status).toBe(503);
         expect(yield* Effect.tryPromise(() => retained.first())).toEqual({
           attempts: 0,
           state: "awaiting_proof",
@@ -3615,7 +3617,10 @@ it("refuses an old replacement selector without charging the new work", () =>
       const failures = yield* Effect.tryPromise(() =>
         Promise.all(
           Array.from({ length: 5 }, () =>
-            request("/web/email/replacement/verify", { combinedCode: wrong })
+            request("/web/email/replacement/verify", {
+              candidateEmail: "first@example.test",
+              combinedCode: wrong,
+            })
           )
         )
       );
@@ -3626,7 +3631,10 @@ it("refuses an old replacement selector without charging the new work", () =>
       const currentCode = yield* Effect.tryPromise(() => deliverPendingReplacement(db));
       expect(
         (yield* Effect.tryPromise(() =>
-          request("/web/email/replacement/verify", { combinedCode: oldCode })
+          request("/web/email/replacement/verify", {
+            candidateEmail: "second@example.test",
+            combinedCode: oldCode,
+          })
         )).status
       ).toBe(400);
       expect(
@@ -3639,7 +3647,10 @@ it("refuses an old replacement selector without charging the new work", () =>
       });
       expect(
         (yield* Effect.tryPromise(() =>
-          request("/web/email/replacement/verify", { combinedCode: currentCode })
+          request("/web/email/replacement/verify", {
+            candidateEmail: "second@example.test",
+            combinedCode: currentCode,
+          })
         )).status
       ).toBe(200);
       expect(

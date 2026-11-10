@@ -466,11 +466,12 @@ test("Dashboard discards an unsent successor after an unknown head without inven
     })
   ));
 
-const installEmptyHistory = async (page: Page): Promise<void> => {
-  await page.route(`${apiOrigin}/transactions**`, (route) =>
-    route.fulfill({ contentType: "application/json", body: response([]) })
-  );
-};
+const installEmptyHistory = (page: Page): Promise<void> =>
+  page
+    .route(`${apiOrigin}/transactions**`, (route) =>
+      route.fulfill({ contentType: "application/json", body: response([]) })
+    )
+    .then(() => {});
 const isDashboardEditRequest = (request: Request): boolean =>
   request.url() === `${apiOrigin}/dashboard/edits`;
 

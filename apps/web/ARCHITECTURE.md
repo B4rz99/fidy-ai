@@ -857,3 +857,7 @@ adds matching rows to that selection; replacing the loaded period requires expli
 `transactions.updateTransactions` with each observed revision and one shared change set. The
 existing correction owner retains admission, pending state and explicit uncertainty recovery;
 there is no splitting into partially committed batches or automatic mutation replay.
+
+Canonical query projection remains observational: retained Ready data, waiting and refreshFailure
+are independent. Route preparation keeps its explicit cached/fresh/display/refresh-display modes
+and nonrejecting completion; preparation completion does not certify a successful new read.

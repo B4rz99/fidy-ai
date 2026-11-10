@@ -58,3 +58,18 @@ describe("canonical query presentation", () => {
     });
   });
 });
+
+it("classifies mixed interruption and defect as boundary failure while retaining display facts", () => {
+  const result = AsyncResult.failure(
+    Cause.combine(Cause.interrupt(1), Cause.die("private defect")),
+    {
+      previousSuccess: Option.some(previous),
+    }
+  );
+  expect(presentCanonicalQuery(result)).toEqual({
+    _tag: "Ready",
+    value: response,
+    waiting: false,
+    refreshFailure: Option.some({ _tag: "BoundaryFailure" }),
+  });
+});

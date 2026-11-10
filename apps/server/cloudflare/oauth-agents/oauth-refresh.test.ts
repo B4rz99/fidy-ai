@@ -106,40 +106,57 @@ it("reconnects an expired access credential with rotated authority for the same 
     })
   ));
 
-it("treats lost token delivery as replay, revokes every generation across restart and requires a new browser grant", () =>
+it("retains a committed rotation after lost delivery and requires new browser approval after restart replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* approvedFixture();
       const original = yield* Schema.decodeUnknownEffect(TokenFixture)(
         yield* wait((yield* wait(exchangeFixture(fixture))).json())
       );
-      const delivered = yield* wait(
+      fixture.loseNextRefreshResponse();
+      const lost = yield* wait(
         refreshFixture({ ...fixture, refresh: original.refresh_token, scope: Option.none() })
       );
-      const winner = yield* Schema.decodeUnknownEffect(TokenFixture)(yield* wait(delivered.json()));
+      expect(lost.status).toBe(400);
+      expect(yield* wait(lost.json())).toEqual({ error: "invalid_grant" });
+      expect(lost.headers.get("cache-control")).toBe("no-store");
+      expect(fixture.refreshHandoffs()).toBe(1);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT (SELECT count(*) FROM oauth_credentials WHERE connection_id = ?) AS credentials,(SELECT count(*) FROM oauth_credentials WHERE connection_id = ? AND consumed_at_ms IS NOT NULL) AS consumed,(SELECT revoked_at_ms FROM oauth_connections WHERE id = ?) AS revoked"
+            )
+            .bind(fixture.connectionId, fixture.connectionId, fixture.connectionId)
+            .first()
+        )
+      ).toEqual({ credentials: 4, consumed: 1, revoked: null });
+      yield* assertReleased(fixture.db);
       fixture.restartCoordinators();
       const replay = yield* wait(
         refreshFixture({ ...fixture, refresh: original.refresh_token, scope: Option.none() })
       );
       expect(replay.status).toBe(400);
       expect(yield* wait(replay.json())).toEqual({ error: "invalid_grant" });
-      for (const bearer of [original.access_token, winner.access_token]) {
-        expect(
-          (yield* wait(
-            mcpFixture({
-              retryKey: Option.none(),
-              send: fixture.send,
-              bearer,
-              method: "tools/list",
-            })
-          )).status
-        ).toBe(401);
-      }
       expect(
         (yield* wait(
-          refreshFixture({ ...fixture, refresh: winner.refresh_token, scope: Option.none() })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: original.access_token,
+            method: "tools/list",
+          })
         )).status
-      ).toBe(400);
+      ).toBe(401);
+      expect(fixture.refreshHandoffs()).toBe(2);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM oauth_credentials WHERE connection_id = ?")
+            .bind(fixture.connectionId)
+            .first<number>("count(*)")
+        )
+      ).toBe(4);
       expect(
         yield* wait(
           fixture.db

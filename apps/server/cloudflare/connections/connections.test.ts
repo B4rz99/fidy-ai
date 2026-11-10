@@ -1979,7 +1979,7 @@ it("erases only the owning User's authorization proof with frozen writes and ato
     })
   ));
 
-it("recovers a failed activation's encrypted grant and destroys tokens only after verified cleanup", () =>
+it("clears verified tokens without clearing bank consent's erasure suppression", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
@@ -1987,15 +1987,104 @@ it("recovers a failed activation's encrypted grant and destroys tokens only afte
       bank.scenario("malformed");
       yield* Effect.tryPromise(() => callback());
       const key = yield* ConnectionGrantKey;
-      yield* sweepConnectionGrants({ db, key, bank: Option.some(bank.cleanup) });
+      institutionRegistration.enabled = false;
+      const recovery = recoverConnections({
+        db,
+        key,
+        bank: Option.some(bank.cleanup),
+        scheduledAtEpochMs: 300000,
+      });
+      yield* recovery;
       const rows = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT state,envelope FROM connection_grants").all()
+        db.prepare("SELECT state,envelope,cleaned_at_ms FROM connection_grants").all()
       );
-      expect(rows.results).toEqual([{ state: "cleanup_required", envelope: null }]);
-      yield* sweepConnectionGrants({ db, key, bank: Option.some(bank.cleanup) });
+      expect(rows.results).toEqual([
+        {
+          state: "cleanup_required",
+          envelope: null,
+          cleaned_at_ms: DateTime.nowUnsafe().epochMilliseconds,
+        },
+      ]);
+      expect(yield* requiresErasureSuppression({ db, userId: users[0] })).toBe(true);
+      yield* recovery;
+      expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
       expect(bank.exchanges()).toBe(1);
     }).pipe(Effect.provideService(ConnectionGrantKey, Option.some(Redacted.make("A".repeat(43)))))
   ));
+
+it.each(["key", "adapter"] as const)(
+  "retains cleanup custody and erasure suppression without the configured %s",
+  (missing) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, callback } = yield* prepareActivation(db);
+        bank.scenario("malformed");
+        yield* Effect.tryPromise(() => callback());
+        institutionRegistration.enabled = false;
+        const custody = (): Promise<D1Result> =>
+          db
+            .prepare(
+              "SELECT envelope,cleaned_at_ms,cleanup_claim,cleanup_after_ms FROM connection_grants"
+            )
+            .all();
+        const before = (yield* Effect.tryPromise(custody)).results;
+        expect(before[0]?.envelope).toMatch(/^v1\./u);
+        yield* recoverConnections({
+          db,
+          key: missing === "key" ? Option.none() : Option.some(Redacted.make("A".repeat(43))),
+          bank: missing === "adapter" ? Option.none() : Option.some(bank.cleanup),
+          scheduledAtEpochMs: 300000,
+        });
+        expect((yield* Effect.tryPromise(custody)).results).toEqual(before);
+        expect(bank.revocations()).toEqual([]);
+        expect(bank.exchanges()).toBe(1);
+        expect(yield* requiresErasureSuppression({ db, userId: users[0] })).toBe(true);
+      })
+    )
+);
+
+it.each([
+  { checkpoint: "active-token observation", expiredRequest: 1 },
+  { checkpoint: "final inactivity proof", expiredRequest: 6 },
+])(
+  "retains encrypted custody when the cleanup lease expires at $checkpoint",
+  ({ expiredRequest }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, callback } = yield* prepareActivation(db);
+        bank.scenario("malformed");
+        yield* Effect.tryPromise(() => callback());
+        const custody = (): Promise<D1Result> =>
+          db.prepare("SELECT envelope,cleaned_at_ms FROM connection_grants").all();
+        const before = (yield* Effect.tryPromise(custody)).results;
+        let requests = 0;
+        bank.beforeCleanup(
+          Effect.sync(() => {
+            requests += 1;
+            if (requests === expiredRequest) {
+              vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 120000);
+            }
+          })
+        );
+        const result = yield* Effect.exit(
+          recoverConnections({
+            db,
+            key: Option.some(Redacted.make("A".repeat(43))),
+            bank: Option.some(bank.cleanup),
+            scheduledAtEpochMs: 300000,
+          })
+        );
+        expect(Exit.isFailure(result)).toBe(true);
+        expect((yield* Effect.tryPromise(custody)).results).toEqual(before);
+        expect(bank.revocations()).toEqual(
+          expiredRequest === 1 ? [] : ["synthetic-refresh", "synthetic-access"]
+        );
+        expect(bank.exchanges()).toBe(1);
+      })
+    )
+);
 
 it("retains failed cleanup for a bounded retry and does not repeat a completed revocation", () =>
   Effect.runPromise(
@@ -2026,6 +2115,70 @@ it("retains failed cleanup for a bounded retry and does not repeat a completed r
       expect(bank.revocations()).toHaveLength(2);
     })
   ));
+it("rejects a late cleanup result while a replacement lease retains the encrypted grant", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, callback } = yield* prepareActivation(db);
+        bank.scenario("malformed");
+        yield* Effect.tryPromise(() => callback());
+        const finishing = yield* Deferred.make<void>();
+        const finish = yield* Deferred.make<void>();
+        let requests = 0;
+        bank.beforeCleanup(
+          Effect.gen(function* () {
+            requests += 1;
+            if (requests === 6) {
+              yield* Deferred.succeed(finishing, undefined);
+              yield* Deferred.await(finish);
+            }
+          })
+        );
+        const recovery = recoverConnections({
+          db,
+          key: Option.some(Redacted.make("A".repeat(43))),
+          bank: Option.some(bank.cleanup),
+          scheduledAtEpochMs: 300000,
+        });
+        const old = yield* Effect.forkScoped(recovery);
+        yield* Deferred.await(finishing);
+        expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+        const oldClaim = yield* Effect.tryPromise(() =>
+          db.prepare("SELECT cleanup_claim FROM connection_grants").first()
+        );
+        vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 120000);
+        const replacing = yield* Deferred.make<void>();
+        const replace = yield* Deferred.make<void>();
+        bank.beforeCleanup(
+          Deferred.succeed(replacing, undefined).pipe(Effect.andThen(Deferred.await(replace)))
+        );
+        const replacement = yield* Effect.forkScoped(recovery);
+        yield* Deferred.await(replacing);
+        const custody = (): Promise<D1Result> =>
+          db.prepare("SELECT envelope,cleaned_at_ms,cleanup_claim FROM connection_grants").all();
+        const retained = (yield* Effect.tryPromise(custody)).results;
+        expect(retained[0]?.envelope).toMatch(/^v1\./u);
+        expect(retained[0]?.cleaned_at_ms).toBeNull();
+        expect(retained[0]?.cleanup_claim).not.toEqual(oldClaim?.cleanup_claim);
+        yield* Deferred.succeed(finish, undefined);
+        expect(Exit.isFailure(yield* Fiber.await(old))).toBe(true);
+        expect((yield* Effect.tryPromise(custody)).results).toEqual(retained);
+        bank.beforeCleanup(Effect.void);
+        yield* Deferred.succeed(replace, undefined);
+        yield* Fiber.join(replacement);
+        expect((yield* Effect.tryPromise(custody)).results).toEqual([
+          {
+            envelope: null,
+            cleaned_at_ms: DateTime.nowUnsafe().epochMilliseconds,
+            cleanup_claim: null,
+          },
+        ]);
+        expect(bank.exchanges()).toBe(1);
+      })
+    )
+  ));
+
 it("refuses a foreign encryption key before bank egress and preserves pending evidence", () =>
   Effect.runPromise(
     Effect.gen(function* () {

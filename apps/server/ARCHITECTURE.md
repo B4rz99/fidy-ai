@@ -371,6 +371,10 @@ cleanup eligibility. Generic maintenance schedules one recovery tick; the owner 
 independently, retains phase-specific operational evidence and reports aggregate failure after the
 remaining phase has run. Interruption stops progression. Durable grant claims and cleanup checkpoints
 remain separate from provider I/O, and unknown authorization outcomes do not authorize replay.
+Active-token observations and cleanup completion require the exact retained grant envelope and a
+live cleanup lease. Verified token inactivity clears encrypted custody while retaining cleanup-required
+history; bank consent independently continues to suppress erasure. Missing cleanup configuration
+makes no progress and cannot establish suppression completion.
 
 Dashboard view timing headers carry request-local numeric metadata only. Direct HTTP reads report
 source/context selection, financial projection and owner Audit/accounting inside Core's canonical

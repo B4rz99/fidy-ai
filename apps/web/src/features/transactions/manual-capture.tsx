@@ -29,7 +29,7 @@ export const ManualCaptureProvider = ({
           ...task,
           check,
           clear: () => {
-            task.restart();
+            task.restart(emptyCaptureDraft(timeZone));
             setCheck(Option.none());
           },
           checkHistory: (version) => setCheck(Option.some(version)),

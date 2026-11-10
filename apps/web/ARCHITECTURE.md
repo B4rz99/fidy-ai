@@ -598,6 +598,8 @@ cannot prove a write outcome. Resuming edits the retained draft while the origin
 attempt remains readable, and a separate submission creates a new Transaction.
 Discard removes only browser interaction state. The draft stays in mounted memory,
 never URLs, browser storage or telemetry, and disappears when Transactions access unmounts.
+Explicit cancellation or confirmed completion initializes the next manual draft on the current
+User-local day; recovery keeps the uncertain attempt's entered date across midnight.
 Recurring capture retains its separate occurrence-owned editor and recovery contract.
 
 ### Transaction Correction

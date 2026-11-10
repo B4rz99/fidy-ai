@@ -370,6 +370,89 @@ test("a pending manual capture survives browser Back without reopening create or
   page,
 }) => Effect.runPromise(replacedCaptureJourney(page)));
 
+const setCaptureTime = (page: Page, value: string): Journey =>
+  wait(() => page.clock.setFixedTime(DateTime.toDateUtc(DateTime.makeUnsafe(value))));
+const preserveUncertainDay = (page: Page, pending: ReadonlyArray<Route>): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("9000"));
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    yield* wait(() => expect.poll(() => pending.length).toBe(2));
+    const unknown = pending[1];
+    if (unknown === undefined) throw new Error("Missing uncertain create");
+    expect(unknown.request().postDataJSON()).toMatchObject({
+      occurredAt: "2026-10-26T05:00:00.000Z",
+    });
+    yield* wait(() => unknown.abort("failed"));
+    yield* wait(() => expect(page.getByRole("alert")).toContainText("Guardado sin confirmar"));
+    yield* setCaptureTime(page, "2026-10-27T05:01:00.000Z");
+    yield* wait(() =>
+      page.getByRole("button", { name: "Actualizar historial", exact: true }).click()
+    );
+    yield* wait(() =>
+      page.getByRole("button", { name: "No la encontré · editar borrador", exact: true }).click()
+    );
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Fecha: 26-10-2026", exact: true })).toBeVisible()
+    );
+    yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("9000"));
+    expect(pending).toHaveLength(2);
+  });
+const midnightCaptureJourney = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* installWorkspace(page);
+    yield* setCaptureTime(page, "2026-10-25T04:59:00.000Z");
+    const pending: Array<Route> = [];
+    yield* wait(() =>
+      page.route(`${apiOrigin}/transactions`, (route) => {
+        pending.push(route);
+      })
+    );
+    yield* openCapture(page);
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Fecha: 24-10-2026", exact: true })).toBeVisible()
+    );
+    yield* setCaptureTime(page, "2026-10-25T05:01:00.000Z");
+    yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
+    yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Fecha: 25-10-2026", exact: true })).toBeVisible()
+    );
+    expect(pending).toHaveLength(0);
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("12345,67"));
+    yield* wait(() => page.getByRole("button", { name: "Registrar", exact: true }).click());
+    yield* wait(() => expect.poll(() => pending.length).toBe(1));
+    const saved = pending[0];
+    if (saved === undefined) throw new Error("Missing pending create");
+    expect(saved.request().postDataJSON()).toMatchObject({
+      occurredAt: "2026-10-25T05:00:00.000Z",
+    });
+    yield* setCaptureTime(page, "2026-10-26T05:01:00.000Z");
+    yield* wait(() =>
+      saved.fulfill({
+        status: createdStatus,
+        contentType: "application/json",
+        body: response({
+          ...row(2),
+          money: { amount: "12345.67", currency: "COP" },
+          occurredAt: "2026-10-25T05:00:00.000Z",
+          createdAt: "2026-10-26T05:01:00.000Z",
+          notes: undefined,
+        }),
+      })
+    );
+    yield* wait(() =>
+      expect(page.getByText("Transacción registrada", { exact: true })).toBeVisible()
+    );
+    yield* wait(() => page.getByRole("button", { name: "+ Registrar", exact: true }).click());
+    yield* wait(() =>
+      expect(page.getByRole("button", { name: "Fecha: 26-10-2026", exact: true })).toBeVisible()
+    );
+    yield* preserveUncertainDay(page, pending);
+  });
+test("manual capture uses a fresh local day after cancellation and confirmed save while preserving an uncertain draft", ({
+  page,
+}) => Effect.runPromise(midnightCaptureJourney(page)));
+
 const uncertainCaptureJourney = (page: Page): Journey =>
   Effect.gen(function* () {
     yield* installWorkspace(page);

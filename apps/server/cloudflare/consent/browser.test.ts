@@ -625,6 +625,36 @@ it("rechecks revoked proof at coordinated commit and rolls withdrawal back when 
     })
   ));
 
+it("rolls back withdrawal when Audit silently refuses and keeps the eventual receipt on replay", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* consentSetup();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_withdrawal_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation='consent.withdraw' BEGIN SELECT RAISE(IGNORE); END"
+          )
+          .run()
+      );
+      const failed = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
+      );
+      expect(failed.status).toBe(503);
+      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Granted");
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_withdrawal_audit").run());
+      const accepted = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
+      );
+      expect(accepted.status).toBe(200);
+      const receipt = yield* Effect.tryPromise(() => accepted.json());
+      const replay = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/consent/withdraw", "POST", { confirm: true }))
+      );
+      expect(replay.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => replay.json())).toEqual(receipt);
+    })
+  ));
+
 it("refuses foreign coordinator, mismatched digest, expired admission and aborted work without effects", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -969,6 +999,52 @@ it("refuses renewal when fresh browser authority expires between admission and c
       const unchanged = yield* Effect.tryPromise(() => send(db, request(0, "/web/consent")));
       expect(yield* Effect.tryPromise(() => unchanged.json())).toEqual(status);
     })
+  ));
+
+it("reconciles a lost renewal commit response without replacing the exact evidence", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, payload } = yield* withdrawnRenewal();
+      const current = yield* Clock.currentTimeMillis;
+      const bytes = yield* Effect.tryPromise(() => digest(bearer(0)));
+      const admission = {
+        userId: users[0],
+        sessionId: sessions[0],
+        digest: Array.from(bytes),
+        deadlineMilliseconds: current + 5000,
+        renewal: payload,
+      };
+      const uncertain = new Proxy(db, {
+        get(target, key, receiver): unknown {
+          if (key === "batch") {
+            return async (statements: D1PreparedStatement[]): Promise<never> => {
+              await target.batch(statements);
+              throw new Error("Synthetic lost commit response");
+            };
+          }
+          const value: unknown = Reflect.get(target, key, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const signal = yield* Effect.abortSignal;
+      const response = yield* executeConsentRenewal({
+        db: uncertain,
+        candidate: admission,
+        userId: users[0],
+        signal,
+      });
+      expect(response.status).toBe(200);
+      const receipt = yield* Effect.tryPromise(() => response.json());
+      const retry = yield* executeConsentRenewal({
+        db,
+        candidate: admission,
+        userId: users[0],
+        signal,
+      });
+      expect(retry.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => retry.json())).toEqual(receipt);
+      expect(yield* readConsentStatus({ db, userId: users[0] })).toBe("Granted");
+    }).pipe(Effect.scoped)
   ));
 
 it("rolls back renewal when Audit silently refuses its acceptance", () =>

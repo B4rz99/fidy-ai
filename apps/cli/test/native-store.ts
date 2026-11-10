@@ -1,5 +1,5 @@
 import { BunServices } from "@effect/platform-bun";
-import { IssuedPAT } from "@fidy/server/client";
+import { IssuedPAT, TokenBearer } from "@fidy/server/client";
 import { Effect, Exit, FileSystem, Option, Redacted, Schema } from "effect";
 import { bunSecrets, makeCredentialStore, supportedBunRevision } from "../src/credential/runtime";
 import {
@@ -45,7 +45,9 @@ const credential: Credential = {
       expiresAt: "2026-10-08T00:00:00.000Z",
     }),
   },
-  bearer: Redacted.make(`fin_abcd1234_${"s".repeat(secretCharacterCount)}`),
+  bearer: Redacted.make(
+    Schema.decodeSync(TokenBearer)(`fin_abcd1234_${"s".repeat(secretCharacterCount)}`)
+  ),
 };
 const isolatedSecrets = (prefix: string): NativeSecrets => ({
   get: (name) => bunSecrets.get(`${prefix}-${name}`),

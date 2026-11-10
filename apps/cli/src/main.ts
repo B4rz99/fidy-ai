@@ -149,7 +149,7 @@ if (import.meta.main) {
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", interrupt);
     if (Exit.isFailure(exit)) {
-      const { message, interrupted } = formatCommandFailure(exit.cause, json);
+      const { message, interrupted } = formatCommandFailure({ cause: exit.cause, json });
       process.stderr.write(
         commandArgs[0] === "support-recovery"
           ? "Proceso de recuperación interrumpido o no disponible. Si ya enviaste la solicitud, comprueba la vinculación en el mismo navegador; no repitas una decisión incierta ni compartas secretos.\n"

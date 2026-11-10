@@ -143,10 +143,10 @@ export const formatFailure = ({
 };
 
 /** Projects process failure without exposing raw causes, retaining interruption certainty. */
-export const formatCommandFailure = (
-  cause: Cause.Cause<unknown>,
-  json: boolean
-): Readonly<{
+export const formatCommandFailure = ({
+  cause,
+  json,
+}: Readonly<{ cause: Cause.Cause<unknown>; json: boolean }>): Readonly<{
   message: string;
   interrupted: boolean;
 }> => {

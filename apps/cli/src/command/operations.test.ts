@@ -228,14 +228,16 @@ it.effect("interrupted saving settles local persistence without success output o
         value: { reason: "LoginSaveInterrupted" },
       });
       for (const json of [false, true]) {
-        const failure = formatCommandFailure(exit.cause, json);
+        const failure = formatCommandFailure({ cause: exit.cause, json });
         expect(failure.interrupted).toBe(true);
         expect(failure.message).toContain("puede haberse guardado");
         expect(failure.message).toContain("fidy status");
         expect(failure.message).not.toContain(secret);
         expect(failure.message).not.toContain(privateProof);
         if (json) {
-          expect(JSON.parse(failure.message)).toMatchObject({ code: "LoginSaveInterrupted" });
+          expect(
+            yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(failure.message)
+          ).toMatchObject({ code: "LoginSaveInterrupted" });
         }
       }
     }
@@ -291,14 +293,16 @@ it.effect(
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
         for (const json of [false, true]) {
-          const failure = formatCommandFailure(exit.cause, json);
+          const failure = formatCommandFailure({ cause: exit.cause, json });
           expect(failure.interrupted).toBe(true);
           expect(failure.message).toContain("No se puede confirmar si el servidor entregó");
           expect(failure.message).toContain("revoca");
           expect(failure.message).not.toContain(secret);
           expect(failure.message).not.toContain(privateProof);
           if (json) {
-            expect(JSON.parse(failure.message)).toMatchObject({ code: "ClaimAmbiguous" });
+            expect(
+              yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(failure.message)
+            ).toMatchObject({ code: "ClaimAmbiguous" });
           }
         }
       }

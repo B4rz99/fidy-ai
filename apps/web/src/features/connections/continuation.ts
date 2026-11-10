@@ -113,20 +113,19 @@ export const useContinuation = (attempt: Attempt): Continuation => {
     )
   );
   const execution = useAtomValue(command).pipe(presentCanonicalQuery);
-  const result = useAtomValue(query).pipe(presentCanonicalQuery);
   const mounted = useCallback(
     (_node: HTMLDivElement): (() => void) =>
       lifetime.attach(() => registry.set(command, Atom.Interrupt)),
     [command, lifetime, registry]
   );
   return {
-    result,
+    result: useAtomValue(query).pipe(presentCanonicalQuery),
     busy: execution.waiting,
     uncertain: execution._tag === "Ready" && execution.value,
     submitted: useAtomValue(submitted),
     mounted,
     begin: () => {
-      const fresh = freshReview(presentCanonicalQuery(registry.get(query)));
+      const fresh = registry.get(query).pipe(presentCanonicalQuery, freshReview);
       if (!lifetime.active() || registry.get(submitted)) return;
       if (Option.isNone(fresh) || fresh.value.phase !== "ready") {
         return;
@@ -141,7 +140,7 @@ export const useContinuation = (attempt: Attempt): Continuation => {
       if (
         lifetime.active() &&
         !registry.get(command).waiting &&
-        canRefresh(presentCanonicalQuery(registry.get(query)))
+        registry.get(query).pipe(presentCanonicalQuery, canRefresh)
       ) {
         registry.refresh(query);
       }
@@ -149,9 +148,10 @@ export const useContinuation = (attempt: Attempt): Continuation => {
     canFollow: (review) =>
       lifetime.active() &&
       !registry.get(command).waiting &&
-      Option.exists(
-        freshReview(presentCanonicalQuery(registry.get(query))),
-        (fresh) => fresh === review
+      registry.get(query).pipe(
+        presentCanonicalQuery,
+        freshReview,
+        Option.exists((fresh) => fresh === review)
       ),
   };
 };

@@ -183,8 +183,9 @@ const disableAuthenticationBroadcast = (): void => {
   Object.defineProperty(window, "BroadcastChannel", { value: undefined });
 };
 const replaceContinuationLocation = (path: string): void => {
-  window.history.pushState(window.history.state, "", path);
-  window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
+  const state: unknown = window.history.state;
+  window.history.pushState(state, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate", { state }));
 };
 
 test("ignores a late Begin reply after the mounted continuation locator changes", ({

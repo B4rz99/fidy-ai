@@ -1,3 +1,4 @@
+import { noLaterReadyPairing } from "./approval-order";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { RecoveryBrowserPairingApproval, RecoveryBrowserPairingQuery } from "../contract";
 
@@ -23,10 +24,17 @@ export const prepareRecoveryApproval = ({
   db,
   subject,
   current,
-}: RecoveryBrowserPairingApproval): D1PreparedStatement =>
-  db
+}: RecoveryBrowserPairingApproval): D1PreparedStatement => {
+  const ordering = noLaterReadyPairing({
+    userId: { sql: `(SELECT userId FROM (${subject.sql}))`, params: subject.params },
+    candidate: "browser_login_pairings",
+    current,
+  });
+  return db
     .prepare(`UPDATE browser_login_pairings SET state = 'ready',
       user_id = (SELECT userId FROM (${subject.sql}))
       WHERE id = (SELECT pairingId FROM (${subject.sql}))
-        AND state = 'pending_approval' AND expires_at_ms > ?`)
-    .bind(...subject.params, ...subject.params, current);
+        AND state = 'pending_approval' AND expires_at_ms > ? AND wrong_attempts < 5
+        AND ${ordering.sql}`)
+    .bind(...subject.params, ...subject.params, current, ...ordering.params);
+};

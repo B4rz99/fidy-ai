@@ -1,3 +1,4 @@
+import { erasurePairingsQuery } from "./internal/erasure";
 import type {
   BrowserPairingApproval,
   BrowserPairingApprovalStatement,
@@ -70,3 +71,7 @@ export const approvedRecoveryBrowserPairingQuery = (
 export const prepareRecoveryBrowserPairingApproval = (
   input: RecoveryBrowserPairingApproval
 ): D1PreparedStatement => prepareRecoveryApproval(input);
+
+/** Erasure-only pairing identities, including retired proofs; conveys no approval or session authority. */
+export const browserPairingsForErasureQuery = (userId: string): OwnedStatement =>
+  erasurePairingsQuery(userId);

@@ -1,3 +1,4 @@
+import { fixtureBrowserCredentialErasureStores } from "../core-worker.test-fixture";
 import { makeProviderAuthenticationErasureStores, sweepProviderAuthentication } from "./runtime";
 import { authenticateChatProvider } from "./whatsapp-provider.test-fixture";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -790,7 +791,7 @@ it("sweeps only invitations past their one-day retention cutoff", () =>
     })
   ));
 
-it("erases only the associated User's invitation through its credential owner and fences unpermitted deletion", () =>
+it("erases superseded signup evidence only for its associated User and fences unpermitted deletion", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { journey, proof } = yield* reviewedInvitation();
@@ -807,6 +808,83 @@ it("erases only the associated User's invitation through its credential owner an
       expect(
         (yield* whatsappMessages.sendChat(journey, "Hola", { caller: "CO.Person2" })).status
       ).toBe(200);
+      const foreignPairing = yield* Effect.tryPromise(() =>
+        journey
+          .send("/web/pairings", {})
+          .then((response) => response.json())
+          .then(
+            Schema.decodeUnknownPromise(
+              Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+            )
+          )
+      );
+      const foreignJourney = { ...journey, pairing: foreignPairing };
+      const foreignInvitation = yield* Effect.tryPromise(() =>
+        journey.db
+          .prepare("SELECT id FROM whatsapp_signup_invitations WHERE source_bsuid='CO.Person2'")
+          .first<{ id: string }>()
+      );
+      yield* authenticateChatProvider(
+        foreignJourney,
+        foreignInvitation?.id ?? "",
+        "foreign-provider-user"
+      );
+      const foreignReview = yield* Effect.tryPromise(() =>
+        journey
+          .send("/web/providers/google/status", foreignPairing)
+          .then((response) => response.json())
+          .then(
+            Schema.decodeUnknownPromise(
+              Schema.Struct({ associationCode: Schema.String, confirmationText: Schema.String })
+            )
+          )
+      );
+      yield* whatsappMessages.advanceClock(2000);
+      expect(
+        (yield* whatsappMessages.sendChat(journey, foreignReview.confirmationText, {
+          caller: "CO.Person2",
+        })).status
+      ).toBe(200);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          journey.send("/web/providers/google/complete", {
+            ...foreignPairing,
+            associationCode: foreignReview.associationCode,
+          })
+        )).status
+      ).toBe(200);
+      const foreignEvidence = yield* Effect.tryPromise(() =>
+        journey.db
+          .prepare("SELECT * FROM whatsapp_signup_invitations WHERE source_bsuid='CO.Person2'")
+          .all()
+      );
+      const newer = yield* Effect.tryPromise(() =>
+        journey
+          .send("/web/pairings", {})
+          .then((response) => response.json())
+          .then(
+            Schema.decodeUnknownPromise(
+              Schema.Struct({
+                pairingId: Schema.String,
+                privateVerifier: Schema.String,
+                publicCode: Schema.String,
+              })
+            )
+          )
+      );
+      yield* whatsappMessages.advanceClock(2000);
+      expect(
+        (yield* whatsappMessages.sendChat(
+          journey,
+          `Aprueba el código de inicio de sesión ${newer.publicCode}`
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* Effect.tryPromise(() => journey.send("/web/pairings/redeem", proof))).status
+      ).toBe(400);
+      expect(
+        (yield* Effect.tryPromise(() => journey.send("/web/pairings/redeem", newer))).status
+      ).toBe(200);
       const reference = "15310000-0000-4000-8000-000000000002";
       yield* Effect.tryPromise(() =>
         journey.db.batch([
@@ -815,7 +893,12 @@ it("erases only the associated User's invitation through its credential owner an
               "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
             )
             .bind(reference, user.id),
-          ...["provider_authentication_attempts", "whatsapp_signup_invitations"].map((store) =>
+          ...[
+            "provider_authentication_attempts",
+            "whatsapp_signup_invitations",
+            "web_sessions",
+            "browser_login_pairings",
+          ].map((store) =>
             journey.db
               .prepare("INSERT INTO erasure_steps(request_id,store_id) VALUES(?,?)")
               .bind(reference, store)
@@ -833,7 +916,10 @@ it("erases only the associated User's invitation through its credential owner an
             .run()
         ).rejects.toThrow("erasure_fenced")
       );
-      const stores = makeProviderAuthenticationErasureStores(journey.db);
+      const stores = [
+        ...makeProviderAuthenticationErasureStores(journey.db),
+        ...fixtureBrowserCredentialErasureStores(journey.db),
+      ];
       for (const id of ["provider_authentication_attempts", "whatsapp_signup_invitations"]) {
         const store = stores.find((item) => item.id === id);
         if (store === undefined) throw Error("Missing invitation erasure owner");
@@ -849,5 +935,25 @@ it("erases only the associated User's invitation through its credential owner an
           journey.db.prepare("SELECT source_bsuid FROM whatsapp_signup_invitations").all()
         )).results
       ).toEqual([{ source_bsuid: "CO.Person2" }]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          journey.db
+            .prepare("SELECT * FROM whatsapp_signup_invitations WHERE source_bsuid='CO.Person2'")
+            .all()
+        )).results
+      ).toEqual(foreignEvidence.results);
+      for (const id of ["web_sessions", "browser_login_pairings"]) {
+        const store = stores.find((item) => item.id === id);
+        if (store === undefined) throw Error("Missing pairing erasure owner");
+        expect(yield* store.remove({ reference, userId: user.id })).toBe(true);
+      }
+      expect(
+        (yield* Effect.tryPromise(() =>
+          journey.db
+            .prepare("SELECT id FROM browser_login_pairings WHERE id IN (?,?)")
+            .bind(proof.pairingId, newer.pairingId)
+            .all()
+        )).results
+      ).toEqual([]);
     })
   ));

@@ -585,6 +585,8 @@ The Budget summary shows recorded monthly income and all effective expenses, inc
 The capture-owned mounted task retains the draft, synchronous create admission, safe committed
 Transaction and immutable uncertain attempt above month/history-generation workspace remounts.
 Parents consume derived placement observations and guarded actions; they cannot set capture status.
+The public form slot receives only an owner component with public capture inputs; that component
+resolves the task privately, so element props do not publish recovery or admission controls.
 Confirmed save is installed before existing reads are invalidated or presentation callbacks run.
 Callback defects cannot reopen create or replace a confirmed save with uncertainty. The originating
 form fences presentation callbacks immediately on replacement; disposing the task also interrupts

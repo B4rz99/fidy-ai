@@ -90,7 +90,6 @@ const ManualCaptureEditor = ({
       disabled={!props.editable}
       categories={props.categories}
       onCancel={Option.some(close)}
-      renderForm={(form) => form}
       apiClient={props.apiClient}
       timeZone={props.currentUser.timeZone}
       task={capture}

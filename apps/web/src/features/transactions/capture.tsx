@@ -208,7 +208,7 @@ type CaptureProps = Readonly<{
   direction: Option.Option<CaptureDraft["direction"]>;
   disabled: boolean;
 }>;
-type EditorProps = Omit<CaptureProps, "intentId"> &
+type EditorProps = Omit<CaptureProps, "intentId" | "renderForm"> &
   Readonly<{ newAttempt: boolean; task: TransactionCaptureTask }>;
 const captureLocked = (props: EditorProps): boolean => props.disabled || props.task.locked;
 const captureCurrencyChange = (
@@ -333,7 +333,7 @@ const CaptureEditor = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element
       },
     });
   };
-  return props.renderForm(
+  return (
     <CaptureForm
       mounted={mounted}
       revealErrors={attempted}
@@ -341,8 +341,7 @@ const CaptureEditor = ({ props }: Readonly<{ props: EditorProps }>): JSX.Element
       draft={draft}
       onDraft={props.task.change}
       onSubmit={onSubmit}
-    />,
-    { saving: props.task.saving, uncertain: props.task.uncertain }
+    />
   );
 };
 class CaptureIdentity extends Data.Class<Readonly<{ client: FidyClient; intentId: string }>> {}
@@ -429,9 +428,28 @@ const RetainedCaptureEditor = ({
     : captureMeaning(props);
   return (
     <CaptureAttachment key={identity} props={props} retention={retention}>
-      <CaptureEditor props={{ ...props, task, newAttempt: false }} />
+      {props.renderForm(<RetainedCaptureForm {...props} />, {
+        saving: task.saving,
+        uncertain: task.uncertain,
+      })}
     </CaptureAttachment>
   );
+};
+const RetainedCaptureForm = (props: CaptureProps): JSX.Element => {
+  const identity = new CaptureIdentity({ client: props.apiClient, intentId: props.intentId });
+  const retentionResource = retainedCaptures(identity);
+  const retention = useAtomValue(retentionResource);
+  return Option.match(retention.resource, {
+    onNone: () => <></>,
+    onSome: (resource) => <CaptureTaskForm props={props} resource={resource} />,
+  });
+};
+const CaptureTaskForm = ({
+  props,
+  resource,
+}: Readonly<{ props: CaptureProps; resource: Atom.Atom<TransactionCaptureTask> }>): JSX.Element => {
+  const task = useAtomValue(resource);
+  return <CaptureEditor props={{ ...props, task, newAttempt: false }} />;
 };
 export const TransactionCapture = (props: CaptureProps): JSX.Element => (
   <RetainedCapture key={props.intentId} props={props} intentId={props.intentId} />

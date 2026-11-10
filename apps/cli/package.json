@@ -15,12 +15,12 @@
     "lint:deps": "bun ../../tools/depcruise/run.mjs . src test"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.6",
+    "@effect/platform-bun": "4.1.2",
     "@fidy/server": "workspace:0.0.0",
-    "effect": "4.0.6"
+    "effect": "4.1.2"
   },
   "devDependencies": {
-    "@effect/vitest": "4.0.6",
+    "@effect/vitest": "4.1.2",
     "vitest": "5.1.0"
   }
 }

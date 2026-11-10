@@ -325,7 +325,14 @@ const execute = Effect.gen(function* () {
 if (import.meta.main) {
   Effect.runPromise(
     Effect.scoped(execute).pipe(
-      Effect.provide(Layer.mergeAll(BunFileSystem.layer, BunCrypto.layer, VerificationHttpLive))
+      Effect.provide(
+        Layer.mergeAll(
+          BunFileSystem.layer,
+          BunCrypto.layerSecureRandom,
+          BunCrypto.layerDigest,
+          VerificationHttpLive
+        )
+      )
     )
   ).catch((error: unknown) => {
     if (error instanceof LocalProofFailure) process.stderr.write(error.message + "\n");

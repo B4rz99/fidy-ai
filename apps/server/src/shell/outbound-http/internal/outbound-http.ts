@@ -1,6 +1,7 @@
+import { Digest } from "effect/crypto";
 import { DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { type WompiEnvironment } from "~/shell/secret-material/contract";
-import { type Crypto, Effect, Match, Option, Redacted, Schema } from "effect";
+import { Effect, Match, Option, Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { FetchHttpClient, HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
 import { makeProviderTransport } from "./transport";
@@ -56,7 +57,7 @@ type OutboundHttpConfig = Readonly<{
   resendEmailDeliveryApiKey: Option.Option<Redacted.Redacted<string>>;
   wompi: Option.Option<WompiTransportConfig>;
   httpClient: HttpClient.HttpClient;
-  crypto: Option.Option<Crypto.Crypto>;
+  digest: Option.Option<Digest.Digest["Service"]>;
 }>;
 
 type ResendRequest = Extract<OutboundHttpRequest, { readonly _tag: `Resend${string}` }>;
@@ -107,18 +108,21 @@ const makeResendRequest = (
 };
 
 const transactionSignature = (
-  crypto: Crypto.Crypto,
+  digest: Digest.Digest["Service"],
   integritySecret: Redacted.Redacted<string>,
   body: WompiTransactionBody
 ): Effect.Effect<string, OutboundHttpFailure> =>
-  crypto
+  digest
     .digest(
-      "SHA-256",
+      Digest.sha256,
       new TextEncoder().encode(
         `${body.reference}${body.amountInCents}${body.currency}${Redacted.value(integritySecret)}`
       )
     )
-    .pipe(Effect.map(Hex.encode), Effect.mapError(unavailableTransport));
+    .pipe(
+      Effect.map(Hex.encode),
+      Effect.catchDefect(() => Effect.fail(unavailableTransport()))
+    );
 
 const walletApprovalRequest = (
   config: WompiTransportConfig,
@@ -244,11 +248,11 @@ const makeSandboxCorrectionRequest = (
 
 const makeSignedTransactionRequest = (
   config: WompiTransportConfig,
-  crypto: Crypto.Crypto,
+  digest: Digest.Digest["Service"],
   body: WompiTransactionBody
 ): Effect.Effect<HttpClientRequest.HttpClientRequest, OutboundHttpFailure> => {
   const origin = config.environment === "sandbox" ? wompiSandboxOrigin : wompiProductionOrigin;
-  return transactionSignature(crypto, config.integritySecret, body).pipe(
+  return transactionSignature(digest, config.integritySecret, body).pipe(
     Effect.map((signature) =>
       jsonRequest(`${origin}/v1/transactions`, signedTransactionBody(body, signature), {
         authorization: `Bearer ${Redacted.value(config.privateKey)}`,
@@ -260,7 +264,7 @@ const makeSignedTransactionRequest = (
 const makeWompiRequest = (
   request: WompiRequest,
   config: WompiTransportConfig,
-  crypto: Crypto.Crypto
+  digest: Digest.Digest["Service"]
 ): Effect.Effect<HttpClientRequest.HttpClientRequest, OutboundHttpFailure> => {
   const origin = { sandbox: wompiSandboxOrigin, production: wompiProductionOrigin }[
     config.environment
@@ -302,7 +306,7 @@ const makeWompiRequest = (
             }
           )
         ),
-      WompiCreateTransaction: (value) => makeSignedTransactionRequest(config, crypto, value.body),
+      WompiCreateTransaction: (value) => makeSignedTransactionRequest(config, digest, value.body),
       WompiSandboxRefund: (value) => makeSandboxCorrectionRequest(value, config),
       WompiSandboxCardVoid: (value) => makeSandboxCorrectionRequest(value, config),
       WompiFindTransaction: (value) =>
@@ -354,11 +358,11 @@ const prepareWompi = (
   request: WompiRequest,
   context: RequestPreparationContext
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> =>
-  Option.all({ wompi: context.config.wompi, crypto: context.config.crypto }).pipe(
+  Option.all({ wompi: context.config.wompi, digest: context.config.digest }).pipe(
     Option.match({
       onNone: () => Effect.fail(unavailableTransport()),
-      onSome: ({ wompi, crypto }) =>
-        makeWompiRequest(request, wompi, crypto).pipe(
+      onSome: ({ wompi, digest }) =>
+        makeWompiRequest(request, wompi, digest).pipe(
           Effect.map((providerRequest) => ({
             http: context.wompiHttp,
             maximumResponseBytes: maximumWompiResponseBytes,

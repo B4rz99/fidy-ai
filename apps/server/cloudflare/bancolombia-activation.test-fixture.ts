@@ -1,4 +1,5 @@
-import { Clock, Context, Crypto, Effect, Layer, Option, Redacted } from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
+import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
 import { Base64Url } from "effect/encoding";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import { SignJWT, exportJWK, exportPKCS8, generateKeyPair } from "jose";
@@ -71,12 +72,15 @@ type State = {
 type ActivationInput = Parameters<ConnectionBankActivation["activate"]>[0];
 
 const fixtureKeys = Effect.gen(function* () {
-  const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+  const services = yield* Layer.build(TestCrypto);
+  const secureRandom = Context.get(services, SecureRandom.SecureRandom);
+  const digest = Context.get(services, Digest.Digest);
   const client = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
   const bank = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
   return {
     credentials: {
-      crypto,
+      secureRandom,
+      digest,
       clientId,
       privateKey: Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(client.privateKey))),
       publicKey: {
@@ -250,7 +254,7 @@ const bankIdentity = (
   Effect.gen(function* () {
     const issuedAt = Math.floor((yield* Clock.currentTimeMillis) / millisecondsPerSecond);
     const hash = (value: string): Effect.Effect<string, BancolombiaAuthorizationFailed> =>
-      material.credentials.crypto.digest("SHA-256", new TextEncoder().encode(value)).pipe(
+      material.credentials.digest.digest(Digest.sha256, new TextEncoder().encode(value)).pipe(
         Effect.map((digest) => Base64Url.encode(digest.slice(0, digest.length / 2))),
         Effect.mapError(() => new BancolombiaAuthorizationFailed())
       );

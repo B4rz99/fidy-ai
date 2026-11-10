@@ -10544,14 +10544,7 @@
                     "additionalProperties": false,
                     "properties": {
                       "cursor": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
+                        "type": "string"
                       }
                     },
                     "type": "object"
@@ -20248,14 +20241,7 @@
             "name": "cursor",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "type": "string"
             }
           }
         ],

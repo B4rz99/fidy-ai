@@ -1,3 +1,4 @@
+import { SecureRandom } from "effect/crypto";
 import { plainReply } from "./plain-reply";
 import { captureWithoutCommit, transactionReceipt } from "./capture-reply";
 import { browserConfirmationText, readBrowserConfirmation } from "./hosted-browser-confirmation";
@@ -62,7 +63,7 @@ import {
   HostedToolCallMaximum,
   type PreparedHostedText,
 } from "../../../src/shell/hosted-inference/contract";
-import { Cause, Clock, Crypto, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
 
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
 import {
@@ -71,7 +72,7 @@ import {
 } from "../../../src/shell/channels/whatsapp/contract";
 import { type TransactionSubject } from "../../canonical-work/operations";
 import { newId } from "../../secret-material/operations";
-import { makeWorkerCrypto } from "../../secret-material/runtime";
+import { makeSecureRandom } from "../../secret-material/runtime";
 import {
   type WhatsAppHostedSubject,
   type WhatsAppInboundEvidence,
@@ -1697,7 +1698,7 @@ const executeHostedTool = ({
         operation.policy.kind === "mutation" &&
         (outcome._tag === "Succeeded" || outcome._tag === "CommittedOutputUnavailable"),
     }));
-  }).pipe(Effect.provideService(Crypto.Crypto, makeWorkerCrypto()));
+  }).pipe(Effect.provideService(SecureRandom.SecureRandom, makeSecureRandom()));
 };
 
 /** Redeem one User-authored exact command without giving the model authority to confirm it. */

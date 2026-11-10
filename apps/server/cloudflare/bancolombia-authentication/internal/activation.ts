@@ -1,3 +1,4 @@
+import { Digest } from "effect/crypto";
 import { Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { createLocalJWKSet, jwtVerify } from "jose";
@@ -110,7 +111,9 @@ const checkHash = (
 ): Effect.Effect<void, BancolombiaAuthorizationFailed> =>
   Effect.gen(function* () {
     if (claim === undefined) return;
-    const digest = yield* input.crypto.digest("SHA-256", new TextEncoder().encode(value));
+    const digest = yield* input.digest
+      .digest(Digest.sha256, new TextEncoder().encode(value))
+      .pipe(Effect.catchDefect(() => Effect.fail(failed())));
     if (claim !== Base64Url.encode(digest.slice(0, digest.length / 2))) return yield* failed();
   }).pipe(Effect.mapError(failed));
 const validateIdentity = (
@@ -255,7 +258,7 @@ const discoverAccounts = (
     let totalPages = Option.none<number>();
     for (let index = 0; index < maximumPages; index += 1) {
       if ((yield* Clock.currentTimeMillis) >= input.expiresAtMilliseconds) return yield* failed();
-      const interactionId = yield* input.crypto.randomUUIDv4();
+      const interactionId = yield* input.secureRandom.uuidV4();
       const response = yield* http.execute({
         _tag: "ReadBankAccounts",
         bearer,
@@ -349,7 +352,7 @@ const verifyConsent = (
       _tag: "ReadBankConsent",
       bearer,
       consentId: input.consentId,
-      interactionId: yield* input.crypto.randomUUIDv4(),
+      interactionId: yield* input.secureRandom.uuidV4(),
     });
     if (consent.status !== successfulResponse) return yield* failed();
     const verifiedConsent = yield* Schema.decodeEffect(Schema.fromJsonString(Consent))(

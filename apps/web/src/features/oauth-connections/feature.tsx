@@ -19,7 +19,10 @@ export const OAuthManagementFeature = (): JSX.Element => {
 };
 const ReviewUnavailable = ({ requestId }: Readonly<{ requestId: string }>): JSX.Element => (
   <OAuthState title="Solicitud no disponible" kind="warning">
-    <p>Puede haber vencido o requerir un nuevo inicio de sesión. No se autorizó ningún acceso.</p>
+    <p>
+      Puede haber vencido, haberse utilizado o requerir un nuevo inicio de sesión. No pudimos
+      comprobar el estado de esta solicitud.
+    </p>
     <Button render={<Link to="/login" reloadDocument search={{ oauthRequest: requestId }} />}>
       Iniciar sesión
     </Button>
@@ -49,7 +52,10 @@ const ReviewContent = ({ requestId }: Readonly<{ requestId: string }>): JSX.Elem
   const router = useRouter();
   const result = useReviewedRequest(router.options.context.webAuthClient, requestId);
   if (result._tag === "Initial") return <LoadingRequest />;
-  if (result._tag === "Failure") return <ReviewUnavailable requestId={requestId} />;
+  if (result._tag === "Failure" || Option.isSome(result.refreshFailure)) {
+    return <ReviewUnavailable requestId={requestId} />;
+  }
+  if (result.waiting) return <LoadingRequest />;
   return (
     <MountedReviewTask
       key={result.value.requestId}
@@ -62,8 +68,16 @@ const MountedReviewTask = ({
   review,
   client,
 }: Readonly<{ review: OAuthReview; client: WebAuthClient }>): JSX.Element => {
-  const [state, setState] = useState<ReviewTaskState>(() => initialReviewSelection(review));
-  const [task] = useState(() => makeReviewTask({ client, initial: state, onChange: setState }));
+  const [initial] = useState(() => initialReviewSelection(review));
+  const [state, setState] = useState<ReviewTaskState>(initial);
+  const [task] = useState(() =>
+    makeReviewTask({
+      client,
+      initial,
+      onChange: setState,
+      navigate: (callback): void => window.location.assign(callback),
+    })
+  );
   const dispatch = useAtomSet(task.atom);
   const lifecycleRef = useCallback<RefCallback<HTMLDivElement>>(
     (node) => {
@@ -79,6 +93,31 @@ const MountedReviewTask = ({
     </div>
   );
 };
+const CancellationRecovery = ({
+  state,
+  readAgain,
+}: Readonly<{
+  state: Extract<ReviewTaskState, { _tag: "Loading" | "Unavailable" | "CancellationUnconfirmed" }>;
+  readAgain: () => void;
+}>): JSX.Element => (
+  <OAuthState
+    title={state._tag === "Unavailable" ? "Solicitud no disponible" : "Cancelación sin confirmar"}
+    kind="warning"
+  >
+    <p role="alert">No pudimos confirmar la cancelación de esta solicitud.</p>
+    {state._tag === "Loading" ? (
+      <PendingRead label="Cargando solicitud" />
+    ) : (
+      <>
+        {state._tag === "Unavailable" && (
+          <p>No pudimos comprobar si esta solicitud sigue disponible.</p>
+        )}
+        <Button onClick={readAgain}>Volver a leer la solicitud</Button>
+      </>
+    )}
+  </OAuthState>
+);
+
 const ReviewTaskContent = ({
   state,
   actions,
@@ -87,6 +126,13 @@ const ReviewTaskContent = ({
   actions: ReturnType<ReturnType<typeof makeReviewTask>["actions"]>;
 }>): JSX.Element => {
   if (state._tag === "Cancelled") return <CancelledRequest />;
+  if (state._tag === "Disposed") {
+    return (
+      <OAuthState title="Solicitud no disponible" kind="warning">
+        <p>Saliste de esta revisión. Si enviaste una decisión, todavía puede completarse.</p>
+      </OAuthState>
+    );
+  }
   if (state._tag === "Uncertain") {
     return (
       <OAuthState title="Conexión sin confirmar" kind="warning">
@@ -104,12 +150,12 @@ const ReviewTaskContent = ({
       </OAuthState>
     );
   }
-  if (state._tag === "CancellationUnconfirmed") {
-    return (
-      <OAuthState title="Cancelación sin confirmar" kind="warning">
-        <p role="alert">No pudimos confirmar la cancelación de esta solicitud.</p>
-      </OAuthState>
-    );
+  if (
+    state._tag === "CancellationUnconfirmed" ||
+    state._tag === "Loading" ||
+    state._tag === "Unavailable"
+  ) {
+    return <CancellationRecovery state={state} readAgain={actions.readAgain} />;
   }
   return (
     <OAuthWorkspace title="Conectar con Fidy">

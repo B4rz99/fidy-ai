@@ -1,3 +1,4 @@
+import { BudgetWriteFeedback } from "./write-feedback";
 import { BudgetDeletion } from "./deletion";
 import { AmountInput } from "@/ui/components/amount-input";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
@@ -22,6 +23,7 @@ type EditorProps = Readonly<{
   onRemove: () => void;
   onRefresh: () => void;
   saveState: SaveState;
+  writeAction: "save" | "delete";
 }>;
 const AmountField = ({
   amount,
@@ -168,6 +170,7 @@ export const BudgetEditor = ({
   onRemove,
   onRefresh,
   saveState,
+  writeAction,
 }: EditorProps): JSX.Element => {
   const [deletionStep, setDeletionStep] = useState<"editing" | "reviewing" | "returning">(
     "editing"
@@ -193,7 +196,7 @@ export const BudgetEditor = ({
         onCancel={() => setDeletionStep("returning")}
         onRemove={onRemove}
         onRefresh={onRefresh}
-        saveState={saveState}
+        saveState={writeAction === "delete" ? saveState : "idle"}
       />
     );
   }
@@ -205,12 +208,32 @@ export const BudgetEditor = ({
       groupCurrencies={groupCurrencies}
       disabled={disabled}
       onClose={onClose}
+      onRefresh={onRefresh}
+      saveState={saveState}
+      writeAction={writeAction}
       editor={editor}
       onDelete={() => setDeletionStep("reviewing")}
       onRemovalMount={focusRemoval}
     />
   );
 };
+
+const BudgetEditorFeedback = ({
+  saveState,
+  writeAction,
+  onRefresh,
+}: Pick<EditorProps, "saveState" | "writeAction" | "onRefresh">): JSX.Element => (
+  <>
+    {writeAction === "save" ? (
+      <BudgetWriteFeedback saveState={saveState} writeAction={writeAction} />
+    ) : null}
+    {saveState === "uncertain" ? (
+      <Button type="button" variant="outline" onClick={onRefresh}>
+        Actualizar presupuestos
+      </Button>
+    ) : null}
+  </>
+);
 
 const EditorForm = ({
   draft,
@@ -219,57 +242,58 @@ const EditorForm = ({
   groupCurrencies,
   disabled,
   onClose,
-  editor,
+  editor: { amount, setAmount, currency, setCurrency, group, onGroup, submit },
   onDelete,
   onRemovalMount,
-}: Omit<EditorProps, "onSubmit" | "onRemove" | "onRefresh" | "saveState"> &
+  onRefresh,
+  saveState,
+  writeAction,
+}: Omit<EditorProps, "onSubmit" | "onRemove"> &
   Readonly<{
     editor: ReturnType<typeof useEditor>;
     onDelete: () => void;
     onRemovalMount: RefCallback<HTMLButtonElement>;
-  }>): JSX.Element => {
-  const { amount, setAmount, currency, setCurrency, group, onGroup, submit } = editor;
-  return (
-    <form
-      onSubmit={submit}
-      className="flex flex-col gap-5"
-      aria-label={`Configurar presupuesto de ${draft.category.label}`}
-    >
-      <EditorHeading draft={draft} month={month} disabled={disabled} onClose={onClose} />
-      <fieldset disabled={disabled} className="flex flex-col gap-4">
-        {Option.isNone(draft.groupCategoryIds) ? (
-          <AmountField amount={amount} onAmount={setAmount} />
-        ) : null}
-        <GroupField group={group} groups={groups} disabled={disabled} onGroup={onGroup} />
-        {Option.isSome(draft.groupCategoryIds) ||
-        !groupCurrencies.some((entry) => entry.group === group) ? (
-          <GroupCurrencyField currency={currency} disabled={disabled} onCurrency={setCurrency} />
-        ) : (
-          <p className="text-sm text-muted-foreground">Moneda del grupo: {currency}</p>
-        )}
-        {Option.isSome(draft.groupCategoryIds) ? (
-          <p className="text-sm text-muted-foreground">
-            La moneda se aplica a todas las categorías del grupo desde este mes. Los importes
-            conservan su valor; no se convierten.
-          </p>
-        ) : null}
-        <Button type="submit">{disabled ? "Guardando…" : "Guardar presupuesto"}</Button>
-      </fieldset>
-      {Option.isSome(draft.budget) && Option.isNone(draft.groupCategoryIds) ? (
-        <Button
-          ref={onRemovalMount}
-          type="button"
-          variant="destructive"
-          contentLayout="wrap"
-          disabled={disabled}
-          onClick={onDelete}
-        >
-          Eliminar presupuesto
-        </Button>
+  }>): JSX.Element => (
+  <form
+    onSubmit={submit}
+    className="flex flex-col gap-5"
+    aria-label={`Configurar presupuesto de ${draft.category.label}`}
+  >
+    <EditorHeading draft={draft} month={month} disabled={disabled} onClose={onClose} />
+    <fieldset disabled={disabled} className="flex flex-col gap-4">
+      {Option.isNone(draft.groupCategoryIds) ? (
+        <AmountField amount={amount} onAmount={setAmount} />
       ) : null}
-    </form>
-  );
-};
+      <GroupField group={group} groups={groups} disabled={disabled} onGroup={onGroup} />
+      {Option.isSome(draft.groupCategoryIds) ||
+      !groupCurrencies.some((entry) => entry.group === group) ? (
+        <GroupCurrencyField currency={currency} disabled={disabled} onCurrency={setCurrency} />
+      ) : (
+        <p className="text-sm text-muted-foreground">Moneda del grupo: {currency}</p>
+      )}
+      {Option.isSome(draft.groupCategoryIds) ? (
+        <p className="text-sm text-muted-foreground">
+          La moneda se aplica a todas las categorías del grupo desde este mes. Los importes
+          conservan su valor; no se convierten.
+        </p>
+      ) : null}
+      <Button type="submit">{saveState === "saving" ? "Guardando…" : "Guardar presupuesto"}</Button>
+    </fieldset>
+    <BudgetEditorFeedback {...{ saveState, writeAction, onRefresh }} />
+    {Option.isSome(draft.budget) && Option.isNone(draft.groupCategoryIds) ? (
+      <Button
+        ref={onRemovalMount}
+        type="button"
+        variant="destructive"
+        contentLayout="wrap"
+        disabled={disabled}
+        onClick={onDelete}
+      >
+        Eliminar presupuesto
+      </Button>
+    ) : null}
+  </form>
+);
 
 const EditorHeading = ({
   draft,

@@ -625,6 +625,71 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
     })
   ));
 
+it.each([
+  { name: "removed", days: 0, queries: 1, outcome: { _tag: "Done" } },
+  { name: "terminal", days: 0, queries: 1, outcome: { _tag: "Done" } },
+  { name: "missing", days: 0, queries: 1, outcome: new InsightUnavailable() },
+  { name: "expired", days: 2, queries: 2, outcome: { _tag: "Done" } },
+])("$name queued content never reopens personal reports or recipients", (scenario) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const schedule = yield* activateTestReminder(db);
+      const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
+      const userId = proactivityTestUsers[0];
+      const generated = yield* materializeReminder({ db, userId, id: schedule.id, now });
+      if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
+      if (scenario.name === "removed") {
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE proactive_messages SET text=NULL WHERE user_id=? AND id=?")
+            .bind(userId, generated.id)
+            .run()
+        );
+      }
+      if (scenario.name === "terminal") {
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "UPDATE proactive_messages SET dispatch_state='settled' WHERE user_id=? AND id=?"
+            )
+            .bind(userId, generated.id)
+            .run()
+        );
+      }
+      const reads = vi.fn((sql: string) => db.prepare(sql));
+      const observedDb = new Proxy(db, {
+        get(target, key, receiver): unknown {
+          return key === "prepare" ? reads : Reflect.get(target, key, receiver);
+        },
+      });
+      const provider = vi.fn(() => Promise.reject(new Error("Unexpected provider send")));
+      vi.stubGlobal("fetch", provider);
+      const result = yield* executeProactivityWork({
+        environment: configuration(observedDb),
+        userId,
+        now: DateTime.add(now, { days: scenario.days }),
+        work: {
+          kind: "proactivity-delivery",
+          version: 1,
+          userId,
+          id: scenario.name === "missing" ? newId() : generated.id,
+        },
+      }).pipe(
+        Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+        Effect.match({ onFailure: (error) => error, onSuccess: (value) => value })
+      );
+      expect(result).toEqual(scenario.outcome);
+      expect(provider).not.toHaveBeenCalled();
+      expect(reads.mock.calls).toHaveLength(scenario.queries);
+      expect(reads.mock.calls[0]?.[0]).toContain("FROM proactivity_delivery_metadata");
+      if (scenario.name === "expired") {
+        expect(reads.mock.calls[1]?.[0]).toMatch(/^UPDATE proactive_messages/u);
+      }
+    })
+  )
+);
+
 it("refuses approved-template drift between a deferred staging and the irreversible claim", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1488,6 +1553,16 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       );
       const later = DateTime.makeUnsafe("2026-10-10T14:00:00Z");
       vi.spyOn(Date, "now").mockReturnValue(later.epochMilliseconds);
+      expect(yield* send(question.delivery_id, later)).toEqual({ _tag: "Done" });
+      expect(sent).toBe(4);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT dispatch_state FROM proactive_messages WHERE user_id=? AND id=?")
+            .bind(userId, question.delivery_id)
+            .first()
+        )
+      ).toEqual({ dispatch_state: "ready" });
       yield* expireDeliveryWork({ db, now: later.epochMilliseconds });
       expect(
         yield* Effect.tryPromise(() =>

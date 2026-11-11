@@ -436,8 +436,15 @@ it.live(
       });
       const registry = AtomRegistry.make();
       const unmount = registry.mount(history.state);
+      const ready = Effect.tryPromise(() =>
+        vi.waitFor(() => {
+          const result = registry.get(history.firstPage);
+          expect(result._tag).toBe("Success");
+          expect(result.waiting).toBe(false);
+        })
+      );
       try {
-        yield* AtomRegistry.getResult(registry, history.firstPage).pipe(Effect.orDie);
+        yield* ready;
         expect(reads).toBe(1);
         for (const expected of [2, 4]) {
           registry.set(history.action, "refresh-pages");
@@ -445,9 +452,7 @@ it.live(
           expect(reads).toBe(expected);
           if (expected === 2) {
             registry.set(history.action, "reset");
-            yield* AtomRegistry.getResult(registry, history.firstPage, {
-              suspendOnWaiting: true,
-            }).pipe(Effect.orDie);
+            yield* ready;
             expect(reads).toBe(3);
           }
         }

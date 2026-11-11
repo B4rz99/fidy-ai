@@ -24,7 +24,12 @@ import {
   withdrawWeeklyFixtureConsent,
 } from "../weekly-summary.test-fixture";
 import { ProactivityActivity, type ProactivityEnvironment } from "./contract";
-import { findWeeklyGovernor, findWeeklySchedule } from "./operations";
+import {
+  findInsight,
+  findInsightAttempt,
+  findWeeklyGovernor,
+  findWeeklySchedule,
+} from "./operations";
 import { admitWeeklyResource } from "./internal/weekly-admission";
 
 const userId = weeklySummaryTestUser;
@@ -182,6 +187,136 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 afterAll(() => weeklySummaryTestDatabases.dispose());
+
+it.each(["read", "dismissed", "matching-receipt"] as const)(
+  "attaches the first verified weekly receipt after %s without regressing attention",
+  (attention) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* testPromise(seed);
+        vi.spyOn(Date, "now").mockReturnValue(fixture.at.epochMilliseconds);
+        const fetch = fakeProvider();
+        vi.stubGlobal("fetch", fetch);
+        const { db } = fixture;
+        const coordinator = makeCoordinator(configuration(db));
+        const schedule = Option.getOrThrow(yield* findWeeklySchedule({ db, userId }));
+        yield* testPromise(() =>
+          activity(coordinator, { kind: "weekly-generate", version: 1, userId, id: schedule.id })
+        );
+        const id = yield* testPromise(() => eventFor(db, fixture.at));
+        const work = { kind: "weekly-summary", version: 1, userId, insightEventId: id } as const;
+        yield* testPromise(() => activity(coordinator, work));
+        const proof = yield* testPromise(() => readSummaryClaim(db, id));
+        yield* testPromise(() =>
+          db
+            .prepare("UPDATE insight_events SET lifecycle_state=? WHERE user_id=? AND id=?")
+            .bind(attention === "matching-receipt" ? "read" : attention, userId, id)
+            .run()
+        );
+        expect(Option.isNone(yield* findInsightAttempt({ db, userId, id }))).toBe(true);
+        if (attention === "matching-receipt") {
+          yield* testPromise(() =>
+            db
+              .prepare(`UPDATE insight_events SET delivery_receipt_id=?,
+            delivery_sent_at_ms=?,delivery_channel='whatsapp',delivery_provider='kapso',
+            delivery_provider_message_id=? WHERE user_id=? AND id=?`)
+              .bind(
+                crypto.randomUUID(),
+                fixture.at.epochMilliseconds,
+                proof.provider_message_id,
+                userId,
+                id
+              )
+              .run()
+          );
+        }
+        const originalReceipt = yield* findInsightAttempt({ db, userId, id });
+        expect(
+          (yield* testPromise(() => delivered(coordinator, proof, fixture.at.epochMilliseconds)))
+            .status
+        ).toBe(200);
+        const receipt = Option.getOrThrow(yield* findInsightAttempt({ db, userId, id }));
+        expect(receipt.providerMessageId).toBe(proof.provider_message_id);
+        if (Option.isSome(originalReceipt)) expect(receipt).toEqual(originalReceipt.value);
+        expect(Option.getOrThrow(yield* findInsight({ db, userId, id })).lifecycleState).toBe(
+          attention === "matching-receipt" ? "read" : attention
+        );
+        expect(
+          (yield* testPromise(() => delivered(coordinator, proof, fixture.at.epochMilliseconds)))
+            .status
+        ).toBe(200);
+        expect(yield* findInsightAttempt({ db, userId, id })).toEqual(Option.some(receipt));
+        expect(Option.getOrThrow(yield* findWeeklyGovernor({ db, userId })).unanswered).toBe(1);
+        yield* testPromise(() => activity(coordinator, work));
+        expect(fetch).toHaveBeenCalledOnce();
+      })
+    )
+);
+
+it("refuses a native weekly proof that conflicts with the retained first receipt atomically", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* testPromise(seed);
+      vi.spyOn(Date, "now").mockReturnValue(fixture.at.epochMilliseconds);
+      const fetch = fakeProvider();
+      vi.stubGlobal("fetch", fetch);
+      const { db } = fixture;
+      const coordinator = makeCoordinator(configuration(db));
+      const schedule = Option.getOrThrow(yield* findWeeklySchedule({ db, userId }));
+      yield* testPromise(() =>
+        activity(coordinator, { kind: "weekly-generate", version: 1, userId, id: schedule.id })
+      );
+      const id = yield* testPromise(() => eventFor(db, fixture.at));
+      yield* testPromise(() =>
+        activity(coordinator, { kind: "weekly-summary", version: 1, userId, insightEventId: id })
+      );
+      const proof = yield* testPromise(() => readSummaryClaim(db, id));
+      yield* testPromise(() =>
+        db
+          .prepare(`UPDATE insight_events SET lifecycle_state='read',
+        delivery_receipt_id=?,delivery_sent_at_ms=?,delivery_channel='whatsapp',delivery_provider='kapso',
+        delivery_provider_message_id='original-message' WHERE user_id=? AND id=?`)
+          .bind(crypto.randomUUID(), fixture.at.epochMilliseconds, userId, id)
+          .run()
+      );
+      const receipt = yield* findInsightAttempt({ db, userId, id });
+      expect(
+        (yield* testPromise(() => delivered(coordinator, proof, fixture.at.epochMilliseconds)))
+          .status
+      ).toBe(503);
+      expect(yield* findInsightAttempt({ db, userId, id })).toEqual(receipt);
+      expect(Option.getOrThrow(yield* findInsight({ db, userId, id })).lifecycleState).toBe("read");
+      expect(Option.isNone(yield* findWeeklyGovernor({ db, userId }))).toBe(true);
+      expect(fetch).toHaveBeenCalledOnce();
+    })
+  ));
+
+it("an ambiguous weekly send retains the pending InsightEvent without a delivery receipt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* testPromise(seed);
+      vi.spyOn(Date, "now").mockReturnValue(fixture.at.epochMilliseconds);
+      const fetch = fakeProvider();
+      fetch.mockImplementationOnce(() => Promise.reject(new Error("provider response lost")));
+      vi.stubGlobal("fetch", fetch);
+      const { db } = fixture;
+      const coordinator = makeCoordinator(configuration(db));
+      const schedule = Option.getOrThrow(yield* findWeeklySchedule({ db, userId }));
+      yield* testPromise(() =>
+        activity(coordinator, { kind: "weekly-generate", version: 1, userId, id: schedule.id })
+      );
+      const id = yield* testPromise(() => eventFor(db, fixture.at));
+      const work = { kind: "weekly-summary", version: 1, userId, insightEventId: id } as const;
+      yield* testPromise(() => activity(coordinator, work));
+      yield* testPromise(() => activity(coordinator, work));
+      expect(Option.getOrThrow(yield* findInsight({ db, userId, id })).lifecycleState).toBe(
+        "pending"
+      );
+      expect(Option.isNone(yield* findInsightAttempt({ db, userId, id }))).toBe(true);
+      expect(Option.isNone(yield* findWeeklyGovernor({ db, userId }))).toBe(true);
+      expect(fetch).toHaveBeenCalledOnce();
+    })
+  ));
 
 it.each(["reassociation", "withdrawal", "summary-withdrawal", "expiry", "withdrawal-expiry"])(
   "a queued question preserves its cutoff, association and expiry after %s",

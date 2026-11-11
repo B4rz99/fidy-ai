@@ -1,3 +1,4 @@
+import { preparePredicateCheck } from "../../../src/shell/sql-assertions/operations";
 import { type UserId } from "../../../src/core/identity/contract";
 import {
   DeliveryAttemptId,
@@ -18,6 +19,20 @@ export const prepareWeeklyDeliverySettlement = (
     thresholds: ProactivityThresholds;
   }>
 ): ReadonlyArray<D1PreparedStatement> => [
+  preparePredicateCheck({
+    db: input.db,
+    scope: "insight_mutation",
+    predicate: {
+      sql: `SELECT 1 WHERE NOT EXISTS (
+        SELECT 1 FROM insight_events AS e JOIN (${input.proof.sql}) AS v
+          ON v.user_id=e.user_id AND v.insight_event_id=e.id
+        WHERE e.user_id=? AND e.id=? AND e.delivery_receipt_id IS NOT NULL
+          AND NOT (e.delivery_sent_at_ms IS v.send_started_at_ms
+            AND e.delivery_channel IS 'whatsapp' AND e.delivery_provider IS 'kapso'
+            AND e.delivery_provider_message_id IS v.provider_message_id))`,
+      params: [...input.proof.params, input.userId, input.insightEventId],
+    },
+  }),
   ...prepareCount(input),
   input.db
     .prepare(`UPDATE insight_events SET

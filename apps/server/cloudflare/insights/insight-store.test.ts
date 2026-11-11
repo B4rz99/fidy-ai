@@ -338,6 +338,34 @@ effectIt.effect("reads and dismisses an owned Insight through the public canonic
       );
       expect(response.status).toBe(200);
       yield* fromTestPromise(() => response.arrayBuffer());
+      const repeated = yield* fromTestPromise(() =>
+        send({
+          db,
+          index: 0,
+          path: `/insights/${event.id}/${action === "dismiss" ? "dismissed" : action}`,
+          method: "POST",
+          body: Option.none(),
+        })
+      );
+      expect(repeated.status).toBe(400);
+      const lateDelivery = yield* fromTestPromise(() =>
+        send({
+          db,
+          index: 0,
+          path: `/insights/${event.id}/delivered`,
+          method: "POST",
+          body: Option.some({
+            sentAt: "2026-08-09T23:00:08Z",
+            channel: "whatsapp",
+            provider: "kapso",
+            providerMessageId: "late-canonical",
+          }),
+        })
+      );
+      expect(lateDelivery.status).toBe(400);
+      expect(Option.isNone(yield* findInsightAttempt({ db, userId: users[0], id: event.id }))).toBe(
+        true
+      );
     }
     expect(
       Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState

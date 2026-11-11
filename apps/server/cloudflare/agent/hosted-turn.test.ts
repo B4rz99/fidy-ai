@@ -10,7 +10,7 @@ import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "../../src/core/identity/contract";
-import { prepareHostedMutationCommit } from "./operations";
+import { prepareHostedMutationCommit, readAdmittedHostedConsent } from "./operations";
 
 import { type Cause, DateTime, Effect, Exit, Option, Redacted, Schema } from "effect";
 import assert from "node:assert/strict";
@@ -2211,3 +2211,178 @@ it("shares the verified recipient window across Turns, advances only on newer ac
       expect(yield* open(clock + 86_401_999)).toBe(false);
     })
   ));
+
+it.each([899_999, 900_000, 900_001])(
+  "rolls back session admission at %i ms when the conditional Turn insert admits nothing",
+  (idleMs) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const caller = yield* Effect.tryPromise(() => subject(0));
+        const current = now();
+        const oldId = HostedAgentSessionId.make(newId());
+        const snapshot = yield* readHostedSnapshot({ db, subject: caller, now: current });
+        if (Option.isNone(snapshot)) return yield* Effect.die("missing fixture authority");
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status) VALUES(?,?,?,?,?,'active')"
+            )
+            .bind(
+              oldId,
+              users[0],
+              encodeJson(snapshot.value.consentBasis),
+              current - idleMs,
+              current - idleMs
+            )
+            .run()
+        );
+        const fresh = yield* readHostedSnapshot({ db, subject: caller, now: current });
+        if (Option.isNone(fresh)) return yield* Effect.die("missing fixture authority");
+        const selection = selectHostedSession({
+          snapshot: fresh.value,
+          userId: UserId.make(users[0]),
+          now: current,
+        });
+        expect(selection.id === oldId).toBe(idleMs < 900_000);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "CREATE TRIGGER reject_turn BEFORE INSERT ON hosted_turns BEGIN SELECT RAISE(IGNORE); END"
+            )
+            .run()
+        );
+        const result = yield* Effect.exit(
+          admitHostedTurn({
+            db,
+            channel: { _tag: "Browser", subject: caller },
+            selection,
+            text: TranscriptText.make("Nueva entrada"),
+            now: current,
+            id: TranscriptTurnId.make(newId()),
+          })
+        );
+        expect(
+          result._tag === "Failure" || (result._tag === "Success" && Option.isNone(result.value))
+        ).toBe(true);
+        const rows = yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT id,status,last_activity_at_ms FROM hosted_agent_sessions WHERE user_id=?"
+            )
+            .bind(users[0])
+            .all()
+        );
+        expect(rows.results).toEqual([
+          { id: oldId, status: "active", last_activity_at_ms: current - idleMs },
+        ]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM hosted_turns").first()
+          )
+        ).toEqual({ count: 0 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM transcript_entries").first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    )
+);
+
+it("rechecks live credential expiry without changing the captured admission start", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const caller = yield* Effect.tryPromise(() => subject(0));
+      const startedAt = now() - 2_000;
+      const snapshot = yield* readHostedSnapshot({ db, subject: caller, now: startedAt });
+      if (Option.isNone(snapshot)) return yield* Effect.die("missing fixture authority");
+      const selection = selectHostedSession({
+        snapshot: snapshot.value,
+        userId: UserId.make(users[0]),
+        now: startedAt,
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET idle_expires_at_ms=? WHERE id=?")
+          .bind(now(), sessions[0])
+          .run()
+      );
+      const result = yield* Effect.exit(
+        admitHostedTurn({
+          db,
+          channel: { _tag: "Browser", subject: caller },
+          selection,
+          text: TranscriptText.make("Entrada vencida"),
+          now: startedAt,
+          id: TranscriptTurnId.make(newId()),
+        })
+      );
+      expect(
+        result._tag === "Failure" || (result._tag === "Success" && Option.isNone(result.value))
+      ).toBe(true);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM hosted_agent_sessions").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM hosted_turns").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM transcript_entries").first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
+it.each([899_999, 900_000, 900_001])(
+  "retains the exact accepted basis across the session boundary at %i ms",
+  (idleMs) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const caller = yield* Effect.tryPromise(() => subject(0));
+        const current = now();
+        const snapshot = yield* readHostedSnapshot({ db, subject: caller, now: current });
+        if (Option.isNone(snapshot)) return yield* Effect.die("missing fixture authority");
+        const accepted = snapshot.value.consentBasis;
+        const priorBasis = { ...accepted, policyRevision: "previous-accepted-policy" };
+        const oldId = HostedAgentSessionId.make(newId());
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status) VALUES(?,?,?,?,?,'active')"
+            )
+            .bind(oldId, users[0], encodeJson(priorBasis), current - idleMs, current - idleMs)
+            .run()
+        );
+        const fresh = yield* readHostedSnapshot({ db, subject: caller, now: current });
+        if (Option.isNone(fresh)) return yield* Effect.die("missing fixture authority");
+        const selection = selectHostedSession({
+          snapshot: fresh.value,
+          userId: UserId.make(users[0]),
+          now: current,
+        });
+        expect(selection.id === oldId).toBe(idleMs < 900_000);
+        const turnId = TranscriptTurnId.make(newId());
+        expect(
+          yield* admitHostedTurn({
+            db,
+            channel: { _tag: "Browser", subject: caller },
+            selection,
+            text: TranscriptText.make("Misma autorización aceptada"),
+            now: current,
+            id: turnId,
+          })
+        ).toEqual(Option.some(turnId));
+        expect(
+          yield* readAdmittedHostedConsent({ db, userId: UserId.make(users[0]), turnId })
+        ).toEqual(Option.some(idleMs < 900_000 ? priorBasis : accepted));
+      })
+    )
+);

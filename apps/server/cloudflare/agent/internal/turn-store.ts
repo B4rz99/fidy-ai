@@ -827,7 +827,8 @@ export const admitHostedTurn = ({
   Effect.gen(function* () {
     const subject = channel.subject;
     const entryId = TranscriptEntryId.make(newId());
-    const authority = hostedAuthority({ subject, current: now });
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
+    const authority = hostedAuthority({ subject, current });
     const basisJson = yield* Schema.encodeEffect(
       Schema.fromJsonString(HostedAgentSessionConsentBasis)
     )(selection.basis);
@@ -839,15 +840,16 @@ export const admitHostedTurn = ({
           .bind(selection.id, basisJson, now, ...authority.params)
       : db
           .prepare(
-            `UPDATE hosted_agent_sessions SET status = 'active' WHERE id = ? AND user_id = ? AND status = 'active'`
+            `UPDATE hosted_agent_sessions SET status = 'active' WHERE id = ? AND user_id = ? AND status = 'active' AND consent_basis_json = ? AND EXISTS (${authority.sql})`
           )
-          .bind(selection.id, subject.userId);
+          .bind(selection.id, subject.userId, basisJson, ...authority.params);
     const channelStatements = prepareChannelAdmission({ db, channel, id, now });
-    const pro = activeProUserCondition({ userId: subject.userId, nowEpochMs: now });
+    const pro = activeProUserCondition({ userId: subject.userId, nowEpochMs: current });
     const day = Math.floor(now / millisecondsPerDay) * millisecondsPerDay;
     const results = yield* Effect.tryPromise(() =>
       db.batch([
         createSession,
+        prepareChangedRowAssertion({ db, scope: "hosted_admission" }),
         db
           .prepare(`INSERT INTO hosted_turns (id, user_id, hosted_session_id, started_at_ms, status)
       SELECT ?, userId, ?, ?, 'pending' FROM (${authority.sql})
@@ -864,12 +866,14 @@ export const admitHostedTurn = ({
             day + millisecondsPerDay,
             ...pro.params
           ),
+        prepareChangedRowAssertion({ db, scope: "hosted_admission" }),
         db
           .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)
       SELECT ?, user_id, hosted_session_id, id, 'user', ?, ? FROM hosted_turns
       WHERE id = ? AND user_id = ? AND status = 'pending'`)
           .bind(entryId, now, text, id, subject.userId),
+        prepareChangedRowAssertion({ db, scope: "hosted_admission" }),
         ...channelStatements,
         prepareReminderPauseNotice({
           db,
@@ -897,10 +901,15 @@ export const admitHostedTurn = ({
           .bind(subject.userId, selection.id),
         ...statementSessionActivity({ db, userId: subject.userId, turnId: id, current: now }),
       ])
+    ).pipe(
+      Effect.catchIf(
+        (failure) => /CHECK constraint failed: accepted = 1/u.test(String(failure.cause)),
+        () => Effect.succeed([])
+      )
     );
     return results[0]?.meta.changes === 1 &&
-      results[1]?.meta.changes === 1 &&
-      results[2]?.meta.changes === 1
+      results[2]?.meta.changes === 1 &&
+      results[4]?.meta.changes === 1
       ? Option.some(id)
       : Option.none();
   });

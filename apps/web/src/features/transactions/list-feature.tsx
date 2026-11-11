@@ -340,6 +340,15 @@ const useTransactionQueries = (
       dispatch("reset");
       router.options.context.registry.refresh(categories);
     },
+    onRetryMore: () => {
+      if (
+        router.options.context.registry.get(historyResource.state).retry.retry !==
+        history.retry.retry
+      )
+        return;
+      if (corrections.locked) return corrections.recover();
+      dispatch(history.retry);
+    },
   };
 };
 const readyQueryActivity = (

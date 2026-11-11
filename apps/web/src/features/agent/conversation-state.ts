@@ -101,8 +101,9 @@ export const conversationCommands = ({
   propose: client.runtime.fn<Submission>()(
     ({ payload, entryId }) => {
       const lifetime = capture();
-      const { setConversation, clearDraft } = lifetime;
+      const { setConversation, clearDraft, active } = lifetime;
       return Effect.gen(function* () {
+        if (!active()) return;
         const channel = yield* client;
         const reply = yield* channel.hostedTurn.propose({ payload });
         yield* Effect.sync(clearDraft);
@@ -113,8 +114,9 @@ export const conversationCommands = ({
   ),
   progress: client.runtime.fn<Processing>()(
     (pending) => {
-      const { setConversation } = capture();
+      const { setConversation, active } = capture();
       return Effect.gen(function* () {
+        if (!active()) return;
         const channel = yield* client;
         const reply = yield* channel.hostedTurn.progress({ payload: { turnId: pending.turnId } });
         yield* Effect.sync(() => setTurn(setConversation, proposedTurn(reply)));
@@ -128,8 +130,9 @@ export const conversationCommands = ({
   ),
   receipt: client.runtime.fn<Proposal>()(
     (proposal) => {
-      const { setConversation } = capture();
+      const { setConversation, active } = capture();
       return Effect.gen(function* () {
+        if (!active()) return;
         const channel = yield* client;
         yield* channel.hostedTurn.acknowledge({
           payload: { turnId: proposal.turnId, receipt: proposal.receipt },

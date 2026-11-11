@@ -961,16 +961,22 @@ for (const method of ["tarjeta", "Nequi", "DaviPlata"] as const) {
   }) => Effect.runPromise(expectPendingPayment(page, method)));
 }
 
+const refuseHeldSubmission = (route: Route, release: Promise<void>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => release);
+      yield* Effect.tryPromise(() => route.fulfill({ status: 503, body: "{}" }));
+    })
+  );
 const holdDaviplataSubmission = Effect.fnUntraced(function* (page: Page) {
   const submitted = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let payments = 0;
   yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/web/subscription/payment-enrollments/submit`, async (route) => {
+    page.route(`${apiOrigin}/web/subscription/payment-enrollments/submit`, (route) => {
       payments += 1;
       submitted.resolve();
-      await release.promise;
-      await route.fulfill({ status: 503, body: "{}" });
+      return refuseHeldSubmission(route, release.promise);
     })
   );
   return {

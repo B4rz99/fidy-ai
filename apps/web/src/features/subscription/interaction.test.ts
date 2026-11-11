@@ -664,7 +664,14 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const input = fixture();
-      const daviplata = { ...input.enrollment, method: "daviplata" as const };
+      const daviplata: PreparedEnrollment = {
+        ...input.enrollment,
+        method: "daviplata",
+        daviplataOtpPolicy: {
+          sendUrl: "https://sandbox.wompi.co/synthetic/send",
+          confirmUrl: "https://sandbox.wompi.co/synthetic/confirm",
+        },
+      };
       input.gateway.prepare.mockResolvedValue(daviplata);
       input.gateway.status.mockResolvedValue(daviplata);
       yield* advance(0);

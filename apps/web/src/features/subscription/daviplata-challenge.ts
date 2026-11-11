@@ -54,7 +54,7 @@ const submissionUncertainty = (
 
 const unapprovedOutcome = (
   approved: boolean,
-  outcome: Exclude<DaviplataProviderOutcome, { status: "approved" }>
+  outcome: Exclude<DaviplataProviderOutcome, { status: "approved" | "uncertain" }>
 ): Promise<DaviplataConfirmation> =>
   Promise.resolve(approved ? { status: "uncertain", retrySubmission: false } : outcome);
 

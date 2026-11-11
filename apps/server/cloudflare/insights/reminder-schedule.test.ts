@@ -414,10 +414,8 @@ it("rejects a revision committed after due reading without partially admitting t
       const racingDb = new Proxy(db, {
         get(target, property): unknown {
           if (property === "batch") {
-            return async <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> => {
-              await nativeBatch([...revision]);
-              return nativeBatch<Row>(statements);
-            };
+            return <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+              nativeBatch([...revision]).then(() => nativeBatch<Row>(statements));
           }
           return Reflect.get(target, property);
         },
@@ -460,10 +458,10 @@ it("keeps an uncertain committed admission without replaying or extending its de
       const uncertainDb = new Proxy(db, {
         get(target, property): unknown {
           if (property === "batch") {
-            return async (statements: D1PreparedStatement[]): Promise<never> => {
-              await nativeBatch(statements);
-              throw new Error("Native commit response lost");
-            };
+            return (statements: D1PreparedStatement[]): Promise<never> =>
+              nativeBatch(statements).then(() =>
+                Promise.reject(new Error("Native commit response lost"))
+              );
           }
           return Reflect.get(target, property);
         },

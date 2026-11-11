@@ -240,7 +240,15 @@ it("compact recurring responses preserve stored history and historical occurrenc
       const receipt = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ data: Schema.toCodecJson(RecurringDocument) })
       )(yield* Effect.tryPromise(() => changed.json()));
-      expect(receipt.data.plans[0]?.revisions).toHaveLength(1);
+      expect(
+        receipt.data.plans[0]?.revisions.map((revision) => ({
+          from: revision.from,
+          name: revision.plan.name,
+        }))
+      ).toEqual([
+        { from: "2026-09-01", name: "Arriendo" },
+        { from: "2026-10-01", name: "Nuevo" },
+      ]);
       expect((yield* read(db, owner)).document.plans[0]?.revisions).toHaveLength(2);
       const selected = yield* executeCanonicalQuery({
         db,
@@ -254,8 +262,7 @@ it("compact recurring responses preserve stored history and historical occurrenc
       const workspace = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ data: Schema.toCodecJson(RecurringWorkspace) })
       )(yield* Effect.tryPromise(() => response.json()));
-      expect(workspace.data.document.plans[0]?.revisions).toHaveLength(1);
-      expect(workspace.data.document.plans[0]?.revisions[0].plan.name).toBe("Nuevo");
+      expect(workspace.data.document.plans[0]?.revisions).toEqual(receipt.data.plans[0]?.revisions);
       expect(workspace.data.occurrences[0]?.plan.name).toBe("Arriendo");
     })
   ));

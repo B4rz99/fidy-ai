@@ -27,7 +27,9 @@ import {
   type Save,
   type Workspace,
   type WorkspaceReadState,
+  currentPlan,
   type planStatus,
+  planToday,
 } from "./model";
 
 type Series = CanonicalSuccess<"recurring.listRecurringSeries">["data"]["series"][number];
@@ -177,6 +179,7 @@ const allPlanStatus = {
 };
 const planStatuses = [
   allPlanStatus,
+  { value: "scheduled", label: "Programados", empty: "No tienes recurrentes programados" },
   { value: "active", label: "Activos", empty: "No tienes recurrentes activos" },
   { value: "paused", label: "Pausados", empty: "No tienes recurrentes pausados" },
   {
@@ -243,7 +246,6 @@ export const PlanManagement = ({
           open={open}
           disabled={disabled}
           save={save}
-          today={view.today}
         />
       ))}
     </section>
@@ -372,7 +374,7 @@ const SuggestionLink = ({
             { value: "", label: "Vincular a uno existente" },
             ...view.document.plans.map((plan) => ({
               value: plan.id,
-              label: plan.revisions.at(-1)?.plan.name ?? "Recurrente",
+              label: currentPlan(plan).name,
             })),
           ]}
         />
@@ -476,8 +478,7 @@ const RestoreSuggestions = ({
 );
 
 const matchesPlanFilters = (plan: Plan, filters: Filters): boolean => {
-  const input = plan.revisions.at(-1)?.plan;
-  if (input === undefined) return false;
+  const input = currentPlan(plan);
   return Object.entries(filters).every(([key, value]) => {
     if (key === "search") return input.name.toLowerCase().includes(value.toLowerCase());
     if (key === "kind") return input.kind === value;
@@ -492,18 +493,15 @@ const PlanRow = ({
   open,
   save,
   disabled,
-  today,
   status,
 }: Readonly<{
   plan: Plan;
   open: (plan: Plan) => void;
   save: Save;
   disabled: boolean;
-  today: string;
   status: ReturnType<typeof planStatus>;
 }>): JSX.Element => {
-  const input = plan.revisions.at(-1)?.plan;
-  if (input === undefined) return <></>;
+  const input = currentPlan(plan);
   return (
     <div className="@container flex min-w-0 items-center gap-2 border-b pr-4 transition-colors last:border-b-0 hover:bg-muted/50">
       <button
@@ -517,15 +515,19 @@ const PlanRow = ({
           <RecurringPlanBadge status={status} />
         </span>
       </button>
-      {status === "paused" ? (
+      {plan.pauses.some((pause) => pause.through === undefined) ? (
         <Button
           contentLayout="wrap"
           focusAppearance="subtle"
           variant="outline"
           size="sm"
-          disabled={disabled}
+          disabled={
+            disabled ||
+            plan.stoppedOn !== undefined ||
+            plan.pauses.some((pause) => pause.through === undefined && pause.from > planToday(plan))
+          }
           onClick={() =>
-            save({ kind: "lifecycle", planId: plan.id, date: today, action: "resume" })
+            save({ kind: "lifecycle", planId: plan.id, date: planToday(plan), action: "resume" })
           }
         >
           Reanudar

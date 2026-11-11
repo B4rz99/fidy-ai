@@ -1,4 +1,4 @@
-import { BigDecimal, Effect, Option, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
 import {
   type RecurringCommand,
   RecurringDocument,
@@ -134,7 +134,9 @@ export const outcome = (compact: boolean): OwnerOutcome => ({
   guardFacts: Option.none(),
   read: (db, userId) =>
     readDocument({ db, userId }).pipe(
-      Effect.map((document) => displayDocument({ document, compact })),
+      Effect.flatMap((document) =>
+        DateTime.now.pipe(Effect.map((now) => displayDocument({ document, compact, now })))
+      ),
       Effect.map((document) =>
         Option.some({
           _tag: "Owner" as const,

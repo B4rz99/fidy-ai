@@ -39,7 +39,8 @@ const prepareWorkspace = ({
   Readonly<{
     query: typeof RecurringWorkspaceQuery.Type;
   }>): Option.Option<PreparedCanonicalBrowserRead> => {
-  const document = prepareReadProjection({ db, users: reservation, query });
+  const now = DateTime.makeUnsafe(current);
+  const document = prepareReadProjection({ db, users: reservation, query, now });
   const context = prepareUserContext({
     db,
     userSelection: reservation,
@@ -77,7 +78,7 @@ const prepareWorkspace = ({
           const view = yield* workspaceFromReadProjection({
             projection: source,
             query,
-            now: DateTime.makeUnsafe(current),
+            now,
             observed: { ...selected.value, snapshot: preferences.value[0] },
           });
           const data = yield* Schema.encodeEffect(Schema.toCodecJson(RecurringWorkspace))(view);

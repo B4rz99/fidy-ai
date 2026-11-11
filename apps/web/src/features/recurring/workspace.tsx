@@ -34,7 +34,9 @@ import {
   type Save,
   type Workspace,
   type WorkspaceReadState,
+  currentPlan,
   type planStatus,
+  planToday,
 } from "./model";
 
 const OccurrenceDetails = lazyRouteComponent(() => import("./details"), "OccurrenceDetails");
@@ -155,15 +157,9 @@ const OccurrenceEditor = ({
   const plan = view.document.plans.find((entry) => entry.id === panel.planId);
   const lifecycle =
     plan === undefined ? null : (
-      <PlanLifecycle
-        plan={plan}
-        status={statusFor(plan)}
-        save={save}
-        disabled={disabled}
-        today={view.today}
-      />
+      <PlanLifecycle plan={plan} status={statusFor(plan)} save={save} disabled={disabled} />
     );
-  if (Option.isNone(item)) {
+  if (Option.isNone(item) || plan === undefined) {
     return (
       <div className="grid gap-5">
         {lifecycle}
@@ -187,6 +183,9 @@ const OccurrenceEditor = ({
         save={save}
         today={view.today}
         link={link}
+        stopTracking={() =>
+          save({ kind: "lifecycle", planId: plan.id, date: planToday(plan), action: "stop" })
+        }
       />
     </div>
   );
@@ -200,25 +199,19 @@ const PlanEditor = ({
   statusFor,
 }: EditorProps & Readonly<{ planId: Plan["id"] }>): JSX.Element => {
   const plan = view.document.plans.find((entry) => entry.id === planId);
-  const latest = plan?.revisions.at(-1);
-  return plan === undefined || latest === undefined ? (
+  const settings = plan === undefined ? undefined : currentPlan(plan);
+  return plan === undefined || settings === undefined ? (
     <p>Plan no disponible.</p>
   ) : (
     <div className="grid gap-5">
-      <PlanLifecycle
-        plan={plan}
-        status={statusFor(plan)}
-        save={save}
-        disabled={disabled}
-        today={view.today}
-      />
+      <PlanLifecycle plan={plan} status={statusFor(plan)} save={save} disabled={disabled} />
       <PlanForm
-        key={JSON.stringify(latest.plan)}
-        initial={latest.plan}
+        key={JSON.stringify(settings)}
+        initial={settings}
         categories={categories}
         disabled={disabled}
         onSubmit={(input) =>
-          save({ kind: "edit", planId, date: view.today, scope: "forward", plan: input })
+          save({ kind: "edit", planId, date: planToday(plan), scope: "forward", plan: input })
         }
       />
     </div>

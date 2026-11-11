@@ -12,6 +12,7 @@ import {
 import {
   applyRecurringEdit,
   emptyRecurringDocument,
+  observeRecurringPlan,
   projectDates,
   projectRecurringMonth,
   proposeRecurringMatches,
@@ -396,4 +397,101 @@ it("starts at the original anchor when the selected window begins in the precedi
     "2026-02-15",
     "2026-03-15",
   ]);
+});
+
+it("observes dated standing without applying future changes early", () => {
+  const plan: RecurringPlan = {
+    ...tracked(1),
+    revisions: [
+      { from: "2026-01-15", plan: settings },
+      { from: "2026-06-01", plan: { ...settings, name: "Future rent" } },
+    ],
+    pauses: [{ from: "2026-03-01", through: "2026-04-01" }],
+    stoppedOn: "2026-05-01",
+  };
+  const document = ledger(plan);
+  const observe = (date: string): Effect.Success<ReturnType<typeof observeRecurringPlan>> =>
+    Effect.runSync(observeRecurringPlan({ document, planId: plan.id, date }));
+  expect(Option.getOrThrow(observe("2026-01-01")).status).toBe("scheduled");
+  expect(Option.getOrThrow(observe("2026-02-01"))).toEqual({ plan: settings, status: "active" });
+  expect(Option.getOrThrow(observe("2026-03-01")).status).toBe("paused");
+  expect(Option.getOrThrow(observe("2026-04-01")).status).toBe("active");
+  expect(Option.getOrThrow(observe("2026-05-01")).status).toBe("stopped");
+  expect(Option.getOrThrow(observe("2026-06-01"))).toEqual({
+    plan: { ...settings, name: "Future rent" },
+    status: "stopped",
+  });
+  expect(
+    Exit.isFailure(
+      Effect.runSyncExit(observeRecurringPlan({ document, planId: plan.id, date: "2026-02-30" }))
+    )
+  ).toBe(true);
+});
+
+it("allows same-day resume and stopped-plan edits while replacing the future suffix and freezing tracked settings", () => {
+  const paused = apply(ledger(tracked(1)), {
+    kind: "lifecycle",
+    planId: id(1),
+    date: "2026-03-01",
+    action: "pause",
+  });
+  const resumed = apply(paused, {
+    kind: "lifecycle",
+    planId: id(1),
+    date: "2026-03-01",
+    action: "resume",
+  });
+  expect(resumed.plans[0]?.pauses).toEqual([{ from: "2026-03-01", through: "2026-03-01" }]);
+  const future = apply(resumed, {
+    kind: "edit",
+    planId: id(1),
+    date: "2026-06-01",
+    scope: "forward",
+    plan: { ...settings, name: "June settings" },
+  });
+  const paid = apply(future, {
+    kind: "fulfill",
+    fulfillment: { ...mark(10, id(1), "2026-07-15"), settled: true },
+  });
+  const stopped = apply(paid, {
+    kind: "lifecycle",
+    planId: id(1),
+    date: "2026-05-01",
+    action: "stop",
+  });
+  const edited = apply(stopped, {
+    kind: "edit",
+    planId: id(1),
+    date: "2026-04-01",
+    scope: "forward",
+    plan: { ...settings, name: "Replacement" },
+  });
+  expect(
+    edited.plans[0]?.revisions.map((entry) => ({ from: entry.from, name: entry.plan.name }))
+  ).toEqual([
+    { from: "2026-01-15", name: "Rent" },
+    { from: "2026-04-01", name: "Replacement" },
+  ]);
+  expect(edited.plans[0]?.stoppedOn).toBe("2026-05-01");
+  expect(
+    Option.getOrThrow(
+      readRecurringOccurrence({ document: edited, planId: id(1), date: "2026-07-15" })
+    ).plan.name
+  ).toBe("June settings");
+  expect(edited.fulfillments).toEqual(paid.fulfillments);
+  for (const action of ["pause", "resume", "stop"] as const) {
+    expect(
+      Exit.isFailure(
+        Effect.runSyncExit(
+          applyRecurringEdit({
+            document: edited,
+            command: {
+              expectedRevision: edited.revision,
+              edit: { kind: "lifecycle", planId: id(1), date: "2026-04-01", action },
+            },
+          })
+        )
+      )
+    ).toBe(true);
+  }
 });

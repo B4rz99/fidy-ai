@@ -33,6 +33,7 @@ type Props = Readonly<{
   disabled: boolean;
   today: string;
   link: () => void;
+  stopTracking: () => void;
 }>;
 const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
   const [invalid, setInvalid] = useState(false);
@@ -79,7 +80,7 @@ const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
     </form>
   );
 };
-const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element => (
+const TrackingActions = ({ item, save, disabled, stopTracking }: Props): JSX.Element => (
   <div className="grid gap-3 border-t pt-4">
     <Button
       contentLayout="wrap"
@@ -107,9 +108,7 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
         focusAppearance="subtle"
         variant="destructive"
         disabled={disabled}
-        onClick={() =>
-          save({ kind: "lifecycle", planId: item.planId, date: today, action: "stop" })
-        }
+        onClick={stopTracking}
       >
         Confirmar dejar de seguir
       </Button>

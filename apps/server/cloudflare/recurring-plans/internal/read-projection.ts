@@ -24,12 +24,17 @@ const monthOffset = (month: string, offset: number): string =>
 
 const revisionSelection = (
   users: OwnedStatement,
-  months: ReadonlyArray<string>
+  months: ReadonlyArray<string>,
+  now: DateTime.Utc
 ): OwnedStatement => {
   const windows = months.map((month) => ({
     from: `${month}-01`,
     through: `${monthOffset(month, 1)}-01`,
   }));
+  windows.push({
+    from: DateTime.formatIsoDateUtc(DateTime.subtract(now, { days: 1 })),
+    through: DateTime.formatIsoDateUtc(DateTime.add(now, { days: 2 })),
+  });
   const point = (kind: "MIN" | "MAX", condition: string): string =>
     `(SELECT ${kind}(r.from_date) FROM recurring_plan_revisions r WHERE r.user_id=p.user_id AND r.plan_id=p.id ${condition})`;
   return {
@@ -63,10 +68,12 @@ export const prepareReadProjection = ({
   db,
   users,
   query,
+  now,
 }: Readonly<{
   db: D1Database;
   users: OwnedStatement;
   query: typeof RecurringWorkspaceQuery.Type;
+  now: DateTime.Utc;
 }>): Readonly<{
   statements: ReadonlyArray<D1PreparedStatement>;
   decode: (
@@ -87,13 +94,13 @@ export const prepareReadProjection = ({
   const source = preparePlanningRows({
     db,
     users,
-    revisions: Option.some(revisionSelection(users, months)),
+    revisions: Option.some(revisionSelection(users, months, now)),
   });
   return {
     statements: source.statements,
     decode: (rows) =>
       source.decode(rows).pipe(
-        Effect.flatMap(decodeReadProjection),
+        Effect.flatMap((rows) => decodeReadProjection({ rows, now })),
         Effect.map((projection) => ({ ...projection, months }))
       ),
   };

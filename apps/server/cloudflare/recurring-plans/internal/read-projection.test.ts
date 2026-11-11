@@ -76,7 +76,9 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
+        const now = DateTime.makeUnsafe("2022-09-05T00:30:00Z");
         const prepared = prepareReadProjection({
+          now,
           query: { month: "2026-10", view: "compact" },
           db,
           users: { sql: "SELECT ? AS userId", params: [userId] },
@@ -85,6 +87,9 @@ it(
         expect(rows[2]?.results.length).toBeLessThanOrEqual(1000);
         const projection = yield* prepared.decode(rows);
         expect(projection.schedule.plans).toHaveLength(100);
+        expect(
+          projection.editing.plans[0]?.revisions.map((revision) => revision.plan.name)
+        ).toEqual(["Revision 0", "Revision 50", "Revision 99"]);
         expect(
           projection.schedule.plans[0]?.revisions.some((revision) => revision.from === "2019-08-01")
         ).toBe(true);
@@ -126,6 +131,7 @@ it(
           { month: "2017-01", view: "compact" },
         ] as const) {
           const selected = prepareReadProjection({
+            now,
             db,
             users: { sql: "SELECT ? AS userId", params: [userId] },
             query,
@@ -133,14 +139,14 @@ it(
           const source = yield* selected.decode(
             yield* Effect.tryPromise(() => db.batch([...selected.statements]))
           );
-          const input = { query, observed, now: DateTime.makeUnsafe("2026-11-05T12:00:00Z") };
+          const input = { query, observed, now };
           expect(yield* workspaceFromReadProjection({ ...input, projection: source })).toEqual(
             yield* workspaceFromSnapshot({ ...input, document: complete })
           );
         }
         const input = {
           query: { month: "2026-10", view: "compact" } as const,
-          now: DateTime.makeUnsafe("2026-11-05T12:00:00Z"),
+          now,
         };
         expect(
           (yield* workspaceFromReadProjection({ ...input, observed, projection }))
@@ -167,7 +173,7 @@ it(
           yield* workspaceFromSnapshot({ ...input, observed: changed, document: complete })
         );
         expect(corrected.invalidFulfillmentIds).toEqual(["81000000-0000-4000-8000-000000000001"]);
-        expect(rows[2]?.results).toHaveLength(402);
+        expect(rows[2]?.results).toHaveLength(502);
         expect(complete.plans.reduce((sum, plan) => sum + plan.revisions.length, 0)).toBe(10000);
       })
     ),

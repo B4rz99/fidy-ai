@@ -2216,7 +2216,7 @@ it("keeps an admitted Turn queued through fenced recovery when alarm scheduling 
           preceding: accepted.settled,
         })
       );
-      following.settled.then(() => {
+      const followingSettlement = following.settled.then(() => {
         followingSettled = true;
       });
       try {
@@ -2243,7 +2243,7 @@ it("keeps an admitted Turn queued through fenced recovery when alarm scheduling 
       } finally {
         release.resolve();
         yield* Effect.tryPromise(() => ownerSettled);
-        yield* Effect.tryPromise(() => following.settled);
+        yield* Effect.tryPromise(() => followingSettlement);
         vi.useRealTimers();
       }
       expect(settled).toBe(true);

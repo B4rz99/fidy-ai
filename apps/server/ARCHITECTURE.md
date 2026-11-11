@@ -260,6 +260,11 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+Projection repair claims the supported target version while remaining unavailable. Each bounded
+clear or rebuild batch fences the exact User, version, phase, cursor and repair revision; admitting
+a page advances the repair revision even when its phase or cursor is unchanged. Ordinary financial
+fact revisions remain trigger-maintained and do not restart repair. Rebuild validates effective
+leaves and Reconciliation membership before the atomic ready cutover.
 Budget threshold reconciliation validates the owned Budget and captured monthly boundaries/time zone
 before atomically advancing monotone marks, frozen crossings and publication intent.
 One bounded threshold pass reports Drained, Pending or Unavailable. Canonical financial preflight

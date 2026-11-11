@@ -16,7 +16,7 @@ import {
   readConsentStatus,
   recordProactivityConsentDisclosure,
 } from "../consent/operations";
-import { ReminderRevisionConflict } from "./contract";
+import { InsightUnavailable, ReminderRevisionConflict } from "./contract";
 import {
   findInsight,
   findReminderSchedule,
@@ -49,7 +49,7 @@ it("refuses due reminder materialization after processing withdrawal without dis
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* proactivityDatabase;
-      const schedule = yield* activateTestReminder(db);
+      yield* activateTestReminder(db);
       const before = yield* reminderPersistence(db);
       expect(Option.getOrThrow(before)).toMatchObject({
         enabled: 1,
@@ -66,7 +66,6 @@ it("refuses due reminder materialization after processing withdrawal without dis
         (yield* materializeReminder({
           db,
           userId: proactivityTestUsers[0],
-          id: schedule.id,
           now: DateTime.makeUnsafe("2026-10-06T23:00:00Z"),
         }))._tag
       ).toBe("NoWork");
@@ -184,7 +183,6 @@ it("activates the disclosed daily 18:00 Bogotá reminder atomically with legal e
       const generated = yield* materializeReminder({
         db,
         userId: context.userId,
-        id: schedule.id,
         now,
       });
       expect(generated._tag).toBe("Created");
@@ -195,13 +193,10 @@ it("activates the disclosed daily 18:00 Bogotá reminder atomically with legal e
       expect(event.kind).toBe("manual-entry-reminder");
       expect(DateTime.formatIso(event.scheduledAt)).toBe("2026-10-10T23:00:00.000Z");
       expect(event.scheduleVersion).toBe(schedule.version);
-      expect(
-        (yield* materializeReminder({ db, userId: context.userId, id: schedule.id, now }))._tag
-      ).toBe("NoWork");
-      expect(
-        (yield* materializeReminder({ db, userId: proactivityTestUsers[1], id: schedule.id, now }))
-          ._tag
-      ).toBe("NoWork");
+      expect((yield* materializeReminder({ db, userId: context.userId, now }))._tag).toBe("NoWork");
+      expect((yield* materializeReminder({ db, userId: proactivityTestUsers[1], now }))._tag).toBe(
+        "NoWork"
+      );
       const next = Option.getOrThrow(yield* findReminderSchedule(context));
       expect(next.version).toBe(schedule.version);
       expect(DateTime.formatIso(next.nextScheduledAt)).toBe("2026-10-11T23:00:00.000Z");
@@ -332,7 +327,6 @@ it("atomically disables reminders when their category grant is revoked and refus
       expect(
         (yield* materializeReminder({
           ...input,
-          id: schedule.id,
           now: DateTime.makeUnsafe("2026-10-06T23:00:00Z"),
         }))._tag
       ).toBe("NoWork");
@@ -344,5 +338,261 @@ it("atomically disables reminders when their category grant is revoked and refus
             .first()
         )
       ).toEqual({ count: 0 });
+    })
+  ));
+
+it("evaluates current instructions from a User wake after revision and retains one occurrence with its original deadline", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const schedule = yield* activateTestReminder(db);
+      const userId = proactivityTestUsers[0];
+      const wake = { db, userId };
+      const revision = yield* prepareReminderRevision({
+        ...wake,
+        now: proactivityTestNow,
+        input: {
+          expectedVersion: schedule.version,
+          cadence: { kind: "weekdays" },
+          timing: { hour: 9, minute: 0 },
+          timeZone: schedule.timeZone,
+        },
+      });
+      yield* Effect.tryPromise(() => db.batch([...revision]));
+      const now = DateTime.makeUnsafe("2026-10-09T15:00:00Z");
+      const generated = yield* materializeReminder({ ...wake, now });
+      expect(generated._tag).toBe("Created");
+      if (generated._tag !== "Created") return;
+      const event = Option.getOrThrow(yield* findInsight({ ...wake, id: generated.id }));
+      expect(event.scheduleVersion).toBe(2);
+      expect(DateTime.formatIso(event.scheduledAt)).toBe("2026-10-09T14:00:00.000Z");
+      expect(yield* materializeReminder({ ...wake, now })).toEqual({ _tag: "NoWork" });
+      expect(Option.getOrThrow(yield* reminderPersistence(db))).toMatchObject({
+        events: 1,
+        reports: 1,
+        outbox: 1,
+        executions: 1,
+        revisions: 2,
+        next_scheduled_at: "2026-10-12T14:00:00.000Z",
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT scheduled_at_ms,expires_at_ms,dispatch_state FROM proactive_messages WHERE user_id=? AND id=?"
+            )
+            .bind(userId, generated.id)
+            .first()
+        )
+      ).toEqual({
+        scheduled_at_ms: Date.parse("2026-10-09T14:00:00Z"),
+        expires_at_ms: Date.parse("2026-10-10T14:00:00Z"),
+        dispatch_state: "ready",
+      });
+    })
+  ));
+
+it("rejects a revision committed after due reading without partially admitting the stale occurrence", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const schedule = yield* activateTestReminder(db);
+      const userId = proactivityTestUsers[0];
+      const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
+      const revision = yield* prepareReminderRevision({
+        db,
+        userId,
+        now: proactivityTestNow,
+        input: {
+          expectedVersion: schedule.version,
+          cadence: schedule.cadence,
+          timing: { hour: 9, minute: 0 },
+          timeZone: schedule.timeZone,
+        },
+      });
+      const nativeBatch = db.batch.bind(db);
+      const racingDb = new Proxy(db, {
+        get(target, property): unknown {
+          if (property === "batch") {
+            return <Row>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+              nativeBatch([...revision]).then(() => nativeBatch<Row>(statements));
+          }
+          return Reflect.get(target, property);
+        },
+      });
+      assert.deepStrictEqual(
+        yield* Effect.exit(materializeReminder({ db: racingDb, userId, now })),
+        Exit.fail(new InsightUnavailable())
+      );
+      expect(Option.getOrThrow(yield* reminderPersistence(db))).toMatchObject({
+        version: 2,
+        events: 0,
+        reports: 0,
+        outbox: 0,
+        executions: 0,
+        revisions: 2,
+        next_scheduled_at: "2026-10-06T14:00:00.000Z",
+      });
+      expect((yield* materializeReminder({ db, userId, now }))._tag).toBe("Created");
+      expect(Option.getOrThrow(yield* reminderPersistence(db))).toMatchObject({
+        version: 2,
+        events: 1,
+        reports: 1,
+        outbox: 1,
+        executions: 1,
+        revisions: 2,
+      });
+    })
+  ));
+
+it("keeps an uncertain committed admission without replaying or extending its deadline", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      yield* activateTestReminder(db);
+      const input = {
+        db,
+        userId: proactivityTestUsers[0],
+        now: DateTime.makeUnsafe("2026-10-06T23:30:00Z"),
+      };
+      const nativeBatch = db.batch.bind(db);
+      const uncertainDb = new Proxy(db, {
+        get(target, property): unknown {
+          if (property === "batch") {
+            return (statements: D1PreparedStatement[]): Promise<never> =>
+              nativeBatch(statements).then(() =>
+                Promise.reject(new Error("Native commit response lost"))
+              );
+          }
+          return Reflect.get(target, property);
+        },
+      });
+      assert.deepStrictEqual(
+        yield* Effect.exit(materializeReminder({ ...input, db: uncertainDb })),
+        Exit.fail(new InsightUnavailable())
+      );
+      const committed = yield* reminderPersistence(db);
+      expect(Option.getOrThrow(committed)).toMatchObject({
+        events: 1,
+        reports: 1,
+        outbox: 1,
+        executions: 1,
+      });
+      expect(
+        yield* materializeReminder({ ...input, now: DateTime.makeUnsafe("2026-10-07T00:30:00Z") })
+      ).toEqual({ _tag: "NoWork" });
+      expect(yield* reminderPersistence(db)).toEqual(committed);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT scheduled_at_ms,expires_at_ms FROM proactive_messages WHERE user_id=? AND role='manual-entry-reminder'"
+            )
+            .bind(input.userId)
+            .first()
+        )
+      ).toEqual({
+        scheduled_at_ms: Date.parse("2026-10-06T23:00:00Z"),
+        expires_at_ms: Date.parse("2026-10-07T23:00:00Z"),
+      });
+    })
+  ));
+
+it("resets standing with the same enabled grant without minting an instruction revision", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const schedule = yield* activateTestReminder(db);
+      const context = {
+        db,
+        userId: proactivityTestUsers[0],
+        caller: proactivityTestCallers[0],
+        kind: "manual-entry-reminder" as const,
+        now: proactivityTestNow,
+      };
+      const grant = yield* findProactivityConsentGrant(context);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE reminder_proactivity_state SET standing_json=? WHERE user_id=?")
+          .bind('{"_tag":"Paused","unanswered":3}', context.userId)
+          .run()
+      );
+      const offer = Option.getOrThrow(yield* createProactivityConsentOffer(context));
+      yield* recordProactivityConsentDisclosure({
+        ...context,
+        offerId: offer.id,
+        disclosureMessageId: "continue-disclosed",
+      });
+      expect(
+        yield* recordProactivityDecision({
+          ...context,
+          choice: offer.acceptChoice,
+          decisionMessageId: "continue-accepted",
+        })
+      ).toBe(true);
+      expect(yield* findProactivityConsentGrant(context)).toEqual(grant);
+      expect(Option.getOrThrow(yield* findReminderSchedule(context))).toEqual(schedule);
+      expect(Option.getOrThrow(yield* reminderPersistence(db))).toMatchObject({
+        version: 1,
+        revisions: 1,
+        events: 0,
+        executions: 0,
+        outbox: 0,
+        standing_json: '{"_tag":"Attentive","unanswered":0}',
+      });
+    })
+  ));
+
+it("revises disabled reminder instructions without enabling work or changing their captured grant", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const schedule = yield* activateTestReminder(db);
+      const userId = proactivityTestUsers[0];
+      const context = { db, userId, kind: "manual-entry-reminder" as const };
+      const grant = yield* findProactivityConsentGrant(context);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE schedules SET enabled=0 WHERE kind='reminder' AND user_id=?")
+          .bind(userId)
+          .run()
+      );
+      const disabled = Option.getOrThrow(yield* reminderPersistence(db));
+      const revision = yield* prepareReminderRevision({
+        db,
+        userId,
+        now: proactivityTestNow,
+        input: {
+          expectedVersion: schedule.version,
+          cadence: { kind: "weekdays" },
+          timing: { hour: 9, minute: 0 },
+          timeZone: schedule.timeZone,
+        },
+      });
+      yield* Effect.tryPromise(() => db.batch([...revision]));
+      const revised = Option.getOrThrow(yield* findReminderSchedule(context));
+      expect(revised).toMatchObject({
+        enabled: false,
+        version: 2,
+        cadence: { kind: "weekdays" },
+        timing: { hour: 9, minute: 0 },
+      });
+      expect(DateTime.formatIso(revised.nextScheduledAt)).toBe("2026-10-06T14:00:00.000Z");
+      expect(yield* findProactivityConsentGrant(context)).toEqual(grant);
+      const beforeWake = yield* reminderPersistence(db);
+      expect(Option.getOrThrow(beforeWake)).toMatchObject({
+        enabled: 0,
+        version: 2,
+        consent_grant_id: disabled.consent_grant_id,
+        revisions: 2,
+        events: 0,
+        reports: 0,
+        outbox: 0,
+        executions: 0,
+      });
+      expect(
+        yield* materializeReminder({ db, userId, now: DateTime.makeUnsafe("2026-10-09T15:00:00Z") })
+      ).toEqual({ _tag: "NoWork" });
+      expect(yield* reminderPersistence(db)).toEqual(beforeWake);
     })
   ));

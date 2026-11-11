@@ -284,7 +284,6 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
       const generated = yield* materializeReminder({
         db,
         userId: proactivityTestUsers[0],
-        id: schedule.id,
         now,
       });
       if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
@@ -699,12 +698,11 @@ it("refuses approved-template drift between a deferred staging and the irreversi
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* proactivityDatabase;
-      const schedule = yield* activateTestReminder(db);
+      yield* activateTestReminder(db);
       const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
       const created = yield* materializeReminder({
         db,
         userId: proactivityTestUsers[0],
-        id: schedule.id,
         now,
       });
       if (created._tag !== "Created") return yield* Effect.die("Expected reminder");
@@ -900,12 +898,11 @@ it.each(refusalCases)(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
-        const schedule = yield* activateTestReminder(db);
+        yield* activateTestReminder(db);
         const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
         const generated = yield* materializeReminder({
           db,
           userId: proactivityTestUsers[0],
-          id: schedule.id,
           now,
         });
         if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
@@ -982,13 +979,13 @@ it.each([false, true])(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
-        const schedule = yield* activateTestReminder(db);
+        yield* activateTestReminder(db);
         const userId = proactivityTestUsers[0];
         const caller = proactivityTestCallers[0];
         const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
         const context = { db, userId, caller, now, kind: "manual-entry-reminder" as const };
         const originalGrant = Option.getOrThrow(yield* findProactivityConsentGrant(context));
-        const generated = yield* materializeReminder({ db, userId, id: schedule.id, now });
+        const generated = yield* materializeReminder({ db, userId, now });
         if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
         yield* Effect.tryPromise(() =>
           db.batch([
@@ -1426,7 +1423,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* proactivityDatabase;
-      const schedule = yield* activateTestReminder(db);
+      yield* activateTestReminder(db);
       const userId = proactivityTestUsers[0];
       const caller = proactivityTestCallers[0];
       const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
@@ -1500,7 +1497,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       for (const day of [6, 7, 8]) {
         const now = DateTime.makeUnsafe(`2026-10-${String(day).padStart(2, "0")}T23:00:00Z`);
         vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
-        const occurrence = yield* materializeReminder({ db, userId, id: schedule.id, now });
+        const occurrence = yield* materializeReminder({ db, userId, now });
         if (occurrence._tag !== "Created") return yield* Effect.die("Expected reminder");
         yield* send(occurrence.id, now);
         yield* verify(occurrence.id, now);
@@ -1679,7 +1676,7 @@ it.each(["paused", "stopped"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
-        const schedule = yield* activateTestReminder(db);
+        yield* activateTestReminder(db);
         const userId = proactivityTestUsers[0];
         const caller = proactivityTestCallers[0];
         yield* Effect.tryPromise(() =>
@@ -1777,7 +1774,7 @@ it.each(["paused", "stopped"] as const)(
         for (const day of [6, 7, 8, 9, 10, 11]) {
           const now = DateTime.makeUnsafe(`2026-10-${String(day).padStart(2, "0")}T23:00:00Z`);
           vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
-          const occurrence = yield* materializeReminder({ db, userId, id: schedule.id, now });
+          const occurrence = yield* materializeReminder({ db, userId, now });
           if (occurrence._tag !== "Created") return yield* Effect.die("Expected latest reminder");
           yield* deliver(occurrence.id, now);
           if (day === 8 || day === 9) {
@@ -1990,7 +1987,6 @@ it.each(["paused", "stopped"] as const)(
         const after = yield* materializeReminder({
           db,
           userId,
-          id: schedule.id,
           now: afterTime,
         });
         expect(after._tag).toBe("NoWork");
@@ -2136,9 +2132,9 @@ it.each(["paused", "stopped"] as const)(
             );
             const resumedAt = DateTime.makeUnsafe("2026-10-13T23:00:00Z");
             vi.spyOn(Date, "now").mockReturnValue(resumedAt.epochMilliseconds);
-            expect(
-              (yield* materializeReminder({ db, userId, id: schedule.id, now: resumedAt }))._tag
-            ).toBe("Created");
+            expect((yield* materializeReminder({ db, userId, now: resumedAt }))._tag).toBe(
+              "Created"
+            );
           });
         yield* reactivate();
       })

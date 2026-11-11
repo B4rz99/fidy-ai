@@ -10,7 +10,7 @@ import {
   type ProactivityActivity,
   type ProactivityActivityResult,
 } from "../contract";
-import { findSchedule, materialize } from "./reminder-schedule";
+import { advanceReminderDue } from "./reminder-schedule";
 import { admitWeeklyResource } from "./weekly-admission";
 import { deliveryQuery, findQueuedReport } from "./proactivity-reports";
 import {
@@ -45,8 +45,7 @@ export const generateProactivity = (
     yield* generateBudgetAlerts(input);
     yield* generateOffers(input);
     yield* generateReminderQuestion(input);
-    const schedule = yield* findSchedule(input);
-    if (Option.isSome(schedule)) yield* materialize({ ...input, id: schedule.value.id });
+    yield* advanceReminderDue(input);
     if (summariesDue(input.now) && Option.isSome(yield* findRecurringDiscovery(input))) {
       yield* advanceRecurringDigest(input);
     }

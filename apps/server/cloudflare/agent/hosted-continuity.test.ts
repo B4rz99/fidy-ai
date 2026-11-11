@@ -2359,6 +2359,315 @@ it.each(["finish", "recover"] as const)(
     )
 );
 
+it.each(["cleared", "changed"])(
+  "refuses Compaction when the selected prior continuity is %s",
+  (change) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const first = yield* closedContinuityFixture(db);
+        const read = (): ReturnType<typeof readHostedContinuity> =>
+          readHostedContinuity({
+            db,
+            subject: first.caller,
+            sessionId: first.sessionId,
+            now: first.current,
+            admittedWhatsAppTurn: Option.none(),
+          });
+        const initial = yield* read();
+        expect(
+          yield* commitHostedCompaction({
+            db,
+            subject: first.caller,
+            sessionId: first.sessionId,
+            continuity: initial,
+            throughSequence: Option.getOrThrow(initial.terminalThroughSequence),
+            text: "Prior continuity",
+            signal: makeAbortController().signal,
+          })
+        ).toBe(true);
+        yield* closedContinuityFixture(db);
+        const selected = yield* read();
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              change === "cleared"
+                ? "UPDATE hosted_agent_sessions SET compacted_text=NULL,compacted_through_sequence=NULL,compacted_revision=NULL,compacted_at_ms=NULL WHERE id=?"
+                : "UPDATE hosted_agent_sessions SET compacted_revision=compacted_revision+1 WHERE id=?"
+            )
+            .bind(first.sessionId)
+            .run()
+        );
+        const before = yield* read();
+        expect(
+          yield* commitHostedCompaction({
+            db,
+            subject: first.caller,
+            sessionId: first.sessionId,
+            continuity: selected,
+            throughSequence: Option.getOrThrow(selected.terminalThroughSequence),
+            text: "Obsolete replacement",
+            signal: makeAbortController().signal,
+          })
+        ).toBe(false);
+        expect(yield* read()).toEqual(before);
+      })
+    )
+);
+
+it("refuses an equal-count substituted Transcript prefix without deleting its replacement", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const fixture = yield* closedContinuityFixture(db);
+      const read = (): ReturnType<typeof readHostedContinuity> =>
+        readHostedContinuity({
+          db,
+          subject: fixture.caller,
+          sessionId: fixture.sessionId,
+          now: fixture.current,
+          admittedWhatsAppTurn: Option.none(),
+        });
+      const selected = yield* read();
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER transcript_no_update").run());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE transcript_entries SET id=? WHERE user_id=? AND kind='user'")
+          .bind(newId(), users[0])
+          .run()
+      );
+      const before = yield* read();
+      expect(before.transcript).toHaveLength(selected.transcript.length);
+      expect(
+        yield* commitHostedCompaction({
+          db,
+          subject: fixture.caller,
+          sessionId: fixture.sessionId,
+          continuity: selected,
+          throughSequence: Option.getOrThrow(selected.terminalThroughSequence),
+          text: "Obsolete replacement",
+          signal: makeAbortController().signal,
+        })
+      ).toBe(false);
+      expect(yield* read()).toEqual(before);
+    })
+  ));
+
+it("keeps Compaction selection isolated to its exact session", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const first = yield* closedContinuityFixture(db);
+      const selected = yield* readHostedContinuity({
+        db,
+        subject: first.caller,
+        sessionId: first.sessionId,
+        now: first.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE hosted_agent_sessions SET status='idle-ended' WHERE id=?")
+          .bind(first.sessionId)
+          .run()
+      );
+      const second = yield* closedContinuityFixture(db);
+      const readSecond = (): ReturnType<typeof readHostedContinuity> =>
+        readHostedContinuity({
+          db,
+          subject: second.caller,
+          sessionId: second.sessionId,
+          now: second.current,
+          admittedWhatsAppTurn: Option.none(),
+        });
+      const before = yield* readSecond();
+      expect(
+        yield* commitHostedCompaction({
+          db,
+          subject: second.caller,
+          sessionId: second.sessionId,
+          continuity: selected,
+          throughSequence: Option.getOrThrow(selected.terminalThroughSequence),
+          text: "Foreign continuity",
+          signal: makeAbortController().signal,
+        })
+      ).toBe(false);
+      expect(yield* readSecond()).toEqual(before);
+      expect(
+        yield* readHostedContinuity({
+          db,
+          subject: first.caller,
+          sessionId: first.sessionId,
+          now: first.current,
+          admittedWhatsAppTurn: Option.none(),
+        })
+      ).toEqual(selected);
+    })
+  ));
+
+it("refuses Compaction if a selected prefix now belongs to a Pending Turn", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const fixture = yield* closedContinuityFixture(db);
+      const selected = yield* readHostedContinuity({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        now: fixture.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER hosted_turns_terminal_once").run());
+      yield* Effect.tryPromise(() =>
+        db.prepare("DROP TRIGGER hosted_turns_terminal_evidence").run()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE hosted_turns SET status='pending',terminal_at_ms=NULL WHERE hosted_session_id=?"
+          )
+          .bind(fixture.sessionId)
+          .run()
+      );
+      const before = yield* Effect.tryPromise(() => retained({ db, user: users[0] }));
+      expect(
+        yield* commitHostedCompaction({
+          db,
+          subject: fixture.caller,
+          sessionId: fixture.sessionId,
+          continuity: selected,
+          throughSequence: Option.getOrThrow(selected.terminalThroughSequence),
+          text: "Must not compact Pending",
+          signal: makeAbortController().signal,
+        })
+      ).toBe(false);
+      expect((yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results).toEqual(
+        before.results
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT compacted_revision FROM hosted_agent_sessions WHERE id=?")
+            .bind(fixture.sessionId)
+            .first()
+        )
+      ).toEqual({ compacted_revision: null });
+    })
+  ));
+
+it("propagates a fresh-read failure after Compaction without reusing deleted Transcript", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const fixture = yield* closedContinuityFixture(db);
+      let compactionPrepared = false;
+      let committed = false;
+      const controlled = new Proxy(db, {
+        get(target, property): unknown {
+          if (property === "prepare") {
+            return (sql: string): D1PreparedStatement => {
+              if (sql.includes("SET compacted_text=?3")) compactionPrepared = true;
+              if (committed && sql.includes("SELECT text, through_sequence, revision")) {
+                throw new Error("Fresh continuity read unavailable");
+              }
+              return target.prepare(sql);
+            };
+          }
+          if (property === "batch") {
+            return (
+              statements: Parameters<D1Database["batch"]>[0]
+            ): ReturnType<D1Database["batch"]> =>
+              target.batch(statements).then((result) => {
+                if (compactionPrepared) committed = true;
+                return result;
+              });
+          }
+          const value: unknown = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      let requests = 0;
+      const provider = yield* Effect.tryPromise(() =>
+        inference(() => {
+          requests++;
+          return Promise.resolve(reply('{"compactedConversation":"Fresh continuity"}'));
+        })
+      );
+      const outcome = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          completeHostedTurn({
+            db: controlled,
+            subject: fixture.caller,
+            text: TranscriptText.make("Next"),
+            inference: { ...provider, countTranscript: () => Effect.succeed(100_001) },
+            deliver: browserHostedDelivery,
+            signal: makeAbortController().signal,
+          })
+        )
+      );
+      expect(Exit.isFailure(outcome)).toBe(true);
+      expect(requests).toBe(1);
+      const after = yield* readHostedContinuity({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        now: fixture.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      expect(after.transcript).toEqual([]);
+      expect(Option.map(after.compactedConversation, ({ text }) => text)).toEqual(
+        Option.some("Fresh continuity")
+      );
+    })
+  ));
+
+it("compacts a session prefix across gaps in global Transcript sequence", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const fixture = yield* closedContinuityFixture(db);
+      const foreignSubject = yield* Effect.tryPromise(() => subject(1));
+      const model = yield* Effect.tryPromise(() => inference(() => Promise.resolve(reply())));
+      const foreign = yield* Effect.tryPromise(() =>
+        completeHostedTurn({
+          db,
+          subject: foreignSubject,
+          text: TranscriptText.make("Other User"),
+          inference: model,
+          deliver: browserHostedDelivery,
+          signal: makeAbortController().signal,
+        })
+      );
+      yield* Effect.tryPromise(() => acknowledgeVisibleReply({ db, index: 1, response: foreign }));
+      yield* closedContinuityFixture(db);
+      const selected = yield* readHostedContinuity({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        now: fixture.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      expect(selected.transcript.map(({ sequence }) => Number(sequence))).toEqual([1, 2, 5, 6]);
+      expect(
+        yield* commitHostedCompaction({
+          db,
+          subject: fixture.caller,
+          sessionId: fixture.sessionId,
+          continuity: selected,
+          throughSequence: Option.getOrThrow(selected.terminalThroughSequence),
+          text: "Exact session prefix",
+          signal: makeAbortController().signal,
+        })
+      ).toBe(true);
+      expect((yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results).toEqual(
+        []
+      );
+      expect(
+        (yield* Effect.tryPromise(() => retained({ db, user: users[1] }))).results
+      ).toHaveLength(2);
+    })
+  ));
+
 it("counts only selected Transcript rows when native D1 compaction triggers write", () =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -613,6 +613,9 @@ export const commitHostedCompaction = ({
       onSome: ({ throughSequence: cursor, revision }) => ({ throughSequence: cursor, revision }),
     });
     const nextRevision = prior.revision + 1;
+    const selectedIdentities = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.Array(Schema.Tuple([Schema.String, TranscriptEntryId])))
+    )(selected.map(({ sequence, entry }) => [String(sequence), entry.id] as const));
     if (signal.aborted) return false;
     return yield* Effect.tryPromise(() =>
       db.batch([
@@ -624,10 +627,16 @@ export const commitHostedCompaction = ({
       AND EXISTS (${authority.sql})
       AND (SELECT COUNT(*) FROM transcript_entries WHERE user_id=? AND hosted_session_id=?
         AND sequence<=?)=?
+      AND NOT EXISTS(SELECT 1 FROM json_each(?) AS selected
+        WHERE NOT EXISTS(SELECT 1 FROM transcript_entries AS e
+          WHERE e.user_id=? AND e.hosted_session_id=?
+            AND e.sequence=CAST(json_extract(selected.value, '$[0]') AS INTEGER)
+            AND e.id=json_extract(selected.value, '$[1]')))
       AND NOT EXISTS(SELECT 1 FROM transcript_entries AS e JOIN hosted_turns AS t
         ON t.id=e.turn_id AND t.user_id=e.user_id WHERE e.user_id=?
         AND e.hosted_session_id=? AND e.sequence<=? AND t.status='pending')
-      AND (compacted_revision IS NULL OR (compacted_revision=? AND compacted_through_sequence=?))`)
+      AND ((?=0 AND compacted_revision IS NULL)
+        OR (compacted_revision=? AND compacted_through_sequence=?))`)
           .bind(
             userId,
             sessionId,
@@ -642,9 +651,13 @@ export const commitHostedCompaction = ({
             sessionId,
             throughSequence,
             selected.length,
+            selectedIdentities,
+            userId,
+            sessionId,
             userId,
             sessionId,
             throughSequence,
+            prior.revision,
             prior.revision,
             prior.throughSequence
           ),

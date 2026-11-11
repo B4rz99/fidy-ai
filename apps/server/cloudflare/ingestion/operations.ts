@@ -263,9 +263,9 @@ export const advanceStatementExtraction = (
   }>
 ): Effect.Effect<"continue" | "settled", StatementProcessingUnavailable> =>
   Effect.gen(function* () {
-    const activity = yield* Schema.decodeUnknownEffect(StatementCoordinatorActivity)(
-      input.activity
-    ).pipe(Effect.mapError(() => new StatementProcessingUnavailable()));
+    const activity = yield* Schema.decodeEffect(StatementCoordinatorActivity)(input.activity).pipe(
+      Effect.mapError(() => new StatementProcessingUnavailable())
+    );
     if (activity.userId !== input.userId) return yield* new StatementProcessingUnavailable();
     const work = { DB: input.DB, userId: input.userId, submissionId: activity.submissionId };
     if (activity._tag === "StatementFailed") {

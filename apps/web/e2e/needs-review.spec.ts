@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import { expectFinancialLabels } from "./financial-form-text";
 import { signInNavigationPerformanceThroughCore, signInThroughCore } from "./real-core-fixture";
 import type { Response as BrowserResponse, Page, Request, Route } from "@playwright/test";
@@ -163,9 +164,12 @@ const mobileInputViewports = [
 const expectReviewReflow = (page: Page): Promise<void> =>
   expect.poll(() => page.evaluate(hasHorizontalOverflow)).toBe(false);
 
-const captureReviewText = (page: Page): Promise<Buffer> =>
-  page.locator('[data-review="fields"]').screenshot({
-    path: test.info().outputPath("review-enlarged-dark.png"),
+const captureReviewText = (page: Page): Promise<void> =>
+  captureVisualEvidence({
+    target: page.locator('[data-review="fields"]'),
+    options: {
+      path: test.info().outputPath("review-enlarged-dark.png"),
+    },
   });
 
 test("mobile review keeps editable financial text legible and enlarges it with text sizing", ({

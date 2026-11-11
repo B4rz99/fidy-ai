@@ -528,6 +528,12 @@ architecture and production runbook.
 
 ## 5. Testing seams
 
+Functional browser checks select reduced motion; admission and latency projects retain native
+motion and clocks. Recurring lifecycle fixtures prepare prerequisite plans through the authenticated,
+revision-bound canonical API; creation journeys still exercise the visible editor. Successful
+review-image export is opt-in with `BROWSER_VISUAL_EVIDENCE=true`; accessibility, layout, focus and
+workflow assertions always run. Failure screenshots remain enabled in their owning hooks.
+
 Vitest tests exercise pure decisions and Effect programs through their public interfaces. UI workflows
 are exercised through Playwright browser acceptance. Istanbul reports logic coverage and enforces a
 90% gate at the browser transport boundary. Production-policy tests validate the generated static artifact, SPA fallbacks,

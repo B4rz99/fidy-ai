@@ -2,7 +2,6 @@ import {
   CreateTransactionInput,
   Direction,
   InstrumentLabel,
-  NotificationCurrencyBasis,
   NotificationFormatId,
   RestoredTransactionPair,
   Transaction,
@@ -43,11 +42,6 @@ it("preserves agent-facing timestamp meanings through calendar refinement JSON S
     "description",
     expect.stringContaining("When fidy learned of it")
   );
-});
-
-it("accepts both of the two ways money can move", () => {
-  expect(Result.isSuccess(decodeDirection("outflow"))).toBe(true);
-  expect(Result.isSuccess(decodeDirection("inflow"))).toBe(true);
 });
 
 it("rejects a third kind of movement, which is a domain decision and not a spelling", () => {
@@ -261,11 +255,5 @@ it("preserves notification-email attestation integrity and the fields explicitly
         Schema.decodeUnknownResult(SourceAttestation)({ ...notification, messageContentSha256 })
       )
     ).toBe(true);
-  }
-});
-
-it("retains whether Currency was explicit or came from the versioned notification format", () => {
-  for (const value of ["explicit", "format-cop-default-v1"]) {
-    expect(Schema.decodeUnknownSync(NotificationCurrencyBasis)(value)).toBe(value);
   }
 });

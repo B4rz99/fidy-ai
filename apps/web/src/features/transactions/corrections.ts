@@ -1,4 +1,4 @@
-import { Array, Cause, type Context, Deferred, Effect, Option, Predicate } from "effect";
+import { Array, Cause, Deferred, Effect, Option, Predicate } from "effect";
 import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
 import { type CanonicalInput, type CanonicalSuccess, type FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
@@ -42,12 +42,10 @@ export type TransactionCorrections = Readonly<{
   confirmDeletion: (id: Transaction["id"], onDeleted: () => void) => void;
   mount: () => () => void;
 }>;
-type Client = Context.Service.Shape<FidyClient>;
-type PageFailure = Effect.Error<ReturnType<Client["transactions"]["listTransactions"]>>;
 type Query<A, E> = Atom.Atom<AsyncResult.AsyncResult<A, E>>;
 type Input = Readonly<{
   client: FidyClient;
-  firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, PageFailure>;
+  firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, unknown>;
   categories: Query<CanonicalSuccess<"categories.listCategories">, unknown>;
   history: Atom.Atom<HistoryState>;
   historyAction: Atom.Writable<Option.Option<void>, HistoryCommand>;

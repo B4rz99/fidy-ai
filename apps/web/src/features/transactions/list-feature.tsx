@@ -228,6 +228,7 @@ type TransactionQueries = Readonly<{
   mount: () => () => void;
   onMore: () => void;
   onRetryMore: () => void;
+  onRefresh: () => void;
 }>;
 const notifySavedCorrection = (
   router: RegisteredRouter,
@@ -334,6 +335,11 @@ const useTransactionQueries = (
       dispatch(history.more);
     },
     onRetryMore: () => dispatch(history.retry),
+    onRefresh: () => {
+      if (corrections.locked) return corrections.recover();
+      dispatch("reset");
+      router.options.context.registry.refresh(categories);
+    },
   };
 };
 const readyQueryActivity = (
@@ -514,7 +520,7 @@ const ReadyTransactionResources = ({
             <TransactionLocationNotice history={history} onMore={onMore} onRetry={onRetryMore} />
           </>
         }
-        onRefresh={corrections.recover}
+        onRefresh={queries.onRefresh}
       />
       {profileCurrent && activity._tag === "Current" ? children : null}
     </Suspense>

@@ -447,7 +447,9 @@ it.live(
         yield* ready;
         expect(reads).toBe(1);
         for (const expected of [2, 4]) {
+          const generation = registry.get(history.state).generation;
           registry.set(history.action, "refresh-pages");
+          expect(registry.get(history.state).generation).toBe(generation + 1);
           expect(yield* readFreshQuery({ registry, query: history.firstPage })).toBe(true);
           expect(reads).toBe(expected);
           if (expected === 2) {

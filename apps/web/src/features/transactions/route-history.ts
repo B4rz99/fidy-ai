@@ -229,6 +229,10 @@ const routeActions = ({
     const current = owner.generation;
     if (command === "refresh-pages") {
       get.set(get(owner.resource).action, command);
+      get.set(navigation, {
+        ...owner,
+        generation: new Generation({ ...current, number: current.number + 1 }),
+      });
       return;
     }
     if (typeof command === "string") {

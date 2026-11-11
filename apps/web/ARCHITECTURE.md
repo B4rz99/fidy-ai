@@ -967,3 +967,11 @@ bounds generated dates. Lifecycle controls consult retained stop/open-pause fact
 standing. Explicit lifecycle and current-plan edit intent capture the local date when submitted;
 canonical document revision checks and live authorization remain server-owned. Stopped plans remain
 editable under the existing forward-edit policy, including replacement of the future revision suffix.
+
+Needs Review retains each item’s earliest observed original deadline in private authentication-registry
+atoms containing only timestamps. These bounds survive page, membership and context-query disposal.
+Context projection, original selection, generated original-read admission and route preloading share
+that bound and item metadata; original expiry
+does not expire a separately retained review draft or resolve its decision. Deadline subscriptions
+recheck wall time on focus, page show, and visibility changes, including retained hidden panels.
+This logical suppression does not depend on physical source cleanup or timely execution while suspended.

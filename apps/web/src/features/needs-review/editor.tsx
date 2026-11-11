@@ -33,6 +33,7 @@ type Props = Readonly<{
   decisions: ReviewDecisions;
   disabled: boolean;
   workspaceQuery: ReviewWorkspaceQuery;
+  originalExpiresAt: Item["expiresAt"];
 }>;
 export const ReviewEditor = (props: Props): JSX.Element => {
   const expired = useReviewExpired(props.item);
@@ -40,7 +41,7 @@ export const ReviewEditor = (props: Props): JSX.Element => {
     <ExpiredReviewItem item={props.item} />
   ) : (
     <>
-      <ReviewMaterialPreload item={props.item} />
+      <ReviewMaterialPreload item={props.item} expiresAt={props.originalExpiresAt} />
       <ReviewItemEditor {...props} />
     </>
   );
@@ -67,7 +68,13 @@ const ExpiredReviewItem = ({
     </div>
   </section>
 );
-const ReviewItemEditor = ({ item, decisions, disabled, workspaceQuery }: Props): JSX.Element => {
+const ReviewItemEditor = ({
+  item,
+  decisions,
+  disabled,
+  workspaceQuery,
+  originalExpiresAt,
+}: Props): JSX.Element => {
   const apiClient = useRouter().options.context.apiClient;
   const [query] = useState(() =>
     reviewItemQuery({
@@ -106,6 +113,7 @@ const ReviewItemEditor = ({ item, decisions, disabled, workspaceQuery }: Props):
       ) : null}
       <ReadyEditor
         detail={detail.value.data}
+        originalExpiresAt={originalExpiresAt}
         decisions={decisions}
         disabled={[
           disabled,
@@ -173,14 +181,18 @@ const ReviewItemFailure = ({
     </Button>
   </ReviewNotice>
 );
+const useDraftChange = (decisions: ReviewDecisions, detail: Detail): ((draft: Draft) => void) =>
+  useCallback((draft: Draft) => decisions.change(detail, draft), [decisions, detail]);
 const ReadyEditor = ({
   detail,
+  originalExpiresAt,
   categories,
   recover,
   decisions,
   disabled,
 }: Readonly<{
   detail: Detail;
+  originalExpiresAt: Item["expiresAt"];
   decisions: ReviewDecisions;
   disabled: boolean;
   categories: ReadonlyArray<Category>;
@@ -190,14 +202,14 @@ const ReadyEditor = ({
   const act = (kind: "Create" | "Skip"): void => decisions.decide(detail, kind);
   const locked = editor.locked || disabled;
   if (editor.detail.item.status !== "pending") {
-    return <HistoryDetail detail={editor.detail} />;
+    return <HistoryDetail detail={editor.detail} originalExpiresAt={originalExpiresAt} />;
   }
-  const failed = editor.feedback === "uncertain" || editor.feedback === "failed";
+  const failed = ["uncertain", "failed"].includes(editor.feedback);
   return (
     <>
       <div data-review="columns">
         <div className="min-w-0">
-          <OriginalMaterial item={detail.item} />
+          <OriginalMaterial item={detail.item} expiresAt={originalExpiresAt} />
         </div>
         <div data-review="form">
           <h2 className="sr-only">Completa la transacción</h2>
@@ -262,11 +274,13 @@ const historyTitles = {
 };
 const HistoryDetail = ({
   detail,
+  originalExpiresAt,
 }: Readonly<{
   detail: Detail;
+  originalExpiresAt: Item["expiresAt"];
 }>): JSX.Element => (
   <div data-review="columns">
-    <OriginalMaterial item={detail.item} />
+    <OriginalMaterial item={detail.item} expiresAt={originalExpiresAt} />
     <div data-review="history" data-status={detail.item.status}>
       <HugeiconsIcon
         icon={detail.item.status === "created" ? CheckmarkCircle02Icon : PauseCircleIcon}

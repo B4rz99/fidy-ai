@@ -122,7 +122,9 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
   }
 }
 
-/** Admit forwarded material only through the Email Worker, retaining the owner's bounded byte and Consent checks. */
+/** Retained receipt/storage protocol with bounded bytes and Consent checks. This does not
+ * verify an institution; native production delivery remains refused at the Email Worker boundary.
+ */
 export const receiveForwardedEmail = ({
   message,
   environment,

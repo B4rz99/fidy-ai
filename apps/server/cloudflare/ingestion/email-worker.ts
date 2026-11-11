@@ -2,7 +2,6 @@ import { withErasureRecovery } from "../erasure/runtime";
 import { Effect } from "effect";
 import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
-import { receiveForwardedEmail } from "./runtime";
 import { runEmailMaintenance } from "../maintenance/runtime";
 import {
   cloudflareWorkerTelemetry,
@@ -18,10 +17,12 @@ type EmailWorker = Readonly<{
   ) => Promise<void>;
 }>;
 
-/** Compose the native Email entrypoints with narrow Ingestion and Maintenance authorities. */
+/** Refuse native delivery until institution verification and Connection admission exist;
+ * maintenance still recovers retained work under its original admission and deadlines.
+ */
 export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
   email: (message, environment) =>
-    receiveForwardedEmail({ message, environment: withErasureRecovery(environment) }).pipe(
+    Effect.sync(() => message.setReject("Mailbox unavailable")).pipe(
       observeWorkerExecution({
         telemetry,
         environment: workerRelease(environment),

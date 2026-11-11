@@ -6,7 +6,7 @@ import {
   readAuthorizedUserDocumentSnapshot,
   readUserDocumentSnapshot,
 } from "../../user-documents/operations";
-import { Effect, Option, Schema } from "effect";
+import { type DateTime, Effect, Option, Schema } from "effect";
 import {
   RecurringDocument,
   RecurringFulfillment,
@@ -17,6 +17,7 @@ import { RecurringPlanningUnavailable } from "../contract";
 import { type CanonicalPreparationWork } from "../../canonical-operations/contract";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 
+import { displayDocument } from "./display";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
 const JsonDocument = Schema.toCodecJson(RecurringDocument);
@@ -247,9 +248,10 @@ export const preparePlanningRows = ({
   };
 };
 
-export const decodeReadProjection = (
-  rows: PlanningRows
-): Effect.Effect<
+export const decodeReadProjection = ({
+  rows,
+  now,
+}: Readonly<{ rows: PlanningRows; now: DateTime.Utc }>): Effect.Effect<
   Readonly<{
     schedule: RecurringSchedule;
     editing: RecurringDocument;
@@ -271,12 +273,9 @@ export const decodeReadProjection = (
       ...rows.root,
       ...schedule,
       revision: rows.revision,
-      plans: schedule.plans.map((plan) => ({
-        ...plan,
-        revisions: [plan.revisions.at(-1) ?? plan.revisions[0]],
-      })),
+      plans: schedule.plans,
     });
-    return { editing, schedule };
+    return { editing: displayDocument({ document: editing, compact: true, now }), schedule };
   }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
 
 export const planningUsers = (users: OwnedStatement): OwnedStatement => ({

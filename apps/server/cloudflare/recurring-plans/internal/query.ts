@@ -275,7 +275,11 @@ export const workspaceFromSnapshot = (
 ): Effect.Effect<typeof RecurringWorkspace.Type, Schema.SchemaError> =>
   workspaceFromFacts({
     ...input,
-    editing: displayDocument({ document: input.document, compact: input.query.view === "compact" }),
+    editing: displayDocument({
+      document: input.document,
+      compact: input.query.view === "compact",
+      now: input.now,
+    }),
   });
 
 export const workspaceFromReadProjection = ({

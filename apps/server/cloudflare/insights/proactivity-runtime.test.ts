@@ -274,6 +274,15 @@ it("the installed User coordinator generates the latest reminder and frozen mess
     })
   ));
 
+const receiptProvider = vi.fn(() =>
+  Promise.resolve(
+    Response.json({
+      messaging_product: "whatsapp",
+      messages: [{ id: "reminder-provider" }],
+    })
+  )
+);
+
 it("a category send is one-shot, provider acceptance is not delivery, and verified evidence settles the exact occurrence", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -347,11 +356,8 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
           }),
         ])
       );
-      const provider = vi.fn(() =>
-        Promise.resolve(
-          Response.json({ messaging_product: "whatsapp", messages: [{ id: "reminder-provider" }] })
-        )
-      );
+      const provider = receiptProvider;
+      provider.mockClear();
       vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const coordinator = makeProactivityCoordinator({
         environment: configuration(db),
@@ -2066,15 +2072,6 @@ it.each(["paused", "stopped"] as const)(
     )
 );
 
-const receiptProvider = vi.fn(() =>
-  Promise.resolve(
-    Response.json({
-      messaging_product: "whatsapp",
-      messages: [{ id: "receipt-provider" }],
-    })
-  )
-);
-
 it.each(["read", "dismissed", "conflicting-receipt"] as const)(
   "native category receipt settlement preserves %s attention and the first receipt",
   (attention) =>
@@ -2155,7 +2152,7 @@ it.each(["read", "dismissed", "conflicting-receipt"] as const)(
               userId: scope.userId,
               correlationToken: claim.correlation_token,
               businessPhoneNumberId: phone,
-              providerMessageId: WhatsAppProviderMessageId.make("receipt-provider"),
+              providerMessageId: WhatsAppProviderMessageId.make("reminder-provider"),
               outcome: "delivered",
               occurredAtMs: now.epochMilliseconds,
               receivedAtMs: now.epochMilliseconds,
@@ -2185,7 +2182,7 @@ it.each(["read", "dismissed", "conflicting-receipt"] as const)(
           ).toBe(true);
         } else {
           expect(Option.isNone(before)).toBe(true);
-          expect(Option.getOrThrow(receipt).providerMessageId).toBe("receipt-provider");
+          expect(Option.getOrThrow(receipt).providerMessageId).toBe("reminder-provider");
           expect((yield* Effect.tryPromise(() => coordinator.fetch(status()))).status).toBe(200);
           expect(yield* findInsightAttempt(scope)).toEqual(receipt);
           expect(Option.getOrThrow(yield* findReminderGovernor(scope))).toEqual({

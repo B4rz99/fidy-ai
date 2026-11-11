@@ -11,13 +11,13 @@ export type BudgetWriteContext = Readonly<{
   refreshQueries: () => void;
 }>;
 const makeWriteOwner = () => {
-    let generation = 0;
-    return {
-      version: (): number => generation,
-      advance: (): void => {
-        generation += 1;
-      },
-    };
+  let generation = 0;
+  return {
+    version: (): number => generation,
+    advance: (): void => {
+      generation += 1;
+    },
+  };
 };
 const initialContext = Option.none<BudgetWriteContext>();
 /** Bridge committed read admission to retained event callbacks; disposal only retires local work. */

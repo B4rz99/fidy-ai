@@ -33,6 +33,7 @@ import {
   rejectUnstartedWhatsAppDelivery as rejectUnstartedWhatsAppDeliveryOwned,
   stageWhatsAppDelivery as stageWhatsAppDeliveryOwned,
   startWhatsAppSend as startWhatsAppSendOwned,
+  submitHostedReply as submitHostedReplyOwned,
 } from "./internal/whatsapp-delivery";
 import {
   classifyWhatsAppAdmission as classifyWhatsAppAdmissionOwned,
@@ -321,3 +322,9 @@ export const admitStatusLookup = (
   }>
 ): ReturnType<ReturnType<typeof makeStatusLookupAdmissionOwned>> =>
   makeStatusLookupAdmissionOwned(input.database)(input.request);
+
+/** Submit an exact hosted reply once, with live channel claim and retained recovery deadline. */
+export const submitHostedReply = (
+  input: Parameters<typeof submitHostedReplyOwned>[0]
+): Effect.Effect<Effect.Success<ReturnType<typeof submitHostedReplyOwned>>, WhatsAppUnavailable> =>
+  submitHostedReplyOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));

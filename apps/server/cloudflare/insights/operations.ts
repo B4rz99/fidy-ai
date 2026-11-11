@@ -68,8 +68,6 @@ import {
   type ReminderMaterialization,
   type ReminderRevisionConflict,
   type WeeklyMaterialization,
-  type WeeklyOccurrenceGuard,
-  type WeeklyScheduleAdvance,
   type WeeklyScheduleSnapshot,
   type WeeklySummaryReport,
 } from "./contract";
@@ -77,14 +75,12 @@ import {
   discoverSchedules,
   findSchedule,
   noteScheduleEvaluation,
-  occurrenceGuard,
   prepareScheduleDisable,
   prepareScheduleEnable,
-  scheduleAdvance,
 } from "./internal/weekly-schedule";
 import {
   findReport,
-  materialize,
+  runGeneration,
   weeklyReportDeliveryQuery as weeklyReportDeliveryQueryOwned,
 } from "./internal/weekly-generation";
 import type { UserId } from "../../src/core/identity/contract";
@@ -110,7 +106,7 @@ export const controlManualReminders: typeof controlReminderOwned = (input) =>
 /** Observe independent reminder-only attention under current processing Consent. */
 export const findReminderGovernor: typeof findReminderGovernorOwned = (input) =>
   findReminderGovernorOwned(input);
-/** Compose one-shot verified reminder/question evidence with exact Transcript settlement. */
+/** Compose one-shot verified reminder/question evidence with Transcript settlement. Execute the ordered group contiguously in one native batch; changes() couples its count marker and governor update. */
 export const prepareReminderDelivery: typeof prepareReminderDeliveryOwned = (input) =>
   prepareReminderDeliveryOwned(input);
 /** Reset only from same-User channel-qualified reminder/question reply evidence. */
@@ -254,10 +250,10 @@ export const prepareReminderRevision = (
   InsightUnavailable | ReminderRevisionConflict
 > => reminder.prepareRevision(input);
 
-/** Materialize only the latest still-fresh reminder with an exact enabled instruction/grant guard. Event, immutable deadline, outbox and advancement commit together; replay cannot create a backlog. */
+/** Under existing User coordination, read the current reminder and admit at most one latest due occurrence. Event, original deadline, outbox, history and advancement commit together under the exact enabled revision and live grant; Created means admitted intent, not delivered. */
 export const materializeReminder = (
-  input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
-): Effect.Effect<ReminderMaterialization, InsightUnavailable> => reminder.materialize(input);
+  input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>
+): Effect.Effect<ReminderMaterialization, InsightUnavailable> => reminder.advanceReminderDue(input);
 
 /** Reject invalid governor knobs before production execution or delivery settlement. */
 export const readWeeklyThresholds: typeof weeklyThresholds = (input) => weeklyThresholds(input);
@@ -286,10 +282,10 @@ export const prepareWeeklyDeliverySettlement: typeof prepareWeeklyDeliverySettle
   input
 ) => prepareWeeklyDeliverySettlementOwned(input);
 
-/** Materialize only the latest relevant cutoff under the existing User coordinator and caller-owned security admission. Complete revision guards commit financial facts, occurrence, report, outbox and schedule advance atomically; unavailable facts never become no activity. */
-export const materializeWeeklySummary = (
+/** Admit bounded weekly generation under the existing User coordinator; current processing and exact category Consent are required before financial evaluation. Complete revision guards commit financial facts, occurrence, report, outbox and schedule advance atomically; unavailable facts never become no activity. */
+export const runWeeklyGeneration = (
   input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
-): Effect.Effect<WeeklyMaterialization, InsightUnavailable> => materialize(input);
+): Effect.Effect<WeeklyMaterialization, InsightUnavailable> => runGeneration(input);
 /** Recheck the enabled schedule and captured grant in the channel owner's irreversible claim action. */
 export const weeklyReportDeliveryQuery: typeof weeklyReportDeliveryQueryOwned = (input) =>
   weeklyReportDeliveryQueryOwned(input);
@@ -337,14 +333,6 @@ export const discoverDueWeeklySchedules = (
 export const noteWeeklyScheduleEvaluation = (
   input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
 ): Effect.Effect<void, InsightUnavailable> => noteScheduleEvaluation(input);
-/** Guard an owner statement ending at its WHERE condition against current captured schedule and exact live Consent grant. */
-export const prepareWeeklyOccurrenceGuard = (input: WeeklyOccurrenceGuard): D1PreparedStatement =>
-  occurrenceGuard(input);
-/** Commit after the occurrence/report/outbox writes in the same batch; stale, disabled, revoked or replayed work aborts the entire unit. */
-export const prepareWeeklyScheduleAdvance = (
-  input: WeeklyScheduleAdvance
-): ReadonlyArray<D1PreparedStatement> => scheduleAdvance(input);
-
 /**
  * Read one User's authoritative occurrence inside that User's coordination boundary. The caller
  * establishes the purpose and live authority; an occurrence identity grants no access by itself.

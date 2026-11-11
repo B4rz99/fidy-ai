@@ -1,4 +1,4 @@
-import { Data, type DateTime, Schema } from "effect";
+import { Data, Schema } from "effect";
 import { ConsentRecordId } from "../../src/core/consent/contract";
 import {
   InsightEventId,
@@ -13,7 +13,6 @@ import { IanaTimeZone } from "../../src/core/_shared/context";
 import { UtcTimestamp } from "../../src/core/_shared/time";
 import { WeeklySummaryPayload } from "../../src/core/insights/weekly-summary/contract";
 import { InsightTemplateSummary } from "../../src/shell/channels/whatsapp/contract";
-import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { QueryAuthority } from "../canonical-work/contract";
 import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
 import type { Option } from "effect";
@@ -92,17 +91,6 @@ export type ReminderMaterialization =
 export const DueWeeklySchedule = Schema.Struct({ userId: UserId, id: ScheduleId });
 export type DueWeeklySchedule = typeof DueWeeklySchedule.Type;
 
-/** Compose a caller-owned action ending at its WHERE condition with exact current schedule and Consent. */
-export type WeeklyOccurrenceGuard = Readonly<{
-  db: D1Database;
-  snapshot: WeeklyScheduleSnapshot;
-  now: DateTime.Utc;
-  statement: OwnedStatement;
-}>;
-
-/** Advance only with the same materialized cutoff in the caller's occurrence/report/outbox unit. */
-export type WeeklyScheduleAdvance = Omit<WeeklyOccurrenceGuard, "statement"> &
-  Readonly<{ materializedScheduledAt: DateTime.Utc; outcome: "generated" | "empty" | "expired" }>;
 /** Immutable complete report and presentation for one explicit occurrence; attention state remains Insights-owned. */
 export const WeeklySummaryReport = Schema.Struct({
   insightEventId: InsightEventId,

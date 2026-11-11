@@ -5,7 +5,11 @@ import { whatsAppAssociationQuery } from "../../../src/shell/identity/operations
 import type { WhatsAppTurnAdmission } from "../../whatsapp/contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { proactivityVerifiedControlQuery } from "../../whatsapp/operations";
+import {
+  proactivityReminderReplyQuery,
+  proactivityVerifiedControlQuery,
+  proactivityVerifiedDeliveryQuery,
+} from "../../whatsapp/operations";
 import { currentProactivityGrantQuery, prepareConsentAction } from "../../consent/operations";
 import { InsightUnavailable } from "../contract";
 
@@ -37,43 +41,55 @@ export const findGovernor = (
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 /** A single verified message is counted at most once; questions never count as reminders. */
 export const prepareDelivery = (
-  input: Scope & Readonly<{ id: string; proof: OwnedStatement }>
-): ReadonlyArray<D1PreparedStatement> => [
-  input.db
-    .prepare(
-      `UPDATE proactive_messages SET reminder_governor_counted=1 WHERE kind='proactivity-delivery' AND user_id=? AND id=? AND reminder_governor_counted IS NULL AND EXISTS(SELECT 1 FROM (${input.proof.sql}) AS v JOIN reminder_proactivity_state g ON g.user_id=v.user_id WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('manual-entry-reminder','reminder-question') AND v.delivered_at_ms>g.last_reply_at_ms)`
-    )
-    .bind(input.userId, input.id, ...input.proof.params, input.userId, input.id),
-  input.db
-    .prepare(
-      `UPDATE reminder_proactivity_state AS reminder_governors SET standing_json=CASE WHEN (SELECT role FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)='reminder-question' THEN CASE WHEN json_extract(standing_json,'$._tag')='QuestionPending' AND question_id=? THEN json_object('_tag','QuestionDelivered','unanswered',3) ELSE standing_json END WHEN json_extract(standing_json,'$._tag')='Attentive' AND json_extract(standing_json,'$.unanswered')<2 THEN json_object('_tag','Attentive','unanswered',json_extract(standing_json,'$.unanswered')+1) WHEN json_extract(standing_json,'$._tag')='Attentive' THEN json_object('_tag','QuestionPending','unanswered',3) WHEN json_extract(standing_json,'$._tag')='QuestionDelivered' AND (SELECT delivered_at_ms FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)>question_delivered_at_ms THEN CASE WHEN json_extract(standing_json,'$.unanswered')=3 THEN json_object('_tag','QuestionDelivered','unanswered',4) ELSE json_object('_tag','Paused','unanswered',5,'pausedAt',(SELECT strftime('%Y-%m-%dT%H:%M:%fZ',delivered_at_ms/1000.0,'unixepoch') FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)) END ELSE standing_json END,question_delivered_at_ms=CASE WHEN question_id=? THEN coalesce(question_delivered_at_ms,(SELECT delivered_at_ms FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)) ELSE question_delivered_at_ms END,notice_completed=0 WHERE user_id=? AND changes()=1`
-    )
-    .bind(
-      ...input.proof.params,
-      input.userId,
-      input.id,
-      input.id,
-      ...input.proof.params,
-      input.userId,
-      input.id,
-      ...input.proof.params,
-      input.userId,
-      input.id,
-      input.id,
-      ...input.proof.params,
-      input.userId,
-      input.id,
-      input.userId
-    ),
-];
+  input: Scope & Readonly<{ id: string }>
+): ReadonlyArray<D1PreparedStatement> => {
+  const channel = proactivityVerifiedDeliveryQuery(input);
+  const grant = currentProactivityGrantQuery({ ...input, kind: "manual-entry-reminder" });
+  const proof = {
+    sql: `SELECT v.* FROM (${channel.sql}) AS v WHERE v.consent_grant_id IN (${grant.sql})`,
+    params: [...channel.params, ...grant.params],
+  };
+  return [
+    input.db
+      .prepare(
+        `UPDATE proactive_messages SET reminder_governor_counted=1 WHERE kind='proactivity-delivery' AND user_id=? AND id=? AND reminder_governor_counted IS NULL AND EXISTS(SELECT 1 FROM (${proof.sql}) AS v JOIN reminder_proactivity_state g ON g.user_id=v.user_id WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('manual-entry-reminder','reminder-question') AND v.delivered_at_ms>g.last_reply_at_ms AND ((v.role='reminder-question' AND v.delivery_id=g.question_id AND json_extract(g.standing_json,'$._tag')='QuestionPending') OR (v.role='manual-entry-reminder' AND json_extract(g.standing_json,'$._tag') IN ('Attentive','QuestionDelivered'))))`
+      )
+      .bind(input.userId, input.id, ...proof.params, input.userId, input.id),
+    input.db
+      .prepare(
+        `UPDATE reminder_proactivity_state AS reminder_governors SET standing_json=CASE WHEN (SELECT role FROM (${proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)='reminder-question' THEN CASE WHEN json_extract(standing_json,'$._tag')='QuestionPending' AND question_id=? THEN json_object('_tag','QuestionDelivered','unanswered',3) ELSE standing_json END WHEN json_extract(standing_json,'$._tag')='Attentive' AND json_extract(standing_json,'$.unanswered')<2 THEN json_object('_tag','Attentive','unanswered',json_extract(standing_json,'$.unanswered')+1) WHEN json_extract(standing_json,'$._tag')='Attentive' THEN json_object('_tag','QuestionPending','unanswered',3) WHEN json_extract(standing_json,'$._tag')='QuestionDelivered' AND (SELECT delivered_at_ms FROM (${proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)>question_delivered_at_ms THEN CASE WHEN json_extract(standing_json,'$.unanswered')=3 THEN json_object('_tag','QuestionDelivered','unanswered',4) ELSE json_object('_tag','Paused','unanswered',5,'pausedAt',(SELECT strftime('%Y-%m-%dT%H:%M:%fZ',delivered_at_ms/1000.0,'unixepoch') FROM (${proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)) END ELSE standing_json END,question_delivered_at_ms=CASE WHEN question_id=? THEN coalesce(question_delivered_at_ms,(SELECT delivered_at_ms FROM (${proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)) ELSE question_delivered_at_ms END,notice_completed=0 WHERE user_id=? AND changes()=1`
+      )
+      .bind(
+        ...proof.params,
+        input.userId,
+        input.id,
+        input.id,
+        ...proof.params,
+        input.userId,
+        input.id,
+        ...proof.params,
+        input.userId,
+        input.id,
+        input.id,
+        ...proof.params,
+        input.userId,
+        input.id,
+        input.userId
+      ),
+  ];
+};
+/** Ordinary replies reset only the episode and captured grant they actually answer. */
 export const prepareReply = (
-  input: Scope & Readonly<{ proof: OwnedStatement }>
-): D1PreparedStatement =>
-  input.db
+  input: Scope & Readonly<{ proof: WhatsAppTurnAdmission }>
+): D1PreparedStatement => {
+  const channel = proactivityReminderReplyQuery(input.proof);
+  const grant = currentProactivityGrantQuery({ ...input, kind: "manual-entry-reminder" });
+  return input.db
     .prepare(
-      `UPDATE reminder_proactivity_state AS reminder_governors SET standing_json=json_object('_tag','Attentive','unanswered',0),last_reply_at_ms=(SELECT max(v.occurred_at_ms) FROM (${input.proof.sql}) AS v WHERE v.user_id=?),question_id=NULL,question_delivered_at_ms=NULL,notice_turn_id=NULL,notice_completed=0 WHERE user_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.role IN ('manual-entry-reminder','reminder-question') AND v.occurred_at_ms>last_reply_at_ms AND v.occurred_at_ms+1000>=v.delivered_at_ms)`
+      `UPDATE reminder_proactivity_state AS g SET standing_json=json_object('_tag','Attentive','unanswered',0),last_reply_at_ms=v.occurred_at_ms,question_id=NULL,question_delivered_at_ms=NULL,notice_turn_id=NULL,notice_completed=0 FROM (${channel.sql}) AS v WHERE g.user_id=? AND v.user_id=g.user_id AND v.consent_grant_id IN (${grant.sql}) AND (v.role='manual-entry-reminder' OR (v.role='reminder-question' AND v.delivery_id=g.question_id)) AND v.occurred_at_ms>g.last_reply_at_ms AND v.delivered_at_ms>g.last_reply_at_ms AND v.occurred_at_ms+1000>=v.delivered_at_ms`
     )
-    .bind(...input.proof.params, input.userId, input.userId, ...input.proof.params, input.userId);
+    .bind(...channel.params, input.userId, ...grant.params);
+};
 const controlChoice = Schema.Tuple([
   Schema.Literal("reminder"),
   Schema.String.check(Schema.isUUID()),

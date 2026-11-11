@@ -350,7 +350,7 @@ export const readWeeklyReplyChoice = (
 export const weeklyQuestionDeliveryQuery = (
   input: Readonly<{ userId: UserId; id: string }>
 ): OwnedStatement => ({
-  sql: "SELECT user_id,id AS question_id,send_started_at_ms,delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND id=? AND state='delivered'",
+  sql: "SELECT user_id,id AS question_id,consent_grant_id,send_started_at_ms,delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS weekly_governor_questions WHERE user_id=? AND id=? AND state='delivered'",
   params: [input.userId, input.id],
 });
 

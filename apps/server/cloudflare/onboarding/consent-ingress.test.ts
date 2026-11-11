@@ -633,6 +633,8 @@ it("routes only signed, correlated Kapso delivery evidence to the same User", ()
                 id: "wamid.disclosure-1",
                 status: "delivered",
                 timestamp: String(nowSeconds),
+                recipient_user_id: bsuid,
+                recipient_id: "573001234567",
                 biz_opaque_callback_data: token,
               },
             ],
@@ -655,6 +657,8 @@ it("routes only signed, correlated Kapso delivery evidence to the same User", ()
         calls[0]?.request
       );
       expect(forwarded).toMatchObject({
+        recipientUserId: bsuid,
+        recipientPhone: "+573001234567",
         userId,
         correlationToken: token,
         providerMessageId: "wamid.disclosure-1",

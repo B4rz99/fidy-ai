@@ -960,3 +960,83 @@ for (const method of ["tarjeta", "Nequi", "DaviPlata"] as const) {
     page,
   }) => Effect.runPromise(expectPendingPayment(page, method)));
 }
+
+const refuseHeldSubmission = (route: Route, release: Promise<void>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => release);
+      yield* Effect.tryPromise(() => route.fulfill({ status: 503, body: "{}" }));
+    })
+  );
+const holdDaviplataSubmission = Effect.fnUntraced(function* (page: Page) {
+  const submitted = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let payments = 0;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/web/subscription/payment-enrollments/submit`, (route) => {
+      payments += 1;
+      submitted.resolve();
+      return refuseHeldSubmission(route, release.promise);
+    })
+  );
+  return {
+    submitted: submitted.promise,
+    release: (): void => release.resolve(),
+    payments: (): number => payments,
+  };
+});
+test("DaviPlata keeps an admitted approved payment locked through a cancelled-action attempt and lost response", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const observed = yield* openSubscription(
+        page,
+        { viewport: desktop, theme: "light" },
+        "approved-submission"
+      );
+      const held = yield* holdDaviplataSubmission(page);
+      yield* chooseMonthly(page);
+      yield* continueWith(page, "DaviPlata");
+      yield* beginDaviplata(page);
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Código de verificación", { exact: true }).fill("574829")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Confirmar código", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => held.submitted);
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Cancelar autorización", exact: true })
+        ).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Cambiar selección", exact: true })).toBeDisabled()
+      );
+      held.release();
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", {
+            name: "Reintentar envío de la autorización aprobada",
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Consultar estado", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Consultar estado", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Cambiar selección", exact: true })).toBeDisabled()
+      );
+      expect(held.payments()).toBe(1);
+      expect(observed.providerCalls).toEqual([
+        "/v1/tokens/daviplata",
+        "RESEND_OTP",
+        "VALIDATE_OTP_API",
+      ]);
+    })
+  ));

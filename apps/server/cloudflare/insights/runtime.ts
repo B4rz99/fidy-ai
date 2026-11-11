@@ -35,7 +35,11 @@ import {
 import { executeWeeklyActivity, weeklyThresholds } from "./internal/weekly-execution";
 import { deliverProactivity, generateProactivity } from "./internal/proactivity-execution";
 import { discoverProactivityUsers, noteProactivityEvaluation } from "./internal/proactivity-work";
-import { discoverDueWeeklySchedules, noteWeeklyScheduleEvaluation } from "./operations";
+import {
+  discoverDueWeeklySchedules,
+  noteWeeklyScheduleEvaluation,
+  runWeeklyGeneration,
+} from "./operations";
 import {
   type DueWeeklySchedule,
   InsightUnavailable,
@@ -105,6 +109,16 @@ const executeScheduledSummary = (
     const environment = input.environment;
     if (environment.WEEKLY_SUMMARY_ENABLED !== "enabled") return yield* new InsightUnavailable();
     yield* weeklyThresholds(environment);
+    if (input.work.kind === "weekly-generate") {
+      if (input.work.userId !== input.userId) return yield* new InsightUnavailable();
+      yield* runWeeklyGeneration({
+        db: environment.DB,
+        userId: input.userId,
+        id: input.work.id,
+        now: input.now,
+      });
+      return { _tag: "Done" } as const;
+    }
     const summaryConfiguration = yield* Schema.decodeEffect(
       Schema.fromJsonString(InsightTemplateConfiguration)
     )(environment.WEEKLY_SUMMARY_TEMPLATE_JSON ?? "");
@@ -114,6 +128,7 @@ const executeScheduledSummary = (
     const outboundHttp = yield* nativeOutbound(environment);
     return yield* executeWeeklyActivity({
       ...input,
+      work: input.work,
       db: environment.DB,
       senders: {
         summary: makeInsightTemplateSender({ configuration: summaryConfiguration, outboundHttp }),

@@ -337,7 +337,24 @@ records retained interactions, and CompactedConversation is lossy session contin
 An accepted User entry and Pending Turn commit together. A generated reply is a proposal until
 verified visible-delivery evidence permits completion. WhatsApp publishes channel evidence; Agent
 owns the resulting Turn and Transcript transition. Alarms and independent maintenance recover
-abandoned work without granting new execution authority.
+abandoned work without granting new execution authority. After durable admission, a failed recovery
+wake fences the abandoned Turn through channel recovery before releasing its User queue owner; it
+cannot turn the retained User entry into a no-admission refusal. Admission notification follows the
+scheduling attempt for ordinary, confirmation and document Turns.
+Recovery freezes begun, unresolved channel delivery and reads its certainty in one native unit.
+Verified delivery that wins that unit completes with its exact text; unresolved delivery that
+recovery freezes cannot later become a successful Turn. Every terminal unit reconciles retained
+canonical commit fences into missing tool-result evidence before appending its one terminal entry.
+Neither recovery nor repeated terminalization reexecutes canonical tools or renews proposal time.
+Hosted reply submission reloads the retained
+same-User route, stages exact text and correlation, schedules the original proposal deadline, and
+claims once under a fresh clock, current association/business endpoint and verified service window
+before calling the sender. Provider acceptance remains pending delivery. Hosted receipts must prove
+the retained recipient BSUID or sandbox phone from raw provider status history before binding a
+message identifier or settling; missing or mismatched recipient evidence grants no delivery.
+Authenticated receipts cannot revive a rejected or unconfirmed hosted reply. Proactive templates and voice refusals retain
+their separate admission, expiry and recovery protocols.
+
 Verified WhatsApp Turns discover every installed canonical operation permitted by the catalog access
 policy. Query and mutation adapters reuse their canonical owners under live held Turn authority,
 including User isolation, audit, confirmation policy and atomic batch commit fences. Browser credentials
@@ -356,6 +373,12 @@ one live pending Turn before protected execution. Reservation commits separately
 and proves no mutation outcome. Recovery rechecks the exact consumed binding and live authority,
 consults retained commit and outcome evidence, and never lends that reservation to another Turn or
 renews its original ten-minute deadline. OAuth's atomic consumption remains a separate protocol.
+Hosted inference privately captures immutable prepared work behind a shared one-shot execution gate.
+Claim and settlement handoff are interruption-safe while provider work remains interruptible. Only
+pure typed retryable provider unavailability can restore execution within its two-attempt budget;
+interruption, defects and mixed causes consume it. Text InvalidOutput retains a separate one-use
+repair right, spent before feedback preparation. Continuation preparation reserves one descendant
+before asynchronous work, restoring only when preparation fails.
 WhatsApp may repair one invalid model output after successful queries, retaining their tool results
 and remaining call budget. Repair is unavailable once a mutation has started; it cannot replay
 owner effects or replace host confirmation.

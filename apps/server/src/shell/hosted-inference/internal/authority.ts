@@ -1,16 +1,11 @@
 import { Brand } from "effect";
 import {
-  type HostedInferenceError,
   type HostedTextContinuation,
   type HostedTextToolPolicy,
   HostedToolCallMaximum,
   type PreparedHostedStructured,
   type PreparedHostedText,
 } from "~/shell/hosted-inference/contract";
-import { maximumHostedProviderAttempts } from "./limits";
-
-/** Lifecycle of one prepared authority: executable, mid-execution, recoverable, or consumed. */
-export type PreparedLifecycle = "ready" | "executing" | "recoverable" | "consumed";
 
 const opaque = <Behavior extends object>(properties: Behavior): Behavior => {
   const authority: Behavior = { ...properties };
@@ -62,12 +57,6 @@ export const continuationPolicy = (input: {
       };
 };
 
-/** Maps one execution failure to the lifecycle its authority must adopt next. */
-export const failedLifecycle = (error: HostedInferenceError): PreparedLifecycle => {
-  if (error.reason._tag === "InvalidOutput") return "recoverable";
-  return error.reason._tag === "ProviderUnavailable" && error.retryable ? "ready" : "consumed";
-};
-
 /** One-shot availability shared by prepared authorities and adapter-local continuations. */
 export type OneShotPreparation = Readonly<{
   readonly begin: () => boolean;
@@ -89,51 +78,6 @@ export const makeOneShotPreparation = (): OneShotPreparation => {
     },
     consume: () => {
       available = false;
-    },
-  };
-};
-
-/** Lifecycle transitions shared by every prepared text authority. */
-export type PreparedLifecycleTransitions = Readonly<{
-  readonly current: () => PreparedLifecycle;
-  readonly beginExecution: () => boolean;
-  readonly completeExecution: () => void;
-  readonly failExecution: (error: HostedInferenceError) => void;
-  readonly beginRecovery: () => boolean;
-  readonly beginDiscard: () => boolean;
-}>;
-
-/** Creates the one-shot execute/recover/discard transitions of a prepared text authority. */
-export const makePreparedLifecycleTransitions = (): PreparedLifecycleTransitions => {
-  let lifecycle: PreparedLifecycle = "ready";
-  let executionAttempts = 0;
-  return {
-    current: () => lifecycle,
-    beginExecution: () => {
-      if (lifecycle !== "ready" || executionAttempts >= maximumHostedProviderAttempts) return false;
-      lifecycle = "executing";
-      executionAttempts += 1;
-      return true;
-    },
-    completeExecution: () => {
-      lifecycle = "consumed";
-    },
-    failExecution: (error) => {
-      const failed = failedLifecycle(error);
-      lifecycle =
-        failed === "ready" && executionAttempts >= maximumHostedProviderAttempts
-          ? "consumed"
-          : failed;
-    },
-    beginRecovery: () => {
-      if (lifecycle !== "recoverable") return false;
-      lifecycle = "consumed";
-      return true;
-    },
-    beginDiscard: () => {
-      if (lifecycle !== "ready" && lifecycle !== "recoverable") return false;
-      lifecycle = "consumed";
-      return true;
     },
   };
 };

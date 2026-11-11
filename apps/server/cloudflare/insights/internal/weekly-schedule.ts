@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import * as ScheduleStore from "./schedule-store";
 import { UtcTimestamp } from "../../../src/core/_shared/time";
@@ -12,13 +13,16 @@ import { nextWeeklyOccurrence } from "../../../src/core/insights/operations";
 import { prepareConsentAction, prepareWeeklyConsentAction } from "../../consent/operations";
 import { readUserContext } from "../../identity/user-context/operations";
 import { newId } from "../../secret-material/operations";
-import {
-  DueWeeklySchedule,
-  InsightUnavailable,
-  type WeeklyOccurrenceGuard,
-  type WeeklyScheduleAdvance,
-  WeeklyScheduleSnapshot,
-} from "../contract";
+import { DueWeeklySchedule, InsightUnavailable, WeeklyScheduleSnapshot } from "../contract";
+
+type WeeklyOccurrenceGuard = Readonly<{
+  db: D1Database;
+  snapshot: WeeklyScheduleSnapshot;
+  now: DateTime.Utc;
+  statement: OwnedStatement;
+}>;
+type WeeklyScheduleAdvance = Omit<WeeklyOccurrenceGuard, "statement"> &
+  Readonly<{ materializedScheduledAt: DateTime.Utc; outcome: "generated" | "empty" | "expired" }>;
 
 const maximumDueSchedules = 64;
 const ScheduleRow = Schema.Struct({

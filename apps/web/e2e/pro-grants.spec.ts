@@ -1,4 +1,5 @@
-import type { Route } from "@playwright/test";
+import { acceptSubscriptionContracts } from "./subscription-interactions";
+import type { Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { playwright } from "./playwright-runtime";
 import { apiOrigin, response } from "./http-fixtures";
@@ -121,42 +122,93 @@ const refreshToGrant = (gate: Promise<void>): ((route: Route) => Promise<void>) 
     });
   };
 };
-test("a manual Pro grant discovered during checkout hides the unsubmitted payment form", ({
-  page,
-}) =>
-  Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        yield* installSubscriptionFixture(page, "form");
-        const gate = Promise.withResolvers<void>();
-        yield* Effect.addFinalizer(() => Effect.sync(gate.resolve));
-        yield* Effect.tryPromise(() =>
-          page.route(`${apiOrigin}/subscription/status`, refreshToGrant(gate.promise))
-        );
-        yield* Effect.tryPromise((signal) => page.goto("/upgrade", { signal }));
-        yield* Effect.tryPromise((signal) =>
-          page.getByRole("button", { name: /^mensual\b/iu }).click({ signal })
-        );
-        yield* Effect.tryPromise((signal) =>
-          page.getByRole("button", { name: "Actualizar estado", exact: true }).click({ signal })
-        );
-        yield* Effect.tryPromise((signal) =>
-          page.getByRole("button", { name: "Continuar con tarjeta", exact: true }).click({ signal })
-        );
-        yield* Effect.tryPromise((signal) =>
-          expect(page.getByRole("button", { name: "Cambiar selección", exact: true })).toBeVisible({
-            signal,
+const submitPendingPayment = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise((signal) =>
+    page.getByLabel("Correo de facturación", { exact: true }).fill("grant@example.com", { signal })
+  );
+  yield* acceptSubscriptionContracts(page);
+  yield* Effect.tryPromise((signal) =>
+    page.getByRole("button", { name: "Activar Pro", exact: true }).click({ signal })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByText("Estamos esperando la confirmación del pago.")).toBeVisible({
+      signal,
+    })
+  );
+});
+const expectAdmittedPayment = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByText("Tu acceso Pro está activo.", { exact: true })).toBeVisible({
+      signal,
+    })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByText("Estamos esperando la confirmación del pago.")).toBeVisible({
+      signal,
+    })
+  );
+  yield* Effect.tryPromise((signal) =>
+    expect(page.getByRole("button", { name: "Cambiar selección", exact: true })).toBeDisabled({
+      signal,
+    })
+  );
+});
+for (const admitted of [false, true]) {
+  test(
+    admitted
+      ? "a manual Pro grant preserves an admitted payment and its original observation"
+      : "a manual Pro grant discovered during checkout hides the unsubmitted payment form",
+    ({ page }) =>
+      Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const observed = yield* installSubscriptionFixture(page, admitted ? "pending" : "form");
+            const gate = Promise.withResolvers<void>();
+            yield* Effect.addFinalizer(() => Effect.sync(gate.resolve));
+            yield* Effect.tryPromise(() =>
+              page.route(`${apiOrigin}/subscription/status`, refreshToGrant(gate.promise))
+            );
+            yield* Effect.tryPromise((signal) => page.goto("/upgrade", { signal }));
+            yield* Effect.tryPromise((signal) =>
+              page.getByRole("button", { name: /^mensual\b/iu }).click({ signal })
+            );
+            yield* Effect.tryPromise((signal) =>
+              page.getByRole("button", { name: "Actualizar estado", exact: true }).click({ signal })
+            );
+            yield* Effect.tryPromise((signal) =>
+              page
+                .getByRole("button", { name: "Continuar con tarjeta", exact: true })
+                .click({ signal })
+            );
+            yield* Effect.tryPromise((signal) =>
+              expect(
+                page.getByRole("button", { name: "Cambiar selección", exact: true })
+              ).toBeVisible({
+                signal,
+              })
+            );
+            if (admitted) yield* submitPendingPayment(page);
+            gate.resolve();
+            if (admitted) {
+              yield* expectAdmittedPayment(page);
+            } else {
+              yield* Effect.tryPromise((signal) =>
+                expect(page.getByRole("heading", { name: "Tu acceso: Pro" })).toBeVisible({
+                  signal,
+                })
+              );
+            }
+            expect(observed.submissions).toHaveLength(admitted ? 1 : 0);
+            yield* Effect.tryPromise((signal) =>
+              expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toHaveCount(
+                0,
+                {
+                  signal,
+                }
+              )
+            );
           })
-        );
-        gate.resolve();
-        yield* Effect.tryPromise((signal) =>
-          expect(page.getByRole("heading", { name: "Tu acceso: Pro" })).toBeVisible({ signal })
-        );
-        yield* Effect.tryPromise((signal) =>
-          expect(page.getByRole("button", { name: "Activar Pro", exact: true })).toHaveCount(0, {
-            signal,
-          })
-        );
-      })
-    )
-  ));
+        )
+      )
+  );
+}

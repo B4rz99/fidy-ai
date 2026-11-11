@@ -3,7 +3,9 @@ import { type DateTime, Effect, Option, Schema } from "effect";
 import { type UserId } from "../../../src/core/identity/contract";
 import { type InsightEventId, ProactivityThresholds } from "../../../src/core/insights/contract";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { prepareConsentAction } from "../../consent/operations";
+import type { WhatsAppTurnAdmission } from "../../whatsapp/contract";
+import { weeklyQuestionDeliveryQuery, weeklySummaryReplyQuery } from "../../whatsapp/operations";
+import { currentWeeklyGrantQuery, prepareConsentAction } from "../../consent/operations";
 import { InsightUnavailable, WeeklyGovernor } from "../contract";
 
 export const pauseMention =
@@ -82,7 +84,12 @@ export const prepareCount = (
   }>
 ): ReadonlyArray<D1PreparedStatement> => {
   const thresholds = ProactivityThresholds.make(input.thresholds);
-  const { db, userId, insightEventId, proof } = input;
+  const { db, userId, insightEventId } = input;
+  const grant = currentWeeklyGrantQuery(input);
+  const proof = {
+    sql: `SELECT v.* FROM (${input.proof.sql}) AS v JOIN proactive_messages AS m ON m.kind='weekly-summary' AND m.user_id=v.user_id AND m.id=v.insight_event_id WHERE m.consent_grant_id IN (${grant.sql})`,
+    params: [...input.proof.params, ...grant.params],
+  };
   return [
     db
       .prepare(
@@ -109,7 +116,7 @@ export const prepareCount = (
         thresholds.askAfter + thresholds.pauseAfter,
         userId
       ),
-    prepareQuestionIntent(input),
+    prepareQuestionIntent({ ...input, proof }),
     db
       .prepare(
         "UPDATE schedules SET enabled=0 WHERE kind='weekly' AND user_id=? AND EXISTS (SELECT 1 FROM weekly_proactivity_state AS weekly_governors WHERE user_id=? AND paused_at_ms IS NOT NULL)"
@@ -118,23 +125,30 @@ export const prepareCount = (
   ];
 };
 
+/** Channel evidence is selected here and rechecked with the current episode at commit. */
 export const prepareReply = (
-  input: Readonly<{ db: D1Database; userId: UserId; proof: OwnedStatement }>
-): D1PreparedStatement =>
-  input.db
+  input: Readonly<{ db: D1Database; userId: UserId; proof: WhatsAppTurnAdmission }>
+): D1PreparedStatement => {
+  const proof = weeklySummaryReplyQuery(input.proof);
+  const grant = currentWeeklyGrantQuery(input);
+  return input.db
     .prepare(
-      `INSERT INTO weekly_proactivity_state AS weekly_governors(user_id,last_reply_at_ms) SELECT ?,max(v.occurred_at_ms) FROM (${input.proof.sql}) AS v LEFT JOIN insight_events AS e ON e.id=v.insight_event_id AND e.user_id=v.user_id WHERE v.user_id=? AND (e.kind='weekly-summary' OR v.question_id IS NOT NULL) AND v.occurred_at_ms+1000 >= v.delivered_at_ms GROUP BY v.user_id ON CONFLICT(user_id) DO UPDATE SET unanswered=0,last_reply_at_ms=excluded.last_reply_at_ms,question_needed=0,question_delivered=0,question_delivered_at_ms=NULL,question_event_id=NULL WHERE excluded.last_reply_at_ms > weekly_governors.last_reply_at_ms`
+      `INSERT INTO weekly_proactivity_state AS weekly_governors(user_id,last_reply_at_ms) SELECT v.user_id,v.occurred_at_ms FROM (${proof.sql}) AS v LEFT JOIN weekly_proactivity_state AS g ON g.user_id=v.user_id WHERE v.user_id=? AND v.occurred_at_ms>coalesce(g.last_reply_at_ms,0) AND v.delivered_at_ms>coalesce(g.last_reply_at_ms,0) AND v.occurred_at_ms+1000>=v.delivered_at_ms AND ((v.question_id=g.question_event_id AND v.consent_grant_id IN (${grant.sql})) OR (v.question_id IS NULL AND EXISTS (SELECT 1 FROM insight_events AS e JOIN proactive_messages AS m ON m.user_id=e.user_id AND m.id=e.id AND m.kind='weekly-summary' WHERE e.user_id=v.user_id AND e.id=v.insight_event_id AND e.kind='weekly-summary' AND m.consent_grant_id IN (${grant.sql})))) ON CONFLICT(user_id) DO UPDATE SET unanswered=0,last_reply_at_ms=excluded.last_reply_at_ms,question_needed=0,question_delivered=0,question_delivered_at_ms=NULL,question_event_id=NULL WHERE excluded.last_reply_at_ms>weekly_governors.last_reply_at_ms`
     )
-    .bind(input.userId, ...input.proof.params, input.userId);
+    .bind(...proof.params, input.userId, ...grant.params, ...grant.params);
+};
 
 export const prepareQuestionDelivered = (
-  input: Readonly<{ db: D1Database; userId: UserId; proof: OwnedStatement }>
-): D1PreparedStatement =>
-  input.db
+  input: Readonly<{ db: D1Database; userId: UserId; id: string }>
+): D1PreparedStatement => {
+  const proof = weeklyQuestionDeliveryQuery(input);
+  const grant = currentWeeklyGrantQuery(input);
+  return input.db
     .prepare(
-      `UPDATE weekly_proactivity_state AS weekly_governors SET question_delivered=1,question_delivered_at_ms=coalesce(question_delivered_at_ms,(SELECT min(v.delivered_at_ms) FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.question_id=question_event_id)) WHERE user_id=? AND question_needed=1 AND paused_at_ms IS NULL AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivered_at_ms > last_reply_at_ms AND v.question_id=question_event_id)`
+      `UPDATE weekly_proactivity_state AS g SET question_delivered=1,question_delivered_at_ms=coalesce(question_delivered_at_ms,v.delivered_at_ms) FROM (${proof.sql}) AS v WHERE g.user_id=? AND v.user_id=g.user_id AND g.question_needed=1 AND g.paused_at_ms IS NULL AND v.delivered_at_ms>g.last_reply_at_ms AND v.question_id=g.question_event_id AND v.consent_grant_id IN (${grant.sql})`
     )
-    .bind(...input.proof.params, input.userId, input.userId, ...input.proof.params, input.userId);
+    .bind(...proof.params, input.userId, ...grant.params);
+};
 
 export const prepareReset = (
   input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>

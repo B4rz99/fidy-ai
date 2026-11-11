@@ -325,13 +325,12 @@ const occurrence = (
 ];
 
 const eligibleSchedule = (
-  input: Scope & Readonly<{ id: ScheduleId; now: DateTime.Utc }>
+  input: Scope & Readonly<{ now: DateTime.Utc }>
 ): Effect.Effect<Option.Option<ReminderScheduleSnapshot>, InsightUnavailable> =>
   Effect.gen(function* () {
     const found = yield* findSchedule(input);
     if (
       Option.isNone(found) ||
-      found.value.id !== input.id ||
       !found.value.enabled ||
       found.value.nextScheduledAt.epochMilliseconds > input.now.epochMilliseconds
     ) {
@@ -341,8 +340,8 @@ const eligibleSchedule = (
     return standing._tag === "Paused" ? Option.none() : found;
   });
 
-export const materialize = (
-  input: Scope & Readonly<{ id: ScheduleId; now: DateTime.Utc }>
+export const advanceReminderDue = (
+  input: Scope & Readonly<{ now: DateTime.Utc }>
 ): Effect.Effect<ReminderMaterialization, InsightUnavailable> =>
   Effect.gen(function* () {
     const found = yield* eligibleSchedule(input);

@@ -1,6 +1,7 @@
 import { PolicyRevision } from "../../src/shell/consent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
 import {
+  CanonicalToolCallEntry,
   HostedAgentSessionId,
   ToolCallId,
   TranscriptText,
@@ -47,6 +48,7 @@ import {
   recordWhatsAppStatus,
   stageWhatsAppDelivery,
   startWhatsAppSend,
+  submitHostedReply,
 } from "../whatsapp/operations";
 import {
   dispatchWhatsAppWork,
@@ -64,7 +66,9 @@ import {
   makeAbortController,
   now,
   promiseGate,
+  queuedSandboxWhatsAppTurn,
   queuedWhatsAppTurn,
+  queuedWhatsAppTurnWithMessage,
   reply,
   retained,
   retainedChannelState,
@@ -77,6 +81,7 @@ import {
 import { browserHostedDelivery, completeWhatsAppTurnWithAdmission } from "./internal/hosted-turn";
 import {
   admitHostedTurn,
+  appendHostedToolEntry,
   commitHostedCompaction,
   deliveryAcknowledgmentWindowMs,
   finishHostedTurn,
@@ -384,6 +389,8 @@ it("admits one exact User entry through WhatsApp without borrowing browser sessi
         outcome: "sent" | "delivered",
         phone = "123456789"
       ): WhatsAppHostedLifecycleEvidence => ({
+        recipientUserId: Option.some(caller.bsuid),
+        recipientPhone: Option.none(),
         correlationToken: staged.value,
         businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make(phone),
         messageEvidence: {
@@ -723,6 +730,7 @@ it("keeps recovered WhatsApp inference alive past the soft deadline and settles 
                 statuses: [
                   {
                     id: "wamid.recovered.answer",
+                    recipient_user_id: "CO.13491208655302741910",
                     status: "delivered",
                     timestamp: String(Math.floor(now() / 1_000)),
                     biz_opaque_callback_data: delivery.correlation_token,
@@ -747,6 +755,7 @@ it("keeps recovered WhatsApp inference alive past the soft deadline and settles 
               method: "POST",
               body: encodeJson(
                 WhatsAppStatusAdmission.make({
+                  recipientUserId: Option.getOrUndefined(authenticated.recipientUserId),
                   userId: UserId.make(users[0]),
                   correlationToken: authenticated.correlationToken,
                   businessPhoneNumberId: authenticated.businessPhoneNumberId,
@@ -1029,6 +1038,10 @@ it("rejects malformed delivery proposals before retaining authenticated status e
           db,
           userId,
           evidence: {
+            recipientUserId: Option.some(
+              WhatsAppBusinessScopedUserId.make("CO.13491208655302741910")
+            ),
+            recipientPhone: Option.none(),
             correlationToken: staged.value,
             businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
             messageEvidence: {
@@ -1274,6 +1287,10 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
         db,
         userId: UserId.make(users[0]),
         evidence: {
+          recipientUserId: Option.some(
+            WhatsAppBusinessScopedUserId.make("CO.13491208655302741918")
+          ),
+          recipientPhone: Option.none(),
           correlationToken: yield* Schema.decodeEffect(HostedDeliveryCorrelationToken)(token),
           businessPhoneNumberId: inbound.businessPhoneNumberId,
           messageEvidence: {
@@ -1504,6 +1521,7 @@ it("serializes duplicate verified WhatsApp admissions and completes only after t
           .run()
       );
       const statusAdmission = WhatsAppStatusAdmission.make({
+        recipientUserId: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
         userId: UserId.make(users[0]),
         correlationToken: stored.correlation_token,
         businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
@@ -1945,78 +1963,94 @@ it("does not send when recovery interrupts a staged reply during scheduling", ()
     })
   ));
 
-it("does not send when a window closes while a prepared reply waits for recovery scheduling", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => setup());
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
-          )
-          .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
-          .run()
-      );
-      const sends = vi.fn(() => Promise.resolve({ kind: "ambiguous" as const }));
-      const model = yield* Effect.tryPromise(() =>
-        inference(() => Promise.resolve(reply("Todavía aquí")))
-      );
-      const response = yield* completeWhatsAppTurnWithAdmission({
-        input: {
-          db,
-          subject: WhatsAppHostedSubject.make({
-            userId: UserId.make(users[0]),
-            portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
-            bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
-          }),
-          inbound: WhatsAppInboundEvidence.make({
-            messageId: WhatsAppProviderMessageId.make("wamid.window-race"),
-            replyToMessageId: Option.none(),
-            sandboxPhone: Option.none(),
-            businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
-            occurredAtMs: now(),
-            receivedAtMs: now(),
-          }),
-          text: TranscriptText.make("Hola"),
-          inference: model,
-          bucket: Option.none(),
-          executeMutation: Option.none(),
-          deliver: {
-            _tag: "WhatsApp",
-            contextualReplyQuery: Option.none(),
-            send: () => Effect.tryPromise(sends).pipe(Effect.orDie),
-          },
-          signal: makeAbortController().signal,
-          scheduleRecovery: () =>
-            db
-              .prepare(
-                "SELECT turn_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ?"
-              )
-              .bind(users[0])
-              .first()
-              .then((staged) => {
-                if (staged === null) return;
-                const last = now() - 86_400_001;
-                return db
-                  .prepare(`UPDATE whatsapp_service_windows
+it.each(["window", "business-phone", "proposal-deadline"] as const)(
+  "does not send when %s changes while a prepared reply waits for recovery scheduling",
+  (change) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "WITH incoming(user_id,portfolio_id,bsuid,verified_at_ms) AS (VALUES (?, ?, ?, ?)) INSERT INTO users(id,service_market,locale,time_zone,created_at_ms,whatsapp_portfolio_id,whatsapp_bsuid,whatsapp_verified_at_ms) SELECT incoming.user_id,'CO','es-CO','America/Bogota',0,incoming.portfolio_id,incoming.bsuid,incoming.verified_at_ms FROM incoming WHERE true ON CONFLICT(id) DO UPDATE SET whatsapp_portfolio_id=excluded.whatsapp_portfolio_id,whatsapp_bsuid=excluded.whatsapp_bsuid,whatsapp_verified_at_ms=excluded.whatsapp_verified_at_ms"
+            )
+            .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
+            .run()
+        );
+        const sends = vi.fn(() => Promise.resolve({ kind: "ambiguous" as const }));
+        const model = yield* Effect.tryPromise(() =>
+          inference(() => Promise.resolve(reply("Todavía aquí")))
+        );
+        const response = yield* completeWhatsAppTurnWithAdmission({
+          input: {
+            db,
+            subject: WhatsAppHostedSubject.make({
+              userId: UserId.make(users[0]),
+              portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+              bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+            }),
+            inbound: WhatsAppInboundEvidence.make({
+              messageId: WhatsAppProviderMessageId.make("wamid.window-race"),
+              replyToMessageId: Option.none(),
+              sandboxPhone: Option.none(),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              occurredAtMs: now(),
+              receivedAtMs: now(),
+            }),
+            text: TranscriptText.make("Hola"),
+            inference: model,
+            bucket: Option.none(),
+            executeMutation: Option.none(),
+            deliver: {
+              _tag: "WhatsApp",
+              contextualReplyQuery: Option.none(),
+              send: () => Effect.tryPromise(sends).pipe(Effect.orDie),
+            },
+            signal: makeAbortController().signal,
+            scheduleRecovery: () =>
+              db
+                .prepare(
+                  "SELECT turn_id FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ?"
+                )
+                .bind(users[0])
+                .first()
+                .then((staged) => {
+                  if (staged === null) return;
+                  if (change === "business-phone") {
+                    return db
+                      .prepare(
+                        "INSERT INTO whatsapp_recipients(user_id,portfolio_id,bsuid,business_phone_number_id,verified_at_ms) VALUES (?, 'portfolio-1', 'CO.13491208655302741918', '987654321', 0) ON CONFLICT(user_id) DO UPDATE SET business_phone_number_id = excluded.business_phone_number_id"
+                      )
+                      .bind(users[0])
+                      .run();
+                  }
+                  if (change === "proposal-deadline") {
+                    vi.useFakeTimers({ toFake: ["Date"] });
+                    vi.setSystemTime(now() + deliveryAcknowledgmentWindowMs + 1);
+                    return;
+                  }
+                  const last = now() - 86_400_001;
+                  return db
+                    .prepare(`UPDATE whatsapp_service_windows
                     SET last_verified_inbound_at_ms = ? WHERE user_id = ?`)
-                  .bind(last, users[0])
-                  .run();
-              })
-              .then(() => undefined),
-        },
-        onAdmitted: () => {},
-      });
-      expect(response.status).toBe(202);
-      expect(sends).not.toHaveBeenCalled();
-      expect(
-        (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
-      ).toMatchObject([
-        { status: "failed", kind: "user" },
-        { status: "failed", kind: "failed", marker: "DeliveryFailed" },
-      ]);
-    })
-  ));
+                    .bind(last, users[0])
+                    .run();
+                })
+                .then(() => undefined),
+          },
+          onAdmitted: () => {},
+        });
+        expect(response.status).toBe(202);
+        expect(sends).not.toHaveBeenCalled();
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+        ).toMatchObject([
+          { status: "failed", kind: "user" },
+          { status: "failed", kind: "failed", marker: "DeliveryFailed" },
+        ]);
+      })
+    ).finally(() => vi.useRealTimers())
+);
 
 it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a late delivered status", () =>
   Effect.runPromise(
@@ -2107,6 +2141,10 @@ it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a 
         db,
         userId: UserId.make(users[0]),
         evidence: {
+          recipientUserId: Option.some(
+            WhatsAppBusinessScopedUserId.make("CO.13491208655302741918")
+          ),
+          recipientPhone: Option.none(),
           correlationToken: token,
           businessPhoneNumberId: inbound.businessPhoneNumberId,
           messageEvidence: {
@@ -2341,6 +2379,485 @@ it.each([899_999, 900_000, 900_001])(
         expect(
           yield* readAdmittedHostedConsent({ db, userId: UserId.make(users[0]), turnId })
         ).toEqual(Option.some(idleMs < 900_000 ? priorBasis : accepted));
+      })
+    )
+);
+
+it.each(["sent", "delivered", "failed"] as const)(
+  "preserves verified %s evidence before a conflicting provider response without resending",
+  (outcome) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const userId = UserId.make(users[0]);
+        const turnId = yield* Effect.tryPromise(() =>
+          queuedWhatsAppTurn({ db, index: 0, text: "Hola" })
+        );
+        const text = TranscriptText.make("Respuesta retenida");
+        const messageId = WhatsAppProviderMessageId.make("wamid.verified-before-response");
+        let sends = 0;
+        let correlationToken = HostedDeliveryCorrelationToken.make(newId());
+        const submit = (replyText: TranscriptText): ReturnType<typeof submitHostedReply> =>
+          submitHostedReply({
+            db,
+            userId,
+            turnId,
+            text: replyText,
+            scheduleRecovery: () => Promise.resolve(),
+            send: (input) =>
+              Effect.gen(function* () {
+                sends++;
+                correlationToken = input.correlationToken;
+                expect(input.text).toBe(text);
+                expect(input.recipient.bsuid).toBe("CO.13491208655302741910");
+                yield* recordWhatsAppStatus({
+                  db,
+                  userId,
+                  receivedAtMs: now(),
+                  evidence: {
+                    recipientUserId: Option.some(
+                      WhatsAppBusinessScopedUserId.make("CO.13491208655302741910")
+                    ),
+                    recipientPhone: Option.none(),
+                    correlationToken,
+                    businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+                    messageEvidence: {
+                      channel: "whatsapp",
+                      provider: "kapso",
+                      providerMessageId: messageId,
+                    },
+                    occurredAt: DateTime.makeUnsafe(now()),
+                    outcome,
+                  },
+                });
+                return {
+                  kind: "accepted" as const,
+                  messageId: WhatsAppProviderMessageId.make("wamid.conflicting-response"),
+                };
+              }),
+          });
+        expect((yield* submit(text))._tag).toBe("AwaitingDelivery");
+        yield* Effect.exit(submit(TranscriptText.make("Replacement forbidden")));
+        expect(sends).toBe(1);
+        const verified = yield* recordWhatsAppStatus({
+          db,
+          userId,
+          receivedAtMs: now(),
+          evidence: {
+            recipientUserId: Option.some(
+              WhatsAppBusinessScopedUserId.make("CO.13491208655302741910")
+            ),
+            recipientPhone: Option.none(),
+            correlationToken,
+            businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: messageId,
+            },
+            occurredAt: DateTime.makeUnsafe(now()),
+            outcome: "failed",
+          },
+        });
+        expect(Option.isSome(verified) && verified.value.providerMessageId).toEqual(
+          Option.some(messageId)
+        );
+        expect(Option.isSome(verified) && verified.value.state).toBe(
+          outcome === "delivered" ? "delivered" : "rejected"
+        );
+        if (outcome === "delivered") {
+          const evidence = yield* reconcileWhatsAppStatus({
+            db,
+            admission: WhatsAppStatusAdmission.make({
+              recipientUserId: WhatsAppBusinessScopedUserId.make("CO.13491208655302741910"),
+              userId,
+              correlationToken,
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              providerMessageId: messageId,
+              outcome: "delivered",
+              occurredAtMs: now(),
+              receivedAtMs: now(),
+            }),
+          });
+          if (evidence._tag !== "TerminalEvidence") {
+            return yield* Effect.die("missing terminal delivery evidence");
+          }
+          expect(yield* finishHostedTurn({ db, ...evidence.completion })).toBe(true);
+          expect(
+            (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+          ).toMatchObject([
+            { status: "completed", kind: "user" },
+            { status: "completed", kind: "assistant", text },
+          ]);
+        }
+      })
+    )
+);
+
+it("refuses foreign or absent hosted locators before scheduling or provider I/O", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const turnId = yield* Effect.tryPromise(() =>
+        queuedWhatsAppTurn({ db, index: 0, text: "Hola" })
+      );
+      const scheduled = vi.fn(() => Promise.resolve());
+      const send = vi.fn(() => Effect.succeed({ kind: "ambiguous" as const }));
+      for (const locator of [
+        { userId: UserId.make(users[1]), turnId },
+        { userId: UserId.make(users[0]), turnId: TranscriptTurnId.make(newId()) },
+      ]) {
+        expect(
+          yield* submitHostedReply({
+            db,
+            ...locator,
+            text: TranscriptText.make("Locator is not authority"),
+            send,
+            scheduleRecovery: scheduled,
+          })
+        ).toEqual({ _tag: "Refused" });
+      }
+      expect(scheduled).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    })
+  ));
+
+it.each([false, true])(
+  "requires the exact verified status recipient before binding a hosted message (sandbox: %s)",
+  (sandbox) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const userId = UserId.make(users[0]);
+        const turnId = yield* Effect.tryPromise(() =>
+          (sandbox ? queuedSandboxWhatsAppTurn : queuedWhatsAppTurnWithMessage)({
+            db,
+            index: 0,
+            text: "Hola",
+            messageId: "wamid.recipient-check",
+          })
+        );
+        const text = TranscriptText.make("Respuesta para el destinatario verificado");
+        let sends = 0;
+        yield* submitHostedReply({
+          db,
+          userId,
+          turnId,
+          text,
+          scheduleRecovery: () => Promise.resolve(),
+          send: (input) =>
+            Effect.gen(function* () {
+              sends++;
+              const before = yield* Effect.tryPromise(() => retainedChannelState(db));
+              const verify = (
+                recipient: Readonly<Record<string, unknown>>
+              ): ReturnType<typeof authenticateHostedStatus> => {
+                const rawBody = new TextEncoder().encode(
+                  encodeJson({
+                    phone_number_id: "123456789",
+                    message: {
+                      id: "wamid.exact-recipient",
+                      kapso: {
+                        statuses: [
+                          {
+                            id: "wamid.exact-recipient",
+                            status: "delivered",
+                            timestamp: String(Math.floor(now() / 1000)),
+                            biz_opaque_callback_data: input.correlationToken,
+                            ...recipient,
+                          },
+                        ],
+                      },
+                    },
+                  })
+                );
+                const secret = "test-recipient-webhook-secret-32-characters";
+                return authenticateHostedStatus({
+                  rawBody,
+                  secret: Redacted.make(secret),
+                  signature: new Bun.CryptoHasher("sha256", secret).update(rawBody).digest("hex"),
+                  eventName: "whatsapp.message.delivered",
+                  receivedAt: DateTime.makeUnsafe(now()),
+                });
+              };
+              for (const recipient of [
+                {},
+                { recipient_user_id: "CO.13491208655302741911" },
+                { recipient_id: "573009999999" },
+              ]) {
+                const evidence = yield* verify(recipient);
+                expect(
+                  yield* recordWhatsAppStatus({ db, userId, evidence, receivedAtMs: now() })
+                ).toEqual(Option.none());
+                expect(yield* Effect.tryPromise(() => retainedChannelState(db))).toEqual(before);
+              }
+              const verified = yield* verify(
+                sandbox
+                  ? { recipient_id: "573001234567" }
+                  : { recipient_user_id: "CO.13491208655302741910" }
+              );
+              expect(verified.recipientPhone).toEqual(
+                sandbox ? Option.some("+573001234567") : Option.none()
+              );
+              const terminal = yield* reconcileWhatsAppStatus({
+                db,
+                admission: {
+                  ...verified,
+                  recipientUserId: Option.getOrUndefined(verified.recipientUserId),
+                  recipientPhone: Option.getOrUndefined(verified.recipientPhone),
+                  userId,
+                  providerMessageId: verified.messageEvidence.providerMessageId,
+                  occurredAtMs: DateTime.toEpochMillis(verified.occurredAt),
+                  receivedAtMs: now(),
+                },
+              });
+              if (terminal._tag !== "TerminalEvidence") {
+                return yield* Effect.die("exact recipient did not settle");
+              }
+              expect(yield* finishHostedTurn({ db, ...terminal.completion })).toBe(true);
+              return {
+                kind: "accepted" as const,
+                messageId: WhatsAppProviderMessageId.make("wamid.later-response"),
+              };
+            }),
+        });
+        expect(sends).toBe(1);
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+        ).toMatchObject([
+          { kind: "user", status: "completed" },
+          { kind: "assistant", status: "completed", text },
+        ]);
+      })
+    )
+);
+
+it.each(["uncertainty-fence", "terminalization"] as const)(
+  "settles delivery racing at %s from current channel certainty",
+  (boundary) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const userId = UserId.make(users[0]);
+        const turnId = yield* Effect.tryPromise(() =>
+          queuedWhatsAppTurn({ db, index: 0, text: "Una respuesta" })
+        );
+        const current = now();
+        const text = TranscriptText.make("Respuesta visible exacta");
+        const token = Option.getOrThrow(
+          yield* stageWhatsAppDelivery({ db, userId, turnId, text, now: current })
+        );
+        expect(yield* startWhatsAppSend({ db, userId, turnId, token, now: current })).toBe(true);
+        yield* recordWhatsAppSend({
+          db,
+          userId,
+          turnId,
+          token,
+          outcome: {
+            kind: "accepted",
+            messageId: WhatsAppProviderMessageId.make("wamid.racing-delivery"),
+          },
+        });
+        let delivered = false;
+        const runStatus = Effect.runPromiseWith(yield* Effect.context<never>());
+        const deliver = (): Promise<void> =>
+          runStatus(
+            recordWhatsAppStatus({
+              db,
+              userId,
+              evidence: {
+                recipientUserId: Option.some(
+                  WhatsAppBusinessScopedUserId.make("CO.13491208655302741910")
+                ),
+                recipientPhone: Option.none(),
+                correlationToken: token,
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+                messageEvidence: {
+                  channel: "whatsapp",
+                  provider: "kapso",
+                  providerMessageId: WhatsAppProviderMessageId.make("wamid.racing-delivery"),
+                },
+                occurredAt: DateTime.makeUnsafe(current + 1),
+                outcome: "delivered",
+              },
+              receivedAtMs: current + 1,
+            })
+          ).then((evidence) => {
+            expect(Option.getOrThrow(evidence).state).toBe(
+              boundary === "uncertainty-fence" ? "delivered" : "unconfirmed"
+            );
+            delivered = true;
+          });
+        let batches = 0;
+        const racing = new Proxy(db, {
+          get(target, property): unknown {
+            if (property !== "batch") return Reflect.get(target, property, target);
+            return (statements: Array<D1PreparedStatement>): Promise<Array<D1Result>> => {
+              batches += 1;
+              return batches === (boundary === "uncertainty-fence" ? 1 : 2)
+                ? deliver().then(() => target.batch(statements))
+                : target.batch(statements);
+            };
+          },
+        });
+        const recovery = {
+          userId,
+          turn: { id: turnId, started_at_ms: current, proposed_at_ms: current },
+          now: current + deliveryAcknowledgmentWindowMs + 1,
+        };
+        expect(yield* recoverHostedTurn({ db: racing, ...recovery })).toBe(true);
+        expect(delivered).toBe(true);
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+        ).toMatchObject([
+          {
+            status: boundary === "uncertainty-fence" ? "completed" : "failed",
+            kind: "user",
+            text: "Una respuesta",
+          },
+          boundary === "uncertainty-fence"
+            ? { status: "completed", kind: "assistant", text }
+            : { status: "failed", kind: "failed", marker: "DeliveryUnconfirmed", text: null },
+        ]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT correlation_token, proposed_at_ms, text FROM whatsapp_deliveries WHERE kind='hosted' AND turn_id=?"
+              )
+              .bind(turnId)
+              .first()
+          )
+        ).toEqual({ correlation_token: token, proposed_at_ms: current, text });
+        expect(yield* recoverHostedTurn({ db, ...recovery })).toBe(false);
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+        ).toHaveLength(2);
+      })
+    )
+);
+
+it.each(["delivered", "ambiguous"] as const)(
+  "retains a committed mutation with lost output before %s channel recovery, once",
+  (certainty) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const userId = UserId.make(users[0]);
+        const turnId = yield* Effect.tryPromise(() =>
+          queuedWhatsAppTurn({ db, index: 0, text: "Olvida esto" })
+        );
+        const current = now();
+        const caller = WhatsAppHostedSubject.make({
+          userId,
+          portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+          bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741910"),
+        });
+        const memoryId = "20000000-0000-4000-8000-000000000099";
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO memories(id,user_id,text,created_at_ms,updated_at_ms) VALUES(?,?,?,?,?)"
+            )
+            .bind(memoryId, userId, "Olvidar", current, current)
+            .run()
+        );
+        const entry = yield* Schema.decodeEffect(CanonicalToolCallEntry)({
+          _tag: "CanonicalToolCallEntry",
+          id: newId(),
+          turnId,
+          occurredAt: DateTime.formatIso(DateTime.makeUnsafe(current)),
+          iteration: 1,
+          toolCallId: "lost-output",
+          operation: "memory.forget",
+          input: { params: { id: memoryId } },
+        });
+        expect(
+          Option.isSome(yield* appendHostedToolEntry({ db, userId, subject: caller, entry }))
+        ).toBe(true);
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db.prepare("DELETE FROM memories WHERE id=? AND user_id=?").bind(memoryId, userId),
+            ...prepareHostedMutationCommit({
+              db,
+              userId,
+              turnId,
+              toolCallId: entry.toolCallId,
+              current,
+            }),
+          ])
+        );
+        const token = Option.getOrThrow(
+          yield* stageWhatsAppDelivery({
+            db,
+            userId,
+            turnId,
+            text: TranscriptText.make("Resultado no disponible"),
+            now: current,
+          })
+        );
+        yield* startWhatsAppSend({ db, userId, turnId, token, now: current });
+        yield* recordWhatsAppSend({ db, userId, turnId, token, outcome: { kind: "ambiguous" } });
+        if (certainty === "delivered") {
+          yield* recordWhatsAppStatus({
+            db,
+            userId,
+            evidence: {
+              recipientUserId: Option.some(
+                WhatsAppBusinessScopedUserId.make("CO.13491208655302741910")
+              ),
+              recipientPhone: Option.none(),
+              correlationToken: token,
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              messageEvidence: {
+                channel: "whatsapp",
+                provider: "kapso",
+                providerMessageId: WhatsAppProviderMessageId.make("wamid.lost-output"),
+              },
+              occurredAt: DateTime.makeUnsafe(current),
+              outcome: "delivered",
+            },
+            receivedAtMs: current,
+          });
+        }
+        const recovery = {
+          db,
+          userId,
+          turn: { id: turnId, started_at_ms: current, proposed_at_ms: current },
+          now: current + deliveryAcknowledgmentWindowMs + 1,
+        };
+        expect(yield* recoverHostedTurn(recovery)).toBe(true);
+        expect(yield* recoverHostedTurn(recovery)).toBe(false);
+        const entries = (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results;
+        expect(entries).toMatchObject([
+          { kind: "user", status: certainty === "delivered" ? "completed" : "failed" },
+          { kind: "tool_call" },
+          { kind: "tool_result" },
+          { kind: certainty === "delivered" ? "assistant" : "failed" },
+        ]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT outcome_json FROM transcript_entries WHERE turn_id=? AND kind='tool_result'"
+              )
+              .bind(turnId)
+              .first<string>("outcome_json")
+          )
+        ).toBe('{"_tag":"CommittedOutputUnavailable"}');
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT id FROM memories WHERE user_id=?").bind(userId).all()
+          )).results
+        ).toHaveLength(0);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT tool_call_id FROM hosted_mutation_commits WHERE turn_id=?")
+              .bind(turnId)
+              .all()
+          )).results
+        ).toEqual([{ tool_call_id: "lost-output" }]);
       })
     )
 );

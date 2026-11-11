@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { InsightUnavailable, type ProactivityDeliveryWork } from "../contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { settleDeliveryWork } from "./proactivity-delivery-work";
+import { expireQueuedDelivery } from "./proactivity-delivery-work";
 
 type Delivery = Readonly<{ userId: UserId; work: ProactivityDeliveryWork; now: number }>;
 /** Metadata is bounded to one native identity, never provider or transport claims. */
@@ -41,12 +41,13 @@ export const continueQueuedDelivery = (
       Schema.Struct({
         state: Schema.Literals(["ready", "started", "settled", "expired", "refused"]),
         expires_at_ms: Schema.Int,
+        content_available: Schema.Literals([0, 1]),
       })
     )(raw);
     if (row.state !== "ready") return false;
     if (row.expires_at_ms <= input.now) {
-      yield* settleDeliveryWork({ ...input, state: "expired" });
+      yield* expireQueuedDelivery(input);
       return false;
     }
-    return true;
+    return row.content_available === 1;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));

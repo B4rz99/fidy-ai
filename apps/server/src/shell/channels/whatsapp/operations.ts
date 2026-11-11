@@ -68,8 +68,8 @@ export const authenticateWhatsAppInbound = Effect.fn(function* (input: {
 /**
  * Authenticates the exact raw Kapso status before projecting a hosted reply's provider evidence.
  * `sent` and `delivered` remain distinct; only `delivered` can prove channel delivery. A callback
- * must be correlated with an existing User-owned attempt before changing a Turn. No body or
- * recipient evidence escapes this projection.
+ * must be correlated with an existing User-owned attempt before changing a Turn. Only provider-verified recipient metadata,
+ * correlation and lifecycle facts escape this projection.
  */
 export const authenticateHostedStatus = Effect.fn(function* (
   input: WhatsAppLifecycleAuthentication

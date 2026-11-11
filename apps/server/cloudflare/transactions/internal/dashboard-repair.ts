@@ -62,14 +62,12 @@ const clearingPhase = (state: (typeof State.Type)["readiness"]): Option.Option<C
     ? Option.some(state)
     : Option.none();
 
-// Revision fences repeated phases/cursors, including a later repair generation. Fact
-// revisions intentionally do not participate: native mutation triggers maintain them.
 const fence =
   "user_id = ? AND version = ? AND readiness = ? AND cursor_id = ? AND repair_revision = ?";
 const fenceBindings = (
   userId: string,
   state: typeof State.Type
-): ReadonlyArray<string | number> => [
+): readonly [string, number, (typeof State.Type)["readiness"], string, number] => [
   userId,
   state.version,
   state.readiness,
@@ -152,8 +150,6 @@ const rebuildPage = (db: D1Database, userId: string, state: typeof State.Type): 
           OR leaf.counterparty IS NOT effective.counterparty OR leaf.notes IS NOT effective.notes)
         OR ${inconsistentReconciliation})`)
         .bind(...expected, userId, state.cursor_id),
-      // Both expressions see the admitted cursor. No caller-held page survives the
-      // atomic batch, and invalid validation above invalidates this same fence.
       db
         .prepare(`UPDATE transaction_projection_state SET
       repair_revision = repair_revision + 1,

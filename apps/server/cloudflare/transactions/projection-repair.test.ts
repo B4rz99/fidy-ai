@@ -184,8 +184,6 @@ it(
   60_000
 );
 
-// Delay the native page batch after its worker has read state. The competing worker
-// uses the same real database; no SQL is interpreted or simulated by this fixture.
 const delayedPage = (db: D1Database, beforePage: Effect.Effect<void>): D1Database => {
   let batches = 0;
   return {

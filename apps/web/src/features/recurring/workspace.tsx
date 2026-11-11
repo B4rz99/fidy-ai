@@ -157,13 +157,7 @@ const OccurrenceEditor = ({
   const plan = view.document.plans.find((entry) => entry.id === panel.planId);
   const lifecycle =
     plan === undefined ? null : (
-      <PlanLifecycle
-        plan={plan}
-        status={statusFor(plan)}
-        save={save}
-        disabled={disabled}
-        today={view.today}
-      />
+      <PlanLifecycle plan={plan} status={statusFor(plan)} save={save} disabled={disabled} />
     );
   if (Option.isNone(item)) {
     return (

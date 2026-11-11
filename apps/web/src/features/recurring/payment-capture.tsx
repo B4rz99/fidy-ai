@@ -6,7 +6,7 @@ import { Atom, Reactivity } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { CaptureEditor } from "./capture-editor";
-import type { CaptureEditorProps, CaptureStatus } from "./capture-context";
+import type { CaptureEditorProps } from "./capture-context";
 import { Button } from "@/ui/components/button";
 import { DeferredDisclosure } from "@/ui/components/disclosure";
 import { ChoiceField } from "./fields";
@@ -26,14 +26,14 @@ import {
 type Captured = CanonicalSuccess<"transactions.createTransaction">["data"];
 type CapturedPayment = Readonly<{ transaction: Captured }> & PaymentAssociation;
 type CaptureState = Readonly<{
-  status: CaptureStatus;
+  intent: number;
   transaction: Option.Option<CapturedPayment>;
 }>;
 class CaptureKey extends Data.Class<
   Readonly<{ client: FidyClient; planId: Occurrence["planId"]; date: string }>
 > {}
 const captures = Atom.family((_key: CaptureKey) =>
-  Atom.make<CaptureState>({ status: "idle", transaction: Option.none() }).pipe(Atom.keepAlive)
+  Atom.make<CaptureState>({ intent: 0, transaction: Option.none() }).pipe(Atom.keepAlive)
 );
 type Props = Readonly<{
   item: Occurrence;
@@ -76,16 +76,16 @@ const CapturePayment = ({ item, categories, save, disabled, today }: Props): JSX
   };
   const restart = (): void => {
     setDraft(defaultAssociation(item));
-    setState({ status: "idle", transaction: Option.none() });
+    setState({ intent: state.intent + 1, transaction: Option.none() });
   };
   return (
     <>
-      {linked ? null : (
+      {linked || Option.isNone(state.transaction) ? null : (
         <CaptureAssociation
           item={item}
           association={association}
           change={change}
-          disabled={disabled || state.status === "saving" || state.status === "uncertain"}
+          disabled={disabled}
         />
       )}
       <CaptureEntry
@@ -99,6 +99,7 @@ const CapturePayment = ({ item, categories, save, disabled, today }: Props): JSX
           refresh,
           restart,
           association,
+          change,
           disabled,
         }}
       />
@@ -147,6 +148,7 @@ const CaptureAssociation = ({
 type EntryProps = Props &
   Readonly<{
     association: PaymentAssociation;
+    change: (value: PaymentAssociation) => void;
     restart: () => void;
     state: CaptureState;
     setState: (value: CaptureState | ((previous: CaptureState) => CaptureState)) => void;
@@ -159,49 +161,55 @@ const CaptureEntry = ({
   disabled,
   today,
   association,
+  change,
   restart,
   state,
   setState,
   refresh,
 }: EntryProps): JSX.Element => {
   const { navigate } = useRouter();
-  return (
-    <>
-      {Option.isSome(state.transaction) ? (
-        <CreatedPayment
-          item={item}
-          {...state.transaction.value}
-          save={save}
-          disabled={disabled}
-          restart={restart}
-        />
-      ) : (
-        <CaptureEditor
-          key={association.replaces}
-          categories={categories}
-          currency={item.plan.currency}
-          direction={item.plan.kind === "income" ? "inflow" : "outflow"}
-          initial={captureInitial({ item, replaces: association.replaces, today })}
-          disabled={disabled || associationBlocked({ item, replaces: association.replaces })}
-          timeZone={item.plan.timeZone}
-          status={state.status}
-          onStatus={(status) => setState((previous) => ({ ...previous, status }))}
-          onCreated={(transaction) => {
-            setState({
-              status: "saved",
-              transaction: Option.some({
-                transaction,
-                ...association,
-              }),
-            });
-            refresh();
-          }}
-          onCheckHistory={() => {
-            navigate({ to: "/app/transactions" }).catch(() => undefined);
-          }}
-        />
+  return Option.isSome(state.transaction) ? (
+    <CreatedPayment
+      item={item}
+      {...state.transaction.value}
+      save={save}
+      disabled={disabled}
+      restart={restart}
+    />
+  ) : (
+    <CaptureEditor
+      intentId={`recurring:${item.planId}:${item.date}:${state.intent}`}
+      categories={categories}
+      currency={item.plan.currency}
+      direction={item.plan.kind === "income" ? "inflow" : "outflow"}
+      initial={captureInitial({ item, replaces: association.replaces, today })}
+      disabled={disabled || associationBlocked({ item, replaces: association.replaces })}
+      timeZone={item.plan.timeZone}
+      onInvalidate={refresh}
+      renderForm={(form, placement) => (
+        <>
+          <CaptureAssociation
+            item={item}
+            association={association}
+            change={change}
+            disabled={disabled || placement.saving || placement.uncertain}
+          />
+          {form}
+        </>
       )}
-    </>
+      onCreated={(transaction) => {
+        setState({
+          intent: state.intent,
+          transaction: Option.some({
+            transaction,
+            ...association,
+          }),
+        });
+      }}
+      onCheckHistory={() => {
+        navigate({ to: "/app/transactions" }).catch(() => undefined);
+      }}
+    />
   );
 };
 const remainingMoney = (item: Occurrence): Option.Option<Occurrence["completed"]> =>

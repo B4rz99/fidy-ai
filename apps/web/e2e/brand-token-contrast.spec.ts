@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import type { Locator, Page, Route } from "@playwright/test";
 import { Data, DateTime, Effect } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
@@ -76,11 +77,14 @@ const prepare = Effect.fnUntraced(function* (page: Page, theme: Theme) {
 const capture = Effect.fnUntraced(function* (page: Page, name: string) {
   yield* Effect.tryPromise(() => page.evaluate(() => document.fonts.ready));
   yield* Effect.tryPromise((signal) =>
-    page.screenshot({
-      signal,
-      path: `${captureDirectory}/${name}.png`,
-      fullPage: true,
-      caret: "hide",
+    captureVisualEvidence({
+      target: page,
+      options: {
+        signal,
+        path: `${captureDirectory}/${name}.png`,
+        fullPage: true,
+        caret: "hide",
+      },
     })
   );
 });

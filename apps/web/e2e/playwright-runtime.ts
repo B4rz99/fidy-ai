@@ -5,17 +5,14 @@ import { disposeAcceptanceClock } from "./acceptance-clock";
 const runtime = await import("@playwright/test");
 export const playwright: typeof runtime = {
   ...runtime,
-  test: runtime.test.extend<{ acceptanceClockScope: void }>({
-    acceptanceClockScope: [
-      ({ page }, use): Promise<void> =>
-        use().then(
-          () => disposeAcceptanceClock(page),
-          (cause: unknown) =>
-            disposeAcceptanceClock(page).then(() => {
-              throw cause;
-            })
-        ),
-      { auto: true },
-    ],
+  test: runtime.test.extend({
+    page: ({ page }, provide): Promise<void> =>
+      provide(page).then(
+        () => disposeAcceptanceClock(page),
+        (cause: unknown) =>
+          disposeAcceptanceClock(page).then(() => {
+            throw cause;
+          })
+      ),
   }),
 };

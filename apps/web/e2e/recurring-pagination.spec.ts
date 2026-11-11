@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import { analyzeAccessibility } from "./accessibility";
 import type { APIRequestContext, Locator, Page, Route } from "@playwright/test";
 import { type Cause, DateTime, Effect } from "effect";
@@ -217,7 +218,13 @@ const inspectCalendarLayouts = (page: Page): Effect.Effect<void, Cause.UnknownEr
       expect(boxes[0].x).toBeLessThan(boxes[1].x);
       yield* expectNoCalendarOverflow(page);
       yield* Effect.tryPromise(() =>
-        page.screenshot({ path: test.info().outputPath(`calendar-${width}.png`), fullPage: true })
+        captureVisualEvidence({
+          target: page,
+          options: {
+            path: test.info().outputPath(`calendar-${width}.png`),
+            fullPage: true,
+          },
+        })
       );
     }
     yield* Effect.tryPromise(() => calendar.getByRole("button", { name: /^Plan 001 /u }).click());
@@ -228,7 +235,13 @@ const inspectCalendarLayouts = (page: Page): Effect.Effect<void, Cause.UnknownEr
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toContainText("Plan 001"));
     yield* expectNoCalendarOverflow(page);
     yield* Effect.tryPromise(() =>
-      page.screenshot({ path: test.info().outputPath("calendar-detail-panel.png"), fullPage: true })
+      captureVisualEvidence({
+        target: page,
+        options: {
+          path: test.info().outputPath("calendar-detail-panel.png"),
+          fullPage: true,
+        },
+      })
     );
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Cerrar", exact: true }).click()
@@ -264,9 +277,12 @@ const inspectEnlargedCalendar = (page: Page): Effect.Effect<void, Cause.UnknownE
     const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
     expect(accessibility.violations).toEqual([]);
     yield* Effect.tryPromise(() =>
-      page.screenshot({
-        path: test.info().outputPath("calendar-dark-enlarged.png"),
-        fullPage: true,
+      captureVisualEvidence({
+        target: page,
+        options: {
+          path: test.info().outputPath("calendar-dark-enlarged.png"),
+          fullPage: true,
+        },
       })
     );
   });

@@ -90,35 +90,35 @@ const ManualCaptureEditor = ({
       disabled={!props.editable}
       categories={props.categories}
       onCancel={Option.some(close)}
-      renderForm={(form) => form}
       apiClient={props.apiClient}
       timeZone={props.currentUser.timeZone}
-      status={capture.status}
-      onStatus={capture.onStatus}
-      draft={{ value: capture.draft, onChange: capture.change }}
+      task={capture}
       newAttempt={Option.isSome(capture.attempt)}
       onCheckHistory={props.onRefresh}
+      onInvalidate={props.onRefresh}
       onCreated={(transaction) => {
         props.onCreated(transaction);
         capture.clear();
         props.onClose();
-        props.onRefresh();
       }}
     />
   </>
 );
+const historyInspected = (capture: ManualCapture, props: Props): boolean =>
+  props.editable &&
+  Option.exists(
+    capture.check,
+    (version) =>
+      version.month === props.version.month &&
+      version.timeZone === props.version.timeZone &&
+      version.generation < props.version.generation
+  );
 const CaptureContent = ({
   capture,
   props,
 }: Readonly<{ capture: ManualCapture; props: Props }>): JSX.Element => {
-  const uncertain = capture.status === "uncertain";
-  const checked =
-    props.editable &&
-    Option.exists(
-      capture.check,
-      (version) =>
-        version.month === props.version.month && version.generation < props.version.generation
-    );
+  const uncertain = capture.uncertain;
+  const checked = historyInspected(capture, props);
   const close = (): void => {
     if (Option.isNone(capture.attempt)) capture.clear();
     props.onClose();
@@ -132,7 +132,7 @@ const CaptureContent = ({
         <Button
           size="sm"
           variant="ghost"
-          disabled={capture.status === "saving"}
+          disabled={capture.saving}
           onClick={close}
           aria-label="Cerrar registro"
         >
@@ -152,7 +152,7 @@ const CaptureContent = ({
             props.onRefresh();
           }}
           onResume={() => {
-            if (checked) capture.resume();
+            if (checked) capture.resumeAfterInspection(props.version);
           }}
           onDiscard={() => {
             capture.clear();

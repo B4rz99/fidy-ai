@@ -32,6 +32,7 @@ const Handoff = Schema.Struct({
   id: Schema.String,
   pairing_id: Schema.NullOr(Schema.String),
   review_code: Schema.NullOr(Schema.String),
+  review_attempt_id: Schema.NullOr(Schema.String),
   review_started_ms: Schema.NullOr(Schema.Int),
   review_message_id: Schema.NullOr(Schema.String),
   decision: Schema.NullOr(Schema.String),
@@ -124,8 +125,10 @@ const confirm = (
   Effect.gen(function* () {
     const { code, decision } = choice;
     const event = input.inbound.event;
+    const reviewAttemptId = handoff.review_attempt_id;
     const reply = Option.getOrElse(event.replyToMessageId, () => "");
     if (
+      reviewAttemptId === null ||
       handoff.review_code !== code ||
       handoff.review_message_id === null ||
       reply !== handoff.review_message_id ||
@@ -138,7 +141,8 @@ const confirm = (
       prepareAcceptedConsentCaller({
         db: input.db,
         statement: {
-          sql: `UPDATE whatsapp_provider_handoffs SET decision=?,decision_message_id=?,confirmed_at_ms=? WHERE id=? AND review_code=? AND review_message_id=? AND decision IS NULL AND consumed_at_ms IS NULL AND expires_at_ms>? AND exchange_id IN (SELECT exchange_id FROM accepted_consent_callers WHERE portfolio_id=? AND bsuid=? AND phone_number_id=? AND expires_at_ms>?)`,
+          sql: `UPDATE whatsapp_provider_handoffs SET decision=?,decision_message_id=?,confirmed_at_ms=? WHERE id=? AND review_code=? AND review_message_id=? AND review_attempt_id=? AND decision IS NULL AND consumed_at_ms IS NULL AND expires_at_ms>? AND exchange_id IN (SELECT exchange_id FROM accepted_consent_callers WHERE portfolio_id=? AND bsuid=? AND phone_number_id=? AND expires_at_ms>?)
+          AND EXISTS(SELECT 1 FROM provider_authentication_attempts a WHERE a.id=whatsapp_provider_handoffs.review_attempt_id AND a.handoff_id=whatsapp_provider_handoffs.id AND a.pairing_id=whatsapp_provider_handoffs.pairing_id AND a.state='verified' AND a.expires_at_ms>?)`,
           params: [
             decision,
             event.messageEvidence.providerMessageId,
@@ -146,8 +150,10 @@ const confirm = (
             handoff.id,
             code,
             reply,
+            reviewAttemptId,
             input.inbound.receivedAtMs,
             ...currentCaller(input),
+            input.inbound.receivedAtMs,
           ],
         },
       }).run()
@@ -159,14 +165,15 @@ const sendReview = (input: Input, handoff: typeof Handoff.Type): Effect.Effect<R
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT provider,contact_email,subject FROM provider_authentication_attempts WHERE handoff_id=? AND state='verified' AND expires_at_ms>?"
+          "SELECT id,provider,contact_email,subject FROM provider_authentication_attempts WHERE handoff_id=? AND pairing_id=? AND state='verified' AND expires_at_ms>?"
         )
-        .bind(handoff.id, input.inbound.receivedAtMs)
+        .bind(handoff.id, handoff.pairing_id, input.inbound.receivedAtMs)
         .first()
     );
     if (raw === null) return response(HTTP_CONFLICT);
     const account = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
+        id: Schema.String,
         provider: Schema.Literals(["google", "microsoft"]),
         contact_email: Schema.NullOr(Schema.String),
         subject: Schema.String,
@@ -175,9 +182,19 @@ const sendReview = (input: Input, handoff: typeof Handoff.Type): Effect.Effect<R
     const claimed = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "UPDATE whatsapp_provider_handoffs SET review_started_ms=? WHERE id=? AND review_started_ms IS NULL AND decision IS NULL AND consumed_at_ms IS NULL AND expires_at_ms>?"
+          `UPDATE whatsapp_provider_handoffs SET review_started_ms=?,review_attempt_id=? WHERE id=? AND review_code=? AND pairing_id=? AND review_started_ms IS NULL AND decision IS NULL AND consumed_at_ms IS NULL AND expires_at_ms>?
+          AND EXISTS(SELECT 1 FROM provider_authentication_attempts a WHERE a.id=? AND a.handoff_id=whatsapp_provider_handoffs.id AND a.pairing_id=whatsapp_provider_handoffs.pairing_id AND a.state='verified' AND a.expires_at_ms>?)`
         )
-        .bind(input.inbound.receivedAtMs, handoff.id, input.inbound.receivedAtMs)
+        .bind(
+          input.inbound.receivedAtMs,
+          account.id,
+          handoff.id,
+          handoff.review_code,
+          handoff.pairing_id,
+          input.inbound.receivedAtMs,
+          account.id,
+          input.inbound.receivedAtMs
+        )
         .run()
     );
     if (claimed.meta.changes !== 1) {
@@ -192,9 +209,9 @@ const sendReview = (input: Input, handoff: typeof Handoff.Type): Effect.Effect<R
     yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "UPDATE whatsapp_provider_handoffs SET review_message_id=? WHERE id=? AND review_message_id IS NULL AND decision IS NULL"
+          "UPDATE whatsapp_provider_handoffs SET review_message_id=? WHERE id=? AND review_attempt_id=? AND review_code=? AND review_message_id IS NULL AND decision IS NULL"
         )
-        .bind(sent.messageEvidence.providerMessageId, handoff.id)
+        .bind(sent.messageEvidence.providerMessageId, handoff.id, account.id, handoff.review_code)
         .run()
     );
     return response(HTTP_OK);
@@ -325,7 +342,7 @@ const routeInvitationConfirmation = (
   input: Input,
   text: string
 ): Effect.Effect<Option.Option<Response>, void> => {
-  if (!/^(?:Vincular|No vincular) (?:Google|Microsoft): /u.test(text)) {
+  if (!/^(?:Vincular|No vincular) (?:Google|Microsoft): /u.test(text.trim())) {
     return Effect.succeedNone;
   }
   const choice = /^(?:Vincular|No vincular) (?:Google|Microsoft): .+ \[([0-9a-f-]{36})\]$/u.exec(
@@ -339,9 +356,9 @@ const routeInvitationConfirmation = (
 export const receiveHandoffText = (input: Input): Effect.Effect<Option.Option<Response>, never> =>
   Effect.gen(function* () {
     if (input.inbound.event.content._tag !== "Text") return Option.none();
-    const text = input.inbound.event.content.text.trim();
-    const invitation = yield* routeInvitationConfirmation(input, text);
+    const invitation = yield* routeInvitationConfirmation(input, input.inbound.event.content.text);
     if (Option.isSome(invitation)) return invitation;
+    const text = input.inbound.event.content.text.trim();
     const choice = yield* decideConsentReply({ _tag: "Text", text });
     const raw = yield* Effect.tryPromise(() => readHandoff(input).first());
     if (raw !== null) {

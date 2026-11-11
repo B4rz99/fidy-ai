@@ -2375,6 +2375,54 @@ it("unlinks the exact pair, restores both originals, and remembers keep-separate
     })
   ));
 
+it.each([
+  { command: "link", facts: { currency: "unknown" } },
+  { command: "unlink", facts: { amount: "45000.001" } },
+])("withholds $command when retained pair facts are unreadable", ({ command, facts }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owner = users[0] ?? "";
+      const first = "30000000-0000-4000-8000-000000000591";
+      const second = "30000000-0000-4000-8000-000000000592";
+      yield* fromTestPromise(() =>
+        Promise.all([
+          seedRetainedTransaction({ db, userId: owner, id: first, categoryId: category, ...facts }),
+          seedRetainedTransaction({ db, userId: owner, id: second, categoryId: category }),
+        ])
+      );
+      const observed = countingDb(db);
+      const response = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          observed.db,
+          new Request(
+            request(0, `/transactions/${command}`, {
+              firstTransactionId: first,
+              secondTransactionId: second,
+            }),
+            {
+              headers: {
+                origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": sessions[0] ?? "invalid",
+                cookie: `__Host-fidy_session=${bearer(0)}`,
+                "content-type": "application/json",
+              },
+            }
+          )
+        )
+      );
+      expect(response.status).toBe(503);
+      expect(yield* fromTestPromise(() => response.json())).toEqual({ status: "unavailable" });
+      expect(observed.batches()).toBe(0);
+      expect(yield* fromTestPromise(() => reconciliationState(db, owner))).toEqual({
+        decisions: [],
+        members: [],
+      });
+      expect(yield* fromTestPromise(() => auditedOperations(db, owner))).toEqual([]);
+    })
+  )
+);
+
 it("refuses duplicate, chained, and cross-User links without partial relation state", () =>
   Effect.runPromise(
     Effect.gen(function* () {

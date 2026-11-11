@@ -10,6 +10,7 @@ import {
   type HostedTextContext,
   type HostedTextContinuation,
   type HostedTextRequest,
+  type HostedTextResult,
   type HostedTextToolPolicy,
   type HostedTextValidationRequest,
   type PreparedHostedStructured,
@@ -20,7 +21,6 @@ import {
   continuationPolicy,
   makeContinuationAuthority,
   makeOneShotPreparation,
-  makePreparedLifecycleTransitions,
   makePreparedStructuredAuthority,
   makePreparedTextAuthority,
 } from "./authority";
@@ -99,11 +99,11 @@ const invalidAuthority = (): HostedInferenceError =>
 
 const toolPolicy = (policy: HostedTextToolPolicy): HostedTextToolPolicy =>
   policy.toolChoice === "none"
-    ? { toolChoice: "none", availableOperations: policy.availableOperations }
+    ? { toolChoice: "none", availableOperations: freezeDeep([...policy.availableOperations]) }
     : {
         toolChoice: "auto",
         maximumToolCalls: policy.maximumToolCalls,
-        availableOperations: policy.availableOperations,
+        availableOperations: freezeDeep([...policy.availableOperations]),
       };
 
 const validateActiveRequest = <Request, Continuation>(
@@ -159,60 +159,113 @@ const prepareAdapterRequest = <Request, Continuation>(
     )
   );
 
-type FailedExecution = (
-  exit: Exit.Exit<unknown, HostedInferenceError>
-) => Option.Option<HostedInferenceError>;
+const pureFailure = (
+  exit: Exit.Exit<unknown, HostedInferenceError>,
+  tag: HostedInferenceError["reason"]["_tag"]
+): boolean =>
+  Exit.isFailure(exit) &&
+  exit.cause.reasons.length > 0 &&
+  exit.cause.reasons.every(
+    (reason) =>
+      reason._tag === "Fail" &&
+      reason.error.reason._tag === tag &&
+      (tag !== "ProviderUnavailable" || reason.error.retryable)
+  );
 
-const failedExecution: FailedExecution = (exit) => {
-  if (!Exit.isFailure(exit)) return Option.none();
-  const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
-  return failure?._tag === "Fail" ? Option.some(failure.error) : Option.none();
+type ExecutionState<Output> =
+  | Readonly<{
+      _tag: "Ready" | "Executing";
+      work: Effect.Effect<Output, HostedInferenceError>;
+      attempts: number;
+    }>
+  | Readonly<{ _tag: "Consumed" }>;
+
+const prepareExecution = <Output>(
+  work: Effect.Effect<Output, HostedInferenceError>,
+  settled: (exit: Exit.Exit<Output, HostedInferenceError>, retryable: boolean) => void = () => {}
+): Readonly<{
+  execute: Effect.Effect<Output, HostedInferenceError>;
+  discard: Effect.Effect<void, HostedInferenceError>;
+}> => {
+  let state: ExecutionState<Output> = { _tag: "Ready", work, attempts: 0 };
+  const settle = (exit: Exit.Exit<Output, HostedInferenceError>): Effect.Effect<void> =>
+    Effect.sync(() => {
+      if (state._tag !== "Executing") return;
+      const retryable =
+        pureFailure(exit, "ProviderUnavailable") && state.attempts < maximumHostedProviderAttempts;
+      state = retryable ? { ...state, _tag: "Ready" } : { _tag: "Consumed" };
+      settled(exit, retryable);
+    });
+  return {
+    execute: Effect.uninterruptibleMask((restore) =>
+      Effect.suspend(() => {
+        if (state._tag !== "Ready") return Effect.fail(invalidAuthority());
+        state = { ...state, _tag: "Executing", attempts: state.attempts + 1 };
+        return restore(state.work).pipe(Effect.onExit(settle));
+      })
+    ),
+    discard: Effect.suspend(() => {
+      if (state._tag !== "Ready") return Effect.fail(invalidAuthority());
+      state = { _tag: "Consumed" };
+      return Effect.void;
+    }),
+  };
 };
+
+const consumeSource = <Continuation>(source: ExactPreparation<Continuation>): void => {
+  if (Option.isSome(source.source)) source.source.value.guard.consume();
+};
+
+const textExecution = <Request, Continuation>(
+  runtime: TextRuntime<Request, Continuation>,
+  exactRequest: Request,
+  input: ExactPreparation<Continuation>
+): Effect.Effect<HostedTextResult, HostedInferenceError> =>
+  Effect.suspend(() => runtime.adapter.execute(exactRequest)).pipe(
+    Effect.map(({ result, continuation }) => {
+      consumeSource(input);
+      return {
+        ...result,
+        continuation: runtime.makeContinuation({
+          basePrefix: input.basePrefix,
+          continuation: Option.some(continuation),
+          policy: continuationPolicy({
+            policy: input.policy,
+            consumedToolCalls: result.toolCalls.length,
+          }),
+        }),
+      };
+    })
+  );
+
+type TextRepairState<Continuation> =
+  | Readonly<{ _tag: "Pending" | "Available"; input: ExactPreparation<Continuation> }>
+  | Readonly<{ _tag: "Spent" }>;
 
 const makePreparedText = <Request, Continuation>(
   runtime: TextRuntime<Request, Continuation>,
   exactRequest: Request,
   input: ExactPreparation<Continuation>
 ): PreparedHostedText => {
-  const lifecycle = makePreparedLifecycleTransitions();
-  const consumeSource = (): void => {
-    if (Option.isSome(input.source)) input.source.value.guard.consume();
-  };
-  const execute = Effect.suspend(() => {
-    if (!lifecycle.beginExecution()) return Effect.fail(invalidAuthority());
-    return runtime.adapter.execute(exactRequest).pipe(
-      Effect.map(({ result, continuation }) => {
-        lifecycle.completeExecution();
-        consumeSource();
-        return {
-          ...result,
-          continuation: runtime.makeContinuation({
-            basePrefix: input.basePrefix,
-            continuation: Option.some(continuation),
-            policy: continuationPolicy({
-              policy: input.policy,
-              consumedToolCalls: result.toolCalls.length,
-            }),
-          }),
-        };
-      }),
-      Effect.onExit((exit) =>
-        Effect.sync(() => {
-          const failure = failedExecution(exit);
-          if (Option.isSome(failure)) return lifecycle.failExecution(failure.value);
-          if (lifecycle.current() === "executing") lifecycle.completeExecution();
-        })
-      )
-    );
-  });
+  let repair: TextRepairState<Continuation> = { _tag: "Pending", input };
+  const execution = prepareExecution(
+    textExecution(runtime, exactRequest, input),
+    (exit, retryable) => {
+      if (repair._tag !== "Pending") return;
+      if (pureFailure(exit, "InvalidOutput")) repair = { ...repair, _tag: "Available" };
+      else if (!retryable) repair = { _tag: "Spent" };
+    }
+  );
   const repairInvalidOutput = Effect.suspend(() => {
-    if (!lifecycle.beginRecovery()) return Effect.fail(invalidAuthority());
-    consumeSource();
+    if (repair._tag !== "Available") return Effect.fail(invalidAuthority());
+    const captured = repair.input;
+    repair = { _tag: "Spent" };
+    consumeSource(captured);
     return runtime
       .makeContinuation({
-        basePrefix: input.basePrefix,
+        basePrefix: captured.basePrefix,
         continuation: Option.none(),
-        policy: input.policy,
+        policy: captured.policy,
       })
       .prepare([
         {
@@ -223,10 +276,21 @@ const makePreparedText = <Request, Continuation>(
       ]);
   });
   const discard = Effect.suspend(() => {
-    if (!lifecycle.beginDiscard()) return Effect.fail(invalidAuthority());
-    consumeSource();
-    return Effect.void;
+    if (repair._tag === "Available") {
+      consumeSource(repair.input);
+      repair = { _tag: "Spent" };
+      return Effect.void;
+    }
+    return execution.discard.pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          if (repair._tag === "Pending") consumeSource(repair.input);
+          repair = { _tag: "Spent" };
+        })
+      )
+    );
   });
+  const execute = execution.execute;
   return makePreparedTextAuthority({ execute, repairInvalidOutput, discard });
 };
 
@@ -236,24 +300,26 @@ const prepareContinuation = <Request, Continuation>(
   next: Readonly<{ context: HostedTextContext; policy: HostedTextToolPolicy }>
 ): Effect.Effect<PreparedHostedText, HostedInferenceError> => {
   const context = projectHostedTextContextInternal(isolateTextContext(next.context));
-  return Effect.suspend(() => {
-    if (!state.guard.begin()) return Effect.fail(invalidAuthority());
-    return runtime
-      .prepareExact({
-        basePrefix: state.basePrefix,
-        projection: context,
-        continuation: state.continuation,
-        policy: next.policy,
-        source: Option.some(state),
-      })
-      .pipe(
-        Effect.onExit((exit) =>
-          Effect.sync(() => {
-            if (Exit.isFailure(exit)) state.guard.restore();
+  const settle = (exit: Exit.Exit<PreparedHostedText, HostedInferenceError>): Effect.Effect<void> =>
+    Effect.sync(() => {
+      if (Exit.isFailure(exit)) state.guard.restore();
+    });
+  return Effect.uninterruptibleMask((restore) =>
+    Effect.suspend(() => {
+      if (!state.guard.begin()) return Effect.fail(invalidAuthority());
+      return restore(
+        Effect.suspend(() =>
+          runtime.prepareExact({
+            basePrefix: state.basePrefix,
+            projection: context,
+            continuation: state.continuation,
+            policy: next.policy,
+            source: Option.some(state),
           })
         )
-      );
-  });
+      ).pipe(Effect.onExit(settle));
+    })
+  );
 };
 
 const makeContinuation = <Request, Continuation>(
@@ -329,51 +395,21 @@ const invalidStructuredOutput = (): HostedInferenceError =>
     retryAfter: Option.none(),
   });
 
-/* istanbul ignore next */
-const isRetryableProviderFailure = (exit: Exit.Exit<unknown, HostedInferenceError>): boolean =>
-  Exit.isFailure(exit) &&
-  exit.cause.reasons.some(
-    (reason) =>
-      reason._tag === "Fail" &&
-      reason.error.reason._tag === "ProviderUnavailable" &&
-      reason.error.retryable
-  );
-
 const makeStructuredBehavior = <Output>(
   execution: PreparedStructuredExecution<Output>,
   outputSchema: Schema.Codec<Output, Readonly<Record<string, unknown>>, never, never>
 ): PreparedHostedStructured<Output> => {
-  let state: "ready" | "executing" | "consumed" = "ready";
-  let executionAttempts = 0;
-  const execute = Effect.suspend(() => {
-    if (state !== "ready" || executionAttempts >= maximumHostedProviderAttempts) {
-      return Effect.fail(invalidAuthority());
-    }
-    state = "executing";
-    executionAttempts += 1;
-    return execution.execute.pipe(
+  const { execute, discard } = prepareExecution(
+    execution.execute.pipe(
       Effect.flatMap(Schema.encodeUnknownEffect(outputSchema)),
       Effect.flatMap((output) =>
         Schema.decodeEffect(outputSchema)(output).pipe(Effect.mapError(invalidStructuredOutput))
       ),
       Effect.mapError((error) =>
         error instanceof HostedInferenceError ? error : invalidStructuredOutput()
-      ),
-      Effect.onExit((exit) =>
-        Effect.sync(() => {
-          state =
-            isRetryableProviderFailure(exit) && executionAttempts < maximumHostedProviderAttempts
-              ? "ready"
-              : "consumed";
-        })
       )
-    );
-  });
-  const discard = Effect.suspend(() => {
-    if (state !== "ready") return Effect.fail(invalidAuthority());
-    state = "consumed";
-    return Effect.void;
-  });
+    )
+  );
   return makePreparedStructuredAuthority({ execute, discard });
 };
 
@@ -391,13 +427,14 @@ const makeHostedStructuredRuntime = (
     request: HostedStructuredRequest<Output, Encoded>
   ) => {
     const context = isolateStructuredContext(request.context);
+    const outputSchema = request.outputSchema;
     return adapter
       .prepare({
         messages: projectHostedStructuredContextInternal(context),
         objectName: hostedStructuredObjectNames[request.purpose],
-        outputSchema: request.outputSchema,
+        outputSchema,
       })
-      .pipe(Effect.map((execution) => makeStructuredBehavior(execution, request.outputSchema)));
+      .pipe(Effect.map((execution) => makeStructuredBehavior(execution, outputSchema)));
   },
 });
 

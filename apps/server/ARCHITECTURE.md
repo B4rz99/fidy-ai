@@ -373,6 +373,12 @@ one live pending Turn before protected execution. Reservation commits separately
 and proves no mutation outcome. Recovery rechecks the exact consumed binding and live authority,
 consults retained commit and outcome evidence, and never lends that reservation to another Turn or
 renews its original ten-minute deadline. OAuth's atomic consumption remains a separate protocol.
+Hosted inference privately captures immutable prepared work behind a shared one-shot execution gate.
+Claim and settlement handoff are interruption-safe while provider work remains interruptible. Only
+pure typed retryable provider unavailability can restore execution within its two-attempt budget;
+interruption, defects and mixed causes consume it. Text InvalidOutput retains a separate one-use
+repair right, spent before feedback preparation. Continuation preparation reserves one descendant
+before asynchronous work, restoring only when preparation fails.
 WhatsApp may repair one invalid model output after successful queries, retaining their tool results
 and remaining call budget. Repair is unavailable once a mutation has started; it cannot replay
 owner effects or replace host confirmation.

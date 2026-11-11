@@ -1,7 +1,8 @@
-import { type WeeklyScheduleSnapshot, WeeklySummaryReport } from "./contract";
+import { deepStrictEqual } from "node:assert";
+import { InsightUnavailable, type WeeklyScheduleSnapshot, WeeklySummaryReport } from "./contract";
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import { categoryIds } from "../../src/core/categories/contract";
 import {
   createWeeklyGovernorConsentOffer,
@@ -193,7 +194,10 @@ it.live("does not convert unavailable aggregates into an empty-week advancement"
       id: snapshot.id,
       now: snapshot.nextScheduledAt,
     };
-    expect((yield* Effect.exit(runWeeklyGeneration(input)))._tag).toBe("Failure");
+    deepStrictEqual(
+      yield* Effect.exit(runWeeklyGeneration(input)),
+      Exit.fail(new InsightUnavailable())
+    );
     expect(
       DateTime.formatIso(Option.getOrThrow(yield* findWeeklySchedule(input)).nextScheduledAt)
     ).toBe(DateTime.formatIso(snapshot.nextScheduledAt));
@@ -375,8 +379,18 @@ for (const change of ["revision", "withdrawal", "schedule"] as const) {
         Effect.gen(function* () {
           const db = yield* weeklySummaryTestDatabase;
           const snapshot = yield* enable(db);
-          if (activity) yield* seedWeeklySummaryActivity({ db, at: "2026-08-04T12:00:00Z" });
+          yield* seedWeeklySummaryActivity({
+            db,
+            at: activity ? "2026-08-04T12:00:00Z" : "2026-07-01T12:00:00Z",
+          });
           const withdrawal = change === "withdrawal" ? yield* prepareWithdrawal(db) : [];
+          const originalRevision = yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT fact_revision FROM transaction_projection_state WHERE user_id=?")
+              .bind(snapshot.userId)
+              .first("fact_revision")
+          );
+          let mutationSucceeded = false;
           let calls = 0;
           let interleaved = false;
           const intercepted: D1Database["batch"] = <Row>(
@@ -386,12 +400,17 @@ for (const change of ["revision", "withdrawal", "schedule"] as const) {
             return db.batch<Row>(statements).then((result) => {
               if (calls !== 2) return result;
               interleaved = true;
-              if (change === "withdrawal") return db.batch([...withdrawal]).then(() => result);
+              if (change === "withdrawal") {
+                return db.batch([...withdrawal]).then(() => {
+                  mutationSucceeded = true;
+                  return result;
+                });
+              }
               const mutation =
                 change === "revision"
                   ? db
                       .prepare(
-                        "UPDATE transaction_projection_state SET revision=revision+1 WHERE user_id=?"
+                        "UPDATE transaction_projection_state SET fact_revision=fact_revision+1 WHERE user_id=?"
                       )
                       .bind(snapshot.userId)
                   : db
@@ -399,7 +418,10 @@ for (const change of ["revision", "withdrawal", "schedule"] as const) {
                         "UPDATE schedules SET version=version+1 WHERE kind='weekly' AND user_id=?"
                       )
                       .bind(snapshot.userId);
-              return mutation.run().then(() => result);
+              return mutation.run().then((committed) => {
+                mutationSucceeded = committed.success && committed.meta.changes === 1;
+                return result;
+              });
             });
           };
           const guardedDb = new Proxy(db, {
@@ -416,7 +438,19 @@ for (const change of ["revision", "withdrawal", "schedule"] as const) {
             })
           );
           expect(interleaved).toBe(true);
-          expect(result._tag).toBe("Failure");
+          expect(mutationSucceeded).toBe(true);
+          if (change === "revision") {
+            const revision = yield* Effect.tryPromise(() =>
+              db
+                .prepare("SELECT fact_revision FROM transaction_projection_state WHERE user_id=?")
+                .bind(snapshot.userId)
+                .first("fact_revision")
+            );
+            const beforeRevision = yield* Schema.decodeUnknownEffect(Schema.Int)(originalRevision);
+            const afterRevision = yield* Schema.decodeUnknownEffect(Schema.Int)(revision);
+            expect(afterRevision).toBe(beforeRevision + 1);
+          }
+          deepStrictEqual(result, Exit.fail(new InsightUnavailable()));
           if (change === "schedule") {
             yield* Effect.tryPromise(() =>
               db
@@ -444,7 +478,10 @@ it.live("rolls back the complete occurrence when report insertion fails and fres
         .run()
     );
     const input = { db, userId: snapshot.userId, id: snapshot.id, now: snapshot.nextScheduledAt };
-    expect((yield* Effect.exit(runWeeklyGeneration(input)))._tag).toBe("Failure");
+    deepStrictEqual(
+      yield* Effect.exit(runWeeklyGeneration(input)),
+      Exit.fail(new InsightUnavailable())
+    );
     yield* assertUnpublished(db, snapshot);
     yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER fail_weekly_report").run());
     expect((yield* runWeeklyGeneration(input))._tag).toBe("Created");
@@ -462,16 +499,17 @@ it.live("unavailable projection cannot masquerade as a complete empty period", (
         .bind(snapshot.userId)
         .run()
     );
-    expect(
-      (yield* Effect.exit(
+    deepStrictEqual(
+      yield* Effect.exit(
         runWeeklyGeneration({
           db,
           userId: snapshot.userId,
           id: snapshot.id,
           now: snapshot.nextScheduledAt,
         })
-      ))._tag
-    ).toBe("Failure");
+      ),
+      Exit.fail(new InsightUnavailable())
+    );
     yield* assertUnpublished(db, snapshot);
   })
 );

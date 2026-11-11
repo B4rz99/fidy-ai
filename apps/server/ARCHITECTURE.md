@@ -219,6 +219,13 @@ See [ADR 0009](../../docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.m
 Consent owns current standing and retained disclosure evidence. Exact admitted work can retain its
 original bounded Consent basis; transport payloads and recurring schedules cannot supply that basis.
 Privacy controls remain independently reachable after processing withdrawal or commercial expiry.
+Processing ingress opens its decision phase only after authenticated, correlated delivery evidence;
+its explicit reply must be a distinct later message from the bound endpoint. Weekly and proactivity
+choices preserve their existing exact offer, association and disclosure-message checks. Those category
+checks do not establish the same authenticated-delivery or later-message proof as Processing ingress;
+extending that proof to categories is a separate policy change. Processing renewal settles the exact
+withdrawal against the retained historical disclosure and fresh browser authority. An uncertain commit
+reconciles that same receipt without replacing legal evidence.
 Cookie-only Consent handlers discover the subject and verify the expected browser binding in one
 live session lookup. Core does not repeat that discovery before dispatch. Protected reads and
 coordinated decisions still recheck credential authority in their existing atomic units; no

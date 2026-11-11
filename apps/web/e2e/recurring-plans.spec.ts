@@ -36,6 +36,7 @@ test("recurring plans persist through the real canonical API and share monthly l
         signInRecurringThroughCore({ page, deferFreshEntry: true, request, identity: "recurring" })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* inspectPastOccurrenceStatus(page);
       yield* createPlan({
         page,
         name: "Arriendo de prueba",
@@ -77,6 +78,37 @@ test("recurring plans persist through the real canonical API and share monthly l
       yield* inspectMobile(page);
     })
   ));
+
+const inspectPastOccurrenceStatus = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* createPlan(
+      { page, name: "Expectativa pasada", kind: "expense", currency: "COP", amount: "100" },
+      { frequency: "Cada mes", firstDate: "2026-10-01" }
+    );
+    const item = recurringItem(page, /Expectativa pasada.*Sin confirmar/u);
+    yield* Effect.tryPromise(() => expect(item).toBeVisible());
+    yield* Effect.tryPromise(() => item.click());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("dialog")).toContainText("2026-10-01 · Sin confirmar")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular transacción existente", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("main", { name: "Vincular transacción", exact: true })).toContainText(
+        "Expectativa pasada"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Volver a la ocurrencia", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("dialog")).toContainText("2026-10-01 · Sin confirmar")
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+  });
 
 const inspectTrackingNotice = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {

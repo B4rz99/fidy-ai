@@ -437,7 +437,7 @@ it.live(
       const registry = AtomRegistry.make();
       const unmount = registry.mount(history.state);
       try {
-        yield* AtomRegistry.getResult(registry, history.firstPage);
+        yield* AtomRegistry.getResult(registry, history.firstPage).pipe(Effect.orDie);
         expect(reads).toBe(1);
         for (const expected of [2, 4]) {
           registry.set(history.action, "refresh-pages");
@@ -445,7 +445,9 @@ it.live(
           expect(reads).toBe(expected);
           if (expected === 2) {
             registry.set(history.action, "reset");
-            yield* AtomRegistry.getResult(registry, history.firstPage, { suspendOnWaiting: true });
+            yield* AtomRegistry.getResult(registry, history.firstPage, {
+              suspendOnWaiting: true,
+            }).pipe(Effect.orDie);
             expect(reads).toBe(3);
           }
         }

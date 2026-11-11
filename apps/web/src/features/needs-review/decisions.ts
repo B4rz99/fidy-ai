@@ -250,7 +250,9 @@ const changeDraft = (owner: Owner, detail: Detail, draft: Draft): void => {
     owner,
     Effect.sleep(Math.max(autosaveMilliseconds, entry.nextAutosaveAt - now())).pipe(
       Effect.andThen(
-        Effect.suspend(() => (version === entry.version ? flush(owner, entry, true) : Effect.void))
+        Effect.suspend(() =>
+          version === entry.version ? flush(owner, entry, Option.some(version)) : Effect.void
+        )
       )
     )
   );
@@ -279,33 +281,42 @@ const write = Effect.fnUntraced(function* (owner: Owner, command: Command) {
       return (yield* client.ingestion.applyReviewEdit({ payload: command })).data;
   }
 });
-const flush = (owner: Owner, entry: Entry, automatic = false): Work =>
+const automaticReady = (owner: Owner, entry: Entry, version: number): boolean =>
+  version === entry.version &&
+  !entry.acting &&
+  owner.phase === "idle" &&
+  now() >= entry.nextAutosaveAt;
+const flush = (owner: Owner, entry: Entry, automatic = Option.none<number>()): Work =>
   entry.permit.withPermit(
-    Effect.gen(function* () {
-      while (current(owner, entry) && !blocked(entry) && Option.isSome(entry.wanted)) {
-        const draft = entry.wanted.value;
-        entry.wanted = Option.none();
-        entry.nextAutosaveAt = now() + autosaveIntervalMilliseconds;
-        entry.feedback = "saving";
-        notify(owner);
-        const result = yield* Effect.exit(
-          write(owner, {
-            _tag: "SaveDraft",
-            id: entry.detail.item.id,
-            revision: entry.detail.revision,
-            draft,
+    Effect.suspend(() =>
+      Option.exists(automatic, (version) => !automaticReady(owner, entry, version))
+        ? Effect.void
+        : Effect.gen(function* () {
+            while (current(owner, entry) && !blocked(entry) && Option.isSome(entry.wanted)) {
+              const draft = entry.wanted.value;
+              entry.wanted = Option.none();
+              entry.nextAutosaveAt = now() + autosaveIntervalMilliseconds;
+              entry.feedback = "saving";
+              notify(owner);
+              const result = yield* Effect.exit(
+                write(owner, {
+                  _tag: "SaveDraft",
+                  id: entry.detail.item.id,
+                  revision: entry.detail.revision,
+                  draft,
+                })
+              );
+              if (!current(owner, entry)) return;
+              if (result._tag === "Failure") reject(entry, result.cause);
+              else acceptDraft(entry, result.value);
+              notify(owner);
+              if (result._tag === "Success") {
+                yield* invalidateItems({ ids: [entry.detail.item.id], countsChanged: false });
+              }
+              if (Option.isSome(automatic)) return;
+            }
           })
-        );
-        if (!current(owner, entry)) return;
-        if (result._tag === "Failure") reject(entry, result.cause);
-        else acceptDraft(entry, result.value);
-        notify(owner);
-        if (result._tag === "Success") {
-          yield* invalidateItems({ ids: [entry.detail.item.id], countsChanged: false });
-        }
-        if (automatic) return;
-      }
-    })
+    )
   );
 const acceptDraft = (entry: Entry, items: ReadonlyArray<Detail>): void => {
   const latest = items.find((detail) => detail.item.id === entry.detail.item.id);

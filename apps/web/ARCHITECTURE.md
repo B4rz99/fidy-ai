@@ -263,6 +263,10 @@ item and panel locks. Selection changes and ordinary route hiding preserve pendi
 panel disposal or authentication teardown cancels unsent work, and evidence expiry stops new work
 for that item. Already-sent mutations may commit; reopening reads canonical state. The generated
 client retains authorization, transport policy and telemetry ownership.
+Automatic draft saves retain the 200 ms debounce and one-second send spacing. A queued save
+rechecks its version, decision admission, pacing and original expiry after acquiring the same
+item permit used by explicit decision drains; a superseded timer cannot submit a newer draft
+before that draft's debounce. Explicit drains bypass pacing while preserving serialization.
 
 ### Dashboard first use
 

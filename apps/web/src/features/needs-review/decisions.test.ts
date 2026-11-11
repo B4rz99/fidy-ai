@@ -477,3 +477,25 @@ it.live("confirms localized review Money exactly and blocks invalid amounts", ()
     });
   })
 );
+
+it.live("retires an obsolete autosave waiting for the item permit before a newer debounce", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    test.delay(1500);
+    test.view().change(test.detail, edit("100"));
+    yield* advance(250);
+    test.view().change(test.detail, edit("200"));
+    yield* advance(1350);
+    test.view().change(test.detail, edit("300"));
+    yield* advance(100);
+    expect(test.sent).toHaveLength(1);
+    expect(test.view().editor(test.detail)).toMatchObject({
+      draft: { amount: "300" },
+      feedback: "unsaved",
+    });
+    test.delay(0);
+    yield* advance(100);
+    expect(test.sent).toHaveLength(2);
+    expect(test.sent[1]).toMatchObject({ revision: 1, draft: { amount: "300" } });
+  })
+);

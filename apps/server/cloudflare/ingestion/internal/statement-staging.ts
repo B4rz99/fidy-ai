@@ -82,7 +82,7 @@ export class StatementStagingFailed extends Data.TaggedError("StatementStagingFa
   readonly reason: StatementStagingFailureReason;
 }> {}
 
-/** The staging adapter could not make a trustworthy decision; no domain state changed. */
+/** The outcome is unconfirmed. Reservations or object writes may already exist; a consumed Request cannot be replayed. */
 export class StatementStagingUnavailable extends Data.TaggedError("StatementStagingUnavailable")<{
   readonly reason: "authority_unavailable";
 }> {}
@@ -134,7 +134,7 @@ export type StoredStatementSubmission = Readonly<{
  * a StatementSubmission; canonical mutation preparation verifies the stored object before publication.
  */
 export type StatementStagingService = Readonly<{
-  /** Streams one bounded request body into private R2 and records non-authoritative staging state. */
+  /** Buffers one request under an actual-byte bound, then hashes and stages it without publication authority. */
   readonly stageStatementBytes: (input: {
     readonly userId: string;
     readonly request: Request;
@@ -159,7 +159,7 @@ export type StatementStagingService = Readonly<{
     StatementStagingUnavailable
   >;
 
-  /** Deletes at most one bounded page of expired staging rows and their R2 objects. */
+  /** Reclaims one bounded page of expired objects, retaining metadata referenced by submissions. */
   readonly sweepExpiredStatementStaging: Effect.Effect<
     StatementStagingSweep,
     StatementStagingUnavailable

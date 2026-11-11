@@ -170,7 +170,7 @@ const presentStatusKind = (tag: Turn["tag"]): ConversationView["statusKind"] => 
   if (tag === "uncertain" || tag === "processing" || tag === "error") return "warning";
   return "information";
 };
-export const presentConversation = (
+const presentConversation = (
   { turn, history }: Conversation,
   actions: Readonly<{ onVisible: () => void; confirm: () => void }>
 ): ConversationView => ({

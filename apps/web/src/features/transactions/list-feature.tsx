@@ -346,7 +346,7 @@ const useTransactionQueries = (
       rememberTransactionPages({ router, scope, pages: history.loadedPages + 1 });
       dispatch("more");
     },
-    onRetryMore: () => dispatch("retry"),
+    onRetryMore: () => (corrections.locked ? corrections.recover() : dispatch("retry")),
   };
 };
 const readyQueryActivity = (

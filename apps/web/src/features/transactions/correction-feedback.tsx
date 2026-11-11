@@ -21,8 +21,8 @@ export const CorrectionRecoveryFeedback = ({
     case "recovered":
       return (
         <output className="text-sm">
-          No se guardaron los cambios. Ya actualizamos el historial. {retained} Puedes volver a
-          guardar.
+          No se guardaron los cambios. Ya actualizamos el historial. {retained} Revisa las
+          transacciones; si cambiaron, abre una nueva edición antes de guardar.
         </output>
       );
     case "rejected":

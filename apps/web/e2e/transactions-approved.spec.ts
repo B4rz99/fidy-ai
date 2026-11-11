@@ -2161,7 +2161,18 @@ const installRejectedCorrection = (
     );
     yield* wait(() =>
       page.route(`${apiOrigin}/transactions/${first.id}`, (route) => {
-        if (route.request().method() === "GET") return route.fallback();
+        if (route.request().method() === "GET") {
+          return route.fulfill({
+            contentType: "application/json",
+            body: response({
+              ...first,
+              revision: state.rejected ? 2 : 1,
+              presentation: { kind: "independent" },
+              reconciliation: { kind: "independent" },
+              sources: [],
+            }),
+          });
+        }
         requests.push(route.request().postDataJSON());
         state.rejected = true;
         return route.fulfill({
@@ -2184,6 +2195,31 @@ const installRejectedCorrection = (
     );
     return state;
   });
+const saveNewCorrectionReview = (page: Page): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
+    yield* wait(() =>
+      page
+        .getByRole("button", { name: /^Ver transacción Prueba 1(?: Restaurantes| Transporte)?$/u })
+        .click()
+    );
+    yield* wait(() =>
+      page.getByLabel("Notas (opcional)", { exact: true }).fill("Nota sin guardar")
+    );
+    yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("30.000"));
+    yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).press("Enter"));
+    yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
+  });
+const captureRecoveredCorrection = (page: Page): Journey =>
+  wait(() =>
+    captureVisualEvidence({
+      target: page,
+      options: {
+        path: test.info().outputPath("correction-recovered.png"),
+        fullPage: true,
+      },
+    })
+  );
 const rejectedCorrectionJourney = (page: Page, failRefresh: boolean): Journey =>
   Effect.gen(function* () {
     const state = yield* installRejectedCorrection(page, failRefresh);
@@ -2223,18 +2259,16 @@ const rejectedCorrectionJourney = (page: Page, failRefresh: boolean): Journey =>
     );
     yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("30.000"));
     yield* wait(() => expect(save).toBeEnabled());
-    yield* wait(() =>
-      captureVisualEvidence({
-        target: page,
-        options: {
-          path: test.info().outputPath("correction-recovered.png"),
-          fullPage: true,
-        },
-      })
-    );
+    yield* captureRecoveredCorrection(page);
     expect(requests).toHaveLength(1);
     yield* wait(() => save.press("Enter"));
-    yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
+    yield* wait(() =>
+      expect(page.getByRole("form", { name: "Corregir transacción" })).toContainText(
+        "Ya actualizamos el historial"
+      )
+    );
+    expect(requests).toHaveLength(1);
+    yield* saveNewCorrectionReview(page);
     expect(requests[1]).toEqual({
       expectedRevision: 2,
       changes: { notes: "Nota sin guardar", money: { amount: "30000", currency: "COP" } },
@@ -2347,21 +2381,11 @@ const rejectedBulkJourney = (page: Page): Journey =>
     );
     expect(requests).toHaveLength(1);
     yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).press("Enter"));
-    yield* wait(() => expect.poll(() => requests.length).toBe(2));
-    expect(requests[1]).toEqual({
-      transactions: rows.map((record) => ({
-        id: record.id,
-        expectedRevision: record.revision + 1,
-      })),
-      changes: {
-        categoryId: categories[1]?.id,
-        notes: "Lote sin guardar",
-        money: { amount: "31000", currency: "COP" },
-      },
-    });
+    yield* wait(() => expect(form).toContainText("Ya actualizamos el historial"));
+    expect(requests).toHaveLength(1);
     yield* cancelRecoveredBulk(page);
   });
-test("rejected atomic Correction retains the whole selection and financial fields for an explicit save at fresh revisions", ({
+test("rejected atomic Correction retains the reviewed selection without substituting fresh revisions", ({
   page,
 }) => Effect.runPromise(rejectedBulkJourney(page)));
 

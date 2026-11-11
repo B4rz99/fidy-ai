@@ -22,7 +22,7 @@ import {
   recurringWorkspaceQuery,
   useRecurringPlanning,
 } from "./controller";
-import { type Filters, type PlanInput, shiftMonth } from "./model";
+import { type Filters, type PlanInput, planStatus, shiftMonth } from "./model";
 
 export type { CaptureEditorProps } from "./capture-context";
 
@@ -152,11 +152,14 @@ export const RecurringFeature = ({
   );
 };
 const lifecycleMessages = {
-  pause:
+  scheduled:
+    "está programado. El seguimiento comenzará en la fecha programada. Los registros existentes se conservan.",
+  paused:
     "está pausado. No aparecerán nuevas fechas de este plan mientras esté pausado. Los registros existentes se conservan.",
-  resume:
+  active:
     "está activo. Fidy volverá a mostrar las próximas fechas de este plan. Los registros existentes se conservan.",
-  stop: "dejó de seguirse. No aparecerán nuevas fechas de este plan. Los registros existentes se conservan.",
+  stopped:
+    "dejó de seguirse. No aparecerán nuevas fechas de este plan. Los registros existentes se conservan.",
 };
 const failureMessage = (state: SaveState): string => {
   if (state === "uncertain") {
@@ -195,7 +198,7 @@ const SaveNotice = ({
       <output>
         <Alert variant="success" role="presentation">
           <AlertDescription>
-            {confirmation.value.name} {lifecycleMessages[confirmation.value.action]}
+            {confirmation.value.name} {lifecycleMessages[planStatus(confirmation.value.plan)]}
           </AlertDescription>
         </Alert>
       </output>

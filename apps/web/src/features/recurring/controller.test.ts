@@ -7,7 +7,7 @@ import { createRoot } from "react-dom/client";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { RecurringPlanId, RecurringPlanInput, makeFidyClient } from "@/transport/client";
-import { type Plan, currentPlan, planStatus, planToday } from "./model";
+import { type Edit, type Plan, currentPlan, planStatus, planToday } from "./model";
 import { recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
 
 const planId = RecurringPlanId.make("23200000-0000-4000-8000-000000000001");
@@ -53,9 +53,14 @@ const workspace = {
 const PlanningProbe = ({
   client,
   onSaved,
-}: Readonly<{ client: ReturnType<typeof makeFidyClient>; onSaved: () => void }>): ReturnType<
-  typeof createElement
-> => {
+  edit,
+  plan,
+}: Readonly<{
+  client: ReturnType<typeof makeFidyClient>;
+  onSaved: () => void;
+  edit: Option.Option<Edit>;
+  plan: Option.Option<Plan>;
+}>): ReturnType<typeof createElement> => {
   const planning = useRecurringPlanning({
     apiClient: client,
     query: { month: "2026-10", view: "compact" },
@@ -81,13 +86,20 @@ const PlanningProbe = ({
         disabled: planning.disabled,
         onClick: () =>
           planning.save(
-            { kind: "lifecycle", planId, date: "2026-10-29", action: "pause" },
+            Option.isSome(edit)
+              ? edit.value
+              : { kind: "lifecycle", planId, date: "2026-10-29", action: "pause" },
             onSaved
           ),
       },
       "Pause"
     ),
-    createElement("button", { onClick: planning.retry }, "Refresh")
+    createElement("button", { onClick: planning.retry }, "Refresh"),
+    createElement(
+      "output",
+      { "data-standing": true },
+      Option.match(plan, { onNone: () => "", onSome: planning.statusFor })
+    )
   );
 };
 
@@ -133,7 +145,12 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
                 createElement(
                   RegistryContext.Provider,
                   { value: registry },
-                  createElement(PlanningProbe, { client, onSaved })
+                  createElement(PlanningProbe, {
+                    client,
+                    onSaved,
+                    edit: Option.none(),
+                    plan: Option.none(),
+                  })
                 )
               )
             )
@@ -178,7 +195,8 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
 
 const planningHttp = (
   reply: Deferred.Deferred<Response>,
-  reread: { current: Deferred.Deferred<Response> }
+  reread: { current: Deferred.Deferred<Response> },
+  initial: unknown = workspace
 ): HttpClient.HttpClient => {
   let submitted = false;
   return HttpClient.make((request) => {
@@ -190,7 +208,7 @@ const planningHttp = (
       }
       return submitted
         ? Deferred.await(reread.current)
-        : Effect.succeed(Response.json({ data: workspace, next: [] }));
+        : Effect.succeed(Response.json({ data: initial, next: [] }));
     })();
     return Effect.map(response, (value) => HttpClientResponse.fromWeb(request, value));
   });
@@ -218,11 +236,13 @@ const reactWork = (work: () => void): Promise<void> =>
   Promise.resolve(act(() => Promise.resolve(work())));
 const reactAssertion = (assertion: () => void): Promise<void> =>
   Promise.resolve(act(() => vi.waitFor(assertion)));
-const settleSave = (reply: Deferred.Deferred<Response>, outcome: Outcome): Promise<void> =>
+const settleSave = (
+  reply: Deferred.Deferred<Response>,
+  outcome: Outcome,
+  response: Response = saveResponse(outcome)
+): Promise<void> =>
   Promise.resolve(
-    act(() =>
-      Effect.runPromise(Deferred.succeed(reply, saveResponse(outcome))).then(() => undefined)
-    )
+    act(() => Effect.runPromise(Deferred.succeed(reply, response)).then(() => undefined))
   );
 
 it("retains equivalent mounted Recurring queries through collection and rerender while separating months", () =>
@@ -403,4 +423,111 @@ it.each([
       vi.useRealTimers();
     }
   }
+);
+
+it.each(["scheduled", "paused"] as const)(
+  "observes acknowledged %s standing after resume when the query refresh fails",
+  (expected) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+        vi.spyOn(Date, "now").mockReturnValue(
+          DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-11T12:00:00Z"))
+        );
+        const settings = yield* Schema.decodeEffect(RecurringPlanInput)({
+          name: "Reviewed plan",
+          kind: "expense",
+          currency: "COP",
+          amountMode: "unknown",
+          frequency: "monthly",
+          firstDate: expected === "scheduled" ? "2026-12-01" : "2026-10-01",
+          timeZone: "America/Bogota",
+        });
+        const closed = expected === "paused" ? [{ from: "2026-11-01", through: "2026-11-20" }] : [];
+        const retained: Plan = {
+          id: planId,
+          pauses: [...closed, { from: "2026-11-11" }],
+          revisions: [
+            { from: settings.firstDate, plan: settings },
+            {
+              from: "2027-01-01",
+              plan: { ...settings, name: "Unreviewed future name", firstDate: "2027-01-01" },
+            },
+          ],
+        };
+        const reply = Deferred.makeUnsafe<Response>();
+        const reread = { current: Deferred.makeUnsafe<Response>() };
+        const client = makeFidyClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(
+            HttpClient.HttpClient,
+            planningHttp(reply, reread, {
+              ...workspace,
+              document: { ...document, revision: 1, plans: [retained] },
+            })
+          ),
+        });
+        const registry = AtomRegistry.make();
+        const container = window.document.createElement("div");
+        const root = createRoot(container);
+        const onSaved = vi.fn();
+        try {
+          yield* Effect.tryPromise(() =>
+            reactWork(() =>
+              root.render(
+                createElement(
+                  RegistryContext.Provider,
+                  { value: registry },
+                  createElement(PlanningProbe, {
+                    client,
+                    onSaved,
+                    plan: Option.some(retained),
+                    edit: Option.some<Edit>({
+                      kind: "lifecycle",
+                      planId,
+                      date: "2026-11-11",
+                      action: "resume",
+                    }),
+                  })
+                )
+              )
+            )
+          );
+          const button = container.querySelector("button");
+          if (button === null) throw new Error("Missing lifecycle action");
+          yield* Effect.tryPromise(() => reactAssertion(() => expect(button.disabled).toBe(false)));
+          yield* Effect.tryPromise(() => reactWork(() => button.click()));
+          yield* Effect.tryPromise(() =>
+            settleSave(
+              reply,
+              "confirmed",
+              Response.json({
+                data: {
+                  ...document,
+                  revision: 2,
+                  plans: [
+                    {
+                      ...retained,
+                      pauses: [...closed, { from: "2026-11-11", through: "2026-11-11" }],
+                    },
+                  ],
+                },
+                next: [],
+              })
+            )
+          );
+          yield* Effect.tryPromise(() => failReread(reread.current));
+          yield* Effect.tryPromise(() => reactAssertion(() => expect(button.disabled).toBe(true)));
+          expect(container.querySelector("[data-standing]")?.textContent).toBe(expected);
+          expect(container.textContent).toContain("Reviewed plan:resume");
+          expect(container.textContent).not.toContain("Unreviewed future name");
+          expect(onSaved).not.toHaveBeenCalled();
+        } finally {
+          yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
+          registry.dispose();
+          vi.restoreAllMocks();
+          vi.unstubAllGlobals();
+        }
+      })
+    )
 );

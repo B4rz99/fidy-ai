@@ -10,7 +10,7 @@ import {
   workspaceQueryRetention,
 } from "@/transport/workspace-query";
 import { preservedDates, restoredDates } from "./edit-scope";
-import { type Edit, type Plan, type Save, type Workspace, planStatus, planToday } from "./model";
+import { type Edit, type Plan, type Save, type Workspace, currentPlan, planStatus } from "./model";
 
 type Query = CanonicalInput<"recurringPlans.getRecurringWorkspace">["query"];
 export type SaveState = "idle" | "saving" | "rejected" | "uncertain" | "refreshing";
@@ -27,19 +27,19 @@ export type LifecycleConfirmation = Readonly<{
   planId: Plan["id"];
   revision: Workspace["document"]["revision"];
   action: Extract<Edit, { kind: "lifecycle" }>["action"];
-  date: string;
+  plan: Plan;
 }>;
 const lifecycleConfirmation = (
   document: Workspace["document"],
   edit: Edit
 ): Option.Option<LifecycleConfirmation> => {
   if (edit.kind !== "lifecycle") return Option.none();
-  const name = document.plans.find((plan) => plan.id === edit.planId)?.revisions.at(-1)?.plan.name;
-  return name === undefined
+  const plan = document.plans.find((entry) => entry.id === edit.planId);
+  return plan === undefined
     ? Option.none()
     : Option.some({
-        name,
-        date: edit.date,
+        name: currentPlan(plan).name,
+        plan,
         action: edit.action,
         planId: edit.planId,
         revision: document.revision,
@@ -77,7 +77,6 @@ type PlanningState = Readonly<{
   save: Save;
   retry: () => void;
 }>;
-const lifecycleStates = { pause: "paused", resume: "active", stop: "stopped" } as const;
 const confirmedPlanStatus =
   (
     state: PlanningState["state"],
@@ -86,13 +85,12 @@ const confirmedPlanStatus =
   (plan) => {
     if (Option.isNone(receipt) || state._tag !== "Ready") return planStatus(plan);
     if (
-      receipt.value.date > planToday(plan) ||
       receipt.value.planId !== plan.id ||
       receipt.value.revision <= state.value.data.document.revision
     ) {
       return planStatus(plan);
     }
-    return lifecycleStates[receipt.value.action];
+    return planStatus(receipt.value.plan);
   };
 type Client = Context.Service.Shape<FidyClient>;
 type WorkspaceError = Effect.Error<ReturnType<Client["recurringPlans"]["getRecurringWorkspace"]>>;

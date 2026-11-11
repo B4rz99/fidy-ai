@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import { expectFinancialLabels } from "./financial-form-text";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, DateTime, Effect, type Schema } from "effect";
@@ -1554,9 +1555,7 @@ const captureLayoutJourney = (page: Page): Journey =>
       yield* expectFinancialLabels(form, "28px");
       expect(yield* wait(() => page.evaluate(captureOverflows))).toBe(false);
     }
-    yield* wait(() =>
-      page.screenshot({ path: test.info().outputPath("capture-enlarged-dark.png"), fullPage: true })
-    );
+
     yield* wait(() => notes.fill("Primera línea\nSegunda línea\nTercera línea\nCuarta línea"));
     yield* wait(() => notes.focus());
     yield* wait(() => notes.scrollIntoViewIfNeeded());
@@ -1659,7 +1658,13 @@ const correctionLayout = (page: Page): Journey =>
       yield* wait(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
     ).toBe(false);
     yield* wait(() =>
-      page.screenshot({ path: test.info().outputPath("currency-correction.png"), fullPage: true })
+      captureVisualEvidence({
+        target: page,
+        options: {
+          path: test.info().outputPath("currency-correction.png"),
+          fullPage: true,
+        },
+      })
     );
     yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
   });
@@ -1868,7 +1873,13 @@ const rejectedCorrectionJourney = (page: Page, failRefresh: boolean): Journey =>
     yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("30.000"));
     yield* wait(() => expect(save).toBeEnabled());
     yield* wait(() =>
-      page.screenshot({ path: test.info().outputPath("correction-recovered.png"), fullPage: true })
+      captureVisualEvidence({
+        target: page,
+        options: {
+          path: test.info().outputPath("correction-recovered.png"),
+          fullPage: true,
+        },
+      })
     );
     expect(requests).toHaveLength(1);
     yield* wait(() => save.press("Enter"));

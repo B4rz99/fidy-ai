@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import { expectFinancialLabels } from "./financial-form-text";
 import type { Locator, Page } from "@playwright/test";
 import { type Cause, Effect } from "effect";
@@ -143,7 +144,13 @@ test("Recurring financial labels and guidance scale and reflow with larger text"
       const guidance = form.getByText("Cuenta: sin cuentas disponibles.", { exact: false });
       yield* wait(() => expect(guidance).toHaveCSS("font-size", "28px"));
       yield* wait(() =>
-        page.screenshot({ path: test.info().outputPath("recurring-enlarged.png"), fullPage: true })
+        captureVisualEvidence({
+          target: page,
+          options: {
+            path: test.info().outputPath("recurring-enlarged.png"),
+            fullPage: true,
+          },
+        })
       );
       yield* wait(() => page.setViewportSize({ width: 900, height: 800 }));
       yield* expectFinancialLabels(form, "28px");

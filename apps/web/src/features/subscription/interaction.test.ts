@@ -632,3 +632,57 @@ it.effect(
       expect(input.view().disabled).toBe(true);
     })
 );
+
+it.effect(
+  "rereads the current offer catalog before admitting preparation without replacing an admitted review",
+  () =>
+    Effect.gen(function* () {
+      const input = fixture();
+      yield* advance(0);
+      input.view().selectPrice(input.enrollment.price.id);
+      const replacement = {
+        ...input.enrollment.price,
+        id: PriceId.make("23200000-0000-4000-8000-000000000099"),
+      };
+      input.view().updateOffers([replacement, replacement, replacement]);
+      input.view().continueToPayment();
+      yield* advance(0);
+      expect(input.gateway.prepare).not.toHaveBeenCalled();
+      input
+        .view()
+        .updateOffers([input.enrollment.price, input.enrollment.price, input.enrollment.price]);
+      input.view().continueToPayment();
+      yield* advance(0);
+      input.view().updateOffers([replacement, replacement, replacement]);
+      expect(input.view().reviewedPrice).toEqual(Option.some(input.enrollment.price));
+      expect(input.gateway.prepare).toHaveBeenCalledTimes(1);
+    })
+);
+
+it.effect(
+  "keeps DaviPlata child uncertainty locked while explicit same-enrollment recovery remains inconclusive",
+  () =>
+    Effect.gen(function* () {
+      const input = fixture();
+      const daviplata = { ...input.enrollment, method: "daviplata" as const };
+      input.gateway.prepare.mockResolvedValue(daviplata);
+      input.gateway.status.mockResolvedValue(daviplata);
+      yield* advance(0);
+      input.view().selectPrice(input.enrollment.price.id);
+      input.view().selectMethod("daviplata");
+      input.view().continueToPayment();
+      yield* advance(0);
+      input.view().uncertainDaviplata();
+      expect(input.view().needsRecovery).toBe(true);
+      input.view().refresh();
+      yield* advance(0);
+      expect(input.gateway.status).toHaveBeenCalledWith(
+        input.enrollment.enrollmentId,
+        expect.any(AbortSignal)
+      );
+      expect(input.view().needsRecovery).toBe(true);
+      expect(input.view().changeSelection()).toBe(false);
+      expect(input.gateway.submit).not.toHaveBeenCalled();
+      expect(input.gateway.resume).not.toHaveBeenCalled();
+    })
+);

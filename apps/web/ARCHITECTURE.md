@@ -243,6 +243,10 @@ across explicit checks and visibility changes; exhaustion remains unresolved and
 check of the same BillingAttempt. A final observation of another attempt cannot settle this task.
 Only settled eligible DaviPlata submission uncertainty grants an approved same-request retry;
 busy approval does not grant another action.
+Cancellation is admitted only while the mounted OTP task is idle; an in-flight provider mutation
+or approved submission retains its lock. Child uncertainty exposes the parent's same-enrollment
+recovery without restoring OTP authority, and expired approved retry authority cannot establish
+that an uncertain payment failed.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
 OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,

@@ -104,3 +104,26 @@ it("keeps approved submission busy until uncertainty settles before granting a s
       expect(input.submitApproved).toHaveBeenCalledTimes(2);
     })
   ));
+
+it("keeps a lost approved submission uncertain when its retry authority later expires", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const retry = vi.fn<DaviplataProviderChallenge["retrySubmission"]>(() =>
+        Effect.succeed(approval())
+      );
+      const input = fixture({ retrySubmission: retry });
+      input.submitApproved.mockRejectedValue(new TestBoundaryFailure());
+      const challenge = makeDaviplataChallenge(input);
+      expect(yield* fromPromise(() => challenge.confirm(Redacted.make("574829")))).toEqual({
+        status: "uncertain",
+        retrySubmission: true,
+      });
+      retry.mockImplementation(() => Effect.succeed({ status: "refused" }));
+      expect(yield* fromPromise(() => challenge.retrySubmission())).toEqual({
+        status: "uncertain",
+        retrySubmission: false,
+      });
+      expect(input.submitApproved).toHaveBeenCalledTimes(1);
+      challenge.dispose();
+    })
+  ));

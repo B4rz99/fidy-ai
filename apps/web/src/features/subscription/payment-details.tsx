@@ -201,6 +201,7 @@ const enrollmentSubmitLabel = (busy: boolean): string => (busy ? "Activando Proâ
 type DaviplataFormActions = Readonly<{
   gateway: Option.Option<EnrollmentGateway>;
   onDaviplataSubmitted: (email: string, submission: PaymentSubmission) => void;
+  onDaviplataUncertain: () => void;
 }>;
 type EnrollmentFormProps = DaviplataFormActions &
   Readonly<{
@@ -396,6 +397,7 @@ const PreparedEnrollmentForm = (props: EnrollmentFormProps): JSX.Element => {
           enrollment={props.enrollment}
           start={gateway.startDaviplata}
           onSubmitted={props.onDaviplataSubmitted}
+          onUncertain={props.onDaviplataUncertain}
         />
       ),
     });
@@ -564,6 +566,7 @@ const renderPaymentEnrollment = (
           offer={input.offer}
           gateway={input.gateway}
           onDaviplataSubmitted={input.onDaviplataSubmitted}
+          onDaviplataUncertain={input.onDaviplataUncertain}
           busy={busy}
           enrollment={enrollment}
           submit={submit}
@@ -584,6 +587,7 @@ const EnrollmentContent = ({
   offer,
   gateway,
   onDaviplataSubmitted,
+  onDaviplataUncertain,
   enrollment,
   busy,
   prepare,
@@ -611,6 +615,7 @@ const EnrollmentContent = ({
         refresh,
         gateway,
         onDaviplataSubmitted,
+        onDaviplataUncertain,
       }),
   });
 const focusPaymentHeading: RefCallback<HTMLHeadingElement> = (node) => {
@@ -654,6 +659,7 @@ export const PaymentDetails = ({
   offer,
   gateway,
   onDaviplataSubmitted,
+  onDaviplataUncertain,
   method,
   enrollment,
   busy,
@@ -698,6 +704,7 @@ export const PaymentDetails = ({
       offer={offer}
       gateway={gateway}
       onDaviplataSubmitted={onDaviplataSubmitted}
+      onDaviplataUncertain={onDaviplataUncertain}
       busy={busy || needsRecovery}
       enrollment={enrollment}
       prepare={prepare}

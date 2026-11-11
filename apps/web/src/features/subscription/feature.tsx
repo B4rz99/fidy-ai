@@ -96,8 +96,23 @@ const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): Subscr
         EffectArray.findFirst(presented, (offer) => offer.id === id)
       )
   );
+  const currentSelection = offers.some((offer) =>
+    Option.contains(interaction.selectedId, offer.id)
+  );
+  const act = (action: () => void): void => {
+    interaction.updateOffers(offers);
+    action();
+  };
   return {
     ...interaction,
+    canContinue:
+      !interaction.disabled &&
+      currentSelection &&
+      interaction.enabledMethods.includes(interaction.method),
+    selectPrice: (id) => act(() => interaction.selectPrice(id)),
+    selectMethod: (method) => act(() => interaction.selectMethod(method)),
+    continueToPayment: () => act(interaction.continueToPayment),
+    prepare: (replacing) => act(() => interaction.prepare(replacing)),
     presented,
     selectedOffer,
     changeSelection: () => {
@@ -199,6 +214,7 @@ const Checkout = ({
             submit={selection.submit}
             refresh={selection.refresh}
             onDaviplataSubmitted={selection.submittedDaviplata}
+            onDaviplataUncertain={selection.uncertainDaviplata}
           />
         </Suspense>
       ),

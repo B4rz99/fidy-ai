@@ -55,13 +55,7 @@ const preparePaymentFlow = Effect.fn(function* (
   ) {
     return yield* new EnrollmentInteractionFailed();
   }
-  if (
-    prepared.status !== "verifying" &&
-    prepared.status !== "creating" &&
-    prepared.status !== "available"
-  ) {
-    return enrollmentFlow(prepared);
-  }
+  if (!canResumeEnrollment(prepared)) return enrollmentFlow(prepared);
   const resumed = yield* Effect.tryPromise({
     try: (signal) => gateway.resume(prepared.enrollmentId, signal),
     catch: () => new EnrollmentInteractionFailed(),
@@ -239,6 +233,7 @@ export type EnrollmentInteraction = Readonly<{
   awaitingObservation: boolean;
   disabled: boolean;
   canContinue: boolean;
+  updateOffers: (offers: SubscriptionOffers) => void;
   selectPrice: (id: PriceId) => void;
   selectMethod: (method: EnrollmentMethod) => void;
   changeSelection: () => boolean;
@@ -248,6 +243,7 @@ export type EnrollmentInteraction = Readonly<{
   refresh: () => void;
   refreshMethods: () => void;
   submittedDaviplata: (email: string, submission: PaymentSubmission) => void;
+  uncertainDaviplata: () => void;
   mount: () => () => void;
 }>;
 type Owner = {
@@ -481,19 +477,32 @@ const reviewedPrice = (flow: PaymentFlowState): Option.Option<SubscriptionOffer>
   }
   return flow.value.status === "prepared" ? Option.some(flow.value.price) : Option.none();
 };
+const changeSelection = (owner: Owner): boolean => {
+  if (!owner.active || selectionLocked(owner)) return false;
+  reset(owner);
+  owner.checkout = false;
+  notify(owner);
+  return true;
+};
+const uncertainDaviplata = (owner: Owner, generation: number): void => {
+  if (owner.active && owner.generation === generation && owner.method === "daviplata") {
+    owner.uncertain = true;
+    notify(owner);
+  }
+};
 const present = (owner: Owner): EnrollmentInteraction => {
   const generation = owner.generation;
   const availability = owner.get.once(owner.availability);
   const selected = owner.offers.find((offer) => Option.contains(owner.selectedId, offer.id));
+  const selectedMethods = new Set(selected?.paymentMethods);
   const enabledMethods =
     availability._tag === "Success"
       ? availability.value.enabledMethods.filter(
-          (method) => selected === undefined || selected.paymentMethods.includes(method)
+          (method) => selected === undefined || selectedMethods.has(method)
         )
       : [];
   const disabled = selectionLocked(owner);
-  const canContinue =
-    !disabled && Option.isSome(owner.selectedId) && enabledMethods.includes(owner.method);
+  const canContinue = !disabled && selected !== undefined && enabledMethods.includes(owner.method);
   return {
     selectedId: owner.selectedId,
     reviewedPrice: Option.flatMap(owner.flow, reviewedPrice),
@@ -509,15 +518,12 @@ const present = (owner: Owner): EnrollmentInteraction => {
     awaitingObservation: owner.awaitingObservation,
     disabled,
     canContinue,
+    updateOffers: (offers) => {
+      owner.offers = offers;
+    },
     selectPrice: (id) => selectPrice(owner, id),
     selectMethod: (method) => selectMethod(owner, method),
-    changeSelection: () => {
-      if (!owner.active || selectionLocked(owner)) return false;
-      reset(owner);
-      owner.checkout = false;
-      notify(owner);
-      return true;
-    },
+    changeSelection: () => changeSelection(owner),
     continueToPayment: () => {
       if (present(owner).canContinue) prepare(owner, owner.replaceFailedSource);
     },
@@ -529,6 +535,7 @@ const present = (owner: Owner): EnrollmentInteraction => {
     refreshMethods: () => {
       if (owner.active) owner.get.refresh(owner.availability);
     },
+    uncertainDaviplata: () => uncertainDaviplata(owner, generation),
     submittedDaviplata: (email, submission) => {
       if (owner.generation === generation) submittedDaviplata(owner, email, submission);
     },

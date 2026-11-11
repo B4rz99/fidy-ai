@@ -126,7 +126,7 @@ const checks: Array<Check> = [
     env: { ...Bun.env, RELEASE_GIT_SHA: gitRevision },
   },
   rootCheck("unit", "CLI behavior tests", ["bun", "run", "--cwd", "apps/cli", "test"]),
-  rootCheck("builds", "Portable web build", ["bun", "run", "build"]),
+  rootCheck("builds", "Portable web build", ["bun", "run", "build:artifacts"]),
   rootCheck("builds", "Worker document parsing proof", ["bun", "run", "check:document-parsing"]),
   {
     ...rootCheck("unit", "Server core tests", ["bun", "run", "test:core"]),

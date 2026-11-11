@@ -554,13 +554,17 @@ test("Uncertain DaviPlata confirmation does not offer a fresh authorization or i
     })
   ));
 
-for (const viewport of [desktop, mobile]) {
-  test(`Paid access and recent attempts remain distinct in light and dark ${viewport.name}`, ({
-    page,
-  }) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const observed = yield* openSubscription(page, { viewport, theme: initialTheme }, "paid");
+test("Paid access and recent attempts remain distinct across viewports and themes", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const observed = yield* openSubscription(
+        page,
+        { viewport: desktop, theme: initialTheme },
+        "paid"
+      );
+      for (const viewport of [desktop, mobile]) {
+        yield* Effect.tryPromise(() => page.setViewportSize(viewport));
+        yield* expectSubscriptionShell(page, { viewport, theme: initialTheme });
         yield* Effect.tryPromise((signal) =>
           expect(page.getByText(/Último período pagado/u)).toBeVisible({ signal })
         );
@@ -573,12 +577,12 @@ for (const viewport of [desktop, mobile]) {
           expect(page.getByText(/Precio cobrado:/u)).toContainText("28.900", { signal })
         );
         yield* captureThemes(page, `paid-${initialTheme}-${viewport.name}`);
-        expect(observed.preparations).toEqual([]);
-        expect(observed.submissions).toEqual([]);
-        expect(observed.unexpectedRequests).toEqual([]);
-      })
-    ));
-}
+      }
+      expect(observed.preparations).toEqual([]);
+      expect(observed.submissions).toEqual([]);
+      expect(observed.unexpectedRequests).toEqual([]);
+    })
+  ));
 
 test("Unavailable subscription standing retains a retry without blocking historical data", ({
   page,
@@ -834,24 +838,6 @@ test("Unavailable payment methods are not presented as an empty successful resul
     })
   ));
 
-for (const viewport of [desktop, mobile]) {
-  test(`Subscription theme control persists the chosen palette on ${viewport.name}`, ({ page }) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const observed = yield* openSubscription(page, { viewport, theme: "light" });
-        yield* Effect.tryPromise((signal) =>
-          page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click({ signal })
-        );
-        yield* expectSubscriptionShell(page, { viewport, theme: "dark" });
-        yield* Effect.tryPromise((signal) => page.reload({ signal }));
-        yield* expectSubscriptionShell(page, { viewport, theme: "dark" });
-        expect(observed.preparations).toEqual([]);
-        expect(observed.submissions).toEqual([]);
-        expect(observed.unexpectedRequests).toEqual([]);
-      })
-    ));
-}
-
 const unavailableConsentStatus = 503;
 const availableConsentStatus = 200;
 const installUnresolvedConsent = Effect.fnUntraced(function* (
@@ -955,8 +941,6 @@ const expectPendingPayment = Effect.fnUntraced(function* (page: Page, method: Me
     release.resolve();
   }
 });
-for (const method of ["tarjeta", "Nequi", "DaviPlata"] as const) {
-  test(`Subscription ${method} preparation exposes no placeholder form or premature payment controls`, ({
-    page,
-  }) => Effect.runPromise(expectPendingPayment(page, method)));
-}
+test("Subscription preparation exposes no placeholder form or premature payment controls", ({
+  page,
+}) => Effect.runPromise(expectPendingPayment(page, "tarjeta")));

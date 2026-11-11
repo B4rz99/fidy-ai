@@ -24,6 +24,7 @@
     "dev:web": "bun run --cwd apps/web dev",
     "dev:cloudflare": "bun run --cwd infra/cloudflare dev",
     "build": "bun run --cwd apps/docs build && bun run --cwd apps/site build && bun run --cwd apps/web build && bun run --cwd apps/cli build",
+    "build:artifacts": "bun run --cwd apps/docs build && bun run --cwd apps/site build && bun run --cwd apps/web build:artifact && bun run --cwd apps/cli build",
     "cli": "bun apps/cli/src/main.ts",
     "pro": "bun scripts/pro/main.ts",
     "titular:requests": "bun scripts/titular-requests/main.ts",

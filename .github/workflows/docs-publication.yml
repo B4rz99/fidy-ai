@@ -51,6 +51,8 @@ jobs:
       - name: Install the browser for documentation checks
         run: bunx playwright install --with-deps chromium
       - name: Validate the publication and focused checks
+        env:
+          DOCS_BROWSER_PREBUILT: "true"
         run: |
           bun run docs:build
           bun run docs:test

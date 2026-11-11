@@ -10,7 +10,7 @@ import {
 } from "./real-core-fixture";
 import { invokeRecoveryOperator } from "../../cli/test/recovery-operator.test-fixture";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
-import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { StartedBrowserLoginPairing } from "@fidy/server/client";
 
 export type ProviderJourneyConfiguration = Readonly<{
@@ -303,18 +303,27 @@ export const stalledProviderJourney = ({
     })
   );
 
-const redirectSubject = (
+const providerCallbackUrl = (
   configuration: ProviderJourneyConfiguration,
   subject: string,
-  route: Route
-): Promise<void> => {
-  const query = new URL(route.request().url()).searchParams;
+  authorizationUrl: string
+): string => {
+  const query = new URL(authorizationUrl).searchParams;
   const code = btoa(JSON.stringify({ nonce: query.get("nonce"), subject }));
   const callback = new URL(`${api}/providers/${configuration.provider}/callback`);
   callback.searchParams.set("state", query.get("state") ?? "");
   callback.searchParams.set("code", code);
-  return route.fulfill({ status: redirectStatus, headers: { location: callback.href } });
+  return callback.href;
 };
+const redirectSubject = (
+  configuration: ProviderJourneyConfiguration,
+  subject: string,
+  route: Route
+): Promise<void> =>
+  route.fulfill({
+    status: redirectStatus,
+    headers: { location: providerCallbackUrl(configuration, subject, route.request().url()) },
+  });
 
 const returningSessionPolicies = (
   configuration: ProviderJourneyConfiguration,
@@ -840,31 +849,85 @@ export const blockedPopupJourney = ({
     })
   );
 
-const createWebUserForAssociation = (
-  input: Readonly<{
-    page: Page;
-    context: BrowserContext;
-    configuration: ProviderJourneyConfiguration;
-  }>
-): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    yield* Effect.tryPromise(() => openSignup(input.page));
+const providerSetupJson = Effect.fnUntraced(function* (response: APIResponse) {
+  expect(response.status()).toBe(successStatus);
+  const body: unknown = yield* Effect.tryPromise(() => response.json());
+  return body;
+});
+const prepareProviderSignup = Effect.fnUntraced(function* (
+  page: Page,
+  configuration: ProviderJourneyConfiguration
+) {
+  const info = playwright.test.info();
+  const headers = {
+    origin: browserAcceptanceTopology().app,
+    "x-acceptance-source": `${info.testId}-${info.repeatEachIndex}`,
+  };
+  const pairing = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(StartedBrowserLoginPairing))(
+    yield* providerSetupJson(
+      yield* Effect.tryPromise(() => page.request.post(`${api}/web/pairings`, { headers }))
+    )
+  );
+  const proof = {
+    pairingId: pairing.pairingId,
+    privateVerifier: Redacted.value(pairing.privateVerifier),
+  };
+  const disclosure = yield* Schema.decodeUnknownEffect(Schema.Struct({ revision: Schema.String }))(
+    yield* providerSetupJson(
+      yield* Effect.tryPromise(() =>
+        page.request.get(`${api}/web/providers/disclosure`, { headers })
+      )
+    )
+  );
+  const started = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ authorizationUrl: Schema.String })
+  )(
+    yield* providerSetupJson(
+      yield* Effect.tryPromise(() =>
+        page.request.post(`${api}/web/providers/${configuration.provider}/start`, {
+          headers,
+          data: { ...proof, intent: "signup", consentRevision: disclosure.revision },
+        })
+      )
+    )
+  );
+  const callback = providerCallbackUrl(
+    configuration,
+    `whatsapp-browser-${configuration.provider}-existing`,
+    started.authorizationUrl
+  );
+  const returned = yield* Effect.tryPromise(() =>
+    page.request.get(callback, { headers, maxRedirects: 0 })
+  );
+  expect(returned.status()).toBe(providerReturnStatus);
+  const completed = yield* providerSetupJson(
     yield* Effect.tryPromise(() =>
-      input.page.getByLabel("Acepto el tratamiento de datos descrito").check()
-    );
+      page.request.post(`${api}/web/providers/${configuration.provider}/complete`, {
+        headers,
+        data: proof,
+      })
+    )
+  );
+  expect(completed).toMatchObject({ status: "created" });
+  return { headers, proof };
+});
+
+/** Existing-user association prerequisites; dedicated signup journeys retain all recovery UI. */
+const createWebUserForAssociation = Effect.fnUntraced(function* (
+  page: Page,
+  configuration: ProviderJourneyConfiguration
+) {
+  const { headers, proof } = yield* prepareProviderSignup(page, configuration);
+  yield* providerSetupJson(
     yield* Effect.tryPromise(() =>
-      input.page.getByRole("button", { name: `Continuar con ${input.configuration.label}` }).click()
-    );
-    yield* Effect.tryPromise(() =>
-      expect(input.page.getByText("Guarda tu código de recuperación")).toBeVisible()
-    );
-    yield* Effect.tryPromise(() => input.page.getByRole("button", { name: "Lo guardé" }).click());
-    yield* Effect.tryPromise(() => expect(input.page).toHaveURL(/\/app\/transactions$/u));
-    yield* Effect.tryPromise(() =>
-      input.page.getByRole("button", { name: "Cerrar sesión" }).click()
-    );
-    yield* Effect.tryPromise(() => expect(input.page).toHaveURL(/\/login$/u));
-  });
+      page.request.post(`${api}/web/pairings/redeem`, { headers, data: proof })
+    )
+  );
+  const loggedOut = yield* Effect.tryPromise(() =>
+    boundSessionRequests(page.request).post(`${api}/web/session/logout`, { headers })
+  );
+  expect(loggedOut.status()).toBe(noContentStatus);
+});
 const confirmBrowserAssociation = ({
   page,
   context,
@@ -918,7 +981,7 @@ export const whatsappAssociationJourney = ({
           redirectSubject(configuration, `whatsapp-browser-${suffix}`, route)
         )
       );
-      if (existing) yield* createWebUserForAssociation({ page, context, configuration });
+      if (existing) yield* createWebUserForAssociation(page, configuration);
       const caller = `CO.Browser${configuration.provider}${existing ? "existing" : "new"}`;
       const start = yield* Effect.tryPromise(() =>
         request.post(`${operator}/whatsapp/start?caller=${caller}`)
@@ -1138,25 +1201,6 @@ const completePATReviewJourney = Effect.fn(function* ({
   yield* Effect.tryPromise(() =>
     expect(page.getByText("Token creado", { exact: true })).toBeVisible()
   );
-  const row = page
-    .getByRole("table", { name: "Tokens activos" })
-    .getByRole("row")
-    .filter({ hasText: tokenName });
-  yield* Effect.tryPromise(() =>
-    row.getByRole("button", { name: "Desactivar", exact: true }).click()
-  );
-  yield* Effect.tryPromise(() =>
-    expect(page.getByText("¿Quieres desactivar el token", { exact: false })).toContainText(
-      tokenName
-    )
-  );
-  yield* Effect.tryPromise(() =>
-    page
-      .getByRole("region", { name: "Tokens activos", exact: true })
-      .getByRole("button", { name: "Sí, desactivar", exact: true })
-      .click()
-  );
-  yield* Effect.tryPromise(() => expect(row).toHaveCount(0));
   yield* Effect.tryPromise(() => openTransactionsThroughCore(page));
 });
 

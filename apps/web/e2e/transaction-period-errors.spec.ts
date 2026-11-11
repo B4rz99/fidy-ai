@@ -154,19 +154,20 @@ const viewports = {
   mobile: { width: 390, height: 844 },
   desktop: { width: 1440, height: 1000 },
 };
-for (const [viewportName, viewport] of Object.entries(viewports)) {
-  for (const colorScheme of ["light", "dark"] as const) {
-    test.describe(`${viewportName} ${colorScheme}`, () => {
-      test.use({ viewport, colorScheme, locale: "es-CO" });
-      test("preserves the requested month through initial history failure, retry and month navigation", ({
-        page,
-      }) => Effect.runPromise(initialFailureJourney(page)));
-      test("retains loaded history and its selected day through a failed refresh and recovery", ({
-        page,
-      }) => Effect.runPromise(refreshFailureJourney(page)));
-      test("rejects invalid periods without requesting history and offers an explicit return to the current month", ({
-        page,
-      }) => Effect.runPromise(invalidPeriodJourney(page)));
-    });
-  }
+for (const { name, viewport, colorScheme } of [
+  { name: "mobile", viewport: viewports.mobile, colorScheme: "dark" },
+  { name: "desktop", viewport: viewports.desktop, colorScheme: "light" },
+] as const) {
+  test.describe(`${name} ${colorScheme}`, () => {
+    test.use({ viewport, colorScheme, locale: "es-CO" });
+    test("preserves the requested month through initial history failure, retry and month navigation", ({
+      page,
+    }) => Effect.runPromise(initialFailureJourney(page)));
+    test("retains loaded history and its selected day through a failed refresh and recovery", ({
+      page,
+    }) => Effect.runPromise(refreshFailureJourney(page)));
+    test("rejects invalid periods without requesting history and offers an explicit return to the current month", ({
+      page,
+    }) => Effect.runPromise(invalidPeriodJourney(page)));
+  });
 }

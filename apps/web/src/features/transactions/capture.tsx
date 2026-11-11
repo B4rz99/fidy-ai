@@ -35,7 +35,7 @@ type CaptureInputsProps = Readonly<{
 }>;
 const changeCaptureCurrency = (
   value: string,
-  change: (currency: CaptureCommand["currency"]) => void
+  change: (currency: CaptureDraft["currency"]) => void
 ): void => {
   const selected = Schema.decodeUnknownOption(Currency)(value);
   if (Option.isSome(selected)) change(selected.value);

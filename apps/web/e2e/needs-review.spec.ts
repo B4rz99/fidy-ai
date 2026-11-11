@@ -21,32 +21,14 @@ const item = {
   expiresAt: "2027-01-13T12:00:00Z",
 };
 
-test("reviews an ingestion item alongside its original and saves a draft", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() => installUser(page));
-      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
-      yield* Effect.tryPromise(() =>
-        page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
-      );
-      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Por revisar", exact: true })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() => page.getByLabel("Valor").fill("13500"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("status")).toContainText("Borrador guardado")
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("button", { name: "Confirmar", exact: true })).toBeDisabled()
-      );
-    })
-  ));
+const expectOriginal = (page: Page): Promise<void> =>
+  expect(page.getByRole("heading", { name: "Por revisar", exact: true }))
+    .toBeVisible()
+    .then(() => expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible());
 
-test("saves an initial draft promptly and spaces continued autosaves", ({ page }) => {
+test("reviews the original, saves an initial draft promptly and spaces continued autosaves", ({
+  page,
+}) => {
   let writes = 0;
   const countWrites = (): number => writes;
   const settleInitial = 250;
@@ -75,6 +57,7 @@ test("saves an initial draft promptly and spaces continued autosaves", ({ page }
       yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
       yield* Effect.tryPromise(() => page.route(`${apiOrigin}/ingestion/review-workspace**`, save));
       yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => expectOriginal(page));
       const value = page.getByLabel("Valor", { exact: true });
       yield* Effect.tryPromise(() => expect(value).toBeVisible());
       yield* Effect.tryPromise(() => page.clock.install({ time: clockTime }));
@@ -84,6 +67,9 @@ test("saves an initial draft promptly and spaces continued autosaves", ({ page }
       yield* Effect.tryPromise(() => expect.poll(countWrites).toBe(1));
       yield* Effect.tryPromise(() =>
         expect(page.getByRole("status")).toContainText("Borrador guardado")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Confirmar", exact: true })).toBeDisabled()
       );
       yield* Effect.tryPromise(() => value.fill("14500"));
       yield* Effect.tryPromise(() => page.clock.runFor(settleInitial));

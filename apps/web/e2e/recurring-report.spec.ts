@@ -262,16 +262,14 @@ const assertVisualReport = Effect.fnUntraced(function* (page: Page) {
   );
 });
 
-for (const viewport of viewports) {
-  for (const state of visualStates) {
-    test(`historical report ${state} is accessible in light and dark ${viewport.name}`, ({
-      page,
-    }) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
+for (const state of visualStates) {
+  test(`historical report ${state} is accessible across viewports and themes`, ({ page }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: initialTheme }));
+        const release = yield* prepareVisualReport(page, state);
+        for (const viewport of viewports) {
           yield* Effect.tryPromise(() => page.setViewportSize(viewport));
-          yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: initialTheme }));
-          const release = yield* prepareVisualReport(page, state);
           const filename = `${state}-${initialTheme}-${viewport.name}`;
           if (viewport.name === "desktop") {
             yield* Effect.tryPromise(() =>
@@ -298,17 +296,17 @@ for (const viewport of viewports) {
               captureReport(page, `${filename}-scroll-final`.replace("-light-", `-${theme}-`))
             );
           }
-          release();
-          if (state === "loading") {
-            yield* Effect.tryPromise(() =>
-              expect(
-                page
-                  .getByRole("list", { name: "Todos los patrones confirmados" })
-                  .getByRole("listitem")
-              ).toHaveCount(visualItemCount)
-            );
-          }
-        })
-      ));
-  }
+        }
+        release();
+        if (state === "loading") {
+          yield* Effect.tryPromise(() =>
+            expect(
+              page
+                .getByRole("list", { name: "Todos los patrones confirmados" })
+                .getByRole("listitem")
+            ).toHaveCount(visualItemCount)
+          );
+        }
+      })
+    ));
 }

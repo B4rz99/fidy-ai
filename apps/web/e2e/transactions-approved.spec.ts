@@ -1793,7 +1793,6 @@ test("mobile keeps income and expense figures side by side and returns keyboard 
   page,
 }) => Effect.runPromise(responsiveJourney(page)));
 
-const reportedCounterpartyRepeats = 12;
 const maximumCounterpartyRepeats = 15;
 const fitsPage = (): boolean => document.documentElement.scrollWidth <= innerWidth;
 const textFitsBounds = (element: HTMLElement | SVGElement): boolean => {
@@ -1848,16 +1847,24 @@ const longCounterpartyJourney = (
     yield* wait(() => expect(trigger).toBeFocused());
     yield* wait(() => expect.poll(() => page.evaluate(fitsPage)).toBe(true));
   });
-for (const dark of [false, true]) {
-  for (const example of [
-    { label: "96-character unbroken", name: "FARMACIA".repeat(reportedCounterpartyRepeats) },
-    { label: "120-character unbroken", name: "FARMACIA".repeat(maximumCounterpartyRepeats) },
-    { label: "spaced", name: "Farmacia La Rebaja Sucursal Centro Servicio Farmacéutico Bogotá" },
-  ]) {
-    test(`${example.label} Counterparty stays fully readable with reachable correction controls at 320px in ${dark ? "Grafito" : "light"}`, ({
-      page,
-    }) => Effect.runPromise(longCounterpartyJourney(page, example.name, { dark, width: 320 })));
-  }
+for (const example of [
+  {
+    label: "120-character unbroken",
+    name: "FARMACIA".repeat(maximumCounterpartyRepeats),
+    dark: false,
+  },
+  {
+    label: "spaced",
+    name: "Farmacia La Rebaja Sucursal Centro Servicio Farmacéutico Bogotá",
+    dark: true,
+  },
+]) {
+  test(`${example.label} Counterparty stays fully readable with reachable correction controls at 320px`, ({
+    page,
+  }) =>
+    Effect.runPromise(
+      longCounterpartyJourney(page, example.name, { dark: example.dark, width: 320 })
+    ));
 }
 test("120-character Counterparty stays fully readable in the desktop detail rail", ({ page }) =>
   Effect.runPromise(

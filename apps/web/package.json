@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --bun vite",
     "shadcn": "shadcn",
-    "build": "bun run typecheck && bun --bun vite build",
+    "build": "bun run typecheck && bun run build:artifact",
+    "build:artifact": "bun --bun vite build",
     "build:production": "bun scripts/build-production.ts",
     "typecheck": "tsc --build tsconfig.app.json",
     "test": "bun --bun vitest run",

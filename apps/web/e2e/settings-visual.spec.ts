@@ -71,6 +71,31 @@ const prepareAccessForm = Effect.fnUntraced(function* (page: Page) {
   );
 });
 
+const expectAccessMetadata = Effect.fnUntraced(function* (page: Page) {
+  const tokens = page.getByRole("table", { name: "Tokens activos", exact: true });
+  const automation = tokens.getByRole("row").filter({ hasText: "Automatización" });
+  yield* Effect.tryPromise(() =>
+    expect(automation.getByText("Nunca", { exact: true })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(automation.getByText("20 oct 2026", { exact: true })).toBeVisible()
+  );
+  for (const label of [
+    "Desactivar",
+    "Desactivar todos los tokens",
+    "Revocar este agente",
+    "Revocar todos los agentes conectados",
+  ]) {
+    const buttons = yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: label, exact: true }).all()
+    );
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      yield* Effect.tryPromise(() => expect(button).toBeEnabled());
+    }
+  }
+});
+
 const expectDestination = Effect.fnUntraced(function* (
   page: Page,
   destination: Destination,
@@ -278,6 +303,7 @@ for (const { viewport, destinations: targets } of captureViewports) {
           );
           if (destination.title === "Accesos") yield* prepareAccessForm(page);
           if (viewport.name === "desktop") {
+            if (destination.title === "Accesos") yield* expectAccessMetadata(page);
             yield* expectAlignedHeader(page, destination.title, /Activar tema (claro|oscuro)/u);
           } else if (destination.title !== "Cuenta") {
             yield* expectAlignedHeader(

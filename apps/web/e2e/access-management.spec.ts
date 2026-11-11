@@ -65,11 +65,6 @@ const installAccess = (page: Page): Promise<void> =>
     )
     .then(() => {});
 
-const documentWidths = (): Readonly<{ content: number; viewport: number }> => ({
-  content: document.documentElement.scrollWidth,
-  viewport: window.innerWidth,
-});
-
 const disclosedBearer = "fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD";
 const createdToken = { ...token, shortId: "created1", recipientLabel: "Agente nuevo" };
 const installIssuance = (page: Page): ReturnType<Page["route"]> => {
@@ -159,49 +154,6 @@ for (const sameUser of [true, false]) {
     page,
   }) => Effect.runPromise(checkIdentityResume(page, sameUser)));
 }
-
-test("Accesos displays token and MCP metadata without horizontal overflow", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() => page.setViewportSize({ width: 1366, height: 978 }));
-      yield* Effect.tryPromise(() => installAccess(page));
-      yield* Effect.tryPromise(() => page.goto("/settings/access"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Accesos", exact: true })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("table", { name: "Tokens activos" })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("table", { name: "Conexiones MCP" })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("table", { name: "Tokens activos" }).getByText("Nunca", { exact: true })
-        ).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(
-          page
-            .getByRole("table", { name: "Tokens activos" })
-            .getByText("1 oct 2026", { exact: true })
-        ).toBeVisible()
-      );
-      for (const label of [
-        "Desactivar",
-        "Desactivar todos los tokens",
-        "Revocar este agente",
-        "Revocar todos los agentes conectados",
-      ]) {
-        yield* Effect.tryPromise(() =>
-          expect(page.getByRole("button", { name: label, exact: true })).toBeEnabled()
-        );
-      }
-      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
-      const widths = yield* Effect.tryPromise(() => page.evaluate(documentWidths));
-      expect(widths.content).toBeLessThanOrEqual(widths.viewport);
-    })
-  ));
 
 test("Accesos refreshes issued metadata and erases its one-time disclosure on navigation", ({
   page,

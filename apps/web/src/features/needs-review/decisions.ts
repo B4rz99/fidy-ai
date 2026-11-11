@@ -313,7 +313,7 @@ const flush = (owner: Owner, entry: Entry, automatic = false): Work =>
         if (result._tag === "Failure") reject(entry, result.cause);
         else acceptDraft(entry, result.value, draft);
         notify(owner);
-        if (result._tag === "Success") {
+        if (!blocked(entry)) {
           yield* invalidateItems({ ids: [entry.detail.item.id], countsChanged: false });
         }
         if (automatic) return;
@@ -374,13 +374,11 @@ const decide = (owner: Owner, detail: Detail, kind: "Create" | "Skip"): void => 
             });
       if (Option.isNone(command)) return finishActing(owner, entry);
       const result = yield* Effect.exit(write(owner, command.value));
-      if (!decisionCurrent(owner, entry, selected)) return;
+      if (!decisionRetained(owner, entry, selected)) return;
       if (result._tag === "Failure") {
         reject(entry, result.cause);
         finishActing(owner, entry);
-      } else if (
-        !acceptedResults(result.value, [acknowledged], kind === "Create" ? "created" : "skipped")
-      ) {
+      } else if (!decisionAccepted(owner, { results: result.value, acknowledged, kind })) {
         entry.feedback = "uncertain";
         finishActing(owner, entry);
       } else {
@@ -394,9 +392,24 @@ const finishActing = (owner: Owner, entry: Entry): void => {
   entry.acting = false;
   notify(owner);
 };
+const decisionAccepted = (
+  owner: Owner,
+  {
+    results,
+    acknowledged,
+    kind,
+  }: Readonly<{
+    results: ReadonlyArray<Detail>;
+    acknowledged: Item;
+    kind: "Create" | "Skip";
+  }>
+): boolean =>
+  acceptedResults(results, [acknowledged], kind === "Create" ? "created" : "skipped") &&
+  results.every((detail) => observedCurrent(owner, detail.item));
+const decisionRetained = (owner: Owner, entry: Entry, selected: Item): boolean =>
+  current(owner, entry) && !itemExpired(selected);
 const decisionCurrent = (owner: Owner, entry: Entry, selected: Item): boolean =>
-  current(owner, entry) &&
-  !itemExpired(selected) &&
+  decisionRetained(owner, entry, selected) &&
   !blocked(entry) &&
   observedCurrent(owner, { ...selected, revision: entry.detail.revision });
 type Selected = Readonly<{ item: Item; entry: Option.Option<Entry> }>;
@@ -470,15 +483,18 @@ const bulkAccepted = (
   acknowledged: ReadonlyArray<Acknowledged>,
   { results, status }: Readonly<{ results: ReadonlyArray<Detail>; status: Item["status"] }>
 ): boolean =>
-  acknowledged.every((item) => selectedCurrent(owner, item)) &&
+  acknowledged.every((item) => selectedRetained(owner, item)) &&
+  results.every((detail) => observedCurrent(owner, detail.item)) &&
   acceptedResults(
     results,
     acknowledged.map(({ item }) => item),
     status
   );
-const selectedCurrent = (owner: Owner, acknowledged: Acknowledged): boolean => {
+const selectedCurrent = (owner: Owner, acknowledged: Acknowledged): boolean =>
+  observedCurrent(owner, acknowledged.item) && selectedRetained(owner, acknowledged);
+const selectedRetained = (owner: Owner, acknowledged: Acknowledged): boolean => {
   const { selected, item } = acknowledged;
-  if (itemExpired(selected.item) || !observedCurrent(owner, item)) return false;
+  if (itemExpired(selected.item)) return false;
   const entry = owner.entries.get(selected.item.id);
   if (Option.isNone(selected.entry)) return entry === undefined;
   return entry === selected.entry.value && retainedCurrent(owner, entry, item);

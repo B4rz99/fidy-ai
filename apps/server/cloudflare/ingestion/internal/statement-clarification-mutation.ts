@@ -43,6 +43,7 @@ const Review = Schema.Struct({
   id: Schema.String,
   submission_id: Schema.String,
   record_number: Schema.Int,
+  revision: Schema.Int,
   service_market: Schema.Literal("CO"),
   locale: Schema.Literal("es-CO"),
   time_zone: Schema.String,
@@ -331,8 +332,9 @@ const loadEligibleReview = ({
   Effect.tryPromise({
     try: () =>
       work.db
-        .prepare(`SELECT r.id, r.submission_id, r.record_number, r.service_market, r.locale, r.time_zone, r.source_format, r.parser_revision, o.sha256
-      FROM statement_review_context r JOIN statement_submissions s ON s.id = r.submission_id AND s.user_id = r.user_id
+        .prepare(`SELECT r.id, r.submission_id, r.record_number, coalesce(i.workspace_revision, 0) AS revision, r.service_market, r.locale, r.time_zone, r.source_format, r.parser_revision, o.sha256
+      FROM statement_review_context r JOIN ingestion_review_items i ON i.id = r.id AND i.user_id = r.user_id
+      JOIN statement_submissions s ON s.id = r.submission_id AND s.user_id = r.user_id
       JOIN statement_staging_objects o ON o.id = s.staging_id AND o.user_id = s.user_id
       WHERE r.id = ? AND r.user_id = ? AND EXISTS (${source.sql})`)
         .bind(id, work.userId, ...source.params)
@@ -392,7 +394,18 @@ const observeReview = ({
       };
       row = yield* loadEligibleReview({ work, id: decision.id, source });
     }
-    return Option.map(row, (value) => ({ row: value, source, observed }));
+    return Option.map(row, (value) => ({
+      row: value,
+      // A pending draft can change without settling the row. The prepared decision must
+      // retain the exact revision observed before capture and state transition are composed.
+      source: {
+        sql: `SELECT user_id FROM (${source.sql}) WHERE EXISTS (
+          SELECT 1 FROM ingestion_review_sources WHERE id = ? AND user_id = ? AND revision = ?
+        )`,
+        params: [...source.params, value.id, work.userId, value.revision],
+      },
+      observed,
+    }));
   });
 
 const discloseCaptureCategory = (

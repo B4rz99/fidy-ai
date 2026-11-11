@@ -616,10 +616,10 @@ it(
       Effect.gen(function* () {
         const { db, subjects } = yield* fixture();
         const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
-        for (const [revision, id, firstDate] of [
-          [0, planId, "2026-09-30"],
-          [1, "40000000-0000-4000-8000-000000000124", "2026-10-01"],
-        ] as const) {
+        for (const { revision, id, firstDate } of [
+          { revision: 0, id: planId, firstDate: "2026-09-30" },
+          { revision: 1, id: "40000000-0000-4000-8000-000000000124", firstDate: "2026-10-01" },
+        ]) {
           expect(
             (yield* call(
               db,

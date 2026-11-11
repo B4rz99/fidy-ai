@@ -1,5 +1,4 @@
-import { observeRecurringPlan } from "@fidy/server/recurring-plan-decisions";
-import { DateTime, Effect, Option } from "effect";
+import { DateTime, Option } from "effect";
 import type { CanonicalInput, CanonicalSuccess } from "@/transport/client";
 import { formatMoneyWithCode } from "@/transport/money";
 
@@ -40,16 +39,17 @@ export const currentPlan = (plan: Plan): PlanInput => {
   const date = planToday(plan);
   return (plan.revisions.findLast((entry) => entry.from <= date) ?? plan.revisions[0]).plan;
 };
-export const planStatus = (plan: Plan): "scheduled" | "stopped" | "paused" | "active" =>
-  Option.getOrThrow(
-    Effect.runSync(
-      observeRecurringPlan({
-        document: { plans: [plan], exceptions: [], fulfillments: [], excludedTransactionIds: [] },
-        planId: plan.id,
-        date: planToday(plan),
-      })
+export const planStatus = (plan: Plan): "scheduled" | "stopped" | "paused" | "active" => {
+  const date = planToday(plan);
+  if (plan.stoppedOn !== undefined && date >= plan.stoppedOn) return "stopped";
+  if (
+    plan.pauses.some(
+      (pause) => date >= pause.from && (pause.through === undefined || date < pause.through)
     )
-  ).status;
+  )
+    {return "paused";}
+  return date < currentPlan(plan).firstDate ? "scheduled" : "active";
+};
 export const frequencies = [
   ["weekly", "Cada semana"],
   ["fortnightly", "Cada 2 semanas"],

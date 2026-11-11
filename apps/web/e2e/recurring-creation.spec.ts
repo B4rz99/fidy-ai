@@ -95,12 +95,12 @@ test("verifies edited source values in their first month after a failed read", (
       yield* Effect.tryPromise(() => page.getByLabel("Importe", { exact: true }).fill("90000"));
       yield* Effect.tryPromise(() => chooseNovember(page));
       const firstMonth = /\/recurring-plans\?month=2026-11(?:&|$)/u;
-      yield* Effect.tryPromise(() => page.route(firstMonth, unavailableRead));
+      const allowRead = yield* Effect.tryPromise(() => refuseWorkspace(page, firstMonth));
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Guardar", exact: true }).click()
       );
       yield* Effect.tryPromise(() => inspectUnverifiedPlan(page));
-      yield* Effect.tryPromise(() => page.unroute(firstMonth, unavailableRead));
+      allowRead();
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Verificar vínculo", exact: true }).click()
       );
@@ -119,6 +119,14 @@ test("verifies edited source values in their first month after a failed read", (
 
 const unavailableRead = (route: Route): Promise<void> =>
   route.fulfill({ status: unavailableStatus, contentType: "application/json", body: "{}" });
+const refuseWorkspace = (page: Page, pattern: RegExp): Promise<() => void> => {
+  let refused = true;
+  return page
+    .route(pattern, (route) => (refused ? unavailableRead(route) : route.continue()))
+    .then(() => () => {
+      refused = false;
+    });
+};
 const chooseNovember = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -247,7 +255,9 @@ const holdWorkspace = (page: Page): Promise<WorkspaceDelay> => {
   const release = Promise.withResolvers<void>();
   const pattern = "**/recurring-plans?**";
   const pending: Array<Promise<void>> = [];
+  let holding = true;
   const hold = (route: Route): Promise<void> => {
+    if (!holding) return route.continue();
     const completion = route.fetch().then((response) => {
       started.resolve();
       return release.promise.then(() => route.fulfill({ response }));
@@ -258,11 +268,9 @@ const holdWorkspace = (page: Page): Promise<WorkspaceDelay> => {
   return page.route(pattern, hold).then(() => ({
     started: started.promise,
     finish: (): Promise<void> => {
+      holding = false;
       release.resolve();
-      return page
-        .unrouteAll({ behavior: "wait" })
-        .then(() => Promise.all(pending))
-        .then(() => undefined);
+      return Promise.all(pending).then(() => undefined);
     },
   }));
 };
@@ -452,7 +460,7 @@ const inspectParentRecovery = (page: Page): Promise<void> =>
     Effect.gen(function* () {
       const firstMonth = /\/recurring-plans\?month=2026-10(?:&|$)/u;
       const nextMonth = /\/recurring-plans\?month=2026-11(?:&|$)/u;
-      yield* Effect.tryPromise(() => page.route(firstMonth, unavailableRead));
+      const allowRead = yield* Effect.tryPromise(() => refuseWorkspace(page, firstMonth));
       const failed = page.waitForResponse(
         (response) => firstMonth.test(response.url()) && response.status() === unavailableStatus
       );
@@ -470,7 +478,7 @@ const inspectParentRecovery = (page: Page): Promise<void> =>
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Nombre", { exact: true })).toHaveValue("Mi corrección pendiente")
       );
-      yield* Effect.tryPromise(() => page.unroute(firstMonth, unavailableRead));
+      allowRead();
       yield* Effect.tryPromise(() =>
         result.getByRole("button", { name: "Verificar vínculo", exact: true }).click()
       );

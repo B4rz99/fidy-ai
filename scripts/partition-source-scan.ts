@@ -2,11 +2,11 @@
 
 /** Use only runners that the ordinary change plan already selects. */
 export const sourceScanPlan = ({
-  unit,
+  native,
   sca,
-}: Readonly<{ unit: boolean; sca: boolean }>): Readonly<{ count: number; sca: number }> => ({
-  count: 1 + Number(unit) + Number(sca),
-  sca: 2 + Number(unit),
+}: Readonly<{ native: boolean; sca: boolean }>): Readonly<{ count: number; sca: number }> => ({
+  count: 1 + Number(native) + Number(sca),
+  sca: 2 + Number(native),
 });
 
 /** Distribute the complete source scope over existing jobs; never select only changed files. */

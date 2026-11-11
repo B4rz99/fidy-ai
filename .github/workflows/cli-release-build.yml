@@ -20,19 +20,45 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
           sparse-checkout: |
             /*
             !/.repos/
           sparse-checkout-cone-mode: false
-      - uses: ./.github/actions/bun-install
-        with:
-          cli-release: "true"
-          save-cache: ${{ runner.os != 'Linux' }}
+      - uses: ./.github/actions/bun-runtime
+      - name: Plan native evidence from the complete PR diff
+        id: plan
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            echo 'cli-native=true' >> "$GITHUB_OUTPUT"
+          else
+            bun scripts/ci-changes.ts
+          fi
+      - name: Require an explicit native selection
+        shell: bash
+        env:
+          NATIVE_SELECTED: ${{ steps.plan.outputs.cli-native }}
+        run: '[[ "$NATIVE_SELECTED" == true || "$NATIVE_SELECTED" == false ]]'
+      - name: Record unchanged CLI build inputs
+        if: ${{ steps.plan.outputs.cli-native == 'false' }}
+        shell: bash
+        run: echo 'CLI build inputs are unchanged; native packaging is not selected.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install frozen CLI dependencies
+        if: ${{ steps.plan.outputs.cli-native == 'true' }}
+        shell: bash
+        run: bash scripts/install-workspace.sh --cli-release
       - name: Build native standalone release candidate
+        if: ${{ steps.plan.outputs.cli-native == 'true' }}
         shell: bash
         run: bash scripts/cli-release/build.sh
       - name: Verify repeat-build archive identity
+        if: ${{ steps.plan.outputs.cli-native == 'true' }}
         shell: bash
         run: |
           bash scripts/cli-release/build.sh dist/cli-repeat
@@ -40,17 +66,19 @@ jobs:
             cmp "$archive" "dist/cli-repeat/$(basename "$archive")"
           done
       - name: Verify release selection and failure safety
-        if: runner.os != 'Windows'
+        if: ${{ steps.plan.outputs.cli-native == 'true' && runner.os != 'Windows' }}
         run: python3 scripts/cli-release/test-release.py
       - name: Test POSIX installer failure safety
-        if: runner.os != 'Windows'
+        if: ${{ steps.plan.outputs.cli-native == 'true' && runner.os != 'Windows' }}
         run: python3 scripts/cli-release/test-install.py
       - name: Test Windows installer and corruption safety
-        if: runner.os == 'Windows'
+        if: ${{ steps.plan.outputs.cli-native == 'true' && runner.os == 'Windows' }}
         shell: pwsh
         run: ./scripts/cli-release/test-install.ps1
       - uses: ./.github/actions/packaged-cli-check
+        if: ${{ steps.plan.outputs.cli-native == 'true' }}
       - name: Preserve candidate archives and checksums
+        if: ${{ steps.plan.outputs.cli-native == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cli-candidate-${{ runner.os }}-${{ runner.arch }}

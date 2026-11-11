@@ -31,10 +31,10 @@ it("refuses invalid partition counts and duplicated source targets", () => {
 });
 
 it("keeps every partition on an already selected runner for every change plan", () => {
-  for (const unit of [false, true]) {
+  for (const native of [false, true]) {
     for (const sca of [false, true]) {
-      const plan = sourceScanPlan({ unit, sca });
-      const indices = [1, ...(unit ? [2] : []), ...(sca ? [plan.sca] : [])];
+      const plan = sourceScanPlan({ native, sca });
+      const indices = [1, ...(native ? [2] : []), ...(sca ? [plan.sca] : [])];
       expect(indices).toEqual(Array.from({ length: plan.count }, (_, index) => index + 1));
     }
   }

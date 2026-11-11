@@ -81,6 +81,17 @@ export const selectChecks = (paths: ReadonlyArray<string>): CheckPlan => {
   return selected;
 };
 
+/** Native CLI evidence follows its build inputs; unfamiliar owners still select it. */
+export const selectNativeChecks = (paths: ReadonlyArray<string>): boolean =>
+  paths.some((path) => {
+    if (isProse(path)) return false;
+    if (isDependencyInput(path)) return true;
+    if (Object.hasOwn(scannerPaths, path)) return false;
+    return !["apps/web/", "apps/site/", "apps/docs/", "infra/", ".patterns/", ".repos/"].some(
+      (prefix) => path.startsWith(prefix)
+    );
+  });
+
 if (import.meta.main) {
   const base = Bun.env.PR_BASE_SHA;
   const head = Bun.env.PR_HEAD_SHA;
@@ -105,7 +116,9 @@ if (import.meta.main) {
   const paths = new TextDecoder().decode(diff.stdout).split("\0").filter(Boolean);
   const plan = selectChecks(paths);
   const lines = Object.entries(plan).map(([job, selected]) => `${job}=${selected}`);
-  const source = sourceScanPlan({ unit: plan.unit, sca: plan["security-sca"] });
+  const native = selectNativeChecks(paths);
+  lines.push(`cli-native=${native}`);
+  const source = sourceScanPlan({ native, sca: plan["security-sca"] });
   lines.push(`source-partitions=${source.count}`, `source-sca-partition=${source.sca}`);
   const file = Bun.file(output);
   await Bun.write(output, `${(await file.exists()) ? await file.text() : ""}${lines.join("\n")}\n`);

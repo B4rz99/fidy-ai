@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { selectChecks } from "./ci-changes";
+import { selectChecks, selectNativeChecks } from "./ci-changes";
 
 const root = process.cwd();
 const fixtures: Array<string> = [];
@@ -23,6 +23,44 @@ const allJobs = [
 ];
 
 describe("PR check selection", () => {
+  it("avoids native CLI work for known unrelated owners while retaining every build input and unknown owner", () => {
+    for (const path of [
+      "apps/web/src/main.tsx",
+      "apps/web/tsconfig.app.json",
+      "apps/site/src/pages/index.astro",
+      "apps/docs/src/content/docs/start.mdx",
+      "infra/cloudflare/worker.ts",
+      "docs/guide.md",
+      ".fluidattacks/sast.yaml",
+    ]) {
+      expect(selectNativeChecks([path]), path).toBe(false);
+    }
+    for (const path of [
+      "apps/cli/src/main.ts",
+      "apps/server/src/shell/api.ts",
+      "scripts/cli-release/build.sh",
+      "scripts/cli-release/BUN-NOTICES.md",
+      "scripts/install-bun.sh",
+      "scripts/install-workspace.sh",
+      ".github/actions/packaged-cli-check/action.yml",
+      ".github/workflows/cli-release-build.yml",
+      "bun.lock",
+      "package.json",
+      "apps/web/package.json",
+      "tsconfig.base.json",
+      "patches/runtime.patch",
+      "future-owner/runtime.ts",
+    ]) {
+      expect(selectNativeChecks([path]), path).toBe(true);
+    }
+    expect(selectNativeChecks([])).toBe(false);
+    expect(
+      selectNativeChecks([
+        ...Array.from({ length: 350 }, (_, index) => `docs/guide-${index}.md`),
+        "apps/cli/src/main.ts",
+      ])
+    ).toBe(true);
+  });
   it("leaves prose and agent guidance to the workspace and secret gates", () => {
     expect(
       selectedJobs([
@@ -164,6 +202,7 @@ describe("PR check selection", () => {
         expect(plan).toContain("cloudflare-adapters=true\n");
         expect(plan).toContain("browser=true\n");
         expect(plan).toContain("security-sca=false\n");
+        expect(plan).toContain("cli-native=true\n");
       });
   });
 });

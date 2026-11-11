@@ -915,7 +915,12 @@ test("period controls share one row on desktop and support keyboard year selecti
   ));
 
 const expectBoundedYearOptions = (page: Page): Promise<void> =>
-  expect.poll(() => page.getByRole("option").count()).toBeLessThan(maximumRenderedYearOptions);
+  expect
+    .poll(() => page.getByRole("option").count())
+    .toBeGreaterThan(0)
+    .then(() =>
+      expect.poll(() => page.getByRole("option").count()).toBeLessThan(maximumRenderedYearOptions)
+    );
 const scrollToLastYear = (list: Element): void => {
   list.scrollTop = list.scrollHeight;
 };

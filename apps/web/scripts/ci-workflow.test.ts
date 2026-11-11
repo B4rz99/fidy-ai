@@ -87,7 +87,8 @@ describe("pull-request checks workflow policy", () => {
     expect(nativeJob).not.toContain("run-id:");
     expect(nativeJob).not.toContain("repository:");
     expect(requiredJob).toContain("- cli-native-package");
-    expect(checksWorkflow).toContain("cli-native-package: ${{ steps.plan.outputs.unit }}");
+    expect(checksWorkflow).toContain("cli-native-package: ${{ steps.plan.outputs.cli-native }}");
+    expect(checksWorkflow).toContain("cli-native: ${{ steps.plan.outputs.cli-native }}");
   });
 
   it("runs mutation testing weekly on Sundays without blocking pull requests", () => {

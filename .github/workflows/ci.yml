@@ -22,8 +22,8 @@ jobs:
     outputs:
       builds: ${{ steps.plan.outputs.builds }}
       unit: ${{ steps.plan.outputs.unit }}
-      cli-native-package: ${{ steps.plan.outputs.unit }}
-      cli-native: ${{ steps.plan.outputs.unit }}
+      cli-native-package: ${{ steps.plan.outputs.cli-native }}
+      cli-native: ${{ steps.plan.outputs.cli-native }}
       cloudflare-adapters: ${{ steps.plan.outputs.cloudflare-adapters }}
       cloudflare-infra: ${{ steps.plan.outputs.cloudflare-infra }}
       browser: ${{ steps.plan.outputs.browser }}

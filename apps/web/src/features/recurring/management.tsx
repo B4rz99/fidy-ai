@@ -517,13 +517,17 @@ const PlanRow = ({
           <RecurringPlanBadge status={status} />
         </span>
       </button>
-      {status === "paused" ? (
+      {plan.pauses.some((pause) => pause.through === undefined) ? (
         <Button
           contentLayout="wrap"
           focusAppearance="subtle"
           variant="outline"
           size="sm"
-          disabled={disabled || plan.stoppedOn !== undefined}
+          disabled={
+            disabled ||
+            plan.stoppedOn !== undefined ||
+            plan.pauses.some((pause) => pause.through === undefined && pause.from > planToday(plan))
+          }
           onClick={() =>
             save({ kind: "lifecycle", planId: plan.id, date: planToday(plan), action: "resume" })
           }

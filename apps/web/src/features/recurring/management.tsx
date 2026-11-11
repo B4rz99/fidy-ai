@@ -480,7 +480,6 @@ const RestoreSuggestions = ({
 
 const matchesPlanFilters = (plan: Plan, filters: Filters): boolean => {
   const input = currentPlan(plan);
-  if (input === undefined) return false;
   return Object.entries(filters).every(([key, value]) => {
     if (key === "search") return input.name.toLowerCase().includes(value.toLowerCase());
     if (key === "kind") return input.kind === value;
@@ -505,7 +504,6 @@ const PlanRow = ({
   status: ReturnType<typeof planStatus>;
 }>): JSX.Element => {
   const input = currentPlan(plan);
-  if (input === undefined) return <></>;
   return (
     <div className="@container flex min-w-0 items-center gap-2 border-b pr-4 transition-colors last:border-b-0 hover:bg-muted/50">
       <button

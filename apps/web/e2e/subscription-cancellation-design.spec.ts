@@ -1,11 +1,12 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import type { Locator, Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { playwright } from "./playwright-runtime";
 import { apiOrigin, response } from "./http-fixtures";
 import { installSubscriptionFixture, paidStanding } from "./subscription-visual-fixture";
+import { analyzeAccessibility } from "./accessibility";
 
 const { test, expect } = playwright;
-const { AxeBuilder } = await import("@axe-core/playwright");
 type Display = Readonly<{ width: number; theme: "light" | "dark"; enlarged: boolean }>;
 const cancellation = {
   cancelledAt: "2026-11-02T15:00:00Z",
@@ -68,14 +69,17 @@ const openDesign = Effect.fnUntraced(function* (
 const captureState = Effect.fnUntraced(function* (page: Page, display: Display, state: string) {
   const filename = `cancellation-${display.width}-${display.theme}-${display.enlarged ? "enlarged" : "standard"}-${state}`;
   yield* Effect.tryPromise((signal) =>
-    page.screenshot({
-      signal,
-      path: new URL(`../test-results/${filename}.png`, import.meta.url).pathname,
-      fullPage: true,
-      animations: "disabled",
+    captureVisualEvidence({
+      target: page,
+      options: {
+        signal,
+        path: new URL(`../test-results/${filename}.png`, import.meta.url).pathname,
+        fullPage: true,
+        animations: "disabled",
+      },
     })
   );
-  const accessibility = yield* Effect.tryPromise(() => new AxeBuilder({ page }).analyze());
+  const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
   expect(accessibility.violations).toEqual([]);
   expect(yield* Effect.tryPromise(() => page.evaluate(contentFitsViewport))).toBe(true);
   expect(

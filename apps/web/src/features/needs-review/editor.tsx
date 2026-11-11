@@ -181,8 +181,6 @@ const ReviewItemFailure = ({
     </Button>
   </ReviewNotice>
 );
-const useDraftChange = (decisions: ReviewDecisions, detail: Detail): ((draft: Draft) => void) =>
-  useCallback((draft: Draft) => decisions.change(detail, draft), [decisions, detail]);
 const ReadyEditor = ({
   detail,
   originalExpiresAt,

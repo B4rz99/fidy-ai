@@ -386,7 +386,11 @@ const flush = (owner: Owner, entry: Entry, automatic = Option.none<number>()): W
 const sameDraft = Schema.toEquivalence(ReviewDraft);
 const acceptDraft = (entry: Entry, items: ReadonlyArray<Detail>, draft: Draft): void => {
   const latest = items[0];
-  if (latest === undefined || !acceptedResults(items, [entry.detail.item], "pending") || !Option.exists(latest.draft, saved => sameDraft(saved, draft))) {
+  if (
+    latest === undefined ||
+    !acceptedResults(items, [entry.detail.item], "pending") ||
+    !Option.exists(latest.draft, (saved) => sameDraft(saved, draft))
+  ) {
     entry.feedback = "uncertain";
     entry.wanted = Option.none();
     entry.version += 1;

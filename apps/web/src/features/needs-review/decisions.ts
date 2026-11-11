@@ -7,10 +7,16 @@ import {
   Effect,
   Option,
   Predicate,
+  Schema,
   Semaphore,
 } from "effect";
-import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
-import type { CanonicalSuccess, FidyClient } from "@/transport/client";
+import { AsyncResult, Atom, Reactivity } from "effect/reactivity";
+import {
+  type CanonicalSuccess,
+  type FidyClient,
+  ReviewCommand,
+  ReviewDraft,
+} from "@/transport/client";
 import { type Command, type Detail, type Draft, type Item, creation, emptyDraft } from "./model";
 
 type Feedback = "saved" | "saving" | "unsaved" | "failed" | "uncertain";
@@ -81,7 +87,7 @@ type Owner = {
   stopped: Deferred.Deferred<void>;
   phase: "idle" | "writing" | "uncertain" | "recovering";
   feedback: string;
-  undo: ReadonlyArray<Detail>;
+  undo: ReadonlyArray<Item>;
   completed: Option.Option<Completion>;
 };
 const autosaveMilliseconds = 200;
@@ -166,6 +172,11 @@ export const makeReviewDecisions = ({
       undo: [],
       completed: Option.none(),
     };
+    get.subscribe(query, (result) => {
+      if (!AsyncResult.isSuccess(result) || result.waiting) return;
+      pruneUndo(owner, result.value.data.items);
+      notify(owner);
+    });
     get.addFinalizer(() => dispose(owner));
     return present(owner);
   });
@@ -173,20 +184,21 @@ export const makeReviewDecisions = ({
 const present = (owner: Owner, generation = owner.generation): ReviewDecisions => ({
   locked: owner.phase !== "idle",
   feedback: owner.feedback,
-  undoCount: owner.undo.length,
+  undoCount: eligibleUndo(owner).length,
   completed: owner.completed,
   editor: (detail) => editorState(owner, detail, generation),
   decide: (detail, kind) => {
     if (liveGeneration(owner, generation)) decide(owner, detail, kind);
   },
   bulk: (restore, items) => {
-    if (liveGeneration(owner, generation)) bulk(owner, restore, items);
+    if (liveGeneration(owner, generation)) bulk(owner, items, restore ? "Restore" : "Skip");
   },
   undoSkip: () => {
     if (!liveGeneration(owner, generation) || owner.phase !== "idle") return;
-    const items = owner.undo.map((detail) => ({ ...detail.item, revision: detail.revision }));
+    const items = eligibleUndo(owner);
     owner.undo = [];
-    bulk(owner, true, items);
+    bulk(owner, items, "Undo");
+    notify(owner);
   },
   recover: () => {
     if (liveGeneration(owner, generation)) recoverWorkspace(owner);
@@ -269,7 +281,7 @@ const expireEntry = (owner: Owner, entry: Entry): Work =>
     }
     if (owner.entries.get(entry.detail.item.id) !== entry) return;
     owner.entries.delete(entry.detail.item.id);
-    owner.undo = owner.undo.filter((detail) => detail.item.id !== entry.detail.item.id);
+    owner.undo = owner.undo.filter((item) => item.id !== entry.detail.item.id);
     notify(owner);
   }).pipe(Effect.raceFirst(Deferred.await(entry.retired)));
 const originalItem = (owner: Owner, item: Item): Item => ({
@@ -290,6 +302,7 @@ const replaceEntry = (owner: Owner, entry: Entry): void => {
   const previous = owner.entries.get(entry.detail.item.id);
   if (previous !== undefined) Deferred.doneUnsafe(previous.retired, Effect.void);
   owner.entries.set(entry.detail.item.id, entry);
+  pruneUndo(owner, [entry.detail.item]);
   run(owner, expireEntry(owner, entry));
 };
 const changeDraft = (owner: Owner, detail: Detail, draft: Draft): void => {
@@ -360,9 +373,9 @@ const flush = (owner: Owner, entry: Entry, automatic = Option.none<number>()): W
               );
               if (!current(owner, entry)) return;
               if (result._tag === "Failure") reject(entry, result.cause);
-              else acceptDraft(entry, result.value);
+              else acceptDraft(entry, result.value, draft);
               notify(owner);
-              if (result._tag === "Success") {
+              if (!blocked(entry)) {
                 yield* invalidateItems({ ids: [entry.detail.item.id], countsChanged: false });
               }
               if (Option.isSome(automatic)) return;
@@ -370,9 +383,10 @@ const flush = (owner: Owner, entry: Entry, automatic = Option.none<number>()): W
           })
     )
   );
-const acceptDraft = (entry: Entry, items: ReadonlyArray<Detail>): void => {
+const sameDraft = Schema.toEquivalence(ReviewDraft);
+const acceptDraft = (entry: Entry, items: ReadonlyArray<Detail>, draft: Draft): void => {
   const latest = items[0];
-  if (items.length !== 1 || latest === undefined || latest.item.id !== entry.detail.item.id) {
+  if (latest === undefined || !acceptedResults(items, [entry.detail.item], "pending") || !Option.exists(latest.draft, saved => sameDraft(saved, draft))) {
     entry.feedback = "uncertain";
     entry.wanted = Option.none();
     entry.version += 1;
@@ -386,23 +400,31 @@ const complete = (owner: Owner, items: ReadonlyArray<Detail>, skipped: boolean):
     const entry = makeEntry(detail);
     replaceEntry(owner, entry);
   }
-  if (items.some((detail) => detail.item.status === "created")) owner.created();
   owner.completed = Option.some({ ids: items.map((detail) => detail.item.id) });
-  owner.feedback = skipped ? `${items.length} elementos omitidos.` : "Cambio guardado.";
-  if (skipped) owner.undo = items;
+  if (owner.phase === "idle") {
+    owner.feedback = skipped ? `${items.length} elementos omitidos.` : "Cambio guardado.";
+  }
+  if (skipped) owner.undo = items.map((detail) => detail.item);
   notify(owner);
+  if (items.some((detail) => detail.item.status === "created")) {
+    run(owner, Effect.sync(owner.created).pipe(Effect.catchDefect(() => Effect.void)));
+  }
 };
 const decide = (owner: Owner, detail: Detail, kind: "Create" | "Skip"): void => {
   if (!owner.active || editorState(owner, detail).locked) return;
   const entry = retain(owner, detail);
   if (!current(owner, entry) || entry.detail.item.status !== "pending") return;
+  const selected = { ...entry.detail.item, expiresAt: originalItem(owner, detail.item).expiresAt };
   entry.acting = true;
   notify(owner);
   run(
     owner,
     Effect.gen(function* () {
       yield* flush(owner, entry);
-      if (!current(owner, entry) || blocked(entry)) return finishActing(owner, entry);
+      if (!decisionCurrent(owner, entry, selected)) {
+        return finishActing(owner, entry);
+      }
+      const acknowledged = { ...selected, revision: entry.detail.revision };
       const command =
         kind === "Create"
           ? creation({ detail: entry.detail, draft: entry.draft })
@@ -412,11 +434,11 @@ const decide = (owner: Owner, detail: Detail, kind: "Create" | "Skip"): void => 
             });
       if (Option.isNone(command)) return finishActing(owner, entry);
       const result = yield* Effect.exit(write(owner, command.value));
-      if (!current(owner, entry)) return;
+      if (!decisionRetained(owner, entry, selected)) return;
       if (result._tag === "Failure") {
         reject(entry, result.cause);
         finishActing(owner, entry);
-      } else if (!sameItems(result.value, [detail.item])) {
+      } else if (!decisionAccepted(owner, { results: result.value, acknowledged, kind })) {
         entry.feedback = "uncertain";
         finishActing(owner, entry);
       } else {
@@ -430,55 +452,177 @@ const finishActing = (owner: Owner, entry: Entry): void => {
   entry.acting = false;
   notify(owner);
 };
-const bulk = (owner: Owner, restore: boolean, items: ReadonlyArray<Item>): void => {
+const decisionAccepted = (
+  owner: Owner,
+  {
+    results,
+    acknowledged,
+    kind,
+  }: Readonly<{
+    results: ReadonlyArray<Detail>;
+    acknowledged: Item;
+    kind: "Create" | "Skip";
+  }>
+): boolean =>
+  acceptedResults(results, [acknowledged], kind === "Create" ? "created" : "skipped") &&
+  results.every((detail) => observedCurrent(owner, detail.item));
+const decisionRetained = (owner: Owner, entry: Entry, selected: Item): boolean =>
+  current(owner, entry) && !itemExpired(selected);
+const decisionCurrent = (owner: Owner, entry: Entry, selected: Item): boolean =>
+  decisionRetained(owner, entry, selected) &&
+  !blocked(entry) &&
+  observedCurrent(owner, { ...selected, revision: entry.detail.revision });
+type Selected = Readonly<{ item: Item; entry: Option.Option<Entry> }>;
+type Acknowledged = Readonly<{ selected: Selected; item: Item }>;
+type BulkIntention = "Skip" | "Restore" | "Undo";
+const bulk = (owner: Owner, items: ReadonlyArray<Item>, intention: BulkIntention): void => {
   if (!owner.active || owner.phase !== "idle" || items.length === 0) return;
-  const selected = items.map((item) => retainExpiry(owner, item));
   owner.phase = "writing";
+  const selected = items.map((item): Selected => ({
+    item: retainExpiry(owner, item),
+    entry: Option.fromUndefinedOr(owner.entries.get(item.id)),
+  }));
   const generation = owner.generation;
   notify(owner);
-  run(
-    owner,
-    Effect.gen(function* () {
-      const saved = yield* Effect.forEach(selected, (item) => flushItem(owner, item));
-      if (!liveGeneration(owner, generation)) return;
-      const ready = Option.filter(Option.all(saved), () => !selected.some(itemExpired));
-      if (Option.isNone(ready)) return failBulk(owner);
-      const first = ready.value[0];
-      if (first === undefined) return failBulk(owner);
-      const result = yield* Effect.exit(
-        write(owner, {
-          _tag: restore ? "Restore" : "Skip",
-          items: [first, ...ready.value.slice(1)],
-        })
-      );
-      if (!liveGeneration(owner, generation)) return;
-      if (result._tag === "Failure") return failBulk(owner);
-      if (!currentItems(result.value, selected)) return failBulk(owner);
-      owner.phase = "idle";
-      complete(owner, result.value, !restore);
-      yield* invalidateItems({ ids: selected.map((item) => item.id), countsChanged: true });
-    })
-  );
+  if (!validSelection(selected, intention)) return failBulk(owner);
+  run(owner, commitBulk(owner, { selected, intention, generation }));
 };
-const currentItems = (results: ReadonlyArray<Detail>, items: ReadonlyArray<Item>): boolean =>
-  !items.some(itemExpired) && sameItems(results, items);
+const validSelection = (selected: ReadonlyArray<Selected>, intention: BulkIntention): boolean =>
+  Option.isSome(
+    Schema.decodeUnknownOption(ReviewCommand)({
+      _tag: intention === "Skip" ? "Skip" : "Restore",
+      items: selected.map(({ item }) => ({ id: item.id, revision: item.revision })),
+    })
+  ) &&
+  new Set(selected.map(({ item }) => item.id)).size === selected.length &&
+  selected.every(({ item }) => item.status === (intention === "Skip" ? "pending" : "skipped"));
+const commitBulk = (
+  owner: Owner,
+  {
+    selected,
+    intention,
+    generation,
+  }: Readonly<{
+    selected: ReadonlyArray<Selected>;
+    intention: BulkIntention;
+    generation: number;
+  }>
+): Work => {
+  const kind = intention === "Skip" ? "Skip" : "Restore";
+  const status = intention === "Skip" ? "skipped" : "pending";
+  return Effect.gen(function* () {
+    const saved = yield* Effect.forEach(selected, (member) => flushItem(owner, member, intention));
+    if (!liveGeneration(owner, generation)) return;
+    const ready = Option.all(saved);
+    if (Option.isNone(ready)) return failBulk(owner);
+    const acknowledged = ready.value.map(({ item }) => item);
+    const first = acknowledged[0];
+    if (first === undefined || !ready.value.every((item) => selectedCurrent(owner, item))) {
+      return failBulk(owner);
+    }
+    const result = yield* Effect.exit(
+      write(owner, {
+        _tag: kind,
+        items: [first, ...acknowledged.slice(1)],
+      })
+    );
+    if (!liveGeneration(owner, generation)) return;
+    if (
+      result._tag === "Failure" ||
+      !bulkAccepted(owner, ready.value, { results: result.value, status })
+    ) {
+      return failBulk(owner);
+    }
+    owner.phase = "idle";
+    complete(owner, result.value, intention === "Skip");
+    yield* invalidateItems({ ids: selected.map(({ item }) => item.id), countsChanged: true });
+  });
+};
+const bulkAccepted = (
+  owner: Owner,
+  acknowledged: ReadonlyArray<Acknowledged>,
+  { results, status }: Readonly<{ results: ReadonlyArray<Detail>; status: Item["status"] }>
+): boolean =>
+  acknowledged.every((item) => selectedRetained(owner, item)) &&
+  results.every((detail) => observedCurrent(owner, detail.item)) &&
+  acceptedResults(
+    results,
+    acknowledged.map(({ item }) => item),
+    status
+  );
+const selectedCurrent = (owner: Owner, acknowledged: Acknowledged): boolean =>
+  observedCurrent(owner, acknowledged.item) && selectedRetained(owner, acknowledged);
+const selectedRetained = (owner: Owner, acknowledged: Acknowledged): boolean => {
+  const { selected, item } = acknowledged;
+  if (itemExpired(selected.item)) return false;
+  const entry = owner.entries.get(selected.item.id);
+  if (Option.isNone(selected.entry)) return entry === undefined;
+  return entry === selected.entry.value && retainedCurrent(owner, entry, item);
+};
+const retainedCurrent = (owner: Owner, entry: Entry, item: Item): boolean =>
+  current(owner, entry) &&
+  !entry.acting &&
+  !blocked(entry) &&
+  entry.detail.revision === item.revision &&
+  entry.detail.item.status === item.status;
 const flushItem = (
   owner: Owner,
-  item: Item
-): Effect.Effect<
-  Option.Option<{ id: Item["id"]; revision: number }>,
-  never,
-  Reactivity.Reactivity
-> =>
+  selected: Selected,
+  intention: BulkIntention
+): Effect.Effect<Option.Option<Acknowledged>, never, Reactivity.Reactivity> =>
   Effect.gen(function* () {
-    if (itemExpired(originalItem(owner, item))) return Option.none();
-    const entry = owner.entries.get(item.id);
-    if (entry === undefined) return Option.some({ id: item.id, revision: item.revision });
-    if (entry.acting) return Option.none();
-    yield* flush(owner, entry);
-    return current(owner, entry) && !blocked(entry)
-      ? Option.some({ id: item.id, revision: entry.detail.revision })
-      : Option.none();
+    const { item } = selected;
+    if (itemExpired(item)) return Option.none();
+    if (Option.isNone(selected.entry)) return Option.some({ selected, item });
+    const entry = selected.entry.value;
+    if (entry.acting || entry.detail.item.status !== item.status) return Option.none();
+    if (intention !== "Undo") yield* flush(owner, entry);
+    const acknowledged = {
+      selected,
+      item: intention === "Undo" ? item : { ...item, revision: entry.detail.revision },
+    };
+    return selectedCurrent(owner, acknowledged) ? Option.some(acknowledged) : Option.none();
+  });
+const observedCurrent = (owner: Owner, acknowledged: Item): boolean => {
+  const result = owner.get.once(owner.query);
+  if (!AsyncResult.isSuccess(result) || result.waiting) return true;
+  return result.value.data.items.every(
+    (item) =>
+      item.id !== acknowledged.id ||
+      item.revision < acknowledged.revision ||
+      (item.revision === acknowledged.revision &&
+        item.status === acknowledged.status &&
+        DateTime.toEpochMillis(item.expiresAt) === DateTime.toEpochMillis(acknowledged.expiresAt))
+  );
+};
+const receiptMatches = (receipt: Item, item: Item): boolean =>
+  receipt.id === item.id &&
+  receipt.revision === item.revision &&
+  item.status === "skipped" &&
+  DateTime.toEpochMillis(receipt.expiresAt) === DateTime.toEpochMillis(item.expiresAt);
+const pruneUndo = (owner: Owner, observed: ReadonlyArray<Item>): void => {
+  owner.undo = owner.undo.filter(
+    (receipt) =>
+      !itemExpired(receipt) &&
+      observed.every(
+        (item) =>
+          item.id !== receipt.id ||
+          item.revision < receipt.revision ||
+          receiptMatches(receipt, item)
+      )
+  );
+};
+const eligibleUndo = (owner: Owner): ReadonlyArray<Item> =>
+  owner.undo.filter((receipt) => {
+    const entry = owner.entries.get(receipt.id);
+    return (
+      !itemExpired(receipt) &&
+      entry !== undefined &&
+      current(owner, entry) &&
+      !blocked(entry) &&
+      !entry.acting &&
+      receiptMatches(receipt, entry.detail.item)
+    );
   });
 const failBulk = (owner: Owner): void => {
   owner.phase = "uncertain";
@@ -486,7 +630,7 @@ const failBulk = (owner: Owner): void => {
   notify(owner);
 };
 const recoverItem = (owner: Owner, detail: Detail): void => {
-  if (!owner.active) return;
+  if (!owner.active || owner.phase !== "idle") return;
   const entry = retain(owner, detail);
   if (entry.recovering || entry.acting || !current(owner, entry)) return;
   entry.recovering = true;
@@ -506,7 +650,14 @@ const recoverItem = (owner: Owner, detail: Detail): void => {
           )
         );
         if (!current(owner, entry)) return;
-        if (result._tag === "Failure") {
+        if (
+          result._tag === "Failure" ||
+          result.value.data.item.id !== detail.item.id ||
+          result.value.data.revision < entry.detail.revision ||
+          result.value.data.item.revision !== result.value.data.revision ||
+          DateTime.toEpochMillis(result.value.data.item.expiresAt) !==
+            DateTime.toEpochMillis(entry.detail.item.expiresAt)
+        ) {
           entry.recovering = false;
           entry.feedback = "uncertain";
         } else {
@@ -525,11 +676,12 @@ const recoverWorkspace = (owner: Owner): void => {
   owner.phase = "recovering";
   notify(owner);
   const generation = owner.generation;
+  const previous = owner.get.once(owner.query);
   owner.get.refresh(owner.query);
   run(
     owner,
     Effect.gen(function* () {
-      const succeeded = yield* workspaceRecovered(owner);
+      const succeeded = yield* workspaceRecovered(owner, previous);
       if (!liveGeneration(owner, generation)) return;
       if (succeeded) {
         owner.phase = "idle";
@@ -543,16 +695,38 @@ const recoverWorkspace = (owner: Owner): void => {
 
 const liveGeneration = (owner: Owner, generation: number): boolean =>
   owner.active && owner.generation === generation;
-const sameItems = (results: ReadonlyArray<Detail>, items: ReadonlyArray<Item>): boolean => {
-  const expected = new Set(items.map((item) => item.id));
+const acceptedResults = (
+  results: ReadonlyArray<Detail>,
+  items: ReadonlyArray<Item>,
+  status: Item["status"]
+): boolean => {
+  const expected = new Map(items.map((item) => [item.id, item]));
   return (
-    results.length === expected.size && results.every((detail) => expected.delete(detail.item.id))
+    expected.size === items.length &&
+    results.length === items.length &&
+    results.every((detail) => {
+      const item = expected.get(detail.item.id);
+      if (item === undefined) return false;
+      expected.delete(detail.item.id);
+      return (
+        detail.item.status === status &&
+        detail.revision === item.revision + 1 &&
+        detail.item.revision === detail.revision &&
+        DateTime.toEpochMillis(detail.item.expiresAt) === DateTime.toEpochMillis(item.expiresAt)
+      );
+    })
   );
 };
 
-const workspaceRecovered = (owner: Owner): Effect.Effect<boolean> =>
-  owner.get
-    .resultOnce(owner.query, { suspendOnWaiting: true })
-    .pipe(Effect.matchCause({ onSuccess: () => true, onFailure: () => false }));
+const workspaceRecovered = (
+  owner: Owner,
+  previous: ReturnType<ReviewWorkspaceQuery["read"]>
+): Effect.Effect<boolean> =>
+  owner.get.resultOnce(owner.query, { suspendOnWaiting: true }).pipe(
+    Effect.matchCause({
+      onSuccess: () => owner.get.once(owner.query) !== previous,
+      onFailure: () => false,
+    })
+  );
 
 const itemExpired = (item: Item): boolean => now() >= DateTime.toEpochMillis(item.expiresAt);

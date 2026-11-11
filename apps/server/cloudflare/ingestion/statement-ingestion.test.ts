@@ -5137,10 +5137,138 @@ it("supports every ingestion source with atomic bulk decisions and individual cr
       expect(createdHistory.pendingCount).toBe(0);
       expect(createdHistory.items).toHaveLength(3);
       expect(createdHistory.items.every((item) => item.status === "created")).toBe(true);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(3);
+      expect(yield* fromTestPromise(() => count(runtime.db, "source_attestations"))).toBe(3);
+      const composed = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "SELECT r.id FROM ingestion_review_items r JOIN transactions t ON t.id=r.transaction_id AND t.user_id=r.user_id JOIN source_attestations a ON a.transaction_id=t.id AND a.user_id=t.user_id AND a.review_item_id=r.id WHERE r.workspace_state='created'"
+          )
+          .all<{ id: string }>()
+      );
+      expect(composed.results.map(({ id }) => id).sort()).toEqual(
+        inbox.items.map(({ id }) => id).sort()
+      );
     })
   ));
 
 afterEach(() => vi.useRealTimers());
+
+it("rolls back the whole bulk decision when a selected revision changes at commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const own = yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          "fecha,valor,descripcion\n2026-08-01,?,Cafe\n2026-08-02,?,Tienda\n"
+        )
+      );
+      const changedId = own.reviewIds[1] ?? "";
+      const database = competingWriteDb(runtime.db, () =>
+        runtime.db
+          .prepare(
+            "UPDATE ingestion_review_items SET workspace_state='skipped',workspace_revision=1,workspace_updated_at_ms=created_at_ms,workspace_archive_row_ref='review:'||id WHERE id=? AND user_id=?"
+          )
+          .bind(changedId, userA)
+          .run()
+      );
+      const result = yield* fromTestPromise(() =>
+        editReview(
+          { ...runtime, db: database },
+          {
+            _tag: "Skip",
+            items: own.reviewIds.map((id) => ({ id, revision: 0 })),
+          }
+        )
+      );
+      expect(result.status).toBe(400);
+      const pending = yield* readReviewInbox(runtime);
+      expect(pending.items.map(({ id, revision }) => ({ id, revision }))).toEqual([
+        { id: own.reviewIds[0], revision: 0 },
+      ]);
+      const history = yield* readReviewInbox(runtime, "history");
+      expect(history.items.map(({ id, revision, status }) => ({ id, revision, status }))).toEqual([
+        { id: changedId, revision: 1, status: "skipped" },
+      ]);
+    })
+  ));
+
+it("rejects a foreign bulk member and stale Undo without changing any acknowledged member", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const own = yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          "fecha,valor,descripcion\n2026-08-01,?,Cafe\n2026-08-02,?,Tienda\n"
+        )
+      );
+      const foreign = yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Ajeno\n", 1)
+      );
+      const refs = own.reviewIds.map((id) => ({ id, revision: 0 }));
+      const foreignId = foreign.reviewIds[0] ?? "";
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Skip",
+            items: [...refs, { id: foreignId, revision: 0 }],
+          })
+        )).status
+      ).toBe(400);
+      expect(
+        (yield* readReviewInbox(runtime)).items.map(({ revision, status }) => ({
+          revision,
+          status,
+        }))
+      ).toEqual([
+        { revision: 0, status: "pending" },
+        { revision: 0, status: "pending" },
+      ]);
+      const foreignDetail = yield* fromTestPromise(() => reviewDetail(runtime, foreignId, 1));
+      expect(yield* fromTestPromise(() => foreignDetail.json())).toMatchObject({
+        data: { revision: 0, item: { status: "pending" } },
+      });
+      expect(
+        (yield* fromTestPromise(() => editReview(runtime, { _tag: "Skip", items: refs }))).status
+      ).toBe(200);
+      const receipt = own.reviewIds.map((id) => ({ id, revision: 1 }));
+      const changedId = own.reviewIds[1] ?? "";
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Restore",
+            items: [{ id: changedId, revision: 1 }],
+          })
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Skip",
+            items: [{ id: changedId, revision: 2 }],
+          })
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* fromTestPromise(() => editReview(runtime, { _tag: "Restore", items: receipt })))
+          .status
+      ).toBe(400);
+      const history = yield* readReviewInbox(runtime, "history");
+      expect(
+        history.items
+          .map(({ revision, status }) => ({ revision, status }))
+          .sort((left, right) => left.revision - right.revision)
+      ).toEqual([
+        { revision: 1, status: "skipped" },
+        { revision: 3, status: "skipped" },
+      ]);
+      expect(history.pendingCount).toBe(0);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+      expect(yield* fromTestPromise(() => count(runtime.db, "source_attestations"))).toBe(0);
+    })
+  ));
 
 it("denies agent originals and refuses review reads and writes after Consent revocation", () =>
   Effect.runPromise(

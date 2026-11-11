@@ -2140,7 +2140,7 @@ it.each(["read", "dismissed", "conflicting-receipt"] as const)(
               .prepare(
                 `UPDATE insight_events SET delivery_receipt_id=?,delivery_sent_at_ms=?,delivery_channel='whatsapp',delivery_provider='kapso',delivery_provider_message_id='original-message' WHERE user_id=? AND id=?`
               )
-              .bind(crypto.randomUUID(), now.epochMilliseconds, scope.userId, id)
+              .bind(newId(), now.epochMilliseconds, scope.userId, id)
               .run()
           );
         }

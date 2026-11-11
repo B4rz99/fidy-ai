@@ -1,3 +1,4 @@
+import { newId } from "../secret-material/operations";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { InsightEventId } from "../../src/core/insights/contract";
@@ -220,13 +221,7 @@ it.each(["read", "dismissed", "matching-receipt"] as const)(
               .prepare(`UPDATE insight_events SET delivery_receipt_id=?,
             delivery_sent_at_ms=?,delivery_channel='whatsapp',delivery_provider='kapso',
             delivery_provider_message_id=? WHERE user_id=? AND id=?`)
-              .bind(
-                crypto.randomUUID(),
-                fixture.at.epochMilliseconds,
-                proof.provider_message_id,
-                userId,
-                id
-              )
+              .bind(newId(), fixture.at.epochMilliseconds, proof.provider_message_id, userId, id)
               .run()
           );
         }
@@ -276,7 +271,7 @@ it("refuses a native weekly proof that conflicts with the retained first receipt
           .prepare(`UPDATE insight_events SET lifecycle_state='read',
         delivery_receipt_id=?,delivery_sent_at_ms=?,delivery_channel='whatsapp',delivery_provider='kapso',
         delivery_provider_message_id='original-message' WHERE user_id=? AND id=?`)
-          .bind(crypto.randomUUID(), fixture.at.epochMilliseconds, userId, id)
+          .bind(newId(), fixture.at.epochMilliseconds, userId, id)
           .run()
       );
       const receipt = yield* findInsightAttempt({ db, userId, id });

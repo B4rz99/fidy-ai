@@ -22,6 +22,7 @@ import {
 import {
   controlManualReminders,
   findInsight,
+  findInsightAttempt,
   findProactivityReport,
   findReminderGovernor,
   findReminderSchedule,
@@ -274,6 +275,15 @@ it("the installed User coordinator generates the latest reminder and frozen mess
     })
   ));
 
+const receiptProvider = vi.fn(() =>
+  Promise.resolve(
+    Response.json({
+      messaging_product: "whatsapp",
+      messages: [{ id: "reminder-provider" }],
+    })
+  )
+);
+
 it("a category send is one-shot, provider acceptance is not delivery, and verified evidence settles the exact occurrence", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -346,11 +356,8 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
           }),
         ])
       );
-      const provider = vi.fn(() =>
-        Promise.resolve(
-          Response.json({ messaging_product: "whatsapp", messages: [{ id: "reminder-provider" }] })
-        )
-      );
+      const provider = receiptProvider;
+      provider.mockClear();
       vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const coordinator = makeProactivityCoordinator({
         environment: configuration(db),
@@ -2137,6 +2144,130 @@ it.each(["paused", "stopped"] as const)(
             );
           });
         yield* reactivate();
+      })
+    )
+);
+
+it.each(["read", "dismissed", "conflicting-receipt"] as const)(
+  "native category receipt settlement preserves %s attention and the first receipt",
+  (attention) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* proactivityDatabase;
+        const schedule = yield* activateTestReminder(db);
+        const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
+        vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
+        const generated = yield* materializeReminder({
+          db,
+          userId: proactivityTestUsers[0],
+          id: schedule.id,
+          now,
+        });
+        if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
+        const id = generated.id;
+        const scope = { db, userId: proactivityTestUsers[0], id };
+        const caller = proactivityTestCallers[0];
+        const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            prepareInsightRecipient({
+              db,
+              userId: scope.userId,
+              recipient: {
+                portfolioId: caller.businessPortfolioId,
+                bsuid: caller.businessScopedUserId,
+                businessPhoneNumberId: phone,
+              },
+              receivedAtMs: now.epochMilliseconds,
+            }),
+          ])
+        );
+        receiptProvider.mockClear();
+        vi.stubGlobal("fetch", withOpenAiFetch(receiptProvider));
+        const coordinator = makeProactivityCoordinator({
+          environment: configuration(db),
+          userId: scope.userId,
+        });
+        const work = (): Request =>
+          workRequest({ kind: "proactivity-delivery", version: 1, userId: scope.userId, id });
+        yield* Effect.tryPromise(() => coordinator.fetch(work()));
+        expect(receiptProvider).toHaveBeenCalledOnce();
+        const claim = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ correlation_token: HostedDeliveryCorrelationToken })
+        )(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT correlation_token FROM whatsapp_deliveries WHERE kind='proactivity' AND user_id=? AND delivery_id=?"
+              )
+              .bind(scope.userId, id)
+              .first()
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE insight_events SET lifecycle_state=? WHERE user_id=? AND id=?")
+            .bind(attention === "conflicting-receipt" ? "read" : attention, scope.userId, id)
+            .run()
+        );
+        if (attention === "conflicting-receipt") {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                `UPDATE insight_events SET delivery_receipt_id=?,delivery_sent_at_ms=?,delivery_channel='whatsapp',delivery_provider='kapso',delivery_provider_message_id='original-message' WHERE user_id=? AND id=?`
+              )
+              .bind(newId(), now.epochMilliseconds, scope.userId, id)
+              .run()
+          );
+        }
+        const before = yield* findInsightAttempt(scope);
+        const status = (): Request =>
+          new Request("https://coordinator/hosted-turn/whatsapp/status", {
+            method: "POST",
+            body: Schema.encodeSync(Schema.fromJsonString(WhatsAppStatusAdmission))({
+              userId: scope.userId,
+              correlationToken: claim.correlation_token,
+              businessPhoneNumberId: phone,
+              providerMessageId: WhatsAppProviderMessageId.make("reminder-provider"),
+              outcome: "delivered",
+              occurredAtMs: now.epochMilliseconds,
+              receivedAtMs: now.epochMilliseconds,
+            }),
+          });
+        expect((yield* Effect.tryPromise(() => coordinator.fetch(status()))).status).toBe(
+          attention === "conflicting-receipt" ? 503 : 200
+        );
+        const receipt = yield* findInsightAttempt(scope);
+        expect(Option.getOrThrow(yield* findInsight(scope)).lifecycleState).toBe(
+          attention === "conflicting-receipt" ? "read" : attention
+        );
+        if (attention === "conflicting-receipt") {
+          expect(receipt).toEqual(before);
+          expect(Option.getOrThrow(yield* findReminderGovernor(scope))).toEqual({
+            _tag: "Attentive",
+            unanswered: 0,
+          });
+          expect(
+            Option.isNone(
+              yield* readProactiveTranscript({
+                ...scope,
+                insightEventId: id,
+                now: now.epochMilliseconds,
+              })
+            )
+          ).toBe(true);
+        } else {
+          expect(Option.isNone(before)).toBe(true);
+          expect(Option.getOrThrow(receipt).providerMessageId).toBe("reminder-provider");
+          expect((yield* Effect.tryPromise(() => coordinator.fetch(status()))).status).toBe(200);
+          expect(yield* findInsightAttempt(scope)).toEqual(receipt);
+          expect(Option.getOrThrow(yield* findReminderGovernor(scope))).toEqual({
+            _tag: "Attentive",
+            unanswered: 1,
+          });
+        }
+        yield* Effect.tryPromise(() => coordinator.fetch(work()));
+        expect(receiptProvider).toHaveBeenCalledOnce();
       })
     )
 );

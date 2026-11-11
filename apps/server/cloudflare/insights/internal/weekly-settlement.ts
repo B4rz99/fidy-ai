@@ -1,3 +1,4 @@
+import { prepareNativeReceiptAgreement } from "./native-receipt";
 import { type UserId } from "../../../src/core/identity/contract";
 import {
   DeliveryAttemptId,
@@ -19,6 +20,17 @@ export const prepareWeeklyDeliverySettlement = (
 ): ReadonlyArray<D1PreparedStatement> => {
   const proof = insightVerifiedDeliveryQuery(input);
   return [
+    prepareNativeReceiptAgreement({
+      db: input.db,
+      receipts: {
+        sql: `SELECT e.delivery_receipt_id,e.delivery_sent_at_ms,e.delivery_channel,
+        e.delivery_provider,e.delivery_provider_message_id,v.send_started_at_ms,v.provider_message_id
+        FROM insight_events AS e JOIN (${proof.sql}) AS v
+          ON v.user_id=e.user_id AND v.insight_event_id=e.id
+        WHERE e.user_id=? AND e.id=?`,
+        params: [...proof.params, input.userId, input.insightEventId],
+      },
+    }),
     ...prepareCount({ ...input, proof }),
     input.db
       .prepare(`UPDATE insight_events SET

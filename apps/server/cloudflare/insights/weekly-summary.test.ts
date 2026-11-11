@@ -165,6 +165,11 @@ it.live(
         )
       ).toBe(true);
       expect(yield* runWeeklyGeneration(input)).toEqual({ _tag: "NoWork" });
+      yield* Effect.tryPromise(() => db.batch([seed("06", { amount: "9999" })]));
+      expect(yield* findWeeklySummaryReport({ ...input, id: outcome.id })).toEqual(
+        Option.some(report)
+      );
+
       const outbox = yield* Effect.tryPromise(() =>
         db
           .prepare(

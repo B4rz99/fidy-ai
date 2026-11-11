@@ -24,7 +24,11 @@ import {
   weeklySummaryTestUser,
   withdrawWeeklyFixtureConsent,
 } from "../weekly-summary.test-fixture";
-import { ProactivityActivity, type ProactivityEnvironment } from "./contract";
+import {
+  type InsightUnavailable,
+  ProactivityActivity,
+  type ProactivityEnvironment,
+} from "./contract";
 import {
   findInsight,
   findInsightAttempt,
@@ -183,6 +187,37 @@ const seed = (): Promise<Readonly<{ db: D1Database; at: DateTime.Utc }>> =>
       return { db, at: schedule.nextScheduledAt };
     })
   );
+const weeklyDeliveryFixture = (
+  providerOverride: Option.Option<() => Promise<Response>> = Option.none()
+): Effect.Effect<
+  Readonly<{
+    fixture: Awaited<ReturnType<typeof seed>>;
+    db: D1Database;
+    coordinator: ProactivityCoordinator;
+    fetch: typeof providerFetch;
+    id: InsightEventId;
+    work: ProactivityActivity;
+  }>,
+  Cause.UnknownError | InsightUnavailable
+> =>
+  Effect.gen(function* () {
+    const fixture = yield* testPromise(seed);
+    vi.spyOn(Date, "now").mockReturnValue(fixture.at.epochMilliseconds);
+    const fetch = fakeProvider();
+    if (Option.isSome(providerOverride)) fetch.mockImplementationOnce(providerOverride.value);
+    vi.stubGlobal("fetch", fetch);
+    const { db } = fixture;
+    const coordinator = makeCoordinator(configuration(db));
+    const schedule = Option.getOrThrow(yield* findWeeklySchedule({ db, userId }));
+    yield* testPromise(() =>
+      activity(coordinator, { kind: "weekly-generate", version: 1, userId, id: schedule.id })
+    );
+    const id = yield* testPromise(() => eventFor(db, fixture.at));
+    const work = { kind: "weekly-summary", version: 1, userId, insightEventId: id } as const;
+    yield* testPromise(() => activity(coordinator, work));
+    return { fixture, db, coordinator, fetch, id, work };
+  });
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -194,19 +229,7 @@ it.each(["read", "dismissed", "matching-receipt"] as const)(
   (attention) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const fixture = yield* testPromise(seed);
-        vi.spyOn(Date, "now").mockReturnValue(fixture.at.epochMilliseconds);
-        const fetch = fakeProvider();
-        vi.stubGlobal("fetch", fetch);
-        const { db } = fixture;
-        const coordinator = makeCoordinator(configuration(db));
-        const schedule = Option.getOrThrow(yield* findWeeklySchedule({ db, userId }));
-        yield* testPromise(() =>
-          activity(coordinator, { kind: "weekly-generate", version: 1, userId, id: schedule.id })
-        );
-        const id = yield* testPromise(() => eventFor(db, fixture.at));
-        const work = { kind: "weekly-summary", version: 1, userId, insightEventId: id } as const;
-        yield* testPromise(() => activity(coordinator, work));
+        const { fixture, db, coordinator, fetch, id, work } = yield* weeklyDeliveryFixture();
         const proof = yield* testPromise(() => readSummaryClaim(db, id));
         yield* testPromise(() =>
           db
@@ -251,20 +274,7 @@ it.each(["read", "dismissed", "matching-receipt"] as const)(
 it("refuses a native weekly proof that conflicts with the retained first receipt atomically", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const fixture = yield* testPromise(seed);
-      vi.spyOn(Date, "now").mockReturnValue(fixture.at.epochMilliseconds);
-      const fetch = fakeProvider();
-      vi.stubGlobal("fetch", fetch);
-      const { db } = fixture;
-      const coordinator = makeCoordinator(configuration(db));
-      const schedule = Option.getOrThrow(yield* findWeeklySchedule({ db, userId }));
-      yield* testPromise(() =>
-        activity(coordinator, { kind: "weekly-generate", version: 1, userId, id: schedule.id })
-      );
-      const id = yield* testPromise(() => eventFor(db, fixture.at));
-      yield* testPromise(() =>
-        activity(coordinator, { kind: "weekly-summary", version: 1, userId, insightEventId: id })
-      );
+      const { fixture, db, coordinator, fetch, id } = yield* weeklyDeliveryFixture();
       const proof = yield* testPromise(() => readSummaryClaim(db, id));
       yield* testPromise(() =>
         db
@@ -289,20 +299,9 @@ it("refuses a native weekly proof that conflicts with the retained first receipt
 it("an ambiguous weekly send retains the pending InsightEvent without a delivery receipt", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const fixture = yield* testPromise(seed);
-      vi.spyOn(Date, "now").mockReturnValue(fixture.at.epochMilliseconds);
-      const fetch = fakeProvider();
-      fetch.mockImplementationOnce(() => Promise.reject(new Error("provider response lost")));
-      vi.stubGlobal("fetch", fetch);
-      const { db } = fixture;
-      const coordinator = makeCoordinator(configuration(db));
-      const schedule = Option.getOrThrow(yield* findWeeklySchedule({ db, userId }));
-      yield* testPromise(() =>
-        activity(coordinator, { kind: "weekly-generate", version: 1, userId, id: schedule.id })
+      const { db, coordinator, fetch, id, work } = yield* weeklyDeliveryFixture(
+        Option.some(() => Promise.reject(new Error("provider response lost")))
       );
-      const id = yield* testPromise(() => eventFor(db, fixture.at));
-      const work = { kind: "weekly-summary", version: 1, userId, insightEventId: id } as const;
-      yield* testPromise(() => activity(coordinator, work));
       yield* testPromise(() => activity(coordinator, work));
       expect(Option.getOrThrow(yield* findInsight({ db, userId, id })).lifecycleState).toBe(
         "pending"

@@ -838,8 +838,8 @@ retry policy and application runtime remain unchanged. Sanitization,
 bounded accumulation, mutation refusal, failure preservation, masked acquisition/disposal deadlines
 and interruption are covered through the diagnostic helper's public seams in the web script tests.
 
-Recurring workspace reads and writes request the compact display projection: only the latest
-revision of each plan crosses the browser boundary. Storage and historical occurrence calculations
+Recurring workspace reads and writes request the compact display projection: first, current local-date
+and latest revisions retain dated standing without projecting future settings early. Storage and historical occurrence calculations
 retain the complete revision ledger; default API reads still return the full document. Draft
 autosave starts after 200 milliseconds of idle input and subsequent automatic writes are spaced
 by at least one second; explicit Create/Skip flushes remain immediate and revision-bound.
@@ -884,3 +884,10 @@ adds matching rows to that selection; replacing the loaded period requires expli
 `transactions.updateTransactions` with each observed revision and one shared change set. The
 existing correction owner retains admission, pending state and explicit uncertainty recovery;
 there is no splitting into partially committed batches or automatic mutation replay.
+
+RecurringPlan standing is observed at the effective plan zone's local calendar date. Future pauses,
+stops and settings do not change earlier standing; Scheduled marks a future start, and endDate only
+bounds generated dates. Lifecycle controls consult retained stop/open-pause facts independently of
+standing. Explicit lifecycle and current-plan edit intent capture the local date when submitted;
+canonical document revision checks and live authorization remain server-owned. Stopped plans remain
+editable under the existing forward-edit policy, including replacement of the future revision suffix.

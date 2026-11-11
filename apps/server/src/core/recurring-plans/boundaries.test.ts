@@ -12,6 +12,7 @@ import {
 import {
   applyRecurringEdit,
   emptyRecurringDocument,
+  observeRecurringPlan,
   projectDates,
   projectRecurringMonth,
   proposeRecurringMatches,
@@ -396,4 +397,33 @@ it("starts at the original anchor when the selected window begins in the precedi
     "2026-02-15",
     "2026-03-15",
   ]);
+});
+
+it("observes dated standing without applying future changes early", () => {
+  const plan: RecurringPlan = {
+    ...tracked(1),
+    revisions: [
+      { from: "2026-01-15", plan: settings },
+      { from: "2026-06-01", plan: { ...settings, name: "Future rent" } },
+    ],
+    pauses: [{ from: "2026-03-01", through: "2026-04-01" }],
+    stoppedOn: "2026-05-01",
+  };
+  const document = ledger(plan);
+  const observe = (date: string): Effect.Success<ReturnType<typeof observeRecurringPlan>> =>
+    Effect.runSync(observeRecurringPlan({ document, planId: plan.id, date }));
+  expect(Option.getOrThrow(observe("2026-01-01")).status).toBe("scheduled");
+  expect(Option.getOrThrow(observe("2026-02-01"))).toEqual({ plan: settings, status: "active" });
+  expect(Option.getOrThrow(observe("2026-03-01")).status).toBe("paused");
+  expect(Option.getOrThrow(observe("2026-04-01")).status).toBe("active");
+  expect(Option.getOrThrow(observe("2026-05-01")).status).toBe("stopped");
+  expect(Option.getOrThrow(observe("2026-06-01"))).toEqual({
+    plan: { ...settings, name: "Future rent" },
+    status: "stopped",
+  });
+  expect(
+    Exit.isFailure(
+      Effect.runSyncExit(observeRecurringPlan({ document, planId: plan.id, date: "2026-02-30" }))
+    )
+  ).toBe(true);
 });

@@ -1,4 +1,5 @@
-import { DateTime, Option } from "effect";
+import { observeRecurringPlan } from "@fidy/server/recurring-plan-decisions";
+import { DateTime, Effect, Option } from "effect";
 import type { CanonicalInput, CanonicalSuccess } from "@/transport/client";
 import { formatMoneyWithCode } from "@/transport/money";
 
@@ -23,10 +24,32 @@ export type CreationResultProps = Readonly<{
   save: Save;
   close: () => void;
 }>;
-export const planStatus = (plan: Plan): "stopped" | "paused" | "active" => {
-  if (plan.stoppedOn !== undefined) return "stopped";
-  return plan.pauses.some((pause) => pause.through === undefined) ? "paused" : "active";
+export const planToday = (plan: Plan): string => {
+  const now = DateTime.nowUnsafe();
+  const revision =
+    plan.revisions.findLast(
+      (entry) =>
+        entry.from <=
+        DateTime.formatIsoDate(DateTime.makeZonedUnsafe(now, { timeZone: entry.plan.timeZone }))
+    ) ?? plan.revisions[0];
+  return DateTime.formatIsoDate(
+    DateTime.makeZonedUnsafe(now, { timeZone: revision.plan.timeZone })
+  );
 };
+export const currentPlan = (plan: Plan): PlanInput => {
+  const date = planToday(plan);
+  return (plan.revisions.findLast((entry) => entry.from <= date) ?? plan.revisions[0]).plan;
+};
+export const planStatus = (plan: Plan): "scheduled" | "stopped" | "paused" | "active" =>
+  Option.getOrThrow(
+    Effect.runSync(
+      observeRecurringPlan({
+        document: { plans: [plan], exceptions: [], fulfillments: [], excludedTransactionIds: [] },
+        planId: plan.id,
+        date: planToday(plan),
+      })
+    )
+  ).status;
 export const frequencies = [
   ["weekly", "Cada semana"],
   ["fortnightly", "Cada 2 semanas"],

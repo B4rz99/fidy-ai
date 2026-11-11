@@ -27,7 +27,9 @@ import {
   type Save,
   type Workspace,
   type WorkspaceReadState,
+  currentPlan,
   type planStatus,
+  planToday,
 } from "./model";
 
 type Series = CanonicalSuccess<"recurring.listRecurringSeries">["data"]["series"][number];
@@ -177,6 +179,7 @@ const allPlanStatus = {
 };
 const planStatuses = [
   allPlanStatus,
+  { value: "scheduled", label: "Programados", empty: "No tienes recurrentes programados" },
   { value: "active", label: "Activos", empty: "No tienes recurrentes activos" },
   { value: "paused", label: "Pausados", empty: "No tienes recurrentes pausados" },
   {
@@ -372,7 +375,7 @@ const SuggestionLink = ({
             { value: "", label: "Vincular a uno existente" },
             ...view.document.plans.map((plan) => ({
               value: plan.id,
-              label: plan.revisions.at(-1)?.plan.name ?? "Recurrente",
+              label: currentPlan(plan).name,
             })),
           ]}
         />
@@ -476,7 +479,7 @@ const RestoreSuggestions = ({
 );
 
 const matchesPlanFilters = (plan: Plan, filters: Filters): boolean => {
-  const input = plan.revisions.at(-1)?.plan;
+  const input = currentPlan(plan);
   if (input === undefined) return false;
   return Object.entries(filters).every(([key, value]) => {
     if (key === "search") return input.name.toLowerCase().includes(value.toLowerCase());
@@ -492,7 +495,6 @@ const PlanRow = ({
   open,
   save,
   disabled,
-  today,
   status,
 }: Readonly<{
   plan: Plan;
@@ -502,7 +504,7 @@ const PlanRow = ({
   today: string;
   status: ReturnType<typeof planStatus>;
 }>): JSX.Element => {
-  const input = plan.revisions.at(-1)?.plan;
+  const input = currentPlan(plan);
   if (input === undefined) return <></>;
   return (
     <div className="@container flex min-w-0 items-center gap-2 border-b pr-4 transition-colors last:border-b-0 hover:bg-muted/50">
@@ -523,9 +525,9 @@ const PlanRow = ({
           focusAppearance="subtle"
           variant="outline"
           size="sm"
-          disabled={disabled}
+          disabled={disabled || plan.stoppedOn !== undefined}
           onClick={() =>
-            save({ kind: "lifecycle", planId: plan.id, date: today, action: "resume" })
+            save({ kind: "lifecycle", planId: plan.id, date: planToday(plan), action: "resume" })
           }
         >
           Reanudar

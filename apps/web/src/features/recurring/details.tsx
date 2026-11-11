@@ -1,5 +1,5 @@
 import { browserSecureRandom } from "@/browser/crypto";
-import { BigDecimal, Effect, Option, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
 import { type FormEvent, type JSX, useId, useRef, useState } from "react";
 import { RecurringCommand } from "@/transport/client";
 import { Button } from "@/ui/components/button";
@@ -79,7 +79,7 @@ const PaymentForm = ({ item, save, disabled, today }: Props): JSX.Element => {
     </form>
   );
 };
-const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element => (
+const TrackingActions = ({ item, save, disabled }: Props): JSX.Element => (
   <div className="grid gap-3 border-t pt-4">
     <Button
       contentLayout="wrap"
@@ -108,7 +108,14 @@ const TrackingActions = ({ item, save, disabled, today }: Props): JSX.Element =>
         variant="destructive"
         disabled={disabled}
         onClick={() =>
-          save({ kind: "lifecycle", planId: item.planId, date: today, action: "stop" })
+          save({
+            kind: "lifecycle",
+            planId: item.planId,
+            date: DateTime.formatIsoDate(
+              DateTime.makeZonedUnsafe(DateTime.nowUnsafe(), { timeZone: item.plan.timeZone })
+            ),
+            action: "stop",
+          })
         }
       >
         Confirmar dejar de seguir

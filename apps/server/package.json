@@ -288,6 +288,11 @@
       "types": "./src/shell/agent/contract.ts",
       "import": "./src/shell/agent/contract.ts",
       "default": "./src/shell/agent/contract.ts"
+    },
+    "./recurring-plan-decisions": {
+      "types": "./src/core/recurring-plans/operations.ts",
+      "import": "./src/core/recurring-plans/operations.ts",
+      "default": "./src/core/recurring-plans/operations.ts"
     }
   },
   "scripts": {

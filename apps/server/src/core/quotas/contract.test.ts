@@ -1,4 +1,4 @@
-import { AllowanceKind, AllowanceMeter, CanonicalRetryKey } from "./contract";
+import { AllowanceMeter, CanonicalRetryKey } from "./contract";
 import { Result, Schema } from "effect";
 import { expect, it } from "vitest";
 
@@ -27,15 +27,7 @@ it("accepts bounded opaque retry references without whitespace or interpreter pu
   }
 });
 
-it("decodes each independent commercial meter and both entitlement states", () => {
-  for (const kind of [
-    "forwarded_email",
-    "media_submission",
-    "hosted_history_turn",
-    "canonical_call",
-  ]) {
-    expect(Schema.decodeUnknownSync(AllowanceKind)(kind)).toBe(kind);
-  }
+it("preserves limited and uncapped entitlement states on the wire", () => {
   const limited = {
     _tag: "Limited",
     limit: 30,

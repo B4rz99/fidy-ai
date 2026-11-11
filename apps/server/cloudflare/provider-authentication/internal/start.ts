@@ -111,6 +111,34 @@ const startedResponse = ({
       "set-cookie": `${providerConfiguration({ environment, provider }).cookieName}=${verifier}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
     },
   });
+const prepareSupersession = ({
+  db,
+  invitation,
+  pairingId,
+  reference,
+  current,
+}: Readonly<{
+  db: D1Database;
+  invitation: boolean;
+  pairingId: string;
+  reference: string;
+  current: number;
+}>): ReadonlyArray<D1PreparedStatement> => [
+  db
+    .prepare(
+      invitation
+        ? "DELETE FROM provider_authentication_attempts WHERE pairing_id=? AND invitation_id=? AND completed_at_ms IS NULL"
+        : "DELETE FROM provider_authentication_attempts WHERE pairing_id=? AND handoff_id=? AND completed_at_ms IS NULL"
+    )
+    .bind(pairingId, reference),
+  db
+    .prepare(
+      invitation
+        ? "UPDATE whatsapp_signup_invitations SET review_code=?,review_attempt_id=NULL,review_text=NULL,review_started_ms=NULL,decision=NULL,decision_message_id=NULL,confirmed_at_ms=NULL WHERE id=? AND pairing_id=? AND approved_at_ms IS NULL AND consumed_at_ms IS NULL AND expires_at_ms>?"
+        : "UPDATE whatsapp_provider_handoffs SET review_code=?,review_attempt_id=NULL,review_started_ms=NULL,review_message_id=NULL,decision=NULL,decision_message_id=NULL,confirmed_at_ms=NULL WHERE id=? AND pairing_id=? AND consumed_at_ms IS NULL AND expires_at_ms>?"
+    )
+    .bind(newId(), reference, pairingId, current),
+];
 const persistAttempt = ({
   environment,
   provider,
@@ -141,12 +169,14 @@ const persistAttempt = ({
   return Effect.tryPromise(() =>
     environment.DB.batch([
       ...claim,
-      ...(invitation
-        ? [
-            environment.DB.prepare(
-              "DELETE FROM provider_authentication_attempts WHERE pairing_id=? AND invitation_id=? AND completed_at_ms IS NULL"
-            ).bind(input.pairingId, handoffId),
-          ]
+      ...(handoffId !== null
+        ? prepareSupersession({
+            db: environment.DB,
+            invitation,
+            pairingId: input.pairingId,
+            reference: handoffId,
+            current,
+          })
         : []),
       environment.DB.prepare(`INSERT INTO provider_authentication_attempts
       (id,pairing_id,provider,cookie_digest,nonce,intent,disclosure_json,consent_at_ms,created_at_ms,expires_at_ms,state,handoff_id,invitation_id)

@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import type { Page } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin, installBoundUser, installCategories, response } from "./http-fixtures";
@@ -47,7 +48,13 @@ const initialFailureJourney = Effect.fn(function* (page: Page) {
     )
   );
   yield* wait(() =>
-    page.screenshot({ path: test.info().outputPath("initial-failure.png"), fullPage: true })
+    captureVisualEvidence({
+      target: page,
+      options: {
+        path: test.info().outputPath("initial-failure.png"),
+        fullPage: true,
+      },
+    })
   );
   fixture.failed = false;
   yield* wait(() => page.getByRole("button", { name: "Reintentar carga", exact: true }).click());
@@ -95,7 +102,13 @@ const refreshFailureJourney = Effect.fn(function* (page: Page) {
     expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeDisabled()
   );
   yield* wait(() =>
-    page.screenshot({ path: test.info().outputPath("refresh-failure.png"), fullPage: true })
+    captureVisualEvidence({
+      target: page,
+      options: {
+        path: test.info().outputPath("refresh-failure.png"),
+        fullPage: true,
+      },
+    })
   );
   fixture.failed = false;
   yield* wait(() =>
@@ -125,7 +138,13 @@ const invalidPeriodJourney = Effect.fn(function* (page: Page) {
     expect(fixture.requests).toHaveLength(0);
   }
   yield* wait(() =>
-    page.screenshot({ path: test.info().outputPath("invalid-period.png"), fullPage: true })
+    captureVisualEvidence({
+      target: page,
+      options: {
+        path: test.info().outputPath("invalid-period.png"),
+        fullPage: true,
+      },
+    })
   );
   yield* wait(() => page.getByRole("link", { name: "Ir al mes actual", exact: true }).click());
   yield* wait(() => expect(page.getByLabel("Mes de transacciones")).toBeVisible());

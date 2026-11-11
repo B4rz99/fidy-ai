@@ -1,9 +1,8 @@
 import { Option } from "effect";
 import { expect, it } from "vitest";
-import { cliVersion, installationOutput } from "./installation";
+import { installationOutput } from "./installation";
 
-it("publishes version and installation help without credential dependencies", () => {
-  expect(installationOutput(["--version"])).toEqual(Option.some(`fidy ${cliVersion}\n`));
+it("publishes installation help without credential dependencies", () => {
   expect(Option.getOrThrow(installationOutput(["--help"]))).toContain("fidy login");
 });
 

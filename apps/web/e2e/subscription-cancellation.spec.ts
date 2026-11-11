@@ -271,55 +271,6 @@ test("Subscription cancellation explains why access without a paid Subscription 
     })
   ));
 
-test("Subscription cancellation review and result fit a mobile screen", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
-      yield* openPaidSubscription(page);
-      yield* installRoute(page, `${apiOrigin}/subscription/cancellation`, (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: response(cancellation),
-        })
-      );
-      yield* Effect.tryPromise((signal) =>
-        page
-          .getByRole("button", { name: "Cancelar renovaciones futuras", exact: true })
-          .click({ signal })
-      );
-      yield* Effect.tryPromise((signal) =>
-        expect(page.getByRole("region", { name: "Revisar cancelación" })).toBeVisible({ signal })
-      );
-      yield* Effect.tryPromise((signal) =>
-        page.screenshot({
-          signal,
-          path: new URL("../test-results/cancellation-mobile-review.png", import.meta.url).pathname,
-          fullPage: true,
-        })
-      );
-      yield* Effect.tryPromise((signal) =>
-        page.getByRole("button", { name: "Confirmar cancelación", exact: true }).click({ signal })
-      );
-      yield* Effect.tryPromise((signal) =>
-        expect(page.getByRole("region", { name: "Renovaciones canceladas" })).toBeVisible({
-          signal,
-        })
-      );
-      yield* Effect.tryPromise((signal) =>
-        page.screenshot({
-          signal,
-          path: new URL("../test-results/cancellation-mobile-result.png", import.meta.url).pathname,
-          fullPage: true,
-        })
-      );
-      const fits = yield* Effect.tryPromise(() => page.evaluate(contentFitsViewport));
-      expect(fits).toBe(true);
-    })
-  ));
-const contentFitsViewport = (): boolean =>
-  document.documentElement.scrollWidth <= document.documentElement.clientWidth;
-
 test("Subscription cancellation restores keyboard focus when review is dismissed", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {

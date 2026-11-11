@@ -44,10 +44,11 @@ const noteIdleSource = (
         kind: "new-recurring-series",
         grantId: instruction.grant_id,
         statement: {
-          sql: "UPDATE schedules SET last_source_identity=?,next_closed_at_ms=? WHERE kind='digest' AND user_id=? AND id=? AND version=? AND consent_grant_id=? AND enabled=1",
+          sql: "UPDATE schedules SET last_source_identity=?,next_closed_at_ms=CASE WHEN ?=0 THEN NULL ELSE ? END WHERE kind='digest' AND user_id=? AND id=? AND version=? AND consent_grant_id=? AND enabled=1",
           params: [
             sourceIdentity,
-            closingTimes.length === 0 ? null : Math.min(...closingTimes),
+            closingTimes.length,
+            closingTimes.length === 0 ? 0 : Math.min(...closingTimes),
             input.userId,
             instruction.id,
             instruction.version,

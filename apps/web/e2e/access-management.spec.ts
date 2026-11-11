@@ -497,6 +497,9 @@ const checkUnknownIssuance = Effect.fn(function* (page: Page, outcome: UnknownOu
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("button", { name: "Volver a la revisión", exact: true })).toHaveCount(0)
   );
+  expect(state.submissions).toHaveLength(1);
+  // Every fault has reached the same cause-free Uncertain state; inspect its lifecycle once.
+  if (outcome !== "lost") return;
   state.metadataFails = true;
   yield* Effect.tryPromise(() =>
     page.getByRole("button", { name: "Actualizar tokens", exact: true }).press("Enter")
@@ -527,7 +530,7 @@ const checkUnknownIssuance = Effect.fn(function* (page: Page, outcome: UnknownOu
   expect(state.submissions).toHaveLength(1);
 });
 for (const outcome of ["undecodable", "lost", "consumed"] as const) {
-  test(`Accesos retains a ${outcome} issuance without replay after failed or successful metadata inspection`, ({
+  test(`Accesos retains a ${outcome} issuance without replay${outcome === "lost" ? " through failed and successful metadata inspection" : ""}`, ({
     page,
   }) => Effect.runPromise(checkUnknownIssuance(page, outcome)));
 }

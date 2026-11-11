@@ -1,27 +1,32 @@
 import { Option } from "effect";
-import { useCallback, useRef, useState } from "react";
-import type { RefCallback, UIEventHandler } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import type { Dispatch, RefCallback, RefObject, SetStateAction, UIEventHandler } from "react";
 
 export const choiceRowRem = 2.75;
 const overscan = 3;
 type Viewport = Readonly<{ top: number; height: number; rowHeight: number }>;
 
-/** Owns fixed-row scrolling and text-scale observation; unmount releases the observer. */
-export const useFixedChoiceWindow = (): Readonly<{
+const emptyNode: Option.Option<HTMLDivElement> = Option.none();
+const useChoiceMeasurement = (
+  highlighted: RefObject<number>
+): Readonly<{
+  node: RefObject<Option.Option<HTMLDivElement>>;
   measure: RefCallback<HTMLDivElement>;
-  onScroll: UIEventHandler<HTMLDivElement>;
-  highlight: (index: number, pointer: boolean) => void;
-  reset: () => void;
   viewport: Viewport;
-  activeIndex: number;
+  setViewport: Dispatch<SetStateAction<Viewport>>;
+  resetViewport: () => void;
 }> => {
-  const node = useRef<Option.Option<HTMLDivElement>>(Option.none());
-  const highlighted = useRef(-1);
-  const [activeIndex, setActiveIndex] = useState(-1);
+  const node = useRef(emptyNode);
+  const [observed, setObserved] = useState(emptyNode);
   const [viewport, setViewport] = useState<Viewport>({ top: 0, height: 256, rowHeight: 44 });
   const measure = useCallback<RefCallback<HTMLDivElement>>((element) => {
-    if (element === null) return;
-    node.current = Option.some(element);
+    const next = Option.fromNullishOr(element);
+    node.current = next;
+    setObserved(next);
+  }, []);
+  useLayoutEffect(() => {
+    if (Option.isNone(observed)) return;
+    const element = observed.value;
     const update = (): void => {
       const rowHeight =
         Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * choiceRowRem;
@@ -33,11 +38,27 @@ export const useFixedChoiceWindow = (): Readonly<{
     observer.observe(document.documentElement);
     if (element.firstElementChild !== null) observer.observe(element.firstElementChild);
     update();
-    return (): void => {
-      observer.disconnect();
-      node.current = Option.none();
-    };
-  }, []);
+    return (): void => observer.disconnect();
+  }, [observed, highlighted]);
+  const resetViewport = (): void => {
+    if (Option.isSome(node.current)) node.current.value.scrollTop = 0;
+    setViewport((current) => ({ ...current, top: 0 }));
+  };
+  return { node, measure, viewport, setViewport, resetViewport };
+};
+
+/** Owns fixed-row scrolling and text-scale observation; unmount releases the observer. */
+export const useFixedChoiceWindow = (): Readonly<{
+  measure: RefCallback<HTMLDivElement>;
+  onScroll: UIEventHandler<HTMLDivElement>;
+  highlight: (index: number, pointer: boolean) => void;
+  reset: () => void;
+  viewport: Viewport;
+  activeIndex: number;
+}> => {
+  const highlighted = useRef(-1);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const { node, measure, viewport, setViewport, resetViewport } = useChoiceMeasurement(highlighted);
   const onScroll: UIEventHandler<HTMLDivElement> = (event) => {
     const element = event.currentTarget;
     const top = element.scrollTop;
@@ -60,8 +81,7 @@ export const useFixedChoiceWindow = (): Readonly<{
   const reset = (): void => {
     highlighted.current = -1;
     setActiveIndex(-1);
-    if (Option.isSome(node.current)) node.current.value.scrollTop = 0;
-    setViewport((current) => ({ ...current, top: 0 }));
+    resetViewport();
   };
   return { measure, onScroll, highlight, reset, viewport, activeIndex };
 };

@@ -38,7 +38,7 @@ const enlargeText = (route: Route): Promise<void> =>
   route.fulfill({
     status: 200,
     contentType: "text/css",
-    body: ".subscription-main :is(p, output, td, th), .subscription-workspace [data-slot='button'] { font-size: 32px; } .subscription-main h2 { font-size: 48px; }",
+    body: "html[data-cancellation-text-scale] .subscription-main :is(p, output, td, th), html[data-cancellation-text-scale] .subscription-workspace [data-slot='button'] { font-size: 32px; } html[data-cancellation-text-scale] .subscription-main h2 { font-size: 48px; }",
   });
 const mobileWidth = 390;
 const intermediateWidth = 715;
@@ -58,12 +58,11 @@ const openDesign = Effect.fnUntraced(function* (
   yield* Effect.tryPromise((signal) =>
     expect(page.getByRole("main")).toHaveCSS("color-scheme", display.theme, { signal })
   );
-  if (display.enlarged) {
-    yield* Effect.tryPromise(() => page.route("**/cancellation-text-scale.css", enlargeText));
-    yield* Effect.tryPromise(() =>
-      page.addStyleTag({ url: new URL("/cancellation-text-scale.css", page.url()).href })
-    );
-  }
+  yield* Effect.tryPromise(() => page.route("**/cancellation-text-scale.css", enlargeText));
+  yield* Effect.tryPromise(() =>
+    page.addStyleTag({ url: new URL("/cancellation-text-scale.css", page.url()).href })
+  );
+  yield* applyDisplay(page, display);
   return observed;
 });
 const captureState = Effect.fnUntraced(function* (page: Page, display: Display, state: string) {
@@ -86,8 +85,72 @@ const captureState = Effect.fnUntraced(function* (page: Page, display: Display, 
     yield* Effect.tryPromise(() => management(page).getByRole("button").evaluateAll(controlsFit))
   ).toBe(true);
 });
-const verifyDesign = Effect.fnUntraced(function* (page: Page, display: Display) {
-  const observed = yield* openDesign(page, display);
+const displays: ReadonlyArray<Display> = (["light", "dark"] as const).flatMap((theme) => [
+  ...[mobileWidth, intermediateWidth, betweenBreakpointsWidth, desktopWidth].map((width) => ({
+    width,
+    theme,
+    enlarged: false,
+  })),
+  ...[mobileWidth, intermediateWidth].map((width) => ({ width, theme, enlarged: true })),
+]);
+const firstDisplay: Display = { width: mobileWidth, theme: "light", enlarged: false };
+const applyDisplay = Effect.fnUntraced(function* (page: Page, display: Display) {
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: display.width, height: 960 }));
+  yield* Effect.tryPromise(() =>
+    page.emulateMedia({ colorScheme: display.theme, reducedMotion: "reduce" })
+  );
+  yield* Effect.tryPromise(() =>
+    page.evaluate((enlarged) => {
+      document.documentElement.toggleAttribute("data-cancellation-text-scale", enlarged);
+    }, display.enlarged)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("main")).toHaveCSS("color-scheme", display.theme)
+  );
+});
+type DisplayGeometry = Readonly<{
+  display: Display;
+  bounds: Readonly<{ width: number; height: number }>;
+}>;
+const inspectReviewDesign = Effect.fnUntraced(function* (page: Page) {
+  const confirm = page.getByRole("button", { name: "Confirmar cancelación", exact: true });
+  const layouts: Array<DisplayGeometry> = [];
+  for (const display of displays) {
+    yield* applyDisplay(page, display);
+    yield* captureState(page, display, "review");
+    yield* Effect.tryPromise(() => confirm.focus());
+    yield* Effect.tryPromise(() => expect(confirm).toHaveCSS("color", "rgb(23, 25, 22)"));
+    const bounds = yield* Effect.tryPromise(() => confirm.evaluate(controlDimensions));
+    layouts.push({ display, bounds });
+  }
+  return layouts;
+});
+const inspectPendingDesign = Effect.fnUntraced(function* (
+  page: Page,
+  layouts: ReadonlyArray<DisplayGeometry>
+) {
+  const pending = page.getByRole("button", { name: "Confirmar cancelación", exact: true });
+  for (const { display, bounds } of layouts) {
+    yield* applyDisplay(page, display);
+    yield* Effect.tryPromise(() => expect(pending).toBeDisabled());
+    yield* Effect.tryPromise(() =>
+      expect(pending).toHaveCSS("background-color", "rgb(240, 180, 174)")
+    );
+    expect(yield* Effect.tryPromise(() => pending.evaluate(controlDimensions))).toEqual(bounds);
+    yield* captureState(page, display, "submitting");
+  }
+});
+const inspectResultDesign = Effect.fnUntraced(function* (page: Page) {
+  const result = page.getByRole("region", { name: "Renovaciones canceladas", exact: true });
+  for (const display of displays) {
+    yield* applyDisplay(page, display);
+    yield* Effect.tryPromise(() => expect(result).toContainText("sigue pendiente"));
+    yield* Effect.tryPromise(() => expect(result.getByRole("status")).toBeFocused());
+    yield* captureState(page, display, "provider-pending");
+  }
+});
+const verifyDesign = Effect.fnUntraced(function* (page: Page) {
+  const observed = yield* openDesign(page, firstDisplay);
   const completion = Promise.withResolvers<void>();
   const handle = (route: Route): Promise<void> =>
     completion.promise.then(() =>
@@ -99,53 +162,32 @@ const verifyDesign = Effect.fnUntraced(function* (page: Page, display: Display) 
       name: "Cancelar renovaciones futuras",
       exact: true,
     });
-    yield* Effect.tryPromise((signal) =>
-      expect(trigger).toHaveCSS("background-color", "rgb(240, 180, 174)", { signal })
-    );
-    yield* Effect.tryPromise((signal) => trigger.focus({ signal }));
-    yield* Effect.tryPromise((signal) => trigger.press("Enter", { signal }));
-    yield* captureState(page, display, "review");
+    for (const display of displays) {
+      yield* applyDisplay(page, display);
+      yield* Effect.tryPromise(() =>
+        expect(trigger).toHaveCSS("background-color", "rgb(240, 180, 174)")
+      );
+    }
+    yield* applyDisplay(page, firstDisplay);
+    yield* Effect.tryPromise(() => trigger.focus());
+    yield* Effect.tryPromise(() => trigger.press("Enter"));
+    const layouts = yield* inspectReviewDesign(page);
+    yield* applyDisplay(page, firstDisplay);
     const confirm = page.getByRole("button", { name: "Confirmar cancelación", exact: true });
-    yield* Effect.tryPromise((signal) => confirm.focus({ signal }));
-    yield* Effect.tryPromise((signal) =>
-      expect(confirm).toHaveCSS("color", "rgb(23, 25, 22)", { signal })
-    );
-    const idleGeometry = yield* Effect.tryPromise(() => confirm.evaluate(controlDimensions));
-    yield* Effect.tryPromise((signal) => confirm.press("Enter", { signal }));
-    const pending = confirm;
-    yield* Effect.tryPromise((signal) => expect(pending).toBeDisabled({ signal }));
-    yield* Effect.tryPromise((signal) =>
-      expect(pending).toHaveCSS("background-color", "rgb(240, 180, 174)", { signal })
-    );
-    expect(yield* Effect.tryPromise(() => pending.evaluate(controlDimensions))).toEqual(
-      idleGeometry
-    );
-    yield* captureState(page, display, "submitting");
+    yield* Effect.tryPromise(() => confirm.focus());
+    yield* Effect.tryPromise(() => confirm.press("Enter"));
+    yield* inspectPendingDesign(page, layouts);
     completion.resolve();
-    const result = page.getByRole("region", { name: "Renovaciones canceladas", exact: true });
-    yield* Effect.tryPromise((signal) =>
-      expect(result).toContainText("sigue pendiente", { signal })
-    );
-    yield* Effect.tryPromise((signal) =>
-      expect(result.getByRole("status")).toBeFocused({ signal })
-    );
-    yield* captureState(page, display, "provider-pending");
+    yield* inspectResultDesign(page);
     expect(observed.unexpectedRequests).toEqual([]);
     expect(observed.providerCalls).toEqual([]);
   } finally {
     completion.resolve();
   }
 });
+test("Subscription cancellation design across viewports, themes and enlarged text", ({ page }) =>
+  Effect.runPromise(verifyDesign(page)));
 for (const theme of ["light", "dark"] as const) {
-  for (const width of [mobileWidth, intermediateWidth, betweenBreakpointsWidth, desktopWidth]) {
-    test(`Subscription cancellation design at ${width}px in ${theme}`, ({ page }) =>
-      Effect.runPromise(verifyDesign(page, { width, theme, enlarged: false })));
-  }
-  for (const width of [mobileWidth, intermediateWidth]) {
-    test(`Subscription cancellation design with enlarged text at ${width}px in ${theme}`, ({
-      page,
-    }) => Effect.runPromise(verifyDesign(page, { width, theme, enlarged: true })));
-  }
   test(`Subscription cancellation unavailable feedback in ${theme}`, ({ page }) =>
     Effect.runPromise(
       Effect.gen(function* () {

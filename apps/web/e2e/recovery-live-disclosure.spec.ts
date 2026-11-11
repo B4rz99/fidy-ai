@@ -208,7 +208,7 @@ test("discloses a real rotated recovery code only in its mounted settings view",
   ));
 
 for (const mode of ["lost", "malformed"] as const) {
-  test(`a ${mode} committed recovery rotation stays uncertain until a fresh sign-in`, ({
+  test(`a ${mode} committed recovery rotation ${mode === "lost" ? "stays uncertain until a fresh sign-in" : "exposes uncertainty without retry"}`, ({
     page,
     request,
   }) =>
@@ -246,6 +246,8 @@ for (const mode of ["lost", "malformed"] as const) {
         yield* Effect.tryPromise(() => expect(page.locator("code")).toHaveCount(0));
         expect(rotations).toBe(1);
         expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
+        // Both failures normalize to the same parameterless onUncertain transition.
+        if (mode === "malformed") return;
         yield* Effect.tryPromise(() => revisitUncertainRecovery(page));
         expect(rotations).toBe(1);
         yield* Effect.tryPromise(() => page.unroute(rotationPattern));

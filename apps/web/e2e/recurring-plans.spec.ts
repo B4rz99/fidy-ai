@@ -2,7 +2,7 @@ import { captureVisualEvidence } from "./visual-evidence";
 import { SecureRandom } from "effect/crypto";
 import { analyzeAccessibility } from "./accessibility";
 import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
-import { type Cause, DateTime, Effect, Schema } from "effect";
+import { Cause, DateTime, Effect, Schema } from "effect";
 import {
   boundSessionRequests,
   browserSessionHeaders,

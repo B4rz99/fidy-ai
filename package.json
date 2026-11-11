@@ -65,7 +65,7 @@
     "@babel/traverse": "8.1.0",
     "@babel/types": "8.1.0",
     "@effect/platform-bun": "4.1.2",
-    "@effect/tsgo": "0.64.1",
+    "@effect/tsgo": "0.67.1",
     "@playwright/test": "1.64.1",
     "@shadcn/lint": "0.2.5",
     "@types/istanbul-lib-coverage": "2.0.6",

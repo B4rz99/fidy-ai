@@ -84,7 +84,7 @@ available at `https://unpkg.com/effect@4.1.2/src/<module>.ts` and
   Apply phases through the public SDK; actual-engine fixture tests cover tracked generations,
   dependency ordering and refusal before mutation. Import success is not live deployment parity.
 
-The compiler is @effect/tsgo 0.64.1. Its new
+The compiler is @effect/tsgo 0.67.1. Its new
 [`unstableApiUsage`](https://github.com/Effect-TS/tsgo/blob/main/docs/rules/unstable-api-usage.md)
 notice is disabled because the deliberately adopted, integrity-locked Effect 4 platform modules
 still carry upstream unstable annotations. Existing error/suggestion/warning exit policies stay

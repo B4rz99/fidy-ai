@@ -57,6 +57,7 @@ import {
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import {
   acceptWhatsAppMedia,
+  advanceStatementExtraction,
   prepareHeldStatementReviewDecision,
   prepareReviewEdit,
   prepareStatementAbandonment,
@@ -2564,6 +2565,80 @@ it("captures a same-session exact-confirmed hosted row without a browser credent
     })
   ));
 
+it.each(["resolve", "skip"] as const)(
+  "refuses a prepared %s after the exact review revision changes",
+  (action) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const statement = yield* fromTestPromise(() =>
+          clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+        );
+        const id = statement.reviewIds[0];
+        if (id === undefined) return yield* Effect.die("Missing review");
+        const operation =
+          action === "resolve"
+            ? "ingestion.resolveNeedsReviewItem"
+            : "ingestion.skipNeedsReviewItem";
+        const input = yield* Schema.decodeEffect(getCanonicalOperationInput(operation))({
+          params: { id },
+          ...(action === "resolve"
+            ? {
+                payload: {
+                  extraction: {
+                    money: { amount: "13000.00", currency: "COP" },
+                    direction: "outflow",
+                    occurredAt: "2026-08-02T12:00:00.000Z",
+                  },
+                },
+              }
+            : {}),
+        });
+        const prepared = yield* prepareStatementReviewDecision({
+          operation,
+          work: {
+            db: runtime.db,
+            subject: {
+              id: sessionA,
+              userId: UserId.make(userA),
+              digest: yield* fromTestPromise(() => digest(bearer(0))),
+            },
+            current: yield* Clock.currentTimeMillis,
+            bucket: Option.some(runtime.bucket),
+            input,
+          },
+        });
+        if (prepared._tag !== "Prepared") return yield* Effect.die("Missing prepared decision");
+        const changed = yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "SaveDraft",
+            id,
+            revision: 0,
+            draft: {
+              amount: "14000",
+              counterparty: "Café",
+              occurredAt: "2026-08-01T15:00:00.000Z",
+              direction: "outflow",
+              userProvidedFields: ["money", "counterparty", "occurredAt", "direction"],
+            },
+          })
+        );
+        expect(changed.status).toBe(200);
+        yield* fromTestPromise(() =>
+          expect(runtime.db.batch([...prepared.mutation.statements])).rejects.toThrow()
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        const detail = yield* fromTestPromise(() => reviewDetail(runtime, id));
+        expect(yield* fromTestPromise(() => detail.json())).toMatchObject({
+          data: { item: { id, status: "pending" }, revision: 1 },
+        });
+        expect((yield* fromTestPromise(() => reviewDecision(runtime, { id, action }))).status).toBe(
+          200
+        );
+      })
+    )
+);
+
 it("clarifies a mixed statement through canonical capture and erases evidence without losing clean Transactions", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2582,6 +2657,22 @@ it("clarifies a mixed statement through canonical capture and erases evidence wi
         reviewDecision(runtime, { id, action: "resolve" }, 1)
       );
       expect(foreign.status).toBe(404);
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(`CREATE TRIGGER refuse_clarification_audit
+        BEFORE INSERT ON audit_entries WHEN NEW.operation = 'ingestion.resolveNeedsReviewItem'
+        BEGIN SELECT RAISE(ABORT, 'clarification_audit_unavailable'); END`)
+          .run()
+      );
+      const unaudited = yield* fromTestPromise(() =>
+        reviewDecision(runtime, { id, action: "resolve" })
+      );
+      expect(unaudited.status).toBe(503);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+      expect(yield* fromTestPromise(() => count(runtime.db, "source_attestations"))).toBe(1);
+      yield* fromTestPromise(() =>
+        runtime.db.prepare("DROP TRIGGER refuse_clarification_audit").run()
+      );
       const resolved = yield* fromTestPromise(() =>
         reviewDecision(runtime, { id, action: "resolve" })
       );
@@ -5295,5 +5386,47 @@ it("shares review revisions across workspace and statement decisions without cap
         400
       );
       expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(2);
+    })
+  ));
+
+it("settles exhausted extraction without storage while preserving coordinator User ownership", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const staged = yield* fromTestPromise(() => stageOne(runtime));
+      const accepted = yield* fromTestPromise(() =>
+        publishFixture(runtime, {
+          index: 0,
+          idempotencyKey: "20000000-0000-4000-8000-000000000691",
+          reference: staged.staged,
+        })
+      );
+      const submission = yield* fromTestPromise(() => submissionOf(accepted));
+      const activity = {
+        _tag: "StatementFailed" as const,
+        version: 1 as const,
+        userId: userA,
+        submissionId: submission.id,
+      };
+      const input = { DB: runtime.db, bucket: Option.none<R2Bucket>(), activity };
+      expect(
+        yield* Effect.result(advanceStatementExtraction({ ...input, userId: userB }))
+      ).toMatchObject({ _tag: "Failure" });
+      const readState = (): Promise<typeof submissionStateRow.Type> =>
+        firstRow(
+          runtime.db,
+          {
+            schema: submissionStateRow,
+            sql: "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?",
+          },
+          submission.id
+        );
+      expect((yield* fromTestPromise(readState)).status).toBe("queued");
+      expect(yield* advanceStatementExtraction({ ...input, userId: userA })).toBe("settled");
+      const state = yield* fromTestPromise(readState);
+      expect(state.status).toBe("failed");
+      expect(state.failure_reason).toEqual(Option.some("resource-limit"));
+      expect(yield* advanceStatementExtraction({ ...input, userId: userA })).toBe("settled");
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
     })
   ));

@@ -19,7 +19,9 @@ import {
   type ReviewAuditWork,
   type ReviewEditWork,
   type ReviewQueryWork,
+  StatementCoordinatorActivity,
   StatementDocumentUnavailable,
+  StatementProcessingUnavailable,
 } from "./contract";
 import type {
   CanonicalMutationPreparation,
@@ -31,7 +33,7 @@ import type { HostedCanonicalCaller } from "../canonical-work/contract";
 import { admitMedia } from "./internal/media-submissions";
 
 import type { StagedStatementBytes } from "../../src/shell/ingestion/contract";
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import {
   prepareStatementDocumentAdmission as documentAdmission,
@@ -247,3 +249,33 @@ export const prepareBoundReviewMaterial: typeof prepareMaterial = (input) => pre
 
 /** Compose the existing detail observation with native browser admission. */
 export const prepareBoundReviewItem: typeof prepareItem = (request) => prepareItem(request);
+
+/** Advance only the coordinator User's retained extraction identity. Settled means activity
+ * termination, including failed, absent or foreign submissions; it never proves extraction success.
+ * The first activity may materialize the complete bounded source; 32 bounds committed outcomes.
+ */
+export const advanceStatementExtraction = (
+  input: Readonly<{
+    DB: D1Database;
+    bucket: Option.Option<R2Bucket>;
+    userId: string;
+    activity: typeof StatementCoordinatorActivity.Type;
+  }>
+): Effect.Effect<"continue" | "settled", StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const activity = yield* Schema.decodeEffect(StatementCoordinatorActivity)(input.activity).pipe(
+      Effect.mapError(() => new StatementProcessingUnavailable())
+    );
+    if (activity.userId !== input.userId) return yield* new StatementProcessingUnavailable();
+    const work = { DB: input.DB, userId: input.userId, submissionId: activity.submissionId };
+    if (activity._tag === "StatementFailed") {
+      yield* failSubmission({ ...work, reason: "resource-limit" });
+      return "settled";
+    }
+    if (Option.isNone(input.bucket)) return yield* new StatementProcessingUnavailable();
+    const result = yield* processSubmission({
+      ...work,
+      STATEMENT_STAGING_BUCKET: input.bucket.value,
+    });
+    return result === "continue" ? "continue" : "settled";
+  });

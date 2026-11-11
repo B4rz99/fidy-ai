@@ -80,7 +80,12 @@ import {
 } from "./internal/statement-mutation";
 import { forwardingAddressMutationAdapter } from "./internal/forwarding-address-mutation";
 
-/** Atomically accept an authenticated image with its media unit, attribution, visible review and capacity reservation. Exact delivery replay is free; no provider retrieval occurs here. */
+/** Atomically publish an authenticated image for review with its media unit, attribution and
+ * capacity reservation. A 202 acknowledges admission, never extraction or Transaction capture.
+ * Exact-event replay preserves the identity and original evidence expiry without restoring material
+ * or consuming another unit. Resolution and metadata retention are independent of evidence expiry.
+ * A 503 can follow publication; retry the exact event to reconcile its outcome.
+ */
 export const acceptWhatsAppMedia = (input: MediaAdmissionInput): Effect.Effect<Response> =>
   admitMedia(input);
 

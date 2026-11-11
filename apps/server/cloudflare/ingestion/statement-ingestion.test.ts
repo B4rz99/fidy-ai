@@ -4915,6 +4915,81 @@ const admitReviewEmail = (runtime: Runtime): Effect.Effect<void> =>
       })
     );
   }).pipe(Effect.orDie);
+it("suppresses expired media material and denies review restoration before cleanup", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const acceptedAt = yield* Clock.currentTimeMillis;
+      vi.setSystemTime(acceptedAt);
+      const expiresAt = acceptedAt + 2_592_000_000;
+      yield* fromTestPromise(() =>
+        runtime.db.prepare("UPDATE web_sessions SET idle_expires_at_ms=hard_expires_at_ms").run()
+      );
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','fixture','fixture',1,1)"
+          )
+          .bind(newId(), userA)
+          .run()
+      );
+      yield* admitReviewImage(runtime);
+      const inbox = yield* readReviewInbox(runtime);
+      const item = inbox.items[0];
+      if (item === undefined) return yield* Effect.die("Missing media review");
+      const material = (index: number): Promise<Response> =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/review-workspace/${item.id}/material`, {
+            headers: sessionHeaders(index),
+          })
+        );
+      const own = yield* fromTestPromise(() => material(0));
+      expect(own.status).toBe(200);
+      expect(yield* fromTestPromise(() => own.json())).toMatchObject({
+        data: { available: true, text: "Un comprobante" },
+      });
+      const foreign = yield* fromTestPromise(() => material(1));
+      expect(foreign.status).toBe(404);
+      expect(yield* fromTestPromise(() => foreign.text())).not.toContain("Un comprobante");
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Skip",
+            items: [{ id: item.id, revision: item.revision }],
+          })
+        )).status
+      ).toBe(200);
+      vi.setSystemTime(expiresAt - 1);
+      const before = yield* fromTestPromise(() => material(0));
+      expect(yield* fromTestPromise(() => before.json())).toMatchObject({
+        data: { available: true },
+      });
+      vi.setSystemTime(expiresAt);
+      const expired = yield* fromTestPromise(() => material(0));
+      expect(expired.status).toBe(200);
+      expect(expired.headers.get("cache-control")).toContain("no-store");
+      expect(yield* fromTestPromise(() => expired.json())).toMatchObject({
+        data: { available: false },
+      });
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Restore",
+            items: [{ id: item.id, revision: item.revision + 1 }],
+          })
+        )).status
+      ).toBe(400);
+      expect(
+        yield* fromTestPromise(() =>
+          runtime.db.prepare("SELECT caption,expires_at_ms FROM media_submissions").first()
+        )
+      ).toEqual({ caption: "Un comprobante", expires_at_ms: expiresAt });
+      expect((yield* readReviewInbox(runtime, "expired")).items).toHaveLength(1);
+    })
+  ));
+
 it("supports every ingestion source with atomic bulk decisions and individual creation", () =>
   Effect.runPromise(
     Effect.gen(function* () {

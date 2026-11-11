@@ -1,6 +1,7 @@
 import { PolicyRevision } from "../../src/shell/consent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
 import {
+  CanonicalToolCallEntry,
   HostedAgentSessionId,
   ToolCallId,
   TranscriptText,
@@ -80,6 +81,7 @@ import {
 import { browserHostedDelivery, completeWhatsAppTurnWithAdmission } from "./internal/hosted-turn";
 import {
   admitHostedTurn,
+  appendHostedToolEntry,
   commitHostedCompaction,
   deliveryAcknowledgmentWindowMs,
   finishHostedTurn,

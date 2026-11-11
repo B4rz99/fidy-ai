@@ -641,10 +641,10 @@ it.each([
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* proactivityDatabase;
-      const schedule = yield* activateTestReminder(db);
+      yield* activateTestReminder(db);
       const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
       const userId = proactivityTestUsers[0];
-      const generated = yield* materializeReminder({ db, userId, id: schedule.id, now });
+      const generated = yield* materializeReminder({ db, userId, now });
       if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
       if (scenario.name === "removed") {
         yield* Effect.tryPromise(() =>
@@ -2154,13 +2154,12 @@ it.each(["read", "dismissed", "conflicting-receipt"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
-        const schedule = yield* activateTestReminder(db);
+        yield* activateTestReminder(db);
         const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
         vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
         const generated = yield* materializeReminder({
           db,
           userId: proactivityTestUsers[0],
-          id: schedule.id,
           now,
         });
         if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");

@@ -87,17 +87,11 @@ type Fixture = Readonly<{
   dispose: () => void;
   view: () => EnrollmentInteraction;
 }>;
-const fixture = (
-  methods: PreparedEnrollment["price"]["paymentMethods"] = ["card", "nequi", "daviplata"]
-): Fixture => {
+const fixture = (): Fixture => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
-  const enrollment = {
-    ...prepared(0),
-    paymentSourceMode: "reuse" as const,
-    price: { ...prepared(0).price, paymentMethods: methods },
-  };
+  const enrollment = { ...prepared(0), paymentSourceMode: "reuse" as const };
   const submission: PaymentSubmission = {
     status: "source-verifying",
     enrollmentId: enrollment.enrollmentId,
@@ -511,14 +505,15 @@ it.effect(
     })
 );
 
-it.effect("refuses payment methods outside the selected Price without preparing", () =>
+it.effect("refuses a Price absent from the actual offers without preparing", () =>
   Effect.gen(function* () {
-    const input = fixture(["card"]);
+    const input = fixture();
     yield* advance(0);
-    input.view().selectPrice(input.enrollment.price.id);
-    input.view().selectMethod("nequi");
-    expect(input.view().method).toBe("card");
-    expect(input.view().enabledMethods).toEqual(["card"]);
+    input.view().selectPrice(PriceId.make("23200000-0000-4000-8000-000000000099"));
+    input.view().continueToPayment();
+    yield* advance(0);
+    expect(input.view().canContinue).toBe(false);
+    expect(Option.isNone(input.view().selectedId)).toBe(true);
     expect(input.gateway.prepare).not.toHaveBeenCalled();
   })
 );

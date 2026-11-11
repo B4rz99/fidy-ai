@@ -65,7 +65,7 @@ const preparePaymentFlow = Effect.fn(function* (
   const resumed = yield* Effect.tryPromise({
     try: (signal) => gateway.resume(prepared.enrollmentId, signal),
     catch: () => new EnrollmentInteractionFailed(),
-  }).pipe(Effect.catchCause(() => Effect.succeed(Option.none())));
+  }).pipe(Effect.catchCause(() => Effect.succeedNone));
   return Option.match(resumed, {
     onNone: () => enrollmentFlow(prepared),
     onSome: ({ submission, billingEmail }) =>
@@ -464,7 +464,8 @@ const submittedDaviplata = (owner: Owner, email: string, submission: PaymentSubm
   ) {
     return;
   }
-  run(owner, () => Effect.succeed(submissionFlow(submission, email, Option.some(current.value))));
+  const prepared = current.value;
+  run(owner, () => Effect.succeed(submissionFlow(submission, email, Option.some(prepared))));
 };
 const viewFlow = (flow: PaymentFlowState): PaymentFlowView =>
   flow._tag === "Enrollment"

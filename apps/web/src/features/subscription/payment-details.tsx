@@ -310,7 +310,7 @@ const NequiFormContents = ({
   decisions: EnrollmentDecisions;
   awaitingApproval: boolean;
   formLifetimeRef: RefCallback<HTMLFormElement>;
-  onSubmit: (event: FormEvent) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   setBillingEmail: (email: string) => void;
   setDecisions: (decisions: EnrollmentDecisions) => void;
   changePhone: (phone: string) => void;

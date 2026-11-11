@@ -71,32 +71,26 @@ export const recoverWhatsAppDelivery = ({
   Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
-    const raw = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT d.text, d.state, d.send_started_at_ms, i.portfolio_id, i.bsuid
-        FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d JOIN (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
-          ON i.turn_id = d.turn_id AND i.user_id = d.user_id
-        WHERE d.turn_id = ? AND d.user_id = ?`)
-        .bind(turnId, userId)
-        .first()
+    const results = yield* Effect.tryPromise(() =>
+      db.batch([
+        db
+          .prepare(`UPDATE whatsapp_deliveries AS hosted_whatsapp_delivery SET state = 'unconfirmed'
+          WHERE kind='hosted' AND turn_id = ? AND user_id = ?
+            AND state IN ('sending','accepted','ambiguous') AND send_started_at_ms IS NOT NULL`)
+          .bind(turnId, userId),
+        db
+          .prepare(`SELECT d.text, d.state, d.send_started_at_ms, i.inbound_portfolio_id AS portfolio_id, i.inbound_bsuid AS bsuid
+        FROM whatsapp_deliveries AS d JOIN hosted_turns AS i
+          ON i.id = d.turn_id AND i.user_id = d.user_id
+        WHERE d.kind = 'hosted' AND d.turn_id = ? AND d.user_id = ? AND i.inbound_message_id IS NOT NULL`)
+          .bind(turnId, userId),
+      ])
     );
-    if (raw === null) return Option.none();
+    const raw = results[1]?.results[0];
+    if (raw === undefined) return Option.none();
     const delivery = yield* Schema.decodeUnknownEffect(RecoverableWhatsAppDelivery)(raw);
     if (isUnstartedWhatsAppSend(delivery)) {
       return Option.none();
-    }
-    if (
-      delivery.state === "sending" ||
-      delivery.state === "accepted" ||
-      delivery.state === "ambiguous"
-    ) {
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`UPDATE whatsapp_deliveries AS hosted_whatsapp_delivery SET state = 'unconfirmed'
-          WHERE kind='hosted' AND turn_id = ? AND user_id = ? AND state IN ('sending','accepted','ambiguous')`)
-          .bind(turnId, userId)
-          .run()
-      );
     }
     return Option.some({
       userId,
@@ -243,8 +237,11 @@ export const whatsAppCompletionGuard = (
 ): Readonly<{ sql: string; bindings: ReadonlyArray<string> }> => ({
   sql: `AND (? <> 'completed' OR EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS d
           WHERE d.turn_id = hosted_turns.id AND d.user_id = hosted_turns.user_id
+            AND d.state = 'delivered'))
+    AND (? <> 'failed' OR NOT EXISTS (SELECT 1 FROM whatsapp_deliveries AS d
+          WHERE d.kind = 'hosted' AND d.turn_id = hosted_turns.id AND d.user_id = hosted_turns.user_id
             AND d.state = 'delivered'))`,
-  bindings: [status],
+  bindings: [status, status],
 });
 /** Same-User proposal times for bounded abandoned-Turn recovery; never a delivery receipt. */
 export const whatsAppProposalTimes = (userId: UserId): OwnedStatement => ({

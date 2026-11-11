@@ -2149,6 +2149,114 @@ it("does not retry a recovery defect or release queued work before its hosted ow
     })
   ));
 
+it("keeps an admitted Turn queued through fenced recovery when alarm scheduling fails", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credentials = yield* Effect.tryPromise(() => subject(0));
+      const recovery = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      let recovering = false;
+      let recoveryAttempts = 0;
+      let settled = false;
+      let followingSettled = false;
+      const controlled = new Proxy(db, {
+        get(target, key): unknown {
+          if (key === "batch") {
+            return (statements: D1PreparedStatement[]): Promise<D1Result[]> => {
+              if (!recovering) return target.batch(statements);
+              recoveryAttempts += 1;
+              if (recoveryAttempts <= 2) return Promise.reject(new Error("Recovery unavailable"));
+              recovery.resolve();
+              return release.promise.then(() => target.batch(statements));
+            };
+          }
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const model = vi.fn(() => Promise.resolve(reply("Must not execute")));
+      const service = makeAgentService({
+        connectionAdmission: Option.none(),
+        environment: {
+          DB: controlled,
+          HOSTED_AI_MODEL: approvedOpenAiModel,
+          OPENAI_API_KEY: openAiTestKey({ run: model }),
+        },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => {
+          recovering = true;
+          return Promise.reject(new Error("Alarm unavailable"));
+        },
+      });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      const accepted = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credentials.userId,
+              sessionId: credentials.id,
+              digest: Array.from(credentials.digest),
+              text: "Hola",
+            }),
+          }),
+          preceding: Promise.resolve(),
+        })
+      );
+      const ownerSettled = accepted.settled.then(() => {
+        settled = true;
+      });
+      const following = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: "{}",
+          }),
+          preceding: accepted.settled,
+        })
+      );
+      const followingSettlement = following.settled.then(() => {
+        followingSettled = true;
+      });
+      try {
+        yield* Effect.tryPromise(() => vi.waitFor(() => expect(recoveryAttempts).toBe(1)));
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(1_001));
+        yield* Effect.tryPromise(() => vi.waitFor(() => expect(recoveryAttempts).toBe(2)));
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(1_001));
+        yield* Effect.tryPromise(() => vi.waitFor(() => expect(recoveryAttempts).toBe(3)));
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(25_001));
+        const response = yield* Effect.tryPromise(() => accepted.response);
+        expect(response.status).toBe(202);
+        expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+          status: "processing",
+        });
+        yield* Effect.tryPromise(() => vi.waitFor(() => expect(recoveryAttempts).toBe(3)));
+        yield* Effect.tryPromise(() => recovery.promise);
+        expect(settled).toBe(false);
+        expect(followingSettled).toBe(false);
+        expect(recoveryAttempts).toBe(3);
+        expect(model).not.toHaveBeenCalled();
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+        ).toMatchObject([{ status: "pending", kind: "user", text: "Hola" }]);
+      } finally {
+        release.resolve();
+        yield* Effect.tryPromise(() => ownerSettled);
+        yield* Effect.tryPromise(() => followingSettlement);
+        vi.useRealTimers();
+      }
+      expect(settled).toBe(true);
+      expect(followingSettled).toBe(true);
+      expect(
+        (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+      ).toMatchObject([
+        { status: "interrupted", kind: "user", text: "Hola" },
+        { status: "interrupted", kind: "interrupted", text: null },
+      ]);
+    })
+  ));
+
 it("cannot release queued hosted work before its ordinary predecessor settles", () =>
   Effect.runPromise(
     Effect.gen(function* () {

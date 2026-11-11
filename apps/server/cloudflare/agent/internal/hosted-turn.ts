@@ -64,7 +64,7 @@ import {
   HostedToolCallMaximum,
   type PreparedHostedText,
 } from "../../../src/shell/hosted-inference/contract";
-import { Cause, Clock, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, DateTime, Duration, Effect, Exit, Option, Schedule, Schema } from "effect";
 
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
 import {
@@ -521,6 +521,45 @@ const admissionChannel = (input: AdmittedTurnInput): HostedAdmissionChannel => {
   }
   return { _tag: "WhatsApp", subject: input.subject, inbound: input.inbound };
 };
+/** Once admission commits, a failed wake is abandoned work, never a preflight refusal.
+ * Fence it through the same channel recovery before releasing its execution owner. */
+const scheduleAdmittedTurn = ({
+  db,
+  subject,
+  turnId,
+  startedAtMs,
+  scheduleRecovery,
+  onAdmitted,
+}: Readonly<{
+  db: D1Database;
+  subject: HostedSubject;
+  turnId: TranscriptTurnId;
+  startedAtMs: number;
+  scheduleRecovery: HostedTurnInput["scheduleRecovery"];
+  onAdmitted: Option.Option<(turnId: TranscriptTurnId) => void>;
+}>): Effect.Effect<boolean, HostedWorkFailure> =>
+  Effect.gen(function* () {
+    const scheduled = yield* Effect.option(
+      Effect.tryPromise(() => scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs))
+    );
+    if (Option.isSome(onAdmitted)) onAdmitted.value(turnId);
+    if (Option.isSome(scheduled)) return true;
+    yield* Clock.currentTimeMillis.pipe(
+      Effect.flatMap((now) =>
+        recoverHostedTurn({
+          db,
+          userId: UserId.make(subject.userId),
+          turn: { id: turnId, started_at_ms: startedAtMs, proposed_at_ms: null },
+          now,
+        })
+      ),
+      Effect.retry(Schedule.spaced(Duration.seconds(1))),
+      // A defect is not a recovery fence. The service's bounded recovery remains the queue owner.
+      Effect.catchDefect(() => Effect.never)
+    );
+    return false;
+  });
+
 const executeHostedTurn = (
   input: AdmittedTurnInput
 ): Effect.Effect<Response, HostedWorkFailure> => {
@@ -551,8 +590,18 @@ const executeHostedTurn = (
     if (Option.isSome(input.document) && "inbound" in input && Option.isSome(bucket)) {
       const turn = yield* preparation.commit({ text, id: activeTurnId });
       if (Option.isNone(turn)) return unauthenticated();
-      if (Option.isSome(onAdmitted)) onAdmitted.value(turn.value);
-      yield* Effect.tryPromise(() => scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs));
+      if (
+        !(yield* scheduleAdmittedTurn({
+          db,
+          subject,
+          turnId: turn.value,
+          startedAtMs,
+          scheduleRecovery,
+          onAdmitted,
+        }))
+      ) {
+        return interrupted();
+      }
       const current = yield* Clock.currentTimeMillis;
       const caller = yield* mintHostedStatementCaller({
         db,
@@ -636,9 +685,17 @@ const executeHostedTurn = (
         });
         return unavailable();
       }
-      yield* Effect.tryPromise(() => scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs));
-      if (Option.isSome(onAdmitted)) {
-        onAdmitted.value(turn.value);
+      if (
+        !(yield* scheduleAdmittedTurn({
+          db,
+          subject,
+          turnId: turn.value,
+          startedAtMs,
+          scheduleRecovery,
+          onAdmitted,
+        }))
+      ) {
+        return interrupted();
       }
       return yield* confirmation.value
         .execute()
@@ -675,9 +732,17 @@ const executeHostedTurn = (
       });
       return unavailable();
     }
-    yield* Effect.tryPromise(() => scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs));
-    if (Option.isSome(onAdmitted)) {
-      onAdmitted.value(turn.value);
+    if (
+      !(yield* scheduleAdmittedTurn({
+        db,
+        subject,
+        turnId: turn.value,
+        startedAtMs,
+        scheduleRecovery,
+        onAdmitted,
+      }))
+    ) {
+      return interrupted();
     }
     return yield* executeAdmittedTurn({
       db,

@@ -4,8 +4,10 @@ import { AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { afterEach, expect, vi } from "vitest";
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
+import { makeFreshQuery } from "@/transport/fresh-query";
 import { makeFidyClient } from "@/transport/client";
 import { type TransactionCorrections, makeTransactionCorrections } from "./corrections";
+import { transactionFirstPage } from "./query";
 import { type HistoryState, transactionHistory } from "./history";
 
 const firstId = "25000000-0000-4000-8000-000000000001";
@@ -57,11 +59,41 @@ const readFixturePage = (
         ]
       : [],
 });
+const fixtureDetail = Effect.fnUntraced(function* (
+  path: string,
+  detail: Readonly<{ outcome: string; delay: number }>,
+  lookups: Array<string>
+) {
+  lookups.push(path);
+  yield* Effect.sleep(detail.delay);
+  if (detail.outcome === "missing") {
+    return {
+      status: 404,
+      data: { error: { code: "not_found", message: "Transaction not found" }, next: [] },
+    };
+  }
+  return {
+    status: detail.outcome === "failure" ? 503 : 200,
+    data: {
+      data: {
+        ...record(path.split("/").at(-1) ?? firstId),
+        reconciliation: { kind: "independent" },
+        sources: [],
+        presentation: { kind: "independent" },
+      },
+      next: [],
+    },
+  };
+});
+const savedFixtureData = (path: string, records: ReadonlyArray<typeof initialRecord>): unknown =>
+  path.endsWith("/corrections") ? { updated: records.length } : records[0];
 const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
   vi.useFakeTimers();
   const records = [record(firstId), record(secondId)];
   const sent: Array<{ path: string; body: string }> = [];
   const behavior = { failRead: false, write: "success", delay: 0, readDelay: 0 };
+  const lookups: Array<string> = [];
+  const detail = { outcome: "success", delay: 0 };
   let saved = 0;
   const http = HttpClient.make((request) =>
     Effect.gen(function* () {
@@ -83,17 +115,28 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
             error: { code: "validation_failed", message: "Invalid", fields: [] },
             next: [],
           };
-        } else data = { data: records[0], next: [] };
+        } else {
+          data = {
+            data: savedFixtureData(path, records),
+            next: [],
+          };
+        }
       } else {
         yield* Effect.sleep(behavior.readDelay);
         if (behavior.failRead) status = 503;
-        data = path.endsWith("categories")
-          ? { data: [{ id: categoryId, label: "Restaurantes" }], next: [] }
-          : readFixturePage(
-              records,
-              paginated,
-              request.urlParams.params.some(([key]) => key === "cursor")
-            );
+        if (path.startsWith("/transactions/")) {
+          const response = yield* fixtureDetail(path, detail, lookups);
+          data = response.data;
+          status = response.status;
+        } else {
+          data = path.endsWith("categories")
+            ? { data: [{ id: categoryId, label: "Restaurantes" }], next: [] }
+            : readFixturePage(
+                records,
+                paginated,
+                request.urlParams.params.some(([key]) => key === "cursor")
+              );
+        }
       }
       return HttpClientResponse.fromWeb(
         request,
@@ -114,12 +157,15 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
     from: DateTime.makeUnsafe("2026-10-01T00:00:00Z"),
     to: DateTime.makeUnsafe("2026-11-01T00:00:00Z"),
   };
-  const firstPage = client
-    .query("transactions", "listTransactions", { ...workspaceQueryRetention, query: period })
-    .pipe(revalidateWorkspaceQuery);
-  const categories = client
-    .query("categories", "listCategories", workspaceQueryRetention)
-    .pipe(revalidateWorkspaceQuery);
+  const firstPage = transactionFirstPage({ client, period });
+  const categories = makeFreshQuery({
+    runtime: client.runtime,
+    load: Effect.gen(function* () {
+      const api = yield* client;
+      return yield* api.categories.listCategories();
+    }),
+    decorate: revalidateWorkspaceQuery,
+  });
   const history = transactionHistory({
     initialPages: 1,
     apiClient: client,
@@ -154,6 +200,8 @@ const fixture = Effect.fnUntraced(function* (paginated: boolean = false) {
     transaction,
     transactions,
     sent,
+    lookups,
+    detail,
     behavior,
     dispose,
     records,
@@ -412,3 +460,113 @@ it.live("reading and disposing history does not initialize the correction transp
     }
   })
 );
+
+it.effect("deletion review shares Correction admission and consumes confirmation once", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    test.behavior.write = "uncertain";
+    expect(test.view().reviewDeletion(test.transaction.id)).toBe(true);
+    test.view().submit({
+      kind: "single",
+      origin: "editor",
+      transaction: test.transaction,
+      changes: { notes: "Blocked by deletion review" },
+    });
+    expect(test.sent).toHaveLength(0);
+    test.view().confirmDeletion(test.transaction.id, () => {
+      throw new Error("No receipt");
+    });
+    test.view().confirmDeletion(test.transaction.id, () => {
+      throw new Error("Duplicate");
+    });
+    yield* advance();
+    expect(test.sent).toHaveLength(1);
+    expect(test.sent[0]?.path).toBe(`/transactions/${firstId}`);
+    expect(test.sent[0]?.body).toBe("");
+    test.view().cancelDeletion();
+    expect(test.view().locked).toBe(true);
+    expect(test.view().reviewDeletion(test.transaction.id)).toBe(false);
+    test.view().submit({
+      kind: "bulk",
+      transactions: test.transactions,
+      changes: { notes: "Still blocked after closing the panel" },
+    });
+    yield* advance();
+    expect(test.sent).toHaveLength(1);
+  })
+);
+
+it.effect("cancelling unsent deletion retains facts and admits a new Correction", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    test.view().reviewDeletion(test.transaction.id);
+    test.view().cancelDeletion();
+    test.view().confirmDeletion(test.transaction.id, () => {
+      throw new Error("Cancelled review");
+    });
+    expect(test.sent).toHaveLength(0);
+    test.view().submit({
+      kind: "single",
+      origin: "editor",
+      transaction: test.transaction,
+      changes: { notes: "New action" },
+    });
+    yield* advance();
+    expect(test.sent).toHaveLength(1);
+    expect(test.sent[0]?.body).toContain("New action");
+  })
+);
+
+it.effect("recovery waits for a moved identity and refuses stale captured actions", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const captured = test.view();
+    captured.submit({
+      kind: "bulk",
+      transactions: test.transactions,
+      changes: { notes: "Unconfirmed atomic changes" },
+    });
+    test.records.splice(1, 1);
+    test.detail.delay = 50;
+    yield* advance();
+    expect(test.view().locked).toBe(true);
+    expect(test.lookups).toEqual([`/transactions/${secondId}`]);
+    yield* advance(50);
+    expect(test.view().locked).toBe(false);
+    captured.submit({
+      kind: "single",
+      origin: "editor",
+      transaction: test.transaction,
+      changes: { notes: "Obsolete review" },
+    });
+    yield* advance();
+    expect(test.sent).toHaveLength(1);
+  })
+);
+
+for (const outcome of ["missing", "failure"] as const) {
+  it.effect(`unknown deletion recovery requires decoded identity evidence: ${outcome}`, () =>
+    Effect.gen(function* () {
+      const test = yield* fixture();
+      let receipts = 0;
+      test.behavior.write = "uncertain";
+      test.view().reviewDeletion(test.transaction.id);
+      test.view().confirmDeletion(test.transaction.id, () => {
+        receipts += 1;
+      });
+      yield* advance();
+      test.view().cancelDeletion();
+      test.records.splice(0, 1);
+      test.detail.outcome = outcome;
+      test.detail.delay = 50;
+      test.view().recover();
+      yield* advance();
+      expect(test.view().locked).toBe(true);
+      expect(test.lookups).toEqual([`/transactions/${firstId}`]);
+      yield* advance(50);
+      expect(test.view().locked).toBe(outcome === "failure");
+      expect(receipts).toBe(0);
+      expect(test.sent).toHaveLength(1);
+    })
+  );
+}

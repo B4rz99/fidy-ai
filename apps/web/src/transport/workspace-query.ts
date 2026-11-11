@@ -1,5 +1,7 @@
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
-import { type Context, type Effect, Option } from "effect";
+import { type Context, Effect, Option, Schema } from "effect";
+import { HttpClientError } from "effect/http";
+import { forwardFreshQuery, makeFreshQuery } from "./fresh-query";
 import type { CanonicalSuccess, FidyClient } from "./client";
 
 type Client = Context.Service.Shape<FidyClient>;
@@ -40,8 +42,19 @@ const initialMetadata: (client: FidyClient) => Atom.Writable<MetadataValue, Meta
     >(Option.none()).pipe(Atom.setIdleTTL("400 millis"))
   );
 const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
-  const remote = client.query("identity", "getCurrentUser", workspaceQueryRetention);
-  return Atom.readable(
+  const remote = makeFreshQuery({
+    runtime: client.runtime,
+    load: client
+      .use((api) => api.identity.getCurrentUser())
+      .pipe(
+        Effect.catchIf(
+          (error) => Schema.isSchemaError(error) || HttpClientError.isHttpClientError(error),
+          Effect.die
+        )
+      ),
+    decorate: Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
+  });
+  const source = Atom.readable(
     (get) => {
       const current = Option.getOrElse(get(initialMetadata(client)), () => get(remote));
       // The first remote read has no prior value of its own; retain the owned entry display.
@@ -61,6 +74,11 @@ const workspaceMetadataQuery = Atom.family((client: FidyClient) => {
     client.runtime.factory.withReactivity(["recurring-resume"]),
     Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
   );
+  return forwardFreshQuery({
+    query: source,
+    sources: [remote],
+    before: (registry) => registry.set(initialMetadata(client), Option.none()),
+  });
 });
 /** The initial observation belongs to the canonical metadata owner; refresh retires it. */
 export const workspaceMetadataInitialValue = ({
@@ -86,14 +104,31 @@ export const retainPreparedWorkspaceMetadata = ({
 };
 /** All workspaces observe one profile and its optional inline display taxonomy. */
 export const workspaceProfileQuery: (client: FidyClient) => ProfileQuery = Atom.family(
-  (client: FidyClient) => workspaceMetadataQuery(client).pipe(revalidateWorkspaceQuery)
+  (client: FidyClient) =>
+    forwardFreshQuery({
+      query: workspaceMetadataQuery(client).pipe(revalidateWorkspaceQuery),
+      sources: [workspaceMetadataQuery(client)],
+    })
 );
 /** The browser's metadata projection supplies taxonomy; other transports can read it separately. */
 const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.family(
   (client: FidyClient) => {
-    const individual = client.query("categories", "listCategories", {
-      ...workspaceQueryRetention,
-      reactivityKeys: ["recurring-resume"],
+    const individual = makeFreshQuery({
+      runtime: client.runtime,
+      load: client
+        .use((api) => api.categories.listCategories())
+        .pipe(
+          Effect.catchIf(
+            (error) => Schema.isSchemaError(error) || HttpClientError.isHttpClientError(error),
+            Effect.die
+          )
+        ),
+      decorate: (query) =>
+        query.pipe(
+          Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
+          client.runtime.factory.withReactivity(["recurring-resume"]),
+          Atom.setIdleTTL(workspaceQueryRetention.timeToLive)
+        ),
     });
     const metadata = workspaceMetadataQuery(client);
     const source: CategoriesQuery = Atom.readable(
@@ -112,11 +147,14 @@ const workspaceCategoriesSource: (client: FidyClient) => CategoriesQuery = Atom.
         refresh(individual);
       }
     );
-    return source;
+    return forwardFreshQuery({ query: source, sources: [metadata, individual] });
   }
 );
 const workspaceCategoriesView = Atom.family((client: FidyClient) =>
-  workspaceCategoriesSource(client).pipe(revalidateWorkspaceQuery)
+  forwardFreshQuery({
+    query: workspaceCategoriesSource(client).pipe(revalidateWorkspaceQuery),
+    sources: [workspaceCategoriesSource(client)],
+  })
 );
 export const workspaceCategoriesQuery = (
   client: FidyClient

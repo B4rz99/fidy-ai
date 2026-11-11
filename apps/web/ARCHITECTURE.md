@@ -651,10 +651,18 @@ One mounted Transaction Correction module coordinates inline Category edits, ind
 and atomic bulk Corrections for the canonical history resource. It owns synchronous write admission,
 observed revisions and outcomes. A definite save rejection automatically rereads history and Category
 data without replaying the mutation. The editor retains its draft and bulk selection through that
-reread; only an explicit subsequent save submits against the refreshed revisions. Failed refreshes
+reread; the original draft remains bound to its captured revisions. After fresh facts change,
+the User opens a new review before submitting another Correction. Failed refreshes
 retain the draft and lock writes until explicit retry succeeds. Recovery rereads the previously
 loaded history pages while retaining their display, so later-page editing remains mounted until the
-fresh pages settle. Successful saves and explicit uncertain-outcome verification keep their existing
+fresh pages settle. Every admitted mutation retains its affected identities until required Category
+and list loaders have completed fresh canonical reads and loaded history continuation has settled.
+The Correction owner resets continuation navigation without scheduling an ordinary first-page
+refresh; its strict read owns that loader invocation, so a queued display refresh cannot interrupt
+recovery's new first-page read.
+Identities absent from that history are then read directly, sequentially within the canonical batch
+bound; decoded NotFound establishes current absence but cannot attribute a lost deletion receipt.
+A failed direct lookup keeps conflicting writes locked. Successful saves and explicit uncertain-outcome verification keep their existing
 workspace reset. Drafts remain with presentation; single and atomic mutations retain their distinct
 server contracts. Closing an editing panel does not release an uncertain write. Automatic recovery
 uses the existing canonical transport observations; no financial-content telemetry or additional
@@ -916,3 +924,14 @@ adds matching rows to that selection; replacing the loaded period requires expli
 `transactions.updateTransactions` with each observed revision and one shared change set. The
 existing correction owner retains admission, pending state and explicit uncertainty recovery;
 there is no splitting into partially committed batches or automatic mutation replay.
+
+Canonical query projection remains observational: retained Ready data, waiting and refreshFailure
+are independent. Route preparation keeps its explicit cached/fresh/display/refresh-display modes
+and nonrejecting completion; preparation completion does not certify a successful new read.
+
+Strict Transaction recovery uses loader-owned request/completion identities in the authenticated
+registry. A requested read forces a new loader invocation, independently of retained display content;
+equal new facts qualify. Failure, supersession, runtime failure and registry retirement settle as
+unsuccessful recovery. History still owns pagination/reset, and Category recovery rereads the metadata
+projection and its canonical fallback before admission can resume. Ordinary route preparation and
+Budget/Recurring refresh policies keep their existing contracts and retention.

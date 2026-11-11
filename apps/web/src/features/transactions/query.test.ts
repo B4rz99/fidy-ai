@@ -3,6 +3,7 @@ import { afterEach, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
 import { AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse, UrlParams } from "effect/http";
+import { readFreshQuery } from "@/transport/fresh-query";
 import { makeFidyClient } from "@/transport/client";
 import { transactionHistory } from "./history";
 import { transactionFirstPage, transactionPageInitialValue } from "./query";
@@ -177,6 +178,46 @@ it.live(
         yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toHaveLength(22)));
       } finally {
         unmount();
+        registry.dispose();
+      }
+    })
+);
+
+it.live(
+  "strict history recovery starts a canonical read even when its fresh page equals the retained page",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("window", Object.assign(new EventTarget(), { Uint8Array }));
+      let reads = 0;
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make((request) => {
+            reads += 1;
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(request, Response.json({ data: [], next: [] }))
+            );
+          })
+        ),
+      });
+      const registry = AtomRegistry.make();
+      const query = transactionFirstPage({
+        client,
+        period: {
+          from: DateTime.makeUnsafe("2026-10-01T05:00:00Z"),
+          to: DateTime.makeUnsafe("2026-11-01T05:00:00Z"),
+        },
+      });
+      try {
+        yield* AtomRegistry.getResult(registry, query);
+        expect(reads).toBe(1);
+        expect(yield* readFreshQuery({ registry, query })).toBe(true);
+        expect(reads).toBe(2);
+        expect(
+          (yield* AtomRegistry.getResult(registry, query, { suspendOnWaiting: true })).data
+        ).toEqual([]);
+      } finally {
         registry.dispose();
       }
     })

@@ -218,7 +218,6 @@ const DetailPanel = ({
   Readonly<{
     panel: Extract<TransactionPanel, { _tag: "Detail" }>;
   }>): JSX.Element => {
-  const corrections = use(TransactionCorrectionContext);
   const transaction = Option.fromNullishOr(
     props.transactions.find((record) => record.id === panel.id)
   );
@@ -251,10 +250,6 @@ const DetailPanel = ({
       onDeleted={() => {
         toast.success("Transacción eliminada");
         close();
-        Option.match(corrections, {
-          onNone: props.onRefresh,
-          onSome: (owner) => owner.refreshAfterMutation(),
-        });
       }}
     />
   );
@@ -850,6 +845,7 @@ const useWorkspacePanel = (
   generation: number
 ): Readonly<{ panel: TransactionPanel; onPanel: (panel: TransactionPanel) => void }> => {
   const capture = use(ManualCaptureContext);
+  const corrections = use(TransactionCorrectionContext);
   const defaultPanel: TransactionPanel = Option.exists(capture, (owner) => owner.uncertain)
     ? { _tag: "Capture", status: "uncertain" }
     : { _tag: "Summary" };
@@ -861,7 +857,16 @@ const useWorkspacePanel = (
   }
   const panel: TransactionPanel =
     interaction.generation === generation ? interaction.panel : defaultPanel;
-  const onPanel = (next: TransactionPanel): void => setInteraction({ generation, panel: next });
+  const onPanel = (next: TransactionPanel): void => {
+    if (
+      panel._tag === "Detail" &&
+      panel.mode._tag === "Deleting" &&
+      (next._tag !== "Detail" || next.mode._tag !== "Deleting" || next.id !== panel.id)
+    ) {
+      Option.map(corrections, (owner) => owner.cancelDeletion());
+    }
+    setInteraction({ generation, panel: next });
+  };
   return { panel: capturePanelStatus(panel, capture), onPanel };
 };
 type PeriodChoice = Readonly<{ kind: "date" | "month"; value: string }>;

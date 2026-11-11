@@ -1330,7 +1330,7 @@ effectIt.effect(
 );
 
 effectIt.effect(
-  "recovers a committed Pending Turn by independent Core cron when its DO alarm fails",
+  "fences a committed Turn after failed DO alarm and keeps Core cron recovery idempotent",
   () =>
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
@@ -1367,9 +1367,15 @@ effectIt.effect(
         sendPublicRequest(db, hostedBrowserRequest(0, "Private text"), binding)
       );
       expect(response.status).toBe(503);
+      expect(yield* fromTestPromise(() => response.json())).toEqual({ status: "interrupted" });
       expect(
         (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
-      ).toEqual([{ status: "pending" }]);
+      ).toEqual([{ status: "interrupted" }]);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT kind FROM transcript_entries ORDER BY occurred_at_ms, rowid").all()
+        )).results
+      ).toEqual([{ kind: "user" }, { kind: "interrupted" }]);
       yield* makeAgentRetention({ db }).sweep(transactionNow() + pendingExecutionRecoveryMs + 1);
       expect(
         (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results

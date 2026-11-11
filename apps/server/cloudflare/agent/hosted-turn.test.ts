@@ -2262,9 +2262,7 @@ it.each([899_999, 900_000, 900_001])(
             id: TranscriptTurnId.make(newId()),
           })
         );
-        expect(
-          result._tag === "Failure" || (result._tag === "Success" && Option.isNone(result.value))
-        ).toBe(true);
+        expect(result._tag === "Failure" || Option.isNone(result.value)).toBe(true);
         const rows = yield* Effect.tryPromise(() =>
           db
             .prepare(
@@ -2319,9 +2317,7 @@ it("rechecks live credential expiry without changing the captured admission star
           id: TranscriptTurnId.make(newId()),
         })
       );
-      expect(
-        result._tag === "Failure" || (result._tag === "Success" && Option.isNone(result.value))
-      ).toBe(true);
+      expect(result._tag === "Failure" || Option.isNone(result.value)).toBe(true);
       expect(
         yield* Effect.tryPromise(() =>
           db.prepare("SELECT count(*) AS count FROM hosted_agent_sessions").first()

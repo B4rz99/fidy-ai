@@ -1,4 +1,4 @@
-import { browserCrypto } from "@/browser/crypto";
+import { browserSecureRandom } from "@/browser/crypto";
 import { type Context, Effect, Option, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import { HostedTurnQuotaExceeded, HostedTurnRequest } from "@/transport/hosted-turn-client";
@@ -197,7 +197,7 @@ const submitConversation = ({
     return;
   }
   const entry: Entry = {
-    id: Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie)),
+    id: Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)),
     from: "user",
     text: displayText,
   };

@@ -1,3 +1,4 @@
+import { SecureRandom } from "effect/crypto";
 import { PrivateObjectKey } from "../../private-objects/contract";
 import {
   erasePrivateObject,
@@ -15,7 +16,7 @@ import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { prepareConsentWithdrawalProjection } from "../../consent/operations";
-import { Clock, Crypto, Data, Effect, Option, PlatformError, Result, Schema } from "effect";
+import { Clock, Data, Effect, Option, Result, Schema } from "effect";
 import PostalMime from "postal-mime";
 import {
   maximumEmailAddressCharacters,
@@ -117,23 +118,9 @@ const io = <A>(tryWork: () => Promise<A>): Effect.Effect<A, EmailUnavailable> =>
   });
 
 /** Worker-native entropy and digest, supplied at the Email Worker boundary. */
-export const emailCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "EmailCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
+export const emailSecureRandom = SecureRandom.make((size) =>
+  crypto.getRandomValues(new Uint8Array(size))
+);
 const reject = (message: ForwardedEmailMessage): void => {
   message.setReject("Mailbox unavailable");
 };
@@ -314,9 +301,9 @@ export const receiveForwardedEmail = Effect.fn(function* (
     if (receipt.value.state === "queued" || receipt.value.state === "expired") return;
     return yield* authorityUnavailable();
   }
-  const cryptoService = yield* Crypto.Crypto;
-  const id = yield* cryptoService.randomUUIDv4();
-  const objectKey = `${userPrivateObjectPrefix(approved.user_id)}email/v1/${yield* cryptoService.randomUUIDv4()}`;
+  const cryptoService = yield* SecureRandom.SecureRandom;
+  const id = yield* cryptoService.uuidV4();
+  const objectKey = `${userPrivateObjectPrefix(approved.user_id)}email/v1/${yield* cryptoService.uuidV4()}`;
   const reservation = yield* Effect.exit(
     io(() =>
       environment.DB.batch([
@@ -528,7 +515,7 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
   const expired = Schema.decodeUnknownOption(Schema.Array(ExpiredReceipt))(rows.results);
   if (Option.isNone(expired)) return yield* authorityUnavailable();
   for (const row of expired.value) {
-    const reviewId = yield* emailCrypto.randomUUIDv4();
+    const reviewId = yield* emailSecureRandom.uuidV4();
     yield* io(() =>
       environment.DB.batch([
         prepareCleanupReview({

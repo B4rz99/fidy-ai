@@ -116,6 +116,73 @@ const installWorkspace = (
       )
     );
   });
+const chooseLedgerSort = (page: Page, current: string, next: string): Journey =>
+  Effect.gen(function* () {
+    yield* wait(() =>
+      page.getByRole("button", { name: `Ordenar transacciones: ${current}`, exact: true }).click()
+    );
+    yield* wait(() => page.getByRole("menuitemradio", { name: next, exact: true }).click());
+  });
+
+test("ledger sorting preserves day groups and selection while columns toggle", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const naturalSortIndex = 10;
+      const rows = [
+        row(naturalSortIndex),
+        row(2),
+        { ...row(3), occurredAt: "2026-10-22T12:00:00.000Z" },
+      ];
+      yield* installWorkspace(page, rows);
+      yield* wait(() => page.goto("/app/transactions"));
+      const ledger = page.getByRole("table", { name: "Tabla de transacciones" });
+      const identities = ledger.locator('[data-transaction-slot="transaction-identity-control"]');
+      yield* wait(() =>
+        expect(identities).toHaveText([
+          "Ver transacción Prueba 10Restaurantes",
+          "Ver transacción Prueba 2Restaurantes",
+          "Ver transacción Prueba 3Restaurantes",
+        ])
+      );
+      yield* chooseLedgerSort(page, "Ordenar", "Contraparte A–Z");
+      yield* wait(() =>
+        expect(identities).toHaveText([
+          "Ver transacción Prueba 2Restaurantes",
+          "Ver transacción Prueba 10Restaurantes",
+          "Ver transacción Prueba 3Restaurantes",
+        ])
+      );
+      yield* wait(() => page.getByRole("button", { name: "Columnas", exact: true }).click());
+      yield* wait(() =>
+        page.getByRole("menuitemcheckbox", { name: "Categoría", exact: true }).click()
+      );
+      yield* wait(() =>
+        expect(page.locator(".transaction-ledger")).toHaveAttribute(
+          "data-category-visible",
+          "false"
+        )
+      );
+      yield* wait(() => page.keyboard.press("Escape"));
+      yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
+      yield* wait(() =>
+        ledger.getByRole("checkbox", { name: "Seleccionar Prueba 2", exact: true }).click()
+      );
+      yield* chooseLedgerSort(page, "Contraparte A–Z", "Contraparte Z–A");
+      yield* wait(() =>
+        expect(
+          ledger.getByRole("checkbox", { name: "Seleccionar Prueba 2", exact: true })
+        ).toBeChecked()
+      );
+      yield* wait(() =>
+        expect(identities).toHaveText([
+          "Seleccionar transacción Prueba 10Restaurantes",
+          "Deseleccionar transacción Prueba 2Restaurantes",
+          "Seleccionar transacción Prueba 3Restaurantes",
+        ])
+      );
+    })
+  ));
+
 test("identifies each daily Currency and signed amount before and after filtering", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {

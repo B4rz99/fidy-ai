@@ -1,6 +1,6 @@
 # Effect v4 crypto, encoding, and secret handling
 
-Selected sources: `node_modules/effect/src/Crypto.ts`, `Redacted.ts`, and
+Selected sources: `node_modules/effect/src/crypto/{SecureRandom,Digest,WebCrypto}.ts`, `Redacted.ts`, and
 `encoding/{Base64,Base64Url,Hex,EncodingError}.ts` under the same source directory.
 See [the source map](effect-4-stable.md) for release versus upstream authority.
 
@@ -10,7 +10,8 @@ Use this pattern when generating identifiers or bearer secrets, hashing, encodin
 
 | Concern                           | API                                                 | Security property                                                        |
 | --------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
-| Entropy, UUIDs, ULIDs, SHA digest | `Crypto.Crypto`                                     | Platform-backed cryptographic implementation                             |
+| Entropy, UUIDs, ULIDs             | `SecureRandom.SecureRandom` from `effect/crypto`    | Cryptographically secure randomness                                      |
+| SHA digests                       | `Digest.Digest` from `effect/crypto`                | One-way content fingerprints                                             |
 | Binary-to-text representation     | `Base64`, `Base64Url`, `Hex` from `effect/encoding` | Reversible encoding only; no secrecy or authenticity                     |
 | Accidental display/log protection | `Redacted`                                          | Presentation guard only; not encryption or access control                |
 | Constant-time byte comparison     | platform `timingSafeEqual`                          | Reduces timing leakage for equal-length secret-derived bytes             |
@@ -21,42 +22,45 @@ Never describe Base64, Base64Url, or hex as encryption. Never describe `Redacted
 
 ## Entropy and digests
 
-Request `Crypto.Crypto` inside the effect and provide the platform layer once at the runtime edge.
-The Cloudflare Worker adapter uses Web Crypto for entropy and digests; portable tests use the
-repository's deterministic `TestCrypto` seam rather than a process-runtime service.
+Request `SecureRandom.SecureRandom` for entropy and `Digest.Digest` for hashing. Provide each
+needed layer explicitly at the runtime edge; Bun/Node aggregate layers no longer supply crypto.
+Workers use Web Crypto. The test harness publishes separate `TestSecureRandom` and `TestDigest`
+layers plus their combined `TestCrypto` composition; these use real Web Crypto.
 
 ```ts
-import { Crypto, Effect, Redacted } from "effect";
+import { Effect, Redacted } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 
 const makeBearer = Effect.gen(function* () {
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   const bytes = yield* crypto.randomBytes(32);
   return Redacted.make(Base64Url.encode(bytes));
 });
 ```
 
-`randomUUIDv4()` and `randomUUIDv7()` are methods returning Effects. Their default format is a
-lowercase, hyphenated 36-character UUID string; `{ format: "bytes" }` returns 16 bytes. `randomULID`
-remains an Effect-valued property. Verify the `Crypto` interface and `make` implementation before
+`uuidV4()` and `uuidV7()` are methods returning Effects. Their default format is a
+lowercase, hyphenated 36-character UUID string; `{ format: "bytes" }` returns 16 bytes. `ulid`
+remains an Effect-valued property. Verify the `SecureRandom` interface and `make` implementation before
 porting examples from releases where UUID generation was an Effect-valued property.
 
-`Crypto.make` validates `randomBytes(size)` as a non-negative safe integer and exposes a
-`PlatformError` channel; `digest` also exposes `PlatformError`. Its underlying synchronous entropy
-callback can still throw a defect. Decide at the owning adapter whether platform failure is
-recoverable. Use `Effect.orDie` only where failure means a broken runtime, not business recovery.
+`SecureRandom.make` accepts a synchronous random-byte callback and validates requested sizes.
+`Digest.digest` takes an algorithm descriptor such as `Digest.sha256`, not a string.
+Both services have no typed failure channel. At a recoverable adapter boundary, use
+`Effect.catchDefect` to map a platform failure to the existing closed failure; do not consume
+interruption. Keep hashing of protocol bytes and purpose prefixes unchanged.
 
 Rules:
 
-- Generate bearer secrets, verification entropy, nonces, and security identities from `Crypto.Crypto.randomBytes`, never `Math.random`, timestamps, counters, or `Hex.random`.
+- Generate bearer secrets, verification entropy, nonces, and security identities from `SecureRandom.SecureRandom.randomBytes`, never `Math.random`, timestamps, counters, or `Hex.random`.
 - Choose entropy in bytes first, then encode. Hex emits two characters per byte; Base64Url is denser and URL/header safe.
 - Use SHA-256 or stronger for fingerprints and lookup digests. SHA-1 exists for interoperability, not new security designs.
 - A fast digest does not make a low-entropy code safe against offline guessing. Include enough entropy or use a protocol-specific KDF/pepper design.
 - Hash the canonical bytes, not an ambiguously concatenated string. For multi-field proofs, use an unambiguous length-prefix/canonical encoding or a protocol-defined construction.
-- `randomUUIDv4()`, `randomUUIDv7()`, and `randomULID` produce identifiers, not bearer credentials.
+- `uuidV4()`, `uuidV7()`, and `ulid` produce identifiers, not bearer credentials.
   Use explicit random bytes for secrets. ULIDs expose their creation time: their first 10 Crockford
   base32 characters encode the `Clock` timestamp in milliseconds and the remaining 16 encode 80
-  random bits (see `Crypto.make` and `randomULID`). Use that sortability only when timestamp disclosure
+  random bits (see `SecureRandom.make` and `ulid`). Use that sortability only when timestamp disclosure
   is acceptable; it adds no secrecy.
 
 ## Encoding is a boundary with failure
@@ -151,8 +155,8 @@ a small named function/port when behavior needs deterministic testing.
 
 ## Testing
 
-Prefer a deterministic `Crypto.make` service for focused logic tests; return fresh byte arrays and
-model digest failure when relevant. Keep integration coverage with the Cloudflare Web Crypto adapter.
+Use `SecureRandom.make` with fixed fresh bytes for focused entropy tests and a separate
+`Digest.Digest` implementation for digest failure tests. Keep integration coverage with the Cloudflare Web Crypto adapter.
 
 Test:
 

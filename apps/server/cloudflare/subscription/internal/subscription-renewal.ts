@@ -1,6 +1,6 @@
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { workerCrypto } from "./wompi-runtime";
+import { workerSecureRandom } from "./wompi-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import {
@@ -125,7 +125,7 @@ export const claimSubscriptionRenewal = (
     const boundary = yield* Schema.decodeUnknownEffect(Boundary)(row).pipe(
       Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
     );
-    const retryId = yield* workerCrypto.randomUUIDv4().pipe(Effect.orDie);
+    const retryId = yield* workerSecureRandom.uuidV4().pipe(Effect.orDie);
     const retry = prepareRetryClaim({ ...input, id: retryId });
     yield* fromPromise(() =>
       input.db
@@ -139,7 +139,7 @@ export const claimSubscriptionRenewal = (
       originalStartsAt: DateTime.makeUnsafe(boundary.calendar_anchor_ms),
       previousEndsAt: DateTime.makeUnsafe(boundary.ends_at_ms),
     });
-    const id = yield* workerCrypto.randomUUIDv4().pipe(Effect.orDie);
+    const id = yield* workerSecureRandom.uuidV4().pipe(Effect.orDie);
     const statement = prepareRenewalClaim({ ...input, id, period });
     yield* fromPromise(() =>
       input.db

@@ -1,19 +1,5 @@
-import { Crypto, Effect, PlatformError } from "effect";
+import { SecureRandom } from "effect/crypto";
 
-export const browserCrypto = Crypto.make({
-  randomBytes: (size) => globalThis.crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        globalThis.crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((digest) => new Uint8Array(digest)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "BrowserCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
+export const browserSecureRandom = SecureRandom.make((size) =>
+  globalThis.crypto.getRandomValues(new Uint8Array(size))
+);

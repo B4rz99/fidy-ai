@@ -2,9 +2,11 @@ import { openAiTestKey } from "../openai.test-fixture";
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
+import { ReviewMaterial } from "../../src/shell/ingestion/contract";
 import { DurableTraceContext, TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { TestClock } from "effect/testing";
+import { Base64 } from "effect/encoding";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
@@ -22,7 +24,7 @@ import {
   receiveForwardedEmail,
   receiveForwardedEmailWork,
 } from "./runtime";
-import { listNeedsReviewItems, processForwardedEmail } from "./operations";
+import { browseReviewMaterial, listNeedsReviewItems, processForwardedEmail } from "./operations";
 import { currentMillis } from "../runtime/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 
@@ -1692,3 +1694,196 @@ it("refuses attachments and dishonest length before any authoritative receipt or
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
     })
   ));
+
+it.live(
+  "captures an encoded multipart bank notification once while retaining its exact MIME evidence",
+  () =>
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      const original = new TextDecoder().decode(financialEmailBytes());
+      const html = original.slice(original.indexOf("\r\n\r\n") + 4);
+      const bytes = new TextEncoder().encode(
+        [
+          "From: =?UTF-8?Q?Banco_Ficticio?= <bank@example.test>",
+          `To: ${localA}@fidyapp.com`,
+          "Subject: =?UTF-8?Q?Compra_confirmada?=",
+          "MIME-Version: 1.0",
+          'Content-Type: multipart/alternative; boundary="bank-notice"',
+          "",
+          "--bank-notice",
+          "Content-Type: text/plain; charset=utf-8",
+          "Content-Transfer-Encoding: quoted-printable",
+          "",
+          "Notificaci=C3=B3n recibida.",
+          "--bank-notice",
+          "Content-Type: text/html; charset=utf-8",
+          "Content-Transfer-Encoding: base64",
+          "",
+          Base64.encode(new TextEncoder().encode(html)),
+          "--bank-notice--",
+          "",
+        ].join("\r\n")
+      );
+      const input = delivery(undefined, bytes);
+      yield* wait(() => emailWorker.email(input.message, env));
+      expect(input.rejected).toEqual([]);
+      const receipt = yield* wait(() =>
+        db
+          .prepare("SELECT id, object_key FROM forwarded_email_receipts WHERE user_id = ?")
+          .bind(userA)
+          .first<{ id: string; object_key: string }>()
+      );
+      if (receipt === null) throw new Error("Expected admitted multipart receipt");
+      const retained = yield* wait(() => bucket.get(receipt.object_key));
+      if (retained === null) throw new Error("Expected retained MIME evidence");
+      expect(new Uint8Array(yield* wait(() => retained.arrayBuffer()))).toEqual(bytes);
+      const work: Parameters<typeof processForwardedEmail>[0] = {
+        DB: db,
+        EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
+        userId: userA,
+        receiptId: receipt.id,
+      };
+      yield* wait(() => processForwardedEmail(work));
+      yield* wait(() => processForwardedEmail(work));
+      expect(
+        (yield* wait(() =>
+          db
+            .prepare("SELECT amount, currency FROM transactions WHERE user_id = ?")
+            .bind(userA)
+            .all()
+        )).results
+      ).toEqual([{ amount: "12500", currency: "COP" }]);
+    })
+);
+
+it.live("decodes retained email originals only for their browser owner", () =>
+  Effect.gen(function* () {
+    const { env, db, bucket } = yield* setup();
+    yield* wait(() => installForwardingTestSchema({ db, tables: ["ingestion_review_sources"] }));
+    const bytes = new TextEncoder().encode(
+      [
+        "From: bank@example.test",
+        `To: ${localA}@fidyapp.com`,
+        "Subject: =?ISO-8859-1?Q?Notificaci=F3n?=",
+        "Content-Type: text/plain; charset=iso-8859-1",
+        "Content-Transfer-Encoding: quoted-printable",
+        "",
+        "Notificaci=F3n: Caf=E9 privado",
+      ].join("\r\n")
+    );
+    const input = delivery(undefined, bytes);
+    yield* wait(() => emailWorker.email(input.message, env));
+    expect(input.rejected).toEqual([]);
+    const receipt = yield* wait(() =>
+      db
+        .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
+        .bind(userA)
+        .first<{ id: string }>()
+    );
+    if (receipt === null) throw new Error("Expected admitted email receipt");
+    yield* wait(() =>
+      processForwardedEmail({
+        DB: db,
+        EMAIL_BUCKET: { get: (key) => bucket.get(key, {}).then(Option.fromNullishOr) },
+        userId: userA,
+        receiptId: receipt.id,
+      })
+    );
+    const review = yield* wait(() =>
+      db
+        .prepare("SELECT id FROM ingestion_review_items WHERE email_receipt_id = ?")
+        .bind(receipt.id)
+        .first<{ id: string }>()
+    );
+    if (review === null) throw new Error("Expected retained email review");
+    const current = yield* Clock.currentTimeMillis;
+    const digest = new Uint8Array(32);
+    for (const [userId, id] of [
+      [userA, "10000000-0000-4000-8000-000000000201"],
+      [userB, "10000000-0000-4000-8000-000000000202"],
+    ] as const) {
+      yield* wait(() =>
+        db
+          .prepare(`INSERT INTO web_sessions
+        (id, user_id, token_digest, idle_expires_at_ms, hard_expires_at_ms)
+        VALUES (?, ?, ?, ?, ?)`)
+          .bind(id, userId, digest, current + 60_000, current + 60_000)
+          .run()
+      );
+      const response = yield* browseReviewMaterial({
+        db,
+        subject: { id, userId, digest },
+        request: new Request(
+          `https://api.fidyapp.com/ingestion/review-workspace/${review.id}/material`
+        ),
+        bucket: Option.some(bucket),
+      });
+      expect(response.headers.get("cache-control")).toContain("no-store");
+      const body: unknown = yield* wait(() => response.json());
+      if (userId === userA) {
+        expect(response.status).toBe(200);
+        const material = yield* Schema.decodeUnknownEffect(Schema.Struct({ data: ReviewMaterial }))(
+          body
+        );
+        expect(material.data.available).toBe(true);
+        if (material.data.available) {
+          expect(material.data.text).toContain("Notificación: Café privado");
+        }
+      } else {
+        expect(response.status).toBe(404);
+        expect(
+          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body)
+        ).not.toContain("Café privado");
+      }
+    }
+  })
+);
+
+it.each([
+  {
+    name: "headers spread across MIME parts beyond the shared header budget",
+    raw: [
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/alternative; boundary="wide-headers"',
+      "",
+      "--wide-headers",
+      "Content-Type: text/plain",
+      `X-Padding: ${"a".repeat(8_200)}`,
+      "",
+      "private message",
+      "--wide-headers",
+      "Content-Type: text/html",
+      `X-Padding: ${"b".repeat(8_200)}`,
+      "",
+      "<p>private message</p>",
+      "--wide-headers--",
+    ].join("\r\n"),
+  },
+  {
+    name: "a forwarded message without an attachment disposition",
+    raw: "Content-Type: message/rfc822\r\n\r\nFrom: bank@example.test\r\nSubject: Compra\r\n\r\nprivate message",
+  },
+  {
+    name: "a transfer-encoded forwarded message",
+    raw: [
+      "Content-Type: message/rfc822",
+      "Content-Transfer-Encoding: base64",
+      "",
+      Base64.encode("From: bank@example.test\r\nSubject: Compra\r\n\r\nprivate message"),
+    ].join("\r\n"),
+  },
+])("rejects $name before retaining an authoritative receipt or object", ({ raw }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { env, db, bucket, jobs } = yield* setup();
+      const input = delivery(undefined, new TextEncoder().encode(raw));
+      yield* wait(() => emailWorker.email(input.message, env));
+      expect(input.rejected).toEqual(["Mailbox unavailable"]);
+      expect(
+        (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
+      ).toEqual([]);
+      expect((yield* wait(() => bucket.list())).objects).toEqual([]);
+      expect(jobs).toEqual([]);
+    })
+  )
+);

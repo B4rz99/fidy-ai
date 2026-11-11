@@ -1,4 +1,5 @@
-import { Crypto, Effect, Option, Redacted, Result, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
+import { Effect, Option, Redacted, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { ConnectionAuthorizationUnavailable, type ConnectionBankGrant } from "../contract";
 
@@ -29,7 +30,7 @@ export const decodeGrantKey = (
 
 export const sealGrant = (
   input: Readonly<{ key: Redacted.Redacted<string>; purpose: string; grant: ConnectionBankGrant }>
-): Effect.Effect<string, ConnectionAuthorizationUnavailable, Crypto.Crypto> =>
+): Effect.Effect<string, ConnectionAuthorizationUnavailable, SecureRandom.SecureRandom> =>
   Effect.gen(function* () {
     const bytes = yield* decodeGrantKey(input.key);
     const plaintext = yield* Schema.encodeEffect(Schema.fromJsonString(Grant))({
@@ -37,7 +38,7 @@ export const sealGrant = (
       refreshToken: Option.map(input.grant.refreshToken, Redacted.value),
       expiresAtMilliseconds: input.grant.expiresAtMilliseconds,
     });
-    const entropy = yield* Crypto.Crypto;
+    const entropy = yield* SecureRandom.SecureRandom;
     const nonce = yield* entropy.randomBytes(nonceLength);
     return yield* Effect.tryPromise({
       try: () =>

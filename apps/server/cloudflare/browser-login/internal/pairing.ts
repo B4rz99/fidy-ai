@@ -1,3 +1,4 @@
+import { SecureRandom } from "effect/crypto";
 import { noLaterReadyPairing } from "./approval-order";
 import {
   BrowserLoginPairingId,
@@ -16,7 +17,7 @@ import {
   selectPublicCodeSymbols,
 } from "../../../src/core/browser-login/operations";
 import { WhatsAppCallerReference } from "../../../src/core/identity/contract";
-import { Clock, Crypto, DateTime, Effect, Option, PlatformError, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
@@ -71,24 +72,10 @@ const sameDigest = (expected: ReadonlyArray<number>, received: Uint8Array): bool
 };
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
-const uuid = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
+const workerSecureRandom = SecureRandom.make((size) =>
+  crypto.getRandomValues(new Uint8Array(size))
+);
+const uuid = (): string => Effect.runSync(workerSecureRandom.uuidV4().pipe(Effect.orDie));
 const instant = (epochMs: number): string => DateTime.formatIso(DateTime.makeUnsafe(epochMs));
 const json = (body: object, status = 200, headers?: HeadersInit): Response => {
   const responseHeaders = new Headers(headers);

@@ -1,3 +1,4 @@
+import { SecureRandom } from "effect/crypto";
 import { prepareResourceCounter, resourceCounterQuery } from "../../resource-admission/operations";
 import {
   pendingBrowserPairingQuery,
@@ -9,7 +10,7 @@ import {
   EmailVerificationCode,
 } from "../../../src/core/email-authentication/contract";
 import { BrowserLoginPairingId } from "../../../src/core/browser-login/contract";
-import { Clock, Crypto, Effect, Option, PlatformError, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
 
@@ -27,24 +28,10 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 512,
   deadlineMilliseconds: 2_000,
 });
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
-const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
+const workerSecureRandom = SecureRandom.make((size) =>
+  crypto.getRandomValues(new Uint8Array(size))
+);
+const newId = (): string => Effect.runSync(workerSecureRandom.uuidV4().pipe(Effect.orDie));
 const digestLength = 32;
 const emailCooldownMilliseconds = 60_000;
 const emailUserRequestsPerWindow = 5;

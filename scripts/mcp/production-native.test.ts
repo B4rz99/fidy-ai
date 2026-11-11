@@ -1,15 +1,7 @@
+import { type SecureRandom } from "effect/crypto";
 import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
 import { join } from "node:path";
-import {
-  type Crypto,
-  Effect,
-  Fiber,
-  FileSystem,
-  Layer,
-  Option,
-  type PlatformError,
-  Schema,
-} from "effect";
+import { Effect, Fiber, FileSystem, Layer, Option, type PlatformError, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { type NativeMode, nativeLogin, nativeTools } from "./production-native";
 
@@ -95,8 +87,12 @@ const withClient = <A, E>(
   mode: string,
   use: (
     input: Readonly<{ root: string; binary: string }>
-  ) => Effect.Effect<A, E, FileSystem.FileSystem | Crypto.Crypto>
-): Effect.Effect<A, PlatformError.PlatformError | E, FileSystem.FileSystem | Crypto.Crypto> =>
+  ) => Effect.Effect<A, E, FileSystem.FileSystem | SecureRandom.SecureRandom>
+): Effect.Effect<
+  A,
+  PlatformError.PlatformError | E,
+  FileSystem.FileSystem | SecureRandom.SecureRandom
+> =>
   Effect.scoped(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -112,10 +108,14 @@ const withClient = <A, E>(
     })
   );
 const run = <A, E>(
-  effect: Effect.Effect<A, E, FileSystem.FileSystem | Crypto.Crypto>
+  effect: Effect.Effect<A, E, FileSystem.FileSystem | SecureRandom.SecureRandom>
 ): Promise<A> =>
   Effect.runPromise(
-    effect.pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, BunCrypto.layer)))
+    effect.pipe(
+      Effect.provide(
+        Layer.mergeAll(BunFileSystem.layer, BunCrypto.layerSecureRandom, BunCrypto.layerDigest)
+      )
+    )
   );
 const callbackFixture = Effect.fn(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;

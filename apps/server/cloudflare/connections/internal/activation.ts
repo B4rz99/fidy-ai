@@ -1,5 +1,6 @@
+import { SecureRandom } from "effect/crypto";
 import { digestBytes } from "../../secret-material/operations";
-import { Clock, Crypto, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Effect, Option, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
@@ -110,7 +111,7 @@ const retainGrant = (
   input: Input,
   claim: Claim,
   retained: Readonly<{ grant: ConnectionBankGrant; clientId: string }>
-): Effect.Effect<void, ConnectionAuthorizationUnavailable, Crypto.Crypto> =>
+): Effect.Effect<void, ConnectionAuthorizationUnavailable, SecureRandom.SecureRandom> =>
   Effect.gen(function* () {
     const key = yield* ConnectionGrantKey;
     if (Option.isNone(key)) return yield* failed();
@@ -233,14 +234,14 @@ const failClaim = (
 
 export const completeAuthorization = (
   input: Input
-): Effect.Effect<void, ConnectionAuthorizationUnavailable, Crypto.Crypto> =>
+): Effect.Effect<void, ConnectionAuthorizationUnavailable, SecureRandom.SecureRandom> =>
   Effect.gen(function* () {
     const bank = yield* ConnectionActivation;
     const key = yield* ConnectionGrantKey;
     if (Option.isNone(bank) || Option.isNone(key)) return yield* failed();
     yield* decodeGrantKey(key.value);
     const claim = yield* claimCallback(input);
-    const entropy = yield* Crypto.Crypto;
+    const entropy = yield* SecureRandom.SecureRandom;
     const activation = Effect.gen(function* () {
       const result = input.admission.result;
       if (result._tag === "Denied") return yield* failed();
@@ -257,7 +258,7 @@ export const completeAuthorization = (
         expiresAtMilliseconds: claim.expiresAtMilliseconds,
         retainGrant: (grant) =>
           retainGrant(input, claim, { grant, clientId: bank.value.clientId }).pipe(
-            Effect.provideService(Crypto.Crypto, entropy)
+            Effect.provideService(SecureRandom.SecureRandom, entropy)
           ),
       });
       yield* settleAccounts(input, claim, accounts);

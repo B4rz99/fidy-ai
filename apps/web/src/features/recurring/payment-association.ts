@@ -1,4 +1,4 @@
-import { browserCrypto } from "@/browser/crypto";
+import { browserSecureRandom } from "@/browser/crypto";
 import { DateTime, Effect } from "effect";
 import type { CanonicalSuccess } from "@/transport/client";
 import { type Edit, type Occurrence, money } from "./model";
@@ -61,7 +61,7 @@ export const associateTransaction = ({
   kind: "fulfill",
   ...(replaces === "" ? {} : { replaces }),
   fulfillment: {
-    id: Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie)),
+    id: Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)),
     planId: item.planId,
     date: item.date,
     actualDate: DateTime.formatIsoDate(

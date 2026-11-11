@@ -1,10 +1,11 @@
+import { SecureRandom } from "effect/crypto";
 import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import { withPublicationWake } from "./internal/publication-wake";
 import type { ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Crypto, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import type {
   ForwardedEmailEnvironment,
@@ -22,7 +23,7 @@ import {
 } from "../runtime/telemetry/operations";
 import {
   dispatchForwardedEmail as dispatchEmail,
-  emailCrypto,
+  emailSecureRandom,
   receiveForwardedEmail as receiveEmail,
   sweepForwardedEmail as retainEmail,
 } from "./internal/forwarded-email";
@@ -131,7 +132,7 @@ export const receiveForwardedEmail = ({
 }>): Effect.Effect<void, Effect.Error<ReturnType<typeof receiveEmail>>> =>
   receiveEmail(message, environment).pipe(
     Effect.withSpan("forwarded-email.receive"),
-    Effect.provideService(Crypto.Crypto, emailCrypto)
+    Effect.provideService(SecureRandom.SecureRandom, emailSecureRandom)
   );
 
 /** Reoffer only retained same-User receipt identities; an offer grants no processing authority. */

@@ -1,4 +1,4 @@
-import { browserCrypto } from "@/browser/crypto";
+import { browserSecureRandom } from "@/browser/crypto";
 import { Effect, Option, Schema } from "effect";
 
 import {
@@ -7,7 +7,7 @@ import {
 } from "./authentication-channel";
 
 export { authenticationEndedEvent } from "./authentication-channel";
-const tabId = Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie));
+const tabId = Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie));
 const Transition = Schema.Struct({ event: Schema.Literal("changed"), sender: Schema.String });
 
 /** Retire this tab synchronously and notify other mounted tabs without transmitting any identity. */

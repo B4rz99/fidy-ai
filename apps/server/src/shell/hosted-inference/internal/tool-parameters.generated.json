@@ -4218,15 +4218,7 @@
           "type": "object",
           "properties": {
             "cursor": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Shape: (string|null)"
+              "type": "string"
             }
           },
           "additionalProperties": false

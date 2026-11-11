@@ -105,7 +105,15 @@ const responseStatusForbidsBody = (status: number): boolean =>
 
 const diagnosticsRequest = (
   request: HttpClientRequest.HttpClientRequest
-): HttpClientRequest.HttpClientRequest => HttpClientRequest.make(request.method)(diagnosticsUrl);
+): HttpClientRequest.HttpClientRequest =>
+  HttpClientRequest.makeWith(
+    request.method,
+    diagnosticsUrl,
+    HttpClientRequest.empty.urlParams,
+    HttpClientRequest.empty.hash,
+    HttpClientRequest.empty.headers,
+    HttpClientRequest.empty.body
+  );
 
 const projectResponseHeaders = (
   response: HttpClientResponse.HttpClientResponse
@@ -134,6 +142,15 @@ const diagnosticsResponse = (
     })
   );
 
+// Effect 4.1 response serialization omits headers, including the validated trace receipt.
+const responseTraceDescription = (
+  response: HttpClientResponse.HttpClientResponse
+): Pick<HttpClientError.DecodeError, "description"> =>
+  Option.match(traceId(response.headers[traceResponseHeader]), {
+    onNone: () => ({}),
+    onSome: (value) => ({ description: `traceId=${value}` }),
+  });
+
 const sanitizeHttpClientError = (
   error: HttpClientError.HttpClientError
 ): HttpClientError.HttpClientError => {
@@ -154,18 +171,21 @@ const sanitizeHttpClientError = (
       sanitizedReason = new HttpClientError.StatusCodeError({
         request,
         response: diagnosticsResponse(request, reason.response),
+        ...responseTraceDescription(reason.response),
       });
       break;
     case "DecodeError":
       sanitizedReason = new HttpClientError.DecodeError({
         request,
         response: diagnosticsResponse(request, reason.response),
+        ...responseTraceDescription(reason.response),
       });
       break;
     case "EmptyBodyError":
       sanitizedReason = new HttpClientError.EmptyBodyError({
         request,
         response: diagnosticsResponse(request, reason.response),
+        ...responseTraceDescription(reason.response),
       });
       break;
   }

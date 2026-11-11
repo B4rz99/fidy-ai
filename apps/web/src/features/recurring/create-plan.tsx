@@ -1,4 +1,4 @@
-import { browserCrypto } from "@/browser/crypto";
+import { browserSecureRandom } from "@/browser/crypto";
 import { Effect, Option } from "effect";
 import { type JSX, useState } from "react";
 import { RecurringPlanId } from "@/transport/client";
@@ -29,7 +29,7 @@ export const CreatePlan = (props: Props): JSX.Element => {
   const [draft, setDraft] = useState({ initial, transactionId: Option.none<string>() });
   const submit = (plan: PlanInput): void => {
     const id = RecurringPlanId.make(
-      Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie))
+      Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie))
     );
     const source = draft.transactionId;
     save(

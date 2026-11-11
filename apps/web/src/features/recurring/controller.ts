@@ -413,7 +413,7 @@ const admittedRevision = ({
 };
 const editCodec = Schema.toCodecJson(RecurringEdit);
 const snapshotEdit = (edit: Edit): Edit =>
-  Schema.decodeUnknownSync(editCodec)(structuredClone(Schema.encodeSync(editCodec)(edit)));
+  Schema.decodeSync(editCodec)(structuredClone(Schema.encodeSync(editCodec)(edit)));
 const saveEdit = (options: Actions, edit: Edit, onSaved: () => void): void => {
   const { owner, query, setSaveState, feedback, complete, submit } = options;
   const revision = admittedRevision(options);

@@ -363,7 +363,7 @@ it("snapshots one exact edit before dispatch and contains a throwing visible cal
         yield* Effect.tryPromise(() => reactWork(() => pause.click()));
         yield* Effect.tryPromise(() => reactAssertion(() => expect(requests).toHaveLength(1)));
         expect(
-          Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(requests[0] ?? "")
+          yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(requests[0] ?? "")
         ).toMatchObject({
           expectedRevision: 0,
           edit: { action: "pause" },
@@ -639,7 +639,7 @@ it("saves a Money-bearing edit with its exact reviewed facts and confirms its vi
         planning = Option.some(current);
       };
       const current = (): ReturnType<typeof useRecurringPlanning> => Option.getOrThrow(planning);
-      const edit = Schema.decodeUnknownSync(Schema.toCodecJson(RecurringEdit))({
+      const edit = yield* Schema.decodeEffect(Schema.toCodecJson(RecurringEdit))({
         kind: "edit",
         planId,
         date: "2026-10-29",
@@ -670,7 +670,7 @@ it("saves a Money-bearing edit with its exact reviewed facts and confirms its vi
         if (edit.kind === "edit") Object.assign(edit.plan, { name: "Changed after save" });
         yield* Effect.tryPromise(() => reactAssertion(() => expect(requests).toHaveLength(1)));
         expect(
-          Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(requests[0] ?? "")
+          yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(requests[0] ?? "")
         ).toMatchObject({
           expectedRevision: 0,
           edit: {

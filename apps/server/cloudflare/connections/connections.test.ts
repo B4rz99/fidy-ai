@@ -855,6 +855,62 @@ it("binds one bank handoff to the original attempt and never repeats its prepara
     })
   ));
 
+it("exposes a prepared bank handoff only to the exact session that began continuation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { started, bank } = yield* prepareActivation(db);
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      const otherSession = "10000000-0000-4000-8000-000000000063";
+      const otherPairing = "10000000-0000-4000-8000-000000000073";
+      const current = DateTime.nowUnsafe().epochMilliseconds;
+      const otherDigest = yield* Effect.tryPromise(() => digest(bearer(2)));
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) SELECT ?, 'ABCD-1232', verifier_digest, user_id, 'consumed', ?, ? FROM browser_login_pairings WHERE user_id=?"
+            )
+            .bind(otherPairing, current, current + 600000, users[0]),
+          db
+            .prepare(
+              "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+            .bind(
+              otherSession,
+              otherPairing,
+              users[0],
+              otherDigest,
+              current,
+              current + 600000,
+              current + 3600000,
+              current + 7776000000
+            ),
+        ])
+      );
+      const other = request(2, `/web/connections/review?attempt=${attempt}`);
+      other.headers.set("Fidy-Session-Binding", otherSession);
+      const refused = yield* Effect.tryPromise(() => send(db, other));
+      expect(refused.status).toBe(404);
+      expect(refused.headers.get("cache-control")).toBe("no-store");
+      expect(yield* Effect.tryPromise(() => refused.json())).toEqual({
+        error: { code: "continuation_unavailable" },
+      });
+      const owned = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/web/connections/review?attempt=${attempt}`))
+      );
+      expect(owned.status).toBe(200);
+      const review: unknown = yield* Effect.tryPromise(() => owned.json());
+      expect(review).toMatchObject({
+        phase: "prepared",
+        connection: { state: "Connecting" },
+        expiresAt: DateTime.formatIso(started.continuation.expiresAt),
+      });
+      expect(review).toHaveProperty("authorization.expiresAt");
+      expect(bank.exchanges()).toBe(0);
+    })
+  ));
+
 it("settles an uncertain bank submission without retaining its verifier or allowing a retry", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -888,6 +944,117 @@ it("settles an uncertain bank submission without retaining its verifier or allow
       expect(calls).toBe(1);
     })
   ));
+
+it("times out stalled bank preparation without authorizing another provider call", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      institutionRegistration.enabled = true;
+      const preparing = yield* Deferred.make<void>();
+      let preparations = 0;
+      bankPreparation = Option.some({
+        intent: fixtureConsentIntent(),
+        prepare: (input) =>
+          Effect.gen(function* () {
+            preparations += 1;
+            yield* input.recordConsent("synthetic-consent");
+            yield* Deferred.succeed(preparing, undefined);
+            return yield* Effect.never;
+          }),
+      });
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      const pending = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      ).pipe(Effect.forkChild);
+      yield* Deferred.await(preparing);
+      yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(30000));
+      const response = yield* Fiber.join(pending);
+      expect(response.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+        phase: "failed",
+        expiresAt: DateTime.formatIso(started.continuation.expiresAt),
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT phase,verifier,handoff_url FROM connection_authorizations").first()
+        )
+      ).toEqual({ phase: "failed", verifier: null, handoff_url: null });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        )).status
+      ).toBe(404);
+      expect(preparations).toBe(1);
+    })
+  ));
+
+it.each(["preparation-budget", "original-expiry"] as const)(
+  "refuses a bank handoff that settles after its %s without preparing again",
+  (deadline) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        institutionRegistration.enabled = true;
+        let preparations = 0;
+        bankPreparation = Option.some({
+          intent: fixtureConsentIntent(),
+          prepare: (input) =>
+            Effect.gen(function* () {
+              preparations += 1;
+              yield* input.recordConsent("synthetic-consent");
+              const settledAt =
+                deadline === "preparation-budget"
+                  ? DateTime.nowUnsafe().epochMilliseconds + 30000
+                  : input.expiresAtMilliseconds;
+              vi.setSystemTime(settledAt);
+              return {
+                url: "https://auth1-api-open-finance-sandbox.ambientesbc.com/auth?client_id=10000000-0000-4000-8000-000000000001&response_type=code&scope=accounts&request_uri=urn:ietf:params:oauth:request_uri:synthetic",
+                expiresAtMilliseconds: input.expiresAtMilliseconds,
+              };
+            }),
+        });
+        const started = yield* Effect.tryPromise(() => start(db));
+        if (started.type !== "continue_in_browser") {
+          throw new Error("Expected browser continuation");
+        }
+        const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+        if (deadline === "original-expiry") {
+          vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds - 4000);
+        }
+        const response = yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        );
+        expect(response.status).toBe(deadline === "original-expiry" ? 404 : 200);
+        if (deadline === "preparation-budget") {
+          expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+            phase: "failed",
+            expiresAt: DateTime.formatIso(started.continuation.expiresAt),
+          });
+        }
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT phase,verifier,handoff_url FROM connection_authorizations").first()
+          )
+        ).toEqual({ phase: "failed", verifier: null, handoff_url: null });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT expires_at_ms FROM connection_attempts")
+              .first<number>("expires_at_ms")
+          )
+        ).toBe(started.continuation.expiresAt.epochMilliseconds);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+          )).status
+        ).toBe(404);
+        expect(preparations).toBe(1);
+      })
+    )
+);
 
 it("prepares a browser authorization once without activating the Connection", () =>
   Effect.runPromise(
@@ -1121,6 +1288,67 @@ it("commits only one concurrent browser preparation and retires old continuation
       expect(retired.status).toBe(404);
     })
   ));
+it("refuses a superseded pending attempt atomically before bank preparation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      institutionRegistration.enabled = true;
+      let preparations = 0;
+      bankPreparation = Option.some({
+        intent: fixtureConsentIntent(),
+        prepare: () => {
+          preparations += 1;
+          return Effect.fail(new ConnectionAuthorizationUnavailable());
+        },
+      });
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      const refused = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }), (database) =>
+          database
+            .prepare(
+              "INSERT INTO connection_attempts (id,connection_id,public_reference,status,created_at_ms,expires_at_ms) VALUES (?,?,?,'invalidated',?,?)"
+            )
+            .bind(
+              "10000000-0000-4000-8000-000000000081",
+              started.connection.id,
+              "10000000-0000-4000-8000-000000000082",
+              DateTime.nowUnsafe().epochMilliseconds,
+              DateTime.nowUnsafe().epochMilliseconds + 600000
+            )
+            .run()
+        )
+      );
+      expect(refused.status).toBe(404);
+      expect(preparations).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT status,prepared_session_id FROM connection_attempts WHERE public_reference=?"
+            )
+            .bind(attempt)
+            .first()
+        )
+      ).toEqual({ status: "pending", prepared_session_id: null });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT attempt_id FROM connection_authorizations").all()
+        )).results
+      ).toEqual([]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT id FROM audit_entries WHERE operation='connections.beginContinuation' AND outcome='accepted'"
+            )
+            .all()
+        )).results
+      ).toEqual([]);
+    })
+  ));
+
 it("rolls back browser preparation when Audit fails and allows a safe retry", () =>
   Effect.runPromise(
     Effect.gen(function* () {

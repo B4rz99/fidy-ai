@@ -1,13 +1,15 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
 import { ConnectionResult } from "./result";
+import { continuationDeadline, useContinuation } from "./continuation";
 import { ConnectionRecovery } from "@/ui/components/connection-recovery";
 import { useSession } from "@/session/session-context";
 import { WorkspaceHeader } from "@/ui/components/workspace-layout";
-import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Link, useRouter, useSearch } from "@tanstack/react-router";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { type JSX, useState } from "react";
+import { Atom } from "effect/reactivity";
+import { type JSX, type MouseEvent, useState } from "react";
 import { ConnectionAttemptReference, type ConnectionContinuationReview } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
@@ -51,47 +53,73 @@ const Unavailable = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX.
 const BankHandoff = ({
   review,
   disabled,
+  canFollow,
 }: Readonly<{
   review: typeof ConnectionContinuationReview.Type;
   disabled: boolean;
+  canFollow: () => boolean;
 }>): JSX.Element => {
   if (disabled || review.authorization === undefined) return <></>;
+  const follow = (event: MouseEvent<HTMLAnchorElement>): void => {
+    if (!canFollow()) event.preventDefault();
+  };
   return (
-    <a className={buttonVariants()} href={review.authorization.url} rel="noreferrer">
+    <a
+      className={buttonVariants()}
+      href={review.authorization.url}
+      rel="noreferrer"
+      onClick={follow}
+      onAuxClick={follow}
+      onContextMenu={follow}
+    >
       Continuar en Bancolombia
     </a>
   );
 };
-const continuationDeadline = (review: typeof ConnectionContinuationReview.Type): DateTime.Utc =>
-  review.authorization?.expiresAt ?? review.expiresAt;
-const preparationBlocked = (
-  review: typeof ConnectionContinuationReview.Type,
-  uncertain: boolean,
-  stale: boolean
-): boolean => stale || (uncertain && review.phase === "ready");
-const ExpiringReview = ({
-  review,
-  busy,
-  blocked,
-  begin,
-}: Readonly<{
-  review: typeof ConnectionContinuationReview.Type;
-  busy: boolean;
-  blocked: boolean;
-  begin: () => void;
-}>): JSX.Element => {
-  const client = useRouter().options.context.webAuthClient;
-  const expiresAt = continuationDeadline(review);
-  const [expiry] = useState(() =>
-    client.runtime.atom(
+const useExpiry = (
+  expiresAt: DateTime.Utc
+): Readonly<{ expired: boolean; check: () => boolean }> => {
+  const { webAuthClient: client, registry } = useRouter().options.context;
+  const [expiry] = useState(() => {
+    const timer = client.runtime.atom(
       Effect.gen(function* () {
         const current = yield* Clock.currentTimeMillis;
         yield* Effect.sleep(Math.max(0, expiresAt.epochMilliseconds - current));
         return true;
       })
-    )
-  );
-  const expired = useAtomValue(expiry).pipe(presentCanonicalQuery)._tag === "Ready";
+    );
+    return Atom.writable(
+      (get) =>
+        get(timer).pipe(presentCanonicalQuery)._tag === "Ready" ||
+        expiresAt.epochMilliseconds <= Effect.runSync(Clock.currentTimeMillis),
+      (context, _value: void) => context.setSelf(true)
+    );
+  });
+  return {
+    expired: useAtomValue(expiry),
+    check: () => {
+      if (expiresAt.epochMilliseconds > Effect.runSync(Clock.currentTimeMillis)) return true;
+      registry.set(expiry, undefined);
+      return false;
+    },
+  };
+};
+const ExpiringReview = ({
+  review,
+  busy,
+  blocked,
+  expired,
+  begin,
+  canFollow,
+}: Readonly<{
+  review: typeof ConnectionContinuationReview.Type;
+  busy: boolean;
+  blocked: boolean;
+  expired: boolean;
+  begin: () => void;
+  canFollow: () => boolean;
+}>): JSX.Element => {
+  const expiresAt = continuationDeadline(review);
   const disabled = busy || blocked || expired;
   return (
     <Card className="w-full max-w-md">
@@ -103,7 +131,7 @@ const ExpiringReview = ({
               : `Conectar ${review.institutionName}`}
           </h1>
         </CardTitle>
-        <CardDescription>{preparationMessage[review.phase]}</CardDescription>
+        {expired ? null : <CardDescription>{preparationMessage[review.phase]}</CardDescription>}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p>No compartas claves bancarias, documentos de identidad ni números de cuenta en Fidy.</p>
@@ -120,7 +148,7 @@ const ExpiringReview = ({
             {busy ? "Continuando…" : "Continuar"}
           </Button>
         ) : null}
-        <BankHandoff review={review} disabled={disabled} />
+        <BankHandoff review={review} disabled={disabled} canFollow={canFollow} />
         <Button variant="outline" render={<Link to="/app/transactions" />}>
           Cancelar y volver a Fidy
         </Button>
@@ -128,22 +156,33 @@ const ExpiringReview = ({
     </Card>
   );
 };
+const UncertainNotice = ({ expired }: Readonly<{ expired: boolean }>): JSX.Element => (
+  <p role="alert">
+    {expired
+      ? "No pudimos confirmar el resultado. Esta solicitud venció; no la vuelvas a enviar."
+      : "No pudimos confirmar el resultado. Consulta el estado antes de continuar; no repitas esta solicitud."}
+  </p>
+);
 const ReviewNotices = ({
   uncertain,
+  sent,
+  expired,
   phase,
   stale,
 }: Readonly<{
   uncertain: boolean;
+  sent: boolean;
+  expired: boolean;
   phase: (typeof ConnectionContinuationReview.Type)["phase"];
   stale: boolean;
 }>): JSX.Element => (
   <>
-    {uncertain && phase === "ready" ? (
-      <p role="alert">
-        No pudimos confirmar el resultado. Consulta el estado antes de continuar; no repitas esta
-        solicitud.
-      </p>
+    {sent && !uncertain && !expired && phase === "ready" ? (
+      <output>
+        La solicitud se envió. Consulta el estado para ver el resultado; no la vuelvas a enviar.
+      </output>
     ) : null}
+    {uncertain && phase === "ready" ? <UncertainNotice expired={expired} /> : null}
     {stale ? (
       <p role="alert">
         No pudimos actualizar el estado. La información mostrada puede estar desactualizada.
@@ -151,53 +190,60 @@ const ReviewNotices = ({
     ) : null}
   </>
 );
+type ReadyContinuation = Extract<ReturnType<typeof useContinuation>["result"], { _tag: "Ready" }>;
+const ContinuationReview = ({
+  task,
+  review,
+}: Readonly<{
+  task: ReturnType<typeof useContinuation>;
+  review: ReadyContinuation;
+}>): JSX.Element => {
+  const { busy, uncertain, submitted, begin, refresh, canFollow } = task;
+  const { value, waiting, refreshFailure } = review;
+  const { expired, check } = useExpiry(continuationDeadline(value));
+  return (
+    <>
+      <ReviewNotices
+        uncertain={uncertain}
+        sent={submitted && !busy}
+        expired={expired}
+        phase={value.phase}
+        stale={Option.isSome(refreshFailure)}
+      />
+      <ExpiringReview
+        review={value}
+        busy={busy || waiting}
+        expired={expired}
+        blocked={Option.isSome(refreshFailure) || (submitted && value.phase === "ready")}
+        begin={() => {
+          if (check()) begin();
+        }}
+        canFollow={() => check() && canFollow(value)}
+      />
+      <Button
+        variant="outline"
+        disabled={expired || busy || waiting}
+        onClick={() => {
+          if (check()) refresh();
+        }}
+      >
+        Consultar estado
+      </Button>
+    </>
+  );
+};
 const Continuation = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX.Element => {
-  const client = useRouter().options.context.webAuthClient;
-  const [query] = useState(() =>
-    client.query("connectionBrowser", "review", { query: { attempt }, timeToLive: "0 seconds" })
-  );
-  const result = useAtomValue(query).pipe(presentCanonicalQuery);
-  const refresh = useAtomRefresh(query);
-  const [busy, setBusy] = useState(false);
-  const [uncertain, setUncertain] = useState(false);
-  const markUncertain = (): void => setUncertain(true);
-  const settled = (): void => setBusy(false);
-  const [command] = useState(() =>
-    client.runtime.fn<void>()(
-      () =>
-        client.pipe(
-          Effect.flatMap((api) => api.connectionBrowser.begin({ payload: { attempt } })),
-          Effect.tap(() => Effect.sync(refresh)),
-          Effect.asVoid,
-          Effect.catchCause(() => Effect.sync(markUncertain)),
-          Effect.ensuring(Effect.sync(settled))
-        ),
-      { concurrent: false }
-    )
-  );
-  const run = useAtomSet(command);
+  const task = useContinuation(attempt);
+  const { result, mounted } = task;
   if (result._tag === "Initial") return <PendingRead label="Cargando solicitud" />;
   if (result._tag === "Failure") return <Unavailable attempt={attempt} />;
   return (
-    <div className="flex w-full max-w-md flex-col gap-3">
-      <ReviewNotices
-        uncertain={uncertain}
-        phase={result.value.phase}
-        stale={Option.isSome(result.refreshFailure)}
-      />
-      <ExpiringReview
+    <div ref={mounted} className="flex w-full max-w-md flex-col gap-3">
+      <ContinuationReview
         key={continuationDeadline(result.value).epochMilliseconds}
-        review={result.value}
-        busy={busy || result.waiting}
-        blocked={preparationBlocked(result.value, uncertain, Option.isSome(result.refreshFailure))}
-        begin={() => {
-          setBusy(true);
-          run();
-        }}
+        task={task}
+        review={result}
       />
-      <Button variant="outline" disabled={busy || result.waiting} onClick={refresh}>
-        Consultar estado
-      </Button>
     </div>
   );
 };
@@ -219,7 +265,7 @@ export const ConnectionContinuationFeature = (): JSX.Element => {
   }
   return (
     <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
-      <Continuation key={attempt.value} attempt={attempt.value} />
+      <Continuation key={`${sessionBinding}:${attempt.value}`} attempt={attempt.value} />
     </main>
   );
 };

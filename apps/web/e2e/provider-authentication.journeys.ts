@@ -1146,7 +1146,15 @@ const completePATReviewJourney = Effect.fn(function* ({
     row.getByRole("button", { name: "Desactivar", exact: true }).click()
   );
   yield* Effect.tryPromise(() =>
-    row.getByRole("button", { name: "Sí, desactivar", exact: true }).click()
+    expect(page.getByText("¿Quieres desactivar el token", { exact: false })).toContainText(
+      tokenName
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    page
+      .getByRole("region", { name: "Tokens activos", exact: true })
+      .getByRole("button", { name: "Sí, desactivar", exact: true })
+      .click()
   );
   yield* Effect.tryPromise(() => expect(row).toHaveCount(0));
   yield* Effect.tryPromise(() => openTransactionsThroughCore(page));

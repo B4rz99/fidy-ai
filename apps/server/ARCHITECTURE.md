@@ -143,6 +143,12 @@ commit rechecks the exact initiating proof, bound User, both expiries, current C
 capacity before consuming approval, storing a digest-only PAT and appending Audit atomically.
 Repeated claims cannot disclose the bearer again, including after an uncertain response.
 
+OAuth token exchange owns the original unconsumed Request through bounded form decoding,
+code issuance or coordinated refresh, and no-store response delivery. Ingress returns that response
+without inspecting bearer material or retrying issuance. Code consumption rechecks both code and
+original grant expiry against commit-time D1 time; refresh descendants retain the original deadline
+and any narrowed scope.
+
 OAuth approval, refresh, revocation and sensitive-operation confirmation remain distinct from PAT
 and browser-session authority. Sensitive OAuth operations require one client-native decision,
 bound to the exact operation and consumed atomically; the client assertion is not human attestation.
@@ -421,7 +427,10 @@ specification and operational evidence.
 
 Connection authorization preparation privately owns its attempt-bound verifier, state digest
 and bounded PAR handoff in `connection_authorizations`. Claim and Audit commit before external bank
-I/O; settlement cannot replay a consumed attempt. The scheduled Connections retention sweep clears
+I/O; the claim refuses superseded attempts before committing any effects. Prepared review is
+bound to the exact WebSession that consumed the attempt. Settlement cannot replay a consumed
+attempt or publish a handoff after the shorter of the thirty-second preparation budget and the
+original attempt lifetime. The scheduled Connections retention sweep clears
 expired private proofs independently of User Consent, and erasure removes them before attempts.
 The Bancolombia adapter reuses private Core mTLS/signing custody for application authentication,
 consent creation and PAR. It records the immutable consent intent at claim and the returned ConsentId

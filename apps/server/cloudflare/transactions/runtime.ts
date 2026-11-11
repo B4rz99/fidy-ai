@@ -1,5 +1,6 @@
+import { SecureRandom } from "effect/crypto";
 import type { ErasureRecoveryConfiguration, ErasureRegistry } from "../erasure/contract";
-import { makeWorkerCrypto } from "../secret-material/runtime";
+import { makeSecureRandom } from "../secret-material/runtime";
 import { makeUserRecoveryAlarm } from "./internal/recovery-alarm";
 import {
   bancolombiaSandboxAdmission,
@@ -93,18 +94,7 @@ import { executeOAuthRefresh, executeOAuthRevocation } from "../oauth-agents/ope
 import type { HostedCommitFence } from "../agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 
-import {
-  Clock,
-  Crypto,
-  Data,
-  DateTime,
-  Effect,
-  Exit,
-  Option,
-  Redacted,
-  Schema,
-  type Scope,
-} from "effect";
+import { Clock, Data, DateTime, Effect, Exit, Option, Redacted, Schema, type Scope } from "effect";
 
 import { optionalHostedInference } from "../ai/runtime";
 import type { OpenAiEnvironment } from "../ai/contract";
@@ -459,7 +449,7 @@ const privateConnectionActivity = (
       candidate: input.candidate,
       userId: input.userId,
       signal: input.request.signal,
-    }).pipe(Effect.provideService(Crypto.Crypto, makeWorkerCrypto()))
+    }).pipe(Effect.provideService(SecureRandom.SecureRandom, makeSecureRandom()))
   );
 };
 const consentActivities = new Map([

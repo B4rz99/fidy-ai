@@ -135,6 +135,8 @@ const deliverCanonicalFault = (
 export type Harness = Readonly<{
   disableInference: () => void;
   mcpHandoffs: () => number;
+  refreshHandoffs: () => number;
+  loseNextRefreshResponse: () => void;
   holdMutationCommit: () => Readonly<{
     waiting: Promise<void>;
     settled: Promise<void>;
@@ -166,6 +168,8 @@ export const setup = Effect.fnUntraced(function* () {
   const db = yield* wait(databases.acquire());
   yield* wait(installTestSchema({ db }));
   let mcpHandoffCount = 0;
+  let refreshHandoffCount = 0;
+  let loseRefreshResponse = false;
   const coordinators = new Map<string, UserTransactionCoordinator>();
   const deliveryResidencies = new Map<string, McpResidency>();
   let queryGate: Option.Option<QueryGate> = Option.none();
@@ -252,8 +256,19 @@ export const setup = Effect.fnUntraced(function* () {
                 }).pipe(Effect.orDie),
             });
           }
-          const run = (): Promise<Response> =>
-            fetchCoordinator({ coordinators, name, environment, request });
+          const run = (): Promise<Response> => {
+            const refresh = new URL(request.url).pathname === "/oauth-refresh";
+            refreshHandoffCount += Number(refresh);
+            const result = fetchCoordinator({ coordinators, name, environment, request });
+            if (!refresh || !loseRefreshResponse) return result;
+            loseRefreshResponse = false;
+            return result.then((response) => {
+              if (response.status !== 200) return response;
+              return (response.body?.cancel() ?? Promise.resolve()).then(() =>
+                Promise.reject(new Error("Refresh response delivery lost after execution"))
+              );
+            });
+          };
           const intercept = queryResponseIntercept;
           if (new URL(request.url).pathname === "/oauth-canonical" && Option.isSome(intercept)) {
             return run().then((response) => intercept.value({ request, response }));
@@ -312,6 +327,10 @@ export const setup = Effect.fnUntraced(function* () {
     db: queryDb,
     send,
     mcpHandoffs: () => mcpHandoffCount,
+    refreshHandoffs: () => refreshHandoffCount,
+    loseNextRefreshResponse: () => {
+      loseRefreshResponse = true;
+    },
     holdMutationCommit: mutationCommit.hold,
     disableInference: () => {
       environment.HOSTED_AI_MODEL = "";

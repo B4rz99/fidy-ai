@@ -9,7 +9,7 @@ import {
   makeTestOutboundTransport,
   testOutboundTransportResponse,
 } from "../../src/shell/outbound-http/testing";
-import { workerCrypto } from "./internal/wompi-runtime";
+import { workerDigest } from "./internal/wompi-runtime";
 import {
   DaviplataSandboxProofFailure,
   authorizeDaviplataSandbox,
@@ -26,7 +26,7 @@ const outboundFor = (
     publicKey: "pub_test_synthetic_only",
     privateKey: Redacted.make("synthetic-private"),
     integritySecret: Redacted.make("synthetic-integrity"),
-    crypto: workerCrypto,
+    digest: workerDigest,
     daviplataSandboxPolicy: Option.some(policy),
     httpClient: makeTestOutboundTransport(handler),
   });

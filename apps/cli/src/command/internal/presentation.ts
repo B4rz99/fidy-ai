@@ -15,6 +15,9 @@ const recovery =
   "Comprueba el acceso local con fidy status. Si no hay acceso local utilizable, revisa y revoca el permiso en https://app.fidyapp.com/settings/access; después usa fidy logout e inicia una nueva vinculación. No se repite una consulta privada consumida.";
 export const failures: Readonly<Record<CliFailure["reason"], string>> = {
   Cancelled: "Proceso interrumpido localmente. Si aprobaste un permiso, " + recovery,
+  LoginSaveInterrupted:
+    "Proceso interrumpido durante el guardado local. El guardado terminó, pero el acceso puede haberse guardado sin mostrar confirmación. Comprueba fidy status antes de iniciar otra vinculación. No se deshizo el acceso guardado. " +
+    recovery,
   UnsupportedRuntime:
     "Este CLI requiere el Bun verificado 38afee6c8. Ejecuta bash scripts/install-bun.sh y usa ese ejecutable.",
   InvalidInput:

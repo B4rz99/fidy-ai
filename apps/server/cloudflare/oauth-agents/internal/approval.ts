@@ -1,3 +1,4 @@
+import type { BootstrapUnavailable } from "../contract";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, type PlatformError, Redacted, Schema } from "effect";
 import { OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
@@ -18,7 +19,7 @@ import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { freshSessionConditions } from "../../../src/shell/web-session/operations";
 import { grantOAuthConsent, protectConsentStatement } from "../../../src/shell/consent/operations";
 import { newId, newSecret, secretDigest } from "../../secret-material/operations";
-import { type BootstrapUnavailable, dbWork, invalidRequest } from "./bootstrap";
+import { dbWork, invalidRequest } from "./bootstrap";
 import { oauthResponse } from "./response";
 
 type ApprovalInput = Readonly<{

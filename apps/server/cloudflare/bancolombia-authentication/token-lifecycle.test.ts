@@ -1,6 +1,7 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import * as assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, Crypto, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import { Cause, Context, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
@@ -69,7 +70,9 @@ const introspectionResponse = (scenario: Scenario, revoked: boolean): Response =
   });
 };
 const lifecycle = Effect.fn(function* (scenario: Scenario) {
-  const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+  const services = yield* Layer.build(TestCrypto);
+  const secureRandom = Context.get(services, SecureRandom.SecureRandom);
+  const digest = Context.get(services, Digest.Digest);
   const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
   const publicKey = {
     ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
@@ -113,7 +116,8 @@ const lifecycle = Effect.fn(function* (scenario: Scenario) {
     })
   );
   const result = yield* verifyBancolombiaSandboxTokenLifecycle({
-    crypto,
+    secureRandom,
+    digest,
     clientId,
     publicKey,
     privateKey: Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey))),

@@ -2,7 +2,7 @@ import { useAtomSet } from "@effect/atom-react";
 import { DateTime, Duration, Effect, type Exit, Option, Redacted, Schema } from "effect";
 import { type Atom, Reactivity } from "effect/reactivity";
 import { type Dispatch, type RefCallback, type SetStateAction, useCallback, useState } from "react";
-import { browserCrypto } from "@/browser/crypto";
+import { browserSecureRandom } from "@/browser/crypto";
 import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
 import {
   type FidyClient,
@@ -67,7 +67,7 @@ type ManualPATCreationState =
   | Readonly<{ _tag: "Issued"; issued: IssuedPAT }>;
 
 const makeManualPATRequestId = (): ManualPATRequestIdType =>
-  ManualPATRequestId.make(Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie)));
+  ManualPATRequestId.make(Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)));
 
 const initialState: ManualPATCreationState = {
   _tag: "Editing",

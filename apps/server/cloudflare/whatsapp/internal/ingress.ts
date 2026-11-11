@@ -1,3 +1,4 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import { OutboundHttpLive } from "../../outbound-http/runtime";
 import { makeStatusLookupAdmission } from "./status-admission";
 import { receiveWhatsAppProviderHandoff } from "../../provider-authentication/runtime";
@@ -17,7 +18,6 @@ import {
 import { DisclosureDeliveryCorrelationToken } from "../../../src/core/provider-evidence/contract";
 import {
   Context,
-  Crypto,
   DateTime,
   Duration,
   Effect,
@@ -267,7 +267,11 @@ const routeHostedInbound = (
 const routeTextInbound = (
   environment: Environment,
   input: TextInbound
-): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
+): Effect.Effect<
+  Response,
+  void,
+  Digest.Digest | SecureRandom.SecureRandom | HttpClient.HttpClient
+> =>
   Effect.gen(function* () {
     const approval =
       /^Aprueba el código de inicio de sesión ([BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4})$/u.exec(
@@ -311,7 +315,11 @@ const handleInbound = (
   base: WebhookBase,
   request: Request,
   environment: Environment
-): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
+): Effect.Effect<
+  Response,
+  void,
+  Digest.Digest | SecureRandom.SecureRandom | HttpClient.HttpClient
+> =>
   Effect.gen(function* () {
     const decoded = yield* Effect.exit(
       authenticateWhatsAppInbound({
@@ -329,9 +337,9 @@ const handleInbound = (
     ) {
       return answer(HTTP_CONFLICT);
     }
-    const cryptoService = yield* Crypto.Crypto;
+    const cryptoService = yield* Digest.Digest;
     const digest = Sha256Digest.make(
-      Hex.encode(yield* cryptoService.digest("SHA-256", base.rawBody).pipe(Effect.orDie))
+      Hex.encode(yield* cryptoService.digest(Digest.sha256, base.rawBody).pipe(Effect.orDie))
     );
     const input = {
       event: decoded.value.events[0],
@@ -429,7 +437,11 @@ const isLifecycleEvent = (name: string): boolean =>
 const handleWebhook = (
   request: Request,
   environment: Environment
-): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
+): Effect.Effect<
+  Response,
+  void,
+  Digest.Digest | SecureRandom.SecureRandom | HttpClient.HttpClient
+> =>
   Effect.gen(function* () {
     if (
       request.headers.get("content-length") !== null &&
@@ -454,13 +466,10 @@ const handleWebhook = (
     return yield* handleInbound(base, request, environment);
   });
 
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    attempt(() =>
-      crypto.subtle.digest(algorithm, new Uint8Array(data)).then((buffer) => new Uint8Array(buffer))
-    ).pipe(Effect.orDie),
-});
+const workerSecureRandom = SecureRandom.make((size) =>
+  crypto.getRandomValues(new Uint8Array(size))
+);
+const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
 
 const answer = (status: number): Response =>
   new Response(null, { status, headers: { "cache-control": "no-store" } });
@@ -485,7 +494,8 @@ export const receiveIngress =
         );
         return yield* handleWebhook(request, environment).pipe(
           Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient)),
-          Effect.provideService(Crypto.Crypto, workerCrypto),
+          Effect.provideService(Digest.Digest, workerDigest),
+          Effect.provideService(SecureRandom.SecureRandom, workerSecureRandom),
           Effect.provideService(FetchHttpClient.Fetch, fetcher)
         );
       })

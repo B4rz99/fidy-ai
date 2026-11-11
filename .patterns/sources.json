@@ -1,7 +1,7 @@
 {
   "effect": {
     "repository": "https://github.com/Effect-TS/effect",
-    "verifiedOn": "2026-10-29",
+    "verifiedOn": "2026-11-10",
     "snapshot": {
       "manifest": ".repos/effect/packages/effect/package.json",
       "version": "4.0.4",
@@ -14,12 +14,12 @@
       {
         "name": "effect",
         "manifest": "package.json",
-        "version": "4.0.6"
+        "version": "4.1.2"
       },
       {
         "name": "@effect/atom-react",
         "manifest": "apps/web/package.json",
-        "version": "4.0.6"
+        "version": "4.1.2"
       }
     ],
     "sourcePaths": [
@@ -31,7 +31,7 @@
   },
   "alchemy": {
     "repository": "https://github.com/alchemy-run/alchemy",
-    "verifiedOn": "2026-10-30",
+    "verifiedOn": "2026-11-10",
     "snapshot": {
       "manifest": ".repos/alchemy/packages/alchemy/package.json",
       "version": "2.0.0-beta.79",
@@ -55,7 +55,7 @@
     "patches": [
       {
         "path": "patches/alchemy@2.0.0-beta.80.patch",
-        "sha256": "2f753f1b7740039a361b0b5c7da1c6df9f152b6b976b7625039beeb13af3538b"
+        "sha256": "ba8c95ba263630566fef9b527f1835bb26cc86934621a75ba9e086cb4215c3ad"
       }
     ]
   },

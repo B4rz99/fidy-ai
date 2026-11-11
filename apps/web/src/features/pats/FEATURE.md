@@ -303,3 +303,20 @@ commit. Late inspection or approval callbacks cannot settle a replacement task. 
 approval response offers authenticated access metadata/revocation, without claiming rejection,
 client login or automatic retry. The browser holds no private device proof or PAT bearer. Live
 session approval retains the existing policy; recent authentication is not newly required.
+
+## Management ownership
+
+`management.ts` owns one mounted task for single and aggregate PAT revocation. Review captures an
+exact metadata identity or the authenticated User's aggregate scope; confirmation accepts no new
+target. Synchronous admission closes both actions before starting the canonical mutation. Only a
+decoded receipt supplies the acknowledged short ID or active-token count. Transport, decoding and
+unavailable outcomes remain uncertain and block another command until an explicit fresh metadata
+read succeeds. Retained or background query observations cannot settle that task. A reread can show
+current presence or absence, but cannot reconstruct the original revocation receipt, aggregate count,
+or closure of unclaimed approvals. That unknown outcome remains visible during a new review.
+
+The canonical query remains the metadata owner. Review survives changed or missing rows so it can
+always be cancelled. Mounted lifetime and generation fences reject stale actions and completions;
+authentication retirement and unmount interrupt owned command/recovery waits. This task never
+receives bearer material and makes no claim about removing native credentials. Existing canonical
+transport diagnostics observe its requests; local interaction needs no additional telemetry.

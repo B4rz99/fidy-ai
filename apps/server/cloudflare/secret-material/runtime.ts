@@ -1,5 +1,6 @@
-import { Crypto } from "effect";
-import { workerCryptoOptions } from "./internal/worker-crypto";
+import type { SecureRandom } from "effect/crypto";
+import { makeWorkerSecureRandom } from "./internal/worker-crypto";
 
-/** Construct Worker-native security entropy and hashing at a Promise runtime boundary. */
-export const makeWorkerCrypto = (): Crypto.Crypto => Crypto.make(workerCryptoOptions);
+/** Construct Worker-native entropy at a Promise runtime boundary. */
+export const makeSecureRandom = (): SecureRandom.SecureRandom["Service"] =>
+  makeWorkerSecureRandom();

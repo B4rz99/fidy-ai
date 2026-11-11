@@ -42,6 +42,10 @@ fidy transactions listTransactions --currency COP --json
 
 `status` informa el estado local: no comprueba en ese instante que el servidor conserve el acceso. `commands` descubre las operaciones disponibles con tu permiso.
 
+Si interrumpes `login` después de iniciar la entrega del permiso, el servidor puede haberlo entregado aunque la terminal no reciba la respuesta. Si interrumpes mientras se guarda, la CLI deja terminar el guardado: puede quedar acceso local sin mostrar la confirmación. Ejecuta `fidy status` antes de iniciar otra vinculación. La interrupción no revoca el PAT ni deshace un acceso guardado.
+
+Si el estado local está incompleto o no coincide, la CLI lo rechaza sin mostrar secretos. Usa `fidy logout` para limpiar los restos. Si no hay acceso local utilizable después de una entrega incierta, revisa y revoca el permiso en [Configuración → Tokens personales](https://app.fidyapp.com/settings/access) antes de iniciar una nueva vinculación.
+
 ## Actualiza o desconecta
 
 Vuelve a ejecutar el instalador cuando decidas actualizar. No hay actualizador en segundo plano.

@@ -1,10 +1,10 @@
+import { Digest } from "effect/crypto";
 import { expect, it } from "@effect/vitest";
 import {
   Cause,
   type Config,
   ConfigProvider,
   Context,
-  Crypto,
   Deferred,
   Effect,
   Exit,
@@ -43,7 +43,7 @@ it.effect(
         calls += 1;
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       });
-      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
       for (const scenario of [
         { environment: "production", policy: Option.none<DaviplataOtpPolicy>() },
         { environment: "sandbox", policy: Option.none<DaviplataOtpPolicy>() },
@@ -77,7 +77,7 @@ it.effect(
           privateKey: Redacted.make("synthetic-private-key"),
           integritySecret: Redacted.make("synthetic-integrity-secret"),
           httpClient,
-          crypto,
+          digest,
         });
         for (const request of [
           { _tag: "WompiDaviplataSandboxToken", outcome: "approved" },
@@ -119,14 +119,14 @@ it.effect(
         calls++;
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       });
-      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
       const outbound = makeWompiOutboundHttp({
         environment: "production",
         publicKey: "pub_prod_synthetic_only",
         privateKey: Redacted.make("prv_prod_synthetic_only"),
         integritySecret: Redacted.make("synthetic-integrity-secret"),
         httpClient,
-        crypto,
+        digest,
       });
       for (const request of [
         { _tag: "WompiSandboxRefund", body: "{}" },
@@ -169,14 +169,14 @@ it.effect(
         });
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       });
-      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
       const outbound = makeWompiOutboundHttp({
         environment: "sandbox",
         publicKey: "pub_test_synthetic_only",
         privateKey: Redacted.make("synthetic-private-key"),
         integritySecret: Redacted.make("synthetic-integrity-secret"),
         httpClient,
-        crypto,
+        digest,
         daviplataSandboxPolicy: Option.some(sandboxOtpPolicy),
       });
       for (const outcome of ["approved", "declined"] as const) {
@@ -765,14 +765,14 @@ it.effect(
         urls.push(request.url);
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
       });
-      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
       const outbound = makeWompiOutboundHttp({
         environment: "sandbox",
         publicKey: "pub_test_synthetic_only",
         privateKey: Redacted.make("synthetic-private-key"),
         integritySecret: Redacted.make("synthetic-integrity-secret"),
         httpClient,
-        crypto,
+        digest,
         daviplataSandboxPolicy: Option.some({
           sendUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
           confirmUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
@@ -800,14 +800,14 @@ it.effect("refuses malformed DaviPlata authorization IDs before any OTP egress",
       calls += 1;
       return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
     });
-    const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+    const digest = Context.get(yield* Layer.build(TestCrypto), Digest.Digest);
     const outbound = makeWompiOutboundHttp({
       environment: "sandbox",
       publicKey: "pub_test_synthetic_only",
       privateKey: Redacted.make("synthetic-private-key"),
       integritySecret: Redacted.make("synthetic-integrity-secret"),
       httpClient,
-      crypto,
+      digest,
       daviplataSandboxPolicy: Option.some({
         sendUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",
         confirmUrl: "https://api-sandbox.wompi.co/v1/webhook_events/daviplata_response/sandbox",

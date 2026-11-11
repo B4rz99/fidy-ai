@@ -1,18 +1,8 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import * as assert from "node:assert/strict";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
 import { expect, it } from "@effect/vitest";
-import {
-  Cause,
-  Context,
-  Crypto,
-  Data,
-  DateTime,
-  Effect,
-  Exit,
-  Layer,
-  Redacted,
-  Schema,
-} from "effect";
+import { Cause, Context, Data, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
 import { BancolombiaAuthenticationFailed } from "./contract";
@@ -42,7 +32,9 @@ it.effect(
   "authenticates accounts with a matching RS256 key and retains no bearer in its result",
   () =>
     Effect.gen(function* () {
-      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      const services = yield* Layer.build(TestCrypto);
+      const secureRandom = Context.get(services, SecureRandom.SecureRandom);
+      const digest = Context.get(services, Digest.Digest);
       const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
       const publicKey = {
         ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
@@ -92,7 +84,8 @@ it.effect(
         })
       );
       const result = yield* authenticateBancolombiaSandbox({
-        crypto,
+        secureRandom,
+        digest,
         clientId,
         privateKey,
         publicKey,
@@ -105,7 +98,9 @@ it.effect(
 
 it.effect("refuses a signing key that does not match registration before sending any request", () =>
   Effect.gen(function* () {
-    const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+    const services = yield* Layer.build(TestCrypto);
+    const secureRandom = Context.get(services, SecureRandom.SecureRandom);
+    const digest = Context.get(services, Digest.Digest);
     const registered = yield* Effect.tryPromise(() =>
       generateKeyPair("RS256", { extractable: true })
     );
@@ -119,7 +114,8 @@ it.effect("refuses a signing key that does not match registration before sending
       alg: "RS256",
     };
     const result = yield* authenticateBancolombiaSandbox({
-      crypto,
+      secureRandom,
+      digest,
       clientId,
       publicKey,
       privateKey: Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(unrelated.privateKey))),
@@ -147,7 +143,9 @@ it.effect("refuses a signing key that does not match registration before sending
 
 it.effect("refuses issuer or token-endpoint drift before any credential-bearing request", () =>
   Effect.gen(function* () {
-    const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+    const services = yield* Layer.build(TestCrypto);
+    const secureRandom = Context.get(services, SecureRandom.SecureRandom);
+    const digest = Context.get(services, Digest.Digest);
     const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
     const publicKey = {
       ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
@@ -162,7 +160,8 @@ it.effect("refuses issuer or token-endpoint drift before any credential-bearing 
     ]) {
       let calls = 0;
       const result = yield* authenticateBancolombiaSandbox({
-        crypto,
+        secureRandom,
+        digest,
         clientId,
         publicKey,
         privateKey,
@@ -193,7 +192,9 @@ it.effect("refuses issuer or token-endpoint drift before any credential-bearing 
 
 it.effect("does not retry bank rejection or expose its body or a malformed token", () =>
   Effect.gen(function* () {
-    const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+    const services = yield* Layer.build(TestCrypto);
+    const secureRandom = Context.get(services, SecureRandom.SecureRandom);
+    const digest = Context.get(services, Digest.Digest);
     const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
     const publicKey = {
       ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
@@ -214,7 +215,8 @@ it.effect("does not retry bank rejection or expose its body or a malformed token
     ]) {
       let posts = 0;
       const result = yield* authenticateBancolombiaSandbox({
-        crypto,
+        secureRandom,
+        digest,
         clientId,
         publicKey,
         privateKey,

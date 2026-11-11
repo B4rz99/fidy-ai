@@ -1,3 +1,4 @@
+import { Digest } from "effect/crypto";
 import { openAiHttp } from "~/shell/outbound-http/internal/openai-http";
 import { operatorD1Http } from "~/shell/outbound-http/internal/operator-d1-http";
 import { bancolombiaSandboxHttp } from "~/shell/outbound-http/internal/bancolombia-http";
@@ -5,7 +6,7 @@ import { cliReleaseHttp } from "~/shell/outbound-http/internal/cli-release-http"
 import { oidcHttp } from "~/shell/outbound-http/internal/oidc-http";
 import { type DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { WompiEnvironment } from "~/shell/secret-material/contract";
-import { Config, Context, Crypto, Effect, Layer, Option, type Redacted, Schema } from "effect";
+import { Config, Context, Effect, Layer, Option, type Redacted, Schema } from "effect";
 import { HttpClient } from "effect/http";
 import {
   loadResendEmailDeliveryApiKey,
@@ -62,7 +63,7 @@ export const makeKapsoOutboundHttp = (
     resendEmailDeliveryApiKey: Option.none(),
     wompi: Option.none(),
     httpClient: input.httpClient,
-    crypto: Option.none(),
+    digest: Option.none(),
   });
 
 /** Execute only Resend requests using the supplied credential and client; other providers fail closed. */
@@ -77,7 +78,7 @@ export const makeResendOutboundHttp = (
     resendEmailDeliveryApiKey: Option.some(input.apiKey),
     wompi: Option.none(),
     httpClient: input.httpClient,
-    crypto: Option.none(),
+    digest: Option.none(),
   });
 
 /** Restricts Worker-owned Wompi credentials to bounded provider transport. The optional reviewed
@@ -90,7 +91,7 @@ export const makeWompiOutboundHttp = (
     privateKey: Redacted.Redacted<string>;
     integritySecret: Redacted.Redacted<string>;
     httpClient: HttpClient.HttpClient;
-    crypto: Crypto.Crypto;
+    digest: Digest.Digest["Service"];
   }> &
     Partial<Readonly<{ daviplataSandboxPolicy: Option.Option<DaviplataOtpPolicy> }>>
 ): OutboundHttpService =>
@@ -102,7 +103,7 @@ export const makeWompiOutboundHttp = (
       daviplataSandboxPolicy: input.daviplataSandboxPolicy ?? Option.none(),
     }),
     httpClient: input.httpClient,
-    crypto: Option.some(input.crypto),
+    digest: Option.some(input.digest),
   });
 
 /** Authority to reach an external provider through the published Outbound HTTP policy. */
@@ -123,7 +124,7 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
       const wompiPrivateKey = yield* loadWompiPrivateKey(wompiEnvironment);
       const wompiIntegritySecret = yield* loadWompiIntegritySecret(wompiEnvironment);
       const httpClient = yield* HttpClient.HttpClient;
-      const crypto = yield* Crypto.Crypto;
+      const digest = yield* Digest.Digest;
       return makeOutboundHttp({
         kapsoApiKey,
         resendEmailDeliveryApiKey: Option.some(resendEmailDeliveryApiKey),
@@ -135,7 +136,7 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
           daviplataSandboxPolicy: Option.none(),
         }),
         httpClient,
-        crypto: Option.some(crypto),
+        digest: Option.some(digest),
       });
     })
   );

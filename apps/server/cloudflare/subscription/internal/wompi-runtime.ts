@@ -1,21 +1,17 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import { DaviplataOtpPolicy } from "../../../src/core/subscription/contract";
 import { type WompiBindings } from "../contract";
 
 import { makeWompiOutboundHttp } from "../../../src/shell/outbound-http/operations";
-import { Crypto, Effect, Option, Redacted, Schema } from "effect";
+import { Effect, Option, Redacted, Schema } from "effect";
 import { type HttpClient } from "effect/http";
 
-export const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, bytes) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, new Uint8Array(bytes))
-          .then((value) => new Uint8Array(value)),
-      catch: () => undefined,
-    }).pipe(Effect.orDie),
-});
+export const workerSecureRandom = SecureRandom.make((size) =>
+  crypto.getRandomValues(new Uint8Array(size))
+);
+export const workerDigest = Effect.runSync(
+  Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto))
+);
 
 export type WompiTransportFactory = (
   environment: WompiBindings
@@ -33,7 +29,7 @@ export const makeWompiTransport = ({
     privateKey: Redacted.make(environment.WOMPI_PRIVATE_KEY),
     integritySecret: Redacted.make(environment.WOMPI_INTEGRITY_SECRET),
     httpClient,
-    crypto: workerCrypto,
+    digest: workerDigest,
     daviplataSandboxPolicy:
       environment.WOMPI_ENVIRONMENT === "sandbox"
         ? Schema.decodeUnknownOption(DaviplataOtpPolicy)({

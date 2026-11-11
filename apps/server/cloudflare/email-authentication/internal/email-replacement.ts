@@ -1,3 +1,4 @@
+import { SecureRandom } from "effect/crypto";
 import { prepareResourceCounter, resourceCounterQuery } from "../../resource-admission/operations";
 import { freshSessionQuery } from "../../../src/shell/web-session/operations";
 import { prepareEmailReplacementEvidence } from "../../../src/shell/audit/operations";
@@ -17,7 +18,7 @@ import {
   emailReplacementImplementations,
   permitsFreshBrowserReplacement,
 } from "../../../src/shell/email-authentication/operations";
-import { Clock, Crypto, Data, Effect, Option, PlatformError, Schema } from "effect";
+import { Clock, Data, Effect, Option, Schema } from "effect";
 import { freshBrowserSession } from "../../web-session/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
@@ -35,24 +36,10 @@ const HTTP_OK = 200;
 const HTTP_INVALID = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_UNAVAILABLE = 503;
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
-const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
+const workerSecureRandom = SecureRandom.make((size) =>
+  crypto.getRandomValues(new Uint8Array(size))
+);
+const newId = (): string => Effect.runSync(workerSecureRandom.uuidV4().pipe(Effect.orDie));
 const digestLength = 32;
 const proofPublicLength = 9;
 const proofSecretOffset = 10;

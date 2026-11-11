@@ -33,19 +33,15 @@ import {
 import { type WhatsAppStatusAdmission, type WhatsAppTurnAdmission } from "../../whatsapp/contract";
 import {
   findWeeklyQuestionUser,
-  insightVerifiedDeliveryQuery,
   insightVerifiedTranscriptQuery,
   prepareInsightRecipient,
   prepareProactivityStatus,
-  proactivityReminderReplyQuery,
   proactivityVerifiedDeliveryQuery,
   proactivityVerifiedTranscriptQuery,
   readDisclosureReplyChoice,
   reconcileInsightStatus,
   reconcileProactivityStatus,
   reconcileWeeklyQuestion,
-  weeklyQuestionDeliveryQuery,
-  weeklySummaryReplyQuery,
 } from "../../whatsapp/operations";
 import { type AgentEnvironment, AgentUnavailable } from "../contract";
 import { prepareMessageTranscript, prepareProactiveTranscript } from "./proactive-transcript";
@@ -77,7 +73,7 @@ const reconcileQuestion = (input: Status): Effect.Effect<boolean, AgentUnavailab
           prepareWeeklyQuestionDelivery({
             db: environment.DB,
             userId,
-            proof: weeklyQuestionDeliveryQuery({ userId, id: question.value.id }),
+            id: question.value.id,
           }),
         ])
       );
@@ -102,7 +98,7 @@ const prepareCategorySettlement = (
   return [
     prepareProactivityStatus({ db: environment.DB, admission: status }),
     prepareVerifiedProactivityDisclosure({ ...scope, proof }),
-    ...prepareReminderDelivery({ ...scope, proof }),
+    ...prepareReminderDelivery(scope),
     ...prepareProactivityDeliverySettlement({ ...scope, proof }),
     prepareMessageTranscript({ ...scope, now: status.receivedAtMs, proof: transcript }),
     ...prepareProactiveTranscript({
@@ -145,7 +141,6 @@ export const reconcileWeeklyChannel = (input: Status): Effect.Effect<boolean, Ag
         environment.DB.batch([
           ...prepareWeeklyDeliverySettlement({
             ...scope,
-            proof: insightVerifiedDeliveryQuery(scope),
             thresholds,
           }),
           ...prepareProactiveTranscript({
@@ -169,12 +164,12 @@ export const recordWeeklyReply = (
       prepareReminderReply({
         db: input.db,
         userId: input.proof.userId,
-        proof: proactivityReminderReplyQuery(input.proof),
+        proof: input.proof,
       }),
       prepareWeeklyGovernorReply({
         db: input.db,
         userId: input.proof.userId,
-        proof: weeklySummaryReplyQuery(input.proof),
+        proof: input.proof,
       }),
     ])
   ).pipe(

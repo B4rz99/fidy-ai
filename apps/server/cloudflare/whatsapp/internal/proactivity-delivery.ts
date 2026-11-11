@@ -314,7 +314,7 @@ export const rejectedDeliveryQuery = (
 });
 
 export const deliveryQuery = (input: Readonly<{ userId: UserId; id: string }>): OwnedStatement => ({
-  sql: "SELECT user_id,delivery_id,role,provider_message_id,send_started_at_ms,delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='delivered' AND provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL",
+  sql: "SELECT user_id,delivery_id,role,consent_grant_id,provider_message_id,send_started_at_ms,delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='delivered' AND provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL",
   params: [input.userId, input.id],
 });
 export const transcriptQuery = (
@@ -358,7 +358,7 @@ export const replyQuery = (input: WhatsAppTurnAdmission): OwnedStatement => {
     bsuid: input.bsuid,
   });
   return {
-    sql: `SELECT c.user_id,c.delivery_id,c.role,c.delivered_at_ms,? AS occurred_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS c WHERE c.user_id=? AND c.provider_message_id=? AND c.state='delivered' AND c.role IN ('manual-entry-reminder','reminder-question') AND c.portfolio_id=? AND c.bsuid=? AND c.business_phone_number_id=? AND EXISTS (${association.sql})`,
+    sql: `SELECT c.user_id,c.delivery_id,c.role,c.consent_grant_id,c.delivered_at_ms,? AS occurred_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='proactivity') AS c WHERE c.user_id=? AND c.provider_message_id=? AND c.state='delivered' AND c.role IN ('manual-entry-reminder','reminder-question') AND c.portfolio_id=? AND c.bsuid=? AND c.business_phone_number_id=? AND EXISTS (${association.sql})`,
     params: [
       input.occurredAtMs,
       input.userId,

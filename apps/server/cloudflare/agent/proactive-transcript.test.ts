@@ -22,7 +22,6 @@ import { makeInsightTemplateSender } from "../../src/shell/channels/whatsapp/run
 import { WhatsAppProviderMessageId } from "../../src/shell/channels/whatsapp/contract";
 import {
   contextualProactiveInsightQuery,
-  insightVerifiedDeliveryQuery,
   insightVerifiedTranscriptQuery,
   reconcileInsightStatus,
   stageInsightDelivery,
@@ -113,7 +112,6 @@ const settlement = (input: InsightWhatsAppStage): ReadonlyArray<D1PreparedStatem
       ...scope,
       thresholds: { askAfter: 4, pauseAfter: 2 },
       db: input.db,
-      proof: insightVerifiedDeliveryQuery(scope),
     }),
   ];
 };

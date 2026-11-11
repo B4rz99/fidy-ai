@@ -1,3 +1,4 @@
+import { WhatsAppTurnAdmission } from "../whatsapp/contract";
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
@@ -12,6 +13,7 @@ import {
   findWeeklyGovernor,
   materializeWeeklySummary,
   prepareWeeklyDeliverySettlement,
+  prepareWeeklyGovernorReply,
   prepareWeeklyQuestionDelivery,
 } from "./operations";
 import { InsightEventId } from "../../src/core/insights/contract";
@@ -31,6 +33,44 @@ const assertTypedFailure = <E>(exit: Exit.Exit<unknown, E>, expected: E): void =
   assert(reason !== undefined && Cause.isFailReason(reason));
   assert.deepStrictEqual(reason.error, expected);
 };
+
+const seedGovernorQuestion = (
+  db: D1Database,
+  id: string,
+  at: number
+): Effect.Effect<unknown, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare(
+        "INSERT INTO whatsapp_deliveries(kind,id,user_id,offer_id,consent_grant_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,time_zone,state,provider_message_id,delivered_at_ms,send_started_at_ms) SELECT 'weekly-question',?,user_id,id,(SELECT consent_grant_id FROM schedules WHERE kind='weekly' AND user_id=?),0,600000,?,'portfolio','CO.abcdef','123456789','America/Bogota','delivered',?,?,? FROM consent_offers WHERE kind='weekly-summary' AND user_id=? LIMIT 1"
+      )
+      .bind(id, weeklySummaryTestUser, id, `question-${id}`, at, at, weeklySummaryTestUser)
+      .run()
+  );
+const seedGovernorDelivery = (
+  db: D1Database,
+  id: InsightEventId,
+  at: number
+): Effect.Effect<unknown, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    db.batch([
+      db
+        .prepare(
+          "INSERT INTO insight_reports(user_id,insight_event_id,kind,consent_grant_id,payload_json,presentation_json,content_expires_at_ms) SELECT user_id,?,'weekly-summary',consent_grant_id,'{}','{}',86400000 FROM schedules WHERE kind='weekly' AND user_id=?"
+        )
+        .bind(id, weeklySummaryTestUser),
+      db
+        .prepare(
+          "INSERT INTO proactive_messages(kind,id,user_id,role,report_event_id,consent_grant_id,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) SELECT 'weekly-summary',?,user_id,'weekly-summary',?,consent_grant_id,?,?,'America/Bogota',? FROM schedules WHERE kind='weekly' AND user_id=?"
+        )
+        .bind(id, id, at, at + 86400000, at, weeklySummaryTestUser),
+      db
+        .prepare(
+          "INSERT INTO whatsapp_deliveries(kind,user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms) VALUES('insight',?,?,?,'portfolio','CO.abcdef','123456789',?,?,'America/Bogota','delivered',?,?,?)"
+        )
+        .bind(weeklySummaryTestUser, id, id, at, at + 86400000, at, `provider-${id}`, at),
+    ])
+  );
 
 afterAll(() => weeklySummaryTestDatabases.dispose());
 it.live("rejects corrupt retained pause dates before materializing any report", () =>
@@ -164,15 +204,12 @@ it.live(
             .bind(id, userId, index * 1000)
             .run()
         );
+        yield* seedGovernorDelivery(db, id, index * 1000);
         const statements = prepareWeeklyDeliverySettlement({
           db,
           userId,
           insightEventId: id,
           thresholds: { askAfter: 4, pauseAfter: 2 },
-          proof: {
-            sql: "SELECT ? AS user_id,? AS insight_event_id,? AS provider_message_id,? AS send_started_at_ms,? AS delivered_at_ms",
-            params: [userId, id, `delivered-${index}`, index * 1000, index * 1000],
-          },
         });
         yield* Effect.tryPromise(() => db.batch([...statements]));
         expect(Option.getOrThrow(yield* findWeeklyGovernor({ db, userId }))).toEqual({
@@ -190,6 +227,7 @@ it.live("counts verified scheduled deliveries once, asks at four and pauses afte
   Effect.gen(function* () {
     const db = yield* weeklySummaryTestDatabase;
     const userId = weeklySummaryTestUser;
+    yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
     for (let index = 1; index <= 6; index++) {
       const id = InsightEventId.make(`30000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
       yield* Effect.tryPromise(() =>
@@ -200,15 +238,12 @@ it.live("counts verified scheduled deliveries once, asks at four and pauses afte
           .bind(id, userId, index * 1000)
           .run()
       );
+      yield* seedGovernorDelivery(db, id, index * 1000);
       const input = {
         db,
         userId,
         insightEventId: id,
         thresholds: { askAfter: 4, pauseAfter: 2 },
-        proof: {
-          sql: "SELECT ? AS user_id,? AS insight_event_id,? AS provider_message_id,? AS send_started_at_ms,? AS delivered_at_ms",
-          params: [userId, id, `provider-${index}`, index * 1000, index * 1000],
-        },
       };
       yield* Effect.tryPromise(() => db.batch([...prepareWeeklyDeliverySettlement(input)]));
       yield* Effect.tryPromise(() => db.batch([...prepareWeeklyDeliverySettlement(input)]));
@@ -224,14 +259,12 @@ it.live("counts verified scheduled deliveries once, asks at four and pauses afte
       ];
       expect(state._tag).toBe(expectedStates[index - 1]);
       if (index === 4) {
+        yield* seedGovernorQuestion(db, id, 4001);
         yield* Effect.tryPromise(() =>
           prepareWeeklyQuestionDelivery({
             db,
             userId,
-            proof: {
-              sql: "SELECT ? AS user_id,? AS question_id,4001 AS send_started_at_ms,4001 AS delivered_at_ms",
-              params: [userId, id],
-            },
+            id,
           }).run()
         );
       }
@@ -239,5 +272,102 @@ it.live("counts verified scheduled deliveries once, asks at four and pauses afte
     expect(Option.isNone(yield* findWeeklyGovernor({ db, userId: weeklySummaryOtherUser }))).toBe(
       true
     );
+  })
+);
+
+it.live(
+  "an old question reply with a newer timestamp cannot answer the current weekly episode",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* weeklySummaryTestDatabase;
+      const userId = weeklySummaryTestUser;
+      yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO weekly_proactivity_state(user_id,unanswered,last_reply_at_ms,question_needed,question_event_id) VALUES (?,4,100,1,'current-question')"
+          )
+          .bind(userId)
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_deliveries(kind,id,user_id,offer_id,consent_grant_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,time_zone,state,provider_message_id,delivered_at_ms,send_started_at_ms) SELECT 'weekly-question','old-question',user_id,id,(SELECT consent_grant_id FROM schedules WHERE kind='weekly' AND user_id=?),0,600000,'old-correlation','portfolio','CO.abcdef','123456789','America/Bogota','delivered','old-provider',150,150 FROM consent_offers WHERE kind='weekly-summary' AND user_id=? LIMIT 1"
+          )
+          .bind(userId, userId)
+          .run()
+      );
+      const proof = Schema.decodeSync(WhatsAppTurnAdmission)({
+        userId,
+        portfolioId: "portfolio",
+        bsuid: "CO.abcdef",
+        businessPhoneNumberId: "123456789",
+        messageId: "late-reply",
+        text: "gracias",
+        occurredAtMs: 200,
+        receivedAtMs: 200,
+        replyToMessageId: "old-provider",
+      });
+      yield* Effect.tryPromise(() => prepareWeeklyGovernorReply({ db, userId, proof }).run());
+      expect(Option.getOrThrow(yield* findWeeklyGovernor({ db, userId }))).toEqual({
+        _tag: "QuestionPending",
+        unanswered: 4,
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE weekly_proactivity_state SET question_event_id='old-question' WHERE user_id=?"
+          )
+          .bind(userId)
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        prepareWeeklyGovernorReply({
+          db,
+          userId,
+          proof: Schema.decodeSync(WhatsAppTurnAdmission)({
+            ...Schema.encodeSync(WhatsAppTurnAdmission)(proof),
+            messageId: "current-reply",
+            replyToMessageId: "old-provider",
+          }),
+        }).run()
+      );
+      expect(Option.getOrThrow(yield* findWeeklyGovernor({ db, userId }))).toEqual({
+        _tag: "Attentive",
+        unanswered: 0,
+      });
+    })
+);
+
+it.live("late weekly question status cannot advance a replaced captured grant", () =>
+  Effect.gen(function* () {
+    const db = yield* weeklySummaryTestDatabase;
+    const userId = weeklySummaryTestUser;
+    yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
+    yield* seedGovernorQuestion(db, "question", 200);
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "UPDATE whatsapp_deliveries SET consent_grant_id='replaced-grant' WHERE kind='weekly-question' AND user_id=?"
+        )
+        .bind(userId)
+        .run()
+    );
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO weekly_proactivity_state(user_id,unanswered,last_reply_at_ms,question_needed,question_event_id) VALUES (?,4,100,1,'question')"
+        )
+        .bind(userId)
+        .run()
+    );
+    yield* Effect.tryPromise(() =>
+      prepareWeeklyQuestionDelivery({ db, userId, id: "question" }).run()
+    );
+    expect(Option.getOrThrow(yield* findWeeklyGovernor({ db, userId }))).toEqual({
+      _tag: "QuestionPending",
+      unanswered: 4,
+    });
   })
 );

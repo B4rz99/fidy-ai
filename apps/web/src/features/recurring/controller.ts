@@ -1,8 +1,24 @@
 import { RegistryContext, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Cause, type Context, Data, Effect, Equal, Exit, Option, Predicate, Stream } from "effect";
+import {
+  Cause,
+  type Context,
+  Data,
+  Effect,
+  Equal,
+  Exit,
+  Option,
+  Predicate,
+  Schema,
+  Stream,
+} from "effect";
 import { AsyncResult, Atom, type AtomRegistry, Reactivity } from "effect/reactivity";
 import { type RefCallback, useCallback, useContext, useState } from "react";
-import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
+import {
+  type CanonicalInput,
+  type CanonicalSuccess,
+  type FidyClient,
+  RecurringEdit,
+} from "@/transport/client";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import {
   revalidateWorkspaceQuery,
@@ -395,12 +411,16 @@ const admittedRevision = ({
   }
   return Option.some(state.value.data.document.revision);
 };
+const editCodec = Schema.toCodecJson(RecurringEdit);
+const snapshotEdit = (edit: Edit): Edit =>
+  Schema.decodeUnknownSync(editCodec)(structuredClone(Schema.encodeSync(editCodec)(edit)));
 const saveEdit = (options: Actions, edit: Edit, onSaved: () => void): void => {
   const { owner, query, setSaveState, feedback, complete, submit } = options;
   const revision = admittedRevision(options);
   if (Option.isNone(revision)) return;
-  owner.transition("saving");
+  const savedEdit = snapshotEdit(edit);
   const originatingQuery = structuredClone(query);
+  owner.transition("saving");
   const generation = owner.generation();
   const submission = owner.nextSubmission();
   const current = (): boolean =>
@@ -422,7 +442,7 @@ const saveEdit = (options: Actions, edit: Edit, onSaved: () => void): void => {
   submit({
     payload: {
       expectedRevision: revision.value,
-      edit: structuredClone(edit),
+      edit: savedEdit,
       view: "compact",
     },
   })

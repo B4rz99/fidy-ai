@@ -6,7 +6,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
-import { RecurringPlanId, makeFidyClient } from "@/transport/client";
+import { RecurringEdit, RecurringPlanId, makeFidyClient } from "@/transport/client";
 import { recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
 
 const planId = RecurringPlanId.make("23200000-0000-4000-8000-000000000001");
@@ -606,6 +606,84 @@ it("rejects obsolete save actions and fences acknowledged completion after dispo
         expect(onSaved).not.toHaveBeenCalled();
         yield* Effect.tryPromise(() => reactWork(() => current().save(edit, onSaved)));
         expect(writes).toBe(1);
+      } finally {
+        yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
+        registry.dispose();
+        vi.unstubAllGlobals();
+      }
+    })
+  ));
+
+it("saves a Money-bearing edit with its exact reviewed facts and confirms its visible revision", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const reply = Deferred.makeUnsafe<Response>();
+      const reread = { current: Deferred.makeUnsafe<Response>() };
+      const requests: string[] = [];
+      const base = planningHttp(reply, reread);
+      const http = HttpClient.make((request) => {
+        if (request.method === "POST" && request.body._tag === "Uint8Array")
+          {requests.push(new TextDecoder().decode(request.body.body));}
+        return base.execute(request);
+      });
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, http),
+      });
+      const registry = AtomRegistry.make();
+      const root = createRoot(window.document.createElement("div"));
+      let planning: Option.Option<ReturnType<typeof useRecurringPlanning>> = Option.none();
+      const retain = (current: ReturnType<typeof useRecurringPlanning>): void => {
+        planning = Option.some(current);
+      };
+      const current = (): ReturnType<typeof useRecurringPlanning> => Option.getOrThrow(planning);
+      const edit = Schema.decodeUnknownSync(Schema.toCodecJson(RecurringEdit))({
+        kind: "edit",
+        planId,
+        date: "2026-10-29",
+        scope: "forward",
+        plan: {
+          ...document.plans[0]?.revisions[0]?.plan,
+          amountMode: "fixed",
+          money: { amount: "12345.67", currency: "COP" },
+        },
+      });
+      const onSaved = vi.fn();
+      try {
+        yield* Effect.tryPromise(() =>
+          reactWork(() =>
+            root.render(
+              createElement(
+                RegistryContext.Provider,
+                { value: registry },
+                createElement(ActionsProbe, { client, month: "2026-10", stale: false, retain })
+              )
+            )
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => expect(current().disabled).toBe(false))
+        );
+        yield* Effect.tryPromise(() => reactWork(() => current().save(edit, onSaved)));
+        if (edit.kind === "edit") Object.assign(edit.plan, { name: "Changed after save" });
+        yield* Effect.tryPromise(() => reactAssertion(() => expect(requests).toHaveLength(1)));
+        expect(
+          Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(requests[0] ?? "")
+        ).toMatchObject({
+          expectedRevision: 0,
+          edit: {
+            kind: "edit",
+            plan: { name: "Internet QA", money: { amount: "12345.67", currency: "COP" } },
+          },
+        });
+        yield* Effect.tryPromise(() => settleSave(reply, "confirmed"));
+        expect(onSaved).not.toHaveBeenCalled();
+        yield* Effect.tryPromise(() => settleReread(reread.current));
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => expect(onSaved).toHaveBeenCalledOnce())
+        );
+        expect(current().saveState).toBe("idle");
       } finally {
         yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
         registry.dispose();

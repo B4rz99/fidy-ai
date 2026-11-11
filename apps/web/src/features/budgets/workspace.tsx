@@ -93,7 +93,7 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
 };
 const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => (
   <div className="px-5 empty:hidden [&:not(:empty)]:pt-4" aria-live="polite">
-    {controller.writeAction === "delete" && Option.isSome(controller.draft) ? null : (
+    {Option.isSome(controller.draft) ? null : (
       <BudgetWriteFeedback saveState={controller.saveState} writeAction={controller.writeAction} />
     )}
     {props.report.initialized === false && props.report.statuses.length > 0 ? (
@@ -143,11 +143,8 @@ const BudgetPanel = ({
             onSubmit={controller.write}
             onRemove={controller.remove}
             onRefresh={controller.refresh}
-            saveState={
-              controller.writeAction === "delete" && controller.saveState !== "saved"
-                ? controller.saveState
-                : "idle"
-            }
+            saveState={controller.saveState}
+            writeAction={controller.writeAction}
           />
         </Suspense>
       ),

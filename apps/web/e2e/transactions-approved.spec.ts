@@ -2211,15 +2211,15 @@ const saveNewCorrectionReview = (page: Page): Journey =>
     yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
   });
 const captureRecoveredCorrection = (page: Page): Journey =>
-  yield* wait(() =>
-      captureVisualEvidence({
-        target: page,
-        options: {
-          path: test.info().outputPath("correction-recovered.png"),
-          fullPage: true,
-        },
-      })
-    );;
+  wait(() =>
+    captureVisualEvidence({
+      target: page,
+      options: {
+        path: test.info().outputPath("correction-recovered.png"),
+        fullPage: true,
+      },
+    })
+  );
 const rejectedCorrectionJourney = (page: Page, failRefresh: boolean): Journey =>
   Effect.gen(function* () {
     const state = yield* installRejectedCorrection(page, failRefresh);

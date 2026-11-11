@@ -2580,7 +2580,7 @@ it.each(["resolve", "skip"] as const)(
           action === "resolve"
             ? "ingestion.resolveNeedsReviewItem"
             : "ingestion.skipNeedsReviewItem";
-        const input = yield* Schema.decodeUnknownEffect(getCanonicalOperationInput(operation))({
+        const input = yield* Schema.decodeEffect(getCanonicalOperationInput(operation))({
           params: { id },
           ...(action === "resolve"
             ? {

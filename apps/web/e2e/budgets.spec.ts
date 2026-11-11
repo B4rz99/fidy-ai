@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import { analyzeAccessibility } from "./accessibility";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, Effect } from "effect";
@@ -191,9 +192,12 @@ for (const colorScheme of ["light", "dark"] as const) {
           expect(yield* Effect.tryPromise(() => page.evaluate(fitsViewport))).toBe(true);
           yield* Effect.tryPromise(() => group.scrollIntoViewIfNeeded());
           yield* Effect.tryPromise(() =>
-            page.screenshot({
-              path: testInfo.outputPath(`currency-${viewport.width}.png`),
-              fullPage: true,
+            captureVisualEvidence({
+              target: page,
+              options: {
+                path: testInfo.outputPath(`currency-${viewport.width}.png`),
+                fullPage: true,
+              },
             })
           );
           const toggle = group.getByRole("button", { name: "Alimentación USD", exact: true });
@@ -252,9 +256,6 @@ test("shows grouped currency totals and prevents replay after a lost save acknow
       yield* Effect.tryPromise(() => expect(input).toHaveValue("100000"));
       yield* checkAccessibility(page);
       yield* Effect.tryPromise(() => expect(input).toBeEnabled());
-      yield* Effect.tryPromise(() =>
-        page.screenshot({ path: "/tmp/fidy-budgets-desktop.png", fullPage: true })
-      );
       yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
       expect(yield* Effect.tryPromise(() => page.evaluate(fitsViewport))).toBe(true);
       yield* checkAccessibility(page);
@@ -263,9 +264,6 @@ test("shows grouped currency totals and prevents replay after a lost save acknow
       );
       yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toBeVisible());
       yield* checkAccessibility(page);
-      yield* Effect.tryPromise(() =>
-        page.screenshot({ path: "/tmp/fidy-budgets-mobile.png", fullPage: true })
-      );
     })
   ));
 
@@ -1199,15 +1197,9 @@ const checkSpendingReconciliation = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() =>
     expect(page.getByRole("region", { name: "Resumen COP" })).toContainText("25.000")
   );
-  yield* Effect.tryPromise(() =>
-    page.screenshot({ path: "/tmp/fidy-1645-reconciliation-desktop.png", fullPage: true })
-  );
   yield* checkSpendingTrace(page);
   yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
   expect(yield* Effect.tryPromise(() => page.evaluate(fitsViewport))).toBe(true);
-  yield* Effect.tryPromise(() =>
-    page.screenshot({ path: "/tmp/fidy-1645-reconciliation-mobile.png", fullPage: true })
-  );
 });
 test("reconciles budgeted and unbudgeted spending and traces the selected monthly transactions", ({
   page,

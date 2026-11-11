@@ -1,3 +1,4 @@
+import { prepareReservedChangeCheck } from "../../../src/shell/sql-assertions/operations";
 import {
   decodeProcessingConsentStatusRead,
   prepareProcessingConsentStatusRead,
@@ -134,6 +135,14 @@ export const withdrawProcessingConsent = (
             operation: "consent.withdraw",
             outcome: "accepted",
             afterOwnerWrite: true,
+          }),
+          prepareReservedChangeCheck({
+            db: input.db,
+            scope: "processing_consent_withdrawal",
+            reservation: {
+              sql: "SELECT 1 FROM consent_history WHERE record_type='processing_withdrawal' AND id=? AND user_id=?",
+              params: [evidenceId, subject.userId],
+            },
           }),
           receiptQuery(input.db, subject, current),
         ])

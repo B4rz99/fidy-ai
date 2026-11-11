@@ -1,7 +1,7 @@
 import { discloseLegacyChat, disposeLegacyConsent } from "./legacy-disclosure.test-fixture";
 import { authenticateChatProvider } from "./whatsapp-provider.test-fixture";
 import { whatsappMessages } from "./whatsapp-messages.test-fixture";
-import { type Cause, Clock, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Fiber, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { sweepExpiredConsent } from "../consent/ingress/runtime";
@@ -201,6 +201,134 @@ const requestReview = (
     expect((yield* whatsappMessages.sendChat(journey, "Estado")).status).toBe(200);
     return review.associationCode;
   });
+
+it.each(["awaiting", "confirmed", "denied"] as const)(
+  "supersedes an accepted-chat %s review on provider retry without extending its original deadline",
+  (decision) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const journey = yield* Effect.tryPromise(() => setupWhatsApp());
+        const reference = yield* seedAcceptedChat(journey.db);
+        yield* authenticateChatProvider(journey, reference);
+        const previousCode = yield* requestReview(journey);
+        const original = yield* Effect.tryPromise(() =>
+          journey.db
+            .prepare("SELECT expires_at_ms FROM whatsapp_provider_handoffs WHERE id=?")
+            .bind(reference)
+            .first()
+        );
+        yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
+        if (decision !== "awaiting") {
+          expect(
+            (yield* whatsappMessages.sendChat(
+              journey,
+              `${decision === "confirmed" ? "Confirmo" : "Rechazo"} asociación ${previousCode}`,
+              {
+                reply: "wamid.association-review",
+              }
+            )).status
+          ).toBe(200);
+        }
+        yield* authenticateChatProvider(journey, reference, "replacement-provider-user");
+        vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          Response.json({
+            messaging_product: "whatsapp",
+            messages: [{ id: "wamid.replacement-review" }],
+          })
+        );
+        expect(
+          (yield* Effect.tryPromise(() =>
+            journey.send("/web/providers/google/complete", journey.pairing)
+          )).status
+        ).toBe(400);
+        const code = yield* requestReview(journey);
+        expect(code).not.toBe(previousCode);
+        yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
+        expect(
+          (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${previousCode}`, {
+            reply: "wamid.association-review",
+          })).status
+        ).toBe(409);
+        expect(
+          (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
+            reply: "wamid.association-review",
+          })).status
+        ).toBe(409);
+        expect(
+          (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
+        ).toEqual([]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            journey.db
+              .prepare("SELECT expires_at_ms FROM whatsapp_provider_handoffs WHERE id=?")
+              .bind(reference)
+              .first()
+          )
+        ).toEqual(original);
+        expect(
+          (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
+            reply: "wamid.replacement-review",
+          })).status
+        ).toBe(200);
+        const completed = yield* Effect.tryPromise(() =>
+          journey.send("/web/providers/google/complete", journey.pairing)
+        );
+        expect(completed.status).toBe(200);
+        expect(completed.headers.get("set-cookie")).toBeNull();
+        const credentials = yield* Effect.tryPromise(() =>
+          journey.db.prepare("SELECT subject FROM provider_credentials").all()
+        );
+        expect(credentials.results).toEqual([{ subject: "replacement-provider-user" }]);
+      })
+    )
+);
+
+it("keeps a late review send receipt from authorizing the replacement provider attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
+      const reference = yield* seedAcceptedChat(journey.db);
+      yield* authenticateChatProvider(journey, reference);
+      const started = Promise.withResolvers<void>();
+      const sent = Promise.withResolvers<Response>();
+      vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+        started.resolve();
+        return sent.promise;
+      });
+      const pending = yield* Effect.forkScoped(whatsappMessages.sendChat(journey, "Estado"));
+      yield* Effect.tryPromise(() => started.promise);
+      yield* authenticateChatProvider(journey, reference, "replacement-provider-user");
+      sent.resolve(
+        Response.json({
+          messaging_product: "whatsapp",
+          messages: [{ id: "wamid.superseded-review" }],
+        })
+      );
+      expect((yield* Fiber.join(pending)).status).toBe(200);
+      const code = yield* requestReview(journey);
+      yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
+      expect(
+        (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
+          reply: "wamid.superseded-review",
+        })).status
+      ).toBe(409);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          journey.send("/web/providers/google/complete", journey.pairing)
+        )).status
+      ).toBe(400);
+      expect(
+        (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
+          reply: "wamid.association-review",
+        })).status
+      ).toBe(200);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          journey.send("/web/providers/google/complete", journey.pairing)
+        )).status
+      ).toBe(200);
+    }).pipe(Effect.scoped)
+  ));
 
 it("delivers the immutable association review to the authenticated sandbox phone", () =>
   Effect.runPromise(
@@ -477,11 +605,7 @@ it.each(["denied", "expired", "expired_browser", "uncertain_send"] as const)(
           const code = yield* requestReview(journey);
           yield* whatsappMessages.advanceClock(providerSecondMilliseconds);
           if (scenario === "expired") {
-            yield* Effect.tryPromise(() =>
-              journey.db
-                .prepare("UPDATE whatsapp_provider_handoffs SET expires_at_ms=created_at_ms")
-                .run()
-            );
+            yield* whatsappMessages.advanceClock(600000);
           }
           if (scenario === "expired_browser") {
             const pairing = yield* Schema.decodeUnknownEffect(
@@ -503,7 +627,7 @@ it.each(["denied", "expired", "expired_browser", "uncertain_send"] as const)(
             (yield* whatsappMessages.sendChat(journey, command, {
               reply: "wamid.association-review",
             })).status
-          ).toBe(scenario === "expired" ? 409 : 200);
+          ).toBe(scenario === "expired" || scenario === "expired_browser" ? 409 : 200);
           expect(
             (yield* whatsappMessages.sendChat(journey, `Confirmo asociación ${code}`, {
               reply: "wamid.association-review",
@@ -705,11 +829,7 @@ it("allows an explicit new handoff after expiry without reusing the consumed pub
     Effect.gen(function* () {
       const journey = yield* Effect.tryPromise(() => setupWhatsApp());
       const reference = yield* seedAcceptedChat(journey.db);
-      yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare("UPDATE whatsapp_provider_handoffs SET expires_at_ms=created_at_ms")
-          .run()
-      );
+      yield* whatsappMessages.advanceClock(600001);
       const fetch = vi
         .spyOn(globalThis, "fetch")
         .mockResolvedValue(
@@ -738,18 +858,6 @@ it("allows an explicit new handoff after expiry without reusing the consumed pub
     })
   ));
 
-const expireHandoffs = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(
-          "UPDATE whatsapp_provider_handoffs SET created_at_ms=created_at_ms-1000,expires_at_ms=created_at_ms-1000"
-        )
-        .run()
-    );
-    yield* whatsappMessages.advanceClock(600001);
-  });
-
 it.each(["source", "spend", "storage"] as const)(
   "refuses native sends when %s admission fails",
   (scenario) =>
@@ -766,7 +874,7 @@ it.each(["source", "spend", "storage"] as const)(
           );
         if (scenario === "source") {
           for (let count = 0; count < 6; count++) {
-            yield* expireHandoffs(journey.db);
+            yield* whatsappMessages.advanceClock(600001);
             expect((yield* whatsappMessages.sendChat(journey, "Reiniciar")).status).toBe(200);
           }
         } else if (scenario === "spend") {
@@ -795,7 +903,7 @@ it.each(["source", "spend", "storage"] as const)(
           );
         }
         fetch.mockClear();
-        yield* expireHandoffs(journey.db);
+        yield* whatsappMessages.advanceClock(600001);
         const refused = yield* Effect.all(
           [
             whatsappMessages.sendChat(journey, "Reiniciar"),

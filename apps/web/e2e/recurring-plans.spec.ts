@@ -1,6 +1,8 @@
+import { captureVisualEvidence } from "./visual-evidence";
+import { SecureRandom } from "effect/crypto";
 import { analyzeAccessibility } from "./accessibility";
-import type { APIRequestContext, Page, Route } from "@playwright/test";
-import { type Cause, DateTime, Effect, Schema } from "effect";
+import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
+import { Cause, DateTime, Effect, Schema } from "effect";
 import {
   boundSessionRequests,
   browserSessionHeaders,
@@ -229,6 +231,65 @@ const createPlan = (
       expectPayment(recurringItem(page, new RegExp(name, "u")).first()).toBeVisible()
     );
   });
+const preparedPlanRevision = Schema.Struct({
+  data: Schema.Struct({ document: Schema.Struct({ revision: Schema.Int }) }),
+});
+const preparePlan = (
+  { page, name, kind, currency, amount }: PlanDraft,
+  schedule: Readonly<{ frequency: string; firstDate: string }> = {
+    frequency: "Cada mes",
+    firstDate: "2026-10-31",
+  }
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const request = page.request;
+    const bound = boundSessionRequests(request);
+    const month =
+      new URL(page.url()).searchParams.get("month") ??
+      schedule.firstDate.slice(0, "2026-01".length);
+    const workspace = yield* probeCanonicalRequest({
+      request,
+      send: () => bound.get(`${apiOrigin}/recurring-plans?month=${month}`),
+    });
+    expect(workspace.status()).toBe(successStatus);
+    const {
+      data: {
+        document: { revision },
+      },
+    } = yield* Effect.tryPromise(() =>
+      workspace.json().then(Schema.decodeUnknownPromise(preparedPlanRevision))
+    );
+    const id = SecureRandom.uuidV4Unsafe();
+    const created = yield* probeCanonicalRequest({
+      request,
+      send: () =>
+        bound.post(`${apiOrigin}/recurring-plans/edits`, {
+          data: {
+            expectedRevision: revision,
+            edit: {
+              kind: "create",
+              id,
+              plan: {
+                name,
+                kind,
+                currency,
+                amountMode: amount === "" ? "unknown" : "fixed",
+                ...(amount === "" ? {} : { money: { amount, currency } }),
+                frequency: schedule.frequency === "Cada año" ? "yearly" : "monthly",
+                firstDate: schedule.firstDate,
+                timeZone: "America/Bogota",
+              },
+            },
+          },
+        }),
+    });
+    expect(created.status()).toBe(successStatus);
+    yield* Effect.tryPromise(() => page.reload());
+    yield* Effect.tryPromise(() =>
+      expectPayment(recurringItem(page, new RegExp(name, "u")).first()).toBeVisible()
+    );
+  }).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause)));
+
 const checkUnknownTotals = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
@@ -319,13 +380,6 @@ test("keeps income, transfers, unknown expenses and filtered summaries separate"
 
 const inspectMobile = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() =>
-      page.screenshot({
-        path: "/tmp/fidy-recurring-desktop.png",
-        fullPage: true,
-        animations: "disabled",
-      })
-    );
     yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
     yield* Effect.tryPromise(() =>
       recurringItem(page, /Arriendo de prueba.*Parcial/u)
@@ -334,13 +388,6 @@ const inspectMobile = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
     );
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toBeVisible());
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCSS("width", "390px"));
-    yield* Effect.tryPromise(() =>
-      page.screenshot({
-        path: "/tmp/fidy-recurring-mobile.png",
-        fullPage: true,
-        animations: "disabled",
-      })
-    );
   });
 
 test("keeps an uncertain save blocked across navigation until an explicit reread succeeds", ({
@@ -541,7 +588,7 @@ test("manual tracking can be reversed and skipped", ({ page, request }) =>
         })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* createPlan({
+      yield* preparePlan({
         page,
         name: "Ciclo de seguimiento",
         kind: "expense",
@@ -590,7 +637,7 @@ test("pause, resume and stop survive reload", ({ page, request }) =>
         DateTime.add(DateTime.startOf(DateTime.nowUnsafe(), "month"), { months: 1 })
       ).slice(0, "2026-01".length);
       yield* Effect.tryPromise(() => page.goto(`/app/recurring?month=${month}`));
-      yield* createPlan({
+      yield* preparePlan({
         page,
         name: "Ciclo de seguimiento",
         kind: "expense",
@@ -722,7 +769,7 @@ const inspectPartialLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownE
       page.goto(`/app/recurring?month=${today.slice(0, "2026-01".length)}`)
     );
     yield* Effect.tryPromise(() => page.setViewportSize({ width: 1506, height: 900 }));
-    yield* createPlan(
+    yield* preparePlan(
       {
         page,
         name: "Internet QA",
@@ -893,7 +940,7 @@ test("one-occurrence edits stay local and forward edits preserve earlier monthly
         })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* createPlan({
+      yield* preparePlan({
         page,
         name: "Plan con excepciones",
         kind: "expense",
@@ -945,7 +992,7 @@ test("forward edits explain a preserved occurrence before saving and confirm the
         })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* createPlan({
+      yield* preparePlan({
         page,
         name: "Plan protegido",
         kind: "expense",
@@ -1003,7 +1050,7 @@ test("forward schedule edits explain that an unprotected selected date can stop 
         })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* createPlan({
+      yield* preparePlan({
         page,
         name: "Plan reprogramado",
         kind: "expense",
@@ -1053,7 +1100,7 @@ test("forward edits explain retained tracking after its linked Transaction is co
         })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* createPlan({
+      yield* preparePlan({
         page,
         name: "Plan parcial",
         kind: "expense",
@@ -1198,14 +1245,20 @@ const inspectScopeLayout = (page: Page): Effect.Effect<void, Cause.UnknownError>
       page.getByRole("region", { name: "Alcance del cambio" }).scrollIntoViewIfNeeded()
     );
     yield* Effect.tryPromise(() =>
-      page.screenshot({ path: test.info().outputPath("edit-scope-desktop.png") })
+      captureVisualEvidence({
+        target: page,
+        options: { path: test.info().outputPath("edit-scope-desktop.png") },
+      })
     );
     yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
     yield* Effect.tryPromise(() =>
       page.getByRole("region", { name: "Alcance del cambio" }).scrollIntoViewIfNeeded()
     );
     yield* Effect.tryPromise(() =>
-      page.screenshot({ path: test.info().outputPath("edit-scope-mobile.png") })
+      captureVisualEvidence({
+        target: page,
+        options: { path: test.info().outputPath("edit-scope-mobile.png") },
+      })
     );
     const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
     expect(accessibility.violations).toEqual([]);
@@ -1227,7 +1280,7 @@ const prepareScopePartial = (
       })
     );
     yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-    yield* createPlan({
+    yield* preparePlan({
       page,
       name: "Plan parcial",
       kind: "expense",
@@ -1370,63 +1423,117 @@ const inspectPaymentHistory = ({
     });
   });
 
-test("manual recurring tracking leaves financial totals unchanged and capturing its Transaction replaces the mark once", ({
-  page,
-  request,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() =>
-        signInRecurringThroughCore({
-          page,
-          request,
-          deferFreshEntry: true,
-          identity: "recurringCapture",
+for (const lostAssociation of [false, true]) {
+  test(
+    lostAssociation
+      ? "a committed association with a lost response retains one created Transaction through explicit recovery"
+      : "manual recurring tracking leaves financial totals unchanged and capturing its Transaction replaces the mark once",
+    ({ page, request }) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() =>
+            signInRecurringThroughCore({
+              page,
+              request,
+              deferFreshEntry: true,
+              identity: lostAssociation ? "recurringAssociationLost" : "recurringCapture",
+            })
+          );
+          yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+          yield* preparePlan({
+            page,
+            name: "Internet aislado",
+            kind: "expense",
+            currency: "COP",
+            amount: "90000",
+          });
+          yield* createPaymentBudget(page.request);
+          yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+          yield* Effect.tryPromise(() => chooseDate(page, "Fecha real", "2026-10-31"));
+          yield* Effect.tryPromise(() =>
+            page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
+          );
+          yield* Effect.tryPromise(() =>
+            expectPayment(recurringItem(page, /Internet aislado.*Completados/u)).toBeVisible()
+          );
+          yield* inspectPaymentHistory({ request: page.request, count: 0, spent: "0" });
+          yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+          yield* Effect.tryPromise(() =>
+            expectPayment(page.getByRole("dialog")).toContainText("Sin transacción vinculada")
+          );
+          yield* captureMarkedPayment(page);
+          yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
+          yield* recoverCreatedLink(page);
+          if (lostAssociation) yield* loseCreatedLink(page);
+          else {
+            yield* Effect.tryPromise(() =>
+              page.getByRole("button", { name: "Vincular transacción creada", exact: true }).click()
+            );
+            yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
+          }
+          yield* Effect.tryPromise(() => page.reload());
+          yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
+          yield* Effect.tryPromise(() =>
+            expectPayment(page.getByText("Sin transacción vinculada", { exact: true })).toHaveCount(
+              0
+            )
+          );
+          yield* Effect.tryPromise(() =>
+            expectPayment(page.getByRole("dialog")).toContainText(
+              "Completado en recurrentes: COP 90.000,00"
+            )
+          );
+          yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
+          yield* inspectAndRemoveLinkedPayment(page);
         })
-      );
-      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* createPlan({
-        page,
-        name: "Internet aislado",
-        kind: "expense",
-        currency: "COP",
-        amount: "90000",
+      )
+  );
+}
+
+const loseCreatedLink = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const editRoute = `${apiOrigin}/recurring-plans/edits`;
+    let committed = 0;
+    const loseAssociation = (route: Route): Promise<void> =>
+      route.fetch().then((response) => {
+        if (response.status() === rateLimitedStatus) return route.fulfill({ response });
+        expectPayment(response.status()).toBe(successStatus);
+        committed += 1;
+        return route.abort("failed");
       });
-      yield* createPaymentBudget(page.request);
-      yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
-      yield* Effect.tryPromise(() => chooseDate(page, "Fecha real", "2026-10-31"));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Marcar solo en recurrentes", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        expectPayment(recurringItem(page, /Internet aislado.*Completados/u)).toBeVisible()
-      );
-      yield* inspectPaymentHistory({ request: page.request, count: 0, spent: "0" });
-      yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
-      yield* Effect.tryPromise(() =>
-        expectPayment(page.getByRole("dialog")).toContainText("Sin transacción vinculada")
-      );
-      yield* captureMarkedPayment(page);
-      yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
-      yield* recoverCreatedLink(page);
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Vincular transacción creada", exact: true }).click()
-      );
-      yield* Effect.tryPromise(() => expectPayment(page.getByRole("dialog")).toHaveCount(0));
-      yield* Effect.tryPromise(() => page.reload());
-      yield* Effect.tryPromise(() => recurringItem(page, /Internet aislado/u).click());
-      yield* Effect.tryPromise(() =>
-        expectPayment(page.getByText("Sin transacción vinculada", { exact: true })).toHaveCount(0)
-      );
-      yield* Effect.tryPromise(() =>
-        expectPayment(page.getByRole("dialog")).toContainText(
-          "Completado en recurrentes: COP 90.000,00"
-        )
-      );
-      yield* inspectPaymentHistory({ request: page.request, count: 1, spent: "90000" });
-      yield* inspectAndRemoveLinkedPayment(page);
-    })
-  ));
+    yield* Effect.tryPromise(() => page.route(editRoute, loseAssociation));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Vincular transacción creada", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("alert")).toContainText("No pudimos confirmar si se guardó")
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByText("Transacción creada. Falta vincularla al recurrente.", { exact: true })
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByRole("button", { name: "Vincular transacción creada", exact: true })
+      ).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Registrar", exact: true })).toHaveCount(0)
+    );
+    expectPayment(committed).toBe(1);
+    yield* Effect.tryPromise(() => page.unroute(editRoute, loseAssociation));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Actualizar recurrentes", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expectPayment(page.getByRole("alert")).toHaveCount(0));
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByText("Transacción vinculada.", { exact: true })).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+  });
 
 const recoverCreatedLink = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -1495,7 +1602,7 @@ test("an uncertain recurring capture stays locked across panel and month changes
         })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* createPlan({
+      yield* preparePlan({
         page,
         name: "Pago sin respuesta",
         kind: "expense",
@@ -1536,6 +1643,115 @@ test("an uncertain recurring capture stays locked across panel and month changes
       ]);
     })
   ));
+
+const preparePendingCapture = (
+  page: Page,
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      signInRecurringThroughCore({
+        page,
+        request,
+        deferFreshEntry: true,
+        identity: "recurringCaptureReplaced",
+      })
+    );
+    yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+    yield* preparePlan({
+      page,
+      name: "Pago sin respuesta",
+      kind: "expense",
+      currency: "COP",
+      amount: "90000",
+    });
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago sin respuesta/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* nameUncertainCapture(page);
+  });
+type PendingCaptureResponse = Readonly<{ route: Route; response: APIResponse }>;
+const holdCaptureResponse =
+  (pending: Array<PendingCaptureResponse>) =>
+  (route: Route): Promise<void> =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        if (route.request().method() !== "POST") {
+          return yield* Effect.tryPromise(() => route.continue());
+        }
+        const response = yield* Effect.tryPromise(() => route.fetch());
+        if (response.status() === rateLimitedStatus) {
+          return yield* Effect.tryPromise(() => route.fulfill({ response }));
+        }
+        expectPayment(response.status()).toBe(createdStatus);
+        pending.push({ route, response });
+      })
+    );
+const pendingRecurringCapture = (
+  page: Page,
+  request: APIRequestContext
+): Effect.Effect<void, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    yield* preparePendingCapture(page, request);
+    const pending: Array<PendingCaptureResponse> = [];
+    yield* Effect.tryPromise(() =>
+      page.route(`${apiOrigin}/transactions`, holdCaptureResponse(pending))
+    );
+    yield* Effect.tryPromise(() =>
+      page
+        .getByRole("form", { name: "Registrar transacción" })
+        .evaluate((form: HTMLFormElement) => {
+          form.requestSubmit();
+          form.requestSubmit();
+        })
+    );
+    yield* Effect.tryPromise(() => expectPayment.poll(() => pending.length).toBe(1));
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Guardando…", exact: true })).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByRole("button", { name: /^Marca manual que reemplaza:/u })
+      ).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Cerrar", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => recurringItem(page, /Pago sin respuesta/u).click());
+    yield* Effect.tryPromise(() =>
+      page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
+    );
+    const release = pending[0];
+    if (release === undefined) throw new Error("Missing committed capture response");
+    yield* Effect.tryPromise(() => release.route.fulfill({ response: release.response })).pipe(
+      Effect.ignoreCause
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("alert")).toContainText(
+        "No pudimos confirmar si la transacción se guardó"
+      )
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(
+        page.getByText("Transacción creada. Falta vincularla al recurrente.", { exact: true })
+      ).toHaveCount(0)
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("90000")
+    );
+    expectPayment(pending).toHaveLength(1);
+    yield* inspectCapturedTransactions(page.request, [
+      expect.objectContaining({ money: { amount: "90000", currency: "COP" } }),
+    ]);
+  });
+test("replacing a pending recurring capture fences its late parent result and preserves one uncertain create", ({
+  page,
+  request,
+}) => Effect.runPromise(pendingRecurringCapture(page, request)));
 
 const enlargeRecurringCaptureText = (): void => {
   document.documentElement.style.fontSize = "32px";
@@ -1621,6 +1837,17 @@ const captureMarkedPayment = (page: Page): Effect.Effect<void, Cause.UnknownErro
   Effect.gen(function* () {
     yield* Effect.tryPromise(() =>
       page.getByText("Crear y vincular transacción", { exact: true }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("90000")
+    );
+    yield* Effect.tryPromise(() => page.getByLabel("Monto", { exact: true }).fill("80000"));
+    yield* Effect.tryPromise(() => chooseOption(page, "Marca manual que reemplaza", "Ninguno"));
+    yield* Effect.tryPromise(() =>
+      expectPayment(page.getByRole("button", { name: "Registrar", exact: true })).toBeDisabled()
+    );
+    yield* Effect.tryPromise(() =>
+      chooseOption(page, "Marca manual que reemplaza", "2026-10-31 · COP 90.000,00")
     );
     yield* Effect.tryPromise(() =>
       expectPayment(page.getByLabel("Monto", { exact: true })).toHaveValue("90000")
@@ -1716,7 +1943,7 @@ const prepareIncomeCapture = (
       })
     );
     yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-    yield* createPlan({
+    yield* preparePlan({
       page,
       name: "Honorarios en USD",
       kind: "income",
@@ -1901,7 +2128,7 @@ const prepareSplitMarks = (
       })
     );
     yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-    yield* createPlan({
+    yield* preparePlan({
       page,
       name: "Pago por partes",
       kind: "expense",
@@ -2022,7 +2249,7 @@ test("finds and reviews an older recurring Transaction across 500 records before
         })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* createPlan({
+      yield* preparePlan({
         page,
         name: "Internet del hogar",
         kind: "expense",
@@ -2088,7 +2315,12 @@ const inspectLargeReview = (page: Page): Effect.Effect<void, Cause.UnknownError>
       dialog.evaluate((element) => element.scrollWidth <= element.clientWidth);
     yield* Effect.tryPromise(() => expect.poll(noOverflow).toBe(true));
     yield* Effect.tryPromise(() =>
-      page.screenshot({ path: test.info().outputPath("transaction-link-large-mobile.png") })
+      captureVisualEvidence({
+        target: page,
+        options: {
+          path: test.info().outputPath("transaction-link-large-mobile.png"),
+        },
+      })
     );
   });
 const inspectLongSearchScope = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
@@ -2207,7 +2439,10 @@ const inspectLinkDesign = (page: Page): Effect.Effect<void, Cause.UnknownError> 
     yield* Effect.tryPromise(() => page.setViewportSize({ width: 1440, height: 1000 }));
     yield* Effect.tryPromise(() => page.evaluate(() => window.scrollTo(0, 0)));
     yield* Effect.tryPromise(() =>
-      page.screenshot({ path: test.info().outputPath("transaction-link-desktop.png") })
+      captureVisualEvidence({
+        target: page,
+        options: { path: test.info().outputPath("transaction-link-desktop.png") },
+      })
     );
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Activar tema oscuro", exact: true }).click()
@@ -2223,7 +2458,10 @@ const inspectLinkDesign = (page: Page): Effect.Effect<void, Cause.UnknownError> 
     const darkAccessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
     expect(darkAccessibility.violations).toEqual([]);
     yield* Effect.tryPromise(() =>
-      page.screenshot({ path: test.info().outputPath("transaction-link-dark.png") })
+      captureVisualEvidence({
+        target: page,
+        options: { path: test.info().outputPath("transaction-link-dark.png") },
+      })
     );
     yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Activar tema claro", exact: true }).click()
@@ -2243,7 +2481,10 @@ const inspectLinkDesign = (page: Page): Effect.Effect<void, Cause.UnknownError> 
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCSS("height", "844px"));
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toHaveCSS("top", "0px"));
     yield* Effect.tryPromise(() =>
-      page.screenshot({ path: test.info().outputPath("transaction-link-mobile.png") })
+      captureVisualEvidence({
+        target: page,
+        options: { path: test.info().outputPath("transaction-link-mobile.png") },
+      })
     );
     const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
     expect(accessibility.violations).toEqual([]);
@@ -2343,7 +2584,12 @@ const inspectLinkedPaymentLayouts = (page: Page): Effect.Effect<void, Cause.Unkn
           ).toContainText("Compra de la semana")
         );
         yield* Effect.tryPromise(() =>
-          page.screenshot({ path: test.info().outputPath(`linked-${width}-${theme}.png`) })
+          captureVisualEvidence({
+            target: page,
+            options: {
+              path: test.info().outputPath(`linked-${width}-${theme}.png`),
+            },
+          })
         );
         yield* Effect.tryPromise(() => page.evaluate(enlargeRecurringCaptureText));
         yield* Effect.tryPromise(() => expect.poll(() => panelFits(page)).toBe(true));
@@ -2451,13 +2697,6 @@ const inspectFirstPlanCreation = (page: Page): Effect.Effect<void, Cause.Unknown
       expect(page.getByRole("status")).toContainText("Aún no tienes recurrentes")
     );
     yield* Effect.tryPromise(() =>
-      page.screenshot({
-        path: "/tmp/fidy-1669-desktop.png",
-        fullPage: true,
-        animations: "disabled",
-      })
-    );
-    yield* Effect.tryPromise(() =>
       page.getByRole("button", { name: "Crear recurrente", exact: true }).click()
     );
     yield* Effect.tryPromise(() =>
@@ -2534,13 +2773,6 @@ const inspectEmptyActivePlans = (page: Page): Effect.Effect<void, Cause.UnknownE
       expect(
         page.getByRole("status", { name: "Resultados de recurrentes", exact: true })
       ).toContainText("No tienes recurrentes activos")
-    );
-    yield* Effect.tryPromise(() =>
-      page.screenshot({
-        path: "/tmp/fidy-1669-mobile-dark.png",
-        fullPage: true,
-        animations: "disabled",
-      })
     );
     const accessibility = yield* Effect.tryPromise(() => analyzeAccessibility(page));
     expect(accessibility.violations).toEqual([]);

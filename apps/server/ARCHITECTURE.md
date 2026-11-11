@@ -203,6 +203,14 @@ provider account compose initial association and invitation consumption in the o
 cannot approve anything. A prepared WhatsApp message removes manual code copying; only authenticated
 native receipt can settle its per-provider-attempt review. Original accepted-chat handoffs retain their native confirmation proof.
 
+Both protocols bind immutable reviews and native decisions to the exact current verified provider
+attempt. Invitation approval compares the prepared text verbatim; accepted-chat approval also requires
+a native reply to the retained review message in the accepted exchange. Retrying an unfinished
+attempt atomically supersedes it and clears its review and decision while preserving the original
+invitation or handoff deadline. Late send receipts cannot attach to a replacement review; an uncertain
+send stays claimed for that attempt. Completion rechecks the same attempt and consumes its review
+with pairing approval in one native batch. This grants no WebSession before separate private redemption.
+
 Onboarding composes owner preparations in one D1 unit with exact originating proof consumption.
 Returning authentication preserves established User identity and creation facts. Browser Login alone
 establishes a WebSession with the browser's private verifier.
@@ -219,6 +227,13 @@ See [ADR 0009](../../docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.m
 Consent owns current standing and retained disclosure evidence. Exact admitted work can retain its
 original bounded Consent basis; transport payloads and recurring schedules cannot supply that basis.
 Privacy controls remain independently reachable after processing withdrawal or commercial expiry.
+Processing ingress opens its decision phase only after authenticated, correlated delivery evidence;
+its explicit reply must be a distinct later message from the bound endpoint. Weekly and proactivity
+choices preserve their existing exact offer, association and disclosure-message checks. Those category
+checks do not establish the same authenticated-delivery or later-message proof as Processing ingress;
+extending that proof to categories is a separate policy change. Processing renewal settles the exact
+withdrawal against the retained historical disclosure and fresh browser authority. An uncertain commit
+reconciles that same receipt without replacing legal evidence.
 Cookie-only Consent handlers discover the subject and verify the expected browser binding in one
 live session lookup. Core does not repeat that discovery before dispatch. Protected reads and
 coordinated decisions still recheck credential authority in their existing atomic units; no
@@ -245,6 +260,11 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+Budget threshold reconciliation validates the owned Budget and captured monthly boundaries/time zone
+before atomically advancing monotone marks, frozen crossings and publication intent.
+One bounded threshold pass reports Drained, Pending or Unavailable. Canonical financial preflight
+requires Drained; post-commit evaluation remains best effort, and opt-in composes its fence only
+after drained accounting. Exact sampled work versions are acknowledged after crossing commit.
 Group Corrections use the existing credential-neutral Audit projection with the exact browser
 session and accepted/rejected outcome. The original Audit history and table remain in place;
 adding this operation requires no Audit rebuild.

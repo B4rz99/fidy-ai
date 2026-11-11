@@ -36,6 +36,7 @@ export default defineConfig({
     },
     {
       name: "browser",
+      use: { reducedMotion: "reduce" },
       testIgnore: ["cli-login.spec.ts", "acceptance-clock.spec.ts"],
       dependencies: ["performance"],
       grepInvert:

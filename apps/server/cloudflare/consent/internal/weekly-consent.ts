@@ -262,6 +262,7 @@ const createOfferWithAdmission = (
       Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
     )(disclosure);
     const now = input.now.epochMilliseconds;
+    const sourceId = input.request._tag === "GovernorQuestion" ? input.request.sourceId : "";
     const inserted = yield* Effect.tryPromise(() =>
       channelAction(
         input,
@@ -269,7 +270,8 @@ const createOfferWithAdmission = (
           sql: `INSERT INTO consent_offers (kind,id,user_id,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,source_id,rejection_id)
       SELECT 'weekly-summary',?,?,?,?,?,?,?,NULLIF(?,''),(SELECT id FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=? ORDER BY sequence DESC LIMIT 1) WHERE (SELECT COUNT(*) FROM consent_offers WHERE kind='weekly-summary' AND user_id = ? AND created_at_ms > ?) < 8
       AND NOT EXISTS (SELECT 1 FROM consent_offers WHERE kind='weekly-summary' AND user_id = ? AND decision IS NULL AND expires_at_ms > ?)
-      AND (? = 'requested' OR NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id = ?))`,
+      AND (? = 'requested' OR NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id = ?))
+      AND (? = '' OR NOT EXISTS (SELECT 1 FROM consent_offers WHERE kind='weekly-summary' AND user_id=? AND source_id=?))`,
           params: [
             id,
             input.userId,
@@ -278,7 +280,7 @@ const createOfferWithAdmission = (
             json,
             now,
             now + (input.request._tag === "GovernorQuestion" ? dailyWindowMs : offerLifetimeMs),
-            input.request._tag === "GovernorQuestion" ? input.request.sourceId : "",
+            sourceId,
             input.userId,
             input.userId,
             now - dailyWindowMs,
@@ -286,6 +288,9 @@ const createOfferWithAdmission = (
             now,
             input.request.origin,
             input.userId,
+            sourceId,
+            input.userId,
+            sourceId,
           ],
         },
         queued
@@ -395,11 +400,25 @@ const findDecisionOffer = (
 
 const decisionUpdate = (
   input: WeeklyConsentContext,
-  choice: Choice,
-  message: WhatsAppProviderMessageId
-): D1PreparedStatement =>
-  (choice[2] === "accept" ? channelAction : privacyChannelAction)(input, {
-    sql: `UPDATE consent_offers SET decision_message_id = ?, decision = ? WHERE kind='weekly-summary' AND id = ? AND user_id = ? AND (? <> 'accept' OR (portfolio_id = ? AND bsuid = ?)) AND disclosure_message_id IS NOT NULL AND decision IS NULL AND (? <> 'accept' OR (expires_at_ms > ? AND rejection_id IS (SELECT id FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=? ORDER BY sequence DESC LIMIT 1)))`,
+  {
+    choice,
+    message,
+    grant,
+  }: Readonly<{
+    choice: Choice;
+    message: WhatsAppProviderMessageId;
+    grant: Option.Option<ConsentRecord>;
+  }>
+): D1PreparedStatement => {
+  const grantGuard = Option.match(grant, {
+    onNone: () => ({ sql: `NOT EXISTS (${liveGrant})`, params: [input.userId] }),
+    onSome: (record) => ({
+      sql: `EXISTS (${liveGrant} AND g.id=?)`,
+      params: [input.userId, record.id],
+    }),
+  });
+  return (choice[2] === "accept" ? channelAction : privacyChannelAction)(input, {
+    sql: `UPDATE consent_offers SET decision_message_id = ?, decision = ? WHERE kind='weekly-summary' AND id = ? AND user_id = ? AND (? <> 'accept' OR (portfolio_id = ? AND bsuid = ?)) AND disclosure_message_id IS NOT NULL AND decision IS NULL AND (? <> 'accept' OR (expires_at_ms > ? AND rejection_id IS (SELECT id FROM (SELECT * FROM consent_history WHERE record_type='weekly_rejection') AS weekly_consent_rejections WHERE user_id=? ORDER BY sequence DESC LIMIT 1))) AND ${grantGuard.sql}`,
     params: [
       message,
       choice[2],
@@ -411,8 +430,10 @@ const decisionUpdate = (
       choice[2],
       input.now.epochMilliseconds,
       input.userId,
+      ...grantGuard.params,
     ],
   });
+};
 
 const revocationAuthorization = (
   input: WeeklyConsentContext,
@@ -556,7 +577,7 @@ const authorizationStatement = (
       grantId: evidence.grant.value.id,
     });
   }
-  return decisionUpdate(input, evidence.choice, evidence.message);
+  return decisionUpdate(input, evidence);
 };
 const recordRejectionStatements = (
   input: WeeklyConsentContext,

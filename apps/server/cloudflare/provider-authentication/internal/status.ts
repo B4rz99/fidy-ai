@@ -13,6 +13,7 @@ import { providerBodyPolicy, providerJson } from "./start";
 const invalidStatus = 400;
 const maximumAccountLabelLength = 254;
 const State = Schema.Struct({
+  id: Schema.String,
   handoff_id: Schema.NullOr(Schema.String),
   invitation_id: Schema.NullOr(Schema.String),
   state: Schema.Literals(["pending", "exchanging", "verified", "rejected"]),
@@ -157,7 +158,7 @@ const resolveStatus = ({
     if (attempt.handoff_id !== null) {
       const raw = yield* Effect.tryPromise(() =>
         environment.DB.prepare(
-          "SELECT decision,review_code FROM whatsapp_provider_handoffs WHERE id=? AND pairing_id=? AND consumed_at_ms IS NULL AND expires_at_ms>?"
+          "SELECT decision,review_code,review_attempt_id FROM whatsapp_provider_handoffs WHERE id=? AND pairing_id=? AND consumed_at_ms IS NULL AND expires_at_ms>?"
         )
           .bind(attempt.handoff_id, pairingId, current)
           .first()
@@ -166,10 +167,14 @@ const resolveStatus = ({
         Schema.Struct({
           decision: Schema.NullOr(Schema.Literals(["confirmed", "denied"])),
           review_code: Schema.String,
+          review_attempt_id: Schema.NullOr(Schema.String),
         })
       )(raw);
-      if (handoff.decision === "denied") return providerJson({ body: { status: "rejected" } });
-      if (attempt.state === "verified" && handoff.decision !== "confirmed") {
+      const currentDecision = handoff.review_attempt_id === attempt.id ? handoff.decision : null;
+      if (currentDecision === "denied") {
+        return providerJson({ body: { status: "rejected" } });
+      }
+      if (attempt.state === "verified" && currentDecision !== "confirmed") {
         return providerJson({
           body: { status: "awaiting_confirmation", associationCode: handoff.review_code },
         });
@@ -219,7 +224,7 @@ export const providerStatus = ({
     const current = yield* Clock.currentTimeMillis;
     const row = yield* Effect.tryPromise(() =>
       environment.DB.prepare(
-        "SELECT state,handoff_id,invitation_id FROM provider_authentication_attempts WHERE pairing_id=? AND provider=? AND expires_at_ms>?"
+        "SELECT id,state,handoff_id,invitation_id FROM provider_authentication_attempts WHERE pairing_id=? AND provider=? AND expires_at_ms>?"
       )
         .bind(proof.value.pairingId, provider, current)
         .first()

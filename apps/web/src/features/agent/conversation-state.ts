@@ -17,7 +17,9 @@ type Turn =
   | Readonly<{ tag: "confirming" | "completed" | "unconfirmed"; value: Proposal }>;
 type Entry = Readonly<{ id: string; from: "user" | "assistant"; text: string }>;
 export type Conversation = Readonly<{ turn: Turn; history: ReadonlyArray<Entry> }>;
-type SetConversation = (update: Conversation | ((previous: Conversation) => Conversation)) => void;
+export type SetConversation = (
+  update: Conversation | ((previous: Conversation) => Conversation)
+) => void;
 const visibleHistoryLimit = 40;
 export const initialConversation: Conversation = { turn: { tag: "idle" }, history: [] };
 
@@ -66,17 +68,24 @@ const progressChecks = 12;
 const retainUncertain = (setConversation: SetConversation, reply: Proposal | Processing): void => {
   if ("status" in reply) setTurn(setConversation, { tag: "uncertain", value: reply });
 };
+export type ConversationLifetime = Readonly<{
+  setConversation: SetConversation;
+  clearDraft: () => void;
+  active: () => boolean;
+}>;
 const followTurn = (
   channel: Channel,
   initial: Proposal | Processing,
-  setConversation: SetConversation
+  { setConversation, active }: ConversationLifetime
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     let current = initial;
     for (let attempt = 0; "status" in current && attempt < progressChecks; attempt++) {
+      if (!active()) return;
       const pending = current;
       yield* Effect.sync(() => setTurn(setConversation, { tag: "polling", value: pending }));
       yield* Effect.sleep("5 seconds");
+      if (!active()) return;
       current = yield* channel.hostedTurn.progress({ payload: { turnId: current.turnId } });
     }
     yield* Effect.sync(() => setTurn(setConversation, proposedTurn(current)));
@@ -84,26 +93,30 @@ const followTurn = (
 
 export const conversationCommands = ({
   client,
-  setConversation,
-  clearDraft,
+  capture,
 }: Readonly<{
   client: HostedTurnClient;
-  setConversation: SetConversation;
-  clearDraft: () => void;
+  capture: () => ConversationLifetime;
 }>): Commands => ({
   propose: client.runtime.fn<Submission>()(
-    ({ payload, entryId }) =>
-      Effect.gen(function* () {
+    ({ payload, entryId }) => {
+      const lifetime = capture();
+      const { setConversation, clearDraft, active } = lifetime;
+      return Effect.gen(function* () {
+        if (!active()) return;
         const channel = yield* client;
         const reply = yield* channel.hostedTurn.propose({ payload });
         yield* Effect.sync(clearDraft);
-        yield* followTurn(channel, reply, setConversation);
-      }).pipe(Effect.catch((failure) => rejectSubmission(setConversation, entryId, failure))),
+        yield* followTurn(channel, reply, lifetime);
+      }).pipe(Effect.catch((failure) => rejectSubmission(setConversation, entryId, failure)));
+    },
     { concurrent: false }
   ),
   progress: client.runtime.fn<Processing>()(
-    (pending) =>
-      Effect.gen(function* () {
+    (pending) => {
+      const { setConversation, active } = capture();
+      return Effect.gen(function* () {
+        if (!active()) return;
         const channel = yield* client;
         const reply = yield* channel.hostedTurn.progress({ payload: { turnId: pending.turnId } });
         yield* Effect.sync(() => setTurn(setConversation, proposedTurn(reply)));
@@ -111,12 +124,15 @@ export const conversationCommands = ({
         Effect.catch(() =>
           Effect.sync(() => setTurn(setConversation, { tag: "uncertain", value: pending }))
         )
-      ),
+      );
+    },
     { concurrent: false }
   ),
   receipt: client.runtime.fn<Proposal>()(
-    (proposal) =>
-      Effect.gen(function* () {
+    (proposal) => {
+      const { setConversation, active } = capture();
+      return Effect.gen(function* () {
+        if (!active()) return;
         const channel = yield* client;
         yield* channel.hostedTurn.acknowledge({
           payload: { turnId: proposal.turnId, receipt: proposal.receipt },
@@ -126,7 +142,8 @@ export const conversationCommands = ({
         Effect.catch(() =>
           Effect.sync(() => setTurn(setConversation, { tag: "unconfirmed", value: proposal }))
         )
-      ),
+      );
+    },
     { concurrent: false }
   ),
 });
@@ -134,7 +151,9 @@ export const conversationCommands = ({
 export type VisibleAgentReply = Readonly<{
   text: string;
   awaitingVisibility: boolean;
-  confirmation: boolean;
+  id: string;
+  onVisible: () => void;
+  confirm: Option.Option<() => void>;
 }>;
 type ConversationView = Readonly<{
   history: ReadonlyArray<Entry>;
@@ -151,14 +170,20 @@ const presentStatusKind = (tag: Turn["tag"]): ConversationView["statusKind"] => 
   if (tag === "uncertain" || tag === "processing" || tag === "error") return "warning";
   return "information";
 };
-export const presentConversation = ({ turn, history }: Conversation): ConversationView => ({
+const presentConversation = (
+  { turn, history }: Conversation,
+  actions: Readonly<{ onVisible: () => void; confirm: () => void }>
+): ConversationView => ({
   history,
   reply:
     "value" in turn && !("status" in turn.value)
       ? Option.some({
           text: turn.value.text,
           awaitingVisibility: turn.tag === "proposal",
-          confirmation: turn.value.confirmation !== undefined,
+          id: turn.value.turnId,
+          onVisible: actions.onVisible,
+          confirm:
+            turn.value.confirmation === undefined ? Option.none() : Option.some(actions.confirm),
         })
       : Option.none(),
   status: status[turn.tag],
@@ -169,10 +194,8 @@ export const presentConversation = ({ turn, history }: Conversation): Conversati
   canRetryDelivery: turn.tag === "unconfirmed",
 });
 export type HostedConversation = Readonly<{
-  view: ConversationView;
+  display: ConversationView;
   submit: (text: string) => void;
-  confirm: () => void;
-  replyVisible: () => void;
   checkProgress: () => void;
   retryDelivery: () => void;
 }>;
@@ -218,50 +241,50 @@ export const presentHostedConversation = ({
   propose,
   progress,
   acknowledge,
-  deliveredTurn,
+  current,
+  active,
 }: Readonly<{
   conversation: Conversation;
   setConversation: SetConversation;
   propose: (submission: Submission) => void;
   progress: (pending: Processing) => void;
   acknowledge: (proposal: Proposal) => void;
-  deliveredTurn: { current: Option.Option<string> };
+  current: () => Conversation;
+  active: () => boolean;
 }>): HostedConversation => {
   const { turn } = conversation;
+  const isCurrent = (): boolean => active() && current().turn === turn;
   const deliver = (proposal: Proposal): void => {
     setTurn(setConversation, { tag: "confirming", value: proposal });
     acknowledge(proposal);
   };
+  const confirm = (): void => {
+    if (!isCurrent() || turn.tag !== "completed" || turn.value.confirmation === undefined) return;
+    submitConversation({
+      text: turn.value.confirmation.command,
+      displayText: "Confirmar cambio",
+      turn,
+      setConversation,
+      propose,
+    });
+  };
+  const onVisible = (): void => {
+    if (isCurrent() && turn.tag === "proposal") deliver(turn.value);
+  };
   return {
-    view: presentConversation(conversation),
-    submit: (text): void =>
-      submitConversation({ text, displayText: text, turn, setConversation, propose }),
-    confirm: (): void => {
-      if (turn.tag !== "completed" || turn.value.confirmation === undefined) return;
-      submitConversation({
-        text: turn.value.confirmation.command,
-        displayText: "Confirmar cambio",
-        turn,
-        setConversation,
-        propose,
-      });
-    },
-    replyVisible: (): void => {
-      if (turn.tag !== "proposal") return;
-      if (
-        Option.isSome(deliveredTurn.current) &&
-        deliveredTurn.current.value === turn.value.turnId
-      ) {
-        return;
+    display: presentConversation(conversation, { onVisible, confirm }),
+    submit: (text): void => {
+      if (isCurrent()) {
+        submitConversation({ text, displayText: text, turn, setConversation, propose });
       }
-      deliveredTurn.current = Option.some(turn.value.turnId);
-      deliver(turn.value);
     },
     checkProgress: (): void => {
-      if (turn.tag === "processing" || turn.tag === "uncertain") progress(turn.value);
+      if (!isCurrent() || (turn.tag !== "processing" && turn.tag !== "uncertain")) return;
+      setTurn(setConversation, { tag: "polling", value: turn.value });
+      progress(turn.value);
     },
     retryDelivery: (): void => {
-      if (turn.tag === "unconfirmed") deliver(turn.value);
+      if (isCurrent() && turn.tag === "unconfirmed") deliver(turn.value);
     },
   };
 };

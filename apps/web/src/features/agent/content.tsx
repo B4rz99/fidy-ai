@@ -24,7 +24,7 @@ export const AgentContent = ({
   text: string;
   setText: (text: string) => void;
 }>): JSX.Element => {
-  const { view } = conversation;
+  const { display } = conversation;
   const onSubmit = (event: SubmitEvent<HTMLFormElement>): void => {
     event.preventDefault();
     conversation.submit(text);
@@ -33,26 +33,25 @@ export const AgentContent = ({
     <>
       <Conversation className="min-h-0" aria-label="Conversación con Fidy">
         <ChatContent>
-          {view.empty && <ChatStart onSelect={setText} />}
-          {view.history.map((entry) => (
+          {display.empty && <ChatStart onSelect={setText} />}
+          {display.history.map((entry) => (
             <Message key={entry.id} from={entry.from}>
               <MessageContent>{entry.text}</MessageContent>
             </Message>
           ))}
-          {Option.isSome(view.reply) && (
+          {Option.isSome(display.reply) && (
             <AgentReply
-              reply={view.reply.value}
+              reply={display.reply.value}
               active={open}
-              canSubmit={view.canSubmit}
-              onVisible={conversation.replyVisible}
-              confirm={conversation.confirm}
+              canSubmit={display.canSubmit}
+              key={display.reply.value.id}
             />
           )}
-          <ChatStatus text={view.status} kind={view.statusKind} />
-          {view.canCheckProgress && (
+          <ChatStatus text={display.status} kind={display.statusKind} />
+          {display.canCheckProgress && (
             <ChatRecovery onClick={conversation.checkProgress}>Consultar estado</ChatRecovery>
           )}
-          {view.canRetryDelivery && (
+          {display.canRetryDelivery && (
             <ChatRecovery onClick={conversation.retryDelivery}>Reintentar conexión</ChatRecovery>
           )}
         </ChatContent>
@@ -60,7 +59,7 @@ export const AgentContent = ({
       </Conversation>
       <ChatComposer
         text={text}
-        disabled={!view.canSubmit}
+        disabled={!display.canSubmit}
         onTextChange={setText}
         onSubmit={onSubmit}
       />
@@ -71,19 +70,17 @@ const AgentReply = ({
   reply,
   active,
   canSubmit,
-  onVisible,
-  confirm,
 }: Readonly<{
   reply: VisibleAgentReply;
   active: boolean;
   canSubmit: boolean;
-  onVisible: () => void;
-  confirm: () => void;
 }>): JSX.Element => (
-  <VisibleReply active={active && reply.awaitingVisibility} onVisible={onVisible}>
+  <VisibleReply active={active && reply.awaitingVisibility} onVisible={reply.onVisible}>
     <Message from="assistant" aria-label="Respuesta del agente">
       <MessageContent>{reply.text}</MessageContent>
-      {reply.confirmation && <ChatConfirmation disabled={!canSubmit} onConfirm={confirm} />}
+      {Option.isSome(reply.confirm) && (
+        <ChatConfirmation disabled={!canSubmit} onConfirm={reply.confirm.value} />
+      )}
     </Message>
   </VisibleReply>
 );

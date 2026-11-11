@@ -159,7 +159,6 @@ const prepareAdapterRequest = <Request, Continuation>(
     )
   );
 
-// A mixed cause cannot authorize repeating uncertain external work.
 const pureFailure = (
   exit: Exit.Exit<unknown, HostedInferenceError>,
   tag: HostedInferenceError["reason"]["_tag"]
@@ -173,6 +172,14 @@ const pureFailure = (
       (tag !== "ProviderUnavailable" || reason.error.retryable)
   );
 
+type ExecutionState<Output> =
+  | Readonly<{
+      _tag: "Ready" | "Executing";
+      work: Effect.Effect<Output, HostedInferenceError>;
+      attempts: number;
+    }>
+  | Readonly<{ _tag: "Consumed" }>;
+
 const prepareExecution = <Output>(
   work: Effect.Effect<Output, HostedInferenceError>,
   settled: (exit: Exit.Exit<Output, HostedInferenceError>, retryable: boolean) => void = () => {}
@@ -180,30 +187,26 @@ const prepareExecution = <Output>(
   execute: Effect.Effect<Output, HostedInferenceError>;
   discard: Effect.Effect<void, HostedInferenceError>;
 }> => {
-  let state: "ready" | "executing" | "consumed" = "ready";
-  let attempts = 0;
-  let captured = Option.some(work);
+  let state: ExecutionState<Output> = { _tag: "Ready", work, attempts: 0 };
   const settle = (exit: Exit.Exit<Output, HostedInferenceError>): Effect.Effect<void> =>
     Effect.sync(() => {
+      if (state._tag !== "Executing") return;
       const retryable =
-        pureFailure(exit, "ProviderUnavailable") && attempts < maximumHostedProviderAttempts;
-      state = retryable ? "ready" : "consumed";
-      if (!retryable) captured = Option.none();
+        pureFailure(exit, "ProviderUnavailable") && state.attempts < maximumHostedProviderAttempts;
+      state = retryable ? { ...state, _tag: "Ready" } : { _tag: "Consumed" };
       settled(exit, retryable);
     });
   return {
     execute: Effect.uninterruptibleMask((restore) =>
       Effect.suspend(() => {
-        if (state !== "ready" || Option.isNone(captured)) return Effect.fail(invalidAuthority());
-        state = "executing";
-        attempts += 1;
-        return restore(captured.value).pipe(Effect.onExit(settle));
+        if (state._tag !== "Ready") return Effect.fail(invalidAuthority());
+        state = { ...state, _tag: "Executing", attempts: state.attempts + 1 };
+        return restore(state.work).pipe(Effect.onExit(settle));
       })
     ),
     discard: Effect.suspend(() => {
-      if (state !== "ready") return Effect.fail(invalidAuthority());
-      state = "consumed";
-      captured = Option.none();
+      if (state._tag !== "Ready") return Effect.fail(invalidAuthority());
+      state = { _tag: "Consumed" };
       return Effect.void;
     }),
   };
@@ -235,25 +238,28 @@ const textExecution = <Request, Continuation>(
     })
   );
 
+type TextRepairState<Continuation> =
+  | Readonly<{ _tag: "Pending" | "Available"; input: ExactPreparation<Continuation> }>
+  | Readonly<{ _tag: "Spent" }>;
+
 const makePreparedText = <Request, Continuation>(
   runtime: TextRuntime<Request, Continuation>,
   exactRequest: Request,
   input: ExactPreparation<Continuation>
 ): PreparedHostedText => {
-  let repairInput = Option.some(input);
-  let repairAvailable = false;
+  let repair: TextRepairState<Continuation> = { _tag: "Pending", input };
   const execution = prepareExecution(
     textExecution(runtime, exactRequest, input),
     (exit, retryable) => {
-      repairAvailable = pureFailure(exit, "InvalidOutput");
-      if (!retryable && !repairAvailable) repairInput = Option.none();
+      if (repair._tag !== "Pending") return;
+      if (pureFailure(exit, "InvalidOutput")) repair = { ...repair, _tag: "Available" };
+      else if (!retryable) repair = { _tag: "Spent" };
     }
   );
   const repairInvalidOutput = Effect.suspend(() => {
-    if (!repairAvailable || Option.isNone(repairInput)) return Effect.fail(invalidAuthority());
-    const captured = repairInput.value;
-    repairAvailable = false;
-    repairInput = Option.none();
+    if (repair._tag !== "Available") return Effect.fail(invalidAuthority());
+    const captured = repair.input;
+    repair = { _tag: "Spent" };
     consumeSource(captured);
     return runtime
       .makeContinuation({
@@ -270,17 +276,16 @@ const makePreparedText = <Request, Continuation>(
       ]);
   });
   const discard = Effect.suspend(() => {
-    if (repairAvailable && Option.isSome(repairInput)) {
-      consumeSource(repairInput.value);
-      repairAvailable = false;
-      repairInput = Option.none();
+    if (repair._tag === "Available") {
+      consumeSource(repair.input);
+      repair = { _tag: "Spent" };
       return Effect.void;
     }
     return execution.discard.pipe(
       Effect.tap(() =>
         Effect.sync(() => {
-          if (Option.isSome(repairInput)) consumeSource(repairInput.value);
-          repairInput = Option.none();
+          if (repair._tag === "Pending") consumeSource(repair.input);
+          repair = { _tag: "Spent" };
         })
       )
     );

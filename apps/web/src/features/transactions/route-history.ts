@@ -238,7 +238,10 @@ const routeActions = ({
     const owner = get(navigation);
     const current = owner.generation;
     if (command === "refresh-pages") {
-      get.set(get(owner.resource).action, command);
+      const pages = Math.max(1, get(state).loadedPages);
+      const resource = get(owner.resource);
+      get.set(resource.action, command);
+      get.set(resource.action, { restorePages: pages });
       get.set(navigation, advanceContinuation(owner));
       return;
     }

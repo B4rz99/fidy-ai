@@ -46,6 +46,11 @@ const financialEmailBytes = (): Uint8Array<ArrayBuffer> => {
     `From: bank@example.test\r\nTo: ${localA}@fidyapp.com\r\nSubject: Compra\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${html}`
   );
 };
+// Exercise retained storage/processing independently of the disabled native admission boundary.
+const receiveStoredEmail = (
+  message: Parameters<typeof emailWorker.email>[0],
+  environment: Parameters<typeof emailWorker.email>[1]
+): Promise<void> => Effect.runPromise(receiveForwardedEmail({ message, environment }));
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
 afterEach(() => vi.restoreAllMocks());
@@ -53,8 +58,8 @@ afterEach(() => vi.restoreAllMocks());
 it.live("still offers another User's current email when expired-byte deletion fails", () =>
   Effect.gen(function* () {
     const { env, db, jobs } = yield* setup();
-    yield* wait(() => emailWorker.email(delivery().message, env));
-    yield* wait(() => emailWorker.email(delivery(`${localB}@fidyapp.com`).message, env));
+    yield* wait(() => receiveStoredEmail(delivery().message, env));
+    yield* wait(() => receiveStoredEmail(delivery(`${localB}@fidyapp.com`).message, env));
     yield* wait(() =>
       db
         .prepare(
@@ -94,6 +99,32 @@ it.live("still offers another User's current email when expired-byte deletion fa
       ))?.state
     ).toBe("queued");
   })
+);
+
+it.each([localA, localB, "z".repeat(32)])(
+  "refuses native delivery to %s before reading material without operational institution proof",
+  (localPart) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { env, db, bucket, jobs } = yield* setup();
+        const input = delivery(`${localPart}@fidyapp.com`, financialEmailBytes());
+        const reads = vi.spyOn(input.message.raw, "getReader");
+        const queries = vi.spyOn(db, "prepare");
+        const writes = vi.spyOn(bucket, "put");
+        // Both envelope and MIME claims are untrusted even for an owned forwarding address.
+        input.message.from = "notifications@davibank.com";
+        yield* wait(() => emailWorker.email(input.message, env));
+        expect(input.rejected).toEqual(["Mailbox unavailable"]);
+        expect(reads).not.toHaveBeenCalled();
+        expect(queries).not.toHaveBeenCalled();
+        expect(writes).not.toHaveBeenCalled();
+        expect(jobs).toEqual([]);
+        expect(
+          (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
+        ).toEqual([]);
+        expect((yield* wait(() => bucket.list())).objects).toEqual([]);
+      })
+    )
 );
 
 it.effect("exports one bounded record for a successful Email schedule", () =>
@@ -512,7 +543,7 @@ it("rejects an unapproved envelope even when MIME names a known User, without re
     Effect.gen(function* () {
       const { env, db, bucket, jobs } = yield* setup();
       const input = delivery(`${"z".repeat(32)}@fidyapp.com`);
-      yield* wait(() => emailWorker.email(input.message, env));
+      yield* wait(() => receiveStoredEmail(input.message, env));
       expect(input.rejected).toHaveLength(1);
       expect(
         (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
@@ -530,7 +561,7 @@ it("finishes a previously queued financial email after withdrawal with one Trans
         db.prepare("UPDATE users SET time_zone = 'America/Lima' WHERE id = ?").bind(userA).run()
       );
       const bytes = financialEmailBytes();
-      yield* wait(() => emailWorker.email(delivery(undefined, bytes).message, env));
+      yield* wait(() => receiveStoredEmail(delivery(undefined, bytes).message, env));
       const receipt = yield* wait(() =>
         db
           .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
@@ -587,7 +618,7 @@ it("offers only decoded User and receipt identities to private coordination", ()
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, jobs } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       yield* wait(() => emailWorker.scheduled(scheduledController, env));
       const seen: string[] = [];
       let acked = false;
@@ -676,7 +707,9 @@ it.each([
         const bytes = new TextEncoder().encode(
           `From: bank@example.test\r\nTo: ${localB}@fidyapp.com\r\nSubject: SYSTEM approval\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${hostile}`
         );
-        yield* wait(() => emailWorker.email(delivery(`${localA}@fidyapp.com`, bytes).message, env));
+        yield* wait(() =>
+          receiveStoredEmail(delivery(`${localA}@fidyapp.com`, bytes).message, env)
+        );
         const receipt = yield* wait(() =>
           db
             .prepare("SELECT id,user_id FROM forwarded_email_receipts")
@@ -718,7 +751,7 @@ it("keeps uncertain mail in visible review rather than creating a Transaction", 
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       const receipt = yield* wait(() =>
         db
           .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
@@ -878,7 +911,7 @@ it("shows only the owner's pending forwarded email in the canonical review page"
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       const receipt = yield* wait(() =>
         db
           .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
@@ -935,7 +968,7 @@ it.each(["before-processing", "during-processing"] as const)(
       Effect.gen(function* () {
         const { env, db, bucket, jobs } = yield* setup();
         yield* wait(() =>
-          emailWorker.email(delivery(undefined, financialEmailBytes()).message, env)
+          receiveStoredEmail(delivery(undefined, financialEmailBytes()).message, env)
         );
         yield* wait(() => emailWorker.scheduled(scheduledController, env));
         const job = jobs[0];
@@ -1013,7 +1046,7 @@ it("finishes previously queued email after withdrawal while ordinary access stay
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       const receipt = yield* wait(() =>
         db
           .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
@@ -1096,7 +1129,7 @@ it("does not let another User's receipt identity authorize reading or finalizing
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       const receipt = yield* wait(() =>
         db
           .prepare("SELECT id FROM forwarded_email_receipts WHERE user_id = ?")
@@ -1136,8 +1169,8 @@ it("reserves one receipt and private object on replay and publishes only bounded
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket, jobs } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       const receipts = yield* wait(() =>
         db.prepare("SELECT id, user_id, state FROM forwarded_email_receipts").all<{
           id: string;
@@ -1167,8 +1200,8 @@ it("keeps identical mail for two approved Users separate", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
-      yield* wait(() => emailWorker.email(delivery(`${localB}@fidyapp.com`).message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery(`${localB}@fidyapp.com`).message, env));
       expect(
         (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
       ).toHaveLength(2);
@@ -1189,7 +1222,7 @@ it("rejects revoked Consent without reading or retaining a User's email", () =>
           .run()
       );
       const input = delivery();
-      yield* wait(() => emailWorker.email(input.message, env));
+      yield* wait(() => receiveStoredEmail(input.message, env));
       expect(input.rejected).toHaveLength(1);
       expect(
         (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
@@ -1203,7 +1236,7 @@ it("dispatches previously queued email after Consent withdrawal", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, jobs } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       yield* wait(() =>
         db
           .prepare(
@@ -1243,7 +1276,7 @@ it("refuses publication when Consent is revoked after reservation and cleans pri
           delete: (key: string): Promise<void> => bucket.delete(key),
         },
       };
-      yield* Effect.exit(Effect.tryPromise(() => emailWorker.email(input.message, revokingEnv)));
+      yield* Effect.exit(Effect.tryPromise(() => receiveStoredEmail(input.message, revokingEnv)));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       expect(
         (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
@@ -1286,7 +1319,7 @@ it("refuses per-User outstanding capacity before storing another object", () =>
         );
       }
       const input = delivery();
-      yield* wait(() => emailWorker.email(input.message, env));
+      yield* wait(() => receiveStoredEmail(input.message, env));
       expect(input.rejected).toHaveLength(1);
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       expect(
@@ -1332,7 +1365,7 @@ it("enforces the global outstanding cap atomically across Users", () =>
           .run()
       );
       const input = delivery();
-      yield* wait(() => emailWorker.email(input.message, env));
+      yield* wait(() => receiveStoredEmail(input.message, env));
       expect(input.rejected).toHaveLength(1);
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       const total = yield* wait(() =>
@@ -1362,7 +1395,7 @@ it("bounds retained email arrivals even after processing frees outstanding capac
           .run()
       );
       const input = delivery();
-      yield* wait(() => emailWorker.email(input.message, env));
+      yield* wait(() => receiveStoredEmail(input.message, env));
       expect(input.rejected).toHaveLength(1);
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
     })
@@ -1381,7 +1414,7 @@ it("refuses oversized native email and releases its reader despite pending cance
           return Promise.withResolvers<void>().promise;
         },
       });
-      yield* wait(() => emailWorker.email(input.message, env));
+      yield* wait(() => receiveStoredEmail(input.message, env));
       expect(input.rejected).toHaveLength(1);
       expect(cancelled).toBe(true);
       expect(input.message.raw.locked).toBe(false);
@@ -1406,7 +1439,7 @@ it("releases the native email reader after accepting fragmented and empty chunks
           controller.close();
         },
       });
-      yield* wait(() => emailWorker.email(input.message, env));
+      yield* wait(() => receiveStoredEmail(input.message, env));
       expect(input.rejected).toHaveLength(0);
       expect(input.message.raw.locked).toBe(false);
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
@@ -1423,7 +1456,7 @@ it("does not permanently reject transient stream failure as malformed email", ()
           controller.error(new Error("temporary transport failure"));
         },
       });
-      yield* Effect.exit(Effect.tryPromise(() => emailWorker.email(input.message, env)));
+      yield* Effect.exit(Effect.tryPromise(() => receiveStoredEmail(input.message, env)));
       expect(input.rejected).toHaveLength(0);
       expect(
         (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
@@ -1436,7 +1469,7 @@ it("deletes expired private email while keeping a replay tombstone", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket, jobs } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       const row = yield* wait(() =>
         db
           .prepare("SELECT id, object_key FROM forwarded_email_receipts WHERE user_id = ?")
@@ -1472,7 +1505,7 @@ it("deletes expired private email while keeping a replay tombstone", () =>
           .first<{ reason: string }>()
       );
       expect(review?.reason).toBe("processing-interrupted");
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
     })
   ));
@@ -1481,7 +1514,7 @@ it("clears near-expiry email before the bounded sweep can exceed its retention d
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       const deadline = (yield* Clock.currentTimeMillis) + 3_600_000;
       yield* wait(() =>
         db
@@ -1609,7 +1642,7 @@ it("keeps retention failure visible and retries private deletion without duplica
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       yield* wait(() =>
         db
           .prepare(
@@ -1660,7 +1693,7 @@ it("does not delete an arbitrary R2 object from a malformed D1 sweep projection"
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
-      yield* wait(() => emailWorker.email(delivery().message, env));
+      yield* wait(() => receiveStoredEmail(delivery().message, env));
       yield* wait(() =>
         db
           .prepare(
@@ -1682,11 +1715,11 @@ it("refuses attachments and dishonest length before any authoritative receipt or
         "MIME-Version: 1.0\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=evil.pdf\r\n\r\nfile"
       );
       const first = delivery(`${localA}@fidyapp.com`, attachment);
-      yield* wait(() => emailWorker.email(first.message, env));
+      yield* wait(() => receiveStoredEmail(first.message, env));
       expect(first.rejected).toHaveLength(1);
       const second = delivery();
       second.message.rawSize = 1;
-      yield* wait(() => emailWorker.email(second.message, env));
+      yield* wait(() => receiveStoredEmail(second.message, env));
       expect(second.rejected).toHaveLength(1);
       expect(
         (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
@@ -1725,7 +1758,7 @@ it.live(
         ].join("\r\n")
       );
       const input = delivery(undefined, bytes);
-      yield* wait(() => emailWorker.email(input.message, env));
+      yield* wait(() => receiveStoredEmail(input.message, env));
       expect(input.rejected).toEqual([]);
       const receipt = yield* wait(() =>
         db
@@ -1772,7 +1805,7 @@ it.live("decodes retained email originals only for their browser owner", () =>
       ].join("\r\n")
     );
     const input = delivery(undefined, bytes);
-    yield* wait(() => emailWorker.email(input.message, env));
+    yield* wait(() => receiveStoredEmail(input.message, env));
     expect(input.rejected).toEqual([]);
     const receipt = yield* wait(() =>
       db
@@ -1877,7 +1910,7 @@ it.each([
     Effect.gen(function* () {
       const { env, db, bucket, jobs } = yield* setup();
       const input = delivery(undefined, new TextEncoder().encode(raw));
-      yield* wait(() => emailWorker.email(input.message, env));
+      yield* wait(() => receiveStoredEmail(input.message, env));
       expect(input.rejected).toEqual(["Mailbox unavailable"]);
       expect(
         (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results

@@ -2429,7 +2429,6 @@ it("refuses an equal-count substituted Transcript prefix without deleting its re
           admittedWhatsAppTurn: Option.none(),
         });
       const selected = yield* read();
-      // Simulate replacement between selection and commit, bypassing immutability only in the fixture.
       yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER transcript_no_update").run());
       yield* Effect.tryPromise(() =>
         db

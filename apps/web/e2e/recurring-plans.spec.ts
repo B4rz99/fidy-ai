@@ -304,21 +304,21 @@ test("keeps income, transfers, unknown expenses and filtered summaries separate"
         })
       );
       yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
-      yield* preparePlan({
+      yield* createPlan({
         page,
         name: "Honorarios",
         kind: "income",
         currency: "USD",
         amount: "20",
       });
-      yield* preparePlan({
+      yield* createPlan({
         page,
         name: "Pago de tarjeta",
         kind: "transfer",
         currency: "COP",
         amount: "100",
       });
-      yield* preparePlan({
+      yield* createPlan({
         page,
         name: "Internet variable",
         kind: "expense",
@@ -824,7 +824,7 @@ const inspectAnnualLifecycle = (page: Page): Effect.Effect<void, Cause.UnknownEr
     yield* Effect.tryPromise(() =>
       page.setViewportSize({ width: desktopLifecycleWidth, height: 900 })
     );
-    yield* preparePlan(
+    yield* createPlan(
       {
         page,
         name: "Plan anual QA",

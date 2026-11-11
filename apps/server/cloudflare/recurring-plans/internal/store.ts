@@ -269,7 +269,7 @@ export const decodeReadProjection = ({
         })
       )
     )(planningValue(rows));
-    const editing = yield* Schema.decodeUnknownEffect(Schema.toType(RecurringDocument))({
+    const editing = yield* Schema.decodeEffect(Schema.toType(RecurringDocument))({
       ...rows.root,
       ...schedule,
       revision: rows.revision,

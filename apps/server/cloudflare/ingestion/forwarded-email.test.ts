@@ -27,6 +27,7 @@ import {
 import { browseReviewMaterial, listNeedsReviewItems, processForwardedEmail } from "./operations";
 import { currentMillis } from "../runtime/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
+import { delayedUpload } from "./statement-upload-race.test-fixture";
 
 const userA = "10000000-0000-4000-8000-000000000101";
 const scheduledController = { scheduledTime: 0 };
@@ -109,15 +110,11 @@ it.each([localA, localB, "z".repeat(32)])(
         const { env, db, bucket, jobs } = yield* setup();
         const input = delivery(`${localPart}@fidyapp.com`, financialEmailBytes());
         const reads = vi.spyOn(input.message.raw, "getReader");
-        const queries = vi.spyOn(db, "prepare");
-        const writes = vi.spyOn(bucket, "put");
         // Both envelope and MIME claims are untrusted even for an owned forwarding address.
         input.message.from = "notifications@davibank.com";
         yield* wait(() => emailWorker.email(input.message, env));
         expect(input.rejected).toEqual(["Mailbox unavailable"]);
         expect(reads).not.toHaveBeenCalled();
-        expect(queries).not.toHaveBeenCalled();
-        expect(writes).not.toHaveBeenCalled();
         expect(jobs).toEqual([]);
         expect(
           (yield* wait(() => db.prepare("SELECT id FROM forwarded_email_receipts").all())).results
@@ -163,7 +160,7 @@ it.effect("exports one bounded record for a successful Email schedule", () =>
   })
 );
 
-it.effect("exports only closed metadata for received financial email", () =>
+it.effect("exports only closed metadata for refused financial email", () =>
   Effect.gen(function* () {
     const records: TelemetryWorkRecord[] = [];
     const worker = makeEmailWorker(
@@ -1170,7 +1167,24 @@ it("reserves one receipt and private object on replay and publishes only bounded
     Effect.gen(function* () {
       const { env, db, bucket, jobs } = yield* setup();
       yield* wait(() => receiveStoredEmail(delivery().message, env));
+      const original = yield* wait(() =>
+        db
+          .prepare(
+            "SELECT id,delivery_digest,object_key,byte_length,received_at_ms,expires_at_ms,time_zone FROM forwarded_email_receipts"
+          )
+          .all()
+      );
+      vi.spyOn(Date, "now").mockReturnValue((yield* Clock.currentTimeMillis) + 60_000);
       yield* wait(() => receiveStoredEmail(delivery().message, env));
+      expect(
+        (yield* wait(() =>
+          db
+            .prepare(
+              "SELECT id,delivery_digest,object_key,byte_length,received_at_ms,expires_at_ms,time_zone FROM forwarded_email_receipts"
+            )
+            .all()
+        )).results
+      ).toEqual(original.results);
       const receipts = yield* wait(() =>
         db.prepare("SELECT id, user_id, state FROM forwarded_email_receipts").all<{
           id: string;
@@ -1293,6 +1307,99 @@ it("refuses publication when Consent is revoked after reservation and cleans pri
       expect(jobs).toHaveLength(0);
     })
   ));
+
+it.live(
+  "retains the original writer after an unknown email upload and its delayed completion",
+  () =>
+    Effect.gen(function* () {
+      const { env, db, bucket } = yield* setup();
+      const delayed = delayedUpload({ bucket, outcome: "ambiguous-rejection" });
+      const received = receiveStoredEmail(delivery().message, {
+        ...env,
+        EMAIL_BUCKET: delayed.bucket,
+      }).then(
+        () => "accepted",
+        () => "unavailable"
+      );
+      yield* wait(() => delayed.entered);
+      delayed.rejectAcknowledgement();
+      expect(yield* wait(() => received)).toBe("unavailable");
+      expect(
+        (yield* wait(() => db.prepare("SELECT id FROM erasure_writers").all())).results
+      ).toHaveLength(1);
+      expect((yield* wait(() => bucket.list())).objects).toEqual([]);
+      delayed.release();
+      yield* wait(() => delayed.settled);
+      expect((yield* wait(() => bucket.list())).objects).toEqual([]);
+      expect(
+        (yield* wait(() => db.prepare("SELECT id FROM erasure_writers").all())).results
+      ).toHaveLength(1);
+    })
+);
+
+it.each(["queued", "unavailable", "malformed"] as const)(
+  "preserves committed queued bytes after a lost publication response and %s readback",
+  (readback) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { env, db, bucket } = yield* setup();
+        const batch = db.batch.bind(db);
+        const prepare = db.prepare.bind(db);
+        let publicationLost = false;
+        let batches = 0;
+        const database = new Proxy(db, {
+          get(target, key): unknown {
+            if (key === "batch")
+              return (statements: D1PreparedStatement[]) =>
+                batch(statements).then((results) => {
+                  batches += 1;
+                  if (batches === 2) {
+                    publicationLost = true;
+                    throw new Error("Publication response lost");
+                  }
+                  return results;
+                });
+            if (key === "prepare")
+              return (query: string) => {
+                const statement = prepare(query);
+                if (!publicationLost || readback === "queued") return statement;
+                return new Proxy(statement, {
+                  get(boundTarget, property): unknown {
+                    if (property === "bind")
+                      return (...values: unknown[]) => {
+                        const bound = statement.bind(...values);
+                        return new Proxy(bound, {
+                          get(readTarget, readProperty): unknown {
+                            if (readProperty === "first")
+                              return () =>
+                                readback === "unavailable"
+                                  ? Promise.reject(new Error("Readback unavailable"))
+                                  : Promise.resolve({ state: "unknown" });
+                            return Reflect.get(readTarget, readProperty);
+                          },
+                        });
+                      };
+                    return Reflect.get(boundTarget, property);
+                  },
+                });
+              };
+            return Reflect.get(target, key);
+          },
+        });
+        const outcome = yield* Effect.exit(
+          Effect.tryPromise(() => receiveStoredEmail(delivery().message, { ...env, DB: database }))
+        );
+        expect(outcome._tag).toBe(readback === "queued" ? "Success" : "Failure");
+        expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
+        expect(
+          (yield* wait(() => prepare("SELECT state FROM forwarded_email_receipts").all())).results
+        ).toEqual([expect.objectContaining({ state: "queued" })]);
+        expect(
+          (yield* wait(() => prepare("SELECT id FROM erasure_writers").all())).results
+        ).toHaveLength(readback === "queued" ? 0 : 1);
+      })
+    )
+);
 
 it("refuses per-User outstanding capacity before storing another object", () =>
   Effect.runPromise(

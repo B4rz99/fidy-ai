@@ -477,3 +477,8 @@ work and native integration evidence. They do not establish institution verifica
 readiness. Previously queued work retains its original Processing basis, context and expiry after
 withdrawal; maintenance and erasure remain active. Issuing or returning a forwarding address does
 not enable native delivery.
+
+An unknown receipt-publication response requires a same-User receipt readback before object
+cleanup. A failed or malformed readback retains both private bytes and the original writer's
+unresolved custody; only authoritative queued state can recover successful publication. Retries
+reuse the original receipt and deadline rather than rewriting material or extending retention.

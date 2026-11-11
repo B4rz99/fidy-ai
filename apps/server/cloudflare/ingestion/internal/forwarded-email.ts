@@ -404,6 +404,7 @@ export const receiveForwardedEmail = Effect.fn(function* (
           .first()
       );
       const published = Schema.decodeUnknownOption(ReceiptState)(committed);
+      if (committed !== null && Option.isNone(published)) return yield* authorityUnavailable();
       if (Option.isSome(published) && published.value.state === "queued") return;
       yield* erasePrivateObject({ bucket: environment.EMAIL_BUCKET, key: objectKey }).pipe(
         Effect.mapError(authorityUnavailable)

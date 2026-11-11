@@ -1,6 +1,6 @@
-import type { BrowserContext, Page, Route } from "@playwright/test";
+import type { BrowserContext, Page, Request, Route } from "@playwright/test";
 import { Effect } from "effect";
-import { apiOrigin, installUser, response } from "./http-fixtures";
+import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { test, expect } = playwright;
@@ -79,11 +79,7 @@ const delayedView =
 
 const install = Effect.fnUntraced(function* (page: Page, edits: Array<unknown>) {
   yield* Effect.tryPromise(() => installUser(page));
-  yield* Effect.tryPromise(() =>
-    page.route(`${apiOrigin}/dashboard/view`, (route) =>
-      route.fulfill({ contentType: "application/json", body: response(view) })
-    )
-  );
+  yield* Effect.tryPromise(() => page.route(`${apiOrigin}/dashboard/view`, serveDashboardView));
   yield* Effect.tryPromise(() =>
     page.route(`${apiOrigin}/dashboard/catalog`, (route) =>
       route.fulfill({ contentType: "application/json", body: response(catalog) })
@@ -356,5 +352,207 @@ test("Dashboard abandons pending placement when the successful save cannot be re
         expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeEnabled()
       );
       expect(edits).toHaveLength(1);
+    })
+  ));
+
+const dashboardStaleMilliseconds = 6000;
+const dispatchDashboardFocus = (): void => {
+  window.dispatchEvent(new Event("visibilitychange"));
+};
+const serveDashboardView = (route: Route): Promise<void> =>
+  route.fulfill({ contentType: "application/json", body: response(view) });
+const expectEdits = (edits: Array<unknown>, expected: Array<unknown>): Promise<void> =>
+  expect.poll(() => edits).toEqual(expected);
+const expectEditCount = (edits: Array<unknown>, expected: number): Promise<void> =>
+  expect.poll(() => edits).toHaveLength(expected);
+
+test("uncertain Dashboard editing requires the explicit refresh, including identical content", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const edits: Array<unknown> = [];
+      yield* install(page, edits);
+      const acknowledgment = Promise.withResolvers<void>();
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/dashboard/edits`, heldFailure(acknowledgment.promise, edits))
+      );
+      yield* startSwapDrag(page);
+      yield* Effect.tryPromise(() => page.mouse.up());
+      yield* Effect.tryPromise(() => expectSwap(edits));
+      acknowledgment.resolve();
+      const alert = page.getByRole("alert").filter({ hasText: "No pudimos confirmar el cambio" });
+      yield* Effect.tryPromise(() => expect(alert).toBeVisible());
+      const handle = page.getByRole("button", { name: "Arrastrar Gastos visibles", exact: true });
+      yield* Effect.tryPromise(() => expect(handle).toBeDisabled());
+      yield* Effect.tryPromise(() => page.route(`${apiOrigin}/dashboard/view`, failView));
+      yield* Effect.tryPromise(() => page.clock.install());
+      yield* Effect.tryPromise(() => page.clock.fastForward(dashboardStaleMilliseconds));
+      yield* Effect.tryPromise(() => page.evaluate(dispatchDashboardFocus));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("No pudimos actualizar el tablero", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(handle).toBeDisabled());
+      yield* Effect.tryPromise(() => page.route(`${apiOrigin}/dashboard/view`, serveDashboardView));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar actualización del tablero" }).click()
+      );
+      yield* Effect.tryPromise(() => expect(handle).toBeEnabled());
+      yield* Effect.tryPromise(() => expect(alert).toHaveCount(0));
+      yield* Effect.tryPromise(() => page.clock.fastForward(dashboardStaleMilliseconds));
+      const ordinaryRead = page.waitForResponse(`${apiOrigin}/dashboard/view`);
+      yield* Effect.tryPromise(() => page.evaluate(dispatchDashboardFocus));
+      yield* Effect.tryPromise(() => ordinaryRead);
+      yield* Effect.tryPromise(() => expect(handle).toBeEnabled());
+      expect(edits).toHaveLength(1);
+    })
+  ));
+
+const removeBothWidgets = (page: Page): Promise<void> =>
+  page
+    .locator(
+      'button[aria-label="Eliminar Gastos visibles"], button[aria-label="Eliminar Otro Widget"]'
+    )
+    .evaluateAll((buttons) => {
+      for (const button of buttons) {
+        if (button instanceof HTMLButtonElement) button.click();
+      }
+    });
+
+test("Dashboard sends same-turn gestures in admitted order", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const edits: Array<unknown> = [];
+      yield* install(page, edits);
+      yield* Effect.tryPromise(() => removeBothWidgets(page));
+      yield* Effect.tryPromise(() =>
+        expectEdits(edits, [
+          { op: "remove-widget", widgetId: firstId },
+          { op: "remove-widget", widgetId: secondId },
+        ])
+      );
+    })
+  ));
+
+test("Dashboard discards an unsent successor after an unknown head without inventing a saved layout", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const edits: Array<unknown> = [];
+      yield* install(page, edits);
+      const acknowledgment = Promise.withResolvers<void>();
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/dashboard/edits`, heldFailure(acknowledgment.promise, edits))
+      );
+      yield* Effect.tryPromise(() => removeBothWidgets(page));
+      yield* Effect.tryPromise(() =>
+        expectEdits(edits, [{ op: "remove-widget", widgetId: firstId }])
+      );
+      acknowledgment.resolve();
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert").filter({ hasText: "No pudimos confirmar" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.locator("[data-dashboard-widget-id] h2")).toHaveText([
+          "Gastos visibles",
+          "Otro Widget",
+        ])
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Vista previa de la distribución", { exact: true })).toHaveCount(0)
+      );
+      expect(edits).toHaveLength(1);
+    })
+  ));
+
+const installEmptyHistory = (page: Page): Promise<void> =>
+  page
+    .route(`${apiOrigin}/transactions**`, (route) =>
+      route.fulfill({ contentType: "application/json", body: response([]) })
+    )
+    .then(() => {});
+const isDashboardEditRequest = (request: Request): boolean =>
+  request.url() === `${apiOrigin}/dashboard/edits`;
+
+test("leaving the mounted Dashboard abandons the unsent successor and fences late acknowledgment", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const edits: Array<unknown> = [];
+      yield* install(page, edits);
+      yield* Effect.tryPromise(() => installEmptyHistory(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      const acknowledgment = Promise.withResolvers<void>();
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/dashboard/edits`, heldFailure(acknowledgment.promise, edits))
+      );
+      yield* Effect.tryPromise(() => removeBothWidgets(page));
+      yield* Effect.tryPromise(() => expectEditCount(edits, 1));
+      const failedHead = page.waitForEvent("requestfailed", isDashboardEditRequest);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Transacciones", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Transacciones", exact: true })).toBeVisible()
+      );
+      acknowledgment.resolve();
+      yield* Effect.tryPromise(() => failedHead);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("link", { name: "Tablero", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Personalizar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Arrastrar Gastos visibles", exact: true })
+        ).toBeEnabled()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert").filter({ hasText: "No pudimos confirmar" })).toHaveCount(0)
+      );
+      expect(edits).toHaveLength(1);
+    })
+  ));
+
+const refuseFirstEdit =
+  (edits: Array<unknown>): ((route: Route) => Promise<void>) =>
+  (route) => {
+    if (edits.length > 0) return route.fallback();
+    edits.push(route.request().postDataJSON());
+    return route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: { code: "validation_failed", message: "Invalid placement", fields: [] },
+        next: [],
+      }),
+    });
+  };
+test("Dashboard retains validation refusal while an eligible queued successor succeeds", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const edits: Array<unknown> = [];
+      yield* install(page, edits);
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/dashboard/edits`, refuseFirstEdit(edits))
+      );
+      yield* Effect.tryPromise(() => removeBothWidgets(page));
+      yield* Effect.tryPromise(() =>
+        expectEdits(edits, [
+          { op: "remove-widget", widgetId: firstId },
+          { op: "remove-widget", widgetId: secondId },
+        ])
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert").filter({ hasText: "El cambio fue rechazado" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Vista previa de la distribución", { exact: true })).toHaveCount(0)
+      );
     })
   ));

@@ -274,7 +274,11 @@ initialization attempt. Concurrent tabs rely on canonical initialization idempot
 edits invalidate the same Dashboard resource; queries themselves never create or repair domain state.
 The mounted edit module owns serialized submission, pending placement projection and canonical
 reread recovery. Uncertain or missing-Widget outcomes discard unsent edits and block new edits
-until an explicit successful canonical refresh. Route departure discards unsent edits; an
+until an explicit successful canonical refresh. The existing query owner starts a new load for
+that private recovery attempt; only its first successful, unsuperseded invocation certifies
+completion. Older in-flight reads, equal-content comparisons and timestamps confer no recovery
+authority. Equal-content fresh success is valid, and later ordinary reads do not revoke a completed
+attempt. Dashboard retry controls pass through the editing owner. Route departure discards unsent edits; an
 already-sent mutation may have committed. Presentation owns local drafts and drag mechanics.
 Budget Widget configuration keeps only the selected Widget identity and local choice in React;
 the live Dashboard supplies the current Widget configuration. The dialog loads current-month

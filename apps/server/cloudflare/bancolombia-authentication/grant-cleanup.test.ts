@@ -1,5 +1,6 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import { expect, it } from "@effect/vitest";
-import { Context, Crypto, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair } from "jose";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
@@ -33,7 +34,9 @@ const inspectResponse = (scenario: Scenario, active: boolean, hint: string): Res
         client_id: scenario === "foreign-client" ? "other-client" : clientId,
       });
 const cleanup = Effect.fn(function* (scenario: Scenario) {
-  const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+  const services = yield* Layer.build(TestCrypto);
+  const secureRandom = Context.get(services, SecureRandom.SecureRandom);
+  const digest = Context.get(services, Digest.Digest);
   const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
   const revoked = new Set<string>();
   const requests: string[] = [];
@@ -81,7 +84,8 @@ const cleanup = Effect.fn(function* (scenario: Scenario) {
     }).pipe(Effect.orDie)
   );
   const result = yield* revokeBancolombiaSandboxGrant({
-    crypto,
+    secureRandom,
+    digest,
     clientId,
     httpClient,
     privateKey: Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey))),

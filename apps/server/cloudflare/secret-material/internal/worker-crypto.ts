@@ -1,19 +1,4 @@
-import { type Crypto, Effect, PlatformError } from "effect";
+import { SecureRandom } from "effect/crypto";
 
-export const workerCryptoOptions: Parameters<typeof Crypto.make>[0] = {
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-};
+export const makeWorkerSecureRandom = (): SecureRandom.SecureRandom["Service"] =>
+  SecureRandom.make((size) => crypto.getRandomValues(new Uint8Array(size)));

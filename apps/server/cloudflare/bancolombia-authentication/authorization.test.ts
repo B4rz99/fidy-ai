@@ -1,17 +1,8 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import * as assert from "node:assert/strict";
 import { BancolombiaAuthorizationFailed, BancolombiaConsentProfile } from "./contract";
 import { expect, it } from "@effect/vitest";
-import {
-  type Cause,
-  Context,
-  Crypto,
-  DateTime,
-  Effect,
-  Exit,
-  Layer,
-  Redacted,
-  Schema,
-} from "effect";
+import { type Cause, Context, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import { exportJWK, exportPKCS8, generateKeyPair, jwtVerify } from "jose";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
@@ -24,7 +15,9 @@ const state = "s".repeat(43);
 const challenge = "c".repeat(43);
 
 const signing = Effect.gen(function* () {
-  const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+  const services = yield* Layer.build(TestCrypto);
+  const secureRandom = Context.get(services, SecureRandom.SecureRandom);
+  const digest = Context.get(services, Digest.Digest);
   const key = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
   const publicKey = {
     ...(yield* Effect.tryPromise(() => exportJWK(key.publicKey))),
@@ -32,7 +25,7 @@ const signing = Effect.gen(function* () {
     alg: "RS256",
   };
   const privateKey = Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(key.privateKey)));
-  return { crypto, key, publicKey, privateKey };
+  return { secureRandom, digest, key, publicKey, privateKey };
 });
 const discovery = {
   issuer,
@@ -83,7 +76,7 @@ it.effect(
   "pushes the exact consent, S256 and state with a locally signed assertion and returns only the bounded bank handoff",
   () =>
     Effect.gen(function* () {
-      const { crypto, key, publicKey, privateKey } = yield* signing;
+      const { secureRandom, digest, key, publicKey, privateKey } = yield* signing;
       const urls: string[] = [];
       const httpClient = HttpClient.make((request) =>
         Effect.gen(function* () {
@@ -105,7 +98,8 @@ it.effect(
         })
       );
       const result = yield* pushBancolombiaSandboxAuthorization({
-        crypto,
+        secureRandom,
+        digest,
         clientId,
         privateKey,
         publicKey,

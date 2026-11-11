@@ -512,7 +512,14 @@ const result = await Effect.runPromiseExit(
   main.pipe(
     Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
     Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
-    Effect.provide(Layer.mergeAll(BunCrypto.layer, BunFileSystem.layer, VerificationHttpLive))
+    Effect.provide(
+      Layer.mergeAll(
+        BunCrypto.layerSecureRandom,
+        BunCrypto.layerDigest,
+        BunFileSystem.layer,
+        VerificationHttpLive
+      )
+    )
   )
 );
 if (Exit.isFailure(result)) {

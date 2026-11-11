@@ -10,6 +10,33 @@ runs:
     - name: Verify archive refusal and credential isolation
       shell: bash
       run: python3 scripts/cli-release/test-packaged.py
+    - name: Select Linux native package cache identity
+      if: runner.os == 'Linux'
+      id: native-packages
+      shell: bash
+      run: |
+        echo "image=$ImageVersion" >> "$GITHUB_OUTPUT"
+        mkdir -p /tmp/fidy-native-package-archives
+    - name: Restore Linux native package downloads
+      if: runner.os == 'Linux'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: /tmp/fidy-native-package-archives/*.deb
+        key: ${{ runner.os }}-${{ runner.arch }}-native-packages-v2-${{ steps.native-packages.outputs.image }}
+    - name: Install Linux native credential dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        packages=(dbus-x11 gnome-keyring libsecret-1-0)
+        apt_options=(-o Dir::Cache::archives=/tmp/fidy-native-package-archives -o DPkg::Lock::Timeout=30)
+        if ! sudo timeout --kill-after=10s 180s apt-get "${apt_options[@]}" \
+          -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 \
+          install --download-only -y --no-install-recommends "${packages[@]}"; then
+          echo '::error::Linux native credential dependencies could not be downloaded within 180 seconds. Check Ubuntu mirror DNS/connectivity; credential verification has not run.'
+          exit 1
+        fi
+        sudo timeout --kill-after=10s 120s env NEEDRESTART_SUSPEND=1 apt-get "${apt_options[@]}" \
+          install --no-download -y --no-install-recommends "${packages[@]}"
     - name: Initialize disposable macOS test keychain
       if: runner.os == 'macOS'
       shell: bash
@@ -28,7 +55,6 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         if [[ "$RUNNER_OS" == Linux ]]; then
-          sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
           dbus-run-session -- bash -euc '
             printf "%s" fidy-packaged-test-keyring | gnome-keyring-daemon --unlock --components=secrets
             python3 scripts/cli-release/verify-packaged.py --version "${FIDY_CLI_VERSION:-0.1.0}" --credentials

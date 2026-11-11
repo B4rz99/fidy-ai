@@ -9,7 +9,7 @@ import { ReceivedEmailId } from "../../../src/core/ingestion/contract";
 import { CapturedInterpretationContext } from "../../../src/core/interpretation-evidence/contract";
 import { prepareNotificationEmailCapture } from "../../transactions/operations";
 import { interpretNotificationEmail } from "../../../src/shell/ingestion/operations";
-import { emailCrypto } from "./forwarded-email";
+import { emailSecureRandom } from "./forwarded-email";
 
 const maximumTimeZoneCharacters = 128;
 const Receipt = Schema.Struct({
@@ -215,7 +215,7 @@ const acceptedStatements = (
       extraction,
       categoryId: fallbackCaptureCategory(extraction.direction),
       attestation: {
-        id: yield* emailCrypto.randomUUIDv4(),
+        id: yield* emailSecureRandom.uuidV4(),
         serviceMarket: "CO",
         locale: "es-CO",
         timeZone: settlement.receipt.time_zone,
@@ -294,7 +294,7 @@ const settle = (
   EmailProcessingUnavailable | Schema.SchemaError | PlatformError.PlatformError
 > =>
   Effect.gen(function* () {
-    const id = yield* emailCrypto.randomUUIDv4();
+    const id = yield* emailSecureRandom.uuidV4();
     const now = yield* Clock.currentTimeMillis;
     const settlement: Settlement = {
       input,
@@ -312,7 +312,7 @@ const settle = (
     // The deterministic, versioned, allowlisted structural transform is the approval policy.
     // Do not retain uncertain/unrecognized email structure indefinitely.
     if (Option.isSome(material.html) && material.interpretation._tag === "Interpreted") {
-      const sampleId = yield* emailCrypto.randomUUIDv4();
+      const sampleId = yield* emailSecureRandom.uuidV4();
       statements.push(sampleStatement(settlement, sampleId, material.html.value));
     }
     statements.push(

@@ -1,6 +1,6 @@
 import type { OAuthRecentActivity } from "../../../src/core/audit/contract";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
-import { OAuthRevocationAdmission } from "../contract";
+import { BootstrapUnavailable, OAuthRevocationAdmission } from "../contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
@@ -20,7 +20,7 @@ import { prepareOAuthActivityPage } from "../../../src/shell/audit/operations";
 import { liveSessionConditions } from "../../../src/shell/web-session/operations";
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
 import { browserSession } from "../../web-session/operations";
-import { type BootstrapInvalid, BootstrapUnavailable, dbWork, decodePayload } from "./bootstrap";
+import { type BootstrapInvalid, dbWork, decodePayload } from "./bootstrap";
 import { oauthResponse } from "./response";
 
 type ManagementInput = Readonly<{

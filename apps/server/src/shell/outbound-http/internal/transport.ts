@@ -5,6 +5,7 @@ import {
   type HttpClientError,
   type HttpClientRequest,
   type HttpClientResponse,
+  HttpMethod,
 } from "effect/http";
 
 import {
@@ -279,7 +280,9 @@ export const makeProviderTransport =
           Effect.tap(annotateOutcome),
           Effect.withSpan("provider.request", {
             kind: "client",
-            attributes: projectExternalHttpRequest(request.method, provider),
+            attributes: HttpMethod.isHttpMethod(request.method)
+              ? projectExternalHttpRequest(request.method, provider)
+              : { "fidy.provider": provider },
           }),
           Effect.flatMap(
             Exit.match({

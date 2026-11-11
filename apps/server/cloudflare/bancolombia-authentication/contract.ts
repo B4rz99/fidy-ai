@@ -1,6 +1,7 @@
+import { type Digest, type SecureRandom } from "effect/crypto";
 import { ConnectionConsentIntent } from "../connections/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { type Crypto, Data, type Effect, type Option, type Redacted, Schema } from "effect";
+import { Data, type Effect, type Option, type Redacted, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { JWK } from "jose";
 import { UtcTimestamp } from "../../src/core/_shared/time";
@@ -85,7 +86,8 @@ export type BancolombiaActivationInput = Readonly<{
 }>;
 
 export type SandboxAuthenticationInput = Readonly<{
-  crypto: Crypto.Crypto;
+  secureRandom: SecureRandom.SecureRandom["Service"];
+  digest: Digest.Digest["Service"];
   clientId: string;
   privateKey: Redacted.Redacted<string>;
   publicKey: JWK;

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
+import { SecureRandom } from "effect/crypto";
 import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
-import { Crypto, Effect, FileSystem, Option, Schema } from "effect";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import * as XLSX from "xlsx/xlsx.mjs";
 import type { WorkBook, WorkSheet } from "xlsx";
@@ -478,7 +479,7 @@ const program = Effect.gen(function* () {
     }).pipe(Effect.orDie)
   );
   const suffix = remote
-    ? (yield* (yield* Crypto.Crypto).randomUUIDv4()).slice(0, proofNameSuffixLength)
+    ? (yield* (yield* SecureRandom.SecureRandom).uuidV4()).slice(0, proofNameSuffixLength)
     : "local";
   const name = `xlsx-proof-${suffix}`;
   yield* buildWorker(name);
@@ -515,5 +516,13 @@ const program = Effect.gen(function* () {
   });
 });
 await Effect.runPromise(
-  program.pipe(Effect.scoped, Effect.provide([BunFileSystem.layer, BunCrypto.layer, ProofHttpLive]))
+  program.pipe(
+    Effect.scoped,
+    Effect.provide([
+      BunFileSystem.layer,
+      BunCrypto.layerSecureRandom,
+      BunCrypto.layerDigest,
+      ProofHttpLive,
+    ])
+  )
 );

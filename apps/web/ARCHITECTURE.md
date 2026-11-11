@@ -37,6 +37,16 @@ and enrollment refusals never gain automatic replay. Cancellation interrupts pac
 in-flight transport. Shared and server state belongs to Effect
 Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
 
+Connection continuation mounts one private task under the validated public attempt and immutable
+session binding. Its synchronous admission gate is consumed before dispatch and never reopened by a
+Ready read, including after an unconfirmed POST. Reads retain the canonical continuation review;
+pending or failed refreshes suppress actions. Disposal retires callbacks and interrupts local work
+without claiming remote rollback. Original attempt and shorter handoff deadlines are checked at
+action time as well as by authentication-registry expiry work, including auxiliary link navigation.
+The same expiry projection disables refresh and removes the bank handoff.
+Bank handoff remains distinct from Connection activation. Existing browser transport diagnostics
+cover these calls; this local admission change adds no telemetry or browser persistence.
+
 The hosted conversation derives its client directly from the existing `HostedTurnApi` declaration.
 It shares the same browser HTTP policy, transfer budget and immutable session binding as the other
 clients, without constructing the canonical API catalog when loaded independently.
@@ -413,13 +423,31 @@ within the shorter bank deadline. ResourceLimited non-admission can be paced wit
 request budget; uncertain POST outcomes cannot be replayed. Real sandbox preparation requires a private, same-User profile and a bounded operator test window. Callback credentials, Account discovery and
 activation remain unavailable until the verified institution capsule is installed.
 
+One mounted request-bound review task owns the selected scope subset and duration. Its shared
+synchronous admission gate permits one Conectar or Cancelar decision, including opposing actions
+in the same tick. Admission freezes the displayed choice; later selection callbacks cannot change it
+or acquire another decision. Its mount identity and synchronous authentication/page-departure
+retirement fence stale decisions, reads and navigation before delayed registry disposal; a submitted
+decision may still commit. Replacing a mount cannot reactivate an earlier decision's callbacks.
+Cancellation uncertainty retains its failure context while an explicit read calls the generated
+review client for the same request. Cached query success never restores eligibility. Only a fresh
+successful pending review supplies a new selection and requires another explicit decision; failed
+reads remain unavailable without claiming that authority is absent.
+
 Conectar submits the exact reviewed scope subset, duration and absolute expiration through the typed
 origin/CSRF-protected client. Its void command result prevents callback codes from entering Atom result
-state; it immediately navigates to the server-owned registered callback. Fidy never handles or stores
-access/refresh credentials. An ambiguous approval failure disables repeat approval and asks the User
-to restart from the agent.
+state; the private navigation adapter assigns the server-owned registered callback verbatim once.
+A normal assignment is only handoff, not proof of arrival or code exchange. Lost/malformed approval
+results and thrown navigation remain terminal uncertainty for that mounted decision and ask the
+User to restart from the agent. Callback URLs and codes never enter task state or failure text.
+Fidy never handles or stores access/refresh credentials.
 
 `/settings/access` composes independent mounted owners for manual PAT management, one-time PAT issuance and external MCP connections. Obsolete PAT and agent settings aliases are removed. The application owns composition and disposal; each feature retains its canonical client and command authority. MCP rows show declared name, approved Spanish permissions, absolute expiration and status, while duplicate names remain separate through canonical identity. Pagination belongs to the router and server resources/commands belong to the authentication registry. Individual and aggregate revocation remain separate for PATs and MCP connections. Successful commands invalidate their own list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails. The mounted manual PAT issuance module encloses review, request identity, command outcomes and same-User draft continuation. Presentation receives display state and User actions. Issued PAT bearer disclosure remains in its private child owner and is cleared when the combined page leaves the authentication lifetime; late command completion cannot restore it.
+
+Mounted PAT management owns one synchronous single/all revocation gate and retains its exact
+review independently of metadata row changes. Command receipts and current query observations stay
+separate: uncertainty permits explicit metadata recovery, never mutation replay. Authentication
+retirement and disposal fence actions and completions and interrupt owned command/recovery waits.
 
 Manual PAT review captures an immutable normalized grant and one request identity. Task actions bind
 to the rendered state and active mounted owner; editing, clearing or replacing the review invalidates

@@ -1,3 +1,4 @@
+import { SecureRandom } from "effect/crypto";
 import { reviewCancellation } from "./cancellation-review";
 import { HostedTurnConfirmation } from "../../../src/shell/agent/contract";
 import type { ConfirmationRead } from "./confirmation-description";
@@ -8,7 +9,7 @@ import {
 } from "../../../src/core/agent/contract";
 import { type UserId } from "../../../src/core/identity/contract";
 import { type HostedSubject, hostedAuthority, isWhatsAppHosted } from "./hosted-authority";
-import { type Cause, Crypto, Effect, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
@@ -71,12 +72,12 @@ export const issueHostedConfirmation = ({
 }: IssueConfirmationInput): Effect.Effect<
   Option.Option<ConfirmationPreparation>,
   Cause.UnknownError | Schema.SchemaError,
-  Crypto.Crypto
+  SecureRandom.SecureRandom
 > =>
   Effect.gen(function* () {
     const cancellation = yield* reviewCancellation({ operation: operation.id, input, read });
     if (cancellation._tag === "Notice") return Option.some(cancellation);
-    const crypto = yield* Crypto.Crypto;
+    const crypto = yield* SecureRandom.SecureRandom;
     const nonce = yield* crypto.randomBytes(nonceBytes).pipe(Effect.option);
     if (Option.isNone(nonce)) return Option.none();
     const command = commandPrefix + Hex.encode(nonce.value);

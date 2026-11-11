@@ -416,7 +416,7 @@ for (const viewport of viewports) {
 }
 
 for (const viewport of viewports) {
-  test(`OAuth cancellation failure retains a readable review and explicit retry in ${viewport.name}`, ({
+  test(`OAuth cancellation uncertainty requires a fresh review before another decision in ${viewport.name}`, ({
     page,
   }) =>
     Effect.runPromise(
@@ -433,24 +433,39 @@ for (const viewport of viewports) {
         const cancel = page.getByRole("button", { name: "Cancelar", exact: true });
         yield* Effect.tryPromise((signal) => cancel.click({ signal }));
         yield* Effect.tryPromise((signal) =>
-          expect(page.getByRole("alert")).toContainText("No pudimos cancelar", { signal })
+          expect(page.getByRole("alert")).toContainText("No pudimos confirmar la cancelación", {
+            signal,
+          })
         );
-        yield* Effect.tryPromise((signal) => expect(cancel).toBeEnabled({ signal }));
+        yield* Effect.tryPromise((signal) => expect(cancel).toHaveCount(0, { signal }));
         yield* Effect.tryPromise((signal) =>
-          expect(page.getByRole("heading", { name: "Agente de ejemplo", exact: true })).toBeVisible(
-            { signal }
-          )
+          expect(
+            page.getByRole("heading", { name: "Cancelación sin confirmar", exact: true })
+          ).toBeVisible({ signal })
         );
-        if (viewport.name === "desktop") {
-          yield* Effect.tryPromise((signal) =>
-            expect(
-              page.getByRole("heading", { name: "Agente de ejemplo", exact: true })
-            ).toBeInViewport({ signal })
-          );
-        }
         yield* Effect.tryPromise(() => page.evaluate(scrollToTop));
         yield* capture(page, `connection-cancel-failed-light-${viewport.name}`);
-        const retried = yield* installOAuthReview(page);
+        const retried = yield* installOAuthReview(page, {
+          review: "loading",
+          consent: "granted",
+          mutation: "success",
+        });
+        yield* Effect.tryPromise((signal) =>
+          page.getByRole("button", { name: "Volver a leer la solicitud" }).click({ signal })
+        );
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("status")).toContainText("Cargando solicitud", { signal })
+        );
+        yield* Effect.tryPromise((signal) =>
+          expect(page.getByRole("alert")).toContainText("No pudimos confirmar la cancelación", {
+            signal,
+          })
+        );
+        yield* Effect.tryPromise((signal) => expect(cancel).toHaveCount(0, { signal }));
+        yield* capture(page, `connection-cancel-reading-light-${viewport.name}`);
+        expect(retried.mutations).toHaveLength(0);
+        retried.release();
+        yield* Effect.tryPromise((signal) => expect(cancel).toBeEnabled({ signal }));
         yield* Effect.tryPromise((signal) => cancel.click({ signal }));
         yield* Effect.tryPromise((signal) =>
           expect(page.getByRole("status")).toContainText("No se autorizó ningún acceso", { signal })
@@ -459,7 +474,6 @@ for (const viewport of viewports) {
         expect(retried.mutations).toHaveLength(1);
         expect(failed.unexpected).toEqual([]);
         expect(retried.unexpected).toEqual([]);
-        yield* Effect.tryPromise((signal) => expect(cancel).toHaveCount(0, { signal }));
       })
     ));
 }

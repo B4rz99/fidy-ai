@@ -346,6 +346,15 @@ Verified delivery that wins that unit completes with its exact text; unresolved 
 recovery freezes cannot later become a successful Turn. Every terminal unit reconciles retained
 canonical commit fences into missing tool-result evidence before appending its one terminal entry.
 Neither recovery nor repeated terminalization reexecutes canonical tools or renews proposal time.
+Hosted reply submission reloads the retained
+same-User route, stages exact text and correlation, schedules the original proposal deadline, and
+claims once under a fresh clock, current association/business endpoint and verified service window
+before calling the sender. Provider acceptance remains pending delivery. Hosted receipts must prove
+the retained recipient BSUID or sandbox phone from raw provider status history before binding a
+message identifier or settling; missing or mismatched recipient evidence grants no delivery.
+Authenticated receipts cannot revive a rejected or unconfirmed hosted reply. Proactive templates and voice refusals retain
+their separate admission, expiry and recovery protocols.
+
 Verified WhatsApp Turns discover every installed canonical operation permitted by the catalog access
 policy. Query and mutation adapters reuse their canonical owners under live held Turn authority,
 including User isolation, audit, confirmation policy and atomic batch commit fences. Browser credentials

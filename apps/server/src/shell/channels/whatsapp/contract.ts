@@ -375,6 +375,8 @@ export type WhatsAppDisclosureLifecycleEvidence = WhatsAppDisclosureLifecycleEvi
 
 /** Authenticated Kapso status for a hosted reply, not evidence of browser rendering. */
 export type WhatsAppHostedLifecycleEvidence = Readonly<{
+  recipientUserId: Option.Option<WhatsAppBusinessScopedUserId>;
+  recipientPhone: Option.Option<E164PhoneNumber>;
   correlationToken: HostedDeliveryCorrelationToken;
   messageEvidence: WhatsAppMessageEvidence;
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;

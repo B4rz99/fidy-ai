@@ -75,18 +75,12 @@ import { type TransactionSubject } from "../../canonical-work/operations";
 import { newId } from "../../secret-material/operations";
 import { makeSecureRandom } from "../../secret-material/runtime";
 import {
+  type WhatsAppHostedRecipient,
   type WhatsAppHostedSubject,
   type WhatsAppInboundEvidence,
   type WhatsAppUnavailable,
 } from "../../whatsapp/contract";
-import {
-  isWhatsAppWindowOpen,
-  readWhatsAppPendingWork,
-  recordWhatsAppSend,
-  rejectUnstartedWhatsAppDelivery,
-  stageWhatsAppDelivery,
-  startWhatsAppSend,
-} from "../../whatsapp/operations";
+import { readWhatsAppPendingWork, submitHostedReply } from "../../whatsapp/operations";
 import {
   type HostedSubject,
   hostedAuthority as heldAuthority,
@@ -220,6 +214,7 @@ type WhatsAppHostedDelivery = Readonly<{
       turnId: TranscriptTurnId;
       correlationToken: HostedDeliveryCorrelationToken;
       confirmation: Option.Option<typeof HostedTurnConfirmation.Type>;
+      recipient: WhatsAppHostedRecipient;
     }>
   ) => Effect.Effect<
     | Readonly<{ kind: "accepted"; messageId: WhatsAppProviderMessageId }>
@@ -2014,57 +2009,27 @@ const proposeWhatsAppDelivery = ({
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
 }>): Effect.Effect<Response, HostedWorkFailure> =>
   Effect.gen(function* () {
-    if (
-      !(yield* isWhatsAppWindowOpen({ db, userId, turnId, now: yield* Clock.currentTimeMillis }))
-    ) {
-      yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
-      return Response.json({ status: "delivery_failed" }, { status: 202, headers: noStore });
-    }
-    const token = yield* stageWhatsAppDelivery({
+    const submitted = yield* submitHostedReply({
       db,
       userId,
       turnId,
       text: answer,
-      now: yield* Clock.currentTimeMillis,
+      scheduleRecovery,
+      send: (input) =>
+        Effect.gen(function* () {
+          const confirmation = yield* readWhatsAppConfirmation({
+            db,
+            userId,
+            turnId,
+            now: yield* Clock.currentTimeMillis,
+          });
+          return yield* deliver.send({ ...input, confirmation });
+        }),
     });
-    if (Option.isNone(token)) return unavailable();
-    const recoveryAt = (yield* Clock.currentTimeMillis) + deliveryAcknowledgmentWindowMs;
-    yield* Effect.tryPromise(() => scheduleRecovery(recoveryAt));
-    const started = yield* startWhatsAppSend({
-      db,
-      userId,
-      turnId,
-      token: token.value,
-      now: yield* Clock.currentTimeMillis,
-    });
-    if (!started) {
-      yield* rejectUnstartedWhatsAppDelivery({ db, userId, turnId, token: token.value });
+    if (submitted._tag === "NotSubmitted") return unavailable();
+    if (submitted._tag === "Refused") {
       yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
       return Response.json({ status: "delivery_failed" }, { status: 202, headers: noStore });
-    }
-    const confirmation = yield* readWhatsAppConfirmation({
-      db,
-      userId,
-      turnId,
-      now: yield* Clock.currentTimeMillis,
-    });
-    const sent = yield* deliver
-      .send({
-        text: answer,
-        turnId,
-        correlationToken: token.value,
-        confirmation,
-      })
-      .pipe(Effect.orElseSucceed(() => ({ kind: "ambiguous" as const })));
-    const recorded = yield* recordWhatsAppSend({
-      db,
-      userId,
-      turnId,
-      token: token.value,
-      outcome: sent,
-    });
-    if (sent.kind === "rejected" && recorded) {
-      yield* finish({ _tag: "Failed", reason: "DeliveryFailed" });
     }
     return Response.json(
       { status: "awaiting_delivery", turnId },

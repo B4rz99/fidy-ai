@@ -175,6 +175,8 @@ export const WhatsAppInboundAdmission = Schema.Union([
 
 /** Internal, authenticated Core-to-User-coordinator status projection; no text or bearer. */
 export const WhatsAppStatusAdmission = Schema.Struct({
+  recipientUserId: Schema.optionalKey(WhatsAppBusinessScopedUserId),
+  recipientPhone: Schema.optionalKey(E164PhoneNumber),
   userId: UserId,
   correlationToken: HostedDeliveryCorrelationToken,
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
@@ -205,6 +207,11 @@ export type WhatsAppPendingWork = Readonly<{
   replyToMessageId: Option.Option<WhatsAppProviderMessageId>;
   text: TranscriptText;
 }>;
+/** Current retained route for an exact hosted Turn, rechecked at send claim. */
+export type WhatsAppHostedRecipient = Pick<
+  WhatsAppPendingWork,
+  "portfolioId" | "bsuid" | "businessPhoneNumberId" | "sandboxPhone" | "replyToMessageId"
+>;
 /** Safe projection of one exact User-owned send attempt, never its private correlation or routing row. */
 export type WhatsAppDeliveryProposal = Readonly<{
   turnId: TranscriptTurnId;

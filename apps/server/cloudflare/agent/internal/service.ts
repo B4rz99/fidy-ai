@@ -254,10 +254,10 @@ const startWhatsAppTurn = ({
     deliver: {
       _tag: "WhatsApp",
       contextualReplyQuery: contextualProactiveInsightQuery(proof),
-      send: ({ text, correlationToken, confirmation }) =>
+      send: ({ text, correlationToken, confirmation, recipient }) =>
         sendWhatsAppAttempt({
           sender,
-          admission: proof,
+          admission: recipient,
           text,
           correlationToken,
           confirmation,
@@ -563,10 +563,10 @@ const runWhatsAppWork = (
               ...admission,
               userId: UserId.make(userId),
             }),
-            send: ({ text, correlationToken, confirmation }) =>
+            send: ({ text, correlationToken, confirmation, recipient }) =>
               sendWhatsAppAttempt({
                 sender: prepared.value.sender,
-                admission,
+                admission: recipient,
                 text,
                 correlationToken,
                 confirmation,

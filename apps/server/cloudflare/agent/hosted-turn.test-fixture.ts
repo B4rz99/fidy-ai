@@ -20,6 +20,7 @@ import {
   TranscriptTurnId,
 } from "../../src/core/agent/contract";
 import {
+  E164PhoneNumber,
   UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
@@ -359,17 +360,36 @@ export const queuedWhatsAppTurn = (
 ): Promise<TranscriptTurnId> =>
   queuedWhatsAppTurnWithMessage({ ...input, messageId: `wamid.isolation.${input.index}` });
 
-export const queuedWhatsAppTurnWithMessage = ({
-  db,
-  index,
-  text,
-  messageId,
-}: Readonly<{
+type WhatsAppQueuedMessage = Readonly<{
   db: D1Database;
   index: 0 | 1;
   text: string;
   messageId: string;
-}>): Promise<TranscriptTurnId> =>
+}>;
+
+export const queuedWhatsAppTurnWithMessage = (
+  input: WhatsAppQueuedMessage
+): Promise<TranscriptTurnId> => queueWhatsAppMessage(input, Option.none());
+
+export const queuedSandboxWhatsAppTurn = (
+  input: WhatsAppQueuedMessage
+): Promise<TranscriptTurnId> =>
+  queueWhatsAppMessage(input, Option.some(E164PhoneNumber.make("+573001234567")));
+
+const queueWhatsAppMessage = (
+  {
+    db,
+    index,
+    text,
+    messageId,
+  }: Readonly<{
+    db: D1Database;
+    index: 0 | 1;
+    text: string;
+    messageId: string;
+  }>,
+  sandboxPhone: Option.Option<E164PhoneNumber> = Option.none()
+): Promise<TranscriptTurnId> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const userId = UserId.make(users[index]);
@@ -399,7 +419,7 @@ export const queuedWhatsAppTurnWithMessage = ({
           inbound: WhatsAppInboundEvidence.make({
             messageId: WhatsAppProviderMessageId.make(messageId),
             replyToMessageId: Option.none(),
-            sandboxPhone: Option.none(),
+            sandboxPhone,
             businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
             occurredAtMs: now(),
             receivedAtMs: now(),
@@ -453,6 +473,8 @@ export const finishLatestWhatsAppFixture = ({
       db,
       userId: subject.userId,
       evidence: {
+        recipientUserId: Option.some(subject.bsuid),
+        recipientPhone: Option.none(),
         correlationToken: delivery.correlation_token,
         businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
         messageEvidence: {

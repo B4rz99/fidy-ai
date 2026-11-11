@@ -406,6 +406,12 @@ const handleHostedLifecycle = (
       return yield* attempt(() =>
         environment.onHostedStatus({
           userId: user.value,
+          ...(Option.isNone(evidence.recipientUserId)
+            ? {}
+            : { recipientUserId: evidence.recipientUserId.value }),
+          ...(Option.isNone(evidence.recipientPhone)
+            ? {}
+            : { recipientPhone: evidence.recipientPhone.value }),
           correlationToken: evidence.correlationToken,
           businessPhoneNumberId: evidence.businessPhoneNumberId,
           providerMessageId: evidence.messageEvidence.providerMessageId,

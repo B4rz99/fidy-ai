@@ -34,6 +34,7 @@ import {
   latestRejection,
   prepareDecision,
   queuedAction,
+  currentGrantQuery as weeklyGrantQuery,
 } from "./internal/weekly-consent";
 import type {
   PreparedProactivityConsentDecision,
@@ -301,3 +302,6 @@ export const recordWebOnboardingConsent = (
       input.acceptedAtMs,
       input.acceptedAtMs
     );
+
+/** Current weekly grant identity for atomic attention evidence correlation. */
+export const currentWeeklyGrantQuery: typeof weeklyGrantQuery = (input) => weeklyGrantQuery(input);

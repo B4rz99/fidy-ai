@@ -106,7 +106,7 @@ export const controlManualReminders: typeof controlReminderOwned = (input) =>
 /** Observe independent reminder-only attention under current processing Consent. */
 export const findReminderGovernor: typeof findReminderGovernorOwned = (input) =>
   findReminderGovernorOwned(input);
-/** Compose one-shot verified reminder/question evidence with exact Transcript settlement. */
+/** Compose one-shot verified reminder/question evidence with Transcript settlement. Execute the ordered group contiguously in one native batch; changes() couples its count marker and governor update. */
 export const prepareReminderDelivery: typeof prepareReminderDeliveryOwned = (input) =>
   prepareReminderDeliveryOwned(input);
 /** Reset only from same-User channel-qualified reminder/question reply evidence. */

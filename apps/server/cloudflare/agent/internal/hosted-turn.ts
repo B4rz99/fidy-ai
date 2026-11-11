@@ -33,6 +33,7 @@ import {
   type CanonicalToolOutcome,
   CanonicalToolResultEntry,
   CompactedConversationOutput,
+  type HostedAgentSessionId,
   ToolCallId,
   TranscriptEntryId,
   TranscriptText,
@@ -542,20 +543,13 @@ const executeHostedTurn = (
     const isAborted = (): boolean => signal.aborted;
     if (isAborted()) return unavailable();
     const userId = UserId.make(subject.userId);
-    const snapshot = yield* readAdmissibleSnapshot({ db, subject, userId });
-    if (snapshot instanceof Response) return snapshot;
-    const startedAtMs = yield* Clock.currentTimeMillis;
-    const selection = selectHostedSession({ snapshot, userId, now: startedAtMs });
+    const preparation = yield* prepareHostedSession({ db, channel });
+    if (preparation instanceof Response) return preparation;
+    const { snapshot, startedAtMs } = preparation;
+    const selection = { id: preparation.sessionId };
     const activeTurnId = TranscriptTurnId.make(newId());
     if (Option.isSome(input.document) && "inbound" in input && Option.isSome(bucket)) {
-      const turn = yield* admitHostedTurn({
-        db,
-        channel,
-        selection,
-        text,
-        now: startedAtMs,
-        id: activeTurnId,
-      });
+      const turn = yield* preparation.commit({ text, id: activeTurnId });
       if (Option.isNone(turn)) return unauthenticated();
       if (Option.isSome(onAdmitted)) onAdmitted.value(turn.value);
       yield* Effect.tryPromise(() => scheduleRecovery(startedAtMs + pendingExecutionRecoveryMs));
@@ -627,14 +621,7 @@ const executeHostedTurn = (
           }),
       });
       if (Option.isNone(confirmation)) return unauthenticated();
-      const turn = yield* admitHostedTurn({
-        db,
-        channel,
-        selection,
-        text,
-        now: startedAtMs,
-        id: activeTurnId,
-      });
+      const turn = yield* preparation.commit({ text, id: activeTurnId });
       if (Option.isNone(turn)) return unauthenticated();
       if (isAborted()) {
         yield* recoverHostedTurn({
@@ -673,14 +660,7 @@ const executeHostedTurn = (
       contextualReplyQuery: "inbound" in input ? input.deliver.contextualReplyQuery : Option.none(),
     });
     if (Option.isNone(prepared) || isAborted()) return unavailable();
-    const turn = yield* admitHostedTurn({
-      db,
-      channel,
-      selection,
-      text,
-      now: startedAtMs,
-      id: activeTurnId,
-    });
+    const turn = yield* preparation.commit({ text, id: activeTurnId });
     if (Option.isNone(turn)) return unauthenticated();
     if (isAborted()) {
       yield* recoverHostedTurn({
@@ -716,6 +696,48 @@ const executeHostedTurn = (
     });
   });
 };
+
+type HostedSessionPreparation = Readonly<{
+  snapshot: HostedTurnSnapshot;
+  startedAtMs: number;
+  sessionId: HostedAgentSessionId;
+  commit: (
+    input: Readonly<{ id: TranscriptTurnId; text: TranscriptText }>
+  ) => ReturnType<typeof admitHostedTurn>;
+}>;
+
+/** Request-local admission preparation stays inside the same-User serialized execution. */
+const prepareHostedSession = ({
+  db,
+  channel,
+}: Readonly<{
+  db: D1Database;
+  channel: HostedAdmissionChannel;
+}>): Effect.Effect<HostedSessionPreparation | Response, HostedWorkFailure> =>
+  Effect.gen(function* () {
+    const userId = UserId.make(channel.subject.userId);
+    const snapshot = yield* readAdmissibleSnapshot({ db, subject: channel.subject, userId });
+    if (snapshot instanceof Response) return snapshot;
+    const startedAtMs = yield* Clock.currentTimeMillis;
+    const selection = selectHostedSession({ snapshot, userId, now: startedAtMs });
+    let consumed = false;
+    return {
+      snapshot,
+      startedAtMs,
+      sessionId: selection.id,
+      commit: ({
+        id,
+        text,
+      }: Readonly<{ id: TranscriptTurnId; text: TranscriptText }>): ReturnType<
+        typeof admitHostedTurn
+      > =>
+        Effect.suspend(() => {
+          if (consumed) return Effect.succeed(Option.none<TranscriptTurnId>());
+          consumed = true;
+          return admitHostedTurn({ db, channel, selection, text, now: startedAtMs, id });
+        }),
+    };
+  });
 
 const readAdmissibleSnapshot = ({
   db,

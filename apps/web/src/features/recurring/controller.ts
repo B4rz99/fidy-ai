@@ -1,8 +1,24 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Cause, type Context, Data, Effect, Exit, Option, Predicate, Stream } from "effect";
-import { AsyncResult, Atom, Reactivity } from "effect/reactivity";
-import { useRef, useState } from "react";
-import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
+import { RegistryContext, useAtomSet, useAtomValue } from "@effect/atom-react";
+import {
+  Cause,
+  type Context,
+  Data,
+  Effect,
+  Equal,
+  Exit,
+  Option,
+  Predicate,
+  Schema,
+  Stream,
+} from "effect";
+import { AsyncResult, Atom, type AtomRegistry, Reactivity } from "effect/reactivity";
+import { type RefCallback, useCallback, useContext, useState } from "react";
+import {
+  type CanonicalInput,
+  type CanonicalSuccess,
+  type FidyClient,
+  RecurringEdit,
+} from "@/transport/client";
 import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/canonical-query";
 import {
   revalidateWorkspaceQuery,
@@ -17,6 +33,8 @@ export type SaveState = "idle" | "saving" | "rejected" | "uncertain" | "refreshi
 type WriteOutcome =
   | Readonly<{
       state: "saved";
+      input: CanonicalInput<"recurringPlans.applyRecurringEdit">;
+      result: CanonicalSuccess<"recurringPlans.applyRecurringEdit">;
       revision: Workspace["document"]["revision"];
       confirmation: Option.Option<LifecycleConfirmation>;
       editConfirmation: Option.Option<string>;
@@ -75,6 +93,8 @@ type PlanningState = Readonly<{
   waiting: boolean;
   disabled: boolean;
   save: Save;
+  mounted: RefCallback<HTMLElement>;
+  admit: RefCallback<HTMLElement>;
   retry: () => void;
 }>;
 const confirmedPlanStatus =
@@ -159,6 +179,8 @@ const makeCommands = (apiClient: FidyClient): Commands => {
           yield* Reactivity.invalidate([recurringWorkspaceKey]);
           return {
             state: "saved",
+            input,
+            result,
             revision: result.data.revision,
             confirmation: lifecycleConfirmation(result.data, input.payload.edit),
             editConfirmation: editConfirmation(result.data, input.payload.edit),
@@ -214,20 +236,6 @@ const writesDisabled = ({
   saveState === "uncertain";
 const queryStale = (state: CanonicalQueryState<unknown, unknown>): boolean =>
   state._tag === "Ready" && Option.isSome(state.refreshFailure);
-/** Editor completion waits for the acknowledged document, preventing stale drafts on reopen. */
-const useSaveCompletion = (
-  command: Commands["completion"],
-  query: Query
-): ((revision: CompletionInput["revision"], onSaved: () => void) => void) => {
-  const complete = useAtomSet(command, { mode: "promiseExit" });
-  return (revision, onSaved) => {
-    complete({ query, revision })
-      .then((exit) => {
-        if (Exit.isSuccess(exit) && exit.value) onSaved();
-      })
-      .catch(() => undefined);
-  };
-};
 const useSaveFeedback = (): Pick<PlanningState, "confirmation" | "editConfirmation"> &
   Readonly<{
     clear: () => void;
@@ -251,53 +259,99 @@ type PlanningOptions = Readonly<{
   profileWaiting: boolean;
   refreshProfile: () => void;
 }>;
+
+class PlanningQuery extends Data.Class<Query> {}
+type Interaction = Readonly<{
+  active: () => boolean;
+  generation: () => number;
+  submission: () => number;
+  nextSubmission: () => number;
+  status: () => SaveState;
+  transition: (next: SaveState) => void;
+  admit: (query: Query, disabled: boolean) => void;
+  permits: (query: Query) => boolean;
+  matches: (query: Query) => boolean;
+  mount: (interrupt: () => void) => () => void;
+}>;
+const makeInteraction = (): Interaction => {
+  let active = false;
+  let generation = 0;
+  let submission = 0;
+  let status: SaveState = "idle";
+  let admission: Option.Option<Readonly<{ query: Query; disabled: boolean }>> = Option.none();
+  return {
+    active: (): boolean => active,
+    generation: (): number => generation,
+    submission: (): number => submission,
+    nextSubmission: (): number => ++submission,
+    status: (): SaveState => status,
+    transition: (next: SaveState): void => {
+      status = next;
+    },
+    admit: (query: Query, disabled: boolean): void => {
+      admission = Option.some({ query: structuredClone(query), disabled });
+    },
+    matches: (query: Query): boolean =>
+      Option.exists(admission, (value) =>
+        Equal.equals(new PlanningQuery(value.query), new PlanningQuery(query))
+      ),
+    permits: (query: Query): boolean =>
+      Option.exists(
+        admission,
+        (value) =>
+          active &&
+          Equal.equals(new PlanningQuery(value.query), new PlanningQuery(query)) &&
+          !value.disabled
+      ),
+    mount: (interrupt: () => void): (() => void) => {
+      active = true;
+      return () => {
+        active = false;
+        generation += 1;
+        interrupt();
+      };
+    },
+  };
+};
 /** Retains write uncertainty across month and filter changes until an explicit reread succeeds. */
 export const useRecurringPlanning = (options: PlanningOptions): PlanningState => {
   const { apiClient, query, profileStale, profileWaiting, refreshProfile } = options;
   const [commands] = useState(() => makeCommands(apiClient));
-  const state = useAtomValue(commands.queries.workspace(query).view).pipe(presentCanonicalQuery);
+  const workspaceQuery = commands.queries.workspace(query);
+  const state = useAtomValue(workspaceQuery.view).pipe(presentCanonicalQuery);
   const categoryState = useAtomValue(commands.queries.categories.view).pipe(presentCanonicalQuery);
   const submit = useAtomSet(commands.write, { mode: "promiseExit" });
   const reread = useAtomSet(commands.refresh, { mode: "promiseExit" });
-  const admission = useRef(false);
+  const registry = useContext(RegistryContext);
+  const [owner] = useState(makeInteraction);
+  const mounted = useCallback<RefCallback<HTMLElement>>(
+    () => owner.mount(() => registry.set(commands.completion, Atom.Interrupt)),
+    [commands, owner, registry]
+  );
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const feedback = useSaveFeedback();
   const stale = profileStale || queryStale(state) || queryStale(categoryState);
   const waiting =
     profileWaiting || state.waiting || categoryState.waiting || saveState === "refreshing";
-  const complete = useSaveCompletion(commands.completion, query);
+  const complete = useAtomSet(commands.completion, { mode: "promiseExit" });
   const disabled = writesDisabled({ state, categoryState, waiting, stale, saveState });
-  const save: Save = (edit, onSaved = () => undefined) => {
-    if (disabled || admission.current || state._tag !== "Ready") return;
-    admission.current = true;
-    setSaveState("saving");
-    feedback.clear();
-    const finish = (outcome: WriteOutcome): void => {
-      admission.current = false;
-      setSaveState(outcome.state === "saved" ? "idle" : outcome.state);
-      if (outcome.state !== "saved") return;
-      feedback.confirm(outcome);
-      complete(outcome.revision, onSaved);
-    };
-    submit({
-      payload: { expectedRevision: state.value.data.document.revision, edit, view: "compact" },
-    })
-      .then((exit) => finish(Exit.isSuccess(exit) ? exit.value : { state: "uncertain" }))
-      .catch(() => finish({ state: "uncertain" }));
+  const admit: RefCallback<HTMLElement> = () => {
+    owner.admit(query, disabled);
   };
-  const retry = (): void => {
-    if (admission.current) return;
-    admission.current = true;
-    setSaveState("refreshing");
-    refreshProfile();
-    const finish = (succeeded: boolean): void => {
-      admission.current = false;
-      setSaveState(succeeded ? "idle" : saveState);
-    };
-    reread(query)
-      .then((exit) => finish(Exit.isSuccess(exit) && exit.value))
-      .catch(() => finish(false));
-  };
+  const { save, retry } = planningActions({
+    commands,
+    registry,
+    owner,
+    query,
+    state,
+    disabled,
+    submit,
+    complete,
+    reread,
+    feedback,
+    setSaveState,
+    refreshProfile,
+  });
   return {
     state,
     categoryState,
@@ -309,8 +363,122 @@ export const useRecurringPlanning = (options: PlanningOptions): PlanningState =>
     waiting,
     disabled,
     save,
+    mounted,
+    admit,
     retry,
   };
+};
+type Actions = Readonly<{
+  commands: Commands;
+  registry: AtomRegistry.AtomRegistry;
+  owner: Interaction;
+  query: Query;
+  state: PlanningState["state"];
+  disabled: boolean;
+  submit: (
+    input: CanonicalInput<"recurringPlans.applyRecurringEdit">
+  ) => Promise<Exit.Exit<WriteOutcome>>;
+  complete: (input: CompletionInput) => Promise<Exit.Exit<boolean>>;
+  reread: (query: Query) => Promise<Exit.Exit<boolean>>;
+  feedback: ReturnType<typeof useSaveFeedback>;
+  setSaveState: (state: SaveState) => void;
+  refreshProfile: () => void;
+}>;
+const planningActions = (options: Actions): Pick<PlanningState, "save" | "retry"> => ({
+  save: (edit, onSaved = () => undefined) => saveEdit(options, edit, onSaved),
+  retry: () => retryReads(options),
+});
+const freshQuery = (state: CanonicalQueryState<unknown, unknown>): boolean =>
+  state._tag === "Ready" && !state.waiting && !queryStale(state);
+const admittedRevision = ({
+  commands,
+  registry,
+  owner,
+  query,
+  state,
+  disabled,
+}: Actions): Option.Option<number> => {
+  const source = commands.queries.workspace(query).source;
+  if (
+    !owner.permits(query) ||
+    disabled ||
+    ["saving", "uncertain", "refreshing"].includes(owner.status())
+  ) {
+    return Option.none();
+  }
+  const freshState = presentCanonicalQuery(registry.get(source));
+  const freshCategories = presentCanonicalQuery(registry.get(commands.queries.categories.source));
+  if (state._tag !== "Ready" || freshState._tag !== "Ready") return Option.none();
+  if (
+    ![freshState, freshCategories].every(freshQuery) ||
+    freshState.value.data.document.revision !== state.value.data.document.revision
+  ) {
+    return Option.none();
+  }
+  return Option.some(state.value.data.document.revision);
+};
+const editCodec = Schema.toCodecJson(RecurringEdit);
+const snapshotEdit = (edit: Edit): Edit =>
+  Schema.decodeSync(editCodec)(structuredClone(Schema.encodeSync(editCodec)(edit)));
+const saveEdit = (options: Actions, edit: Edit, onSaved: () => void): void => {
+  const { owner, query, setSaveState, feedback, complete, submit } = options;
+  const revision = admittedRevision(options);
+  if (Option.isNone(revision)) return;
+  const savedEdit = snapshotEdit(edit);
+  const originatingQuery = structuredClone(query);
+  owner.transition("saving");
+  const generation = owner.generation();
+  const submission = owner.nextSubmission();
+  const current = (): boolean =>
+    owner.active() && owner.generation() === generation && owner.submission() === submission;
+  setSaveState("saving");
+  feedback.clear();
+  const finish = (outcome: WriteOutcome): void => {
+    if (!current()) return;
+    owner.transition(outcome.state === "saved" ? "idle" : outcome.state);
+    setSaveState(owner.status());
+    if (outcome.state !== "saved") return;
+    feedback.confirm(outcome);
+    complete({ query: originatingQuery, revision: outcome.revision })
+      .then((exit) => {
+        if (current() && Exit.isSuccess(exit) && exit.value) onSaved();
+      })
+      .catch(() => undefined);
+  };
+  submit({
+    payload: {
+      expectedRevision: revision.value,
+      edit: savedEdit,
+      view: "compact",
+    },
+  })
+    .then(
+      (exit) => finish(Exit.isSuccess(exit) ? exit.value : { state: "uncertain" }),
+      () => finish({ state: "uncertain" })
+    )
+    .catch(() => undefined);
+};
+const retryReads = ({ owner, setSaveState, refreshProfile, reread, query }: Actions): void => {
+  if (
+    !owner.active() ||
+    !owner.matches(query) ||
+    ["saving", "refreshing"].includes(owner.status())
+  ) {
+    return;
+  }
+  const prior = owner.status();
+  const generation = owner.generation();
+  owner.transition("refreshing");
+  setSaveState("refreshing");
+  refreshProfile();
+  const finish = (succeeded: boolean): void => {
+    if (!owner.active() || owner.generation() !== generation) return;
+    owner.transition(succeeded ? "idle" : prior);
+    setSaveState(owner.status());
+  };
+  reread(query)
+    .then((exit) => finish(Exit.isSuccess(exit) && exit.value))
+    .catch(() => finish(false));
 };
 export const recurringWorkspaceQuery = ({
   apiClient,

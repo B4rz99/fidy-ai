@@ -6,7 +6,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
-import { RecurringPlanId, RecurringPlanInput, makeFidyClient } from "@/transport/client";
+import { RecurringEdit, RecurringPlanId, RecurringPlanInput, makeFidyClient } from "@/transport/client";
 import { type Edit, type Plan, currentPlan, planStatus, planToday } from "./model";
 import { recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
 
@@ -53,27 +53,33 @@ const workspace = {
 const PlanningProbe = ({
   client,
   onSaved,
+  month,
+  profileStale,
+  duplicate,
   edit,
   plan,
 }: Readonly<{
   client: ReturnType<typeof makeFidyClient>;
   onSaved: () => void;
+  month: string;
+  profileStale: boolean;
+  duplicate: boolean;
   edit: Option.Option<Edit>;
   plan: Option.Option<Plan>;
 }>): ReturnType<typeof createElement> => {
   const planning = useRecurringPlanning({
     apiClient: client,
-    query: { month: "2026-10", view: "compact" },
-    profileStale: false,
+    query: { month, view: "compact" },
+    profileStale,
     profileWaiting: false,
     refreshProfile: () => undefined,
   });
   return createElement(
     "main",
-    null,
+    { ref: planning.mounted },
     createElement(
       "output",
-      null,
+      { ref: planning.admit },
       planning.saveState,
       Option.match(planning.confirmation, {
         onNone: () => "",
@@ -84,22 +90,17 @@ const PlanningProbe = ({
       "button",
       {
         disabled: planning.disabled,
-        onClick: () =>
-          planning.save(
-            Option.isSome(edit)
-              ? edit.value
-              : { kind: "lifecycle", planId, date: "2026-10-29", action: "pause" },
-            onSaved
-          ),
+        onClick: () => {
+          const submitted = Option.getOrElse(edit, () => ({ kind: "lifecycle", planId, date: "2026-10-29", action: "pause" }) as const);
+          planning.save(submitted, onSaved);
+          if (duplicate) planning.save(submitted, onSaved);
+          if (Option.isNone(edit)) Object.assign(submitted, { action: "stop" });
+        },
       },
       "Pause"
     ),
     createElement("button", { onClick: planning.retry }, "Refresh"),
-    createElement(
-      "output",
-      { "data-standing": true },
-      Option.match(plan, { onNone: () => "", onSome: planning.statusFor })
-    )
+    createElement("output", { "data-standing": true }, Option.match(plan, { onNone: () => "", onSome: planning.statusFor }))
   );
 };
 
@@ -146,10 +147,12 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
                   RegistryContext.Provider,
                   { value: registry },
                   createElement(PlanningProbe, {
+edit: Option.none(), plan: Option.none(),
                     client,
                     onSaved,
-                    edit: Option.none(),
-                    plan: Option.none(),
+                    month: "2026-10",
+                    profileStale: false,
+                    duplicate: false,
                   })
                 )
               )
@@ -212,6 +215,20 @@ const planningHttp = (
     })();
     return Effect.map(response, (value) => HttpClientResponse.fromWeb(request, value));
   });
+};
+const recordedPlanningHttp = (
+  reply: Deferred.Deferred<Response>,
+  reread: { current: Deferred.Deferred<Response> }
+): Readonly<{ http: HttpClient.HttpClient; requests: ReadonlyArray<string> }> => {
+  const requests: string[] = [];
+  const base = planningHttp(reply, reread);
+  const http = HttpClient.make((request) => {
+    if (request.method === "POST" && request.body._tag === "Uint8Array") {
+      requests.push(new TextDecoder().decode(request.body.body));
+    }
+    return base.execute(request);
+  });
+  return { http, requests };
 };
 const failReread = (reply: Deferred.Deferred<Response>): Promise<void> =>
   Promise.resolve(
@@ -317,6 +334,371 @@ it("retains equivalent mounted Recurring queries through collection and rerender
         vi.restoreAllMocks();
         for (const unmount of mounts) unmount();
         registry.dispose();
+      }
+    })
+  ));
+
+it("snapshots one exact edit before dispatch and contains a throwing visible callback", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const reply = Deferred.makeUnsafe<Response>();
+      const reread = { current: Deferred.makeUnsafe<Response>() };
+      const { http, requests } = recordedPlanningHttp(reply, reread);
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, http),
+      });
+      const registry = AtomRegistry.make();
+      const container = window.document.createElement("div");
+      const root = createRoot(container);
+      const onSaved = vi.fn(() => {
+        throw new Error("Broken presentation callback");
+      });
+      try {
+        yield* Effect.tryPromise(() =>
+          reactWork(() =>
+            root.render(
+              createElement(
+                RegistryContext.Provider,
+                { value: registry },
+                createElement(PlanningProbe, {
+edit: Option.none(), plan: Option.none(),
+                  client,
+                  onSaved,
+                  month: "2026-10",
+                  profileStale: false,
+                  duplicate: true,
+                })
+              )
+            )
+          )
+        );
+        const pause = container.querySelector("button");
+        if (pause === null) throw new Error("Missing pause action");
+        yield* Effect.tryPromise(() => reactAssertion(() => expect(pause.disabled).toBe(false)));
+        yield* Effect.tryPromise(() => reactWork(() => pause.click()));
+        yield* Effect.tryPromise(() => reactAssertion(() => expect(requests).toHaveLength(1)));
+        expect(
+          yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(requests[0] ?? "")
+        ).toMatchObject({
+          expectedRevision: 0,
+          edit: { action: "pause" },
+        });
+        yield* Effect.tryPromise(() => settleSave(reply, "confirmed"));
+        yield* Effect.tryPromise(() => settleReread(reread.current));
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => expect(onSaved).toHaveBeenCalledOnce())
+        );
+        expect(container.textContent).toContain("idleInternet QA:pause");
+      } finally {
+        yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
+        registry.dispose();
+        vi.unstubAllGlobals();
+      }
+    })
+  ));
+
+it.each(["confirmed", "uncertain"] as const)(
+  "keeps the originating receipt separate from navigation and explicit recovery: %s",
+  (outcome) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+        const reply = Deferred.makeUnsafe<Response>();
+        const origin = { current: Deferred.makeUnsafe<Response>() };
+        let submitted = false;
+        let writes = 0;
+        let categoryFailure = false;
+        const http = HttpClient.make((request) => {
+          if (request.method === "POST") {
+            submitted = true;
+            writes += 1;
+          }
+          const response = ((): Effect.Effect<Response> => {
+            if (request.method === "POST") return Deferred.await(reply);
+            if (request.url.endsWith("/categories")) {
+              return Effect.succeed(Response.json(categoryFailure ? {} : { data: [], next: [] }));
+            }
+            if (submitted && new Map(request.urlParams).get("month") === "2026-10") {
+              return Deferred.await(origin.current);
+            }
+            return Effect.succeed(
+              Response.json({
+                data: {
+                  ...workspace,
+                  document: { ...document, revision: submitted && outcome === "confirmed" ? 9 : 0 },
+                },
+                next: [],
+              })
+            );
+          })();
+          return Effect.map(response, (value) => HttpClientResponse.fromWeb(request, value));
+        });
+        const client = makeFidyClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(HttpClient.HttpClient, http),
+        });
+        const registry = AtomRegistry.make();
+        const container = window.document.createElement("div");
+        const root = createRoot(container);
+        const onSaved = vi.fn();
+        const render = (month: string, profileStale = false): Promise<void> =>
+          reactWork(() =>
+            root.render(
+              createElement(
+                RegistryContext.Provider,
+                { value: registry },
+                createElement(PlanningProbe, {
+edit: Option.none(), plan: Option.none(),
+                  client,
+                  onSaved,
+                  month,
+                  profileStale,
+                  duplicate: false,
+                })
+              )
+            )
+          );
+        const pause = (): HTMLButtonElement => {
+          const button = container.querySelector("button");
+          if (button === null) throw new Error("Missing pause action");
+          return button;
+        };
+        try {
+          yield* Effect.tryPromise(() => render("2026-10"));
+          yield* Effect.tryPromise(() =>
+            reactAssertion(() => expect(pause().disabled).toBe(false))
+          );
+          yield* Effect.tryPromise(() => reactWork(() => pause().click()));
+          yield* Effect.tryPromise(() => render("2026-11"));
+          yield* Effect.tryPromise(() => settleSave(reply, outcome));
+          yield* Effect.tryPromise(() =>
+            reactAssertion(() =>
+              expect(container.textContent).toContain(
+                outcome === "confirmed" ? "Internet QA:pause" : "uncertain"
+              )
+            )
+          );
+          expect(onSaved).not.toHaveBeenCalled();
+          expect(writes).toBe(1);
+          if (outcome === "confirmed") {
+            yield* Effect.tryPromise(() =>
+              reactWork(() => container.querySelectorAll("button")[1]?.click())
+            );
+            yield* Effect.tryPromise(() =>
+              reactAssertion(() => expect(pause().disabled).toBe(false))
+            );
+            expect(onSaved).not.toHaveBeenCalled();
+            yield* Effect.tryPromise(() => settleReread(origin.current));
+            yield* Effect.tryPromise(() =>
+              reactAssertion(() => expect(onSaved).toHaveBeenCalledOnce())
+            );
+          } else {
+            expect(pause().disabled).toBe(true);
+            categoryFailure = true;
+            yield* Effect.tryPromise(() =>
+              reactWork(() => container.querySelectorAll("button")[1]?.click())
+            );
+            yield* Effect.tryPromise(() =>
+              reactAssertion(() => expect(container.textContent).toContain("uncertain"))
+            );
+            expect(pause().disabled).toBe(true);
+            categoryFailure = false;
+            yield* Effect.tryPromise(() => render("2026-11", true));
+            yield* Effect.tryPromise(() =>
+              reactWork(() => container.querySelectorAll("button")[1]?.click())
+            );
+            yield* Effect.tryPromise(() =>
+              reactAssertion(() => expect(container.textContent).toContain("idle"))
+            );
+            expect(pause().disabled).toBe(true);
+            expect(container.textContent).not.toContain("Internet QA:pause");
+            yield* Effect.tryPromise(() => render("2026-11"));
+            yield* Effect.tryPromise(() =>
+              reactAssertion(() => expect(pause().disabled).toBe(false))
+            );
+          }
+          expect(writes).toBe(1);
+        } finally {
+          yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
+          registry.dispose();
+          vi.unstubAllGlobals();
+        }
+      })
+    )
+);
+
+const ActionsProbe = ({
+  client,
+  month,
+  stale,
+  retain,
+}: Readonly<{
+  client: ReturnType<typeof makeFidyClient>;
+  month: string;
+  stale: boolean;
+  retain: (planning: ReturnType<typeof useRecurringPlanning>) => void;
+}>): ReturnType<typeof createElement> => {
+  const planning = useRecurringPlanning({
+    apiClient: client,
+    query: { month, view: "compact" },
+    profileStale: stale,
+    profileWaiting: false,
+    refreshProfile: () => undefined,
+  });
+  return createElement(
+    "div",
+    { ref: planning.mounted },
+    createElement("output", { ref: planning.admit }, planning.saveState),
+    createElement("span", {
+      ref: () => {
+        retain(planning);
+      },
+    })
+  );
+};
+it("rejects obsolete save actions and fences acknowledged completion after disposal", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const reply = Deferred.makeUnsafe<Response>();
+      const reread = { current: Deferred.makeUnsafe<Response>() };
+      let writes = 0;
+      const base = planningHttp(reply, reread);
+      const http = HttpClient.make((request) => {
+        if (request.method === "POST") writes += 1;
+        return base.execute(request);
+      });
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, http),
+      });
+      const registry = AtomRegistry.make();
+      const root = createRoot(window.document.createElement("div"));
+      let planning: Option.Option<ReturnType<typeof useRecurringPlanning>> = Option.none();
+      const retain = (current: ReturnType<typeof useRecurringPlanning>): void => {
+        planning = Option.some(current);
+      };
+      const render = (month: string, stale: boolean): Promise<void> =>
+        reactWork(() =>
+          root.render(
+            createElement(
+              RegistryContext.Provider,
+              { value: registry },
+              createElement(ActionsProbe, { client, month, stale, retain })
+            )
+          )
+        );
+      const current = (): ReturnType<typeof useRecurringPlanning> => Option.getOrThrow(planning);
+      const edit = { kind: "lifecycle", planId, date: "2026-10-29", action: "pause" } as const;
+      const onSaved = vi.fn();
+      try {
+        yield* Effect.tryPromise(() => render("2026-10", false));
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => expect(current().disabled).toBe(false))
+        );
+        const obsolete = current().save;
+        yield* Effect.tryPromise(() => render("2026-11", false));
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => expect(current().disabled).toBe(false))
+        );
+        yield* Effect.tryPromise(() => reactWork(() => obsolete(edit, onSaved)));
+        expect(writes).toBe(0);
+        const formerlyFresh = current().save;
+        yield* Effect.tryPromise(() => render("2026-11", true));
+        yield* Effect.tryPromise(() => reactWork(() => formerlyFresh(edit, onSaved)));
+        expect(writes).toBe(0);
+        yield* Effect.tryPromise(() => render("2026-11", false));
+        yield* Effect.tryPromise(() =>
+          reactWork(() => {
+            current().save(edit, onSaved);
+            current().save(edit, onSaved);
+          })
+        );
+        yield* Effect.tryPromise(() => reactAssertion(() => expect(writes).toBe(1)));
+        yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
+        yield* Effect.tryPromise(() => settleSave(reply, "confirmed"));
+        yield* Effect.tryPromise(() => settleReread(reread.current));
+        expect(onSaved).not.toHaveBeenCalled();
+        yield* Effect.tryPromise(() => reactWork(() => current().save(edit, onSaved)));
+        expect(writes).toBe(1);
+      } finally {
+        yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
+        registry.dispose();
+        vi.unstubAllGlobals();
+      }
+    })
+  ));
+
+it("saves a Money-bearing edit with its exact reviewed facts and confirms its visible revision", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const reply = Deferred.makeUnsafe<Response>();
+      const reread = { current: Deferred.makeUnsafe<Response>() };
+      const { http, requests } = recordedPlanningHttp(reply, reread);
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, http),
+      });
+      const registry = AtomRegistry.make();
+      const root = createRoot(window.document.createElement("div"));
+      let planning: Option.Option<ReturnType<typeof useRecurringPlanning>> = Option.none();
+      const retain = (current: ReturnType<typeof useRecurringPlanning>): void => {
+        planning = Option.some(current);
+      };
+      const current = (): ReturnType<typeof useRecurringPlanning> => Option.getOrThrow(planning);
+      const edit = yield* Schema.decodeEffect(Schema.toCodecJson(RecurringEdit))({
+        kind: "edit",
+        planId,
+        date: "2026-10-29",
+        scope: "forward",
+        plan: {
+          ...document.plans[0]?.revisions[0]?.plan,
+          amountMode: "fixed",
+          money: { amount: "12345.67", currency: "COP" },
+        },
+      });
+      const onSaved = vi.fn();
+      try {
+        yield* Effect.tryPromise(() =>
+          reactWork(() =>
+            root.render(
+              createElement(
+                RegistryContext.Provider,
+                { value: registry },
+                createElement(ActionsProbe, { client, month: "2026-10", stale: false, retain })
+              )
+            )
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => expect(current().disabled).toBe(false))
+        );
+        yield* Effect.tryPromise(() => reactWork(() => current().save(edit, onSaved)));
+        if (edit.kind === "edit") Object.assign(edit.plan, { name: "Changed after save" });
+        yield* Effect.tryPromise(() => reactAssertion(() => expect(requests).toHaveLength(1)));
+        expect(
+          yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(requests[0] ?? "")
+        ).toMatchObject({
+          expectedRevision: 0,
+          edit: {
+            kind: "edit",
+            plan: { name: "Internet QA", money: { amount: "12345.67", currency: "COP" } },
+          },
+        });
+        yield* Effect.tryPromise(() => settleSave(reply, "confirmed"));
+        expect(onSaved).not.toHaveBeenCalled();
+        yield* Effect.tryPromise(() => settleReread(reread.current));
+        yield* Effect.tryPromise(() =>
+          reactAssertion(() => expect(onSaved).toHaveBeenCalledOnce())
+        );
+        expect(current().saveState).toBe("idle");
+      } finally {
+        yield* Effect.tryPromise(() => reactWork(() => root.unmount()));
+        registry.dispose();
+        vi.unstubAllGlobals();
       }
     })
   ));
@@ -479,6 +861,7 @@ it.each(["scheduled", "paused"] as const)(
                   RegistryContext.Provider,
                   { value: registry },
                   createElement(PlanningProbe, {
+month: "2026-10", profileStale: false, duplicate: false,
                     client,
                     onSaved,
                     plan: Option.some(retained),

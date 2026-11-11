@@ -221,6 +221,37 @@ export const readHostedSnapshot = ({
     });
   });
 
+const prepareMissingCommittedOutput = ({
+  db,
+  userId,
+  turnId,
+  timestamp,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  timestamp: number;
+}>): D1PreparedStatement =>
+  db
+    .prepare(`INSERT INTO transcript_entries
+      (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, iteration,
+       tool_call_id, operation, outcome_json)
+      SELECT lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
+        lower(substr(hex(randomblob(2)), 2, 3)) || '-8' ||
+        lower(substr(hex(randomblob(2)), 2, 3)) || '-' || lower(hex(randomblob(6))),
+        c.user_id, c.hosted_session_id, c.turn_id, 'tool_result', ?, c.iteration,
+        c.tool_call_id, c.operation,
+        '{"_tag":"CommittedOutputUnavailable"}'
+      FROM transcript_entries AS c
+      JOIN hosted_mutation_commits AS m
+        ON m.turn_id = c.turn_id AND m.tool_call_id = c.tool_call_id AND m.user_id = c.user_id
+      WHERE c.turn_id = ? AND c.user_id = ? AND c.kind = 'tool_call'
+        AND EXISTS (SELECT 1 FROM hosted_turns AS t
+          WHERE t.id = c.turn_id AND t.user_id = c.user_id AND t.status = 'pending')
+        AND NOT EXISTS (SELECT 1 FROM transcript_entries AS r
+          WHERE r.turn_id = c.turn_id AND r.tool_call_id = c.tool_call_id AND r.kind = 'tool_result')`)
+    .bind(timestamp, turnId, userId);
+
 /** Recovery works even after revocation: it never admits new work or sends User content. */
 export const recoverHostedTurn = ({
   db,
@@ -244,23 +275,7 @@ export const recoverHostedTurn = ({
     const marker = TranscriptEntryId.make(newId());
     const results = yield* Effect.tryPromise(() =>
       db.batch([
-        db
-          .prepare(`INSERT INTO transcript_entries
-      (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, iteration,
-       tool_call_id, operation, outcome_json)
-      SELECT lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
-        lower(substr(hex(randomblob(2)), 2, 3)) || '-8' ||
-        lower(substr(hex(randomblob(2)), 2, 3)) || '-' || lower(hex(randomblob(6))),
-        c.user_id, c.hosted_session_id, c.turn_id, 'tool_result', ?, c.iteration,
-        c.tool_call_id, c.operation,
-        '{"_tag":"CommittedOutputUnavailable"}'
-      FROM transcript_entries AS c
-      JOIN hosted_mutation_commits AS m
-        ON m.turn_id = c.turn_id AND m.tool_call_id = c.tool_call_id AND m.user_id = c.user_id
-      WHERE c.turn_id = ? AND c.user_id = ? AND c.kind = 'tool_call'
-        AND NOT EXISTS (SELECT 1 FROM transcript_entries AS r
-          WHERE r.turn_id = c.turn_id AND r.tool_call_id = c.tool_call_id AND r.kind = 'tool_result')`)
-          .bind(timestamp, turn.id, userId),
+        prepareMissingCommittedOutput({ db, userId, turnId: turn.id, timestamp }),
         db
           .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms)
@@ -1255,6 +1270,7 @@ const hostedFinishStatements = ({
         bindings: [status, ...sessionAuthority.value.bindings],
       };
   return [
+    prepareMissingCommittedOutput({ db, userId, turnId, timestamp: time }),
     db
       .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text, failure_reason)
@@ -1303,5 +1319,5 @@ export const finishHostedTurn = (
 ): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const results = yield* Effect.tryPromise(() => input.db.batch(hostedFinishStatements(input)));
-    return results[0]?.meta.changes === 1 && results[1]?.results.length === 1;
+    return results[1]?.meta.changes === 1 && results[2]?.results.length === 1;
   });

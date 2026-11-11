@@ -1,6 +1,7 @@
 import { PolicyRevision } from "../../src/shell/consent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
 import {
+  CanonicalToolCallEntry,
   HostedAgentSessionId,
   ToolCallId,
   TranscriptText,
@@ -77,6 +78,7 @@ import {
 import { browserHostedDelivery, completeWhatsAppTurnWithAdmission } from "./internal/hosted-turn";
 import {
   admitHostedTurn,
+  appendHostedToolEntry,
   commitHostedCompaction,
   deliveryAcknowledgmentWindowMs,
   finishHostedTurn,
@@ -2341,6 +2343,228 @@ it.each([899_999, 900_000, 900_001])(
         expect(
           yield* readAdmittedHostedConsent({ db, userId: UserId.make(users[0]), turnId })
         ).toEqual(Option.some(idleMs < 900_000 ? priorBasis : accepted));
+      })
+    )
+);
+
+it.each(["uncertainty-fence", "terminalization"] as const)(
+  "settles delivery racing at %s from current channel certainty",
+  (boundary) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const userId = UserId.make(users[0]);
+        const turnId = yield* Effect.tryPromise(() =>
+          queuedWhatsAppTurn({ db, index: 0, text: "Una respuesta" })
+        );
+        const current = now();
+        const text = TranscriptText.make("Respuesta visible exacta");
+        const token = Option.getOrThrow(
+          yield* stageWhatsAppDelivery({ db, userId, turnId, text, now: current })
+        );
+        expect(yield* startWhatsAppSend({ db, userId, turnId, token, now: current })).toBe(true);
+        yield* recordWhatsAppSend({
+          db,
+          userId,
+          turnId,
+          token,
+          outcome: {
+            kind: "accepted",
+            messageId: WhatsAppProviderMessageId.make("wamid.racing-delivery"),
+          },
+        });
+        let delivered = false;
+        const runStatus = Effect.runPromiseWith(yield* Effect.context<never>());
+        const deliver = (): Promise<void> =>
+          runStatus(
+            recordWhatsAppStatus({
+              db,
+              userId,
+              evidence: {
+                correlationToken: token,
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+                messageEvidence: {
+                  channel: "whatsapp",
+                  provider: "kapso",
+                  providerMessageId: WhatsAppProviderMessageId.make("wamid.racing-delivery"),
+                },
+                occurredAt: DateTime.makeUnsafe(current + 1),
+                outcome: "delivered",
+              },
+              receivedAtMs: current + 1,
+            })
+          ).then((evidence) => {
+            expect(Option.getOrThrow(evidence).state).toBe(
+              boundary === "uncertainty-fence" ? "delivered" : "unconfirmed"
+            );
+            delivered = true;
+          });
+        let batches = 0;
+        const racing = new Proxy(db, {
+          get(target, property): unknown {
+            if (property !== "batch") return Reflect.get(target, property, target);
+            return (statements: Array<D1PreparedStatement>): Promise<Array<D1Result>> => {
+              batches += 1;
+              return batches === (boundary === "uncertainty-fence" ? 1 : 2)
+                ? deliver().then(() => target.batch(statements))
+                : target.batch(statements);
+            };
+          },
+        });
+        const recovery = {
+          userId,
+          turn: { id: turnId, started_at_ms: current, proposed_at_ms: current },
+          now: current + deliveryAcknowledgmentWindowMs + 1,
+        };
+        expect(yield* recoverHostedTurn({ db: racing, ...recovery })).toBe(true);
+        expect(delivered).toBe(true);
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+        ).toMatchObject([
+          {
+            status: boundary === "uncertainty-fence" ? "completed" : "failed",
+            kind: "user",
+            text: "Una respuesta",
+          },
+          boundary === "uncertainty-fence"
+            ? { status: "completed", kind: "assistant", text }
+            : { status: "failed", kind: "failed", marker: "DeliveryUnconfirmed", text: null },
+        ]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT correlation_token, proposed_at_ms, text FROM whatsapp_deliveries WHERE kind='hosted' AND turn_id=?"
+              )
+              .bind(turnId)
+              .first()
+          )
+        ).toEqual({ correlation_token: token, proposed_at_ms: current, text });
+        expect(yield* recoverHostedTurn({ db, ...recovery })).toBe(false);
+        expect(
+          (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results
+        ).toHaveLength(2);
+      })
+    )
+);
+
+it.each(["delivered", "ambiguous"] as const)(
+  "retains a committed mutation with lost output before %s channel recovery, once",
+  (certainty) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const userId = UserId.make(users[0]);
+        const turnId = yield* Effect.tryPromise(() =>
+          queuedWhatsAppTurn({ db, index: 0, text: "Olvida esto" })
+        );
+        const current = now();
+        const caller = WhatsAppHostedSubject.make({
+          userId,
+          portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+          bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741910"),
+        });
+        const memoryId = "20000000-0000-4000-8000-000000000099";
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO memories(id,user_id,text,created_at_ms,updated_at_ms) VALUES(?,?,?,?,?)"
+            )
+            .bind(memoryId, userId, "Olvidar", current, current)
+            .run()
+        );
+        const entry = yield* Schema.decodeEffect(CanonicalToolCallEntry)({
+          _tag: "CanonicalToolCallEntry",
+          id: newId(),
+          turnId,
+          occurredAt: DateTime.formatIso(DateTime.makeUnsafe(current)),
+          iteration: 1,
+          toolCallId: "lost-output",
+          operation: "memory.forget",
+          input: { params: { id: memoryId } },
+        });
+        expect(
+          Option.isSome(yield* appendHostedToolEntry({ db, userId, subject: caller, entry }))
+        ).toBe(true);
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db.prepare("DELETE FROM memories WHERE id=? AND user_id=?").bind(memoryId, userId),
+            ...prepareHostedMutationCommit({
+              db,
+              userId,
+              turnId,
+              toolCallId: entry.toolCallId,
+              current,
+            }),
+          ])
+        );
+        const token = Option.getOrThrow(
+          yield* stageWhatsAppDelivery({
+            db,
+            userId,
+            turnId,
+            text: TranscriptText.make("Resultado no disponible"),
+            now: current,
+          })
+        );
+        yield* startWhatsAppSend({ db, userId, turnId, token, now: current });
+        yield* recordWhatsAppSend({ db, userId, turnId, token, outcome: { kind: "ambiguous" } });
+        if (certainty === "delivered") {
+          yield* recordWhatsAppStatus({
+            db,
+            userId,
+            evidence: {
+              correlationToken: token,
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              messageEvidence: {
+                channel: "whatsapp",
+                provider: "kapso",
+                providerMessageId: WhatsAppProviderMessageId.make("wamid.lost-output"),
+              },
+              occurredAt: DateTime.makeUnsafe(current),
+              outcome: "delivered",
+            },
+            receivedAtMs: current,
+          });
+        }
+        const recovery = {
+          db,
+          userId,
+          turn: { id: turnId, started_at_ms: current, proposed_at_ms: current },
+          now: current + deliveryAcknowledgmentWindowMs + 1,
+        };
+        expect(yield* recoverHostedTurn(recovery)).toBe(true);
+        expect(yield* recoverHostedTurn(recovery)).toBe(false);
+        const entries = (yield* Effect.tryPromise(() => retained({ db, user: users[0] }))).results;
+        expect(entries).toMatchObject([
+          { kind: "user", status: certainty === "delivered" ? "completed" : "failed" },
+          { kind: "tool_call" },
+          { kind: "tool_result" },
+          { kind: certainty === "delivered" ? "assistant" : "failed" },
+        ]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT outcome_json FROM transcript_entries WHERE turn_id=? AND kind='tool_result'"
+              )
+              .bind(turnId)
+              .first<string>("outcome_json")
+          )
+        ).toBe('{"_tag":"CommittedOutputUnavailable"}');
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT id FROM memories WHERE user_id=?").bind(userId).all()
+          )).results
+        ).toHaveLength(0);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT tool_call_id FROM hosted_mutation_commits WHERE turn_id=?")
+              .bind(turnId)
+              .all()
+          )).results
+        ).toEqual([{ tool_call_id: "lost-output" }]);
       })
     )
 );

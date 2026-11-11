@@ -341,6 +341,11 @@ abandoned work without granting new execution authority. After durable admission
 wake fences the abandoned Turn through channel recovery before releasing its User queue owner; it
 cannot turn the retained User entry into a no-admission refusal. Admission notification follows the
 scheduling attempt for ordinary, confirmation and document Turns.
+Recovery freezes begun, unresolved channel delivery and reads its certainty in one native unit.
+Verified delivery that wins that unit completes with its exact text; unresolved delivery that
+recovery freezes cannot later become a successful Turn. Every terminal unit reconciles retained
+canonical commit fences into missing tool-result evidence before appending its one terminal entry.
+Neither recovery nor repeated terminalization reexecutes canonical tools or renews proposal time.
 Verified WhatsApp Turns discover every installed canonical operation permitted by the catalog access
 policy. Query and mutation adapters reuse their canonical owners under live held Turn authority,
 including User isolation, audit, confirmation policy and atomic batch commit fences. Browser credentials

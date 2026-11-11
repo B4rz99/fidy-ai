@@ -86,6 +86,38 @@ const generationSources = (
         })
   );
 
+const generationFirstPage = ({
+  destination,
+  sources,
+  period,
+  generation,
+}: Readonly<{
+  destination: GenerationOwner["destination"];
+  sources: (selected: CurrentMonthPeriod) => PageAtom;
+  period: Atom.Atom<CurrentMonthPeriod>;
+  generation: number;
+}>): PageAtom => {
+  const views = Atom.family((source: PageAtom) =>
+    forwardFreshQuery({ query: source.pipe(revalidateWorkspaceQuery), sources: [source] })
+  );
+  const firstPage = Atom.make((get): AsyncResult.AsyncResult<Page, unknown> => {
+    if (Option.isSome(destination)) {
+      const result = get(destination.value);
+      if (result._tag === "Initial") return AsyncResult.initial(result.waiting);
+      if (result._tag === "Failure") {
+        return AsyncResult.failure(result.cause, { waiting: result.waiting });
+      }
+      if (result.waiting) return AsyncResult.initial(true);
+    }
+    const source = sources(get(period));
+    return get(generation === 0 ? source : views(source));
+  });
+  return forwardFreshQuery({
+    query: firstPage,
+    sources: (registry) => [sources(registry.get(period))],
+  });
+};
+
 const makeGeneration = (
   { client, search, timeZone, now }: RouteHistoryInput,
   generation: Generation
@@ -107,20 +139,11 @@ const makeGeneration = (
     return result._tag === "Success" ? Option.some(result.value.data.id) : generation.locate;
   });
   const sources = generationSources(client, generation.number);
-  const views = Atom.family((source: PageAtom) =>
-    forwardFreshQuery({ query: source.pipe(revalidateWorkspaceQuery), sources: [source] })
-  );
-  const firstPage = Atom.make((get): AsyncResult.AsyncResult<Page, unknown> => {
-    if (Option.isSome(destination)) {
-      const result = get(destination.value);
-      if (result._tag === "Initial") return AsyncResult.initial(result.waiting);
-      if (result._tag === "Failure") {
-        return AsyncResult.failure(result.cause, { waiting: result.waiting });
-      }
-      if (result.waiting) return AsyncResult.initial(true);
-    }
-    const source = sources(get(period));
-    return get(generation.number === 0 ? source : views(source));
+  const firstPage = generationFirstPage({
+    destination,
+    sources,
+    period,
+    generation: generation.number,
   });
   const histories = Atom.family((identity: QueryIdentity) =>
     Atom.make(
@@ -139,10 +162,7 @@ const makeGeneration = (
   return {
     generation,
     destination,
-    firstPage: forwardFreshQuery({
-      query: firstPage,
-      sources: (registry) => [sources(registry.get(period))],
-    }),
+    firstPage,
     period,
     locate,
     resource,
@@ -192,6 +212,9 @@ export const transactionRouteHistory = (input: RouteHistoryInput): TransactionRo
   };
 };
 
+const resetPages = (command: string, loadedPages: number): number =>
+  command === "refresh" ? Math.max(1, loadedPages) : 1;
+
 const routeActions = ({
   input,
   navigation,
@@ -216,7 +239,7 @@ const routeActions = ({
           input,
           new Generation({
             number: current.number + 1,
-            pages: command === "refresh" ? Math.max(1, previous.loadedPages) : 1,
+            pages: resetPages(command, previous.loadedPages),
             period: previous.period,
             locate: previous.locate,
           })

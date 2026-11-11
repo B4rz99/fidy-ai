@@ -157,9 +157,9 @@ const DetailIdentity = ({
     </div>
   );
 };
-const DetailDeleteAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => {
+const DetailDeleteButton = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element => {
   const owner = useTransactionCorrections();
-  return props.editable && props.mode._tag !== "Deleting" && props.mode._tag !== "Reconciling" ? (
+  return (
     <Button
       variant="outline"
       data-transaction-slot="transaction-danger"
@@ -172,10 +172,14 @@ const DetailDeleteAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX
       <HugeiconsIcon icon={Delete02Icon} size={20} aria-hidden="true" />
       Eliminar transacción
     </Button>
+  );
+};
+const DetailDeleteAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element =>
+  props.editable && props.mode._tag !== "Deleting" && props.mode._tag !== "Reconciling" ? (
+    <DetailDeleteButton props={props} />
   ) : (
     <></>
   );
-};
 const detailTitle = (mode: DetailMode): string => {
   if (mode._tag === "Reconciling") return "Revisar vínculo";
   return mode._tag === "Deleting" ? "Eliminar transacción" : "Detalle de transacción";

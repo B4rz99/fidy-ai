@@ -337,7 +337,10 @@ records retained interactions, and CompactedConversation is lossy session contin
 An accepted User entry and Pending Turn commit together. A generated reply is a proposal until
 verified visible-delivery evidence permits completion. WhatsApp publishes channel evidence; Agent
 owns the resulting Turn and Transcript transition. Alarms and independent maintenance recover
-abandoned work without granting new execution authority.
+abandoned work without granting new execution authority. After durable admission, a failed recovery
+wake fences the abandoned Turn through channel recovery before releasing its User queue owner; it
+cannot turn the retained User entry into a no-admission refusal. Admission notification follows the
+scheduling attempt for ordinary, confirmation and document Turns.
 Verified WhatsApp Turns discover every installed canonical operation permitted by the catalog access
 policy. Query and mutation adapters reuse their canonical owners under live held Turn authority,
 including User isolation, audit, confirmation policy and atomic batch commit fences. Browser credentials

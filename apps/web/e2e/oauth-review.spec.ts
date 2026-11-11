@@ -1,4 +1,5 @@
 import { retainedSecretCount } from "./browser-storage-fixture";
+import { OAuthConnectionId, OAuthConnectionList } from "@fidy/server/client";
 import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
 import { Effect, Schema } from "effect";
 import type { Cause } from "effect";
@@ -12,9 +13,12 @@ import {
 
 const { test, expect } = playwright;
 const { api, app, operator } = browserAcceptanceTopology();
-const isolateReviewSource = (page: Page): Promise<void> => {
+const reviewSource = (): string => {
   const info = test.info();
-  const source = `${info.testId}-${info.repeatEachIndex}-review`;
+  return `${info.testId}-${info.repeatEachIndex}-review`;
+};
+const isolateReviewSource = (page: Page): Promise<void> => {
+  const source = reviewSource();
   return page
     .context()
     .route(`${api}/**`, (route) =>
@@ -28,6 +32,7 @@ test.beforeEach(({ page }) => isolateReviewSource(page));
 const firstPoll = 5000;
 const cancelledMessage = "No se autorizó ningún acceso.";
 const completeOAuthJourneyMilliseconds = 60_000;
+const lateCallbackObservationMilliseconds = 1_000;
 const created = 201;
 const found = 302;
 const noContent = 204;
@@ -54,6 +59,7 @@ const authorization = (request: APIRequestContext): Effect.Effect<URLSearchParam
   Effect.gen(function* () {
     const registered = yield* Effect.tryPromise(() =>
       request.post(`${api}/oauth/register`, {
+        headers: { "x-acceptance-source": reviewSource() },
         data: {
           client_name: "<img src=x onerror=alert(1)>",
           redirect_uris: ["http://127.0.0.1/callback"],
@@ -80,7 +86,10 @@ const beginReview = (
 ): Effect.Effect<string, TestFailure> =>
   Effect.gen(function* () {
     const started = yield* Effect.tryPromise(() =>
-      request.get(`${api}/oauth/authorize?${query}`, { maxRedirects: 0 })
+      request.get(`${api}/oauth/authorize?${query}`, {
+        maxRedirects: 0,
+        headers: { "x-acceptance-source": reviewSource() },
+      })
     );
     expect(started.status()).toBe(found);
     return new URL(started.headers().location ?? "").pathname;
@@ -164,6 +173,60 @@ test("built browser returns from established sign-in to a text-only request revi
       expect(page.url()).not.toContain("code=");
     })
   ));
+
+const opposingClicks = (firstDecision: string): void => {
+  const buttons = Array.from(document.querySelectorAll("button"));
+  const connect = buttons.find((button) => button.textContent === "Conectar");
+  const cancel = buttons.find((button) => button.textContent === "Cancelar");
+  const selected = firstDecision === "Conectar" ? connect : cancel;
+  const opposing = firstDecision === "Conectar" ? cancel : connect;
+  selected?.click();
+  opposing?.click();
+  selected?.click();
+};
+const assertSingleDecision = (
+  input: Readonly<{ page: Page; request: APIRequestContext; first: string }>
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { page, request, first } = input;
+      const path = yield* beginReview(request, yield* authorization(request));
+      yield* loginFromReview({ page, request, path, identity: "primary" });
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Conectar", exact: true })).toBeEnabled()
+      );
+      const admitted: Array<string> = [];
+      const refuseConnect = (route: Route): Promise<void> => {
+        admitted.push("Conectar");
+        return route.abort();
+      };
+      const confirmCancel = (route: Route): Promise<void> => {
+        admitted.push("Cancelar");
+        return route.fulfill({
+          status: ok,
+          contentType: "application/json",
+          body: '{"cancelled":true}',
+        });
+      };
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/connect", refuseConnect));
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/cancel", confirmCancel));
+      yield* Effect.tryPromise(() => page.evaluate(opposingClicks, first));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", {
+            name: first === "Conectar" ? "Conexión sin confirmar" : "Solicitud cancelada",
+          })
+        ).toBeVisible()
+      );
+      expect(admitted).toEqual([first]);
+    })
+  );
+for (const first of ["Conectar", "Cancelar"]) {
+  test(`OAuth review admits only ${first} when opposing decisions happen in the same tick`, ({
+    page,
+    request,
+  }) => assertSingleDecision({ page, request, first }));
+}
 
 test("built browser approves an exact connection and exchanges its callback code without Fidy bearer storage", ({
   page,
@@ -846,3 +909,251 @@ const prepareNativeOperation = Effect.fn(function* (request: APIRequestContext, 
   )(yield* Effect.tryPromise(() => reviewResponse.json()));
   return { args, reference: pending.result.requestState };
 });
+
+const frozenChoice = ({
+  page,
+  request,
+}: Readonly<{ page: Page; request: APIRequestContext }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const query = yield* authorization(request);
+      query.set("scope", "read write");
+      const path = yield* beginReview(request, query);
+      yield* loginFromReview({ page, request, path, identity: "primary" });
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(1).uncheck());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "7 días", exact: true }).click()
+      );
+      const expiration = yield* Effect.tryPromise(() =>
+        page
+          .getByRole("complementary", { name: "Duración del acceso" })
+          .locator("time")
+          .first()
+          .getAttribute("dateTime")
+      );
+      const captured = Promise.withResolvers<unknown>();
+      const release = Promise.withResolvers<void>();
+      let calls = 0;
+      const hold = (route: Route): Promise<void> => {
+        calls += 1;
+        captured.resolve(route.request().postDataJSON());
+        return release.promise.then(() => route.abort());
+      };
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/connect", hold));
+      yield* Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Conectar", exact: true }).click()
+        );
+        const choice = yield* Effect.tryPromise(() => captured.promise);
+        expect(choice).toMatchObject({
+          requestId: path.split("/").at(-1),
+          scopes: ["read"],
+          lifetimeDays: 7,
+          expiresAt: expiration,
+        });
+        yield* Effect.tryPromise(() => expect(page.getByRole("checkbox").nth(1)).toBeDisabled());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "90 días", exact: true })).toBeDisabled()
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Cancelar", exact: true })).toBeDisabled()
+        );
+        yield* Effect.tryPromise(() => page.evaluate(opposingClicks, "Conectar"));
+        expect(calls).toBe(1);
+      }).pipe(Effect.ensuring(Effect.sync(release.resolve)));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Conexión sin confirmar" })).toBeVisible()
+      );
+    })
+  );
+
+test(
+  "OAuth approval freezes the displayed subset and expiry while admitted work is pending",
+  frozenChoice
+);
+
+const cancellationRecovery = ({
+  page,
+  request,
+}: Readonly<{ page: Page; request: APIRequestContext }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const path = yield* beginReview(request, yield* authorization(request));
+      yield* loginFromReview({ page, request, path, identity: "primary" });
+      let cancellations = 0;
+      const refuseCancellation = (route: Route): Promise<void> => {
+        cancellations += 1;
+        return unavailableManagement(route);
+      };
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/cancel", refuseCancellation));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cancelar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos confirmar la cancelación")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Conectar", exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText(cancelledMessage, { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/review?*", unavailableManagement));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Volver a leer la solicitud" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Solicitud no disponible" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos confirmar la cancelación")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Conectar", exact: true })).toHaveCount(0)
+      );
+      expect(cancellations).toBe(1);
+      yield* Effect.tryPromise(() => page.unroute("**/web/oauth/review?*"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Volver a leer la solicitud" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Conectar", exact: true })).toBeEnabled()
+      );
+      expect(cancellations).toBe(1);
+      yield* Effect.tryPromise(() => page.unroute("**/web/oauth/cancel"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Cancelar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toContainText(cancelledMessage)
+      );
+    })
+  );
+test(
+  "OAuth cancellation failure requires a fresh successful read and another explicit decision",
+  cancellationRecovery
+);
+
+const forwardDecision = (route: Route): Promise<APIResponse> =>
+  route.fetch({ headers: { ...route.request().headers(), "x-acceptance-source": reviewSource() } });
+
+const lostCommittedApproval = ({
+  page,
+  request,
+}: Readonly<{ page: Page; request: APIRequestContext }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const path = yield* beginReview(request, yield* authorization(request));
+      yield* loginFromReview({ page, request, path, identity: "primary" });
+      let approvals = 0;
+      let connectionId = "";
+      const run = Effect.runPromiseWith(yield* Effect.context<never>());
+      const loseResult = (route: Route): Promise<void> =>
+        run(
+          Effect.gen(function* () {
+            approvals += 1;
+            const committed = yield* Effect.tryPromise(() => forwardDecision(route));
+            expect(committed.status()).toBe(ok);
+            const connected = yield* Schema.decodeUnknownEffect(
+              Schema.Struct({ connectionId: OAuthConnectionId })
+            )(yield* Effect.tryPromise(() => committed.json()));
+            connectionId = connected.connectionId;
+            yield* Effect.tryPromise(() => unavailableManagement(route));
+          })
+        );
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/connect", loseResult));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Conectar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Conexión sin confirmar" })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Conectar", exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Volver a leer la solicitud" })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("main")).not.toContainText("code="));
+      expect(approvals).toBe(1);
+      const listed = yield* Effect.tryPromise(() =>
+        boundSessionRequests(page.context().request).get(`${api}/web/oauth/connections`, {
+          headers: { origin: app, "x-acceptance-source": reviewSource() },
+        })
+      );
+      const connections = yield* Schema.decodeUnknownEffect(OAuthConnectionList)(
+        yield* Effect.tryPromise(() => listed.json())
+      );
+      expect(connections.connections.map((connection) => connection.connectionId)).toContain(
+        connectionId
+      );
+      expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
+      const pending = yield* Effect.tryPromise(() =>
+        boundSessionRequests(page.context().request).get(
+          `${api}/web/oauth/review?requestId=${path.split("/").at(-1) ?? ""}`,
+          { headers: { origin: app, "x-acceptance-source": reviewSource() } }
+        )
+      );
+      expect(pending.status()).toBe(invalid);
+    })
+  );
+test(
+  "lost committed OAuth approval remains unresolved without replaying or claiming no authority",
+  lostCommittedApproval
+);
+
+const departedReview = ({
+  page,
+  request,
+}: Readonly<{ page: Page; request: APIRequestContext }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const path = yield* beginReview(request, yield* authorization(request));
+      yield* loginFromReview({ page, request, path, identity: "primary" });
+      const started = yield* Effect.tryPromise(() => page.evaluate(() => performance.timeOrigin));
+      const committed = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const settled = Promise.withResolvers<void>();
+      const run = Effect.runPromiseWith(yield* Effect.context<never>());
+      const holdResult = (route: Route): Promise<void> =>
+        run(
+          Effect.gen(function* () {
+            const response = yield* Effect.tryPromise(() => forwardDecision(route));
+            expect(response.status()).toBe(ok);
+            committed.resolve();
+            yield* Effect.tryPromise(() => release.promise);
+            yield* Effect.tryPromise(() => route.fulfill({ response }));
+            settled.resolve();
+          })
+        );
+      yield* Effect.tryPromise(() => page.route("**/web/oauth/connect", holdResult));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Conectar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => committed.promise);
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("navigation", { name: "Aplicación" })
+          .getByRole("link", { name: "Recurrentes", exact: true })
+          .click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Nuevo recurrente", exact: true })).toBeEnabled()
+      );
+      release.resolve();
+      yield* Effect.tryPromise(() => settled.promise);
+      yield* Effect.tryPromise(() => page.clock.fastForward(lateCallbackObservationMilliseconds));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Nuevo recurrente", exact: true })).toBeEnabled()
+      );
+      expect(yield* Effect.tryPromise(() => page.evaluate(() => performance.timeOrigin))).toBe(
+        started
+      );
+      expect(page.url()).not.toContain("callback");
+      expect(page.url()).not.toContain("code=");
+    })
+  );
+test(
+  "leaving OAuth review in the same document fences a late committed approval callback",
+  departedReview
+);

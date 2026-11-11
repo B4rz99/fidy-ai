@@ -46,8 +46,9 @@ export const planStatus = (plan: Plan): "scheduled" | "stopped" | "paused" | "ac
     plan.pauses.some(
       (pause) => date >= pause.from && (pause.through === undefined || date < pause.through)
     )
-  )
-    {return "paused";}
+  ) {
+    return "paused";
+  }
   return date < currentPlan(plan).firstDate ? "scheduled" : "active";
 };
 export const frequencies = [

@@ -58,6 +58,28 @@ const aggregate = (db: D1Database): ReturnType<typeof findDashboardAggregate> =>
     from: 1577836800000,
     toExclusive: 1580515200000,
   });
+const aggregateValues = (
+  groups: Effect.Success<ReturnType<typeof findDashboardAggregate>>
+): ReadonlyArray<
+  Readonly<{
+    currency: string;
+    direction: string;
+    categoryId: string;
+    count: string;
+    sum: string;
+    maximum: string;
+    maximumCurrency: string;
+  }>
+> =>
+  Option.getOrThrow(groups).map((group) => ({
+    currency: group.sum.currency,
+    direction: group.direction,
+    categoryId: group.categoryId,
+    count: String(group.count),
+    sum: encodeMoneyAmount(group.sum.amount),
+    maximum: encodeMoneyAmount(group.maximum.amount),
+    maximumCurrency: group.maximum.currency,
+  }));
 const repair = (db: D1Database): Effect.Effect<"ready" | "pending"> =>
   repairDashboardProjection({
     db,
@@ -106,7 +128,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup(257);
-        const expected = yield* aggregate(db);
+        const expected = aggregateValues(yield* aggregate(db));
         const metadata = yield* fromTestPromise(() =>
           db
             .prepare(
@@ -146,8 +168,7 @@ it(
             .bind(foreignId)
             .run()
         );
-        const foreignBefore = yield* foreignQuery();
-        expect(Option.isSome(foreignBefore)).toBe(true);
+        const foreignBefore = aggregateValues(yield* foreignQuery());
         const facts = yield* fromTestPromise(() =>
           db.prepare("SELECT * FROM transactions WHERE user_id = ? ORDER BY id").bind(userId).all()
         );
@@ -159,8 +180,8 @@ it(
         );
         expect(Option.isNone(yield* aggregate(db))).toBe(true);
         yield* finish(db);
-        expect(yield* aggregate(db)).toEqual(expected);
-        expect(yield* foreignQuery()).toEqual(foreignBefore);
+        expect(aggregateValues(yield* aggregate(db))).toEqual(expected);
+        expect(aggregateValues(yield* foreignQuery())).toEqual(foreignBefore);
         expect(
           yield* fromTestPromise(() =>
             db
@@ -207,7 +228,7 @@ it.each(["clearing-buckets", "clearing-digits", "clearing", "rebuilding"])(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup(257);
-        const expected = yield* aggregate(db);
+        const expected = aggregateValues(yield* aggregate(db));
         yield* fromTestPromise(() =>
           db
             .prepare(
@@ -230,7 +251,7 @@ it.each(["clearing-buckets", "clearing-digits", "clearing", "rebuilding"])(
         );
         expect(yield* repair(delayed)).toBe("ready");
         expect(observed.cost().rowsWritten - beforeWrites).toBe(0);
-        expect(yield* aggregate(db)).toEqual(expected);
+        expect(aggregateValues(yield* aggregate(db))).toEqual(expected);
       })
     ),
   60_000
@@ -241,7 +262,7 @@ it.each(["clearing-buckets", "clearing-digits", "clearing", "rebuilding"])(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup(513);
-        const expected = yield* aggregate(db);
+        const expected = aggregateValues(yield* aggregate(db));
         yield* fromTestPromise(() =>
           db
             .prepare(
@@ -266,7 +287,7 @@ it.each(["clearing-buckets", "clearing-digits", "clearing", "rebuilding"])(
         );
         expect(observed.cost().rowsWritten - beforeWrites).toBe(0);
         yield* finish(db);
-        expect(yield* aggregate(db)).toEqual(expected);
+        expect(aggregateValues(yield* aggregate(db))).toEqual(expected);
       })
     ),
   60_000
@@ -277,7 +298,7 @@ it.each([0, 256, 257])(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup(count);
-        const expected = yield* aggregate(db);
+        const expected = aggregateValues(yield* aggregate(db));
         yield* fromTestPromise(() =>
           db
             .prepare(
@@ -287,7 +308,7 @@ it.each([0, 256, 257])(
             .run()
         );
         yield* finish(db);
-        expect(yield* aggregate(db)).toEqual(expected);
+        expect(aggregateValues(yield* aggregate(db))).toEqual(expected);
       })
     ),
   60_000
@@ -338,7 +359,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup(513);
-        const expected = yield* aggregate(db);
+        const expected = aggregateValues(yield* aggregate(db));
         yield* fromTestPromise(() =>
           db
             .prepare(
@@ -361,7 +382,7 @@ it(
         );
         expect(observed.cost().rowsWritten - beforeWrites).toBe(0);
         yield* finish(db);
-        expect(yield* aggregate(db)).toEqual(expected);
+        expect(aggregateValues(yield* aggregate(db))).toEqual(expected);
       })
     ),
   60_000
@@ -372,7 +393,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup(2);
-        const expected = yield* aggregate(db);
+        const expected = aggregateValues(yield* aggregate(db));
         yield* fromTestPromise(() =>
           db
             .prepare(
@@ -390,7 +411,7 @@ it(
         expect(yield* repair(db)).toBe("pending");
         expect(Option.isNone(yield* aggregate(db))).toBe(true);
         yield* finish(db);
-        expect(yield* aggregate(db)).toEqual(expected);
+        expect(aggregateValues(yield* aggregate(db))).toEqual(expected);
       })
     ),
   60_000

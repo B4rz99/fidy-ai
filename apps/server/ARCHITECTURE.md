@@ -260,6 +260,11 @@ owner reconciliation, not blind replay. See
 Transactions owns effective financial facts and their derived projections. Budget, Dashboard,
 Recurring and Planning consume published facts without reimplementing financial selection policy.
 Exact Money and historical interpretation context remain intact across these boundaries.
+Projection repair claims the supported target version while remaining unavailable. Each bounded
+clear or rebuild batch fences the exact User, version, phase, cursor and repair revision; admitting
+a page advances the repair revision even when its phase or cursor is unchanged. Ordinary financial
+fact revisions remain trigger-maintained and do not restart repair. Rebuild validates effective
+leaves and Reconciliation membership before the atomic ready cutover.
 Budget threshold reconciliation validates the owned Budget and captured monthly boundaries/time zone
 before atomically advancing monotone marks, frozen crossings and publication intent.
 One bounded threshold pass reports Drained, Pending or Unavailable. Canonical financial preflight
@@ -476,3 +481,29 @@ AccessTier and Subscription status. The native `bun run pro` operator tool uses 
 Cloudflare admin authority through Outbound HTTP; no Worker, PAT, browser or hosted-agent operation
 can mint that authority. Its grant/revoke statement resolves exactly one existing User atomically.
 See [operator procedure](../../docs/operations/manual-pro-grants.md).
+
+## Forwarded institutional email admission
+
+The native Email Worker uniformly refuses new deliveries before reading MIME, querying an owner,
+or writing private material. Cloudflare delivery authenticates the native transport, not the
+institution or the User's relationship to it. An owned forwarding address, active Consent, envelope
+sender, MIME sender, and recognized financial format cannot supply that missing proof.
+
+Routing must remain disabled until an operational capability supplies verifiable institution
+admission bound to the exact forwarding-address User. Enablement requires concrete provider evidence
+for forwarded-message authentication (including its trust boundary and failure behavior), retention
+of that exact User/institution admission with the receipt, and Connections-owned eligibility at both
+retention and atomic settlement. Connecting, Active, and Action required conflict; no Connection or
+Ended qualifies. Tests must cover each state and races at both boundaries before routing is enabled.
+No environment toggle or permissive verifier can substitute for these requirements.
+
+The Ingestion receipt/storage and coordinated processing operations remain available for retained
+work and native integration evidence. They do not establish institution verification or production
+readiness. Previously queued work retains its original Processing basis, context and expiry after
+withdrawal; maintenance and erasure remain active. Issuing or returning a forwarding address does
+not enable native delivery.
+
+An unknown receipt-publication response requires a same-User receipt readback before object
+cleanup. A failed or malformed readback retains both private bytes and the original writer's
+unresolved custody; only authoritative queued state can recover successful publication. Retries
+reuse the original receipt and deadline rather than rewriting material or extending retention.

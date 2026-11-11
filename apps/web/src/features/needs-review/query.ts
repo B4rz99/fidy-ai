@@ -2,6 +2,7 @@ import { observeReviewQuery } from "./query-observation";
 import { reviewItemKey, reviewWorkspaceKey } from "./query-keys";
 import { Data, DateTime, Effect, Option } from "effect";
 import { preparationActive, prepareQuery } from "@/transport/query-preparation";
+import { observeOriginalDeadline } from "./original-deadline";
 import { reviewMaterialQuery } from "./material-query";
 import { AsyncResult, Atom, type AtomRegistry, Reactivity } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
@@ -119,7 +120,7 @@ const prepareFirstMaterial = (
       const selected = Option.flatMap(snapshot, ({ data }) => data.selectedDetail);
       if (
         Option.isSome(selected) &&
-        DateTime.toEpochMillis(selected.value.item.expiresAt) >
+        DateTime.toEpochMillis(observeOriginalDeadline({ registry, item: selected.value.item })) >
           DateTime.toEpochMillis(DateTime.nowUnsafe())
       ) {
         yield* Effect.tryPromise(() =>
@@ -127,7 +128,7 @@ const prepareFirstMaterial = (
             registry,
             query: reviewMaterialQuery({
               client: apiClient,
-              id: selected.value.item.id,
+              item: selected.value.item,
             }),
             options: {
               mode: "cached",

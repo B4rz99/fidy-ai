@@ -387,6 +387,69 @@ it("rechecks current association and Consent before publication and exact replay
     })
   ));
 
+it("reports unconfirmed admission after committed publication loses readback and reconciles the exact event", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup;
+      let batches = 0;
+      const unavailableReadback = new Proxy(db, {
+        get(target, property): unknown {
+          if (property === "batch") {
+            return (statements: D1PreparedStatement[]): Promise<D1Result[]> => {
+              batches += 1;
+              return batches === 2
+                ? Promise.reject(new Error("readback unavailable"))
+                : target.batch(statements);
+            };
+          }
+          const member: unknown = Reflect.get(target, property, target);
+          return typeof member === "function" ? member.bind(target) : member;
+        },
+      });
+      const inbound = event("lost-readback");
+      const uncertain = yield* acceptWhatsAppMedia({
+        db: unavailableReadback,
+        userId,
+        event: inbound,
+      });
+      expect(uncertain.status).toBe(503);
+      expect(uncertain.headers.get("cache-control")).toBe("no-store");
+      expect(yield* io(() => uncertain.json())).toMatchObject({
+        error: {
+          code: "unavailable",
+          message: "Media admission could not be confirmed. Retry the same event.",
+        },
+      });
+      const retained = yield* io(() =>
+        db.prepare("SELECT id,accepted_at_ms,expires_at_ms FROM media_submissions").first()
+      );
+      const replay = yield* acceptWhatsAppMedia({ db, userId, event: inbound });
+      expect(replay.status).toBe(202);
+      expect(yield* io(() => replay.json())).toMatchObject({
+        data: {
+          submissionId: retained?.id,
+          status: "needs-review",
+          reason: "extraction-unavailable",
+        },
+      });
+      expect(
+        yield* io(() =>
+          db.prepare("SELECT id,accepted_at_ms,expires_at_ms FROM media_submissions").first()
+        )
+      ).toEqual(retained);
+      for (const table of [
+        "media_submissions",
+        "ingestion_review_items",
+        "commercial_allowance_consumptions",
+        "audit_entries",
+      ]) {
+        expect(
+          yield* io(() => db.prepare(`SELECT count(*) AS total FROM ${table}`).first())
+        ).toEqual({ total: 1 });
+      }
+    })
+  ));
+
 it("rolls submission, consumption, accountability and review back when accountability publication fails", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -490,7 +553,9 @@ it("expires personal media locators without recharge on exact replay and eventua
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup;
-      expect((yield* acceptWhatsAppMedia({ db, userId, event: event("first") })).status).toBe(202);
+      const admission = yield* acceptWhatsAppMedia({ db, userId, event: event("first") });
+      expect(admission.status).toBe(202);
+      const admitted = yield* io(() => db.prepare("SELECT id FROM media_submissions").first());
       const expired = DateTime.toEpochMillis(current) + 2592000000;
       yield* sweepMediaSubmissions({ db, now: expired - 1 });
       expect(
@@ -513,13 +578,51 @@ it("expires personal media locators without recharge on exact replay and eventua
             .first()
         )
       ).toEqual({ total: 0 });
-      expect(
-        (yield* acceptWhatsAppMedia({
+      const replay = yield* acceptWhatsAppMedia({
+        db,
+        userId,
+        event: { ...event("first"), receivedAt: DateTime.makeUnsafe(expired) },
+      });
+      expect(replay.status).toBe(202);
+      expect(replay.headers.get("cache-control")).toBe("no-store");
+      expect(yield* io(() => replay.json())).toMatchObject({
+        data: {
+          submissionId: admitted?.id,
+          status: "needs-review",
+          reason: "extraction-unavailable",
+        },
+      });
+      for (const content of [
+        { _tag: "Image", mediaId: WhatsAppMediaId.make("changed-locator"), caption: Option.none() },
+        {
+          _tag: "Image",
+          mediaId: WhatsAppMediaId.make("media-first"),
+          caption: Option.some(TranscriptText.make("changed caption")),
+        },
+      ] as const) {
+        const conflict = yield* acceptWhatsAppMedia({
           db,
           userId,
-          event: { ...event("first"), receivedAt: DateTime.makeUnsafe(expired) },
-        })).status
-      ).toBe(202);
+          event: { ...event("first"), receivedAt: DateTime.makeUnsafe(expired), content },
+        });
+        expect(conflict.status).toBe(409);
+        expect(conflict.headers.get("cache-control")).toBe("no-store");
+      }
+      expect(
+        yield* io(() =>
+          db
+            .prepare(
+              "SELECT media_id,caption,capacity_held,accepted_at_ms,expires_at_ms FROM media_submissions"
+            )
+            .first()
+        )
+      ).toEqual({
+        media_id: null,
+        caption: null,
+        capacity_held: 0,
+        accepted_at_ms: 1784116800000,
+        expires_at_ms: expired,
+      });
       expect(
         yield* io(() =>
           db.prepare("SELECT sum(units) AS total FROM commercial_allowance_consumptions").first()

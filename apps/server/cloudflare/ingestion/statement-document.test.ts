@@ -7,6 +7,11 @@ import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { recoverHeldStatementDocument } from "./operations";
 import { WhatsAppBusinessPhoneNumberId } from "../../src/shell/channels/whatsapp/contract";
 import { StatementDocumentUnavailable } from "./contract";
+import {
+  stageHeldStatementDocument,
+  withHeldStatementDocumentUpload,
+} from "./internal/statement-document";
+import { StatementStaging, StatementStagingFailed } from "./internal/statement-staging";
 
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
@@ -163,6 +168,62 @@ it("recovers the same staged reference without provider retrieval or another upl
               "SELECT upload_grant_id FROM (SELECT rowid,id AS turn_id,user_id,document_media_id AS media_id,document_staging_id AS staging_id,document_upload_grant_id AS upload_grant_id,document_upload_expires_at_ms AS upload_expires_at_ms,document_reference_json AS reference_json,started_at_ms AS created_at_ms FROM hosted_turns WHERE document_media_id IS NOT NULL)"
             )
             .first("upload_grant_id")
+        )
+      ).toBeNull();
+    })
+  ));
+
+it("retains the admitted byte snapshot when the caller changes its buffer before staging settles", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const work = yield* heldDocument();
+      const bytes = new TextEncoder().encode("Fecha,Descripcion,Valor\n2026-01-01,Mercado,1000\n");
+      const original = bytes.slice();
+      const reference = yield* withHeldStatementDocumentUpload({
+        ...work,
+        work: (grant) => {
+          const staged = stageHeldStatementDocument({ ...work, grant, bytes });
+          bytes.fill(0);
+          return staged;
+        },
+      });
+      const staging = StatementStaging.make({
+        database: work.db,
+        bucket: work.bucket,
+        nowEpochMs: () => work.current,
+      });
+      expect(
+        yield* staging.readOwnedStagedBytes({
+          userId: work.caller.userId,
+          stagingId: reference.stagingId,
+        })
+      ).toEqual(original);
+      expect(yield* recoverHeldStatementDocument(work)).toEqual(reference);
+    })
+  ));
+
+it("refuses over-bound direct bytes without retaining an object or document reference", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const work = yield* heldDocument();
+      const result = yield* Effect.exit(
+        withHeldStatementDocumentUpload({
+          ...work,
+          work: (grant) =>
+            stageHeldStatementDocument({
+              ...work,
+              grant,
+              bytes: new Uint8Array(5 * 1024 * 1024 + 1),
+            }),
+        })
+      );
+      deepStrictEqual(result, Exit.fail(new StatementStagingFailed({ reason: "resource-limit" })));
+      expect((yield* wait(() => work.bucket.list())).objects).toEqual([]);
+      expect(
+        yield* wait(() =>
+          work.db
+            .prepare("SELECT document_reference_json FROM hosted_turns WHERE id='turn'")
+            .first("document_reference_json")
         )
       ).toBeNull();
     })

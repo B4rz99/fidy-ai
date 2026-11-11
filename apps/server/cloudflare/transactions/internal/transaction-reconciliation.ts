@@ -83,10 +83,9 @@ const candidateQuery = `SELECT retained.id, retained.amount, retained.currency,
   (retained.reconciliation_first_id IS NOT NULL) AS already_linked
 FROM transactions retained`;
 
-const candidateFromRow = (row: MemberRow): Option.Option<Candidate> =>
-  Option.map(
-    Schema.decodeOption(Money)({ amount: row.amount, currency: row.currency }),
-    (money) => ({
+const candidateFromRow = (row: MemberRow): Effect.Effect<Candidate, Schema.SchemaError> =>
+  Schema.decodeEffect(Money)({ amount: row.amount, currency: row.currency }).pipe(
+    Effect.map((money) => ({
       member: {
         id: row.id,
         money,
@@ -94,8 +93,20 @@ const candidateFromRow = (row: MemberRow): Option.Option<Candidate> =>
         createdAt: row.created_at,
       },
       alreadyLinked: row.already_linked === 1,
-    })
+    }))
   );
+
+const SnapshotRows = Schema.Tuple([
+  Schema.Struct({
+    results: Schema.Array(Schema.Struct({ authorized: Schema.Literal(1) })).check(
+      Schema.isMaxLength(1)
+    ),
+  }),
+  Schema.Struct({ results: Schema.Array(MemberRow).check(Schema.isMaxLength(2)) }),
+  Schema.Struct({
+    results: Schema.Array(ReconciliationDecisionRow).check(Schema.isMaxLength(1)),
+  }),
+]);
 
 type PairSnapshot = Readonly<{
   authority: Option.Option<TransactionAuthority>;
@@ -106,7 +117,7 @@ const pairSnapshot = (work: PairWork): Effect.Effect<PairSnapshot, TransactionBo
   Effect.gen(function* () {
     const authority = callerAuthority({ subject: work.subject, current: work.current });
     const guard = `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`;
-    const [live, retained, decision] = yield* Effect.tryPromise({
+    const result = yield* Effect.tryPromise({
       try: () =>
         work.db.batch([
           work.db.prepare(`SELECT 1 AS authorized WHERE ${guard}`).bind(...authority.bindings),
@@ -133,22 +144,23 @@ const pairSnapshot = (work: PairWork): Effect.Effect<PairSnapshot, TransactionBo
         ]),
       catch: boundaryFailure,
     });
-    const rows = Schema.decodeUnknownOption(Schema.Array(MemberRow))(retained?.results);
-    const candidates = Option.flatMap(rows, (members) => {
-      const first = members.find((member) => member.id === work.pair.firstTransactionId);
-      const second = members.find((member) => member.id === work.pair.secondTransactionId);
-      if (first === undefined || second === undefined) return Option.none();
-      return Option.all([candidateFromRow(first), candidateFromRow(second)] as const);
-    });
+    const [live, retained, decision] = yield* Schema.decodeUnknownEffect(SnapshotRows)(result).pipe(
+      Effect.mapError(boundaryFailure)
+    );
+    const members = yield* Effect.forEach(retained.results, candidateFromRow).pipe(
+      Effect.mapError(boundaryFailure)
+    );
+    const first = members.find((candidate) => candidate.member.id === work.pair.firstTransactionId);
+    const second = members.find(
+      (candidate) => candidate.member.id === work.pair.secondTransactionId
+    );
     return {
-      authority: Option.map(
-        Schema.decodeUnknownOption(Schema.Struct({ authorized: Schema.Literal(1) }))(
-          live?.results[0]
-        ),
-        () => authority
-      ),
-      candidates,
-      decision: Schema.decodeUnknownOption(ReconciliationDecisionRow)(decision?.results[0]),
+      authority: live.results.length === 1 ? Option.some(authority) : Option.none(),
+      candidates:
+        first === undefined || second === undefined
+          ? Option.none()
+          : Option.some([first, second] as const),
+      decision: Option.fromUndefinedOr(decision.results[0]),
     };
   });
 

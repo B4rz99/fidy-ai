@@ -252,6 +252,43 @@ const validateParts = (
     }
     return parts.map((part) => part.body).join("");
   });
+const verifyReadyIdentity = (
+  input: MaterializationIdentity,
+  manifest: Manifest
+): Effect.Effect<void, BoundaryFailure> =>
+  Effect.gen(function* () {
+    const response = yield* foreign(() =>
+      input.DB.prepare(`SELECT p.chunk_index,p.part_index,p.sha256
+        FROM statement_materialization_parts p
+        JOIN statement_materializations m ON m.submission_id=p.submission_id
+        JOIN statement_submissions s ON s.id=m.submission_id
+        WHERE p.submission_id=? AND s.user_id=? AND m.state='ready'
+        ORDER BY p.chunk_index,p.part_index LIMIT ?`)
+        .bind(input.submissionId, input.userId, maximumParts + 1)
+        .all()
+    );
+    const parts = yield* Schema.decodeUnknownEffect(
+      Schema.Array(
+        Schema.Struct({
+          chunk_index: StoredPart.fields.chunk_index,
+          part_index: Part.fields.part_index,
+          sha256: digest,
+        })
+      ).check(Schema.isMaxLength(maximumParts))
+    )(response.results);
+    if (
+      parts.length !== manifest.part_count ||
+      (yield* partsChecksum(
+        parts.map((part) => ({
+          chunk: part.chunk_index,
+          part: part.part_index,
+          hash: part.sha256,
+        }))
+      )) !== manifest.parts_sha256
+    ) {
+      return yield* failed();
+    }
+  });
 const readRows = (
   input: MaterializationIdentity,
   offset: number,
@@ -309,6 +346,7 @@ const findMaterializedChunk = (
     if (value.state === "building" && !(yield* recoverBuilding(input, value))) {
       return Option.none();
     }
+    yield* verifyReadyIdentity(input, value);
     const headers = yield* Schema.decodeEffect(headersCodec)(value.headers_json);
     const rows =
       input.offset === value.row_count ? [] : yield* readRows(input, input.offset, value);

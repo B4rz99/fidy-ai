@@ -27,7 +27,16 @@ class MediaUnavailable extends Data.TaggedError("MediaUnavailable")<{ cause: unk
 const noStore = { "cache-control": "no-store" };
 const failure = (code: string, status: number): Response =>
   Response.json(
-    { error: { code, message: "Media submission could not be admitted." }, next: [] },
+    {
+      error: {
+        code,
+        message:
+          status === HTTP_UNAVAILABLE
+            ? "Media admission could not be confirmed. Retry the same event."
+            : "Media submission could not be admitted.",
+      },
+      next: [],
+    },
     { status, headers: noStore }
   );
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, MediaUnavailable> =>

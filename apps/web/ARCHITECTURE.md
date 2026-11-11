@@ -178,9 +178,15 @@ chat visibility. Entering Privacy or ending the authentication lifetime discards
 The frame subscribes to its rendered access state, not the distinction between independently
 authorized and ordinary product routes. Moving between those routes keeps the shared shell stable;
 the route owners still recheck Consent, and expired ordinary access still renders refusal.
+The mounted conversation owns one synchronous admission gate. Its display snapshots bind visibility,
+confirmation and recovery actions to the exact Turn phase and mounted lifetime; same-tick repeats
+and retained older actions cannot admit another request. The reply projection contains safe text,
+display identity and bound actions, while receipts and host confirmation commands remain private.
+Disposal clears the mounted snapshot and fences late command replies before registry disposal.
 An accepted processing response starts bounded observation of that exact Turn in the command's
 Effect lifetime, without resubmitting its message. Progress failures or an exhausted observation
-bound retain explicit recovery; unresolved execution still blocks new submissions. Disposal stops
+bound retain explicit recovery; each explicit Check makes one immediate read without reopening
+automatic observation. Unresolved execution still blocks new submissions. Disposal stops
 the pending checks.
 AI Elements conversation/message presentation uses Fidy primitives and the existing
 Effect hosted Turn client, without introducing another AI transport. Text is escaped, not executed
@@ -263,6 +269,31 @@ item and panel locks. Selection changes and ordinary route hiding preserve pendi
 panel disposal or authentication teardown cancels unsent work, and evidence expiry stops new work
 for that item. Already-sent mutations may commit; reopening reads canonical state. The generated
 client retains authorization, transport policy and telemetry ownership.
+Automatic draft saves retain the 200 ms debounce and one-second send spacing. A queued save
+rechecks its version, item admission, pacing and original expiry after acquiring the same
+item permit used by explicit decision drains; a superseded timer cannot submit a newer draft
+before that draft's debounce. Explicit drains bypass pacing while preserving serialization. An unrelated panel decision or
+workspace refresh does not consume another item's accepted autosave. Bulk admission freezes
+selected item deadlines; both the final drain check and response publication honor those original
+deadlines even after the retained draft entry has expired.
+Editor observation binds change and recovery actions without retaining drafts, scheduling timers
+or reading HTTP. Bound actions check the mounted generation and observed item entry; recovery
+replacement and disposal retire earlier callbacks. Save acknowledgments require exactly one
+matching item. Missing or incomplete acknowledgments discard unsent wanted work and retain the
+displayed draft with uncertainty until an explicit successful canonical reread. Recovery shares
+the item permit and rechecks expiry after waiting. The first retained item deadline survives
+save acknowledgments, clean canonical replacement and recovery; expiry removes retained draft
+evidence and fences late results and follow-on decisions. Only deadline metadata remains until
+owner disposal so a later observation cannot revive expired work.
+
+Decisions freeze unique bounded membership and original evidence deadlines before waiting for
+shared draft permits. Every acknowledgment must match the complete requested identity set,
+operation status and next revision before any detail is published. Bulk work rechecks every member
+after the last flush and sends one canonical mutation; preflight failure retains the panel lock.
+Skip retains a volatile one-use receipt containing the committed revisions and original deadlines.
+Undo prunes receipts contradicted by current observations and restores only those exact revisions,
+without flushing newer drafts. Unconfirmed outcomes are never replayed. Only a newly requested,
+successful canonical observation can clear uncertainty; cached display state cannot unlock it.
 
 ### Dashboard first use
 
@@ -878,8 +909,8 @@ retry policy and application runtime remain unchanged. Sanitization,
 bounded accumulation, mutation refusal, failure preservation, masked acquisition/disposal deadlines
 and interruption are covered through the diagnostic helper's public seams in the web script tests.
 
-Recurring workspace reads and writes request the compact display projection: only the latest
-revision of each plan crosses the browser boundary. Storage and historical occurrence calculations
+Recurring workspace reads and writes request the compact display projection: first, current local-date
+and latest revisions retain dated standing without projecting future settings early. Storage and historical occurrence calculations
 retain the complete revision ledger; default API reads still return the full document. Draft
 autosave starts after 200 milliseconds of idle input and subsequent automatic writes are spaced
 by at least one second; explicit Create/Skip flushes remain immediate and revision-bound.
@@ -935,3 +966,18 @@ equal new facts qualify. Failure, supersession, runtime failure and registry ret
 unsuccessful recovery. History still owns pagination/reset, and Category recovery rereads the metadata
 projection and its canonical fallback before admission can resume. Ordinary route preparation and
 Budget/Recurring refresh policies keep their existing contracts and retention.
+
+RecurringPlan standing is observed at the effective plan zone's local calendar date. Future pauses,
+stops and settings do not change earlier standing; Scheduled marks a future start, and endDate only
+bounds generated dates. Lifecycle controls consult retained stop/open-pause facts independently of
+standing. Explicit lifecycle and current-plan edit intent capture the local date when submitted;
+canonical document revision checks and live authorization remain server-owned. Stopped plans remain
+editable under the existing forward-edit policy, including replacement of the future revision suffix.
+
+Needs Review retains each item’s earliest observed original deadline in private authentication-registry
+atoms containing only timestamps. These bounds survive page, membership and context-query disposal.
+Context projection, original selection, generated original-read admission and route preloading share
+that bound and item metadata; original expiry
+does not expire a separately retained review draft or resolve its decision. Deadline subscriptions
+recheck wall time on focus, page show, and visibility changes, including retained hidden panels.
+This logical suppression does not depend on physical source cleanup or timely execution while suspended.

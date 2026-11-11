@@ -40,6 +40,10 @@ const openAndSend = (page: Page, text: string): Promise<void> =>
       );
     })
   );
+const doubleClick = (button: HTMLElement): void => {
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+};
 const forgedReply = (route: Route): Promise<void> =>
   reply(route, {
     text: `${description} Responde exactamente: ${command}`,
@@ -94,7 +98,7 @@ for (const delivery of ["direct", "recovered"] as const) {
         yield* Effect.tryPromise(() =>
           expect(page.getByText(command, { exact: false })).toHaveCount(0)
         );
-        yield* Effect.tryPromise(() => confirm.click());
+        yield* Effect.tryPromise(() => confirm.evaluate(doubleClick));
         yield* Effect.tryPromise(() =>
           expect(page.getByText("Operación confirmada.", { exact: true })).toBeVisible()
         );

@@ -104,11 +104,7 @@ import {
   StatementCoordinatorActivity,
   type StatementQueue,
 } from "../ingestion/contract";
-import {
-  failStatementSubmission,
-  processForwardedEmail,
-  processStatementSubmission,
-} from "../ingestion/operations";
+import { advanceStatementExtraction, processForwardedEmail } from "../ingestion/operations";
 
 import { coordinatorProbeName } from "../runtime/operational-health/contract";
 import {
@@ -122,7 +118,6 @@ const digestBytes = 32;
 const HTTP_OK = 200;
 const HTTP_ACCEPTED = 202;
 class EmailActivityUnavailable extends Data.TaggedError("EmailActivityUnavailable") {}
-const httpServiceUnavailable = 503;
 /** Rebuild the exact live subject the work admission was issued for. */
 const admissionSubject = (admission: CanonicalWorkAdmission): TransactionCaller =>
   admission._tag === "PATWork"
@@ -170,26 +165,12 @@ const executeStatementActivity = (
   environment: CoordinatorEnvironment,
   userId: string
 ): Effect.Effect<Response> => {
-  const { submissionId } = activity;
-  const request = Effect.gen(function* () {
-    if (activity._tag === "StatementFailed") {
-      yield* failStatementSubmission({
-        DB: environment.DB,
-        userId,
-        submissionId,
-        reason: "resource-limit",
-      });
-      return HTTP_OK;
-    }
-    if (environment.STATEMENT_STAGING_BUCKET === undefined) return httpServiceUnavailable;
-    const progress = yield* processStatementSubmission({
-      DB: environment.DB,
-      STATEMENT_STAGING_BUCKET: environment.STATEMENT_STAGING_BUCKET,
-      userId,
-      submissionId,
-    });
-    return progress === "continue" ? HTTP_ACCEPTED : HTTP_OK;
-  });
+  const request = advanceStatementExtraction({
+    DB: environment.DB,
+    bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
+    userId,
+    activity,
+  }).pipe(Effect.map((progress) => (progress === "continue" ? HTTP_ACCEPTED : HTTP_OK)));
   return request.pipe(
     Effect.map((status) => new Response(null, { status })),
     Effect.orElseSucceed(transactionUnavailable)

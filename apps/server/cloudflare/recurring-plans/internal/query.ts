@@ -81,9 +81,9 @@ type ProjectionWork = Readonly<{
 }>;
 type AutomaticProjection = Readonly<{
   document: RecurringSchedule;
-  complete: boolean;
   matches: (typeof RecurringWorkspace.Type)["matches"];
-}>;
+}> &
+  (Readonly<{ complete: false }> | Readonly<{ complete: true; unambiguous: boolean }>);
 export const matchingRange = (month: string): PlanningTransactionRange => {
   const start = DateTime.makeUnsafe(`${month}-01`);
   return {
@@ -93,6 +93,7 @@ export const matchingRange = (month: string): PlanningTransactionRange => {
 };
 const automaticFromFacts = ({
   document,
+  allocations,
   month,
   now,
   selection,
@@ -101,8 +102,11 @@ const automaticFromFacts = ({
   month: string;
   now: DateTime.Utc;
   selection: Option.Option<PlanningTransactionFacts>;
+  allocations: RecurringSchedule;
 }>): AutomaticProjection => {
-  if (document.plans.length === 0) return { document, complete: true, matches: [] };
+  if (document.plans.length === 0) {
+    return { document, complete: true, unambiguous: true, matches: [] };
+  }
   if (Option.isNone(selection) || !selection.value.complete) {
     return { document, complete: false, matches: [] };
   }
@@ -114,10 +118,13 @@ const automaticFromFacts = ({
   const items = [previousMonth(month), month, nextMonth].flatMap((selected) =>
     projectRecurringMonth({ document, month: selected, now })
   );
-  return matchedProjection(
-    document,
-    automaticMatches({ document, items, transactions: selection.value.transactions })
-  );
+  const candidates = matchCandidates({
+    document: allocations,
+    items,
+    transactions: selection.value.transactions,
+  });
+  const matches = uniqueRecurringMatches(candidates);
+  return matchedProjection(document, matches, matches.length === candidates.length);
 };
 export const automaticProjection = ({
   db,
@@ -128,7 +135,9 @@ export const automaticProjection = ({
 }: ProjectionWork): Effect.Effect<AutomaticProjection> =>
   Effect.gen(function* () {
     // No automatic matching candidate can exist without a retained plan.
-    if (document.plans.length === 0) return { document, complete: true, matches: [] };
+    if (document.plans.length === 0) {
+      return { document, complete: true, unambiguous: true, matches: [] };
+    }
     const selection = yield* readPlanningTransactions({
       db,
       userId,
@@ -137,7 +146,7 @@ export const automaticProjection = ({
         ...matchingRange(month),
       },
     });
-    return automaticFromFacts({ document, month, now, selection });
+    return automaticFromFacts({ document, allocations: document, month, now, selection });
   });
 
 const workspaceMatching = ({
@@ -175,8 +184,7 @@ const workspaceMatching = ({
     return observed.value;
   });
 
-/** Reuse date conversion only within this projection; never retain live facts between reads. */
-export const automaticMatches = ({
+const matchCandidates = ({
   document,
   items,
   transactions,
@@ -184,19 +192,29 @@ export const automaticMatches = ({
   document: RecurringSchedule;
   items: Parameters<typeof recurringMatchCandidates>[0]["items"];
   transactions: ReadonlyArray<Transaction>;
-}>): ReturnType<typeof uniqueRecurringMatches> => {
+}>): ReturnType<typeof recurringMatchCandidates> => {
   const factsByTimeZone = new Map<string, ReadonlyArray<ReturnType<typeof planningFact>>>();
-  const pairs = items.flatMap((item) => {
-    const timeZone = item.plan.timeZone;
-    let facts = factsByTimeZone.get(timeZone);
-    if (facts === undefined) {
-      facts = transactions.map((transaction) => planningFact({ transaction, timeZone }));
-      factsByTimeZone.set(timeZone, facts);
-    }
-    return recurringMatchCandidates({ document, items: [item], facts });
-  });
-  return uniqueRecurringMatches(pairs);
+  const allocatedOccurrences = new Set(
+    document.fulfillments.map((mark) => `${mark.planId}:${mark.date}`)
+  );
+  const pairs = items
+    .filter((item) => !allocatedOccurrences.has(`${item.planId}:${item.date}`))
+    .flatMap((item) => {
+      const timeZone = item.plan.timeZone;
+      let facts = factsByTimeZone.get(timeZone);
+      if (facts === undefined) {
+        facts = transactions.map((transaction) => planningFact({ transaction, timeZone }));
+        factsByTimeZone.set(timeZone, facts);
+      }
+      return recurringMatchCandidates({ document, items: [item], facts });
+    });
+  return pairs;
 };
+
+/** Reuse date conversion only within this projection; never retain live facts between reads. */
+export const automaticMatches = (
+  input: Parameters<typeof matchCandidates>[0]
+): ReturnType<typeof uniqueRecurringMatches> => uniqueRecurringMatches(matchCandidates(input));
 
 type WorkspaceWork = Readonly<{
   db: D1Database;
@@ -249,6 +267,7 @@ const projectWorkspaceSnapshot = ({
   const projection = (selected: string, index: number): AutomaticProjection =>
     automaticFromFacts({
       document: checked.document,
+      allocations: document,
       month: selected,
       now,
       selection: observed.ranges[index] ?? Option.none(),
@@ -275,7 +294,11 @@ export const workspaceFromSnapshot = (
 ): Effect.Effect<typeof RecurringWorkspace.Type, Schema.SchemaError> =>
   workspaceFromFacts({
     ...input,
-    editing: displayDocument({ document: input.document, compact: input.query.view === "compact" }),
+    editing: displayDocument({
+      document: input.document,
+      compact: input.query.view === "compact",
+      now: input.now,
+    }),
   });
 
 export const workspaceFromReadProjection = ({
@@ -341,15 +364,18 @@ const workspaceFromFacts = ({
       }),
       invalidFulfillmentIds: invalid,
       matches: matched.matches.filter(({ item }) => item.expectedDate.startsWith(query.month)),
-      matchesComplete: matched.complete && earlier.complete,
+      matchesComplete:
+        matched.complete && earlier.complete && matched.unambiguous && earlier.unambiguous,
     });
   });
 
 const matchedProjection = (
   document: RecurringSchedule,
-  matches: AutomaticProjection["matches"]
+  matches: AutomaticProjection["matches"],
+  unambiguous: boolean
 ): AutomaticProjection => ({
   complete: true,
+  unambiguous,
   matches,
   document: {
     ...document,

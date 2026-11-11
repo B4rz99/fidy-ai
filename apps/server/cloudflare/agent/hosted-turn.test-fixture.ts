@@ -14,6 +14,8 @@ import {
 } from "./internal/hosted-turn";
 import {
   CanonicalToolOutcome,
+  type HostedAgentSessionConsentBasis,
+  HostedAgentSessionId,
   TranscriptText,
   TranscriptTurnId,
 } from "../../src/core/agent/contract";
@@ -1168,3 +1170,51 @@ export const assertStatementPublicationWake =
       else if (checkpoint === "none") expect(wakes.length).toBeGreaterThan(0);
       return result;
     });
+
+export const sessionAdmissionFixture = ({
+  idleMs = 900_000,
+  basis = {},
+}: Partial<
+  Readonly<{
+    idleMs: number;
+    basis: Partial<HostedAgentSessionConsentBasis>;
+  }>
+> = {}): Promise<
+  Readonly<{
+    db: D1Database;
+    caller: Awaited<ReturnType<typeof subject>>;
+    current: number;
+    oldId: HostedAgentSessionId;
+    accepted: HostedAgentSessionConsentBasis;
+    priorBasis: HostedAgentSessionConsentBasis;
+    selection: ReturnType<typeof selectHostedSession>;
+  }>
+> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const caller = yield* Effect.tryPromise(() => subject(0));
+      const current = now();
+      const snapshot = yield* readHostedSnapshot({ db, subject: caller, now: current });
+      if (Option.isNone(snapshot)) return yield* Effect.die("missing fixture authority");
+      const accepted = snapshot.value.consentBasis;
+      const priorBasis = { ...accepted, ...basis };
+      const oldId = HostedAgentSessionId.make(newId());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status) VALUES(?,?,?,?,?,'active')"
+          )
+          .bind(oldId, users[0], encodeJson(priorBasis), current - idleMs, current - idleMs)
+          .run()
+      );
+      const fresh = yield* readHostedSnapshot({ db, subject: caller, now: current });
+      if (Option.isNone(fresh)) return yield* Effect.die("missing fixture authority");
+      const selection = selectHostedSession({
+        snapshot: fresh.value,
+        userId: UserId.make(users[0]),
+        now: current,
+      });
+      return { db, caller, current, oldId, accepted, priorBasis, selection };
+    })
+  );

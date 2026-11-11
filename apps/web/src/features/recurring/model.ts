@@ -23,9 +23,34 @@ export type CreationResultProps = Readonly<{
   save: Save;
   close: () => void;
 }>;
-export const planStatus = (plan: Plan): "stopped" | "paused" | "active" => {
-  if (plan.stoppedOn !== undefined) return "stopped";
-  return plan.pauses.some((pause) => pause.through === undefined) ? "paused" : "active";
+const observeCurrentPlan = (plan: Plan): Readonly<{ date: string; settings: PlanInput }> => {
+  const now = DateTime.nowUnsafe();
+  const revision =
+    plan.revisions.findLast(
+      (entry) =>
+        entry.from <=
+        DateTime.formatIsoDate(DateTime.makeZonedUnsafe(now, { timeZone: entry.plan.timeZone }))
+    ) ?? plan.revisions[0];
+  return {
+    date: DateTime.formatIsoDate(
+      DateTime.makeZonedUnsafe(now, { timeZone: revision.plan.timeZone })
+    ),
+    settings: revision.plan,
+  };
+};
+export const planToday = (plan: Plan): string => observeCurrentPlan(plan).date;
+export const currentPlan = (plan: Plan): PlanInput => observeCurrentPlan(plan).settings;
+export const planStatus = (plan: Plan): "scheduled" | "stopped" | "paused" | "active" => {
+  const { date, settings } = observeCurrentPlan(plan);
+  if (plan.stoppedOn !== undefined && date >= plan.stoppedOn) return "stopped";
+  if (
+    plan.pauses.some(
+      (pause) => date >= pause.from && (pause.through === undefined || date < pause.through)
+    )
+  ) {
+    return "paused";
+  }
+  return date < settings.firstDate ? "scheduled" : "active";
 };
 export const frequencies = [
   ["weekly", "Cada semana"],

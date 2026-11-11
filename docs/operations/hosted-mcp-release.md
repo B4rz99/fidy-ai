@@ -40,6 +40,10 @@ references, never login links, codes, credential stores, raw PTY/browser traces 
    Exercise expiry only under the approved clock/fault procedure; never rewrite Production grant
    rows ad hoc. Revoke from fresh first-party settings and prove later calls and refresh fail.
    Verify logout/PAT controls remain independent. A new browser approval creates a new connection.
+   If refresh delivery is lost, treat its outcome as unknown: refusal does not prove rollback.
+   Do not replay refresh to recover its result; recognized replay revokes the whole connection,
+   including concurrent winning credentials. Obtain new browser approval instead. No replacement
+   credential can be retrieved again, and revocation does not undo committed work.
 5. Exercise only approved bounded interruption/pressure scenarios. Lost mutation delivery requires
    observing the retained result, never blind replay. Preserve original retry identity for decoded
    non-admission pacing. Confirm metadata-only telemetry for success, refusal and interruption.

@@ -1,25 +1,12 @@
-import { Crypto, Effect, PlatformError } from "effect";
+import { SecureRandom } from "effect/crypto";
+import { Effect } from "effect";
 
 export const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
-export const uuid = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
+const workerSecureRandom = SecureRandom.make((size) =>
+  crypto.getRandomValues(new Uint8Array(size))
+);
+export const uuid = (): string => Effect.runSync(workerSecureRandom.uuidV4().pipe(Effect.orDie));
 export const json = ({
   body,
   status,

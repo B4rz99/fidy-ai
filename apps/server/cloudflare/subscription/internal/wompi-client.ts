@@ -1,9 +1,9 @@
+import { Digest } from "effect/crypto";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { UnknownJsonString, jsonStringSchema } from "../../../src/shell/schema-codecs/contract";
 import {
   Config,
   Context,
-  Crypto,
   Data,
   type DateTime,
   Effect,
@@ -131,8 +131,10 @@ const responseJson = Effect.fn(function* (response: OutboundHttpResponse) {
 });
 
 const digestText = Effect.fn(function* (text: string) {
-  const crypto = yield* Crypto.Crypto;
-  const digest = yield* crypto.digest("SHA-256", new TextEncoder().encode(text)).pipe(Effect.orDie);
+  const hashing = yield* Digest.Digest;
+  const digest = yield* hashing
+    .digest(Digest.sha256, new TextEncoder().encode(text))
+    .pipe(Effect.orDie);
   return Hex.encode(digest);
 });
 
@@ -214,7 +216,7 @@ const contractsFromMerchant = (
   merchant: typeof MerchantResponse.Type,
   publicKey: string,
   observedAt: DateTime.Utc
-): Effect.Effect<WompiContracts, "acceptance-claims", Crypto.Crypto> =>
+): Effect.Effect<WompiContracts, "acceptance-claims", Digest.Digest> =>
   Effect.all([
     contractEvidenceFields({
       permalink: merchant.data.presigned_acceptance.permalink,
@@ -248,11 +250,11 @@ const contractsFromMerchant = (
 const makeContracts =
   ({
     outboundHttp,
-    crypto,
+    digest,
     publicKey,
   }: Readonly<{
     outboundHttp: OutboundHttpService;
-    crypto: Crypto.Crypto;
+    digest: Digest.Digest["Service"];
     publicKey: string;
   }>): WompiEnrollmentClientService["contracts"] =>
   (observedAt) =>
@@ -273,7 +275,7 @@ const makeContracts =
       ),
       Effect.flatMap((merchant) => contractsFromMerchant(merchant, publicKey, observedAt)),
       Effect.mapError(() => new WompiContractsUnavailable()),
-      Effect.provideService(Crypto.Crypto, crypto),
+      Effect.provideService(Digest.Digest, digest),
       Effect.withSpan("Wompi.contracts", { attributes: { provider: "wompi" } })
     );
 
@@ -398,7 +400,7 @@ const makeCreatePaymentSource =
 export const makeWompiEnrollmentClient = (
   input: Readonly<{
     outboundHttp: OutboundHttpService;
-    crypto: Crypto.Crypto;
+    digest: Digest.Digest["Service"];
     publicKey: string;
   }>
 ): WompiEnrollmentClientService => ({
@@ -418,7 +420,7 @@ export class WompiEnrollmentClient extends Context.Service<
     WompiEnrollmentClient,
     Effect.gen(function* () {
       const outboundHttp = yield* OutboundHttp;
-      const crypto = yield* Crypto.Crypto;
+      const hashing = yield* Digest.Digest;
       const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
       const prefixes = wompiCredentialPrefixes(environment);
       const publicKey = yield* Config.schema(
@@ -429,7 +431,7 @@ export class WompiEnrollmentClient extends Context.Service<
         publicKey,
         verifyNequiApproval: makeVerifyWalletApproval(outboundHttp, "nequi"),
         verifyDaviplataApproval: makeVerifyWalletApproval(outboundHttp, "daviplata"),
-        contracts: makeContracts({ outboundHttp, crypto, publicKey }),
+        contracts: makeContracts({ outboundHttp, digest: hashing, publicKey }),
         createPaymentSource: makeCreatePaymentSource(outboundHttp),
         verifyPaymentSource: makeVerifyPaymentSource(outboundHttp),
       });

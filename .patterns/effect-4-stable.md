@@ -1,7 +1,7 @@
 # Selected stable Effect source
 
-The application uses exact **effect@4.0.6**, coordinated platform/SQL/Atom packages at
-4.0.6 and **alchemy@2.0.0-beta.80**. Topic notes cite source files and symbols in these selected
+The application uses exact **effect@4.1.2**, coordinated platform/SQL/Atom packages at
+4.1.2 and **alchemy@2.0.0-beta.80**. Topic notes cite source files and symbols in these selected
 packages. Verify against the installed release before adopting an upstream example; matching
 package version strings alone do not establish identical source.
 
@@ -19,7 +19,7 @@ the published 4.0.4 source. Use it for upstream tests, examples, and investigati
 a newer behavior exists in the pinned application. `.repos/alchemy` remains an older snapshot;
 the installed beta.80 source plus `patches/alchemy@2.0.0-beta.80.patch` defines the selected behavior.
 For a fresh checkout, install the admitted frozen graph first. Published source is also
-available at `https://unpkg.com/effect@4.0.6/src/<module>.ts` and
+available at `https://unpkg.com/effect@4.1.2/src/<module>.ts` and
 `https://unpkg.com/alchemy@2.0.0-beta.80/src/<module>.ts`; the latter does not contain Fidy's patch.
 
 | Topic                    | Current public namespace / source                                                               |
@@ -37,6 +37,22 @@ available at `https://unpkg.com/effect@4.0.6/src/<module>.ts` and
 | Alchemy CLI              | `node_modules/alchemy/bin/alchemy.js` → public `alchemy/Cli/main`                               |
 
 ## Migration-sensitive behavior
+
+- `Crypto` is replaced by `SecureRandom` and `Digest` under `effect/crypto`.
+  Require only the service used. Platform aggregate layers no longer supply crypto;
+  compose the explicit crypto layers at the runtime edge. Digest algorithms are descriptors
+  such as `Digest.sha256`; `uuidV4()` and `uuidV7()` replace the old UUID method names.
+  Crypto operations now fail as defects; preserve recoverable adapter refusals with
+  `Effect.catchDefect` at the narrow operation boundary. Interruption must still propagate.
+- `Terminal.make` requires a scoped `size` queue subscription, including in test fixtures.
+- `HttpClientRequest.method` accepts extension methods. Keep telemetry restricted to its
+  closed catalog and omit the method attribute for an unrecognized method.
+- Alchemy retains its Distilled rc.13 provider graph. The AWS S3 patch uses
+  `Schema.UndefinedOr(Schema.String)` for Metadata record values: Effect 4.1 rejects
+  optional-key annotations on index signatures. Native release/retirement imports exercise
+  this eager schema even though production state remains Cloudflare-owned.
+- The beta.80 Alchemy patch also migrates its OAuth and platform service composition to
+  separate entropy/digest services, with generated declarations matching the runtime.
 
 - `Encoding` is gone. Use `Hex.encode`, `Hex.decode`, `Base64Url.encode`,
   `Base64Url.decode` and `Base64Url.decodeString`. Decoders still return Result, not throwing
@@ -68,7 +84,7 @@ available at `https://unpkg.com/effect@4.0.6/src/<module>.ts` and
   Apply phases through the public SDK; actual-engine fixture tests cover tracked generations,
   dependency ordering and refusal before mutation. Import success is not live deployment parity.
 
-The compiler is @effect/tsgo 0.56.1. Its new
+The compiler is @effect/tsgo 0.67.1. Its new
 [`unstableApiUsage`](https://github.com/Effect-TS/tsgo/blob/main/docs/rules/unstable-api-usage.md)
 notice is disabled because the deliberately adopted, integrity-locked Effect 4 platform modules
 still carry upstream unstable annotations. Existing error/suggestion/warning exit policies stay

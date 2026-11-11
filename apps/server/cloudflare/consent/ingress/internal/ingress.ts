@@ -1,3 +1,4 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import {
   classifyResourceAdmissionFailure,
   prepareResourceAdmission,
@@ -28,18 +29,7 @@ import {
   decideConsentReply,
   isConsentIngressDecisionPhase,
 } from "../../../../src/shell/consent/operations";
-import {
-  Cause,
-  Clock,
-  Crypto,
-  DateTime,
-  Duration,
-  Effect,
-  Exit,
-  Option,
-  Result,
-  Schema,
-} from "effect";
+import { Cause, Clock, DateTime, Duration, Effect, Exit, Option, Result, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   type ResourceAdmissionAuthorityConfig,
@@ -479,7 +469,7 @@ const exchangeStatement = (
 const admitExchange = (
   db: D1Database,
   exchange: NewExchange
-): Effect.Effect<Response, never, Crypto.Crypto> =>
+): Effect.Effect<Response, never, Digest.Digest> =>
   Effect.gen(function* () {
     const { input, id, disclosure } = exchange;
     const disclosureJson = yield* Schema.encodeEffect(PendingDisclosureJson)(disclosure);
@@ -487,9 +477,9 @@ const admitExchange = (
     const portfolio = input.event.caller.businessPortfolioId;
     const bsuid = input.event.caller.businessScopedUserId;
     const caller = `${portfolio.length}:${portfolio}${bsuid.length}:${bsuid}`;
-    const cryptoService = yield* Crypto.Crypto;
+    const digest = yield* Digest.Digest;
     const sourceHash = Hex.encode(
-      yield* cryptoService.digest("SHA-256", new TextEncoder().encode(caller))
+      yield* digest.digest(Digest.sha256, new TextEncoder().encode(caller))
     );
     const prepared = prepareResourceAdmission(admission(db, input.receivedAtMs), {
       charges: consentCharges(sourceHash),
@@ -684,7 +674,7 @@ const priorExchangeResponse = (
 const startExchange = (
   environment: Environment,
   input: Inbound
-): Effect.Effect<Response, void, Crypto.Crypto> =>
+): Effect.Effect<Response, void, SecureRandom.SecureRandom | Digest.Digest> =>
   Effect.gen(function* () {
     const pending = yield* findExchange(environment.DB, input.event);
     const prior = priorExchangeResponse(pending, input);
@@ -694,12 +684,10 @@ const startExchange = (
     }
     const disclosure = yield* Effect.exit(Effect.sync(() => currentDisclosureFor()));
     if (Exit.isFailure(disclosure)) return answer(HTTP_UNAVAILABLE);
-    const cryptoService = yield* Crypto.Crypto;
-    const id = PendingConsentExchangeId.make(
-      yield* cryptoService.randomUUIDv4().pipe(Effect.orDie)
-    );
+    const cryptoService = yield* SecureRandom.SecureRandom;
+    const id = PendingConsentExchangeId.make(yield* cryptoService.uuidV4().pipe(Effect.orDie));
     const correlationToken = DisclosureDeliveryCorrelationToken.make(
-      yield* cryptoService.randomUUIDv4().pipe(Effect.orDie)
+      yield* cryptoService.uuidV4().pipe(Effect.orDie)
     );
     const exchange = {
       input,
@@ -729,7 +717,7 @@ export const receiveConsentText = ({
 }: Readonly<{ environment: Environment; input: Inbound }>): Effect.Effect<
   Response,
   void,
-  Crypto.Crypto
+  SecureRandom.SecureRandom | Digest.Digest
 > =>
   Effect.gen(function* () {
     const pending = yield* findExchange(environment.DB, input.event);

@@ -1,7 +1,7 @@
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { Clock, Effect, Option, type PlatformError, Redacted, Schema } from "effect";
-import { OAuthRefreshAdmission } from "../contract";
+import { BootstrapUnavailable, OAuthRefreshAdmission } from "../contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
 import { decideOAuthCredentialExpirations } from "../../../src/core/oauth-agents/operations";
 import type { OAuthCredentialExpirations } from "../../../src/core/oauth-agents/contract";
@@ -11,7 +11,7 @@ import {
   revokeOAuthReplayConsent,
 } from "../../../src/shell/consent/operations";
 import { newId, newSecret, secretDigest } from "../../secret-material/operations";
-import { BootstrapUnavailable, dbWork } from "./bootstrap";
+import { dbWork } from "./bootstrap";
 import { oauthResponse } from "./response";
 
 const secondMs = 1000;

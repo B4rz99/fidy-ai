@@ -1,3 +1,4 @@
+import { BootstrapUnavailable } from "./contract";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -35,10 +36,9 @@ import { oauthResponse as response } from "./internal/response";
 import { manageConnections } from "./internal/management";
 import { reviewRequest } from "./internal/review";
 import { handleMcpRequest } from "../mcp/runtime";
-import { exchangeToken } from "./internal/exchange";
+import { token } from "./operations";
 import {
   type BootstrapInvalid,
-  BootstrapUnavailable,
   invalidRequest,
   registerClient,
   startAuthorization,
@@ -295,23 +295,14 @@ const executeBootstrap = (
     }
     if (path === oauthPaths.authorize) return yield* startAuthorization({ ...input, current });
     if (path === oauthPaths.token) {
-      if (input.request.signal.aborted) return invalidRequest();
-      return yield* exchangeToken({
+      return yield* token({
         ...input,
-        current,
         admitUser: (userId) =>
           charge({ db: input.db, source: userId, kind: "user" }).pipe(
             Effect.asVoid,
             Effect.mapError(() => new BootstrapUnavailable())
           ),
-      }).pipe(
-        Effect.raceFirst(awaitRequestAbort(input.request)),
-        Effect.timeoutOrElse({
-          duration: "5 seconds",
-          orElse: () => Effect.fail(new BootstrapUnavailable()),
-        }),
-        Effect.mapError(() => new BootstrapUnavailable())
-      );
+      });
     }
     if (path === oauthPaths.mcp) return yield* handleMcpRequest(input);
     return discoveryResponse(path);

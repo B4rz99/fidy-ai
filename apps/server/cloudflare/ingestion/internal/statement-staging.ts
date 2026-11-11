@@ -1,3 +1,4 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import {
   erasePrivateObject,
   userPrivateObjectPrefix,
@@ -43,18 +44,7 @@ import {
   prepareOwnerAuditCall,
   recordRejectedPATWork,
 } from "../../../src/shell/audit/operations";
-import {
-  Context,
-  Crypto,
-  Data,
-  DateTime,
-  Effect,
-  Function,
-  Layer,
-  Option,
-  PlatformError,
-  Schema,
-} from "effect";
+import { Context, Data, DateTime, Effect, Function, Layer, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { type BoundedBodyReadFailed } from "../../http/contract";
@@ -79,27 +69,10 @@ export type StatementPublicationRefusal = Readonly<{
 
 type RefusalRecord = "recorded" | "credential_refused" | "unavailable";
 
-/**
- * Worker-backed entropy and digest for staging identities, object locators, and content digests.
- * Every adapter path draws both from this one Effect-producing boundary rather than ambient crypto.
- */
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
+const workerSecureRandom = SecureRandom.make((size) =>
+  crypto.getRandomValues(new Uint8Array(size))
+);
+const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
 
 /**
  * The staging adapter refused a request or reference. Reasons are closed and safe: they never
@@ -262,7 +235,7 @@ const platformUnavailable = <A>(
 
 const isSafeEpoch = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
 
-const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4().pipe(Effect.orDie));
+const newId = (): string => Effect.runSync(workerSecureRandom.uuidV4().pipe(Effect.orDie));
 
 /** Worker-generated random identity for one ingested statement record: a submission, audit, or
  * admission grant. It is never derived from User input, a digest, or a locator. */
@@ -270,7 +243,7 @@ export const newIngestionId = (): string => newId();
 
 const randomObjectKey = (userId: UserId): string => {
   const entropy = Effect.runSync(
-    workerCrypto.randomBytes(statementStagingObjectEntropyBytes).pipe(Effect.orDie)
+    workerSecureRandom.randomBytes(statementStagingObjectEntropyBytes).pipe(Effect.orDie)
   );
   return `${userPrivateObjectPrefix(userId)}${statementStagingObjectPrefix}${Hex.encode(entropy)}`;
 };
@@ -278,9 +251,9 @@ const randomObjectKey = (userId: UserId): string => {
 const digestUnavailable = (
   bytes: Uint8Array
 ): Effect.Effect<ArrayBuffer, StatementStagingUnavailable> =>
-  workerCrypto.digest("SHA-256", bytes).pipe(
+  workerDigest.digest(Digest.sha256, bytes).pipe(
     Effect.map((digest) => new Uint8Array(digest).buffer),
-    Effect.mapError(() => unavailable())
+    Effect.catchDefect(() => Effect.fail(unavailable()))
   );
 
 /**

@@ -1,3 +1,4 @@
+import { BootstrapUnavailable } from "../contract";
 import { DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
 import { approveRequest } from "./approval";
 import type { PlatformError } from "effect";
@@ -17,7 +18,6 @@ import { freshSessionConditions } from "../../../src/shell/web-session/operation
 import { freshBrowserSession } from "../../web-session/operations";
 import {
   BootstrapInvalid,
-  BootstrapUnavailable,
   dbWork,
   decodePayload,
   invalidRequest,

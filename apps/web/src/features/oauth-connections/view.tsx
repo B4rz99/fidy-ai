@@ -1,14 +1,11 @@
-import { DateTime, Duration, Option, Schema } from "effect";
-import { type JSX, useState } from "react";
+import { DateTime, Duration } from "effect";
+import { type JSX } from "react";
 import {
   type OAuthReview,
-  OAuthReviewChoice,
   PATLifetimeDays,
   type PATScope,
-  defaultPATLifetimeDays,
   patLifetimeDayOptions,
 } from "@/transport/client";
-import { Alert, AlertDescription } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 import { OAuthClient } from "@/ui/components/oauth-review";
 import { Checkbox } from "@/ui/components/checkbox";
@@ -20,16 +17,21 @@ type ReviewProps = Readonly<{
   cancel: () => void;
   cancelling: boolean;
   connecting: boolean;
-  connect: (choice: OAuthReviewChoice) => void;
+  connect: () => void;
+  scopes: ReadonlyArray<PATScope>;
+  days: PATLifetimeDays;
+  toggle: (scope: PATScope, checked: boolean) => void;
+  select: (days: PATLifetimeDays) => void;
 }>;
 const PermissionChoices = (
   input: Readonly<{
     permissions: OAuthReview["permissions"];
+    disabled: boolean;
     scopes: ReadonlySet<PATScope>;
     toggle: (scope: PATScope, checked: boolean) => void;
   }>
 ): JSX.Element => (
-  <fieldset className="oauth-permissions">
+  <fieldset className="oauth-permissions" disabled={input.disabled}>
     <legend>Permisos solicitados</legend>
     {input.permissions.map((permission) => (
       <label
@@ -39,6 +41,7 @@ const PermissionChoices = (
       >
         <Checkbox
           id={`oauth-${permission.scope}`}
+          disabled={input.disabled}
           checked={input.scopes.has(permission.scope)}
           onCheckedChange={(checked) => input.toggle(permission.scope, checked)}
         />
@@ -51,9 +54,13 @@ const PermissionChoices = (
   </fieldset>
 );
 const DurationChoices = (
-  input: Readonly<{ days: PATLifetimeDays; select: (days: PATLifetimeDays) => void }>
+  input: Readonly<{
+    days: PATLifetimeDays;
+    select: (days: PATLifetimeDays) => void;
+    disabled: boolean;
+  }>
 ): JSX.Element => (
-  <fieldset className="oauth-duration">
+  <fieldset className="oauth-duration" disabled={input.disabled}>
     <legend>Duración</legend>
     {patLifetimeDayOptions.map((option) => (
       <Button
@@ -69,52 +76,26 @@ const DurationChoices = (
   </fieldset>
 );
 const ReviewActions = ({
-  review,
   scopes,
-  days,
-  expiration,
   connect,
   connecting,
   cancelling,
   cancel,
-}: ReviewProps &
-  Readonly<{
-    scopes: ReadonlyArray<PATScope>;
-    days: PATLifetimeDays;
-    expiration: DateTime.Utc;
-  }>): JSX.Element => {
-  const submit = (): void => {
-    const choice = Schema.decodeOption(Schema.toType(OAuthReviewChoice))({
-      requestId: review.requestId,
-      scopes,
-      lifetimeDays: days,
-      reviewedAt: review.reviewedAt,
-      expiresAt: expiration,
-    });
-    if (Option.isSome(choice)) connect(choice.value);
-  };
-  return (
-    <div className="oauth-actions">
-      <Button
-        disabled={scopes.length === 0 || cancelling || connecting}
-        type="button"
-        onClick={submit}
-      >
-        {connecting ? "Conectando…" : "Conectar"}
-      </Button>
-      <Button disabled={cancelling || connecting} onClick={cancel} type="button" variant="outline">
-        {cancelling ? "Cancelando…" : "Cancelar"}
-      </Button>
-    </div>
-  );
-};
-const CancellationFailure = (): JSX.Element => (
-  <div className="pt-6">
-    <Alert variant="warning">
-      <AlertDescription>
-        No pudimos cancelar. Intenta de nuevo; no se autorizó ningún acceso.
-      </AlertDescription>
-    </Alert>
+}: Pick<
+  ReviewProps,
+  "scopes" | "connect" | "connecting" | "cancelling" | "cancel"
+>): JSX.Element => (
+  <div className="oauth-actions">
+    <Button
+      disabled={scopes.length === 0 || cancelling || connecting}
+      type="button"
+      onClick={connect}
+    >
+      {connecting ? "Conectando…" : "Conectar"}
+    </Button>
+    <Button disabled={cancelling || connecting} onClick={cancel} type="button" variant="outline">
+      {cancelling ? "Cancelando…" : "Cancelar"}
+    </Button>
   </div>
 );
 
@@ -124,21 +105,18 @@ export const OAuthReviewView = ({
   cancelling,
   connect,
   connecting,
-  cancelFailed,
-}: ReviewProps & Readonly<{ cancelFailed: boolean }>): JSX.Element => {
-  const [scopes, setScopes] = useState<ReadonlyArray<PATScope>>(() => review.scopes);
-  const [days, setDays] = useState<PATLifetimeDays>(defaultPATLifetimeDays);
+  scopes,
+  days,
+  toggle,
+  select,
+}: ReviewProps): JSX.Element => {
   const expiration = DateTime.addDuration(review.reviewedAt, Duration.days(days));
-  const toggle = (scope: PATScope, checked: boolean): void =>
-    setScopes((current) =>
-      checked ? [...current, scope] : current.filter((candidate) => candidate !== scope)
-    );
   return (
     <div className="settings-columns">
       <div className="settings-main">
-        {cancelFailed ? <CancellationFailure /> : null}
         <OAuthClient name={review.claimedClientName}>
           <PermissionChoices
+            disabled={connecting || cancelling}
             permissions={review.permissions}
             scopes={new Set(scopes)}
             toggle={toggle}
@@ -151,7 +129,7 @@ export const OAuthReviewView = ({
           <h2>Duración del acceso</h2>
           <p className="oauth-description">Elige cuándo vencerá esta conexión.</p>
         </div>
-        <DurationChoices days={days} select={setDays} />
+        <DurationChoices days={days} select={select} disabled={connecting || cancelling} />
         <p className="oauth-expiration">
           <span className="oauth-description">Vencimiento previsto</span>
           <time dateTime={DateTime.formatIso(expiration)}>{formatExpiration(expiration)}</time>
@@ -166,9 +144,7 @@ export const OAuthReviewView = ({
           El acceso vence en la fecha indicada. Para renovarlo tendrás que aprobar una nueva
           conexión.
         </p>
-        <ReviewActions
-          {...{ review, scopes, days, expiration, connect, connecting, cancelling, cancel }}
-        />
+        <ReviewActions {...{ scopes, connect, connecting, cancelling, cancel }} />
       </aside>
     </div>
   );

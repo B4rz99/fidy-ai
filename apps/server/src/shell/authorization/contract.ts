@@ -1,4 +1,5 @@
-import { Context, type Crypto, type DateTime, type Effect } from "effect";
+import { type Digest } from "effect/crypto";
+import { Context, type DateTime, type Effect } from "effect";
 import type { SqlClient } from "effect/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/http-api";
 import type { AuditCaller, AuditOutcome } from "~/core/audit/contract";
@@ -86,13 +87,13 @@ export const agentBearerSecurity = HttpApiSecurity.bearer.pipe(
  * WebSession-or-PAT authorization. PAT is attempted first, preserving the final
  * cookie alternative's Consent or caller-policy refusal.
  *
- * @effect-expect-leaking Crypto | HttpServerRequest | ParsedSearchParams | RouteContext | SqlClient
+ * @effect-expect-leaking Digest | HttpServerRequest | ParsedSearchParams | RouteContext | SqlClient
  */
 export class TokenAuthorization extends HttpApiMiddleware.Service<
   TokenAuthorization,
   {
     provides: ResolvedCaller | ChildOperationAudit;
-    requires: Crypto.Crypto | SqlClient.SqlClient;
+    requires: Digest.Digest | SqlClient.SqlClient;
   }
 >()("@fidy/server/shell/authorization/contract/TokenAuthorization", {
   requiredForClient: true,

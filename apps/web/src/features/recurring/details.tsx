@@ -1,4 +1,4 @@
-import { browserCrypto } from "@/browser/crypto";
+import { browserSecureRandom } from "@/browser/crypto";
 import { BigDecimal, Effect, Option, Schema } from "effect";
 import { type FormEvent, type JSX, useId, useRef, useState } from "react";
 import { RecurringCommand } from "@/transport/client";
@@ -259,7 +259,7 @@ const paymentCommand = (form: FormData, item: Occurrence): Option.Option<Recurri
       kind: "fulfill",
       ...(replaces === "" ? {} : { replaces }),
       fulfillment: {
-        id: Effect.runSync(browserCrypto.randomUUIDv4().pipe(Effect.orDie)),
+        id: Effect.runSync(browserSecureRandom.uuidV4().pipe(Effect.orDie)),
         planId: item.planId,
         date: item.date,
         actualDate: form.get("actualDate"),

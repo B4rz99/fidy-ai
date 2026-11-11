@@ -52,7 +52,7 @@ import { ResourceAdmissionRefused } from "../../resource-admission/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
 import { browserOrigins } from "../../runtime/contract";
-import { type WompiTransportFactory, workerCrypto } from "./wompi-runtime";
+import { type WompiTransportFactory, workerDigest, workerSecureRandom } from "./wompi-runtime";
 import { type EnrollmentEnvironment } from "../contract";
 
 const Origin = Schema.Literals([
@@ -187,7 +187,7 @@ const rateLimited = (): Response =>
   Response.json(paymentEnrollmentRateLimitedBody, { status: 429, headers: noStore });
 const json = (body: unknown): Response => Response.json(body, { headers: noStore });
 const instant = (ms: number): string => DateTime.formatIso(DateTime.makeUnsafe(ms));
-const id = workerCrypto.randomUUIDv4().pipe(Effect.orDie);
+const id = workerSecureRandom.uuidV4().pipe(Effect.orDie);
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
@@ -249,7 +249,7 @@ const makeWompi = (
     Effect.map((outboundHttp) =>
       makeWompiEnrollmentClient({
         outboundHttp,
-        crypto: workerCrypto,
+        digest: workerDigest,
         publicKey: environment.WOMPI_PUBLIC_KEY,
       })
     )

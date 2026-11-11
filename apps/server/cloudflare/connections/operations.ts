@@ -1,3 +1,4 @@
+import { type SecureRandom } from "effect/crypto";
 import { ConnectionInstitutions } from "../../src/shell/connections/contract";
 import {
   institutionsForUser,
@@ -12,7 +13,7 @@ import { completeAuthorization } from "./internal/activation";
 import { browseAccounts } from "./internal/accounts";
 import { beginContinuation } from "./internal/browser";
 import { initiationStatements, readInitiationResult } from "./internal/initiation";
-import { type Crypto, Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   ConnectInstitutionInput,
   Connection,
@@ -296,7 +297,7 @@ export const executeConnectionBrowserAdmission = (
 
 export const executeConnectionCallbackAdmission = (
   input: Readonly<{ db: D1Database; candidate: unknown; userId: string; signal: AbortSignal }>
-): Effect.Effect<Response, never, Crypto.Crypto> => {
+): Effect.Effect<Response, never, SecureRandom.SecureRandom> => {
   const admission = Schema.decodeUnknownOption(ConnectionCallbackAdmission, {
     onExcessProperty: "error",
   })(input.candidate);

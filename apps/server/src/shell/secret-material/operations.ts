@@ -1,5 +1,6 @@
+import { Digest } from "effect/crypto";
 import type { WompiEnvironment } from "./contract";
-import { type Config, Crypto, Effect, type Redacted, Schema } from "effect";
+import { type Config, Effect, type Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import type { TokenBearer } from "~/core/tokens/contract";
 import { configuredSecret } from "~/shell/secret-material/internal/configured-secret";
@@ -73,9 +74,9 @@ export const loadWompiIntegritySecret = (
 /** Derives the one-way SHA-256 digest persisted and compared when authenticating a PAT bearer. */
 export const derivePATBearerDigest = (
   bearer: TokenBearer
-): Effect.Effect<PATBearerDigest, never, Crypto.Crypto> =>
-  Effect.flatMap(Crypto.Crypto, (crypto) =>
-    crypto.digest("SHA-256", new TextEncoder().encode(bearer))
+): Effect.Effect<PATBearerDigest, never, Digest.Digest> =>
+  Effect.flatMap(Digest.Digest, (crypto) =>
+    crypto.digest(Digest.sha256, new TextEncoder().encode(bearer))
   ).pipe(
     Effect.map((digest) => PATBearerDigest.make(Hex.encode(digest))),
     Effect.orDie

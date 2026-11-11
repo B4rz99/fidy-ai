@@ -1,3 +1,4 @@
+import { SecureRandom } from "effect/crypto";
 // Native CLI managed-path ownership uses the host operating system path format.
 import { join, resolve, sep } from "node:path";
 import { userInfo } from "node:os";
@@ -5,7 +6,6 @@ import {
   Cause,
   Clock,
   Config,
-  Crypto,
   Data,
   DateTime,
   Effect,
@@ -1729,17 +1729,18 @@ export const nativeTools = (
     namespace: string;
     mcpUrl: Option.Option<string>;
   }>
-): Effect.Effect<NativeSummary, NativeProofError, FileSystem.FileSystem | Crypto.Crypto> => {
+): Effect.Effect<
+  NativeSummary,
+  NativeProofError,
+  FileSystem.FileSystem | SecureRandom.SecureRandom
+> => {
   const { host, binary, root, mode, namespace } = input;
   return Effect.scoped(
     Effect.gen(function* () {
       const signal = yield* Effect.abortSignal;
       const fs = yield* FileSystem.FileSystem;
-      const crypto = yield* Crypto.Crypto;
-      const callIds: readonly [string, string] = [
-        yield* crypto.randomUUIDv4(),
-        yield* crypto.randomUUIDv4(),
-      ];
+      const crypto = yield* SecureRandom.SecureRandom;
+      const callIds: readonly [string, string] = [yield* crypto.uuidV4(), yield* crypto.uuidV4()];
       const budgetFile = join(root, `${host}-budget-private.json`);
       const budgetId = (yield* foreign(() => Bun.file(budgetFile).exists()))
         ? text(object(parseJson(yield* fs.readFileString(budgetFile))).id ?? "")

@@ -1,4 +1,5 @@
-import { Config, Crypto, Data, Effect, FileSystem, Option, Schema, Stream } from "effect";
+import { SecureRandom } from "effect/crypto";
+import { Config, Data, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { requestHostedProof } from "./local-workerd-http";
 import { runProofCommand } from "./proof-command";
@@ -100,7 +101,7 @@ export const hostedWorkerProof = Effect.fn(function* (
   }>
 ) {
   const { directory, retirement } = input;
-  const token = yield* (yield* Crypto.Crypto).randomUUIDv4();
+  const token = yield* (yield* SecureRandom.SecureRandom).uuidV4();
   const secrets = `${directory}/proof-secrets.json`;
   const fs = yield* FileSystem.FileSystem;
   const encoded = yield* Schema.encodeEffect(

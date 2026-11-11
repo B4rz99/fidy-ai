@@ -1,7 +1,7 @@
 import { BunServices } from "@effect/platform-bun";
 import { expect, it } from "@effect/vitest";
 import { deepStrictEqual } from "node:assert";
-import { Effect, Exit, Option, Queue, Redacted, Terminal } from "effect";
+import { type Cause, Effect, Exit, Option, Queue, Redacted, Terminal } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { makeRecoveryOperator } from "./runtime";
@@ -15,6 +15,9 @@ const terminal = (readInput: Terminal.Terminal["readInput"]): Terminal.Terminal 
   Terminal.make({
     columns: Effect.succeed(80),
     rows: Effect.succeed(24),
+    size: Effect.acquireRelease(Queue.unbounded<Terminal.Size, Cause.Done>(), (queue) =>
+      Queue.end(queue)
+    ).pipe(Effect.tap((queue) => Queue.offer(queue, { columns: 80, rows: 24 }))),
     readInput,
     readLine: Effect.die("recovery must not use echoed line input"),
     display: () => Effect.die("recovery must not use stdout"),

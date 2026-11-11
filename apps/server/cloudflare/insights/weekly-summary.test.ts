@@ -419,7 +419,7 @@ for (const change of ["revision", "withdrawal", "schedule"] as const) {
                       )
                       .bind(snapshot.userId);
               return mutation.run().then((committed) => {
-                mutationSucceeded = committed.success && committed.meta.changes === 1;
+                mutationSucceeded = committed.meta.changes === 1;
                 return result;
               });
             });

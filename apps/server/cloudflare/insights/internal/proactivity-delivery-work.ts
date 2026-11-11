@@ -76,6 +76,25 @@ const expiryStatement = (
         )
         .bind(work.user_id, work.kind, work.delivery_id, now);
 
+export const expireQueuedDelivery = (
+  input: Readonly<{ db: D1Database; work: ProactivityDeliveryWork; now: number }>
+): Effect.Effect<void, InsightUnavailable> =>
+  Effect.tryPromise(() =>
+    expiryStatement(
+      input.db,
+      {
+        user_id: input.work.userId,
+        kind: input.work.kind,
+        delivery_id:
+          input.work.kind === "weekly-summary" ? input.work.insightEventId : input.work.id,
+      },
+      input.now
+    ).run()
+  ).pipe(
+    Effect.asVoid,
+    Effect.mapError(() => new InsightUnavailable())
+  );
+
 /** Metadata-only cleanup selects at most one shared batch and rechecks each deadline/send proof at commit. */
 export const expireDeliveryWork = (
   input: Readonly<{ db: D1Database; now: number }>

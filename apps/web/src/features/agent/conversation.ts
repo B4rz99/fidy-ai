@@ -17,9 +17,19 @@ type ConversationOwner = Readonly<{
   subscribe: (listener: () => void) => () => void;
   capture: () => ConversationLifetime;
 }>;
+type MountedLifetime = Readonly<{ active: () => boolean; retire: () => void }>;
+const mountedLifetime = (): MountedLifetime => {
+  let retired = false;
+  return {
+    active: (): boolean => !retired,
+    retire: (): void => {
+      retired = true;
+    },
+  };
+};
 const conversationOwner = (clearAcceptedDraft: () => void): ConversationOwner => {
   let conversation = initialConversation;
-  let lifetime = Symbol();
+  let lifetime = mountedLifetime();
   let active = false;
   const listeners = new Set<() => void>();
   const setConversation: SetConversation = (update) => {
@@ -36,13 +46,14 @@ const conversationOwner = (clearAcceptedDraft: () => void): ConversationOwner =>
       return () => {
         listeners.delete(listener);
         active = false;
-        lifetime = Symbol();
+        lifetime.retire();
+        lifetime = mountedLifetime();
         conversation = { turn: { tag: "idle" }, history: [] };
       };
     },
     capture: (): ConversationLifetime => {
       const admitted = lifetime;
-      const isActive = (): boolean => active && admitted === lifetime;
+      const isActive = (): boolean => active && admitted.active();
       return {
         active: isActive,
         setConversation: (update: Parameters<SetConversation>[0]): void => {

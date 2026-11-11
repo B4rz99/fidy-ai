@@ -1,4 +1,4 @@
-import { Clock, DateTime, Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Clock, DateTime, Deferred, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
 import { afterEach, expect, vi } from "vitest";
@@ -43,11 +43,15 @@ type Fixture = {
   detail: Detail;
   entries: Map<string, Saved>;
   sent: Array<ReviewCommand>;
+  reads: Array<string>;
+  remount: () => void;
   dispose: () => void;
   failWrite: (value: boolean) => void;
   failRead: (value: boolean) => void;
   missingResult: () => void;
+  duplicateResult: () => void;
   delay: (value: number) => void;
+  holdWrite: () => () => void;
 };
 const fixture = Effect.fnUntraced(function* () {
   vi.useFakeTimers();
@@ -56,10 +60,13 @@ const fixture = Effect.fnUntraced(function* () {
     [firstId, secondId].map((id) => [id, { item: fixtureItem(id), revision: 0, draft: undefined }])
   );
   const sent: Array<ReviewCommand> = [];
+  const reads: Array<string> = [];
   let failWrite = false;
   let failRead = false;
   let missingResult = false;
+  let duplicateResult = false;
   let delay = 0;
+  let writeGate: Effect.Effect<void> = Effect.void;
   const http = HttpClient.make((request) =>
     Effect.gen(function* () {
       const path = new URL(request.url).pathname;
@@ -69,13 +76,14 @@ const fixture = Effect.fnUntraced(function* () {
           request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : ""
         );
         sent.push(command);
+        yield* writeGate;
         yield* Effect.sleep(delay);
-        data = applyFixture(entries, command);
+        data = fixtureResult(applyFixture(entries, command), { missingResult, duplicateResult });
         if (failWrite) {
           return HttpClientResponse.fromWeb(request, new Response("unavailable", { status: 503 }));
         }
-        if (missingResult) data = [];
       } else {
+        reads.push(path);
         if (failRead) {
           return HttpClientResponse.fromWeb(request, new Response("unavailable", { status: 503 }));
         }
@@ -123,6 +131,10 @@ const fixture = Effect.fnUntraced(function* () {
     detail,
     entries,
     sent,
+    reads,
+    remount: () => {
+      resources.push(registry.get(atom).mount());
+    },
     dispose,
     failWrite: (value: boolean): void => {
       failWrite = value;
@@ -133,6 +145,17 @@ const fixture = Effect.fnUntraced(function* () {
     missingResult: (): void => {
       missingResult = true;
     },
+    duplicateResult: (): void => {
+      duplicateResult = true;
+    },
+    holdWrite: () => {
+      const pending = Deferred.makeUnsafe<void>();
+      writeGate = Deferred.await(pending);
+      return () => {
+        writeGate = Effect.void;
+        Deferred.doneUnsafe(pending, Effect.void);
+      };
+    },
     delay: (value: number): void => {
       delay = value;
     },
@@ -142,6 +165,13 @@ const fixture = Effect.fnUntraced(function* () {
 const advance = Effect.fnUntraced(function* (milliseconds: number) {
   yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(milliseconds));
 });
+const fixtureResult = (
+  data: ReadonlyArray<Saved>,
+  mode: Readonly<{ missingResult: boolean; duplicateResult: boolean }>
+): ReadonlyArray<Saved> => {
+  if (mode.missingResult) return [];
+  return mode.duplicateResult ? [...data, ...data] : data;
+};
 const applyFixture = (
   entries: Map<string, Saved>,
   command: ReviewCommand
@@ -171,7 +201,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const test = yield* fixture();
-      test.view().change(test.detail, edit("98765"));
+      test.view().editor(test.detail).change(edit("98765"));
       test.view().bulk(false, [test.detail.item]);
       yield* advance(0);
       expect(test.sent.map((command) => command._tag)).toEqual(["SaveDraft", "Skip"]);
@@ -190,13 +220,13 @@ it.live(
 it.live("saves promptly while spacing automatic writes and retaining the latest draft", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
-    test.view().change(test.detail, edit("100"));
+    test.view().editor(test.detail).change(edit("100"));
     yield* advance(250);
     expect(test.sent).toHaveLength(1);
-    test.view().change(test.detail, edit("200"));
+    test.view().editor(test.detail).change(edit("200"));
     yield* advance(250);
     expect(test.sent).toHaveLength(1);
-    test.view().change(test.detail, edit("300"));
+    test.view().editor(test.detail).change(edit("300"));
     yield* advance(750);
     expect(test.sent).toHaveLength(2);
     expect(test.sent[1]).toMatchObject({ revision: 1, draft: { amount: "300" } });
@@ -208,9 +238,9 @@ it.live("serializes new draft changes behind an in-flight save before deciding",
   Effect.gen(function* () {
     const test = yield* fixture();
     test.delay(100);
-    test.view().change(test.detail, edit("100"));
+    test.view().editor(test.detail).change(edit("100"));
     yield* advance(250);
-    test.view().change(test.detail, edit("200"));
+    test.view().editor(test.detail).change(edit("200"));
     test.view().decide(test.detail, "Skip");
     yield* advance(400);
     expect(test.sent.map((command) => command._tag)).toEqual(["SaveDraft", "SaveDraft", "Skip"]);
@@ -225,16 +255,16 @@ it.live(
     Effect.gen(function* () {
       const test = yield* fixture();
       test.failWrite(true);
-      test.view().change(test.detail, edit("42000"));
+      test.view().editor(test.detail).change(edit("42000"));
       yield* advance(650);
       expect(test.view().editor(test.detail).feedback).toBe("uncertain");
       test.view().decide(test.detail, "Skip");
       test.failRead(true);
-      test.view().recoverItem(test.detail);
+      test.view().editor(test.detail).recover();
       yield* advance(2000);
       expect(test.view().editor(test.detail).locked).toBe(true);
       test.failRead(false);
-      test.view().recoverItem(test.detail);
+      test.view().editor(test.detail).recover();
       yield* advance(0);
       expect(test.view().editor(test.detail)).toMatchObject({
         locked: false,
@@ -284,9 +314,9 @@ it.live(
     Effect.gen(function* () {
       const test = yield* fixture();
       const retained = test.view();
-      retained.change(test.detail, edit("100"));
+      retained.editor(test.detail).change(edit("100"));
       test.dispose();
-      retained.change(test.detail, edit("200"));
+      retained.editor(test.detail).change(edit("200"));
       retained.decide(test.detail, "Skip");
       yield* advance(1000);
       expect(test.sent).toHaveLength(0);
@@ -297,7 +327,7 @@ it.live("disposal during a save prevents its queued decision and ignores a late 
   Effect.gen(function* () {
     const test = yield* fixture();
     test.delay(200);
-    test.view().change(test.detail, edit("100"));
+    test.view().editor(test.detail).change(edit("100"));
     test.view().bulk(false, [test.detail.item]);
     yield* advance(0);
     expect(test.sent).toHaveLength(1);
@@ -318,7 +348,7 @@ it.live("evidence expiry prevents a pending autosave from submitting", () =>
         expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 100),
       },
     };
-    test.view().change(detail, edit("100"));
+    test.view().editor(detail).change(edit("100"));
     yield* advance(1000);
     expect(test.sent).toHaveLength(0);
     expect(test.view().editor(detail).locked).toBe(true);
@@ -329,10 +359,18 @@ it.live("an incomplete save acknowledgement blocks the following decision", () =
   Effect.gen(function* () {
     const test = yield* fixture();
     test.missingResult();
-    test.view().change(test.detail, edit("100"));
-    test.view().decide(test.detail, "Skip");
+    const release = test.holdWrite();
+    test.view().editor(test.detail).change(edit("100"));
+    yield* advance(250);
+    test.view().editor(test.detail).change(edit("200"));
+    release();
     yield* advance(0);
-    expect(test.view().editor(test.detail).feedback).toBe("uncertain");
+    expect(test.view().editor(test.detail)).toMatchObject({
+      feedback: "uncertain",
+      draft: { amount: "200" },
+    });
+    test.view().decide(test.detail, "Skip");
+    yield* advance(2000);
     expect(test.sent).toHaveLength(1);
   })
 );
@@ -341,7 +379,7 @@ it.live("keeps a failed item's lock local while allowing another item to save", 
   Effect.gen(function* () {
     const test = yield* fixture();
     test.failWrite(true);
-    test.view().change(test.detail, edit("100"));
+    test.view().editor(test.detail).change(edit("100"));
     yield* advance(650);
     test.failWrite(false);
     const other: Detail = {
@@ -351,7 +389,7 @@ it.live("keeps a failed item's lock local while allowing another item to save", 
         id: yield* Schema.decodeEffect(ReviewCommand.members[0].fields.id)(secondId),
       },
     };
-    test.view().change(other, edit("200"));
+    test.view().editor(other).change(edit("200"));
     yield* advance(650);
     expect(test.view().editor(test.detail).locked).toBe(true);
     expect(test.view().editor(other)).toMatchObject({ locked: false, feedback: "saved" });
@@ -364,7 +402,7 @@ it.live("accepts a newer canonical draft only while the local draft is clean", (
     const test = yield* fixture();
     const newer: Detail = { ...test.detail, revision: 1, draft: Option.some(edit("900")) };
     expect(test.view().editor(newer).draft.amount).toBe("900");
-    test.view().change(test.detail, edit("100"));
+    test.view().editor(test.detail).change(edit("100"));
     expect(test.view().editor(newer)).toMatchObject({
       locked: true,
       feedback: "failed",
@@ -427,7 +465,7 @@ it.live("rechecks every selected item's expiry after waiting for other draft sav
       },
     };
     test.delay(300);
-    test.view().change(other, edit("200"));
+    test.view().editor(other).change(edit("200"));
     test.view().bulk(false, [expiring, other.item]);
     yield* advance(400);
     expect(test.sent.map((command) => command._tag)).toEqual(["SaveDraft"]);
@@ -461,10 +499,13 @@ it.live("confirms localized review Money exactly and blocks invalid amounts", ()
       occurredAt: "2026-10-15T12:00:00Z",
     };
     for (const amount of ["", "0", "-12", "12.50", "12,501"]) {
-      test.view().change(test.detail, { ...draft, amount });
+      test
+        .view()
+        .editor(test.detail)
+        .change({ ...draft, amount });
       expect(test.view().editor(test.detail).canCreate).toBe(false);
     }
-    test.view().change(test.detail, draft);
+    test.view().editor(test.detail).change(draft);
     expect(test.view().editor(test.detail).canCreate).toBe(true);
     test.view().decide(test.detail, "Create");
     yield* advance(0);
@@ -481,13 +522,15 @@ it.live("confirms localized review Money exactly and blocks invalid amounts", ()
 it.live("retires an obsolete autosave waiting for the item permit before a newer debounce", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
-    test.delay(1500);
-    test.view().change(test.detail, edit("100"));
+    const release = test.holdWrite();
+    test.view().editor(test.detail).change(edit("100"));
     yield* advance(250);
-    test.view().change(test.detail, edit("200"));
+    test.view().editor(test.detail).change(edit("200"));
     yield* advance(1350);
-    test.view().change(test.detail, edit("300"));
+    test.view().editor(test.detail).change(edit("300"));
     yield* advance(100);
+    release();
+    yield* advance(0);
     expect(test.sent).toHaveLength(1);
     expect(test.view().editor(test.detail)).toMatchObject({
       draft: { amount: "300" },
@@ -497,5 +540,142 @@ it.live("retires an obsolete autosave waiting for the item permit before a newer
     yield* advance(100);
     expect(test.sent).toHaveLength(2);
     expect(test.sent[1]).toMatchObject({ revision: 1, draft: { amount: "300" } });
+  })
+);
+
+it.live("keeps the first expiry after a canonical recovery returns a later deadline", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const detail: Detail = {
+      ...test.detail,
+      item: {
+        ...test.detail.item,
+        expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 1000),
+      },
+    };
+    test.view().editor(detail).recover();
+    yield* advance(0);
+    yield* advance(1100);
+    expect(test.view().editor(test.detail).locked).toBe(true);
+    test.view().editor(test.detail).change(edit("100"));
+    test.view().decide(test.detail, "Skip");
+    yield* advance(2000);
+    expect(test.sent).toHaveLength(0);
+  })
+);
+
+it.live(
+  "refuses duplicate save acknowledgments and retains the displayed next draft until recovery",
+  () =>
+    Effect.gen(function* () {
+      const test = yield* fixture();
+      test.duplicateResult();
+      test.delay(500);
+      test.view().editor(test.detail).change(edit("100"));
+      yield* advance(250);
+      test.view().editor(test.detail).change(edit("200"));
+      yield* advance(500);
+      expect(test.view().editor(test.detail)).toMatchObject({
+        locked: true,
+        feedback: "uncertain",
+        draft: { amount: "200" },
+        detail: { revision: 0 },
+      });
+      test.view().decide(test.detail, "Skip");
+      yield* advance(2000);
+      expect(test.sent).toHaveLength(1);
+      test.failRead(true);
+      test.view().editor(test.detail).recover();
+      yield* advance(2000);
+      expect(test.view().editor(test.detail).locked).toBe(true);
+      test.failRead(false);
+      test.view().editor(test.detail).recover();
+      yield* advance(0);
+      expect(test.view().editor(test.detail)).toMatchObject({
+        locked: false,
+        feedback: "saved",
+        draft: { amount: "100" },
+        detail: { revision: 1 },
+      });
+      yield* advance(2000);
+      expect(test.sent).toHaveLength(1);
+    })
+);
+
+it.live("retired editor callbacks cannot edit or recover a remounted owner", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const retired = test.view().editor(test.detail);
+    test.dispose();
+    test.remount();
+    retired.change(edit("100"));
+    retired.recover();
+    yield* advance(1000);
+    expect(test.sent).toHaveLength(0);
+    expect(test.reads).toHaveLength(1);
+    test.view().editor(test.detail).change(edit("200"));
+    yield* advance(250);
+    expect(test.sent).toHaveLength(1);
+  })
+);
+
+it.live("recovery replaces a clean item without reactivating its old editor callbacks", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const previous = test.view().editor(test.detail);
+    previous.recover();
+    yield* advance(0);
+    previous.change(edit("100"));
+    previous.recover();
+    yield* advance(1000);
+    expect(test.sent).toHaveLength(0);
+    expect(test.reads).toHaveLength(2);
+    expect(test.view().editor(test.detail).locked).toBe(false);
+  })
+);
+
+it.live(
+  "expiry during a decision drain prevents the follow-on decision and late draft publication",
+  () =>
+    Effect.gen(function* () {
+      const test = yield* fixture();
+      const detail: Detail = {
+        ...test.detail,
+        item: {
+          ...test.detail.item,
+          expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 100),
+        },
+      };
+      test.delay(500);
+      test.view().editor(detail).change(edit("100"));
+      test.view().decide(detail, "Skip");
+      yield* advance(600);
+      expect(test.sent.map((command) => command._tag)).toEqual(["SaveDraft"]);
+      expect(Option.isNone(test.view().completed)).toBe(true);
+      expect(test.view().editor(test.detail)).toMatchObject({
+        locked: true,
+        detail: { revision: 0 },
+      });
+    })
+);
+
+it.live("a recovery queued behind a save cannot read after original item expiry", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const detail: Detail = {
+      ...test.detail,
+      item: {
+        ...test.detail.item,
+        expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 500),
+      },
+    };
+    test.delay(1000);
+    test.view().editor(detail).change(edit("100"));
+    yield* advance(250);
+    test.view().editor(detail).recover();
+    yield* advance(1500);
+    expect(test.reads).toHaveLength(1);
+    expect(test.sent).toHaveLength(1);
+    expect(test.view().editor(test.detail).locked).toBe(true);
   })
 );

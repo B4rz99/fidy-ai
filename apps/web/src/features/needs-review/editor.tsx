@@ -21,12 +21,12 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Badge } from "@/ui/components/badge";
 import { reviewExpiry, reviewReason, reviewTitle } from "./presentation";
-import { type JSX, type ReactNode, useCallback, useState } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { ReviewFields } from "./fields";
 import { OriginalMaterial, ReviewMaterialPreload } from "./original";
-import { type Category, type Detail, type Draft, type Item, deadline, sources } from "./model";
+import { type Category, type Detail, type Item, deadline, sources } from "./model";
 
 type Props = Readonly<{
   item: Item;
@@ -82,7 +82,7 @@ const ReviewItemEditor = ({ item, decisions, disabled, workspaceQuery }: Props):
   const refresh = useAtomRefresh(query);
   const refreshCategories = useAtomRefresh(categoryQuery);
   const recover = (): void => {
-    if (detail._tag === "Ready") decisions.recoverItem(detail.value.data);
+    if (detail._tag === "Ready") decisions.editor(detail.value.data).recover();
     else refresh();
     refreshCategories();
   };
@@ -186,10 +186,6 @@ const ReadyEditor = ({
   categories: ReadonlyArray<Category>;
   recover: () => void;
 }>): JSX.Element => {
-  const change = useCallback(
-    (draft: Draft) => decisions.change(detail, draft),
-    [decisions, detail]
-  );
   const editor = decisions.editor(detail);
   const act = (kind: "Create" | "Skip"): void => decisions.decide(detail, kind);
   const locked = editor.locked || disabled;
@@ -214,7 +210,7 @@ const ReadyEditor = ({
           <ReviewFields
             key={detail.item.id}
             draft={editor.draft}
-            change={change}
+            change={editor.change}
             locked={locked}
             categories={categories}
             timeZone={detail.item.timeZone}

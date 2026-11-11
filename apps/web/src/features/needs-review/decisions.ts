@@ -34,6 +34,8 @@ export type ReviewEditorState = Readonly<{
   locked: boolean;
   canCreate: boolean;
   recovering: boolean;
+  change: (draft: Draft) => void;
+  recover: () => void;
 }>;
 export type ReviewDecisions = Readonly<{
   locked: boolean;
@@ -41,11 +43,9 @@ export type ReviewDecisions = Readonly<{
   undoCount: number;
   completed: Option.Option<Completion>;
   editor: (detail: Detail) => ReviewEditorState;
-  change: (detail: Detail, draft: Draft) => void;
   decide: (detail: Detail, kind: "Create" | "Skip") => void;
   bulk: (restore: boolean, items: ReadonlyArray<Item>) => void;
   undoSkip: () => void;
-  recoverItem: (detail: Detail) => void;
   recover: () => void;
   mount: () => () => void;
 }>;
@@ -75,6 +75,7 @@ type Owner = {
   query: ReviewWorkspaceQuery;
   command: Atom.AtomResultFn<Work, void, never>;
   entries: Map<Item["id"], Entry>;
+  expiries: Map<Item["id"], DateTime.Utc>;
   active: boolean;
   generation: number;
   stopped: Deferred.Deferred<void>;
@@ -128,6 +129,7 @@ const dispose = (owner: Owner): void => {
   owner.generation += 1;
   Deferred.doneUnsafe(owner.stopped, Effect.void);
   owner.entries.clear();
+  owner.expiries.clear();
   owner.undo = [];
   owner.completed = Option.none();
   owner.get.set(owner.command, Atom.Interrupt);
@@ -155,6 +157,7 @@ export const makeReviewDecisions = ({
       get,
       command,
       entries: new Map(),
+      expiries: new Map(),
       active: false,
       generation: 0,
       stopped: Deferred.makeUnsafe<void>(),
@@ -167,36 +170,52 @@ export const makeReviewDecisions = ({
     return present(owner);
   });
 };
-const present = (owner: Owner): ReviewDecisions => ({
+const present = (owner: Owner, generation = owner.generation): ReviewDecisions => ({
   locked: owner.phase !== "idle",
   feedback: owner.feedback,
   undoCount: owner.undo.length,
   completed: owner.completed,
-  editor: (detail) => editorState(owner, detail),
-  change: (detail, draft) => changeDraft(owner, detail, draft),
-  decide: (detail, kind) => decide(owner, detail, kind),
-  bulk: (restore, items) => bulk(owner, restore, items),
+  editor: (detail) => editorState(owner, detail, generation),
+  decide: (detail, kind) => {
+    if (liveGeneration(owner, generation)) decide(owner, detail, kind);
+  },
+  bulk: (restore, items) => {
+    if (liveGeneration(owner, generation)) bulk(owner, restore, items);
+  },
   undoSkip: () => {
-    if (owner.phase !== "idle") return;
+    if (!liveGeneration(owner, generation) || owner.phase !== "idle") return;
     const items = owner.undo.map((detail) => ({ ...detail.item, revision: detail.revision }));
     owner.undo = [];
     bulk(owner, true, items);
   },
-  recoverItem: (detail) => recoverItem(owner, detail),
-  recover: () => recoverWorkspace(owner),
+  recover: () => {
+    if (liveGeneration(owner, generation)) recoverWorkspace(owner);
+  },
   mount: () => {
     owner.stopped = Deferred.makeUnsafe<void>();
     owner.active = true;
+    notify(owner);
     return () => dispose(owner);
   },
 });
 const selectedEntry = (owner: Owner, detail: Detail): Entry => {
+  const observation = originalExpiry(owner, detail);
   const entry = owner.entries.get(detail.item.id);
-  if (entry === undefined) return makeEntry(detail);
+  if (entry === undefined) return makeEntry(observation);
   const newer = detail.revision > entry.detail.revision;
-  return newer && entry.feedback === "saved" && !entry.acting ? makeEntry(detail) : entry;
+  return newer && entry.feedback === "saved" && !entry.acting && !entry.recovering
+    ? makeEntry(observation)
+    : entry;
 };
-const editorState = (owner: Owner, detail: Detail): ReviewEditorState => {
+const editorState = (
+  owner: Owner,
+  detail: Detail,
+  generation = owner.generation
+): ReviewEditorState => {
+  const binding = {
+    observed: Option.fromUndefinedOr(owner.entries.get(detail.item.id)),
+    generation,
+  };
   const entry = selectedEntry(owner, detail);
   const superseded = detail.revision > entry.detail.revision;
   return {
@@ -208,10 +227,30 @@ const editorState = (owner: Owner, detail: Detail): ReviewEditorState => {
       blocked(entry) ||
       entry.acting ||
       superseded ||
-      now() >= DateTime.toEpochMillis(detail.item.expiresAt),
+      now() >= DateTime.toEpochMillis(entry.detail.item.expiresAt),
     canCreate: Option.isSome(creation({ detail: entry.detail, draft: entry.draft })),
     recovering: entry.recovering,
+    change: (draft) => {
+      if (editorState(owner, detail).locked || !bindEntry(owner, entry, binding)) {
+        return;
+      }
+      changeDraft(owner, entry.detail, draft);
+    },
+    recover: () => {
+      if (bindEntry(owner, entry, binding)) recoverItem(owner, entry.detail);
+    },
   };
+};
+const bindEntry = (
+  owner: Owner,
+  entry: Entry,
+  binding: Readonly<{ observed: Option.Option<Entry>; generation: number }>
+): boolean => {
+  if (!liveGeneration(owner, binding.generation) || itemExpired(entry.detail.item)) return false;
+  const retained = owner.entries.get(entry.detail.item.id);
+  if (retained !== Option.getOrUndefined(binding.observed) && retained !== entry) return false;
+  if (retained !== entry) replaceEntry(owner, entry);
+  return true;
 };
 const retain = (owner: Owner, detail: Detail): Entry => {
   const entry = selectedEntry(owner, detail);
@@ -231,7 +270,13 @@ const expireEntry = (owner: Owner, entry: Entry): Work =>
     owner.undo = owner.undo.filter((detail) => detail.item.id !== entry.detail.item.id);
     notify(owner);
   }).pipe(Effect.raceFirst(Deferred.await(entry.retired)));
+const originalExpiry = (owner: Owner, detail: Detail): Detail => ({
+  ...detail,
+  item: { ...detail.item, expiresAt: owner.expiries.get(detail.item.id) ?? detail.item.expiresAt },
+});
 const replaceEntry = (owner: Owner, entry: Entry): void => {
+  entry.detail = originalExpiry(owner, entry.detail);
+  owner.expiries.set(entry.detail.item.id, entry.detail.item.expiresAt);
   const previous = owner.entries.get(entry.detail.item.id);
   if (previous !== undefined) Deferred.doneUnsafe(previous.retired, Effect.void);
   owner.entries.set(entry.detail.item.id, entry);
@@ -319,12 +364,14 @@ const flush = (owner: Owner, entry: Entry, automatic = Option.none<number>()): W
     )
   );
 const acceptDraft = (entry: Entry, items: ReadonlyArray<Detail>): void => {
-  const latest = items.find((detail) => detail.item.id === entry.detail.item.id);
-  if (latest === undefined) {
+  const latest = items[0];
+  if (items.length !== 1 || latest === undefined || latest.item.id !== entry.detail.item.id) {
     entry.feedback = "uncertain";
+    entry.wanted = Option.none();
+    entry.version += 1;
     return;
   }
-  entry.detail = latest;
+  entry.detail = { ...latest, item: { ...latest.item, expiresAt: entry.detail.item.expiresAt } };
   entry.feedback = Option.isSome(entry.wanted) ? "unsaved" : "saved";
 };
 const complete = (owner: Owner, items: ReadonlyArray<Detail>, skipped: boolean): void => {
@@ -440,6 +487,7 @@ const recoverItem = (owner: Owner, detail: Detail): void => {
     owner,
     entry.permit.withPermit(
       Effect.gen(function* () {
+        if (!current(owner, entry)) return;
         const result = yield* Effect.exit(
           owner.client.pipe(
             Effect.flatMap((client) =>

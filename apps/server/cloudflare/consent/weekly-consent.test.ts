@@ -308,3 +308,88 @@ it.live("retains the exact source-controlled disclosure digest", () =>
     expect(disclosure.contentSha256).toBe(hex);
   })
 );
+
+it.live("refuses an already prepared grant after another offer established current standing", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    const context = { db, userId, caller, now };
+    const original = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+    yield* recordWeeklyConsentDisclosure({
+      ...context,
+      offerId: original.id,
+      disclosureMessageId: "original-disclosure",
+    });
+    const prepared = Option.getOrThrow(
+      yield* prepareWeeklyConsentDecision({
+        ...context,
+        choice: original.acceptChoice,
+        decisionMessageId: "prepared-original",
+      })
+    );
+    const later = { ...context, now: DateTime.add(now, { minutes: 11 }) };
+    const current = Option.getOrThrow(yield* createWeeklyConsentOffer(later));
+    yield* recordWeeklyConsentDisclosure({
+      ...later,
+      offerId: current.id,
+      disclosureMessageId: "current-disclosure",
+    });
+    expect(
+      yield* decide({ ...later, choice: current.acceptChoice, decisionMessageId: "current-choice" })
+    ).toBe(true);
+    const grant = Option.getOrThrow(yield* findWeeklyConsentGrant(context));
+    const result = yield* Effect.exit(Effect.tryPromise(() => db.batch([...prepared.statements])));
+    expect(result._tag).toBe("Failure");
+    expect(Option.getOrThrow(yield* findWeeklyConsentGrant(context))).toEqual(grant);
+  })
+);
+
+it.live("refuses an expired governor retry without replacing its original offer", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    const context = { db, userId, caller, now };
+    const request = {
+      _tag: "GovernorQuestion" as const,
+      origin: "proactive" as const,
+      sourceId: "49000000-0000-4000-8000-000000000002",
+    };
+    const original = Option.getOrThrow(
+      yield* createWeeklyGovernorConsentOffer({ ...context, request })
+    );
+    yield* recordWeeklyConsentDisclosure({
+      ...context,
+      offerId: original.id,
+      disclosureMessageId: "governor-disclosure",
+    });
+    expect(
+      Option.getOrThrow(
+        yield* createWeeklyGovernorConsentOffer({
+          ...context,
+          now: DateTime.add(now, { hours: 23 }),
+          request,
+        })
+      )
+    ).toEqual(original);
+    const expired = yield* createWeeklyGovernorConsentOffer({
+      ...context,
+      now: DateTime.add(now, { hours: 24 }),
+      request,
+    });
+    expect(Option.isNone(expired)).toBe(true);
+    expect(
+      yield* decide({
+        ...context,
+        now: DateTime.add(now, { hours: 24 }),
+        choice: original.acceptChoice,
+        decisionMessageId: "late-acceptance",
+      })
+    ).toBe(false);
+    expect(
+      yield* decide({
+        ...context,
+        now: DateTime.add(now, { hours: 24 }),
+        choice: original.declineChoice,
+        decisionMessageId: "late-decline",
+      })
+    ).toBe(true);
+  })
+);

@@ -1,5 +1,4 @@
 import type { Array, Option } from "effect";
-import type { CaptureStatus } from "./capture";
 import type { CaptureSources, OriginalTransactions, Transaction } from "./presentation";
 
 export type CorrectionStatus =
@@ -52,5 +51,5 @@ export type TransactionPanel =
       stage: "editing";
       transactions: Array.NonEmptyReadonlyArray<Transaction>;
     }>
-  | Readonly<{ _tag: "Capture"; status: CaptureStatus }>
+  | Readonly<{ _tag: "Capture"; status: "idle" | "saving" | "uncertain" }>
   | Readonly<{ _tag: "Detail"; id: string; mode: DetailMode }>;

@@ -27,6 +27,7 @@ export type AssertionScope =
   | "proactivity_consent"
   | "proactivity_message"
   | "processing_consent_renewal"
+  | "processing_consent_withdrawal"
   | "recurring"
   | "recurring_plan"
   | "reminder_schedule"

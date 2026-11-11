@@ -667,9 +667,15 @@ export const browseBudgets = ({
     return yield* readAuthorizedBudget({ db, subject, operation, now, ...parsed.value });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-/** Commit-time fence for a new Budget grant; pending pre-opt-in financial reconciliation must be fully drained before legal activation. */
-export const prepareBudgetOptInFence: typeof prepareOptInFence = (input) =>
-  prepareOptInFence(input);
+/** Return the private commit fence only after one bounded pre-opt-in pass proves drained accounting. */
+export const prepareBudgetThresholdOptIn = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): Effect.Effect<Option.Option<D1PreparedStatement>> =>
+  reconcileBudgetThresholds(input).pipe(
+    Effect.map((outcome) =>
+      outcome === "Drained" ? Option.some(prepareOptInFence(input)) : Option.none()
+    )
+  );
 
 /** Bounded pending same-User delivery groups retain the grant captured at detection, including explicit ineligibility. */
 export const readBudgetCrossingGroups: typeof readGroups = (input) => readGroups(input);
@@ -791,15 +797,19 @@ const pendingPeriod = Effect.fn(function* ({
  * Coalesce a bounded snapshot of timestamps in one applied month before reconciling its alerts. Work for a backdated
  * correction uses its own zoned month, not the request's current month. The versioned removal
  * leaves a concurrent writer's work pending even if it arrives during an earlier drain.
+ * Unavailable can follow a committed crossing batch or unconfirmed acknowledgement; it never
+ * establishes rollback of a financial mutation. Callers must retain same-User coordination.
  */
-export const evaluateBudgetAlerts = ({
+export const reconcileBudgetThresholds = ({
   db,
   userId,
-}: Readonly<{ db: D1Database; userId: string }>): Effect.Effect<boolean> =>
+}: Readonly<{ db: D1Database; userId: string }>): Effect.Effect<
+  "Drained" | "Pending" | "Unavailable"
+> =>
   Effect.gen(function* () {
     const subject = yield* Schema.decodeEffect(UserId)(userId);
     const context = yield* readUserContext({ db, userId: subject, authority: Option.none() });
-    if (Option.isNone(context)) return false;
+    if (Option.isNone(context)) return "Unavailable" as const;
     const pending = yield* pendingPeriod({ db, userId, context: context.value });
     const first = pending[0];
     if (first !== undefined) {
@@ -811,7 +821,7 @@ export const evaluateBudgetAlerts = ({
           now: first.occurred_at_ms,
         }))
       ) {
-        return false;
+        return "Unavailable" as const;
       }
       const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(PendingWork)))(
         pending
@@ -831,5 +841,5 @@ export const evaluateBudgetAlerts = ({
         .bind(userId)
         .first()
     );
-    return remaining === null;
-  }).pipe(Effect.orElseSucceed(() => false));
+    return remaining === null ? ("Drained" as const) : ("Pending" as const);
+  }).pipe(Effect.orElseSucceed(() => "Unavailable" as const));

@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import type { Page } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin, installUser, response } from "./http-fixtures";
@@ -139,9 +140,12 @@ test("16 spending categories use readable emoji labels below even the smallest b
         expect(page.getByRole("status")).toContainText("Restaurantes")
       );
       yield* Effect.tryPromise(() =>
-        page
-          .locator("[data-slot=card]")
-          .screenshot({ path: testInfo.outputPath("categories-desktop.png") })
+        captureVisualEvidence({
+          target: page.locator("[data-slot=card]"),
+          options: {
+            path: testInfo.outputPath("categories-desktop.png"),
+          },
+        })
       );
     })
   ));
@@ -310,19 +314,17 @@ for (const count of [halfCategoryCount, categoryCount]) {
         const series = page.getByRole("region", { name: "Serie COP" });
         yield* Effect.tryPromise(() => expect(series.getByRole("img")).toHaveCount(count));
         yield* Effect.tryPromise(() =>
-          page
-            .locator("[data-slot=card]")
-            .screenshot({ path: testInfo.outputPath("categories-phone.png") })
+          captureVisualEvidence({
+            target: page.locator("[data-slot=card]"),
+            options: {
+              path: testInfo.outputPath("categories-phone.png"),
+            },
+          })
         );
         yield* Effect.tryPromise(() => page.evaluate(enlargeText));
         yield* Effect.tryPromise(() => expectEmojisSeparate(page, count));
         yield* expectLastCategoryDetails(page, count);
 
-        yield* Effect.tryPromise(() =>
-          page
-            .locator("[data-slot=card]")
-            .screenshot({ path: testInfo.outputPath("categories-phone-keyboard.png") })
-        );
         yield* Effect.tryPromise(() =>
           page.getByRole("button", { name: "Personalizar", exact: true }).click()
         );
@@ -333,9 +335,12 @@ for (const count of [halfCategoryCount, categoryCount]) {
         expect(overflow).toBe(false);
         yield* Effect.tryPromise(() => page.emulateMedia({ colorScheme: "dark" }));
         yield* Effect.tryPromise(() =>
-          page
-            .locator("[data-slot=card]")
-            .screenshot({ path: testInfo.outputPath("categories-phone-enlarged-editing.png") })
+          captureVisualEvidence({
+            target: page.locator("[data-slot=card]"),
+            options: {
+              path: testInfo.outputPath("categories-phone-enlarged-editing.png"),
+            },
+          })
         );
       })
     ));

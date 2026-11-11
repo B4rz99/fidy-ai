@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { installUser } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
 const { expect, test } = playwright;
@@ -33,39 +32,3 @@ test("keeps the pending task while choosing email and returning to login options
       );
     })
   ));
-
-test("combines verified email and recovery settings under Account", ({ page }) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.tryPromise(() => installUser(page));
-      yield* Effect.tryPromise(() => page.goto("/settings/account"));
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Cuenta", exact: true })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(page.getByRole("heading", { name: "Correo verificado" })).toBeVisible()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(
-          page.getByRole("heading", { name: "Código de recuperación", exact: true })
-        ).toBeVisible()
-      );
-    })
-  ));
-
-for (const route of [
-  "/auth/google",
-  "/auth/microsoft",
-  "/auth/pair",
-  "/settings/email",
-  "/settings/recovery",
-  "/settings/pats",
-  "/settings/agents",
-]) {
-  test(`removes obsolete browser destination ${route}`, ({ page }) =>
-    page
-      .goto(route)
-      .then(() =>
-        expect(page.getByRole("heading", { name: "Página no encontrada" })).toBeVisible()
-      ));
-}

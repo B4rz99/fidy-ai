@@ -68,7 +68,6 @@ export const CurrencyField = ({ initial }: Readonly<{ initial: string }>): JSX.E
     <>
       <input type="hidden" name="currency" value={value} />
       <SearchableChoiceDropdown
-        rendering="natural"
         id="recurring-currency"
         label="Moneda"
         value={value}

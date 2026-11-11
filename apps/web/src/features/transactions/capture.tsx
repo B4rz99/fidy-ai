@@ -33,13 +33,6 @@ type CaptureInputsProps = Readonly<{
   disabled: boolean;
   revealErrors: boolean;
 }>;
-const changeCaptureCurrency = (
-  value: string,
-  change: (currency: CaptureDraft["currency"]) => void
-): void => {
-  const selected = Schema.decodeUnknownOption(Currency)(value);
-  if (Option.isSome(selected)) change(selected.value);
-};
 const CaptureInputs = ({
   amount,
   counterparty,
@@ -58,14 +51,16 @@ const CaptureInputs = ({
           <>
             <Label htmlFor="transaction-currency">Moneda</Label>
             <SearchableChoiceDropdown
-              rendering="natural"
               id="transaction-currency"
               label="Moneda"
               value={currency}
               options={Currency.literals.map((value) => ({ value, label: value }))}
               disabled={disabled}
               width="full"
-              onChange={(value) => changeCaptureCurrency(value, change)}
+              onChange={(value) => {
+                const selected = Schema.decodeUnknownOption(Currency)(value);
+                if (Option.isSome(selected)) change(selected.value);
+              }}
             />
           </>
         ),

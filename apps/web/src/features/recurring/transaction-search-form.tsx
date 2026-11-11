@@ -149,7 +149,6 @@ const DirectionCurrencyFields = ({
       triggerLabel={Option.none()}
     />
     <SearchableChoiceDropdown
-      rendering="natural"
       id={`${id}-currency`}
       label="Moneda"
       value={draft.currency}

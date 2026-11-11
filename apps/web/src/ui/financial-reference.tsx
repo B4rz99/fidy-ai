@@ -51,7 +51,6 @@ export const FinancialReference = (): JSX.Element => {
       <AmountStates />
       <LocalizedAmountReference />
       <SearchableChoiceDropdown
-        rendering="natural"
         id="reference-searchable-currency"
         label="Moneda de ejemplo"
         value={currency}

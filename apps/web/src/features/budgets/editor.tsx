@@ -52,7 +52,6 @@ const GroupCurrencyField = ({
   <div className="flex flex-col gap-2">
     <Label htmlFor="budget-group-currency">Moneda del grupo</Label>
     <SearchableChoiceDropdown
-      rendering="natural"
       id="budget-group-currency"
       label="Moneda del grupo"
       value={currency}

@@ -993,3 +993,6 @@ that bound and item metadata; original expiry
 does not expire a separately retained review draft or resolve its decision. Deadline subscriptions
 recheck wall time on focus, page show, and visibility changes, including retained hidden panels.
 This logical suppression does not depend on physical source cleanup or timely execution while suspended.
+
+A current manual Pro grant suppresses an unsubmitted checkout. An admitted or uncertain payment
+retains its mounted observation and exact identity independently of that access observation.

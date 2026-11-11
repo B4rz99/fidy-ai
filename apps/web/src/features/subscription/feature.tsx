@@ -227,13 +227,16 @@ const useEnrollmentLifetime = (interaction: EnrollmentInteraction): RefCallback<
   );
   return lifetimeRef;
 };
+const showCheckout = (selection: EnrollmentInteraction, standing: StandingViewState): boolean =>
+  selection.checkout &&
+  (selection.disabled || standing._tag !== "Ready" || !standing.standing.hasProGrant);
 const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
   const selection = useSubscriptionSelection(props);
   const lifetimeRef = useEnrollmentLifetime(selection);
   const { standing } = props;
   const paid = hasNonTrialPro(standing.state);
   const resolved = standing.state._tag === "Ready";
-  const checkout = selection.checkout;
+  const checkout = showCheckout(selection, standing.state);
   return (
     <div
       ref={lifetimeRef}

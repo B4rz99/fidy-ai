@@ -1,9 +1,10 @@
 import { captureVisualEvidence } from "./visual-evidence";
 import { analyzeAccessibility } from "./accessibility";
 import type { APIRequestContext, Locator, Page, Route } from "@playwright/test";
-import { type Cause, DateTime, Effect } from "effect";
+import { type Cause, DateTime, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
+import { RecurringCommand } from "@/transport/client";
 import { signInRecurringThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
@@ -439,5 +440,100 @@ const datedWorkspace = (stopped: boolean): string => {
         },
       ],
     },
+  });
+};
+
+test("stopping from a historical occurrence freezes the current plan zone's date", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringPagination",
+        })
+      );
+      yield* Effect.tryPromise(() =>
+        page.clock.setSystemTime(
+          DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-11T02:00:00Z"))
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/recurring-plans?*`, serveStopZoneWorkspace)
+      );
+      let command: unknown;
+      const capture = (route: Route): Promise<void> => {
+        command = Schema.decodeUnknownSync(Schema.fromJsonString(RecurringCommand))(
+          route.request().postData()
+        );
+        return route.fulfill({ status: 400, contentType: "application/json", body: "{}" });
+      };
+      yield* Effect.tryPromise(() => page.route(`${apiOrigin}/recurring-plans/edits`, capture));
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-11"));
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("button", { name: /Historical zone plan/u })
+          .first()
+          .click()
+      );
+      yield* Effect.tryPromise(() => page.getByText("Dejar de seguir", { exact: true }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Confirmar dejar de seguir", exact: true }).click()
+      );
+      const observed = (): unknown => command;
+      yield* Effect.tryPromise(() =>
+        expect
+          .poll(observed)
+          .toMatchObject({ edit: { kind: "lifecycle", action: "stop", date: "2026-11-11" } })
+      );
+    })
+  ));
+
+const serveStopZoneWorkspace = (route: Route): Promise<void> => {
+  const historical = {
+    name: "Historical zone plan",
+    kind: "expense",
+    currency: "COP",
+    amountMode: "unknown",
+    frequency: "monthly",
+    firstDate: "2026-11-01",
+    timeZone: "America/Bogota",
+  };
+  const planId = "71000000-0000-4000-8000-000000000001";
+  return route.fulfill({
+    contentType: "application/json",
+    body: response({
+      ...workspace,
+      month: "2026-11",
+      today: "2026-11-11",
+      document: {
+        ...workspace.document,
+        plans: [
+          {
+            id: planId,
+            pauses: [],
+            revisions: [
+              { from: "2026-11-01", plan: historical },
+              { from: "2026-11-05", plan: { ...historical, timeZone: "Asia/Tokyo" } },
+            ],
+          },
+        ],
+      },
+      occurrences: [
+        {
+          planId,
+          date: "2026-11-01",
+          expectedDate: "2026-11-01",
+          plan: historical,
+          status: "unconfirmed",
+          completed: { amount: "0", currency: "COP" },
+          fulfillments: [],
+        },
+      ],
+    }),
   });
 };

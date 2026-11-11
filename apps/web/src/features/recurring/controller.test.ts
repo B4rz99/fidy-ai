@@ -357,3 +357,50 @@ it("keeps future lifecycle boundaries and revisions out of today's plan standing
     vi.useRealTimers();
   }
 });
+
+it.each([
+  {
+    now: "2026-11-01T01:00:00Z",
+    currentFrom: "2026-10-01",
+    futureFrom: "2026-11-01",
+    expectedDate: "2026-11-01",
+  },
+  {
+    now: "2026-11-01T16:00:00Z",
+    currentFrom: "2026-11-01",
+    futureFrom: "2026-11-02",
+    expectedDate: "2026-11-02",
+  },
+])(
+  "keeps settings and standing on the same revision across zone boundaries at $now",
+  ({ now, currentFrom, futureFrom, expectedDate }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DateTime.toEpochMillis(DateTime.makeUnsafe(now)));
+    try {
+      const settings = Schema.decodeUnknownSync(RecurringPlanInput)(
+        document.plans[0]?.revisions[0]?.plan
+      );
+      const plan: Plan = {
+        id: planId,
+        pauses: [],
+        revisions: [
+          {
+            from: currentFrom,
+            plan: {
+              ...settings,
+              name: "Current Tokyo",
+              firstDate: currentFrom,
+              timeZone: Schema.decodeSync(RecurringPlanInput.fields.timeZone)("Asia/Tokyo"),
+            },
+          },
+          { from: futureFrom, plan: { ...settings, name: "Future Bogota", firstDate: futureFrom } },
+        ],
+      };
+      expect(planToday(plan)).toBe(expectedDate);
+      expect(currentPlan(plan).name).toBe("Current Tokyo");
+      expect(planStatus(plan)).toBe("active");
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+);

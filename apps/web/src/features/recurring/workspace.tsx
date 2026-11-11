@@ -159,7 +159,7 @@ const OccurrenceEditor = ({
     plan === undefined ? null : (
       <PlanLifecycle plan={plan} status={statusFor(plan)} save={save} disabled={disabled} />
     );
-  if (Option.isNone(item)) {
+  if (Option.isNone(item) || plan === undefined) {
     return (
       <div className="grid gap-5">
         {lifecycle}
@@ -183,6 +183,9 @@ const OccurrenceEditor = ({
         save={save}
         today={view.today}
         link={link}
+        stopTracking={() =>
+          save({ kind: "lifecycle", planId: plan.id, date: planToday(plan), action: "stop" })
+        }
       />
     </div>
   );

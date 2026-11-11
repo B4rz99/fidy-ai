@@ -23,7 +23,7 @@ const planLabels = {
   stopped: "Dejado de seguir",
 };
 const planVariants = {
-  scheduled: "default",
+  scheduled: "information",
   active: "success",
   paused: "warning",
   stopped: "destructive",

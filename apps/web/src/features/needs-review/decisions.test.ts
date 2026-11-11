@@ -679,3 +679,20 @@ it.live("a recovery queued behind a save cannot read after original item expiry"
     expect(test.view().editor(test.detail).locked).toBe(true);
   })
 );
+
+it.live("bulk admission closes recovery before its canonical decision completes", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const editor = test.view().editor(test.detail);
+    const release = test.holdWrite();
+    test.view().bulk(false, [test.detail.item]);
+    yield* advance(0);
+    editor.recover();
+    yield* advance(0);
+    expect(test.reads).toHaveLength(1);
+    release();
+    yield* advance(0);
+    expect(test.sent.map((command) => command._tag)).toEqual(["Skip"]);
+    expect(test.view().locked).toBe(false);
+  })
+);

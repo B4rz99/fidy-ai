@@ -237,7 +237,8 @@ const editorState = (
       changeDraft(owner, entry.detail, draft);
     },
     recover: () => {
-      if (bindEntry(owner, entry, binding)) recoverItem(owner, entry.detail);
+      if (owner.phase === "idle" && bindEntry(owner, entry, binding))
+        {recoverItem(owner, entry.detail);}
     },
   };
 };

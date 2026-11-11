@@ -45,7 +45,7 @@ const Resources = (props: Props): JSX.Element => {
   const router = useRouter();
   const [calendar, setCalendar] = useState(false);
   const [tab, setTab] = useState("monthly");
-  const planning = useRecurringPlanning({
+  const { mounted, admit, ...planning } = useRecurringPlanning({
     apiClient: router.options.context.apiClient,
     profileStale: props.profileStale,
     profileWaiting: props.profileWaiting,
@@ -57,6 +57,41 @@ const Resources = (props: Props): JSX.Element => {
       ...(Option.isSome(props.previous) ? { previousMonth: props.previous.value } : {}),
     },
   });
+  return (
+    <div ref={mounted}>
+      <div
+        ref={(node) => {
+          admit(node);
+        }}
+      >
+        <ResourceContent
+          props={props}
+          planning={planning}
+          calendar={calendar}
+          setCalendar={setCalendar}
+          tab={tab}
+          setTab={setTab}
+        />
+      </div>
+    </div>
+  );
+};
+const ResourceContent = ({
+  props,
+  planning,
+  calendar,
+  setCalendar,
+  tab,
+  setTab,
+}: Readonly<{
+  props: Props;
+  planning: Omit<ReturnType<typeof useRecurringPlanning>, "mounted" | "admit">;
+  calendar: boolean;
+  setCalendar: (value: boolean) => void;
+  tab: string;
+  setTab: (value: string) => void;
+}>): JSX.Element => {
+  const router = useRouter();
   const { state, categoryState, waiting, retry } = planning;
   if (state._tag === "Failure" || categoryState._tag === "Failure") {
     return (

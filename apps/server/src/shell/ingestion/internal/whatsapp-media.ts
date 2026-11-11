@@ -1,4 +1,5 @@
-import { Crypto, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { Digest } from "effect/crypto";
+import { Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { maximumStatementBytes } from "~/core/ingestion/contract";
 import type {
   WhatsAppBusinessPhoneNumberId,
@@ -68,7 +69,7 @@ export const readWhatsAppStatementMedia = ({
   mediaId: WhatsAppMediaId;
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
   current: number;
-}>): Effect.Effect<typeof Media.Type, StatementMediaUnavailable, Crypto.Crypto> =>
+}>): Effect.Effect<typeof Media.Type, StatementMediaUnavailable, Digest.Digest> =>
   Effect.gen(function* () {
     const response = yield* outbound.execute({
       _tag: "KapsoMediaMetadata",
@@ -93,8 +94,10 @@ export const readWhatsAppStatementMedia = ({
     if (download.status !== httpOK || download.body.length !== metadata.file_size) {
       return yield* new StatementMediaUnavailable();
     }
-    const crypto = yield* Crypto.Crypto;
-    const digest = yield* crypto.digest("SHA-256", download.body);
+    const crypto = yield* Digest.Digest;
+    const digest = yield* crypto
+      .digest(Digest.sha256, download.body)
+      .pipe(Effect.catchDefect(() => Effect.fail(new StatementMediaUnavailable())));
     if (Hex.encode(digest) !== metadata.sha256) return yield* new StatementMediaUnavailable();
     return { bytes: download.body, sha256: metadata.sha256, mimeType: metadata.mime_type };
   }).pipe(Effect.mapError(() => new StatementMediaUnavailable()));

@@ -575,6 +575,68 @@ it("refuses foreign, wrong-state and denied callbacks without exchanging any cod
       });
     })
   ));
+it("does not exchange a code until its one-shot claim and Audit commit together", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, started, callback } = yield* prepareActivation(db);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER fail_claim_audit BEFORE INSERT ON audit_entries WHEN NEW.operation='connections.claimAuthorization' BEGIN SELECT RAISE(ABORT,'synthetic_audit_failure'); END"
+          )
+          .run()
+      );
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT attempt_id FROM connection_grants").all())
+      ).toMatchObject({ results: [] });
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+        data: [{ id: started.connection.id, state: "Connecting" }],
+      });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER fail_claim_audit").run());
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(1);
+      const recovered = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => recovered.json())).toMatchObject({
+        data: [{ id: started.connection.id, state: "Active" }],
+      });
+    })
+  ));
+
+it("retains an older discovery for cleanup without replacing or demoting a newer Connection attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, started, callback } = yield* prepareActivation(db);
+      bank.beforeAccounts(
+        Effect.tryPromise(() => {
+          coordinatorByDatabase.delete(db);
+          return start(db);
+        }).pipe(Effect.asVoid, Effect.orDie)
+      );
+      yield* Effect.tryPromise(() => callback());
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+        data: [{ id: started.connection.id, state: "Connecting" }],
+      });
+      const accounts = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/connections/${started.connection.id}/accounts`))
+      );
+      expect(yield* Effect.tryPromise(() => accounts.json())).toEqual({ data: [], next: [] });
+      yield* sweepConnectionGrants({
+        db,
+        key: Option.some(Redacted.make("A".repeat(43))),
+        bank: Option.some(bank.cleanup),
+      });
+      expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(1);
+    })
+  ));
+
 it("rolls back Accounts and Active authority when the completion Audit cannot commit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -793,6 +855,62 @@ it("binds one bank handoff to the original attempt and never repeats its prepara
     })
   ));
 
+it("exposes a prepared bank handoff only to the exact session that began continuation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { started, bank } = yield* prepareActivation(db);
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      const otherSession = "10000000-0000-4000-8000-000000000063";
+      const otherPairing = "10000000-0000-4000-8000-000000000073";
+      const current = DateTime.nowUnsafe().epochMilliseconds;
+      const otherDigest = yield* Effect.tryPromise(() => digest(bearer(2)));
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) SELECT ?, 'ABCD-1232', verifier_digest, user_id, 'consumed', ?, ? FROM browser_login_pairings WHERE user_id=?"
+            )
+            .bind(otherPairing, current, current + 600000, users[0]),
+          db
+            .prepare(
+              "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+            .bind(
+              otherSession,
+              otherPairing,
+              users[0],
+              otherDigest,
+              current,
+              current + 600000,
+              current + 3600000,
+              current + 7776000000
+            ),
+        ])
+      );
+      const other = request(2, `/web/connections/review?attempt=${attempt}`);
+      other.headers.set("Fidy-Session-Binding", otherSession);
+      const refused = yield* Effect.tryPromise(() => send(db, other));
+      expect(refused.status).toBe(404);
+      expect(refused.headers.get("cache-control")).toBe("no-store");
+      expect(yield* Effect.tryPromise(() => refused.json())).toEqual({
+        error: { code: "continuation_unavailable" },
+      });
+      const owned = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/web/connections/review?attempt=${attempt}`))
+      );
+      expect(owned.status).toBe(200);
+      const review: unknown = yield* Effect.tryPromise(() => owned.json());
+      expect(review).toMatchObject({
+        phase: "prepared",
+        connection: { state: "Connecting" },
+        expiresAt: DateTime.formatIso(started.continuation.expiresAt),
+      });
+      expect(review).toHaveProperty("authorization.expiresAt");
+      expect(bank.exchanges()).toBe(0);
+    })
+  ));
+
 it("settles an uncertain bank submission without retaining its verifier or allowing a retry", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -826,6 +944,117 @@ it("settles an uncertain bank submission without retaining its verifier or allow
       expect(calls).toBe(1);
     })
   ));
+
+it("times out stalled bank preparation without authorizing another provider call", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      institutionRegistration.enabled = true;
+      const preparing = yield* Deferred.make<void>();
+      let preparations = 0;
+      bankPreparation = Option.some({
+        intent: fixtureConsentIntent(),
+        prepare: (input) =>
+          Effect.gen(function* () {
+            preparations += 1;
+            yield* input.recordConsent("synthetic-consent");
+            yield* Deferred.succeed(preparing, undefined);
+            return yield* Effect.never;
+          }),
+      });
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      const pending = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      ).pipe(Effect.forkChild);
+      yield* Deferred.await(preparing);
+      yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(30000));
+      const response = yield* Fiber.join(pending);
+      expect(response.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+        phase: "failed",
+        expiresAt: DateTime.formatIso(started.continuation.expiresAt),
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT phase,verifier,handoff_url FROM connection_authorizations").first()
+        )
+      ).toEqual({ phase: "failed", verifier: null, handoff_url: null });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        )).status
+      ).toBe(404);
+      expect(preparations).toBe(1);
+    })
+  ));
+
+it.each(["preparation-budget", "original-expiry"] as const)(
+  "refuses a bank handoff that settles after its %s without preparing again",
+  (deadline) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        institutionRegistration.enabled = true;
+        let preparations = 0;
+        bankPreparation = Option.some({
+          intent: fixtureConsentIntent(),
+          prepare: (input) =>
+            Effect.gen(function* () {
+              preparations += 1;
+              yield* input.recordConsent("synthetic-consent");
+              const settledAt =
+                deadline === "preparation-budget"
+                  ? DateTime.nowUnsafe().epochMilliseconds + 30000
+                  : input.expiresAtMilliseconds;
+              vi.setSystemTime(settledAt);
+              return {
+                url: "https://auth1-api-open-finance-sandbox.ambientesbc.com/auth?client_id=10000000-0000-4000-8000-000000000001&response_type=code&scope=accounts&request_uri=urn:ietf:params:oauth:request_uri:synthetic",
+                expiresAtMilliseconds: input.expiresAtMilliseconds,
+              };
+            }),
+        });
+        const started = yield* Effect.tryPromise(() => start(db));
+        if (started.type !== "continue_in_browser") {
+          throw new Error("Expected browser continuation");
+        }
+        const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+        if (deadline === "original-expiry") {
+          vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds - 4000);
+        }
+        const response = yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        );
+        expect(response.status).toBe(deadline === "original-expiry" ? 404 : 200);
+        if (deadline === "preparation-budget") {
+          expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+            phase: "failed",
+            expiresAt: DateTime.formatIso(started.continuation.expiresAt),
+          });
+        }
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT phase,verifier,handoff_url FROM connection_authorizations").first()
+          )
+        ).toEqual({ phase: "failed", verifier: null, handoff_url: null });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT expires_at_ms FROM connection_attempts")
+              .first<number>("expires_at_ms")
+          )
+        ).toBe(started.continuation.expiresAt.epochMilliseconds);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+          )).status
+        ).toBe(404);
+        expect(preparations).toBe(1);
+      })
+    )
+);
 
 it("prepares a browser authorization once without activating the Connection", () =>
   Effect.runPromise(
@@ -1059,6 +1288,67 @@ it("commits only one concurrent browser preparation and retires old continuation
       expect(retired.status).toBe(404);
     })
   ));
+it("refuses a superseded pending attempt atomically before bank preparation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      institutionRegistration.enabled = true;
+      let preparations = 0;
+      bankPreparation = Option.some({
+        intent: fixtureConsentIntent(),
+        prepare: () => {
+          preparations += 1;
+          return Effect.fail(new ConnectionAuthorizationUnavailable());
+        },
+      });
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      const refused = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }), (database) =>
+          database
+            .prepare(
+              "INSERT INTO connection_attempts (id,connection_id,public_reference,status,created_at_ms,expires_at_ms) VALUES (?,?,?,'invalidated',?,?)"
+            )
+            .bind(
+              "10000000-0000-4000-8000-000000000081",
+              started.connection.id,
+              "10000000-0000-4000-8000-000000000082",
+              DateTime.nowUnsafe().epochMilliseconds,
+              DateTime.nowUnsafe().epochMilliseconds + 600000
+            )
+            .run()
+        )
+      );
+      expect(refused.status).toBe(404);
+      expect(preparations).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT status,prepared_session_id FROM connection_attempts WHERE public_reference=?"
+            )
+            .bind(attempt)
+            .first()
+        )
+      ).toEqual({ status: "pending", prepared_session_id: null });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT attempt_id FROM connection_authorizations").all()
+        )).results
+      ).toEqual([]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT id FROM audit_entries WHERE operation='connections.beginContinuation' AND outcome='accepted'"
+            )
+            .all()
+        )).results
+      ).toEqual([]);
+    })
+  ));
+
 it("rolls back browser preparation when Audit fails and allows a safe retry", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1917,7 +2207,7 @@ it("erases only the owning User's authorization proof with frozen writes and ato
     })
   ));
 
-it("recovers a failed activation's encrypted grant and destroys tokens only after verified cleanup", () =>
+it("clears verified tokens without clearing bank consent's erasure suppression", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup();
@@ -1925,15 +2215,107 @@ it("recovers a failed activation's encrypted grant and destroys tokens only afte
       bank.scenario("malformed");
       yield* Effect.tryPromise(() => callback());
       const key = yield* ConnectionGrantKey;
-      yield* sweepConnectionGrants({ db, key, bank: Option.some(bank.cleanup) });
+      institutionRegistration.enabled = false;
+      const recovery = recoverConnections({
+        db,
+        key,
+        bank: Option.some(bank.cleanup),
+        scheduledAtEpochMs: 300000,
+      });
+      yield* recovery;
       const rows = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT state,envelope FROM connection_grants").all()
+        db.prepare("SELECT state,envelope,cleaned_at_ms FROM connection_grants").all()
       );
-      expect(rows.results).toEqual([{ state: "cleanup_required", envelope: null }]);
-      yield* sweepConnectionGrants({ db, key, bank: Option.some(bank.cleanup) });
+      expect(rows.results).toEqual([
+        {
+          state: "cleanup_required",
+          envelope: null,
+          cleaned_at_ms: DateTime.nowUnsafe().epochMilliseconds,
+        },
+      ]);
+      expect(yield* requiresErasureSuppression({ db, userId: users[0] })).toBe(true);
+      yield* recovery;
+      expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
       expect(bank.exchanges()).toBe(1);
     }).pipe(Effect.provideService(ConnectionGrantKey, Option.some(Redacted.make("A".repeat(43)))))
   ));
+
+it.each(["key", "adapter"] as const)(
+  "retains cleanup custody and erasure suppression without the configured %s",
+  (missing) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, callback } = yield* prepareActivation(db);
+        bank.scenario("malformed");
+        yield* Effect.tryPromise(() => callback());
+        institutionRegistration.enabled = false;
+        const custody = (): Promise<D1Result> =>
+          db
+            .prepare(
+              "SELECT envelope,cleaned_at_ms,cleanup_claim,cleanup_after_ms FROM connection_grants"
+            )
+            .all();
+        const before = (yield* Effect.tryPromise(custody)).results;
+        const sealed = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ envelope: Schema.String })
+        )(before[0]);
+        expect(sealed.envelope).toMatch(/^v1\./u);
+        yield* recoverConnections({
+          db,
+          key: missing === "key" ? Option.none() : Option.some(Redacted.make("A".repeat(43))),
+          bank: missing === "adapter" ? Option.none() : Option.some(bank.cleanup),
+          scheduledAtEpochMs: 300000,
+        });
+        expect((yield* Effect.tryPromise(custody)).results).toEqual(before);
+        expect(bank.revocations()).toEqual([]);
+        expect(bank.exchanges()).toBe(1);
+        expect(yield* requiresErasureSuppression({ db, userId: users[0] })).toBe(true);
+      })
+    )
+);
+
+it.each([
+  { checkpoint: "active-token observation", expiredRequest: 1 },
+  { checkpoint: "final inactivity proof", expiredRequest: 6 },
+])(
+  "retains encrypted custody when the cleanup lease expires at $checkpoint",
+  ({ expiredRequest }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, callback } = yield* prepareActivation(db);
+        bank.scenario("malformed");
+        yield* Effect.tryPromise(() => callback());
+        const custody = (): Promise<D1Result> =>
+          db.prepare("SELECT envelope,cleaned_at_ms FROM connection_grants").all();
+        const before = (yield* Effect.tryPromise(custody)).results;
+        let requests = 0;
+        bank.beforeCleanup(
+          Effect.sync(() => {
+            requests += 1;
+            if (requests === expiredRequest) {
+              vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 120000);
+            }
+          })
+        );
+        const result = yield* Effect.exit(
+          recoverConnections({
+            db,
+            key: Option.some(Redacted.make("A".repeat(43))),
+            bank: Option.some(bank.cleanup),
+            scheduledAtEpochMs: 300000,
+          })
+        );
+        expect(Exit.isFailure(result)).toBe(true);
+        expect((yield* Effect.tryPromise(custody)).results).toEqual(before);
+        expect(bank.revocations()).toEqual(
+          expiredRequest === 1 ? [] : ["synthetic-refresh", "synthetic-access"]
+        );
+        expect(bank.exchanges()).toBe(1);
+      })
+    )
+);
 
 it("retains failed cleanup for a bounded retry and does not repeat a completed revocation", () =>
   Effect.runPromise(
@@ -1964,6 +2346,73 @@ it("retains failed cleanup for a bounded retry and does not repeat a completed r
       expect(bank.revocations()).toHaveLength(2);
     })
   ));
+it("rejects a late cleanup result while a replacement lease retains the encrypted grant", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const { bank, callback } = yield* prepareActivation(db);
+        bank.scenario("malformed");
+        yield* Effect.tryPromise(() => callback());
+        const finishing = yield* Deferred.make<void>();
+        const finish = yield* Deferred.make<void>();
+        let requests = 0;
+        bank.beforeCleanup(
+          Effect.gen(function* () {
+            requests += 1;
+            if (requests === 6) {
+              yield* Deferred.succeed(finishing, undefined);
+              yield* Deferred.await(finish);
+            }
+          })
+        );
+        const recovery = recoverConnections({
+          db,
+          key: Option.some(Redacted.make("A".repeat(43))),
+          bank: Option.some(bank.cleanup),
+          scheduledAtEpochMs: 300000,
+        });
+        const old = yield* Effect.forkScoped(recovery);
+        yield* Deferred.await(finishing);
+        expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+        const oldClaim = yield* Effect.tryPromise(() =>
+          db.prepare("SELECT cleanup_claim FROM connection_grants").first()
+        );
+        vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 120000);
+        const replacing = yield* Deferred.make<void>();
+        const replace = yield* Deferred.make<void>();
+        bank.beforeCleanup(
+          Deferred.succeed(replacing, undefined).pipe(Effect.andThen(Deferred.await(replace)))
+        );
+        const replacement = yield* Effect.forkScoped(recovery);
+        yield* Deferred.await(replacing);
+        const custody = (): Promise<D1Result> =>
+          db.prepare("SELECT envelope,cleaned_at_ms,cleanup_claim FROM connection_grants").all();
+        const retained = (yield* Effect.tryPromise(custody)).results;
+        const sealed = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ envelope: Schema.String })
+        )(retained[0]);
+        expect(sealed.envelope).toMatch(/^v1\./u);
+        expect(retained[0]).toMatchObject({ cleaned_at_ms: null });
+        expect(retained[0]).not.toMatchObject({ cleanup_claim: oldClaim?.cleanup_claim });
+        yield* Deferred.succeed(finish, undefined);
+        expect(Exit.isFailure(yield* Fiber.await(old))).toBe(true);
+        expect((yield* Effect.tryPromise(custody)).results).toEqual(retained);
+        bank.beforeCleanup(Effect.void);
+        yield* Deferred.succeed(replace, undefined);
+        yield* Fiber.join(replacement);
+        expect((yield* Effect.tryPromise(custody)).results).toEqual([
+          {
+            envelope: null,
+            cleaned_at_ms: DateTime.nowUnsafe().epochMilliseconds,
+            cleanup_claim: null,
+          },
+        ]);
+        expect(bank.exchanges()).toBe(1);
+      })
+    )
+  ));
+
 it("refuses a foreign encryption key before bank egress and preserves pending evidence", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2061,6 +2510,32 @@ it("retains known tokens for cleanup even when the exchange omits the required s
           db.prepare("SELECT state,envelope FROM connection_grants").first()
         )
       ).toEqual({ state: "cleanup_required", envelope: null });
+    })
+  ));
+
+it("quarantines recoverable tokens from a rejected exchange without activating or exchanging again", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const { bank, started, callback } = yield* prepareActivation(db);
+      bank.scenario("rejected-with-tokens");
+      yield* Effect.tryPromise(() => callback());
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+        data: [{ id: started.connection.id, state: "Action required" }],
+      });
+      const accounts = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/connections/${started.connection.id}/accounts`))
+      );
+      expect(yield* Effect.tryPromise(() => accounts.json())).toEqual({ data: [], next: [] });
+      yield* sweepConnectionGrants({
+        db,
+        key: Option.some(Redacted.make("A".repeat(43))),
+        bank: Option.some(bank.cleanup),
+      });
+      expect(bank.revocations()).toEqual(["synthetic-refresh", "synthetic-access"]);
+      yield* Effect.tryPromise(() => callback());
+      expect(bank.exchanges()).toBe(1);
     })
   ));
 

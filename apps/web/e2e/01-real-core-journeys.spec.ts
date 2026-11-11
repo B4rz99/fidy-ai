@@ -201,13 +201,19 @@ const assertUnderScopedBrowser = (
         )
       );
       yield* fromPlaywright(readTransactionsSeparately(page));
+      const browserResponse = fromPlaywright(
+        page.waitForResponse(`${api}/transactions?*`, { timeout: canonicalRecoveryMilliseconds })
+      );
       yield* fromPlaywright(page.goto("/app/transactions"));
+      expect((yield* browserResponse).status()).toBe(forbidden);
       yield* fromPlaywright(expect(page.getByRole("alert")).toBeVisible());
       expect(yield* fromPlaywright(page.locator("body").textContent())).not.toContain(bearer);
       expect(yield* fromPlaywright(page.locator("body").textContent())).not.toContain(
         yield* fromPlaywright(refused.text())
       );
-    })
+    }).pipe(
+      Effect.ensuring(Effect.orDie(Effect.tryPromise(() => page.unrouteAll({ behavior: "wait" }))))
+    )
   );
 test("fresh and concurrent Dashboard first use explicitly initializes through authoritative Core queries", ({
   page,

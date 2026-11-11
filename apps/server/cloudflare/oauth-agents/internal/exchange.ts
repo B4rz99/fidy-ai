@@ -1,3 +1,4 @@
+import type { BootstrapUnavailable } from "../contract";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { Clock, Effect, type PlatformError, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
@@ -15,7 +16,7 @@ import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
 import { digestBytes, newId, newSecret, secretDigest } from "../../secret-material/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import { BootstrapInvalid, type BootstrapUnavailable, dbWork } from "./bootstrap";
+import { BootstrapInvalid, dbWork } from "./bootstrap";
 import { oauthResponse } from "./response";
 import { forwardRefresh } from "./refresh";
 
@@ -126,7 +127,7 @@ const consumptionStatement = (
       sql: `UPDATE oauth_connections AS oauth_codes SET code_consumed_at_ms = ? WHERE code_digest IS NOT NULL AND code_digest = ? AND id = ?
     AND code_consumed_at_ms IS NULL AND code_expires_at_ms > ? AND code_expires_at_ms > ${databaseCurrentMillis} AND code_challenge = ?
     AND EXISTS (SELECT 1 FROM oauth_connections WHERE id = ? AND user_id = ? AND client_id = ?
-      AND redirect_uri = ? AND resource = ? AND revoked_at_ms IS NULL AND code_expires_at_ms > ? AND code_expires_at_ms > ${databaseCurrentMillis})`,
+      AND redirect_uri = ? AND resource = ? AND revoked_at_ms IS NULL AND expires_at_ms > ? AND expires_at_ms > ${databaseCurrentMillis})`,
       params: [
         input.current,
         proof.digest,

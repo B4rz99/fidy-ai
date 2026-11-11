@@ -1,6 +1,7 @@
+import { SecureRandom } from "effect/crypto";
 import { BunServices } from "@effect/platform-bun";
 import { layer } from "@effect/vitest";
-import { Crypto, Data, Effect, Layer, Schedule } from "effect";
+import { Data, Effect, Layer, Schedule } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
@@ -34,7 +35,10 @@ const fetchWhenReady = (
     Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 80 })
   );
 
-const LocalEmulationServices = Layer.mergeAll(BunServices.layer, FetchHttpClient.layer);
+const LocalEmulationServices = Layer.mergeAll(
+  Layer.mergeAll(BunServices.layer, SecureRandom.layerWebCrypto),
+  FetchHttpClient.layer
+);
 
 layer(LocalEmulationServices, {
   excludeTestServices: true,
@@ -44,8 +48,8 @@ layer(LocalEmulationServices, {
     "serves the browser through the real ingress-to-Core service binding",
     () =>
       Effect.gen(function* () {
-        const crypto = yield* Crypto.Crypto;
-        const stageId = yield* crypto.randomUUIDv4();
+        const crypto = yield* SecureRandom.SecureRandom;
+        const stageId = yield* crypto.uuidV4();
         const developmentProcess = yield* ChildProcess.make("bun", ["run", "dev"], {
           cwd: infrastructureRoot,
           env: {

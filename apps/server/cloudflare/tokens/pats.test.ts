@@ -1397,6 +1397,12 @@ it("atomically revokes claimable approvals with User-origin Consent evidence and
   runTest(
     Effect.gen(function* () {
       const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000048",
+        grant: manualGrant(),
+      });
       const started = yield* Schema.decodeUnknownEffect(Started)(
         yield* awaitPromise(
           (yield* awaitPromise(
@@ -1475,21 +1481,23 @@ it("atomically revokes claimable approvals with User-origin Consent evidence and
       expect(
         (yield* awaitPromise(
           send({
-            path: "/pats",
-            method: "DELETE",
-            session: sessions[0],
+            path: "/categories",
+            method: "GET",
+            bearer: issued.bearer,
           })
         )).status
       ).toBe(200);
-      expect(
-        (yield* awaitPromise(
+      for (const revokedCount of [1, 0]) {
+        const revoked = yield* awaitPromise(
           send({
             path: "/pats",
             method: "DELETE",
             session: sessions[0],
           })
-        )).status
-      ).toBe(200);
+        );
+        expect(revoked.status).toBe(200);
+        expect(yield* awaitPromise(revoked.json())).toMatchObject({ data: { revokedCount } });
+      }
       expect(
         yield* awaitPromise(
           db
@@ -1511,7 +1519,7 @@ it("atomically revokes claimable approvals with User-origin Consent evidence and
             )
             .first()
         ))?.total
-      ).toBe(1);
+      ).toBe(2);
       expect(
         (yield* awaitPromise(
           send({
@@ -3104,6 +3112,64 @@ it("records successful PAT Transaction capture as use activity without extending
       expect(pats.find((pat) => pat.shortId === issued.pat.shortId)?.lastUsedAt).not.toBeNull();
     })
   ));
+it("keeps the original PAT deadline across repeated successful uses and refuses its exact expiry without cleanup", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000046",
+        grant: manualGrant({ scopes: ["read"] }),
+      });
+      const createdAt = Date.parse(issued.pat.createdAt);
+      const expiresAt = Date.parse(issued.pat.expiresAt);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      for (let day = 0; day < 7; day++) {
+        vi.setSystemTime(createdAt + day * 86_400_000);
+        const used = yield* awaitPromise(
+          send({ path: "/categories", method: "GET", bearer: issued.bearer })
+        );
+        expect(used.status).toBe(200);
+      }
+      vi.setSystemTime(expiresAt - 1);
+      expect(
+        (yield* awaitPromise(send({ path: "/categories", method: "GET", bearer: issued.bearer })))
+          .status
+      ).toBe(200);
+      const retained = yield* awaitPromise(
+        db
+          .prepare(
+            "SELECT last_used_at_ms,expires_at_ms,revoked_at_ms FROM pats WHERE short_id = ?"
+          )
+          .bind(issued.pat.shortId)
+          .first()
+      );
+      expect(retained).toEqual({
+        last_used_at_ms: expiresAt - 1,
+        expires_at_ms: expiresAt,
+        revoked_at_ms: null,
+      });
+      vi.setSystemTime(expiresAt);
+      const refused = yield* awaitPromise(
+        send({ path: "/categories", method: "GET", bearer: issued.bearer })
+      );
+      expect(refused.status).toBe(401);
+      expect(yield* awaitPromise(refused.json())).toMatchObject({
+        error: { code: "unauthenticated" },
+      });
+      expect(
+        yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT last_used_at_ms,expires_at_ms,revoked_at_ms FROM pats WHERE short_id = ?"
+            )
+            .bind(issued.pat.shortId)
+            .first()
+        )
+      ).toEqual(retained);
+    })
+  ));
 it("rolls back PAT Transaction capture and activity when its audit is silently refused", () =>
   runTest(
     Effect.gen(function* () {
@@ -3917,6 +3983,95 @@ it("does not commit PAT activity or disclose Category rows when its audit is sil
       ).toBe(1);
     })
   ));
+
+it.each(["one", "all"] as const)(
+  "refuses protected Transaction capture after revoke-%s wins between credential resolution and commit",
+  (target) =>
+    runTest(
+      Effect.gen(function* () {
+        let beforeProtectedWork = Option.none<() => Promise<Response>>();
+        const { db, send, sessions } = yield* awaitPromise(
+          setup(() =>
+            runTest(
+              Effect.gen(function* () {
+                const revoke = beforeProtectedWork;
+                if (Option.isNone(revoke)) return;
+                beforeProtectedWork = Option.none();
+                const response = yield* awaitPromise(revoke.value());
+                expect(response.status).toBe(200);
+                expect(yield* awaitPromise(response.json())).toMatchObject({
+                  data: target === "one" ? { shortId: issued.pat.shortId } : { revokedCount: 1 },
+                });
+              })
+            )
+          )
+        );
+        const issued = yield* issueManualPAT({
+          send,
+          session: sessions[0],
+          requestId: "70000000-0000-4000-8000-000000000047",
+          grant: manualGrant({ recipientLabel: "Protected capture agent", scopes: ["write"] }),
+        });
+        const capture = (): Promise<Response> =>
+          send({
+            path: "/transactions",
+            method: "POST",
+            bearer: issued.bearer,
+            payload: {
+              money: { amount: "23.50", currency: "COP" },
+              direction: "outflow",
+              occurredAt: "2026-09-01T12:00:00.000Z",
+            },
+          });
+        expect((yield* awaitPromise(capture())).status).toBe(201);
+        const activityBefore = yield* awaitPromise(
+          db
+            .prepare("SELECT last_used_at_ms FROM pats WHERE short_id = ?")
+            .bind(issued.pat.shortId)
+            .first()
+        );
+        beforeProtectedWork = Option.some(() =>
+          send({
+            path: target === "one" ? `/pats/${issued.pat.shortId}` : "/pats",
+            method: "DELETE",
+            session: sessions[0],
+          })
+        );
+        const refused = yield* awaitPromise(capture());
+        expect(refused.status).toBe(401);
+        expect(yield* awaitPromise(refused.json())).toMatchObject({
+          error: { code: "unauthenticated" },
+        });
+        expect(Option.isNone(beforeProtectedWork)).toBe(true);
+        expect(
+          yield* awaitPromise(
+            db
+              .prepare("SELECT count(*) AS total FROM transactions WHERE user_id = ?")
+              .bind(userA)
+              .first()
+          )
+        ).toEqual({ total: 1 });
+        expect(
+          yield* awaitPromise(
+            db
+              .prepare("SELECT last_used_at_ms FROM pats WHERE short_id = ?")
+              .bind(issued.pat.shortId)
+              .first()
+          )
+        ).toEqual(activityBefore);
+        expect(
+          yield* awaitPromise(
+            db
+              .prepare(
+                "SELECT count(*) AS total FROM audit_entries WHERE record_type='credential_call' AND pat_id = (SELECT id FROM pats WHERE short_id = ?) AND operation='transactions.createTransaction' AND outcome='accepted'"
+              )
+              .bind(issued.pat.shortId)
+              .first()
+          )
+        ).toEqual({ total: 1 });
+      })
+    )
+);
 
 it("rechecks revoke/use races at protected canonical work, not only bearer admission", () =>
   runTest(

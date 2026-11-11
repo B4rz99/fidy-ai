@@ -1,6 +1,6 @@
 import { CreateManualPATPayload } from "@fidy/server/client";
 import type { Page, Route } from "@playwright/test";
-import { Clock, Deferred, Duration, Effect, Schema } from "effect";
+import { type Cause, Clock, Deferred, Duration, Effect, Schema } from "effect";
 import { apiOrigin, installCategories, installUser, makeUser, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
@@ -903,3 +903,408 @@ const checkLateIssuance = Effect.fn(function* (page: Page) {
 test("Accesos never discloses a late issuance result into the task created after pagehide", ({
   page,
 }) => Effect.runPromise(checkLateIssuance(page)));
+
+const reviewTokenForRevocation = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() => page.getByRole("button", { name: "Desactivar", exact: true }).click());
+const confirmRevocationTwice = (page: Page, all = false): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    page
+      .getByRole("button", { name: all ? "Sí, desactivar todos" : "Sí, desactivar", exact: true })
+      .evaluate((button) => {
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      })
+  );
+const recoverPATMetadata = (page: Page): Promise<void> =>
+  page.getByRole("button", { name: "Comprobar estado de tokens", exact: true }).click();
+const refreshPATMetadata = (page: Page): Promise<void> =>
+  page.getByRole("button", { name: "Actualizar tokens", exact: true }).press("Enter");
+const checkUnknownRevocation = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 1440, height: 1100 }));
+  yield* Effect.tryPromise(() => installAccess(page));
+  let mutations = 0,
+    current = true,
+    failRead = false;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/pats**`, (route) => {
+      if (route.request().method() === "DELETE") {
+        mutations += 1;
+        current = false;
+        return route.fulfill({ status: 200, contentType: "application/json", body: "{" });
+      }
+      return failRead
+        ? route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: JSON.stringify({
+              error: { code: "unavailable", message: "Unavailable" },
+              next: [],
+            }),
+          })
+        : route.fulfill({
+            contentType: "application/json",
+            body: response({ pats: current ? [token] : [] }),
+          });
+    })
+  );
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  yield* reviewTokenForRevocation(page);
+  yield* confirmRevocationTwice(page);
+  yield* uncertainRevocation(page);
+  failRead = true;
+  yield* Effect.tryPromise(() => recoverPATMetadata(page));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("No pudimos actualizar tus tokens", { exact: true })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Desactivar todos los tokens", exact: true })
+    ).toBeDisabled()
+  );
+  yield* Effect.tryPromise(() => page.setViewportSize({ width: 390, height: 844 }));
+  failRead = false;
+  yield* Effect.tryPromise(() => recoverPATMetadata(page));
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByText(
+        "El token ya no figura activo. Esto no confirma el resultado de la desactivación anterior.",
+        { exact: true }
+      )
+    ).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Desactivar todos los tokens", exact: true })
+    ).toBeEnabled()
+  );
+  expect(mutations).toBe(1);
+});
+test("Accesos recovers unknown revocation by explicit metadata reads without replay or fabricated receipt", ({
+  page,
+}) => Effect.runPromise(checkUnknownRevocation(page)));
+
+type ManagementFixture = {
+  pats: (typeof token)[];
+  mutations: string[];
+  reply: "lost" | "acknowledged" | "refused" | "unavailable";
+};
+const installManagement = (page: Page, fixture: ManagementFixture): Promise<void> =>
+  installAccess(page)
+    .then(() =>
+      page.route(`${apiOrigin}/pats**`, (route) => {
+        if (route.request().method() !== "DELETE") {
+          return route.fulfill({
+            contentType: "application/json",
+            body: response({ pats: fixture.pats }),
+          });
+        }
+        const path = new URL(route.request().url()).pathname;
+        fixture.mutations.push(path);
+        switch (fixture.reply) {
+          case "lost":
+            return route.fulfill({ status: 200, contentType: "application/json", body: "{" });
+          case "acknowledged":
+            return route.fulfill({
+              contentType: "application/json",
+              body: response(path === "/pats" ? { revokedCount: 7 } : { shortId: token.shortId }),
+            });
+          case "refused":
+            return route.fulfill({
+              status: 404,
+              contentType: "application/json",
+              body: JSON.stringify({
+                error: { code: "not_found", message: "Not found" },
+                next: [],
+              }),
+            });
+          case "unavailable":
+            return route.fulfill({
+              status: 503,
+              contentType: "application/json",
+              body: JSON.stringify({
+                error: { code: "unavailable", message: "Unavailable" },
+                next: [],
+              }),
+            });
+        }
+      })
+    )
+    .then(() => {});
+const reviewAllTokens = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Desactivar todos los tokens", exact: true }).click()
+  );
+const uncertainRevocation = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    expect(page.getByText("Desactivación sin confirmar", { exact: true })).toBeVisible()
+  );
+
+const checkAggregateRecovery = Effect.fn(function* (page: Page) {
+  const fixture: ManagementFixture = { pats: [token], mutations: [], reply: "lost" };
+  yield* Effect.tryPromise(() => installManagement(page, fixture));
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  yield* reviewAllTokens(page);
+  yield* confirmRevocationTwice(page, true);
+  yield* uncertainRevocation(page);
+  fixture.pats = [];
+  yield* Effect.tryPromise(() => recoverPATMetadata(page));
+  const unknown = page.getByText(
+    "La lista está actualizada. El resultado de la desactivación anterior y su cantidad siguen sin confirmar; la lista no confirma el cierre de autorizaciones pendientes.",
+    { exact: true }
+  );
+  yield* Effect.tryPromise(() => expect(unknown).toBeVisible());
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("No tienes tokens activos.", { exact: true })).toBeVisible()
+  );
+  fixture.pats = [{ ...token, shortId: "issued02", recipientLabel: "Agente posterior" }];
+  yield* Effect.tryPromise(() => refreshPATMetadata(page));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("table", { name: "Tokens activos" })).toContainText("Agente posterior")
+  );
+  yield* Effect.tryPromise(() => expect(unknown).toBeVisible());
+  yield* reviewAllTokens(page);
+  yield* Effect.tryPromise(() => expect(unknown).toBeVisible());
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Cancelar", exact: true }).click()
+  );
+  expect(fixture.mutations).toEqual(["/pats"]);
+});
+test("Accesos preserves an unknown aggregate count through empty reads, concurrent issuance and a new review", ({
+  page,
+}) => Effect.runPromise(checkAggregateRecovery(page)));
+
+const competeRevocationReviews = (button: HTMLElement | SVGElement): void => {
+  const aggregate = Array.from(document.querySelectorAll("button")).find(
+    (candidate) => candidate.getAttribute("aria-label") === "Desactivar todos los tokens"
+  );
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  aggregate?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+};
+const checkCompetingRevocation = Effect.fn(function* (page: Page) {
+  const fixture: ManagementFixture = { pats: [token], mutations: [], reply: "acknowledged" };
+  yield* Effect.tryPromise(() => installManagement(page, fixture));
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Desactivar", exact: true }).evaluate(competeRevocationReviews)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "Sí, desactivar", exact: true })).toBeVisible()
+  );
+  yield* confirmRevocationTwice(page);
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByText(
+        `Token desactivado. Dejó de funcionar de inmediato. Identificador: ${token.shortId}.`,
+        { exact: true }
+      )
+    ).toBeVisible()
+  );
+  expect(fixture.mutations).toEqual([`/pats/${token.shortId}`]);
+  yield* reviewAllTokens(page);
+  yield* confirmRevocationTwice(page, true);
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Se desactivaron 7 tokens activos.", { exact: true })).toBeVisible()
+  );
+  expect(fixture.mutations).toEqual([`/pats/${token.shortId}`, "/pats"]);
+});
+test("Accesos serializes same-tick single and aggregate reviews and acknowledges exact command results once", ({
+  page,
+}) => Effect.runPromise(checkCompetingRevocation(page)));
+
+const checkRetainedReview = Effect.fn(function* (page: Page) {
+  const fixture: ManagementFixture = { pats: [token], mutations: [], reply: "acknowledged" };
+  yield* Effect.tryPromise(() => installManagement(page, fixture));
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  yield* reviewTokenForRevocation(page);
+  fixture.pats = [{ ...token, recipientLabel: "Nombre actualizado" }];
+  yield* Effect.tryPromise(() => refreshPATMetadata(page));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("table", { name: "Tokens activos" })).toContainText("Nombre actualizado")
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText(/¿Quieres desactivar el token/u)).toContainText(token.recipientLabel)
+  );
+  fixture.pats = [];
+  yield* Effect.tryPromise(() => refreshPATMetadata(page));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("No tienes tokens activos.", { exact: true })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Cancelar", exact: true }).click()
+  );
+  yield* reviewAllTokens(page);
+  expect(fixture.mutations).toEqual([]);
+});
+test("Accesos keeps the exact reviewed identity and cancellation after metadata changes or expiry", ({
+  page,
+}) => Effect.runPromise(checkRetainedReview(page)));
+
+const checkRevocationRefusal = Effect.fn(function* (page: Page, reply: "refused" | "unavailable") {
+  const fixture: ManagementFixture = { pats: [token], mutations: [], reply };
+  yield* Effect.tryPromise(() => installManagement(page, fixture));
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  yield* reviewTokenForRevocation(page);
+  yield* confirmRevocationTwice(page);
+  if (reply === "refused") {
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByText(
+          "No se encontró ese token. Actualiza la lista antes de revisar otra solicitud.",
+          { exact: true }
+        )
+      ).toBeVisible()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Desactivación sin confirmar", { exact: true })).toHaveCount(0)
+    );
+  } else {
+    yield* uncertainRevocation(page);
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", { name: "Desactivar todos los tokens", exact: true })
+      ).toBeDisabled()
+    );
+  }
+  expect(fixture.mutations).toEqual([`/pats/${token.shortId}`]);
+});
+for (const reply of ["refused", "unavailable"] as const) {
+  test(`Accesos treats ${reply} revocation distinctly without automatic replay`, ({ page }) =>
+    Effect.runPromise(checkRevocationRefusal(page, reply)));
+}
+
+const releaseManagementReply = (
+  route: Route,
+  pending: Promise<void>,
+  data: unknown
+): Promise<void> =>
+  pending.then(() => route.fulfill({ contentType: "application/json", body: response(data) }));
+const installReplacementUser = (page: Page): Promise<void> =>
+  page
+    .route(`${apiOrigin}/user`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: response(makeUser({ id: "24000000-0000-4000-8000-000000000242" })),
+      })
+    )
+    .then(() => {});
+const checkRetiredManagement = Effect.fn(function* (page: Page, pending: "mutation" | "refresh") {
+  const fixture: ManagementFixture = { pats: [token], mutations: [], reply: "lost" };
+  yield* Effect.tryPromise(() => installManagement(page, fixture));
+  const release = Promise.withResolvers<void>();
+  const replied = Promise.withResolvers<void>();
+  let held = 0,
+    holding = pending === "mutation";
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/pats**`, (route) => {
+      const method = route.request().method();
+      if (!holding || method !== (pending === "mutation" ? "DELETE" : "GET")) {
+        return route.fallback();
+      }
+      held += 1;
+      if (method === "DELETE") fixture.mutations.push(new URL(route.request().url()).pathname);
+      return releaseManagementReply(
+        route,
+        release.promise,
+        method === "DELETE" ? { shortId: token.shortId } : { pats: [token] }
+      ).then(replied.resolve);
+    })
+  );
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  yield* reviewTokenForRevocation(page);
+  yield* confirmRevocationTwice(page);
+  if (pending === "refresh") {
+    yield* uncertainRevocation(page);
+    holding = true;
+    yield* Effect.tryPromise(() => recoverPATMetadata(page));
+  }
+  yield* Effect.tryPromise(() => expect.poll(() => held).toBe(1));
+  yield* Effect.tryPromise(() =>
+    page.evaluate(() => window.dispatchEvent(new Event("fidy:authentication-ended")))
+  );
+  release.resolve();
+  yield* Effect.tryPromise(() => replied.promise);
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText(/Token desactivado|El token figura activo/u)).toHaveCount(0)
+  );
+  fixture.pats = [{ ...token, shortId: "other002", recipientLabel: "Agente de otra persona" }];
+  holding = false;
+  yield* Effect.tryPromise(() => installReplacementUser(page));
+  yield* Effect.tryPromise(() => page.reload());
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("table", { name: "Tokens activos" })).toContainText(
+      "Agente de otra persona"
+    )
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText(token.recipientLabel, { exact: true })).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText(/Token desactivado|El token figura activo/u)).toHaveCount(0)
+  );
+  expect(fixture.mutations).toEqual([`/pats/${token.shortId}`]);
+});
+for (const pending of ["mutation", "refresh"] as const) {
+  test(`Accesos fences a late ${pending} result after authentication replacement`, ({ page }) =>
+    Effect.runPromise(checkRetiredManagement(page, pending)));
+}
+
+const checkOldMetadataGeneration = Effect.fn(function* (page: Page) {
+  const fixture: ManagementFixture = { pats: [token], mutations: [], reply: "lost" };
+  yield* Effect.tryPromise(() => installManagement(page, fixture));
+  yield* Effect.tryPromise(() => page.goto("/settings/access"));
+  yield* reviewTokenForRevocation(page);
+  yield* confirmRevocationTwice(page);
+  yield* uncertainRevocation(page);
+  const oldRead = Promise.withResolvers<void>();
+  const newRead = Promise.withResolvers<void>();
+  let reads = 0;
+  yield* Effect.tryPromise(() =>
+    page.route(`${apiOrigin}/pats`, (route) => {
+      reads += 1;
+      return releaseManagementReply(route, reads === 1 ? oldRead.promise : newRead.promise, {
+        pats: reads === 1 ? [token] : [],
+      });
+    })
+  );
+  yield* Effect.tryPromise(() =>
+    page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")))
+  );
+  yield* Effect.tryPromise(() => expect.poll(() => reads).toBe(1));
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Comprobar estado de tokens", exact: true })
+    ).toBeEnabled()
+  );
+  yield* Effect.tryPromise(() => recoverPATMetadata(page));
+  yield* Effect.tryPromise(() => expect.poll(() => reads).toBe(2));
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Comprobar estado de tokens", exact: true })
+    ).toBeDisabled()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Comprobar estado de tokens", exact: true })
+    ).toHaveText("Comprobando…")
+  );
+  oldRead.resolve();
+  yield* uncertainRevocation(page);
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByRole("button", { name: "Desactivar todos los tokens", exact: true })
+    ).toBeDisabled()
+  );
+  newRead.resolve();
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByText(
+        "El token ya no figura activo. Esto no confirma el resultado de la desactivación anterior.",
+        { exact: true }
+      )
+    ).toBeVisible()
+  );
+  expect(fixture.mutations).toEqual([`/pats/${token.shortId}`]);
+});
+test("Accesos rejects an older metadata generation while explicit recovery waits for its fresh read", ({
+  page,
+}) => Effect.runPromise(checkOldMetadataGeneration(page)));

@@ -1,20 +1,11 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import {
   ConnectionAuthorizationUnavailable,
   type ConnectionBankActivation,
   type ConnectionBankCleanup,
   type ConnectionBankPreparation,
 } from "../connections/contract";
-import {
-  Clock,
-  Context,
-  Crypto,
-  Effect,
-  Layer,
-  Option,
-  PlatformError,
-  Redacted,
-  Schema,
-} from "effect";
+import { Clock, Context, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { sandboxPublicKey } from "../bancolombia-sandbox/contract";
@@ -34,22 +25,10 @@ import {
 
 const maximumPrivateKeyLength = 20000;
 const maximumProfileLength = 8192;
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: () =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "BancolombiaCrypto",
-          method: "digest",
-        }),
-    }),
-});
+const workerSecureRandom = SecureRandom.make((size) =>
+  crypto.getRandomValues(new Uint8Array(size))
+);
+const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
 
 const withSandboxClient = <A, E>(
   environment: BancolombiaSandboxEnvironment,
@@ -77,7 +56,8 @@ const withSandboxClient = <A, E>(
       Effect.provideService(FetchHttpClient.Fetch, fetch)
     );
     return yield* run({
-      crypto: workerCrypto,
+      secureRandom: workerSecureRandom,
+      digest: workerDigest,
       clientId,
       privateKey: Redacted.make(key),
       publicKey: sandboxPublicKey,

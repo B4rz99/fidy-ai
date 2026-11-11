@@ -1,11 +1,15 @@
 import {
   type ColumnDef,
-  type Table as ReactTable,
+  type ReactTable,
   type SortingState,
+  columnVisibilityFeature,
+  createSortedRowModel,
   flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
+  rowSortingFeature,
+  sortFn_alphanumeric,
+  sortFn_text,
+  tableFeatures,
+  useTable,
 } from "@tanstack/react-table";
 import {
   DropdownMenu,
@@ -37,7 +41,14 @@ import { formatMoneyWithCode } from "@/transport/money";
 import type { HistoryState } from "./history";
 import type { TransactionListRow } from "./presentation";
 
-const columns: Array<ColumnDef<TransactionListRow>> = [
+const features = tableFeatures({
+  columnVisibilityFeature,
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+  sortFns: { alphanumeric: sortFn_alphanumeric, text: sortFn_text },
+});
+type LedgerTable = ReactTable<typeof features, TransactionListRow>;
+const columns: Array<ColumnDef<typeof features, TransactionListRow>> = [
   { accessorKey: "counterpartyLabel", header: "Contraparte" },
   { accessorKey: "categoryLabel", header: "Categoría" },
   { accessorKey: "transactionTypeLabel", header: "Tipo" },
@@ -232,7 +243,7 @@ const TransactionRow = ({
 const LedgerHeader = ({
   table,
 }: Readonly<{
-  table: ReactTable<TransactionListRow>;
+  table: LedgerTable;
 }>): JSX.Element => (
   <TableHeader className="sr-only">
     {table.getHeaderGroups().map((group) => (
@@ -282,7 +293,7 @@ const sortValue = (sorting: SortingState): string =>
 const ColumnControls = ({
   table,
   disabled,
-}: Readonly<{ table: ReactTable<TransactionListRow>; disabled: boolean }>): JSX.Element => (
+}: Readonly<{ table: LedgerTable; disabled: boolean }>): JSX.Element => (
   <DropdownMenu>
     <DropdownMenuTrigger render={<Button variant="outline" disabled={disabled} />}>
       Columnas
@@ -353,7 +364,7 @@ const LedgerControls = ({
   readOnly,
 }: Readonly<{
   readOnly: boolean;
-  table: ReactTable<TransactionListRow>;
+  table: LedgerTable;
   sorting: SortingState;
   onSorting: (sorting: SortingState) => void;
   disabled: boolean;
@@ -378,7 +389,7 @@ const LedgerControls = ({
 );
 const fallbackInitialRows = 32;
 const estimatedRowHeightPixels = 72;
-type LedgerRows = ReturnType<ReactTable<TransactionListRow>["getRowModel"]>["rows"];
+type LedgerRows = ReturnType<LedgerTable["getRowModel"]>["rows"];
 const useInitialViewportRows = (
   sortedRows: LedgerRows
 ): Readonly<{
@@ -431,7 +442,7 @@ const LedgerBody = ({
 }: Readonly<{
   dates: ReadonlyArray<string>;
   rows: ReadonlyArray<TransactionListRow>;
-  sortedRows: ReturnType<ReactTable<TransactionListRow>["getRowModel"]>["rows"];
+  sortedRows: ReturnType<LedgerTable["getRowModel"]>["rows"];
   locale: string;
   rowProps: Omit<LedgerProps, "rows">;
 }>): JSX.Element => {
@@ -534,7 +545,7 @@ const LedgerContents = ({
   rows,
   table,
   ...props
-}: LedgerProps & Readonly<{ table: ReactTable<TransactionListRow> }>): JSX.Element => {
+}: LedgerProps & Readonly<{ table: LedgerTable }>): JSX.Element => {
   const sortedRows = table.getRowModel().rows;
   const dates = Array.from(new Set(rows.map((row) => row.occurredOnText)));
   return (
@@ -572,15 +583,13 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
   const [visibility, setVisibility] = useState({});
   const [sorting, onSortingChange] = useState<SortingState>([]);
   const data = useMemo(() => Array.from(rows), [rows]);
-  const table = useReactTable({
+  const table = useTable({
+    features,
     data,
     columns,
-    autoResetPageIndex: false,
     state: { sorting, columnVisibility: visibility },
     onColumnVisibilityChange: setVisibility,
     onSortingChange,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
     getRowId: (row) => row.id,
   });
   return (

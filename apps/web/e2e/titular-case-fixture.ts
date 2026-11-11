@@ -1,5 +1,6 @@
+import { SecureRandom } from "effect/crypto";
 import { BunServices } from "@effect/platform-bun";
-import { Clock, Crypto, Effect, FileSystem, Schema } from "effect";
+import { Clock, Effect, FileSystem, Layer, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 
 const { expect } = playwright;
@@ -34,8 +35,8 @@ const runCaseRegister = Effect.fn(function* (
 });
 
 const reference = Effect.gen(function* () {
-  const crypto = yield* Crypto.Crypto;
-  return yield* crypto.randomUUIDv4();
+  const crypto = yield* SecureRandom.SecureRandom;
+  return yield* crypto.uuidV4();
 });
 
 const observeDelivery = Effect.fn(function* (
@@ -110,5 +111,8 @@ export const exerciseTitularCase = (ownerResultRef: string): Promise<void> =>
       expect(receipt.case.delivery.status).toBe("Confirmed");
       expect(receipt.authority).toBe("manual-record-only");
       expect(receipt.deletion).toBe("not-performed");
-    }).pipe(Effect.provide(BunServices.layer), Effect.scoped)
+    }).pipe(
+      Effect.provide(Layer.mergeAll(BunServices.layer, SecureRandom.layerWebCrypto)),
+      Effect.scoped
+    )
   );

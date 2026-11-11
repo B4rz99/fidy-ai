@@ -1,5 +1,6 @@
+import { Digest, SecureRandom } from "effect/crypto";
 import { expect, it } from "@effect/vitest";
-import { Context, Crypto, Effect, Layer, Option, Redacted } from "effect";
+import { Context, Effect, Layer, Option, Redacted } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { SignJWT, exportJWK, exportPKCS8, generateKeyPair } from "jose";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
@@ -16,7 +17,9 @@ it.effect(
   "exchanges the claimed code with its original verifier, validates bank identity and retains authority before complete Account discovery",
   () =>
     Effect.gen(function* () {
-      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      const services = yield* Layer.build(TestCrypto);
+      const secureRandom = Context.get(services, SecureRandom.SecureRandom);
+      const digest = Context.get(services, Digest.Digest);
       const client = yield* Effect.tryPromise(() =>
         generateKeyPair("RS256", { extractable: true })
       );
@@ -115,7 +118,8 @@ it.effect(
         })
       );
       const accounts = yield* activateBancolombiaSandbox({
-        crypto,
+        secureRandom,
+        digest,
         clientId,
         publicKey,
         privateKey: Redacted.make(yield* Effect.tryPromise(() => exportPKCS8(client.privateKey))),

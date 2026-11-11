@@ -73,8 +73,8 @@ const prepareAssertion = Effect.fn(function* (input: SandboxAuthenticationInput)
   }
   const milliseconds = yield* Clock.currentTimeMillis;
   const now = Math.floor(milliseconds / millisecondsPerSecond);
-  const jti = yield* input.crypto
-    .randomUUIDv4()
+  const jti = yield* input.secureRandom
+    .uuidV4()
     .pipe(Effect.mapError(() => failure("bancolombia_signing")));
   const privateKey = yield* Effect.tryPromise({
     try: () => importPKCS8(Redacted.value(input.privateKey), "RS256", { extractable: false }),
@@ -271,7 +271,7 @@ const createConsent = (
     if (input.expiresAtMilliseconds <= (yield* Clock.currentTimeMillis)) {
       return yield* new BancolombiaAuthorizationFailed();
     }
-    const interactionId = yield* input.crypto.randomUUIDv4();
+    const interactionId = yield* input.secureRandom.uuidV4();
     const payload = yield* Schema.encodeEffect(Schema.fromJsonString(ConsentRequest))({
       Data: {
         Permissions: profile.intent.permissions,

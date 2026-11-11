@@ -1,11 +1,16 @@
 import type { APIRequestContext, Page, Route } from "@playwright/test";
-import { ConnectInstitutionResult, ConnectionAttemptReference } from "@fidy/server/client";
+import {
+  ConnectInstitutionResult,
+  ConnectionAttemptReference,
+  ConnectionContinuationReview,
+} from "@fidy/server/client";
 import { type Cause, Clock, Effect, Schema } from "effect";
 import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
 import { playwright } from "./playwright-runtime";
 import {
   boundSessionRequests,
   probeCanonicalRequest,
+  signInDashboardThroughCore,
   signInFirstCardThroughCore,
 } from "./real-core-fixture";
 
@@ -16,6 +21,7 @@ const noContentStatus = 204;
 const notFoundStatus = 404;
 const unauthenticatedStatus = 401;
 const forbiddenStatus = 403;
+const unavailableStatus = 503;
 const protocolJourneyBudget = 60000;
 const browserClockLagMilliseconds = 600000;
 const bankOrigin = "https://auth1-api-open-finance-sandbox.ambientesbc.com";
@@ -118,6 +124,306 @@ const returnFromBank = (
     );
   });
 
+const staleReview =
+  (body: string): ((route: Route) => Promise<void>) =>
+  (route) =>
+    route.fulfill({ status: okStatus, contentType: "application/json", body });
+
+const continuationRecovery = (
+  readyBody: string
+): Readonly<{
+  review: (route: Route) => Promise<void>;
+  select: (mode: "ready" | "failed" | "live") => void;
+}> => {
+  let mode: "ready" | "failed" | "live" = "ready";
+  return {
+    select: (selected) => {
+      mode = selected;
+    },
+    review: (route) => {
+      if (mode === "live") return route.continue();
+      return route.fulfill({
+        status: mode === "ready" ? okStatus : unavailableStatus,
+        contentType: "application/json",
+        body: mode === "ready" ? readyBody : '{"error":{"code":"continuation_unavailable"}}',
+      });
+    },
+  };
+};
+const doubleBegin = (button: HTMLElement): void => {
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+};
+const loseBeginReply = (route: Route): Promise<void> =>
+  route.fetch().then(() => route.abort("failed"));
+
+const holdBeginReply = (): Readonly<{
+  route: (route: Route) => Promise<void>;
+  prepared: Promise<void>;
+  release: () => void;
+  delivered: Promise<void>;
+}> => {
+  const prepared = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const delivered = Promise.withResolvers<void>();
+  return {
+    prepared: prepared.promise,
+    delivered: delivered.promise,
+    release: () => release.resolve(),
+    route: (route) =>
+      route.fetch().then((response) => {
+        prepared.resolve();
+        return release.promise
+          .then(() => route.fulfill({ response }))
+          .then(() => delivered.resolve());
+      }),
+  };
+};
+
+const observeReplacedSession = (): void => {
+  window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+};
+const disableAuthenticationBroadcast = (): void => {
+  Object.defineProperty(window, "BroadcastChannel", { value: undefined });
+};
+const replaceContinuationLocation = (path: string): void => {
+  const state: unknown = window.history.state;
+  window.history.pushState(state, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate", { state }));
+};
+
+test("ignores a late Begin reply after the mounted continuation locator changes", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
+      yield* selectScenario(request, "ready");
+      const original = yield* startConnection({ page, request });
+      const held = holdBeginReply();
+      yield* Effect.tryPromise(() => page.route(`${api}/web/connections/begin`, held.route));
+      yield* begin(page, original.path);
+      yield* Effect.tryPromise(() => held.prepared);
+      const replacement = yield* startConnection({ page, request });
+      expect(replacement.attempt).not.toBe(original.attempt);
+      yield* Effect.tryPromise(() => page.evaluate(replaceContinuationLocation, replacement.path));
+      const action = page.getByRole("button", { name: "Continuar", exact: true });
+      yield* Effect.tryPromise(() => expect(action).toBeEnabled());
+      held.release();
+      yield* Effect.tryPromise(() => held.delivered);
+      yield* Effect.tryPromise(() => expect(action).toBeEnabled());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("link", { name: "Continuar en Bancolombia", exact: true })
+        ).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page).toHaveURL(new URL(replacement.path, app).toString())
+      );
+    })
+  ));
+
+test("retires a pending bank preparation when another browser session replaces its owner", ({
+  page,
+  context,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => page.addInitScript(disableAuthenticationBroadcast));
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
+      yield* selectScenario(request, "ready");
+      const continuation = yield* startConnection({ page, request });
+      const held = holdBeginReply();
+      yield* Effect.tryPromise(() => page.route(`${api}/web/connections/begin`, held.route));
+      yield* begin(page, continuation.path);
+      yield* Effect.tryPromise(() => held.prepared);
+      const other = yield* Effect.tryPromise(() => context.newPage());
+      yield* Effect.tryPromise(() => signInDashboardThroughCore({ page: other, request }));
+      yield* Effect.tryPromise(() => page.evaluate(observeReplacedSession));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Solicitud no disponible", { exact: true })).toBeVisible()
+      );
+      held.release();
+      yield* Effect.tryPromise(() => held.delivered);
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("link", { name: "Continuar en Bancolombia", exact: true })
+        ).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Continuar", exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(other.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
+      );
+    })
+  ));
+
+const expireUnknownReady = (page: Page): Effect.Effect<void, BrowserFailure> =>
+  Effect.gen(function* () {
+    const refresh = page.getByRole("button", { name: "Consultar estado", exact: true });
+    const deadline = yield* Schema.decodeUnknownEffect(Schema.DateTimeUtcFromString)(
+      yield* Effect.tryPromise(() => page.locator("time").getAttribute("datetime"))
+    );
+    yield* Effect.tryPromise(() => page.clock.setSystemTime(deadline.epochMilliseconds + 1));
+    yield* Effect.tryPromise(() => refresh.click());
+    yield* Effect.tryPromise(() => expect(refresh).toBeDisabled());
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByText(
+          "No pudimos confirmar el resultado. Esta solicitud venció; no la vuelvas a enviar.",
+          { exact: true }
+        )
+      ).toBeVisible()
+    );
+  });
+
+test("keeps a lost Begin unresolved through old Ready and failed reads, recovering only authoritative handoff", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
+      yield* selectScenario(request, "ready");
+      const continuation = yield* startConnection({ page, request });
+      const ready = yield* Effect.tryPromise(() =>
+        continuation.session.get(`${api}/web/connections/review?attempt=${continuation.attempt}`)
+      );
+      const recovery = continuationRecovery(yield* Effect.tryPromise(() => ready.text()));
+      yield* Effect.tryPromise(() =>
+        page.route(`${api}/web/connections/review?**`, recovery.review)
+      );
+      yield* Effect.tryPromise(() => page.route(`${api}/web/connections/begin`, loseBeginReply));
+      let submissions = 0;
+      page.on("request", (outgoing) => {
+        if (outgoing.url() === `${api}/web/connections/begin`) submissions += 1;
+      });
+      yield* Effect.tryPromise(() => page.goto(continuation.path));
+      const action = page.getByRole("button", { name: "Continuar", exact: true });
+      yield* Effect.tryPromise(() => action.evaluate(doubleBegin));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText("No pudimos confirmar el resultado")
+      );
+      const refresh = page.getByRole("button", { name: "Consultar estado", exact: true });
+      yield* Effect.tryPromise(() => refresh.click());
+      yield* Effect.tryPromise(() => expect(action).toBeDisabled());
+      recovery.select("failed");
+      yield* Effect.tryPromise(() => refresh.click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText(/La información mostrada puede estar desactualizada/u)).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(action).toBeDisabled());
+      recovery.select("live");
+      yield* Effect.tryPromise(() => refresh.click());
+      const handoff = page.getByRole("link", { name: "Continuar en Bancolombia", exact: true });
+      yield* Effect.tryPromise(() => expect(handoff).toBeVisible());
+      recovery.select("failed");
+      yield* Effect.tryPromise(() => refresh.click());
+      yield* Effect.tryPromise(() => expect(handoff).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText(/La información mostrada puede estar desactualizada/u)).toBeVisible()
+      );
+      recovery.select("live");
+      yield* Effect.tryPromise(() => refresh.click());
+      yield* Effect.tryPromise(() => expect(handoff).toBeVisible());
+      recovery.select("ready");
+      yield* Effect.tryPromise(() => refresh.click());
+      yield* Effect.tryPromise(() => expect(action).toBeDisabled());
+      yield* expireUnknownReady(page);
+      expect(submissions).toBe(1);
+    })
+  ));
+
+test("never reopens Begin when a completed submission is followed by an older Ready review", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
+      yield* selectScenario(request, "ready");
+      const continuation = yield* startConnection({ page, request });
+      const ready = yield* Effect.tryPromise(() =>
+        continuation.session.get(`${api}/web/connections/review?attempt=${continuation.attempt}`)
+      );
+      const readyBody = yield* Effect.tryPromise(() => ready.text());
+      let submissions = 0;
+      yield* Effect.tryPromise(() =>
+        page.route(`${api}/web/connections/review?**`, staleReview(readyBody))
+      );
+      page.on("request", (outgoing) => {
+        if (outgoing.url() === `${api}/web/connections/begin`) submissions += 1;
+      });
+      yield* begin(page, continuation.path);
+      const action = page.getByRole("button", { name: "Continuar", exact: true });
+      yield* Effect.tryPromise(() => expect(action).toBeDisabled());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Consultar estado", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(action).toBeDisabled());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("status")).toHaveText(
+          "La solicitud se envió. Consulta el estado para ver el resultado; no la vuelvas a enviar."
+        )
+      );
+      expect(submissions).toBe(1);
+    })
+  ));
+
+for (const stage of ["begin", "handoff", "auxiliary handoff"] as const) {
+  test(`refuses expired ${stage} actions even before the deadline timer fires`, ({
+    page,
+    request,
+  }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() => signInForConnection({ page, request }));
+        yield* selectScenario(request, "ready");
+        const browserNow = (yield* Clock.currentTimeMillis) - browserClockLagMilliseconds;
+        yield* Effect.tryPromise(() => page.clock.setSystemTime(browserNow));
+        const continuation = yield* startConnection({ page, request });
+        if (stage !== "begin") yield* begin(page, continuation.path);
+        else yield* Effect.tryPromise(() => page.goto(continuation.path));
+        const action =
+          stage === "begin"
+            ? page.getByRole("button", { name: "Continuar", exact: true })
+            : page.getByRole("link", { name: "Continuar en Bancolombia", exact: true });
+        yield* Effect.tryPromise(() => expect(action).toBeVisible());
+        const deadline = yield* Schema.decodeUnknownEffect(Schema.DateTimeUtcFromString)(
+          yield* Effect.tryPromise(() => page.locator("time").getAttribute("datetime"))
+        );
+        let effects = 0;
+        page.on("request", (outgoing) => {
+          if (
+            outgoing.url() === `${api}/web/connections/begin` ||
+            outgoing.url().startsWith(bankOrigin)
+          ) {
+            effects += 1;
+          }
+        });
+        yield* Effect.tryPromise(() => page.clock.setSystemTime(deadline.epochMilliseconds + 1));
+        yield* Effect.tryPromise(() =>
+          action.click({ button: stage === "auxiliary handoff" ? "middle" : "left" })
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("alert")).toContainText("La solicitud venció")
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page).toHaveURL(new URL(continuation.path, app).toString())
+        );
+        if (stage !== "begin") yield* Effect.tryPromise(() => expect(action).toHaveCount(0));
+        else yield* Effect.tryPromise(() => expect(action).toBeDisabled());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Consultar estado", exact: true })).toBeDisabled()
+        );
+        expect(effects).toBe(0);
+      })
+    ));
+}
+
 test("hands off through Core only after browser proof, refuses replay and keeps the Connection pending", ({
   page,
   request,
@@ -175,6 +481,65 @@ test("hands off through Core only after browser proof, refuses replay and keeps 
           Schema.Struct({ data: Schema.Struct({ state: Schema.Literal("Connecting") }) })
         )(yield* Effect.tryPromise(() => inspected.json()))
       ).toEqual({ data: { state: "Connecting" } });
+    })
+  ));
+
+const retainPreparingReview = (
+  page: Page,
+  continuation: Continuation
+): Effect.Effect<void, BrowserFailure> =>
+  Effect.gen(function* () {
+    const response = yield* Effect.tryPromise(() =>
+      continuation.session.get(`${api}/web/connections/review?attempt=${continuation.attempt}`)
+    );
+    const review = yield* Schema.decodeUnknownEffect(
+      Schema.toCodecJson(ConnectionContinuationReview)
+    )(yield* Effect.tryPromise(() => response.json()));
+    if (review.phase !== "ready") throw new Error("Expected an initial Connection review");
+    const preparing = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(ConnectionContinuationReview))
+    )({
+      ...review,
+      phase: "preparing",
+    });
+    yield* Effect.tryPromise(() =>
+      page.route(`${api}/web/connections/review?**`, staleReview(preparing))
+    );
+  });
+
+test("expires a retained preparing review without offering disabled status recovery", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => signInForConnection({ page, request }));
+      const browserNow = (yield* Clock.currentTimeMillis) - browserClockLagMilliseconds;
+      yield* Effect.tryPromise(() => page.clock.setSystemTime(browserNow));
+      yield* selectScenario(request, "ready");
+      const continuation = yield* startConnection({ page, request });
+      yield* retainPreparingReview(page, continuation);
+      yield* Effect.tryPromise(() => page.goto(continuation.path));
+      const preparing = page.getByText(
+        "Estamos preparando la autorización. Consulta el estado; no repitas la solicitud.",
+        { exact: true }
+      );
+      yield* Effect.tryPromise(() => expect(preparing).toBeVisible());
+      const deadline = yield* Schema.decodeUnknownEffect(Schema.DateTimeUtcFromString)(
+        yield* Effect.tryPromise(() => page.locator("time").getAttribute("datetime"))
+      );
+      yield* Effect.tryPromise(() =>
+        page.clock.fastForward(deadline.epochMilliseconds - browserNow + 1)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toContainText(
+          "La solicitud venció. Inicia una nueva conexión."
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Consultar estado", exact: true })).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() => expect(preparing).toHaveCount(0));
     })
   ));
 

@@ -1,7 +1,7 @@
+import { type Digest, type SecureRandom } from "effect/crypto";
 import {
   type Cause,
   Clock,
-  type Crypto,
   DateTime,
   Effect,
   Layer,
@@ -79,7 +79,7 @@ const legacyConsent = (
 ): Effect.Effect<
   Response,
   Cause.UnknownError | Schema.SchemaError | void,
-  Crypto.Crypto | HttpClient.HttpClient
+  SecureRandom.SecureRandom | Digest.Digest | HttpClient.HttpClient
 > =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;

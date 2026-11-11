@@ -1,3 +1,4 @@
+import { BootstrapUnavailable } from "../contract";
 import { Data, Effect, Option, Schema } from "effect";
 import { OAuthAuthorization, OAuthRegistration } from "../../../src/shell/oauth-agents/contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
@@ -18,7 +19,6 @@ const invalidStatus = 400;
 export const invalidRequest = (): Response =>
   jsonResponse({ body: { error: "invalid_request" }, status: invalidStatus });
 export class BootstrapInvalid extends Data.TaggedError("BootstrapInvalid") {}
-export class BootstrapUnavailable extends Data.TaggedError("BootstrapUnavailable") {}
 export const dbWork = <A>(run: () => Promise<A>): Effect.Effect<A, BootstrapUnavailable> =>
   Effect.uninterruptible(Effect.tryPromise({ try: run, catch: () => new BootstrapUnavailable() }));
 

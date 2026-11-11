@@ -1,3 +1,4 @@
+import type { BootstrapUnavailable } from "../contract";
 import { Clock, Effect, Option } from "effect";
 import type { OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
@@ -7,7 +8,7 @@ import {
   revokeOAuthUserConsent,
 } from "../../../src/shell/consent/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { type BootstrapUnavailable, dbWork, invalidRequest } from "./bootstrap";
+import { dbWork, invalidRequest } from "./bootstrap";
 import { oauthResponse } from "./response";
 
 const maximumRevocations = 1024;

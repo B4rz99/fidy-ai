@@ -143,6 +143,12 @@ commit rechecks the exact initiating proof, bound User, both expiries, current C
 capacity before consuming approval, storing a digest-only PAT and appending Audit atomically.
 Repeated claims cannot disclose the bearer again, including after an uncertain response.
 
+OAuth token exchange owns the original unconsumed Request through bounded form decoding,
+code issuance or coordinated refresh, and no-store response delivery. Ingress returns that response
+without inspecting bearer material or retrying issuance. Code consumption rechecks both code and
+original grant expiry against commit-time D1 time; refresh descendants retain the original deadline
+and any narrowed scope.
+
 OAuth approval, refresh, revocation and sensitive-operation confirmation remain distinct from PAT
 and browser-session authority. Sensitive OAuth operations require one client-native decision,
 bound to the exact operation and consumed atomically; the client assertion is not human attestation.
@@ -378,6 +384,10 @@ cleanup eligibility. Generic maintenance schedules one recovery tick; the owner 
 independently, retains phase-specific operational evidence and reports aggregate failure after the
 remaining phase has run. Interruption stops progression. Durable grant claims and cleanup checkpoints
 remain separate from provider I/O, and unknown authorization outcomes do not authorize replay.
+Active-token observations and cleanup completion require the exact retained grant envelope and a
+live cleanup lease. Verified token inactivity clears encrypted custody while retaining cleanup-required
+history; bank consent independently continues to suppress erasure. Missing cleanup configuration
+makes no progress and cannot establish suppression completion.
 
 Dashboard view timing headers carry request-local numeric metadata only. Direct HTTP reads report
 source/context selection, financial projection and owner Audit/accounting inside Core's canonical
@@ -415,7 +425,10 @@ specification and operational evidence.
 
 Connection authorization preparation privately owns its attempt-bound verifier, state digest
 and bounded PAR handoff in `connection_authorizations`. Claim and Audit commit before external bank
-I/O; settlement cannot replay a consumed attempt. The scheduled Connections retention sweep clears
+I/O; the claim refuses superseded attempts before committing any effects. Prepared review is
+bound to the exact WebSession that consumed the attempt. Settlement cannot replay a consumed
+attempt or publish a handoff after the shorter of the thirty-second preparation budget and the
+original attempt lifetime. The scheduled Connections retention sweep clears
 expired private proofs independently of User Consent, and erasure removes them before attempts.
 The Bancolombia adapter reuses private Core mTLS/signing custody for application authentication,
 consent creation and PAR. It records the immutable consent intent at claim and the returned ConsentId
@@ -428,8 +441,10 @@ The sandbox callback uses the original live WebSession and state digest, never b
 Fidy identity. Its single-use grant claim commits before token exchange, outside provider I/O;
 the User coordinator then settles validated Accounts, Active authority and Audit in one D1 batch.
 `connection_grants` owns claimed/quarantined/active/cleanup-required authority; its recoverable
-credentials use purpose-bound AES-GCM under a separate Core secret. `connection_accounts` retains
-stable Fidy identities across reauthorization and exposes only the currently active grant's exact
+credentials use purpose-bound AES-GCM under a separate Core secret. Recoverable tokens are
+quarantined before response status, token shape, bank identity and complete Account discovery can
+accept or reject activation. A rejected response never authorizes another exchange.
+`connection_accounts` retains stable Fidy identities across reauthorization and exposes only the currently active grant's exact
 Account set. The [Connections adapter](cloudflare/connections/) owns credential custody and recovery.
 
 ## Manual Pro operations

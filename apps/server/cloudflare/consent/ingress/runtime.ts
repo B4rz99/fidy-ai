@@ -1,5 +1,6 @@
+import { type Digest, type SecureRandom } from "effect/crypto";
 import { OutboundHttpLive } from "../../outbound-http/runtime";
-import { Context, type Crypto, Effect, Layer, Option, Redacted } from "effect";
+import { Context, Effect, Layer, Option, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { makeDisclosureSender } from "../../../src/shell/consent/runtime";
 import { type ConsentIngressEnvironment } from "./contract";
@@ -17,7 +18,7 @@ export const makeConsentIngress = ({
   httpClient: HttpClient.HttpClient;
 }>): ((
   input: Parameters<typeof receiveConsentText>[0]["input"]
-) => Effect.Effect<Response, void, Crypto.Crypto>) => {
+) => Effect.Effect<Response, void, SecureRandom.SecureRandom | Digest.Digest>) => {
   const delivery =
     environment.KAPSO_API_KEY.length === 0
       ? Option.none()

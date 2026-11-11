@@ -55,7 +55,7 @@ const query = (
   FROM connection_attempts a JOIN connections c ON c.id = a.connection_id
   LEFT JOIN connection_authorizations b ON b.attempt_id=a.id
   WHERE a.public_reference = ? AND c.user_id = ? AND a.expires_at_ms > ? AND c.state = 'Connecting'
-    AND (a.status = 'pending' OR (a.status = 'consumed' AND a.prepared_session_id IS NOT NULL))
+    AND (a.status = 'pending' OR (a.status = 'consumed' AND a.prepared_session_id = ?))
     AND NOT EXISTS (SELECT 1 FROM connection_attempts newer WHERE newer.connection_id = a.connection_id AND newer.rowid > a.rowid)
     AND ${registered}`;
 const present = (candidate: unknown): Effect.Effect<Response, Schema.SchemaError> =>
@@ -104,7 +104,13 @@ export const reviewContinuation = (
     const institutions = yield* institutionsForUser(input.subject.userId);
     const registered = registeredInstitutionPredicate({ column: "c.institution_id", institutions });
     const sql = guardedQuery(authority, registered);
-    const bindings = [input.attempt, input.subject.userId, input.current, ...authority.bindings];
+    const bindings = [
+      input.attempt,
+      input.subject.userId,
+      input.current,
+      input.subject.id,
+      ...authority.bindings,
+    ];
     const result = yield* Effect.tryPromise({
       try: () =>
         input.db.batch([
@@ -168,6 +174,7 @@ const claimStatements = ({
   db
     .prepare(`UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?, prepared_session_id = ?
       WHERE public_reference = ? AND EXISTS(SELECT 1 FROM connections c WHERE c.id=connection_attempts.connection_id AND c.user_id=?) AND status = 'pending' AND expires_at_ms > ?
+      AND NOT EXISTS (SELECT 1 FROM connection_attempts newer WHERE newer.connection_id = connection_attempts.connection_id AND newer.rowid > connection_attempts.rowid)
       AND EXISTS (SELECT 1 FROM connections c WHERE c.id = connection_attempts.connection_id AND c.state = 'Connecting' AND ${registered})
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
     .bind(
@@ -191,7 +198,7 @@ const claimStatements = ({
   ...authorization,
   db
     .prepare(guardedQuery(authority, registered))
-    .bind(admission.attempt, admission.userId, current, ...authority.bindings),
+    .bind(admission.attempt, admission.userId, current, admission.sessionId, ...authority.bindings),
 ];
 
 /** Claim once under fresh same-User authority before any external preparation. */

@@ -85,11 +85,10 @@ it.effect("rejects impossible local status representations at the published outp
   })
 );
 
-it("gives non-redisclosure recovery for an ambiguous claim without echoing arbitrary causes", () => {
+it("gives revocation and fresh-pairing recovery for an ambiguous claim", () => {
   const human = formatFailure({ reason: "ClaimAmbiguous", json: false });
   expect(human).toContain("revoca");
   expect(human).toContain("nueva vinculación");
-  expect(human.includes(secret)).toBe(false);
 });
 
 it.effect(

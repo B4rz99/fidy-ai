@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import { analyzeAccessibility } from "./accessibility";
 import type { Page, Route } from "@playwright/test";
 import { Effect, Schema } from "effect";
@@ -62,12 +63,15 @@ const dimensions = (): Readonly<{ content: number; viewport: number }> => ({
 export const captureReport = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
   yield* Effect.tryPromise(() =>
-    page.screenshot({
-      path: `${captureDirectory}/${filename}.png`,
-      fullPage: false,
-      animations: "disabled",
-      caret: "hide",
-      scale: "css",
+    captureVisualEvidence({
+      target: page,
+      options: {
+        path: `${captureDirectory}/${filename}.png`,
+        fullPage: false,
+        animations: "disabled",
+        caret: "hide",
+        scale: "css",
+      },
     })
   );
   const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));

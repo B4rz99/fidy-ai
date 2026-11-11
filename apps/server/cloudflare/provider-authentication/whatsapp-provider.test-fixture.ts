@@ -1,9 +1,11 @@
-import { type Cause, Effect, Schema } from "effect";
+import { type Cause, Clock, Effect, Schema } from "effect";
 import { expect, vi } from "vitest";
 import type { setup } from "./journey.test-fixture";
 
 const successStatus = 200;
 const redirectStatus = 303;
+const millisecondsPerSecond = 1000;
+const tokenLifetimeSeconds = 300;
 const mockGoogleToken = (
   authorization: URL,
   subject: string
@@ -12,14 +14,15 @@ const mockGoogleToken = (
     const { generateKeyPair, exportJWK, SignJWT } = yield* Effect.tryPromise(() => import("jose"));
     const keys = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
     const jwk = yield* Effect.tryPromise(() => exportJWK(keys.publicKey));
+    const issuedAt = Math.floor((yield* Clock.currentTimeMillis) / millisecondsPerSecond);
     const token = yield* Effect.tryPromise(() =>
       new SignJWT({ nonce: authorization.searchParams.get("nonce"), email: "person@example.test" })
         .setProtectedHeader({ alg: "RS256", kid: "chat" })
         .setIssuer("https://accounts.google.com")
         .setSubject(subject)
         .setAudience("test-client")
-        .setIssuedAt()
-        .setExpirationTime("5m")
+        .setIssuedAt(issuedAt)
+        .setExpirationTime(issuedAt + tokenLifetimeSeconds)
         .sign(keys.privateKey)
     );
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {

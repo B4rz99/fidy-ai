@@ -1,3 +1,4 @@
+import { forwardFreshQuery, makeFreshQuery } from "@/transport/fresh-query";
 import { Data, DateTime, Effect, Option } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
@@ -73,16 +74,16 @@ const generationSources = (
   Atom.family((selected: CurrentMonthPeriod) =>
     generation === 0
       ? transactionFirstPage({ client, period: selected })
-      : client.runtime
-          .atom(
-            Effect.gen(function* () {
-              const api = yield* client;
-              return yield* api.transactions.listTransactions({
-                query: { from: selected.from, to: selected.to, limit: 25 },
-              });
-            })
-          )
-          .pipe(Atom.setIdleTTL(workspaceQueryRetention.timeToLive))
+      : makeFreshQuery({
+          runtime: client.runtime,
+          load: Effect.gen(function* () {
+            const api = yield* client;
+            return yield* api.transactions.listTransactions({
+              query: { from: selected.from, to: selected.to, limit: 25 },
+            });
+          }),
+          decorate: Atom.setIdleTTL(workspaceQueryRetention.timeToLive),
+        })
   );
 
 const makeGeneration = (
@@ -106,7 +107,9 @@ const makeGeneration = (
     return result._tag === "Success" ? Option.some(result.value.data.id) : generation.locate;
   });
   const sources = generationSources(client, generation.number);
-  const views = Atom.family((source: PageAtom) => source.pipe(revalidateWorkspaceQuery));
+  const views = Atom.family((source: PageAtom) =>
+    forwardFreshQuery({ query: source.pipe(revalidateWorkspaceQuery), sources: [source] })
+  );
   const firstPage = Atom.make((get): AsyncResult.AsyncResult<Page, unknown> => {
     if (Option.isSome(destination)) {
       const result = get(destination.value);
@@ -133,7 +136,17 @@ const makeGeneration = (
   const resource = Atom.make((get) =>
     get(histories(new QueryIdentity({ period: get(period), locate: get(locate) })))
   );
-  return { generation, destination, firstPage, period, locate, resource };
+  return {
+    generation,
+    destination,
+    firstPage: forwardFreshQuery({
+      query: firstPage,
+      sources: (registry) => [sources(registry.get(period))],
+    }),
+    period,
+    locate,
+    resource,
+  };
 };
 /** Route staging and destination rereads share the history generation. Construction starts no reads. */
 export const transactionRouteHistory = (input: RouteHistoryInput): TransactionRouteHistory => {
@@ -169,7 +182,14 @@ export const transactionRouteHistory = (input: RouteHistoryInput): TransactionRo
     return retainHistoryDisplay(current, get.self<RouteHistoryState>());
   });
   const action = routeActions({ input, navigation, state });
-  return { firstPage, state, action };
+  return {
+    firstPage: forwardFreshQuery({
+      query: firstPage,
+      sources: (registry) => [registry.get(navigation).firstPage],
+    }),
+    state,
+    action,
+  };
 };
 
 const routeActions = ({
@@ -184,6 +204,10 @@ const routeActions = ({
   Atom.fnSync<HistoryCommand>()((command, get): void => {
     const owner = get(navigation);
     const current = owner.generation;
+    if (command === "refresh-pages") {
+      get.set(get(owner.resource).action, command);
+      return;
+    }
     if (typeof command === "string") {
       const previous = get(state);
       get.set(

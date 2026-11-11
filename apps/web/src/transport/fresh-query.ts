@@ -106,7 +106,9 @@ export const makeFreshQuery = <R, ER, A, E>(
 export const forwardFreshQuery = <A, E>(
   options: Readonly<{
     query: Query<A, E>;
-    sources: ReadonlyArray<Query<unknown, unknown>>;
+    sources:
+      | ReadonlyArray<Query<unknown, unknown>>
+      | ((registry: AtomRegistry.AtomRegistry) => ReadonlyArray<Query<unknown, unknown>>);
   }> &
     (Readonly<{}> | Readonly<{ before: (registry: AtomRegistry.AtomRegistry) => void }>)
 ): Query<A, E> => {
@@ -114,7 +116,8 @@ export const forwardFreshQuery = <A, E>(
   freshReads.set(query, (registry) =>
     Effect.suspend(() => {
       if ("before" in options) options.before(registry);
-      return Effect.forEach(sources, (query) => readFreshQuery({ registry, query })).pipe(
+      const currentSources = typeof sources === "function" ? sources(registry) : sources;
+      return Effect.forEach(currentSources, (query) => readFreshQuery({ registry, query })).pipe(
         Effect.map((results) => results.every(Boolean))
       );
     })

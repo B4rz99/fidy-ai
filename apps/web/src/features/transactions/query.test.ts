@@ -408,3 +408,50 @@ it.live(
       }
     })
 );
+
+it.live(
+  "route recovery preserves exact fresh loaders across continuation refresh and destination resets",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("window", Object.assign(new EventTarget(), { Uint8Array }));
+      let reads = 0;
+      const client = makeFidyClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make((request) => {
+            reads += 1;
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(request, Response.json({ data: [], next: [] }))
+            );
+          })
+        ),
+      });
+      const history = transactionRouteHistory({
+        client,
+        search: {},
+        timeZone: "America/Bogota",
+        now: DateTime.makeUnsafe("2026-11-10T12:00:00Z"),
+        initialPages: 1,
+      });
+      const registry = AtomRegistry.make();
+      const unmount = registry.mount(history.state);
+      try {
+        yield* AtomRegistry.getResult(registry, history.firstPage);
+        expect(reads).toBe(1);
+        for (const expected of [2, 4]) {
+          registry.set(history.action, "refresh-pages");
+          expect(yield* readFreshQuery({ registry, query: history.firstPage })).toBe(true);
+          expect(reads).toBe(expected);
+          if (expected === 2) {
+            registry.set(history.action, "reset");
+            yield* AtomRegistry.getResult(registry, history.firstPage, { suspendOnWaiting: true });
+            expect(reads).toBe(3);
+          }
+        }
+      } finally {
+        unmount();
+        registry.dispose();
+      }
+    })
+);

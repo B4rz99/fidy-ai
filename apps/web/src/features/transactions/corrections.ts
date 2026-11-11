@@ -1,4 +1,4 @@
-import { Array, Cause, Deferred, Effect, Option, Predicate } from "effect";
+import { Array, Cause, type Context, Deferred, Effect, Option, Predicate } from "effect";
 import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
 import { type CanonicalInput, type CanonicalSuccess, type FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
@@ -7,6 +7,7 @@ import { presentCanonicalQuery } from "@/transport/canonical-query";
 import type { HistoryCommand, HistoryState } from "./history";
 import type { Transaction } from "./presentation";
 
+type Client = Context.Service.Shape<FidyClient>;
 type Revision = Pick<Transaction, "id" | "revision">;
 type Changes = CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
 type Correction =

@@ -16,8 +16,8 @@ type HistoryInput = Required<
 type PageAtom = Atom.Atom<AsyncResult.AsyncResult<TransactionPage, unknown>>;
 class PageKey extends Data.Class<{ generation: number; cursor: string }> {}
 type HistoryNavigation = Readonly<{ generation: number; pages: number }>;
-type Retry = Readonly<{ retry: symbol }>;
-type More = Readonly<{ more: symbol }>;
+type Retry = Readonly<{ retry: () => boolean }>;
+type More = Readonly<{ more: () => boolean }>;
 export type HistoryState = Readonly<{
   query: CanonicalQueryState<Pick<TransactionPage, "data">, unknown>;
   generation: number;
@@ -217,6 +217,14 @@ const readyLocation = (
   if (continuation === "loading") return "Locating";
   return continuation === "complete" ? "NotFound" : "BoundReached";
 };
+const oneUse = (): (() => boolean) => {
+  let available = true;
+  return () => {
+    if (!available) return false;
+    available = false;
+    return true;
+  };
+};
 type HistoryActionInput = Readonly<{
   navigation: Atom.Writable<HistoryNavigation>;
   state: Atom.Atom<HistoryState>;
@@ -231,7 +239,7 @@ const readAction = (
   const changePages = (pages: number): void => get.set(navigation, { ...get(navigation), pages });
   if ("restorePages" in command) return changePages(command.restorePages);
   if ("retry" in command) {
-    if (command.retry !== get(state).retry.retry) return;
+    if (command.retry !== get(state).retry.retry || !command.retry()) return;
     Option.match(get(internal).retryPage, {
       onNone: () => get.refresh(firstPage),
       onSome: (atom) => get.refresh(atom),
@@ -239,7 +247,11 @@ const readAction = (
     return;
   }
   const current = get(state);
-  if (current.continuation === "available" && current.more.more === command.more) {
+  if (
+    current.continuation === "available" &&
+    current.more.more === command.more &&
+    command.more()
+  ) {
     changePages(current.loadedPages + 1);
   }
 };
@@ -300,8 +312,8 @@ export const transactionHistory = ({
     return {
       ...publicState,
       location: locationState(publicState, locate),
-      more: { more: Symbol() },
-      retry: { retry: Symbol() },
+      more: { more: oneUse() },
+      retry: { retry: oneUse() },
     };
   });
   const action = historyActions({ navigation, state, internal, firstPage });

@@ -1,7 +1,13 @@
+import type { ConsentUnavailable } from "../consent/contract";
+import {
+  createWeeklyGovernorConsentOffer,
+  latestWeeklyConsentRejection,
+  recordWeeklyConsentDisclosure,
+} from "../consent/operations";
 import { WhatsAppTurnAdmission } from "../whatsapp/contract";
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
   InsightTemplateConfiguration,
   WeeklyQuestionTemplateConfiguration,
@@ -15,11 +21,13 @@ import {
   prepareWeeklyDeliverySettlement,
   prepareWeeklyGovernorReply,
   prepareWeeklyQuestionDelivery,
+  recordWeeklySummaryDecision,
 } from "./operations";
 import { InsightEventId } from "../../src/core/insights/contract";
 import {
   activateWeeklySummary,
   weeklySummaryOtherUser,
+  weeklySummaryTestCaller,
   weeklySummaryTestDatabase,
   weeklySummaryTestDatabases,
   weeklySummaryTestNow,
@@ -37,14 +45,22 @@ const assertTypedFailure = <E>(exit: Exit.Exit<unknown, E>, expected: E): void =
 const seedGovernorQuestion = (
   db: D1Database,
   id: string,
-  at: number
+  delivery: Readonly<{ at: number; providerMessageId: string }>
 ): Effect.Effect<unknown, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     db
       .prepare(
         "INSERT INTO whatsapp_deliveries(kind,id,user_id,offer_id,consent_grant_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,time_zone,state,provider_message_id,delivered_at_ms,send_started_at_ms) SELECT 'weekly-question',?,user_id,id,(SELECT consent_grant_id FROM schedules WHERE kind='weekly' AND user_id=?),0,600000,?,'portfolio','CO.abcdef','123456789','America/Bogota','delivered',?,?,? FROM consent_offers WHERE kind='weekly-summary' AND user_id=? LIMIT 1"
       )
-      .bind(id, weeklySummaryTestUser, id, `question-${id}`, at, at, weeklySummaryTestUser)
+      .bind(
+        id,
+        weeklySummaryTestUser,
+        id,
+        delivery.providerMessageId,
+        delivery.at,
+        delivery.at,
+        weeklySummaryTestUser
+      )
       .run()
   );
 const seedGovernorDelivery = (
@@ -71,6 +87,22 @@ const seedGovernorDelivery = (
         .bind(weeklySummaryTestUser, id, id, at, at + 86400000, at, `provider-${id}`, at),
     ])
   );
+
+const seedGovernorSummary = (
+  db: D1Database,
+  id: InsightEventId
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO insight_events(id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,scheduled_at_ms,money_groups_json) VALUES(?,?,'weekly-summary','40000000-0000-4000-8000-000000000001',1,'CO','es-CO','America/Bogota',100,'[]')"
+        )
+        .bind(id, weeklySummaryTestUser)
+        .run()
+    );
+    yield* seedGovernorDelivery(db, id, 100);
+  });
 
 afterAll(() => weeklySummaryTestDatabases.dispose());
 it.live("rejects corrupt retained pause dates before materializing any report", () =>
@@ -259,7 +291,7 @@ it.live("counts verified scheduled deliveries once, asks at four and pauses afte
       ];
       expect(state._tag).toBe(expectedStates[index - 1]);
       if (index === 4) {
-        yield* seedGovernorQuestion(db, id, 4001);
+        yield* seedGovernorQuestion(db, id, { at: 4001, providerMessageId: `question-${id}` });
         yield* Effect.tryPromise(() =>
           prepareWeeklyQuestionDelivery({
             db,
@@ -290,14 +322,10 @@ it.live(
           .bind(userId)
           .run()
       );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO whatsapp_deliveries(kind,id,user_id,offer_id,consent_grant_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,time_zone,state,provider_message_id,delivered_at_ms,send_started_at_ms) SELECT 'weekly-question','old-question',user_id,id,(SELECT consent_grant_id FROM schedules WHERE kind='weekly' AND user_id=?),0,600000,'old-correlation','portfolio','CO.abcdef','123456789','America/Bogota','delivered','old-provider',150,150 FROM consent_offers WHERE kind='weekly-summary' AND user_id=? LIMIT 1"
-          )
-          .bind(userId, userId)
-          .run()
-      );
+      yield* seedGovernorQuestion(db, "old-question", {
+        at: 150,
+        providerMessageId: "old-provider",
+      });
       const proof = yield* Schema.decodeEffect(WhatsAppTurnAdmission)({
         userId,
         portfolioId: "portfolio",
@@ -343,7 +371,10 @@ it.live("late weekly question status cannot advance a replaced captured grant", 
     const db = yield* weeklySummaryTestDatabase;
     const userId = weeklySummaryTestUser;
     yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
-    yield* seedGovernorQuestion(db, "question", 200);
+    yield* seedGovernorQuestion(db, "question", {
+      at: 200,
+      providerMessageId: "question-provider",
+    });
     yield* Effect.tryPromise(() =>
       db
         .prepare(
@@ -368,4 +399,203 @@ it.live("late weekly question status cannot advance a replaced captured grant", 
       unanswered: 4,
     });
   })
+);
+
+it.live(
+  "a reply before retrying the first rolled-back weekly settlement retains its episode watermark",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* weeklySummaryTestDatabase;
+      const userId = weeklySummaryTestUser;
+      yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
+      const id = InsightEventId.make("30000000-0000-4000-8000-000000000099");
+      yield* seedGovernorSummary(db, id);
+      const settlement = (): ReadonlyArray<D1PreparedStatement> =>
+        prepareWeeklyDeliverySettlement({
+          db,
+          userId,
+          insightEventId: id,
+          thresholds: { askAfter: 4, pauseAfter: 2 },
+        });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER fail_first_settlement BEFORE UPDATE OF delivery_receipt_id ON insight_events BEGIN SELECT RAISE(ABORT,'test_settlement_failure'); END"
+          )
+          .run()
+      );
+      expect((yield* Effect.exit(Effect.tryPromise(() => db.batch([...settlement()]))))._tag).toBe(
+        "Failure"
+      );
+      expect(Option.isNone(yield* findWeeklyGovernor({ db, userId }))).toBe(true);
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER fail_first_settlement").run());
+      const proof = yield* Schema.decodeEffect(WhatsAppTurnAdmission)({
+        userId,
+        portfolioId: "portfolio",
+        bsuid: "CO.abcdef",
+        businessPhoneNumberId: "123456789",
+        messageId: "first-summary-reply",
+        text: "gracias",
+        occurredAtMs: 200,
+        receivedAtMs: 200,
+        replyToMessageId: `provider-${id}`,
+      });
+      yield* Effect.tryPromise(() => prepareWeeklyGovernorReply({ db, userId, proof }).run());
+      yield* Effect.tryPromise(() => db.batch([...settlement()]));
+      expect(Option.getOrThrow(yield* findWeeklyGovernor({ db, userId }))).toEqual({
+        _tag: "Attentive",
+        unanswered: 0,
+      });
+    })
+);
+
+const replaceGovernorGrant = (
+  db: D1Database
+): Effect.Effect<void, ConsentUnavailable | InsightUnavailable> =>
+  Effect.gen(function* () {
+    for (const [index, decision] of ["decline", "accept"].entries()) {
+      const context = {
+        db,
+        userId: weeklySummaryTestUser,
+        caller: weeklySummaryTestCaller,
+        now: DateTime.add(weeklySummaryTestNow, { milliseconds: (index + 1) * 1000 }),
+      };
+      const offer = Option.getOrThrow(
+        yield* createWeeklyGovernorConsentOffer({
+          ...context,
+          request: {
+            _tag: "GovernorQuestion",
+            sourceId: `30000000-0000-4000-8000-0000000000${index + 80}`,
+            origin: "requested",
+            requestedAt: context.now,
+            rejectionOfferId: yield* latestWeeklyConsentRejection(context),
+          },
+        })
+      );
+      yield* recordWeeklyConsentDisclosure({
+        ...context,
+        offerId: offer.id,
+        disclosureMessageId: `replacement-disclosure-${index}`,
+      });
+      expect(
+        yield* recordWeeklySummaryDecision({
+          ...context,
+          choice: `weekly:${offer.id}:${decision}`,
+          decisionMessageId: `replacement-decision-${index}`,
+        })
+      ).toBe(true);
+    }
+  });
+const governorFacts = (
+  db: D1Database
+): Effect.Effect<ReadonlyArray<ReadonlyArray<unknown>>, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    db.batch([
+      db.prepare("SELECT * FROM weekly_proactivity_state ORDER BY user_id"),
+      db.prepare("SELECT * FROM schedules WHERE kind='weekly' ORDER BY user_id"),
+      db.prepare(
+        "SELECT user_id,id,weekly_governor_counted FROM insight_events ORDER BY user_id,id"
+      ),
+      db.prepare("SELECT * FROM weekly_question_requests ORDER BY user_id,id"),
+    ])
+  ).pipe(Effect.map((rows) => rows.map((row) => row.results)));
+
+it.live(
+  "weekly evidence from a replaced grant cannot reset either reply route or count a summary",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* weeklySummaryTestDatabase;
+      const userId = weeklySummaryTestUser;
+      yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
+      const id = InsightEventId.make("30000000-0000-4000-8000-000000000098");
+      yield* seedGovernorSummary(db, id);
+      yield* seedGovernorQuestion(db, "current-question", {
+        at: 150,
+        providerMessageId: "current-question-provider",
+      });
+      yield* replaceGovernorGrant(db);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO weekly_proactivity_state(user_id,unanswered,last_reply_at_ms,question_needed,question_event_id) VALUES (?,4,50,1,'current-question'),(?,2,50,0,NULL)"
+          )
+          .bind(userId, weeklySummaryOtherUser)
+          .run()
+      );
+      const before = yield* governorFacts(db);
+      for (const replyToMessageId of [`provider-${id}`, "current-question-provider"]) {
+        const proof = yield* Schema.decodeEffect(WhatsAppTurnAdmission)({
+          userId,
+          portfolioId: "portfolio",
+          bsuid: "CO.abcdef",
+          businessPhoneNumberId: "123456789",
+          messageId: `replaced-${replyToMessageId}`,
+          text: "gracias",
+          occurredAtMs: 200,
+          receivedAtMs: 200,
+          replyToMessageId,
+        });
+        yield* Effect.tryPromise(() => prepareWeeklyGovernorReply({ db, userId, proof }).run());
+        expect(yield* governorFacts(db)).toEqual(before);
+      }
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          ...prepareWeeklyDeliverySettlement({
+            db,
+            userId,
+            insightEventId: id,
+            thresholds: { askAfter: 4, pauseAfter: 2 },
+          }),
+        ])
+      );
+      expect(yield* governorFacts(db)).toEqual(before);
+    })
+);
+
+it.live(
+  "weekly replies reject a different endpoint and both foreign User substitutions without changing either governor",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* weeklySummaryTestDatabase;
+      const userId = weeklySummaryTestUser;
+      yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
+      yield* seedGovernorQuestion(db, "current-question", {
+        at: 150,
+        providerMessageId: "current-question-provider",
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO weekly_proactivity_state(user_id,unanswered,last_reply_at_ms,question_needed,question_event_id) VALUES (?,4,50,1,'current-question'),(?,2,50,0,NULL)"
+          )
+          .bind(userId, weeklySummaryOtherUser)
+          .run()
+      );
+      const summaryId = InsightEventId.make("30000000-0000-4000-8000-000000000097");
+      yield* seedGovernorSummary(db, summaryId);
+      const before = yield* governorFacts(db);
+      for (const replyToMessageId of ["current-question-provider", `provider-${summaryId}`]) {
+        for (const variant of [
+          { owner: userId, proofUser: userId, phone: "987654321" },
+          { owner: weeklySummaryOtherUser, proofUser: userId, phone: "123456789" },
+          { owner: userId, proofUser: weeklySummaryOtherUser, phone: "123456789" },
+        ]) {
+          const proof = yield* Schema.decodeEffect(WhatsAppTurnAdmission)({
+            userId: variant.proofUser,
+            portfolioId: "portfolio",
+            bsuid: "CO.abcdef",
+            businessPhoneNumberId: variant.phone,
+            messageId: "foreign-reply",
+            text: "gracias",
+            occurredAtMs: 200,
+            receivedAtMs: 200,
+            replyToMessageId,
+          });
+          yield* Effect.tryPromise(() =>
+            prepareWeeklyGovernorReply({ db, userId: variant.owner, proof }).run()
+          );
+          expect(yield* governorFacts(db)).toEqual(before);
+        }
+      }
+    })
 );

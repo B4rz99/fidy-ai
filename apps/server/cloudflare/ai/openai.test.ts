@@ -328,6 +328,50 @@ it("keeps an admitted Turn's Consent basis through revocation but refuses its te
     })
   ));
 
+it.each(["idle boundary", "session ending"])("refuses retained model work after %s", (change) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(setup);
+      yield* Effect.tryPromise(() => seedGrant(db));
+      yield* Effect.tryPromise(() => seedSession(db));
+      yield* Effect.tryPromise(() => seedPendingTurn(db));
+      yield* Effect.tryPromise(() => revoke(db));
+      let current = now + 899_999;
+      let providerCalls = 0;
+      const run = makeAdmittedOpenAiRun({
+        db,
+        userId: userA,
+        nowEpochMs: () => current,
+        admittedTurnId: () => Option.some(turnA),
+        run: () => {
+          providerCalls += 1;
+          return Promise.resolve(Response.json({}));
+        },
+      });
+      yield* Effect.tryPromise(() => invoke(run));
+      expect(providerCalls).toBe(1);
+      if (change === "idle boundary") current = now + 900_000;
+      else {
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE hosted_agent_sessions SET status = 'idle-ended' WHERE id = ?")
+            .bind(hostedSessionA)
+            .run()
+        );
+      }
+      const expired = yield* Effect.exit(
+        Effect.tryPromise({
+          try: () => invoke(run),
+          catch: (failure) =>
+            failure instanceof HostedInferenceError ? failure : new TestInvocationFailure(),
+        })
+      );
+      deepStrictEqual(expired, Exit.fail(admissionUnavailable()));
+      expect(providerCalls).toBe(1);
+    })
+  )
+);
+
 it("cannot use another User's Pending Turn to authorize model egress", () =>
   Effect.runPromise(
     Effect.gen(function* () {

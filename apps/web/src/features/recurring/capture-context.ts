@@ -1,9 +1,8 @@
-import { type ComponentType, createContext } from "react";
+import { type ComponentType, type JSX, createContext } from "react";
 import { Option } from "effect";
 import type { CanonicalSuccess } from "@/transport/client";
 import type { Category, Occurrence } from "./model";
 
-export type CaptureStatus = "idle" | "saving" | "saved" | "failed" | "uncertain";
 export type CaptureEditorProps = Readonly<{
   categories: ReadonlyArray<Category>;
   currency: Occurrence["plan"]["currency"];
@@ -16,8 +15,12 @@ export type CaptureEditorProps = Readonly<{
     categoryId: string;
   }>;
   disabled: boolean;
-  status: CaptureStatus;
-  onStatus: (status: CaptureStatus) => void;
+  intentId: string;
+  onInvalidate: () => void;
+  renderForm: (
+    form: JSX.Element,
+    placement: Readonly<{ saving: boolean; uncertain: boolean }>
+  ) => JSX.Element;
   onCreated: (transaction: CanonicalSuccess<"transactions.createTransaction">["data"]) => void;
   onCheckHistory: () => void;
 }>;

@@ -541,6 +541,12 @@ architecture and production runbook.
 
 ## 5. Testing seams
 
+Functional browser checks select reduced motion; admission and latency projects retain native
+motion and clocks. Recurring lifecycle fixtures prepare prerequisite plans through the authenticated,
+revision-bound canonical API; creation journeys still exercise the visible editor. Successful
+review-image export is opt-in with `BROWSER_VISUAL_EVIDENCE=true`; accessibility, layout, focus and
+workflow assertions always run. Failure screenshots remain enabled in their owning hooks.
+
 Vitest tests exercise pure decisions and Effect programs through their public interfaces. UI workflows
 are exercised through Playwright browser acceptance. Istanbul reports logic coverage and enforces a
 90% gate at the browser transport boundary. Production-policy tests validate the generated static artifact, SPA fallbacks,
@@ -623,15 +629,29 @@ The Budget summary shows recorded monthly income and all effective expenses, inc
 
 ### Manual Transaction capture recovery
 
-The mounted Transactions period owner retains a manual capture draft and an immutable
-uncertain attempt above month/history-generation workspace remounts. Refreshing history
+The capture-owned mounted task retains the draft, synchronous create admission, safe committed
+Transaction and immutable uncertain attempt above month/history-generation workspace remounts
+and same-User profile time-zone replacement. Admitted drafts and resumed uncertain attempts keep
+their original date and time zone; an explicit clear initializes the next intent in the current zone.
+The committed attachment mounts and reads its retention Atom from the current authentication registry,
+so a render-time snapshot disposed before route commit cannot strand history behind empty capture
+initialization. The attachment releases that mount with its task when disposed.
+Parents consume derived placement observations and guarded actions; they cannot set capture status.
+The public form slot receives only an owner component with public capture inputs; that component
+resolves the task privately, so element props do not publish recovery or admission controls.
+Confirmed save is installed before existing reads are invalidated or presentation callbacks run.
+Callback defects cannot reopen create or replace a confirmed save with uncertainty. The originating
+form fences presentation callbacks immediately on replacement; disposing the task also interrupts
+local work without claiming that a sent create was rolled back. Refreshing history
 never resubmits a capture. Recovery requires an explicit reread of the current month's
-history and Categories, with fresh successful observations before offering resume.
+history and Categories, with fresh successful observations in the current time zone before offering resume.
 The User compares the attempt with history; matching fields or an absent loaded row
 cannot prove a write outcome. Resuming edits the retained draft while the original
 attempt remains readable, and a separate submission creates a new Transaction.
 Discard removes only browser interaction state. The draft stays in mounted memory,
 never URLs, browser storage or telemetry, and disappears when Transactions access unmounts.
+Explicit cancellation or confirmed completion initializes the next manual draft on the current
+User-local day; recovery keeps the uncertain attempt's entered date across midnight.
 Recurring capture retains its separate occurrence-owned editor and recovery contract.
 
 ### Transaction Correction
@@ -714,11 +734,19 @@ Recurring manual marks disclose that they change tracking only. Transaction capt
 Transactions-owned form and canonical mutation, preserving the plan's Currency and direction.
 Application composition supplies capture through the published feature interfaces; Recurring does
 not import the Transactions implementation.
-Creation and association are separate explicit actions: a confirmed Transaction and its selected
-manual replacement remain in the authentication registry across presentation changes. Failed links
-retry association of that identity, while uncertain creation blocks another capture and directs
-the User to history and existing-Transaction linking. Association replaces the selected manual mark;
-it does not add financial spending. The existing canonical transport owns request observations.
+Creation and association are separate explicit actions: Recurring retains only a confirmed
+Transaction, its association choices and explicit capture intent identity. The Transactions-owned
+capture task retains admission and its original draft facts in the authentication registry across
+occurrence and month presentation changes. Placement observations disable association choices during
+Saving or Unknown; changed initial or fixed facts replace only an unadmitted draft, and selection
+changes cannot remount an admitted capture. Actual capture disposal
+immediately fences callbacks and interrupts local work, preserving an uncertain create lock without
+claiming rollback. An explicit new capture intent is available only after the created Transaction is
+observed linked. Failed or uncertain association retains that same Transaction and uses the recurring
+owner's current observed document revision after explicit recovery; recovery never repeats creation.
+Association replaces the selected manual mark and does not add financial spending. Drafts and safe
+results remain in memory within the authentication lifetime. The existing canonical transport owns
+request observations.
 
 The `/app/needs-review` feature composes the persistent ingestion inbox, browser-only original
 preview, editable draft and lifecycle history. Canonical query atoms retain server ownership;

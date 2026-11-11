@@ -122,7 +122,8 @@ export const prepareHostedMutationCommit = ({
 ];
 
 /**
- * Read the captured Consent basis only for the exact explicit User and still-Pending Turn.
+ * Read the captured Consent basis only for the exact explicit User and still-Pending Turn within
+ * the original active Hosted Agent Session lifetime. Observation never extends that lifetime.
  * Absence is None; malformed or unavailable persistence fails closed. This grants no egress or
  * lifecycle authority: Consent retains its current-standing comparison immediately before egress.
  */

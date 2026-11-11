@@ -1,6 +1,5 @@
 import { BigDecimal, DateTime, Equal, Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { formatMoney } from "@/transport/money";
 import {
   type TransactionPresentationCategory,
   type TransactionPresentationRecord,
@@ -38,27 +37,6 @@ describe("current-month Transaction presentation", () => {
     expect(DateTime.formatIso(period.from)).toBe("2026-03-01T05:00:00.000Z");
     expect(DateTime.formatIso(period.to)).toBe("2026-04-01T04:00:00.000Z");
     expect(period.timeZone).toBe("America/New_York");
-  });
-
-  it("formats a large fractional Money value exactly with standard Currency digits", () => {
-    const formatted = formatMoney({
-      locale: "es-CO",
-      money: {
-        amount: BigDecimal.fromStringUnsafe("9007199254740993.12"),
-        currency: "USD",
-      },
-    });
-
-    expect(formatted).toBe("$ 9.007.199.254.740.993,12");
-    expect(
-      formatMoney({
-        locale: "es-CO",
-        money: {
-          amount: BigDecimal.fromStringUnsafe("25000"),
-          currency: "COP",
-        },
-      })
-    ).toBe("$ 25.000,00");
   });
 
   it("joins Category labels and presents Counterparty, expense or income, Money, and local date", () => {

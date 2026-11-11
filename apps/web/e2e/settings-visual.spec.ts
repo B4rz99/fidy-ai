@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import { captureInThemes } from "./themed-capture";
 import { analyzeAccessibility } from "./accessibility";
 import type { Locator, Page } from "@playwright/test";
@@ -132,12 +133,15 @@ const captureThemes = (page: Page, filename: string): ReturnType<typeof captureP
 const capturePage = Effect.fnUntraced(function* (page: Page, filename: string) {
   yield* Effect.tryPromise(() => page.evaluate(waitForFonts));
   yield* Effect.tryPromise(() =>
-    page.screenshot({
-      path: `${captureDirectory}/${filename}.png`,
-      fullPage: true,
-      animations: "disabled",
-      caret: "hide",
-      scale: "css",
+    captureVisualEvidence({
+      target: page,
+      options: {
+        path: `${captureDirectory}/${filename}.png`,
+        fullPage: true,
+        animations: "disabled",
+        caret: "hide",
+        scale: "css",
+      },
     })
   );
   const result = yield* Effect.tryPromise(() => analyzeAccessibility(page));

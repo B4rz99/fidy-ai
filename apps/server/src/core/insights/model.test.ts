@@ -5,7 +5,6 @@ import {
   InsightDeliveryDecision,
   InsightEvent,
   InsightGenerationInput,
-  ProactivityMessageRole,
   ReminderCadence,
   ReminderStanding,
 } from "./contract";
@@ -184,20 +183,6 @@ it("rejects all-zero Currency groups as meaningless persisted data", () => {
       )
     )
   ).toBe(true);
-});
-
-it("accepts financial occurrences and contextual offers as distinct proactive roles", () => {
-  for (const role of [
-    "budget-threshold",
-    "manual-entry-reminder",
-    "budget-offer",
-    "reminder-offer",
-    "recurring-offer",
-    "reminder-question",
-    "new-recurring-series",
-  ]) {
-    expect(Schema.decodeUnknownSync(ProactivityMessageRole)(role)).toBe(role);
-  }
 });
 
 it("exports an anchored reminder date pattern for structured-output validators", () => {

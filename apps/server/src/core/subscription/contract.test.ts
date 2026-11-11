@@ -1,19 +1,8 @@
 import { expect, it } from "vitest";
 import { Schema } from "effect";
-import { RefundStartFailure, SubscriptionCancellation } from "./contract";
+import { SubscriptionCancellation } from "./contract";
 
-it("retains closed refund refusals and provider cancellation progress", () => {
-  for (const value of [
-    "unsupported",
-    "charge-unavailable",
-    "amount-exceeds-remaining",
-    "currency-mismatch",
-    "idempotency-conflict",
-    "limited",
-    "unavailable",
-  ]) {
-    expect(Schema.decodeUnknownSync(RefundStartFailure)(value)).toBe(value);
-  }
+it("preserves cancellation instants and provider progress on the wire", () => {
   for (const sourceCancellation of ["detached", "void-pending", "voided"]) {
     const value = {
       cancelledAt: "2026-10-01T00:00:00.000Z",

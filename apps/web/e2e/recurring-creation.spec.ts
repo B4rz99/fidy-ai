@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { Effect } from "effect";
 import { apiOrigin } from "./http-fixtures";
@@ -356,7 +357,10 @@ const inspectPendingPlan = (page: Page): Promise<void> =>
         expect(result.getByRole("heading", { name: /Ingreso separado/u })).toBeInViewport()
       );
       yield* Effect.tryPromise(() =>
-        page.screenshot({ path: test.info().outputPath("creation-pending.png") })
+        captureVisualEvidence({
+          target: page,
+          options: { path: test.info().outputPath("creation-pending.png") },
+        })
       );
     })
   );
@@ -385,7 +389,10 @@ const inspectFuturePlan = (page: Page): Promise<void> =>
         ).resolves.toBe(true)
       );
       yield* Effect.tryPromise(() =>
-        page.screenshot({ path: test.info().outputPath("creation-mobile.png") })
+        captureVisualEvidence({
+          target: page,
+          options: { path: test.info().outputPath("creation-mobile.png") },
+        })
       );
     })
   );

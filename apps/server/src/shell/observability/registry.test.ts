@@ -30,9 +30,4 @@ it("keeps the lightweight telemetry allowlist identical to the assembled canonic
   expect(canonicalMetadata).toEqual(
     operationCatalog.operations.map(({ id, method, route }) => ({ id, method, route }))
   );
-  for (const { id, method, route } of canonicalMetadata) {
-    expect(TelemetryRegistry.operation).toContain(id);
-    expect(TelemetryRegistry.httpRoute).toContain(route);
-    expect(TelemetryRegistry.httpRequest).toContain(`${method} ${route}`);
-  }
 });

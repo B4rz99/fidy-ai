@@ -422,6 +422,8 @@ jobs:
           node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();' ||
             sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
       - name: Capture synthetic Chat views independently of performance admission
+        env:
+          BROWSER_VISUAL_EVIDENCE: "true"
         run: bun run --cwd apps/web test:browser e2e/chat-visual.spec.ts --project=browser --no-deps
       - name: Preserve independent visual evidence without replacing required-check reports
         if: ${{ !cancelled() }}

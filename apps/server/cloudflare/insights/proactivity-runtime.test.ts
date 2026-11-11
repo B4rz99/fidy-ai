@@ -48,7 +48,12 @@ import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../whatsapp/cont
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { newId } from "../secret-material/operations";
 import { UserId } from "../../src/core/identity/contract";
-import { findCurrentProactivityOffer, findProactivityConsentGrant } from "../consent/operations";
+import {
+  createProactivityConsentOffer,
+  findCurrentProactivityOffer,
+  findProactivityConsentGrant,
+  recordProactivityConsentDisclosure,
+} from "../consent/operations";
 import { FetchHttpClient } from "effect/http";
 import type { ConsentUnavailable } from "../consent/contract";
 import {
@@ -897,6 +902,93 @@ it.each(refusalCases)(
               .first()
           )
         ).toEqual({ state: scenario.expectedState });
+      })
+    )
+);
+
+it.each([false, true])(
+  "a category regrant never authorizes the original queued delivery with Processing withdrawal %s",
+  (withdrawProcessing) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* proactivityDatabase;
+        const schedule = yield* activateTestReminder(db);
+        const userId = proactivityTestUsers[0];
+        const caller = proactivityTestCallers[0];
+        const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
+        const context = { db, userId, caller, now, kind: "manual-entry-reminder" as const };
+        const originalGrant = Option.getOrThrow(yield* findProactivityConsentGrant(context));
+        const generated = yield* materializeReminder({ db, userId, id: schedule.id, now });
+        if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            prepareInsightRecipient({
+              db,
+              userId,
+              recipient: {
+                portfolioId: caller.businessPortfolioId,
+                bsuid: caller.businessScopedUserId,
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              },
+              receivedAtMs: now.epochMilliseconds,
+            }),
+          ])
+        );
+        yield* revokeScenarioCategory({
+          db,
+          caller,
+          now,
+          scenario: { ...refused, name: "category withdrawal", revokeCategory: true },
+        });
+        const offer = Option.getOrThrow(yield* createProactivityConsentOffer(context));
+        yield* recordProactivityConsentDisclosure({
+          ...context,
+          offerId: offer.id,
+          disclosureMessageId: "regrant-disclosure",
+        });
+        expect(
+          yield* recordProactivityDecision({
+            ...context,
+            choice: offer.acceptChoice,
+            decisionMessageId: "regrant-acceptance",
+          })
+        ).toBe(true);
+        const currentGrant = Option.getOrThrow(yield* findProactivityConsentGrant(context));
+        expect(currentGrant.id).not.toBe(originalGrant.id);
+        if (withdrawProcessing) yield* withdrawTestProcessingConsent(db);
+        vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
+        const provider = vi.fn(() =>
+          Promise.resolve(
+            Response.json({ messaging_product: "whatsapp", messages: [{ id: "must-not-send" }] })
+          )
+        );
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
+        const execution = {
+          environment: configuration(db),
+          userId,
+          now,
+          work: { kind: "proactivity-delivery", version: 1, userId, id: generated.id } as const,
+        };
+        yield* executeProactivityWork(execution).pipe(
+          Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
+        );
+        yield* executeProactivityWork(execution).pipe(
+          Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
+        );
+        expect(provider).toHaveBeenCalledTimes(0);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT consent_grant_id,dispatch_state FROM proactive_messages WHERE kind='proactivity-delivery' AND user_id=? AND id=?"
+              )
+              .bind(userId, generated.id)
+              .first()
+          )
+        ).toEqual({ consent_grant_id: originalGrant.id, dispatch_state: "ready" });
+        expect(Option.getOrThrow(yield* findProactivityConsentGrant(context))).toEqual(
+          currentGrant
+        );
       })
     )
 );

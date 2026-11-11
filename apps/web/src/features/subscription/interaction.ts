@@ -1,7 +1,7 @@
-import { Data, Effect, Option } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { AsyncResult, Atom } from "effect/reactivity";
-import type { EnrollmentMethod } from "@/transport/client";
-import type { PriceId, SubscriptionOffers } from "./presentation";
+import { BillingEmail, type EnrollmentMethod } from "@/transport/client";
+import type { PriceId, SubscriptionOffer, SubscriptionOffers } from "./presentation";
 import {
   type Enrollment,
   type EnrollmentGateway,
@@ -49,13 +49,23 @@ const preparePaymentFlow = Effect.fn(function* (
       }),
     catch: () => new EnrollmentInteractionFailed(),
   });
-  if (prepared.status !== "verifying" && prepared.status !== "creating") {
+  if (
+    prepared.method !== options.method ||
+    (prepared.status === "prepared" ? prepared.price.id : prepared.priceId) !== priceId
+  ) {
+    return yield* new EnrollmentInteractionFailed();
+  }
+  if (
+    prepared.status !== "verifying" &&
+    prepared.status !== "creating" &&
+    prepared.status !== "available"
+  ) {
     return enrollmentFlow(prepared);
   }
   const resumed = yield* Effect.tryPromise({
     try: (signal) => gateway.resume(prepared.enrollmentId, signal),
     catch: () => new EnrollmentInteractionFailed(),
-  });
+  }).pipe(Effect.catchCause(() => Effect.succeed(Option.none())));
   return Option.match(resumed, {
     onNone: () => enrollmentFlow(prepared),
     onSome: ({ submission, billingEmail }) =>
@@ -86,25 +96,32 @@ class EnrollmentInteractionFailed extends Data.TaggedError("EnrollmentInteractio
 const refreshPaymentUntilTerminal = Effect.fn(function* (
   gateway: EnrollmentGateway,
   initial: PaymentSubmissionFlowState,
-  publish: (current: PaymentSubmissionFlowState) => void
+  observation: { publish: (current: PaymentSubmissionFlowState) => void; budget: { reads: number } }
 ) {
+  const { publish, budget } = observation;
   let current = initial;
-  let refreshCount = 0;
-  while (isAwaitingPaymentStatus(current.value) && refreshCount < maximumPaymentStatusRefreshes) {
+  while (isAwaitingPaymentStatus(current.value) && budget.reads < maximumPaymentStatusRefreshes) {
     const resumedFromHiddenPage = yield* awaitVisiblePage();
-    if (!resumedFromHiddenPage) yield* Effect.sleep(paymentStatusRefreshDelay(refreshCount));
+    if (!resumedFromHiddenPage) yield* Effect.sleep(paymentStatusRefreshDelay(budget.reads));
     if (pageIsHidden()) continue;
-    refreshCount += 1;
+    budget.reads += 1;
     const refreshed = yield* Effect.tryPromise({
       try: (signal) => observePayment(gateway, current, signal),
       catch: () => new EnrollmentInteractionFailed(),
     }).pipe(Effect.option);
-    if (Option.isSome(refreshed) && refreshed.value.enrollmentId === initial.value.enrollmentId) {
+    if (Option.isSome(refreshed) && matchesPayment(current, refreshed.value)) {
       current = submissionFlow(refreshed.value, current.billingEmail, current.prepared);
       yield* Effect.sync(() => publish(current));
     }
   }
+  return isAwaitingPaymentStatus(current.value);
 });
+
+const matchesPayment = (current: PaymentSubmissionFlowState, next: PaymentSubmission): boolean =>
+  next.enrollmentId === current.value.enrollmentId &&
+  (current.value.status !== "payment-pending" ||
+    (next.status === "payment-pending" &&
+      next.billingAttempt.id === current.value.billingAttempt.id));
 
 const observePayment = (
   gateway: EnrollmentGateway,
@@ -121,6 +138,11 @@ const observePayment = (
 
 const canResumeEnrollment = (value: Enrollment): boolean =>
   value.status === "creating" || value.status === "verifying" || value.status === "available";
+const preparedReadIsInconclusive = (
+  value: Enrollment,
+  previous: Enrollment,
+  uncertain: boolean
+): boolean => value.status === "prepared" && (uncertain || previous.status !== "prepared");
 const recoverEnrollment = Effect.fn(function* (
   gateway: EnrollmentGateway,
   current: Extract<PaymentFlowState, { _tag: "Enrollment" }>,
@@ -133,7 +155,9 @@ const recoverEnrollment = Effect.fn(function* (
   if (value.enrollmentId !== current.value.enrollmentId) {
     return yield* new EnrollmentInteractionFailed();
   }
-  if (value.status === "prepared" && uncertain) return yield* new EnrollmentInteractionFailed();
+  if (preparedReadIsInconclusive(value, current.value, uncertain)) {
+    return yield* new EnrollmentInteractionFailed();
+  }
   if (!canResumeEnrollment(value)) {
     return enrollmentFlow(value);
   }
@@ -161,7 +185,7 @@ const refreshPaymentFlow = (
     catch: () => new EnrollmentInteractionFailed(),
   }).pipe(
     Effect.flatMap((value) =>
-      value.enrollmentId === current.value.enrollmentId
+      matchesPayment(current, value)
         ? Effect.succeed(submissionFlow(value, current.billingEmail, current.prepared))
         : Effect.fail(new EnrollmentInteractionFailed())
     )
@@ -202,6 +226,7 @@ export type PaymentFlowView =
   | PaymentSubmissionView;
 export type EnrollmentInteraction = Readonly<{
   selectedId: Option.Option<PriceId>;
+  reviewedPrice: Option.Option<SubscriptionOffer>;
   method: EnrollmentMethod;
   checkout: boolean;
   enabledMethods: ReadonlyArray<EnrollmentMethod>;
@@ -211,6 +236,7 @@ export type EnrollmentInteraction = Readonly<{
   busy: boolean;
   failed: boolean;
   needsRecovery: boolean;
+  awaitingObservation: boolean;
   disabled: boolean;
   canContinue: boolean;
   selectPrice: (id: PriceId) => void;
@@ -242,6 +268,8 @@ type Owner = {
   busy: boolean;
   failed: boolean;
   uncertain: boolean;
+  budget: { reads: number };
+  awaitingObservation: boolean;
 };
 const enrollmentAvailability = Atom.family((gateway: Option.Option<EnrollmentGateway>) =>
   Atom.make(
@@ -260,7 +288,9 @@ const notify = (owner: Owner): void => {
 };
 const paymentLocked = (flow: PaymentFlowState): boolean =>
   flow._tag === "Enrollment"
-    ? flow.value.status === "creating" || flow.value.status === "verifying"
+    ? flow.value.status === "creating" ||
+      flow.value.status === "verifying" ||
+      flow.value.status === "available"
     : isAwaitingPaymentStatus(flow.value) ||
       (flow.value.status === "payment-pending" && flow.value.billingAttempt.status === "succeeded");
 const selectionLocked = (owner: Owner): boolean =>
@@ -286,10 +316,15 @@ const reset = (owner: Owner): void => {
   owner.flow = Option.none();
   owner.failed = false;
   owner.uncertain = false;
+  owner.budget.reads = 0;
+  owner.awaitingObservation = false;
 };
 const publish = (owner: Owner, generation: number, flow: PaymentFlowState): void => {
   if (!owner.active || owner.generation !== generation) return;
   owner.flow = Option.some(flow);
+  if (flow._tag !== "PaymentSubmission" || !isAwaitingPaymentStatus(flow.value)) {
+    owner.awaitingObservation = false;
+  }
   notify(owner);
 };
 const observe = (owner: Owner, generation: number, flow: PaymentFlowState): void => {
@@ -297,9 +332,19 @@ const observe = (owner: Owner, generation: number, flow: PaymentFlowState): void
   Option.map(owner.gateway, (gateway) =>
     owner.get.set(
       owner.observation,
-      refreshPaymentUntilTerminal(gateway, flow, (value) => {
-        if (value.value.enrollmentId === flow.value.enrollmentId) publish(owner, generation, value);
-      })
+      refreshPaymentUntilTerminal(gateway, flow, {
+        publish: (value) => publish(owner, generation, value),
+        budget: owner.budget,
+      }).pipe(
+        Effect.tap((exhausted) =>
+          Effect.sync(() => {
+            if (!owner.active || owner.generation !== generation) return;
+            owner.awaitingObservation = exhausted;
+            notify(owner);
+          })
+        ),
+        Effect.asVoid
+      )
     )
   );
 };
@@ -350,7 +395,7 @@ const selectPrice = (owner: Owner, id: PriceId): void => {
 const selectMethod = (owner: Owner, method: EnrollmentMethod): void => {
   if (!owner.active || selectionLocked(owner) || method === owner.method) return;
   const availability = owner.get.once(owner.availability);
-  if (availability._tag !== "Success" || !availability.value.enabledMethods.includes(method)) {
+  if (availability._tag !== "Success" || !present(owner).enabledMethods.includes(method)) {
     return;
   }
   reset(owner);
@@ -359,9 +404,12 @@ const selectMethod = (owner: Owner, method: EnrollmentMethod): void => {
   notify(owner);
 };
 const prepare = (owner: Owner, replacing: boolean): void => {
-  if (!owner.active || selectionLocked(owner) || Option.isNone(owner.selectedId)) return;
+  if (!owner.active || !present(owner).canContinue || Option.isNone(owner.selectedId)) return;
   const priceId = owner.selectedId.value;
   owner.checkout = true;
+  owner.flow = Option.none();
+  owner.budget.reads = 0;
+  owner.awaitingObservation = false;
   run(owner, (gateway) =>
     preparePaymentFlow(gateway, priceId, {
       method: owner.method,
@@ -369,11 +417,26 @@ const prepare = (owner: Owner, replacing: boolean): void => {
     })
   );
 };
+const fieldsMatchMethod = (prepared: PreparedEnrollment, fields?: PaymentFields): boolean => {
+  if (prepared.paymentSourceMode === "reuse") return true;
+  if (fields === undefined) return false;
+  if (prepared.method === "card") return !("method" in fields);
+  return "method" in fields && fields.method === prepared.method;
+};
 const submit = (owner: Owner, email: string, fields?: PaymentFields): void => {
   if (selectionLocked(owner) || Option.isNone(owner.flow)) return;
   const current = owner.flow.value;
   if (current._tag !== "Enrollment" || current.value.status !== "prepared") return;
   const prepared = current.value;
+  if (
+    !Schema.is(BillingEmail)(email) ||
+    !fieldsMatchMethod(prepared, fields) ||
+    DateTime.nowUnsafe().epochMilliseconds >= prepared.expiresAt.epochMilliseconds
+  ) {
+    owner.failed = true;
+    notify(owner);
+    return;
+  }
   run(
     owner,
     (gateway) =>
@@ -401,7 +464,7 @@ const submittedDaviplata = (owner: Owner, email: string, submission: PaymentSubm
   ) {
     return;
   }
-  run(owner, () => Effect.succeed(submissionFlow(submission, email, Option.none())));
+  run(owner, () => Effect.succeed(submissionFlow(submission, email, Option.some(current.value))));
 };
 const viewFlow = (flow: PaymentFlowState): PaymentFlowView =>
   flow._tag === "Enrollment"
@@ -411,14 +474,28 @@ const viewFlow = (flow: PaymentFlowState): PaymentFlowView =>
         value: flow.value,
         canReplaceCard: Option.exists(flow.prepared, (prepared) => prepared.method === "card"),
       };
+const reviewedPrice = (flow: PaymentFlowState): Option.Option<SubscriptionOffer> => {
+  if (flow._tag === "PaymentSubmission") {
+    return Option.map(flow.prepared, (prepared) => prepared.price);
+  }
+  return flow.value.status === "prepared" ? Option.some(flow.value.price) : Option.none();
+};
 const present = (owner: Owner): EnrollmentInteraction => {
+  const generation = owner.generation;
   const availability = owner.get.once(owner.availability);
-  const enabledMethods = availability._tag === "Success" ? availability.value.enabledMethods : [];
+  const selected = owner.offers.find((offer) => Option.contains(owner.selectedId, offer.id));
+  const enabledMethods =
+    availability._tag === "Success"
+      ? availability.value.enabledMethods.filter(
+          (method) => selected === undefined || selected.paymentMethods.includes(method)
+        )
+      : [];
   const disabled = selectionLocked(owner);
   const canContinue =
     !disabled && Option.isSome(owner.selectedId) && enabledMethods.includes(owner.method);
   return {
     selectedId: owner.selectedId,
+    reviewedPrice: Option.flatMap(owner.flow, reviewedPrice),
     method: owner.method,
     checkout: owner.checkout,
     enabledMethods,
@@ -428,6 +505,7 @@ const present = (owner: Owner): EnrollmentInteraction => {
     busy: owner.busy,
     failed: owner.failed,
     needsRecovery: owner.uncertain,
+    awaitingObservation: owner.awaitingObservation,
     disabled,
     canContinue,
     selectPrice: (id) => selectPrice(owner, id),
@@ -443,12 +521,16 @@ const present = (owner: Owner): EnrollmentInteraction => {
       if (present(owner).canContinue) prepare(owner, owner.replaceFailedSource);
     },
     prepare: (replacing = false) => prepare(owner, replacing),
-    submit: (email, fields) => submit(owner, email, fields),
+    submit: (email, fields) => {
+      if (owner.generation === generation) submit(owner, email, fields);
+    },
     refresh: () => refresh(owner),
     refreshMethods: () => {
       if (owner.active) owner.get.refresh(owner.availability);
     },
-    submittedDaviplata: (email, submission) => submittedDaviplata(owner, email, submission),
+    submittedDaviplata: (email, submission) => {
+      if (owner.generation === generation) submittedDaviplata(owner, email, submission);
+    },
     mount: () => {
       owner.active = true;
       notify(owner);
@@ -484,6 +566,8 @@ export const makeEnrollmentInteraction = (
       busy: false,
       failed: false,
       uncertain: false,
+      budget: { reads: 0 },
+      awaitingObservation: false,
     };
     get.mount(owner.command.atom);
     get.mount(owner.observation);

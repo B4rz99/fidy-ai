@@ -237,6 +237,12 @@ provider authorization and transient credentials private. An uncertain submissio
 submission and selection changes. Explicit recovery checks the same enrollment and resumes an
 admitted submission with its retained PaymentRequestId, then observes its BillingAttempt; source
 availability alone does not complete recovery. Failed or missing continuation retains the lock.
+The prepared Price and recurring disclosure govern checkout and its summary. Offer read feedback
+keeps the same mounted task and review drafts. Observation retains its original 65-read budget
+across explicit checks and visibility changes; exhaustion remains unresolved and offers an explicit
+check of the same BillingAttempt. A final observation of another attempt cannot settle this task.
+Only settled eligible DaviPlata submission uncertainty grants an approved same-request retry;
+busy approval does not grant another action.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
 OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,

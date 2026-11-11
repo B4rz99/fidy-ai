@@ -6,6 +6,7 @@ import { UnknownJsonString } from "@/schema-compatibility";
 import { type Mock, afterEach, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
 import {
+  BillingAttemptId,
   BillingEmail,
   PaymentEnrollment,
   PaymentEnrollmentId,
@@ -86,10 +87,17 @@ type Fixture = Readonly<{
   dispose: () => void;
   view: () => EnrollmentInteraction;
 }>;
-const fixture = (): Fixture => {
+const fixture = (
+  methods: PreparedEnrollment["price"]["paymentMethods"] = ["card", "nequi", "daviplata"]
+): Fixture => {
   vi.useFakeTimers();
+  vi.setSystemTime(0);
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
-  const enrollment = prepared(0);
+  const enrollment = {
+    ...prepared(0),
+    paymentSourceMode: "reuse" as const,
+    price: { ...prepared(0).price, paymentMethods: methods },
+  };
   const submission: PaymentSubmission = {
     status: "source-verifying",
     enrollmentId: enrollment.enrollmentId,
@@ -500,5 +508,132 @@ it.effect(
       expect(input.view().disabled).toBe(true);
       expect(input.gateway.submit).toHaveBeenCalledTimes(1);
       expect(input.gateway.continue).not.toHaveBeenCalled();
+    })
+);
+
+it.effect("refuses payment methods outside the selected Price without preparing", () =>
+  Effect.gen(function* () {
+    const input = fixture(["card"]);
+    yield* advance(0);
+    input.view().selectPrice(input.enrollment.price.id);
+    input.view().selectMethod("nequi");
+    expect(input.view().method).toBe("card");
+    expect(input.view().enabledMethods).toEqual(["card"]);
+    expect(input.gateway.prepare).not.toHaveBeenCalled();
+  })
+);
+
+it.effect(
+  "retains the exhausted observation budget across explicit checks and hidden-page resume",
+  () =>
+    Effect.gen(function* () {
+      const input = fixture();
+      yield* prepareFixture(input);
+      input.view().submit("synthetic@example.invalid");
+      yield* advance(3_000);
+      expect(input.gateway.continue).toHaveBeenCalledTimes(3);
+      input.view().refresh();
+      yield* advance(0);
+      yield* advance(590_000);
+      expect(input.gateway.continue).toHaveBeenCalledTimes(66);
+      expect(input.view().awaitingObservation).toBe(true);
+      expect(input.view().disabled).toBe(true);
+      input.view().refresh();
+      yield* advance(0);
+      expect(input.gateway.continue).toHaveBeenCalledTimes(67);
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+      yield* advance(60_000);
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+      yield* advance(60_000);
+      expect(input.gateway.continue).toHaveBeenCalledTimes(67);
+      expect(input.view().awaitingObservation).toBe(true);
+      expect(input.view().changeSelection()).toBe(false);
+    })
+);
+
+it.effect("rejects a stale authorization callback after preparing a replacement", () =>
+  Effect.gen(function* () {
+    const input = fixture();
+    yield* prepareFixture(input);
+    const previous = input.view();
+    expect(previous.changeSelection()).toBe(true);
+    input.view().continueToPayment();
+    yield* advance(0);
+    previous.submit("synthetic@example.invalid");
+    yield* advance(0);
+    expect(input.gateway.submit).not.toHaveBeenCalled();
+    expect(input.view().disabled).toBe(false);
+  })
+);
+
+it.effect(
+  "never settles a known BillingAttempt from a different attempt or source observation",
+  () =>
+    Effect.gen(function* () {
+      const input = fixture();
+      const pending = recoveryFixture("available").submission;
+      input.gateway.submit.mockResolvedValue(pending);
+      yield* prepareFixture(input);
+      input.view().submit("synthetic@example.invalid");
+      yield* advance(0);
+      input.gateway.observeBillingAttempt.mockResolvedValueOnce({
+        ...pending,
+        billingAttempt: {
+          ...pending.billingAttempt,
+          id: BillingAttemptId.make("23200000-0000-4000-8000-000000000099"),
+          status: "failed",
+          failedAt: DateTime.makeUnsafe(0),
+        },
+      });
+      yield* advance(1_000);
+      expect(input.view().disabled).toBe(true);
+      input.gateway.observeBillingAttempt.mockResolvedValueOnce(input.submission);
+      yield* advance(1_000);
+      expect(input.gateway.continue).not.toHaveBeenCalled();
+      expect(input.gateway.observeBillingAttempt).toHaveBeenLastCalledWith(
+        input.enrollment.enrollmentId,
+        pending.billingAttempt.id,
+        expect.any(AbortSignal)
+      );
+    })
+);
+
+it.effect(
+  "refuses invalid email and expired prepared authorization without extending its lifetime",
+  () =>
+    Effect.gen(function* () {
+      const input = fixture();
+      yield* prepareFixture(input);
+      input.view().submit("invalid-email");
+      yield* advance(0);
+      expect(input.gateway.submit).not.toHaveBeenCalled();
+      yield* advance(60_001);
+      input.view().submit("synthetic@example.invalid");
+      yield* advance(0);
+      expect(input.gateway.submit).not.toHaveBeenCalled();
+      expect(input.view().needsRecovery).toBe(false);
+      expect(input.view().changeSelection()).toBe(true);
+    })
+);
+
+it.effect(
+  "keeps an available source locked without an exact BillingAttempt or retained continuation",
+  () =>
+    Effect.gen(function* () {
+      const input = fixture();
+      input.gateway.prepare.mockResolvedValue({
+        status: "available",
+        enrollmentId: input.enrollment.enrollmentId,
+        method: "card",
+        priceId: input.enrollment.price.id,
+      });
+      yield* prepareFixture(input);
+      expect(input.view().disabled).toBe(true);
+      expect(input.view().changeSelection()).toBe(false);
+      input.view().refresh();
+      yield* advance(0);
+      expect(input.gateway.submit).not.toHaveBeenCalled();
+      expect(input.view().disabled).toBe(true);
     })
 );

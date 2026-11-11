@@ -294,7 +294,7 @@ const useDaviplataInteraction = (props: FormProps): Draft & Commands => {
   const lifetime = useChallengeLifetime(() => lock(false));
   const { setStage, email } = draft;
   const apply = (outcome: DaviplataConfirmation): void => {
-    if (!lifetime.active()) return;
+    if (!lifetime.active() || outcome.status === "busy") return;
     if (outcome.status === "submitted") {
       props.onSubmitted(email.trim().toLowerCase(), outcome.submission);
       return;

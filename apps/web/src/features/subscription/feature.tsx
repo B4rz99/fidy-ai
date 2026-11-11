@@ -89,8 +89,12 @@ const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): Subscr
   );
   const interaction = useAtomValue(atom);
   const presented = offers.map(presentSubscriptionOffer);
-  const selectedOffer = Option.flatMap(interaction.selectedId, (id) =>
-    EffectArray.findFirst(presented, (offer) => offer.id === id)
+  const selectedOffer = Option.orElse(
+    Option.map(interaction.reviewedPrice, presentSubscriptionOffer),
+    () =>
+      Option.flatMap(interaction.selectedId, (id) =>
+        EffectArray.findFirst(presented, (offer) => offer.id === id)
+      )
   );
   return {
     ...interaction,
@@ -190,6 +194,7 @@ const Checkout = ({
             busy={selection.busy}
             failed={selection.failed}
             needsRecovery={selection.needsRecovery}
+            awaitingObservation={selection.awaitingObservation}
             prepare={selection.prepare}
             submit={selection.submit}
             refresh={selection.refresh}
@@ -212,7 +217,7 @@ const ReadyOffersContent = (props: ReadyOffersProps): JSX.Element => {
   const { standing } = props;
   const paid = hasNonTrialPro(standing.state);
   const resolved = standing.state._tag === "Ready";
-  const checkout = selection.checkout && resolved && !standing.state.standing.hasProGrant;
+  const checkout = selection.checkout;
   return (
     <div
       ref={lifetimeRef}
@@ -282,6 +287,27 @@ const LoadFailure = ({
     waiting={waiting}
   />
 );
+const OffersRefreshFeedback = ({
+  state,
+}: Readonly<{ state: SubscriptionOffersPageState }>): JSX.Element => (
+  <>
+    {state._tag === "Refreshing" ? (
+      <p aria-live="polite" className="sr-only">
+        Actualizando ofertas…
+      </p>
+    ) : null}
+    {state._tag === "RefreshFailure" ? (
+      <CanonicalQueryRetry
+        description="Mostramos las últimas ofertas disponibles."
+        onRetry={state.onRetry}
+        retryLabel="Reintentar actualización"
+        retryingLabel="Reintentando…"
+        title="No pudimos actualizar las ofertas"
+        waiting={state.waiting}
+      />
+    ) : null}
+  </>
+);
 const SubscriptionOffersContent = ({
   state,
   gateway,
@@ -296,27 +322,11 @@ const SubscriptionOffersContent = ({
     case "Loading":
       return <PendingRead label="Cargando ofertas" />;
     case "Ready":
-      return <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />;
     case "Refreshing":
-      return (
-        <>
-          <p aria-live="polite" className="sr-only">
-            Actualizando ofertas…
-          </p>
-          <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />
-        </>
-      );
     case "RefreshFailure":
       return (
         <>
-          <CanonicalQueryRetry
-            description="Mostramos las últimas ofertas disponibles."
-            onRetry={state.onRetry}
-            retryLabel="Reintentar actualización"
-            retryingLabel="Reintentando…"
-            title="No pudimos actualizar las ofertas"
-            waiting={state.waiting}
-          />
+          <OffersRefreshFeedback state={state} />
           <ReadyOffers gateway={gateway} offers={state.offers} standing={standing} />
         </>
       );

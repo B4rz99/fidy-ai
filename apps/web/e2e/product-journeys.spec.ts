@@ -461,3 +461,98 @@ for (const { replaceFailedSource, reload } of [
       })
     ));
 }
+
+const installChangedPriceEnrollment = Effect.fnUntraced(function* (page: Page) {
+  yield* Effect.tryPromise(() => installReusedEnrollment(page));
+  yield* installRoute(page, `${apiOrigin}/web/subscription/payment-enrollments/prepare`, (route) =>
+    route.fulfill({
+      status: ok,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...prepared,
+        price: { ...offers[1], money: { amount: "39900", currency: "COP" } },
+        recurringDisclosure: {
+          ...prepared.recurringDisclosure,
+          displayedText: "Autorizo el cobro preparado de 39.900 COP cada mes.",
+        },
+      }),
+    })
+  );
+  let submissions = 0;
+  yield* installRoute(page, `${apiOrigin}/web/subscription/payment-enrollments/submit`, (route) => {
+    submissions += 1;
+    expect(route.request().postDataJSON()).toMatchObject({
+      enrollmentId,
+      billingEmail: "reviewed@example.com",
+    });
+    return route.fulfill({ status: serviceUnavailable, body: "{}" });
+  });
+  yield* installRoute(
+    page,
+    `${apiOrigin}/web/subscription/payment-enrollments/${enrollmentId}`,
+    (route) =>
+      route.fulfill({
+        status: ok,
+        contentType: "application/json",
+        body: JSON.stringify(prepared),
+      })
+  );
+  return (): number => submissions;
+});
+const submitReviewedFormTwice = (button: HTMLElement | SVGElement): void => {
+  button.closest("form")?.requestSubmit();
+  button.closest("form")?.requestSubmit();
+};
+test("reviews the prepared Price and retains billing decisions through an uncertain payment without replay", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const submissions = yield* installChangedPriceEnrollment(page);
+      yield* Effect.tryPromise(() => page.goto("/upgrade"));
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: /^mensual\b/iu }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Continuar con tarjeta" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText(/Se cobrará \$\s39\.900 COP y se renovará cada mes\./u)).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Autorizo el cobro preparado de 39.900 COP cada mes.")).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("complementary", { name: "Tu elección" })).toContainText("39.900 COP")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Correo de facturación").fill("reviewed@example.com")
+      );
+      yield* acceptSubscriptionContracts(page);
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("button", { name: "Activar Pro", exact: true })
+          .evaluate(submitReviewedFormTwice)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Consultar estado", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Correo de facturación")).toHaveValue("reviewed@example.com")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("checkbox", { name: /Acepto el reglamento/iu })).toBeChecked()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("checkbox", { name: /Autorizo el tratamiento/iu })).toBeChecked()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Cambiar selección" })).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Consultar estado", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Activando Pro…", exact: true })).toBeDisabled()
+      );
+      expect(submissions()).toBe(1);
+    })
+  ));

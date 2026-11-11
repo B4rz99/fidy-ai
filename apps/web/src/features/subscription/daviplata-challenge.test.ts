@@ -80,3 +80,27 @@ it("disables recovery when a defective provider cannot inspect retained approval
       challenge.dispose();
     })
   ));
+
+it("keeps approved submission busy until uncertainty settles before granting a same-request retry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const input = fixture();
+      const pending = Promise.withResolvers<PaymentSubmissionType>();
+      input.submitApproved.mockReturnValueOnce(pending.promise);
+      const challenge = makeDaviplataChallenge(input);
+      const confirming = challenge.confirm(Redacted.make("574829"));
+      yield* Effect.yieldNow;
+      expect(yield* fromPromise(() => challenge.retrySubmission())).toEqual({ status: "busy" });
+      expect(input.provider.retrySubmission).not.toHaveBeenCalled();
+      pending.reject(new TestBoundaryFailure());
+      expect(yield* fromPromise(() => confirming)).toEqual({
+        status: "uncertain",
+        retrySubmission: true,
+      });
+      expect(yield* fromPromise(() => challenge.retrySubmission())).toEqual({
+        status: "submitted",
+        submission,
+      });
+      expect(input.submitApproved).toHaveBeenCalledTimes(2);
+    })
+  ));

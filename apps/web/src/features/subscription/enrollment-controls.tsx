@@ -21,6 +21,7 @@ export const EnrollmentConsent = ({
   const id = useId();
   return (
     <div className="subscription-consents">
+      <p>{enrollment.recurringDisclosure.displayedText}</p>
       <label className="subscription-consent" htmlFor={`${id}-end-user-policy`}>
         <Checkbox
           id={`${id}-end-user-policy`}

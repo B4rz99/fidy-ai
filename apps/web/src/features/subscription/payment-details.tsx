@@ -246,19 +246,19 @@ const NequiEnrollmentForm = ({ enrollment, busy, submit }: EnrollmentFormProps):
   const [formLifetimeRef] = useState<RefCallback<HTMLFormElement>>(
     () => (): ReturnType<RefCallback<HTMLFormElement>> => abort
   );
-  const onSubmit = (event: FormEvent): void => {
+  const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (!allDecisionsAccepted(decisions) || busy) return;
+    if (!allDecisionsAccepted(decisions) || busy || !event.currentTarget.checkValidity()) return;
     abort();
     const controller = new AbortController();
     authorization.current = Option.some(controller);
+    setPhoneNumber("");
     submit(billingEmail.trim().toLowerCase(), {
       method: "nequi",
       phoneNumber: Redacted.make(phoneNumber),
       signal: controller.signal,
       onAwaiting: () => {
-        setPhoneNumber("");
-        setAwaitingApproval(true);
+        if (!controller.signal.aborted) setAwaitingApproval(true);
       },
     });
   };
@@ -351,9 +351,10 @@ const PreparedCardEnrollmentForm = ({
   const [fields, setFields] = useState<CardFields>(emptyCardFields);
   const [decisions, setDecisions] = useState<EnrollmentDecisions>(emptyDecisions);
   const allAccepted = allDecisionsAccepted(decisions);
-  const onSubmit = (event: FormEvent): void => {
+  const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (!allAccepted || busy) return;
+    if (!allAccepted || busy || !event.currentTarget.checkValidity()) return;
+    setFields(emptyCardFields);
     submit(
       billingEmail.trim().toLowerCase(),
       enrollment.paymentSourceMode === "create" ? fields : undefined
@@ -421,6 +422,9 @@ const EnrollmentStatusAction = ({
       <PaymentFeedback tone="source" title="Fuente de pago disponible">
         <output>Tu fuente de pago quedó disponible para cobros recurrentes.</output>
         <p>Esto todavía no confirma que el pago esté aprobado.</p>
+        <Button disabled={busy} onClick={refresh} type="button" variant="outline">
+          Consultar estado
+        </Button>
       </PaymentFeedback>
     );
   }
@@ -612,6 +616,40 @@ const EnrollmentContent = ({
 const focusPaymentHeading: RefCallback<HTMLHeadingElement> = (node) => {
   node?.focus();
 };
+const EnrollmentFeedback = ({
+  failed,
+  enrollment,
+  busy,
+  prepare,
+  awaitingObservation,
+  needsRecovery,
+  refresh,
+}: Pick<
+  Parameters<typeof PaymentDetails>[0],
+  "failed" | "enrollment" | "busy" | "prepare" | "awaitingObservation" | "needsRecovery" | "refresh"
+>): JSX.Element => (
+  <>
+    {failed && Option.isNone(enrollment) ? (
+      <Button type="button" disabled={busy} variant="outline" onClick={() => prepare()}>
+        Reintentar preparación
+      </Button>
+    ) : null}
+    {failed ? (
+      <p role="alert">No pudimos continuar. Revisa los datos o intenta más tarde.</p>
+    ) : null}
+    {awaitingObservation ? (
+      <output>
+        La verificación automática terminó sin confirmar el pago. Consulta el estado para verificar
+        el mismo intento; no vuelvas a pagar.
+      </output>
+    ) : null}
+    {needsRecovery ? (
+      <Button type="button" disabled={busy} variant="outline" onClick={refresh}>
+        Consultar estado
+      </Button>
+    ) : null}
+  </>
+);
 export const PaymentDetails = ({
   offer,
   gateway,
@@ -621,6 +659,7 @@ export const PaymentDetails = ({
   busy,
   failed,
   needsRecovery,
+  awaitingObservation,
   prepare,
   submit,
   refresh,
@@ -630,6 +669,7 @@ export const PaymentDetails = ({
   busy: boolean;
   failed: boolean;
   needsRecovery: boolean;
+  awaitingObservation: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
   submit: (email: string, fields?: PaymentFields) => void;
   refresh: () => void;
@@ -644,14 +684,15 @@ export const PaymentDetails = ({
       <p>Pro {offer.selectionLabel}</p>
       <strong>{offer.moneyText}</strong> / {offer.billingUnit}
     </div>
-    {failed ? (
-      <p role="alert">No pudimos continuar. Revisa los datos o intenta más tarde.</p>
-    ) : null}
-    {needsRecovery ? (
-      <Button type="button" disabled={busy} variant="outline" onClick={refresh}>
-        Consultar estado
-      </Button>
-    ) : null}
+    <EnrollmentFeedback
+      failed={failed}
+      enrollment={enrollment}
+      busy={busy}
+      prepare={prepare}
+      awaitingObservation={awaitingObservation}
+      needsRecovery={needsRecovery}
+      refresh={refresh}
+    />
     <EnrollmentContent
       method={method}
       offer={offer}

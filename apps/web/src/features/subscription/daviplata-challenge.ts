@@ -7,6 +7,7 @@ import {
 
 export type DaviplataConfirmation =
   | Readonly<{ status: "retry-allowed" }>
+  | Readonly<{ status: "busy" }>
   | Readonly<{ status: "submitted"; submission: PaymentSubmissionType }>
   | Readonly<{ status: "refused" }>
   | Readonly<{ status: "uncertain"; retrySubmission: boolean }>;
@@ -49,6 +50,7 @@ export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChalleng
   let disposed = false;
   let busy = false;
   let approved = false;
+  let retryAllowed = false;
   const dispose = (): void => {
     disposed = true;
     input.provider.dispose();
@@ -59,12 +61,17 @@ export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChalleng
     }
     if (outcome.status !== "approved") return Promise.resolve(outcome);
     approved = true;
+    retryAllowed = false;
     return input.submitApproved(outcome.token).then(
       (submission): DaviplataConfirmation => {
         dispose();
         return { status: "submitted", submission };
       },
-      () => submissionUncertainty(input)
+      () =>
+        submissionUncertainty(input).then((outcome) => {
+          retryAllowed = outcome.status === "uncertain" && outcome.retrySubmission;
+          return outcome;
+        })
     );
   };
   const execute = (
@@ -72,7 +79,7 @@ export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChalleng
   ): Promise<DaviplataConfirmation> => {
     if (disposed || input.client.signal.aborted) return Promise.resolve({ status: "refused" });
     if (busy) {
-      return approved ? submissionUncertainty(input) : Promise.resolve({ status: "retry-allowed" });
+      return Promise.resolve({ status: "busy" });
     }
     busy = true;
     return input.client
@@ -90,8 +97,12 @@ export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChalleng
         otp,
         approved ? Promise.resolve({ status: "refused" }) : execute(input.provider.confirm(otp))
       ),
-    retrySubmission: () =>
-      approved ? execute(input.provider.retrySubmission()) : Promise.resolve({ status: "refused" }),
+    retrySubmission: () => {
+      if (busy) return Promise.resolve({ status: "busy" });
+      return retryAllowed
+        ? execute(input.provider.retrySubmission())
+        : Promise.resolve({ status: "refused" });
+    },
     dispose,
   };
 };

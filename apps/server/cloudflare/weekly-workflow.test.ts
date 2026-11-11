@@ -7,7 +7,7 @@ import {
   type WeeklyScheduleSnapshot,
 } from "./insights/contract";
 import { UserId, WhatsAppCallerReference } from "../src/core/identity/contract";
-import { materializeWeeklySummary } from "./insights/operations";
+import { runWeeklyGeneration } from "./insights/operations";
 import {
   activateWeeklySummary,
   activateWeeklySummaryForUser,
@@ -280,7 +280,7 @@ it.each(["weekly-summary", "weekly-question"] as const)(
         yield* seedOtherSchedule(db);
         yield* seedWeeklySummaryActivity({ db, at: "2026-08-04T12:00:00.000Z" });
         vi.spyOn(Date, "now").mockReturnValue(schedule.nextScheduledAt.epochMilliseconds);
-        const generated = yield* materializeWeeklySummary({
+        const generated = yield* runWeeklyGeneration({
           db,
           userId,
           id: schedule.id,
@@ -353,7 +353,7 @@ it.each(["retention", "generation"])(
         yield* seedWeeklySummaryActivity({ db, at: "2026-08-04T12:00:00.000Z" });
         const now = schedule.nextScheduledAt.epochMilliseconds;
         vi.spyOn(Date, "now").mockReturnValue(now);
-        yield* materializeWeeklySummary({
+        yield* runWeeklyGeneration({
           db,
           userId,
           id: schedule.id,

@@ -26,11 +26,11 @@ import {
   findReminderGovernor,
   findReminderSchedule,
   materializeReminder,
-  materializeWeeklySummary,
   prepareReminderRevision,
   readProactiveTranscript,
   recordProactivityDecision,
   requestProactivityConsent,
+  runWeeklyGeneration,
 } from "./operations";
 import { contextualProactiveInsightQuery, prepareInsightRecipient } from "../whatsapp/operations";
 import {
@@ -295,7 +295,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         caller: proactivityTestCallers[0],
       });
       yield* seedWeeklySummaryActivity({ db, at: DateTime.formatIso(now) });
-      const weeklyReport = yield* materializeWeeklySummary({
+      const weeklyReport = yield* runWeeklyGeneration({
         db,
         userId: proactivityTestUsers[0],
         id: weekly.id,

@@ -44,7 +44,7 @@ import {
   type ProactivityEnvironment,
   WeeklyThresholdConfiguration,
 } from "../contract";
-import { findQueuedReport, materialize, weeklyReportDeliveryQuery } from "./weekly-generation";
+import { findQueuedReport, weeklyReportDeliveryQuery } from "./weekly-generation";
 import { findInsight } from "./insight-store";
 import {
   findQuestionOrigin,
@@ -61,7 +61,13 @@ type Execution = Readonly<{
   userId: UserId;
   work: Exclude<
     ProactivityActivity,
-    { kind: "proactivity-recover" | "proactivity-generate" | "proactivity-delivery" }
+    {
+      kind:
+        | "proactivity-recover"
+        | "proactivity-generate"
+        | "proactivity-delivery"
+        | "weekly-generate";
+    }
   >;
   now: DateTime.Utc;
   senders: WeeklySenders;
@@ -320,15 +326,6 @@ export const executeWeeklyActivity = (
   Effect.gen(function* () {
     if (input.work.userId !== input.userId) return yield* new InsightUnavailable();
     switch (input.work.kind) {
-      case "weekly-generate":
-        yield* admitWeeklyResource({
-          db: input.db,
-          userId: input.userId,
-          now: input.now,
-          phase: "generation",
-        });
-        yield* materialize({ ...input, id: input.work.id });
-        return { _tag: "Done" } as const;
       case "weekly-summary":
         return yield* deliverSummary({ ...input, work: input.work });
       case "weekly-question":

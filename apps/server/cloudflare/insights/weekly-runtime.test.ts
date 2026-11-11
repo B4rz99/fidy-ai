@@ -556,7 +556,6 @@ it("missing configuration, invalid knobs and foreign coordinator identities fail
       const work = { kind: "weekly-generate", version: 1, userId, id: schedule.id } as const;
       for (const environment of [
         { DB: fixture.db },
-        { ...configuration(fixture.db), WEEKLY_QUESTION_TEMPLATE_JSON: "" },
         { ...configuration(fixture.db), PROACTIVITY_ASK_AFTER: "0" },
       ]) {
         expect(
@@ -649,3 +648,22 @@ it.each([
     })
   )
 );
+it("generation needs no provider configuration or send to freeze an eligible report", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* testPromise(seed);
+      vi.spyOn(Date, "now").mockReturnValue(fixture.at.epochMilliseconds);
+      const fetch = fakeProvider();
+      vi.stubGlobal("fetch", fetch);
+      const schedule = Option.getOrThrow(yield* findWeeklySchedule({ db: fixture.db, userId }));
+      const coordinator = makeCoordinator({ DB: fixture.db, WEEKLY_SUMMARY_ENABLED: "enabled" });
+      expect(
+        (yield* testPromise(() =>
+          activity(coordinator, { kind: "weekly-generate", version: 1, userId, id: schedule.id })
+        )).status
+      ).toBe(200);
+      const id = yield* testPromise(() => eventFor(fixture.db, fixture.at));
+      expect(id).toBeDefined();
+      expect(fetch).not.toHaveBeenCalled();
+    })
+  ));

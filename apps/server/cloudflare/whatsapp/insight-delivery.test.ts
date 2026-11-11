@@ -13,8 +13,8 @@ import {
 } from "../consent/operations";
 import {
   findWeeklySummaryReport,
-  materializeWeeklySummary,
   recordWeeklySummaryDecision,
+  runWeeklyGeneration,
   weeklyReportDeliveryQuery,
 } from "../insights/operations";
 import {
@@ -58,7 +58,7 @@ const prepare = (db: D1Database): Effect.Effect<InsightWhatsAppStage, InsightUna
   Effect.gen(function* () {
     const schedule = yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
     yield* seedWeeklySummaryActivity({ db, at: "2026-08-04T12:00:00.000Z" });
-    const outcome = yield* materializeWeeklySummary({
+    const outcome = yield* runWeeklyGeneration({
       db,
       userId: weeklySummaryTestUser,
       id: schedule.id,

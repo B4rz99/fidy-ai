@@ -120,6 +120,8 @@ type RecurringIdentity =
   | "recurringSearch"
   | "recurringSplitCapture"
   | "recurringCapture"
+  | "recurringAssociationLost"
+  | "recurringCaptureReplaced"
   | "recurringCaptureUncertain"
   | "recurringCaptureCurrency"
   | "recurringManagement"

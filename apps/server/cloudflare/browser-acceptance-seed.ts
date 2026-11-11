@@ -44,6 +44,8 @@ export const recurringIsolatedIdentities = [
   { key: "recurringSearch", userId: "24000000-0000-4000-8000-000000000851" },
   { key: "recurringSplitCapture", userId: "24000000-0000-4000-8000-000000000811" },
   { key: "recurringCapture", userId: "24000000-0000-4000-8000-000000000821" },
+  { key: "recurringAssociationLost", userId: "25000000-0000-4000-8000-000000002001" },
+  { key: "recurringCaptureReplaced", userId: "25000000-0000-4000-8000-000000002011" },
   { key: "recurringCaptureUncertain", userId: "24000000-0000-4000-8000-000000000791" },
   { key: "recurringCaptureCurrency", userId: "24000000-0000-4000-8000-000000000801" },
   { key: "recurringStableReads", userId: "24000000-0000-4000-8000-000000000661" },

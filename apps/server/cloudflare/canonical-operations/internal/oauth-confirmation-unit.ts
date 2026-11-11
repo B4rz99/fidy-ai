@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import { operationCatalog } from "../../../src/shell/api";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
@@ -33,7 +33,7 @@ const reviewBinding = (mutations: ReadonlyArray<PreparedCanonicalMutation>): OAu
     ),
   }));
 type UnitReview =
-  | Readonly<{ _tag: "Continue"; statements: ReadonlyArray<D1PreparedStatement> }>
+  | Readonly<{ _tag: "Continue"; commit: () => Effect.Effect<void, Cause.UnknownError> }>
   | Readonly<{ _tag: "ConfirmationReview"; review: OAuthNativeReview }>
   | Readonly<{ _tag: "Refused"; index: number; refusal: CanonicalMutationRefusal }>
   | Readonly<{ _tag: "Unavailable" }>;
@@ -43,6 +43,7 @@ type Work = Readonly<{
   current: number;
   mutations: ReadonlyArray<PreparedCanonicalMutation>;
   oauthConfirmation: Option.Option<OAuthConfirmationWork>;
+  statements: ReadonlyArray<D1PreparedStatement>;
 }>;
 const prepareSensitiveUnit = (
   work: Work,
@@ -71,17 +72,18 @@ const prepareSensitiveUnit = (
       subject: work.subject,
       work: work.oauthConfirmation.value,
       binding: reviewBinding(work.mutations),
+      statements: [
+        ...work.mutations.flatMap((mutation) =>
+          Option.map(mutation.oauthReview, ({ guards }) => guards).pipe(Option.getOrElse(() => []))
+        ),
+        ...work.statements,
+      ],
     });
     if (prepared._tag === "Refused") return refused;
     if (prepared._tag === "Review") return { _tag: "ConfirmationReview", review: prepared.review };
     return {
       _tag: "Continue",
-      statements: [
-        ...prepared.statements,
-        ...work.mutations.flatMap((mutation) =>
-          Option.map(mutation.oauthReview, ({ guards }) => guards).pipe(Option.getOrElse(() => []))
-        ),
-      ],
+      commit: prepared.commit,
     };
   });
 /** Both sensitive and ordinary children bind the complete original invocation and ordered scopes. */
@@ -92,7 +94,11 @@ export const prepareOAuthUnitConfirmation = (work: Work): Effect.Effect<UnitRevi
       Option.isSome(work.oauthConfirmation) &&
         work.oauthConfirmation.value.attempt._tag === "Decision"
         ? { _tag: "Unavailable" }
-        : { _tag: "Continue", statements: [] }
+        : {
+            _tag: "Continue",
+            commit: () =>
+              Effect.tryPromise(() => work.db.batch([...work.statements])).pipe(Effect.asVoid),
+          }
     );
   }
   const mutation = work.mutations[index];

@@ -752,6 +752,7 @@ export const pendingBudgetDeletion = (
     headers: FixtureHeaders;
     connectionId: string;
     holdMutationCommit: Harness["holdMutationCommit"];
+    interceptQueryResponse: Harness["interceptQueryResponse"];
     call: (response: Schema.Json, argumentsOverride?: Schema.Json) => Promise<Response>;
   }>,
   TestFailure | Schema.SchemaError

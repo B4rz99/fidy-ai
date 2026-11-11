@@ -7,9 +7,9 @@ import {
   TranscriptText,
   type TranscriptTurnId,
 } from "../../../src/core/agent/contract";
-import { type UserId } from "../../../src/core/identity/contract";
+import { UserId } from "../../../src/core/identity/contract";
 import { type HostedSubject, hostedAuthority, isWhatsAppHosted } from "./hosted-authority";
-import { type Cause, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
@@ -39,7 +39,7 @@ const ConfirmationRow = Schema.Struct({
   input_json: Schema.String,
   command: Schema.String,
 });
-export type ConfirmationRow = typeof ConfirmationRow.Type;
+type ConfirmationRow = typeof ConfirmationRow.Type;
 
 /** A User-visible host challenge, bound to precisely the model's validated canonical input. */
 export type PendingHostedConfirmation = Readonly<{ text: TranscriptText; command: string }>;
@@ -146,7 +146,7 @@ export const readWhatsAppConfirmation = ({
   });
 
 /** Read only the most recent challenge for this stable User after its visible Turn completed. */
-export const findHostedConfirmation = ({
+const findHostedConfirmation = ({
   db,
   userId,
   command,
@@ -223,7 +223,7 @@ const confirmationTurnGuard = ({
 /** Consume once, or recover consumption by this exact live Pending Turn in the same channel.
  * Recovery rechecks authority without rewriting or lending another Turn's consumed challenge.
  */
-export const consumeHostedConfirmation = ({
+const consumeHostedConfirmation = ({
   db,
   subject,
   turnId,
@@ -245,12 +245,19 @@ export const consumeHostedConfirmation = ({
     );
     if (Option.isNone(decoded)) return Option.none();
     const guard = confirmationTurnGuard({ subject, turnId, now });
+    const binding = [
+      challenge.id,
+      subject.userId,
+      challenge.command,
+      challenge.operation,
+      challenge.input_json,
+    ];
     const updated = yield* Effect.tryPromise(() =>
       db
         .prepare(`UPDATE hosted_confirmations SET consumed_turn_id = ?, consumed_at_ms = ?
-    WHERE id = ? AND user_id = ? AND command = ? AND consumed_turn_id IS NULL
+    WHERE id = ? AND user_id = ? AND command = ? AND operation = ? AND input_json = ? AND consumed_turn_id IS NULL
       AND expires_at_ms > ? AND (${guard.sql})`)
-        .bind(turnId, now, challenge.id, subject.userId, challenge.command, now, ...guard.params)
+        .bind(turnId, now, ...binding, now, ...guard.params)
         .run()
     );
     const consumed =
@@ -260,18 +267,88 @@ export const consumeHostedConfirmation = ({
           .prepare(
             `SELECT 1 FROM hosted_confirmations WHERE id=? AND user_id=? AND command=? AND operation=? AND input_json=? AND consumed_turn_id=? AND consumed_at_ms < expires_at_ms AND (${guard.sql})`
           )
-          .bind(
-            challenge.id,
-            subject.userId,
-            challenge.command,
-            challenge.operation,
-            challenge.input_json,
-            turnId,
-            ...guard.params
-          )
+          .bind(...binding, turnId, ...guard.params)
           .first()
       )) !== null;
     return consumed
       ? Option.some({ operation: challenge.operation, input: decoded.value })
       : Option.none();
+  });
+
+/** One local attempt; reconstructed tasks retain the durable exact-Turn recovery protocol. */
+export type HostedConfirmationTask<A, E> = Readonly<{
+  execute: () => Effect.Effect<Option.Option<A>, E>;
+}>;
+type ConfirmedHostedWork = Readonly<{
+  id: string;
+  operation: string;
+  input: CanonicalToolEvidence;
+}>;
+export type HostedConfirmationAttempt = Readonly<{
+  turnId: TranscriptTurnId;
+  reserve: () => Effect.Effect<
+    Option.Option<ConfirmedHostedWork>,
+    Cause.UnknownError | Schema.SchemaError
+  >;
+}>;
+
+const reservation = (
+  work: Omit<Parameters<typeof consumeHostedConfirmation>[0], "now">
+): HostedConfirmationAttempt["reserve"] => {
+  let reserved = false;
+  return () =>
+    Effect.gen(function* () {
+      if (reserved) return Option.none();
+      reserved = true;
+      const approved = yield* consumeHostedConfirmation({
+        ...work,
+        now: yield* Clock.currentTimeMillis,
+      });
+      return Option.map(approved, (input) => ({ id: work.challenge.id, ...input }));
+    });
+};
+
+const confirmationTask = <A, E>({
+  execute,
+  ...work
+}: Omit<Parameters<typeof consumeHostedConfirmation>[0], "now"> &
+  Readonly<{
+    execute: (attempt: HostedConfirmationAttempt) => Effect.Effect<A, E>;
+  }>): HostedConfirmationTask<A, E> => {
+  let attempted = false;
+  return {
+    execute: () =>
+      Effect.suspend(() => {
+        if (attempted) return Effect.succeedNone;
+        attempted = true;
+        return execute({ turnId: work.turnId, reserve: reservation(work) }).pipe(Effect.asSome);
+      }),
+  };
+};
+
+/** Lookup and standalone reservation stay private to this hosted protocol. The original callback
+ * owns execution lifetime and failure containment; reservation alone never proves mutation commit.
+ */
+export const prepareHostedConfirmation = <A, E>({
+  turnId,
+  subject,
+  execute,
+  ...lookup
+}: Omit<Parameters<typeof findHostedConfirmation>[0], "userId"> &
+  Readonly<{
+    subject: HostedSubject;
+    turnId: TranscriptTurnId;
+    execute: (attempt: HostedConfirmationAttempt) => Effect.Effect<A, E>;
+  }>): Effect.Effect<
+  Option.Option<HostedConfirmationTask<A, E>>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const retained = yield* findHostedConfirmation({
+      ...lookup,
+      userId: UserId.make(subject.userId),
+    });
+    return Option.map(retained, (challenge) =>
+      confirmationTask({ db: lookup.db, subject, turnId, challenge, execute })
+    );
   });

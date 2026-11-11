@@ -92,12 +92,11 @@ import {
   isWhatsAppHosted,
 } from "./hosted-authority";
 import {
-  type ConfirmationRow,
-  consumeHostedConfirmation,
-  findHostedConfirmation,
+  type HostedConfirmationAttempt,
   guardModelConfirmationReply,
   isHostedConfirmationAttempt,
   issueHostedConfirmation,
+  prepareHostedConfirmation,
   readWhatsAppConfirmation,
 } from "./hosted-confirmation";
 import {
@@ -429,26 +428,30 @@ export const resumeWhatsAppTurn = ({
       }
     }
     if (isHostedConfirmationAttempt(text)) {
-      const challenge = yield* findHostedConfirmation({
+      const confirmation = yield* prepareHostedConfirmation({
         db,
-        userId,
+        subject,
+        turnId,
         command: text,
         now,
         recoveringTurn: Option.some(turnId),
+        execute: (attempt) =>
+          executeConfirmedHostedTurn({
+            db,
+            subject,
+            userId,
+            attempt,
+            startedAtMs,
+            executeMutation: whatsAppStatementMutationExecutor({ db, bucket, subject, inference }),
+            signal,
+            deliver: deliver(work.value),
+            scheduleRecovery,
+          }),
       });
-      if (Option.isNone(challenge)) return unavailable();
-      return yield* executeConfirmedHostedTurn({
-        db,
-        subject,
-        userId,
-        turnId,
-        startedAtMs,
-        challenge: challenge.value,
-        executeMutation: whatsAppStatementMutationExecutor({ db, bucket, subject, inference }),
-        signal,
-        deliver: deliver(work.value),
-        scheduleRecovery,
-      });
+      if (Option.isNone(confirmation)) return unavailable();
+      return yield* confirmation.value
+        .execute()
+        .pipe(Effect.map(Option.getOrElse(unauthenticated)));
     }
     const prepared = yield* prepareHostedWork({
       db,
@@ -600,14 +603,30 @@ const executeHostedTurn = (
       });
     }
     if (isHostedConfirmationAttempt(text)) {
-      const challenge = yield* findHostedConfirmation({
+      if (Option.isNone(executeMutation)) return unauthenticated();
+      const executor = executeMutation.value;
+      const confirmation = yield* prepareHostedConfirmation({
         db,
-        userId,
+        subject,
+        turnId: activeTurnId,
         command: text,
         now: startedAtMs,
         recoveringTurn: Option.none(),
+        execute: (attempt) =>
+          executeConfirmedHostedTurn({
+            db,
+            subject,
+            userId,
+            attempt,
+            startedAtMs,
+            executeMutation: executor,
+            signal,
+            deliver:
+              "inbound" in input ? input.deliver : { _tag: "Browser", propose: input.deliver },
+            scheduleRecovery,
+          }),
       });
-      if (Option.isNone(challenge) || Option.isNone(executeMutation)) return unauthenticated();
+      if (Option.isNone(confirmation)) return unauthenticated();
       const turn = yield* admitHostedTurn({
         db,
         channel,
@@ -634,18 +653,9 @@ const executeHostedTurn = (
       if (Option.isSome(onAdmitted)) {
         onAdmitted.value(turn.value);
       }
-      return yield* executeConfirmedHostedTurn({
-        db,
-        subject,
-        userId,
-        turnId: turn.value,
-        startedAtMs,
-        challenge: challenge.value,
-        executeMutation: executeMutation.value,
-        signal,
-        deliver: "inbound" in input ? input.deliver : { _tag: "Browser", propose: input.deliver },
-        scheduleRecovery,
-      });
+      return yield* confirmation.value
+        .execute()
+        .pipe(Effect.map(Option.getOrElse(unauthenticated)));
     }
     const prepared = yield* prepareHostedWork({
       db,
@@ -1751,9 +1761,8 @@ const executeConfirmedHostedTurn = ({
   db,
   subject,
   userId,
-  turnId,
+  attempt,
   startedAtMs,
-  challenge,
   executeMutation,
   signal,
   deliver,
@@ -1762,15 +1771,15 @@ const executeConfirmedHostedTurn = ({
   db: D1Database;
   subject: HostedSubject;
   userId: UserId;
-  turnId: TranscriptTurnId;
+  attempt: HostedConfirmationAttempt;
   startedAtMs: number;
-  challenge: ConfirmationRow;
   executeMutation: HostedMutationExecutor;
   signal: AbortSignal;
   deliver: ChannelDelivery;
   scheduleRecovery: HostedTurnInput["scheduleRecovery"];
 }>): Effect.Effect<Response, HostedWorkFailure> =>
   Effect.gen(function* () {
+    const { turnId } = attempt;
     const finish = (result: HostedTurnOutcome): ReturnType<typeof finishHostedTurn> =>
       Clock.currentTimeMillis.pipe(
         Effect.flatMap((now) =>
@@ -1795,13 +1804,7 @@ const executeConfirmedHostedTurn = ({
         yield* finish({ _tag: "Interrupted" });
         return unavailable();
       }
-      const approved = yield* consumeHostedConfirmation({
-        db,
-        subject,
-        turnId,
-        challenge,
-        now: yield* Clock.currentTimeMillis,
-      });
+      const approved = yield* attempt.reserve();
       if (Option.isNone(approved)) {
         yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
         return unauthenticated();
@@ -1830,7 +1833,7 @@ const executeConfirmedHostedTurn = ({
         occurredAt: DateTime.formatIso(DateTime.makeUnsafe(yield* Clock.currentTimeMillis)),
         iteration: 1,
         toolCallId: Option.getOrElse(retainedCall, () =>
-          ToolCallId.make(`confirmation:${challenge.id}`)
+          ToolCallId.make(`confirmation:${approved.value.id}`)
         ),
         operation: operation.id,
       };

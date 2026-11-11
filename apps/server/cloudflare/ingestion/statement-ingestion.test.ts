@@ -5072,6 +5072,7 @@ it("invalidates OAuth review when automatic Category changes without creating a 
         db: runtime.db,
         subject,
         binding: firstBinding,
+        statements: [],
         work: { operation, input, attempt: { _tag: "Review" } },
       });
       if (issued._tag !== "Review") return yield* Effect.die("Missing review intent");
@@ -5085,12 +5086,17 @@ it("invalidates OAuth review when automatic Category changes without creating a 
       );
       const changed = yield* prepareReviewEdit({ work, command });
       const changedBinding = reviewBinding(changed);
+      if (changed._tag !== "Prepared") return yield* Effect.die("Missing prepared review edit");
       expect(changedBinding).not.toEqual(firstBinding);
       expect(changedBinding[0]?.effect).toContain("10000000-0000-4000-8000-000000000003");
       const accepted = yield* prepareOAuthConfirmation({
         db: runtime.db,
         subject,
         binding: changedBinding,
+        statements: [
+          ...Option.getOrThrow(changed.mutation.oauthReview).guards,
+          ...changed.mutation.statements,
+        ],
         work: {
           operation,
           input,
@@ -5102,16 +5108,10 @@ it("invalidates OAuth review when automatic Category changes without creating a 
         },
       });
       expect(accepted._tag).toBe("Prepared");
-      if (accepted._tag !== "Prepared" || changed._tag !== "Prepared") {
+      if (accepted._tag !== "Prepared") {
         return yield* Effect.die("Missing guarded acceptance");
       }
-      const rejected = yield* Effect.tryPromise(() =>
-        runtime.db.batch([
-          ...accepted.statements,
-          ...Option.getOrThrow(changed.mutation.oauthReview).guards,
-          ...changed.mutation.statements,
-        ])
-      ).pipe(Effect.result);
+      const rejected = yield* accepted.commit().pipe(Effect.result);
       expect(Result.isFailure(rejected)).toBe(true);
       expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
     })

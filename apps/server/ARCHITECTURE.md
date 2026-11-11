@@ -152,6 +152,10 @@ and any narrowed scope.
 OAuth approval, refresh, revocation and sensitive-operation confirmation remain distinct from PAT
 and browser-session authority. Sensitive OAuth operations require one client-native decision,
 bound to the exact operation and consumed atomically; the client assertion is not human attestation.
+Confirmation preparation captures the complete ordered native unit, including owner revision guards,
+mutations and required Audit. Its guarded commit closure exposes no independently executable
+confirmation statements. Live credential, scope, Consent and database-time expiry checks remain
+inside that unit; a failed commit rolls back consumption and owner effects together.
 See [ADR 0033](../../docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md) and the
 [release evidence](../../docs/operations/hosted-mcp-release.md) for protocol and enablement details.
 
@@ -322,6 +326,11 @@ receives an unconfirmed-registration reply instead of the model's proposed confi
 Executable WhatsApp confirmation commands are rendered only from the host-issued challenge. Model
 prose containing a native confirmation command receives an unconfirmed-preparation reply, so a
 copied or invented command cannot be presented as approval for a new operation.
+Hosted confirmation tasks retain the reviewed input privately and reserve the exact decision for
+one live pending Turn before protected execution. Reservation commits separately from the mutation
+and proves no mutation outcome. Recovery rechecks the exact consumed binding and live authority,
+consults retained commit and outcome evidence, and never lends that reservation to another Turn or
+renews its original ten-minute deadline. OAuth's atomic consumption remains a separate protocol.
 WhatsApp may repair one invalid model output after successful queries, retaining their tool results
 and remaining call budget. Repair is unavailable once a mutation has started; it cannot replay
 owner effects or replace host confirmation.

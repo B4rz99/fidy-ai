@@ -95,19 +95,23 @@ export const useReviewPageContext = ({
   return {
     deadlines,
     contexts: new Map(
-      entries
-        .filter((entry) => items.some((item) => item.id === entry.id))
-        .map((entry) => [
-          entry.id,
-          {
-            ...entry,
-            expiresAt: deadlines.get(entry.id) ?? entry.expiresAt,
-            excerpt:
-              DateTime.toEpochMillis(deadlines.get(entry.id) ?? entry.expiresAt) > current
-                ? entry.excerpt
-                : Option.none(),
-          },
-        ])
+      entries.flatMap((entry) =>
+        items.some((item) => item.id === entry.id)
+          ? [
+              [
+                entry.id,
+                {
+                  ...entry,
+                  expiresAt: deadlines.get(entry.id) ?? entry.expiresAt,
+                  excerpt:
+                    DateTime.toEpochMillis(deadlines.get(entry.id) ?? entry.expiresAt) > current
+                      ? entry.excerpt
+                      : Option.none(),
+                },
+              ] as const,
+            ]
+          : []
+      )
     ),
     loading: state._tag === "Initial",
     failed:

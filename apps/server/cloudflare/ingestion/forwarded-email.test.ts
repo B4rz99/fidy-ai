@@ -1349,7 +1349,7 @@ it.each(["queued", "unavailable", "malformed"] as const)(
         let batches = 0;
         const database = new Proxy(db, {
           get(target, key): unknown {
-            if (key === "batch")
+            if (key === "batch") {
               return (statements: D1PreparedStatement[]) =>
                 batch(statements).then((results) => {
                   batches += 1;
@@ -1359,30 +1359,34 @@ it.each(["queued", "unavailable", "malformed"] as const)(
                   }
                   return results;
                 });
-            if (key === "prepare")
+            }
+            if (key === "prepare") {
               return (query: string) => {
                 const statement = prepare(query);
                 if (!publicationLost || readback === "queued") return statement;
                 return new Proxy(statement, {
                   get(boundTarget, property): unknown {
-                    if (property === "bind")
+                    if (property === "bind") {
                       return (...values: unknown[]) => {
                         const bound = statement.bind(...values);
                         return new Proxy(bound, {
                           get(readTarget, readProperty): unknown {
-                            if (readProperty === "first")
+                            if (readProperty === "first") {
                               return () =>
                                 readback === "unavailable"
                                   ? Promise.reject(new Error("Readback unavailable"))
                                   : Promise.resolve({ state: "unknown" });
+                            }
                             return Reflect.get(readTarget, readProperty);
                           },
                         });
                       };
+                    }
                     return Reflect.get(boundTarget, property);
                   },
                 });
               };
+            }
             return Reflect.get(target, key);
           },
         });

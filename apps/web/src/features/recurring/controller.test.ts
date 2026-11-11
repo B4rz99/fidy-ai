@@ -52,9 +52,9 @@ const workspace = {
 const PlanningProbe = ({
   client,
   onSaved,
-  month = "2026-10",
-  profileStale = false,
-  duplicate = false,
+  month,
+  profileStale,
+  duplicate,
 }: Readonly<{
   client: ReturnType<typeof makeFidyClient>;
   onSaved: () => void;

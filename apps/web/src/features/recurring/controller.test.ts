@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { expect, it, vi } from "vitest";
-import { Clock, Deferred, Effect, Layer, Option } from "effect";
+import { Clock, DateTime, Deferred, Effect, Layer, Option, Schema } from "effect";
 import { RegistryContext } from "@effect/atom-react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
-import { RecurringPlanId, makeFidyClient } from "@/transport/client";
+import { RecurringPlanId, RecurringPlanInput, makeFidyClient } from "@/transport/client";
+import { type Plan, currentPlan, planStatus, planToday } from "./model";
 import { recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
 
 const planId = RecurringPlanId.make("23200000-0000-4000-8000-000000000001");
@@ -299,3 +300,60 @@ it("retains equivalent mounted Recurring queries through collection and rerender
       }
     })
   ));
+
+it("keeps future lifecycle boundaries and revisions out of today's plan standing in the effective zone", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-30T02:00:00Z")));
+  try {
+    const settings = Schema.decodeUnknownSync(RecurringPlanInput)(
+      document.plans[0]?.revisions[0]?.plan
+    );
+    const plan: Plan = {
+      id: planId,
+      revisions: [
+        {
+          from: "2026-10-01",
+          plan: {
+            ...settings,
+            kind: "expense",
+            currency: "COP",
+            amountMode: "unknown",
+            frequency: "monthly",
+            timeZone: settings.timeZone,
+          },
+        },
+        {
+          from: "2026-11-01",
+          plan: {
+            ...settings,
+            name: "Future settings",
+            kind: "expense",
+            currency: "COP",
+            amountMode: "unknown",
+            frequency: "monthly",
+            timeZone: Schema.decodeSync(RecurringPlanInput.fields.timeZone)("Asia/Tokyo"),
+          },
+        },
+      ],
+      pauses: [{ from: "2026-10-30" }],
+      stoppedOn: "2026-11-02",
+    };
+    expect(planToday(plan)).toBe("2026-10-29");
+    expect(planStatus(plan)).toBe("active");
+    expect(currentPlan(plan).name).toBe("Internet QA");
+    vi.setSystemTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-30T12:00:00Z")));
+    expect(planStatus(plan)).toBe("paused");
+    vi.setSystemTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-11-02T12:00:00Z")));
+    expect(planStatus(plan)).toBe("stopped");
+    expect(currentPlan(plan).name).toBe("Future settings");
+    expect(
+      planStatus({
+        ...plan,
+        stoppedOn: undefined,
+        pauses: [{ from: "2026-10-30", through: "2026-10-30" }],
+      })
+    ).toBe("active");
+  } finally {
+    vi.useRealTimers();
+  }
+});

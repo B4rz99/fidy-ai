@@ -10,7 +10,7 @@ import {
   workspaceQueryRetention,
 } from "@/transport/workspace-query";
 import { preservedDates, restoredDates } from "./edit-scope";
-import { type Edit, type Plan, type Save, type Workspace, planStatus } from "./model";
+import { type Edit, type Plan, type Save, type Workspace, planStatus, planToday } from "./model";
 
 type Query = CanonicalInput<"recurringPlans.getRecurringWorkspace">["query"];
 export type SaveState = "idle" | "saving" | "rejected" | "uncertain" | "refreshing";
@@ -27,6 +27,7 @@ export type LifecycleConfirmation = Readonly<{
   planId: Plan["id"];
   revision: Workspace["document"]["revision"];
   action: Extract<Edit, { kind: "lifecycle" }>["action"];
+  date: string;
 }>;
 const lifecycleConfirmation = (
   document: Workspace["document"],
@@ -36,7 +37,13 @@ const lifecycleConfirmation = (
   const name = document.plans.find((plan) => plan.id === edit.planId)?.revisions.at(-1)?.plan.name;
   return name === undefined
     ? Option.none()
-    : Option.some({ name, action: edit.action, planId: edit.planId, revision: document.revision });
+    : Option.some({
+        name,
+        date: edit.date,
+        action: edit.action,
+        planId: edit.planId,
+        revision: document.revision,
+      });
 };
 const editConfirmation = (document: Workspace["document"], edit: Edit): Option.Option<string> => {
   if (edit.kind !== "edit") return Option.none();
@@ -79,6 +86,7 @@ const confirmedPlanStatus =
   (plan) => {
     if (Option.isNone(receipt) || state._tag !== "Ready") return planStatus(plan);
     if (
+      receipt.value.date > planToday(plan) ||
       receipt.value.planId !== plan.id ||
       receipt.value.revision <= state.value.data.document.revision
     ) {

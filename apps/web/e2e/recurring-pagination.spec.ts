@@ -1,7 +1,7 @@
 import { captureVisualEvidence } from "./visual-evidence";
 import { analyzeAccessibility } from "./accessibility";
 import type { APIRequestContext, Locator, Page, Route } from "@playwright/test";
-import { type Cause, Effect } from "effect";
+import { type Cause, DateTime, Effect } from "effect";
 import { apiOrigin, installCategories, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 import { signInRecurringThroughCore } from "./real-core-fixture";
@@ -362,3 +362,82 @@ const openLastDayItem = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
     );
     yield* Effect.tryPromise(() => expect(page.getByRole("dialog")).toContainText("Plan 099"));
   });
+
+test("future pause and stop keep today's standing and settings while lifecycle admission uses retained boundaries", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({
+          page,
+          deferFreshEntry: true,
+          request,
+          identity: "recurringPagination",
+        })
+      );
+      yield* Effect.tryPromise(() =>
+        page.clock.setSystemTime(
+          DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-30T02:00:00Z"))
+        )
+      );
+      let stopped = false;
+      const serve = (route: Route): Promise<void> =>
+        route.fulfill({ contentType: "application/json", body: datedWorkspace(stopped) });
+      yield* Effect.tryPromise(() => page.route(`${apiOrigin}/recurring-plans?*`, serve));
+      yield* Effect.tryPromise(() => page.goto("/app/recurring?month=2026-10"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Todos los recurrentes", exact: true }).click()
+      );
+      const row = page.getByRole("button", { name: "Editar Dated plan", exact: true });
+      yield* Effect.tryPromise(() => expect(row).toContainText("Activo"));
+      yield* Effect.tryPromise(() => row.click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Reanudar plan", exact: true })).toBeDisabled()
+      );
+      stopped = true;
+      yield* Effect.tryPromise(() => page.reload());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Todos los recurrentes", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(row).toContainText("Activo"));
+      yield* Effect.tryPromise(() => row.click());
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Reanudar plan", exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Pausar plan", exact: true })).toHaveCount(0)
+      );
+    })
+  ));
+
+const datedWorkspace = (stopped: boolean): string => {
+  const settings = {
+    name: "Dated plan",
+    kind: "expense",
+    currency: "COP",
+    amountMode: "unknown",
+    frequency: "monthly",
+    firstDate: "2026-01-01",
+    timeZone: "America/Bogota",
+  };
+  return response({
+    ...workspace,
+    occurrences: [],
+    document: {
+      ...workspace.document,
+      plans: [
+        {
+          id: "71000000-0000-4000-8000-000000000001",
+          revisions: [
+            { from: "2026-01-01", plan: settings },
+            { from: "2026-11-01", plan: { ...settings, name: "Future name" } },
+          ],
+          pauses: [{ from: "2026-10-30" }],
+          ...(stopped ? { stoppedOn: "2026-11-02" } : {}),
+        },
+      ],
+    },
+  });
+};

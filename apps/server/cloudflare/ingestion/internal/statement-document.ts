@@ -9,8 +9,13 @@ import {
   StagedStatementBytes,
   StatementStagingId,
   StatementSubmissionId,
+  maximumStatementBytes,
 } from "../../../src/shell/ingestion/contract";
-import { StatementStaging, StatementStagingUnavailable } from "./statement-staging";
+import {
+  StatementStaging,
+  StatementStagingFailed,
+  StatementStagingUnavailable,
+} from "./statement-staging";
 import {
   admitStatementUpload,
   statementUploadAuthority,
@@ -203,17 +208,16 @@ const liveDocument = (document: typeof Document.Type, grantId: string, current: 
   Option.contains(document.upload_grant_id, grantId) &&
   Option.exists(document.upload_expires_at_ms, (expires) => expires > current);
 
-/** Stage bounded verified bytes only under this Pending upload's admitted, unexpired grant. */
-export const stageHeldStatementDocument = ({
-  db,
-  bucket,
-  caller,
-  bytes,
-  grant,
-}: HeldDocumentUpload): ReturnType<
-  ReturnType<typeof StatementStaging.make>["stageStatementBytes"]
-> =>
-  Effect.gen(function* () {
+/** Snapshot bounded verified bytes at invocation and stage only under this Pending upload's admitted, unexpired grant. */
+export const stageHeldStatementDocument = (
+  input: HeldDocumentUpload
+): ReturnType<ReturnType<typeof StatementStaging.make>["stageStatementBytes"]> => {
+  const { db, bucket, caller, bytes, grant } = input;
+  if (bytes.byteLength > maximumStatementBytes) {
+    return Effect.fail(new StatementStagingFailed({ reason: "resource-limit" }));
+  }
+  const snapshot = Uint8Array.from(bytes);
+  return Effect.gen(function* () {
     const document = yield* findDocument({ db, caller });
     const clock = yield* Clock.Clock;
     const checkedAt = clock.currentTimeMillisUnsafe();
@@ -234,7 +238,7 @@ export const stageHeldStatementDocument = ({
       userId: caller.userId,
       request: new Request("https://statement.internal/bytes", {
         method: "POST",
-        body: Uint8Array.from(bytes),
+        body: snapshot,
       }),
     });
     const json = yield* Schema.encodeEffect(Schema.fromJsonString(StagedStatementBytes))(
@@ -261,6 +265,7 @@ export const stageHeldStatementDocument = ({
     if (updated.meta.changes !== 1) return yield* unavailable();
     return reference;
   });
+};
 
 const workerDigest = Effect.runSync(Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto)));
 export const retrieveHeldStatementMedia = (

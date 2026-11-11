@@ -570,3 +570,30 @@ for (const outcome of ["missing", "failure"] as const) {
     })
   );
 }
+
+it.effect(
+  "explicit workspace reset retires captured Correction admission without unlocking an unknown write",
+  () =>
+    Effect.gen(function* () {
+      const test = yield* fixture();
+      const captured = test.view();
+      const correction = {
+        kind: "single" as const,
+        origin: "editor" as const,
+        transaction: test.transaction,
+        changes: { notes: "Reviewed action" },
+      };
+      captured.resetWorkspace();
+      captured.submit(correction);
+      yield* advance();
+      expect(test.sent).toHaveLength(0);
+      test.behavior.write = "uncertain";
+      test.view().submit(correction);
+      yield* advance();
+      expect(test.view().status).toBe("uncertain");
+      test.view().resetWorkspace();
+      expect(test.view().status).toBe("uncertain");
+      expect(test.view().locked).toBe(true);
+      expect(test.sent).toHaveLength(1);
+    })
+);

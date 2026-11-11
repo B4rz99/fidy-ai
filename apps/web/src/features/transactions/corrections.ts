@@ -37,6 +37,7 @@ export type TransactionCorrections = Readonly<{
   workspaceGeneration: number;
   submit: (correction: Correction) => void;
   recover: () => void;
+  resetWorkspace: () => void;
   reviewingDeletion: Option.Option<Transaction["id"]>;
   reviewDeletion: (id: Transaction["id"]) => boolean;
   cancelDeletion: () => void;
@@ -118,6 +119,7 @@ const present = (owner: Owner): TransactionCorrections => {
       if (owner.workspaceGeneration === generation) submit(owner, correction);
     },
     recover: () => recover(owner, "recovery"),
+    resetWorkspace: () => resetWorkspace(owner),
     mount: () => {
       owner.active = true;
       owner.stopped = Deferred.makeUnsafe<void>();
@@ -225,6 +227,12 @@ const available = (owner: Owner): boolean =>
   owner.active &&
   Option.isNone(owner.deletion) &&
   (owner.status === "idle" || owner.status === "recovered");
+const resetWorkspace = (owner: Owner): void => {
+  if (!available(owner)) return;
+  owner.workspaceGeneration += 1;
+  owner.inlineTransaction = Option.none();
+  notify(owner);
+};
 const submit = (owner: Owner, correction: Correction): void => {
   if (!available(owner)) return;
   owner.inlineTransaction =

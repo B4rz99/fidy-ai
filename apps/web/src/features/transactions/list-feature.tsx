@@ -336,6 +336,7 @@ const useTransactionQueries = (
     },
     onRefresh: () => {
       if (corrections.locked) return corrections.recover();
+      corrections.resetWorkspace();
       dispatch("refresh");
       router.options.context.registry.refresh(categories);
     },
@@ -503,7 +504,7 @@ const ReadyTransactionResources = ({
     <Suspense fallback={<TransactionListView state={{ _tag: "Loading" }} />}>
       <TransactionWorkspace
         key={Option.getOrElse(locate, () => "browse")}
-        generation={corrections.workspaceGeneration + history.generation}
+        generation={corrections.workspaceGeneration}
         locate={history.location === "Located" ? locate : Option.none()}
         captureHistoryVersion={Option.some({
           month: dateFilter.month,

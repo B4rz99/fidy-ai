@@ -53,11 +53,18 @@ type Fixture = {
   delay: (value: number) => void;
   holdWrite: () => () => void;
 };
-const fixture = Effect.fnUntraced(function* () {
+const fixture = Effect.fnUntraced(function* (firstExpiry: Option.Option<number> = Option.none()) {
   vi.useFakeTimers();
   vi.setSystemTime(DateTime.toEpochMillis(DateTime.makeUnsafe("2026-10-28T00:00:00Z")));
+  const originalNow = yield* Clock.currentTimeMillis;
   const entries = new Map<string, Saved>(
-    [firstId, secondId].map((id) => [id, { item: fixtureItem(id), revision: 0, draft: undefined }])
+    [firstId, secondId].map((id) => {
+      const item = fixtureItem(id);
+      if (id === firstId && Option.isSome(firstExpiry)) {
+        item.expiresAt = DateTime.formatIso(DateTime.makeUnsafe(originalNow + firstExpiry.value));
+      }
+      return [id, { item, revision: 0, draft: undefined }];
+    })
   );
   const sent: Array<ReviewCommand> = [];
   const reads: Array<string> = [];
@@ -605,6 +612,7 @@ it.live(
 it.live("retired editor callbacks cannot edit or recover a remounted owner", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+    const initialReads = test.reads.length;
     const retired = test.view().editor(test.detail);
     test.dispose();
     test.remount();
@@ -612,7 +620,7 @@ it.live("retired editor callbacks cannot edit or recover a remounted owner", () 
     retired.recover();
     yield* advance(1000);
     expect(test.sent).toHaveLength(0);
-    expect(test.reads).toHaveLength(1);
+    expect(test.reads).toHaveLength(initialReads);
     test.view().editor(test.detail).change(edit("200"));
     yield* advance(250);
     expect(test.sent).toHaveLength(1);
@@ -622,6 +630,7 @@ it.live("retired editor callbacks cannot edit or recover a remounted owner", () 
 it.live("recovery replaces a clean item without reactivating its old editor callbacks", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+    const initialReads = test.reads.length;
     const previous = test.view().editor(test.detail);
     previous.recover();
     yield* advance(0);
@@ -629,7 +638,7 @@ it.live("recovery replaces a clean item without reactivating its old editor call
     previous.recover();
     yield* advance(1000);
     expect(test.sent).toHaveLength(0);
-    expect(test.reads).toHaveLength(2);
+    expect(test.reads).toHaveLength(initialReads + 1);
     expect(test.view().editor(test.detail).locked).toBe(false);
   })
 );
@@ -662,6 +671,7 @@ it.live(
 it.live("a recovery queued behind a save cannot read after original item expiry", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+    const initialReads = test.reads.length;
     const detail: Detail = {
       ...test.detail,
       item: {
@@ -674,7 +684,7 @@ it.live("a recovery queued behind a save cannot read after original item expiry"
     yield* advance(250);
     test.view().editor(detail).recover();
     yield* advance(1500);
-    expect(test.reads).toHaveLength(1);
+    expect(test.reads).toHaveLength(initialReads);
     expect(test.sent).toHaveLength(1);
     expect(test.view().editor(test.detail).locked).toBe(true);
   })
@@ -683,13 +693,14 @@ it.live("a recovery queued behind a save cannot read after original item expiry"
 it.live("bulk admission closes recovery before its canonical decision completes", () =>
   Effect.gen(function* () {
     const test = yield* fixture();
+    const initialReads = test.reads.length;
     const editor = test.view().editor(test.detail);
     const release = test.holdWrite();
     test.view().bulk(false, [test.detail.item]);
     yield* advance(0);
     editor.recover();
     yield* advance(0);
-    expect(test.reads).toHaveLength(1);
+    expect(test.reads).toHaveLength(initialReads);
     release();
     yield* advance(0);
     expect(test.sent.map((command) => command._tag)).toEqual(["Skip"]);
@@ -769,11 +780,8 @@ it.live("bulk drain rechecks the original expiry after another item's held save"
 
 it.live("a late bulk acknowledgment cannot publish completion or Undo after original expiry", () =>
   Effect.gen(function* () {
-    const test = yield* fixture();
-    const item = {
-      ...test.detail.item,
-      expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 100),
-    };
+    const test = yield* fixture(Option.some(100));
+    const item = test.detail.item;
     const release = test.holdWrite();
     test.view().bulk(false, [item]);
     yield* advance(200);

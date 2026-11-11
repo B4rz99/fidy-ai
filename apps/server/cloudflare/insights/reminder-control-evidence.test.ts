@@ -141,7 +141,7 @@ it.each([
             )
             .run()
         );
-        const proof = Schema.decodeSync(WhatsAppTurnAdmission)({
+        const proof = yield* Schema.decodeEffect(WhatsAppTurnAdmission)({
           userId,
           portfolioId: caller.businessPortfolioId,
           bsuid: caller.businessScopedUserId,

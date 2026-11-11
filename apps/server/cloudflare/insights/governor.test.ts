@@ -298,7 +298,7 @@ it.live(
           .bind(userId, userId)
           .run()
       );
-      const proof = Schema.decodeSync(WhatsAppTurnAdmission)({
+      const proof = yield* Schema.decodeEffect(WhatsAppTurnAdmission)({
         userId,
         portfolioId: "portfolio",
         bsuid: "CO.abcdef",
@@ -322,16 +322,14 @@ it.live(
           .bind(userId)
           .run()
       );
+      const encodedProof = yield* Schema.encodeEffect(WhatsAppTurnAdmission)(proof);
+      const currentProof = yield* Schema.decodeEffect(WhatsAppTurnAdmission)({
+        ...encodedProof,
+        messageId: "current-reply",
+        replyToMessageId: "old-provider",
+      });
       yield* Effect.tryPromise(() =>
-        prepareWeeklyGovernorReply({
-          db,
-          userId,
-          proof: Schema.decodeSync(WhatsAppTurnAdmission)({
-            ...Schema.encodeSync(WhatsAppTurnAdmission)(proof),
-            messageId: "current-reply",
-            replyToMessageId: "old-provider",
-          }),
-        }).run()
+        prepareWeeklyGovernorReply({ db, userId, proof: currentProof }).run()
       );
       expect(Option.getOrThrow(yield* findWeeklyGovernor({ db, userId }))).toEqual({
         _tag: "Attentive",

@@ -8,9 +8,15 @@ import {
   Option,
   Predicate,
   Semaphore,
+  Schema,
 } from "effect";
 import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
-import type { CanonicalSuccess, FidyClient } from "@/transport/client";
+import {
+  ReviewCommand,
+  ReviewDraft,
+  type CanonicalSuccess,
+  type FidyClient,
+} from "@/transport/client";
 import { type Command, type Detail, type Draft, type Item, creation, emptyDraft } from "./model";
 
 type Feedback = "saved" | "saving" | "unsaved" | "failed" | "uncertain";
@@ -298,7 +304,7 @@ const flush = (owner: Owner, entry: Entry, automatic = false): Work =>
         );
         if (!current(owner, entry)) return;
         if (result._tag === "Failure") reject(entry, result.cause);
-        else acceptDraft(entry, result.value);
+        else acceptDraft(entry, result.value, draft);
         notify(owner);
         if (result._tag === "Success") {
           yield* invalidateItems({ ids: [entry.detail.item.id], countsChanged: false });
@@ -307,10 +313,16 @@ const flush = (owner: Owner, entry: Entry, automatic = false): Work =>
       }
     })
   );
-const acceptDraft = (entry: Entry, items: ReadonlyArray<Detail>): void => {
-  const latest = items.find((detail) => detail.item.id === entry.detail.item.id);
-  if (latest === undefined) {
+const sameDraft = Schema.toEquivalence(ReviewDraft);
+const acceptDraft = (entry: Entry, items: ReadonlyArray<Detail>, draft: Draft): void => {
+  const latest = items[0];
+  if (
+    latest === undefined ||
+    !acceptedResults(items, [entry.detail.item], "pending") ||
+    !Option.exists(latest.draft, (saved) => sameDraft(saved, draft))
+  ) {
     entry.feedback = "uncertain";
+    entry.wanted = Option.none();
     return;
   }
   entry.detail = latest;
@@ -351,7 +363,13 @@ const decide = (owner: Owner, detail: Detail, kind: "Create" | "Skip"): void => 
       if (result._tag === "Failure") {
         reject(entry, result.cause);
         finishActing(owner, entry);
-      } else if (!sameItems(result.value, [detail.item])) {
+      } else if (
+        !acceptedResults(
+          result.value,
+          [{ ...detail.item, revision: entry.detail.revision }],
+          kind === "Create" ? "created" : "skipped"
+        )
+      ) {
         entry.feedback = "uncertain";
         finishActing(owner, entry);
       } else {
@@ -387,7 +405,17 @@ const bulk = (owner: Owner, restore: boolean, items: ReadonlyArray<Item>): void 
       );
       if (!liveGeneration(owner, generation)) return;
       if (result._tag === "Failure") return failBulk(owner);
-      if (!sameItems(result.value, items)) return failBulk(owner);
+      if (
+        !acceptedResults(
+          result.value,
+          items.map((item, index) => ({
+            ...item,
+            revision: ready.value[index]?.revision ?? item.revision,
+          })),
+          restore ? "pending" : "skipped"
+        )
+      )
+        return failBulk(owner);
       owner.phase = "idle";
       complete(owner, result.value, !restore);
       yield* invalidateItems({ ids: items.map((item) => item.id), countsChanged: true });
@@ -474,10 +502,26 @@ const recoverWorkspace = (owner: Owner): void => {
 
 const liveGeneration = (owner: Owner, generation: number): boolean =>
   owner.active && owner.generation === generation;
-const sameItems = (results: ReadonlyArray<Detail>, items: ReadonlyArray<Item>): boolean => {
-  const expected = new Set(items.map((item) => item.id));
+const acceptedResults = (
+  results: ReadonlyArray<Detail>,
+  items: ReadonlyArray<Item>,
+  status: Item["status"]
+): boolean => {
+  const expected = new Map(items.map((item) => [item.id, item]));
   return (
-    results.length === expected.size && results.every((detail) => expected.delete(detail.item.id))
+    expected.size === items.length &&
+    results.length === items.length &&
+    results.every((detail) => {
+      const item = expected.get(detail.item.id);
+      if (item === undefined) return false;
+      expected.delete(detail.item.id);
+      return (
+        detail.item.status === status &&
+        detail.revision === item.revision + 1 &&
+        detail.item.revision === detail.revision &&
+        DateTime.toEpochMillis(detail.item.expiresAt) === DateTime.toEpochMillis(item.expiresAt)
+      );
+    })
   );
 };
 

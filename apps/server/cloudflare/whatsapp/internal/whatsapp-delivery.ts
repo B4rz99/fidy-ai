@@ -39,9 +39,27 @@ const Proposal = Schema.Struct({
 
 type AuthenticatedHostedStatus = Pick<
   WhatsAppHostedLifecycleEvidence,
-  "correlationToken" | "messageEvidence" | "businessPhoneNumberId" | "occurredAt"
+  | "correlationToken"
+  | "messageEvidence"
+  | "businessPhoneNumberId"
+  | "occurredAt"
+  | "recipientUserId"
+  | "recipientPhone"
 > &
   Readonly<{ outcome: "sent" | "delivered" | "failed" }>;
+
+const hostedRecipientGuard = `AND EXISTS (SELECT 1 FROM hosted_turns AS recipient
+  WHERE recipient.id = hosted_whatsapp_delivery.turn_id AND recipient.user_id = hosted_whatsapp_delivery.user_id
+    AND ((recipient.inbound_sandbox_phone IS NULL AND recipient.inbound_bsuid = ?)
+      OR (recipient.inbound_sandbox_phone IS NOT NULL AND recipient.inbound_sandbox_phone = ?))
+    AND (? IS NULL OR recipient.inbound_bsuid = ?))`;
+
+const recipientParams = (evidence: AuthenticatedHostedStatus): ReadonlyArray<unknown> => [
+  Option.getOrNull(evidence.recipientUserId),
+  Option.getOrNull(evidence.recipientPhone),
+  Option.getOrNull(evidence.recipientUserId),
+  Option.getOrNull(evidence.recipientUserId),
+];
 
 /** Reserve before any network call; the unique Turn row prevents a second visible send. */
 export const stageWhatsAppDelivery = ({
@@ -214,7 +232,7 @@ const prepareStatusEvidence = ({
       (kind,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms)
       SELECT 'delivery-status',?,?,?,?,? WHERE EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery
         WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
-          AND (provider_message_id IS NULL OR provider_message_id = ?))`)
+          AND (provider_message_id IS NULL OR provider_message_id = ?) ${hostedRecipientGuard})`)
     .bind(
       token,
       id,
@@ -224,7 +242,8 @@ const prepareStatusEvidence = ({
       userId,
       token,
       phoneId,
-      id
+      id,
+      ...recipientParams(evidence)
     );
 };
 
@@ -254,7 +273,7 @@ const retainWhatsAppStatus = ({
         THEN ? ELSE delivered_at_ms END
       WHERE kind='hosted' AND user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
         AND state IN ('sending','accepted','ambiguous') AND send_started_at_ms IS NOT NULL
-        AND (provider_message_id IS NULL OR provider_message_id = ?)`)
+        AND (provider_message_id IS NULL OR provider_message_id = ?) ${hostedRecipientGuard}`)
         .bind(
           id,
           status,
@@ -268,7 +287,8 @@ const retainWhatsAppStatus = ({
           userId,
           token,
           phoneId,
-          id
+          id,
+          ...recipientParams(evidence)
         ),
     ])
   ).pipe(Effect.asVoid);
@@ -298,8 +318,8 @@ export const recordWhatsAppStatus = ({
       db
         .prepare(`SELECT turn_id, user_id, text, state, provider_message_id
         FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
-          AND (provider_message_id IS NULL OR provider_message_id = ?)`)
-        .bind(userId, token, phoneId, id)
+          AND (provider_message_id IS NULL OR provider_message_id = ?) ${hostedRecipientGuard}`)
+        .bind(userId, token, phoneId, id, ...recipientParams(evidence))
         .first()
     );
     if (existing === null) return Option.none();
@@ -309,8 +329,8 @@ export const recordWhatsAppStatus = ({
       db
         .prepare(`SELECT turn_id, user_id, text, state, provider_message_id
         FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
-          AND (provider_message_id IS NULL OR provider_message_id = ?)`)
-        .bind(userId, token, phoneId, id)
+          AND (provider_message_id IS NULL OR provider_message_id = ?) ${hostedRecipientGuard}`)
+        .bind(userId, token, phoneId, id, ...recipientParams(evidence))
         .first()
     );
     if (updated === null) return Option.none();
@@ -325,6 +345,8 @@ export const recordWhatsAppStatus = ({
   });
 
 const admittedStatusEvidence = (admission: WhatsAppStatusAdmission): AuthenticatedHostedStatus => ({
+  recipientUserId: Option.fromUndefinedOr(admission.recipientUserId),
+  recipientPhone: Option.fromUndefinedOr(admission.recipientPhone),
   correlationToken: admission.correlationToken,
   businessPhoneNumberId: admission.businessPhoneNumberId,
   messageEvidence: {
@@ -397,7 +419,7 @@ export const reconcileWhatsAppStatus = ({
     };
   });
 
-const readHostedRecipient = ({
+const findHostedRecipient = ({
   db,
   userId,
   turnId,
@@ -410,6 +432,7 @@ const readHostedRecipient = ({
   Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
+    const turns = hostedChannelTurnQuery(userId);
     const rawRecipient = yield* Effect.tryPromise(() =>
       prepareWhatsAppIdentity({
         db,
@@ -418,11 +441,13 @@ const readHostedRecipient = ({
           sql: `SELECT t.inbound_portfolio_id AS portfolioId, t.inbound_bsuid AS bsuid,
         t.inbound_business_phone_number_id AS businessPhoneNumberId,
         t.inbound_sandbox_phone AS sandboxPhone, t.inbound_reply_to_message_id AS replyToMessageId
-        FROM hosted_turns AS t JOIN identity_associations AS identity ON identity.userId = t.user_id
+        FROM hosted_turns AS t JOIN (${turns.sql}) AS turn
+          ON turn.id = t.id AND turn.user_id = t.user_id
+        JOIN identity_associations AS identity ON identity.userId = t.user_id
           AND identity.businessPortfolioId = t.inbound_portfolio_id
           AND identity.businessScopedUserId = t.inbound_bsuid
-        WHERE t.id = ? AND t.user_id = ? AND t.status = 'pending' AND t.inbound_message_id IS NOT NULL`,
-          params: [turnId, userId],
+        WHERE t.id = ? AND t.user_id = ? AND turn.status = 'pending' AND t.inbound_message_id IS NOT NULL`,
+          params: [...turns.params, turnId, userId],
         },
       }).first()
     );
@@ -473,7 +498,7 @@ export const submitHostedReply = <E>({
   Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
-    const recipient = yield* readHostedRecipient({ db, userId, turnId });
+    const recipient = yield* findHostedRecipient({ db, userId, turnId });
     if (Option.isNone(recipient)) return { _tag: "Refused" as const };
     const proposedAt = yield* Clock.currentTimeMillis;
     if (!(yield* isWhatsAppWindowOpen({ db, userId, turnId, now: proposedAt }))) {
@@ -481,7 +506,6 @@ export const submitHostedReply = <E>({
     }
     const token = yield* stageWhatsAppDelivery({ db, userId, turnId, text, now: proposedAt });
     if (Option.isNone(token)) return { _tag: "NotSubmitted" as const };
-    // Scheduling precedes the claim, using the original retained proposal deadline.
     yield* Effect.tryPromise(() => scheduleRecovery(proposedAt + deliveryAcknowledgmentWindowMs));
     const started = yield* startWhatsAppSend({
       db,

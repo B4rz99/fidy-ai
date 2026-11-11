@@ -339,8 +339,10 @@ verified visible-delivery evidence permits completion. WhatsApp publishes channe
 owns the resulting Turn and Transcript transition. Hosted reply submission reloads the retained
 same-User route, stages exact text and correlation, schedules the original proposal deadline, and
 claims once under a fresh clock, current association/business endpoint and verified service window
-before calling the sender. Provider acceptance remains pending delivery; authenticated receipts
-cannot revive a rejected or unconfirmed hosted reply. Proactive templates and voice refusals retain
+before calling the sender. Provider acceptance remains pending delivery. Hosted receipts must prove
+the retained recipient BSUID or sandbox phone from raw provider status history before binding a
+message identifier or settling; missing or mismatched recipient evidence grants no delivery.
+Authenticated receipts cannot revive a rejected or unconfirmed hosted reply. Proactive templates and voice refusals retain
 their separate admission, expiry and recovery protocols. Alarms and independent maintenance recover
 abandoned work without granting new execution authority.
 Verified WhatsApp Turns discover every installed canonical operation permitted by the catalog access

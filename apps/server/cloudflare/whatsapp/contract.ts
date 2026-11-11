@@ -175,6 +175,8 @@ export const WhatsAppInboundAdmission = Schema.Union([
 
 /** Internal, authenticated Core-to-User-coordinator status projection; no text or bearer. */
 export const WhatsAppStatusAdmission = Schema.Struct({
+  recipientUserId: Schema.optionalKey(WhatsAppBusinessScopedUserId),
+  recipientPhone: Schema.optionalKey(E164PhoneNumber),
   userId: UserId,
   correlationToken: HostedDeliveryCorrelationToken,
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,

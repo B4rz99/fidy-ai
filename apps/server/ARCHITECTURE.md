@@ -336,7 +336,12 @@ records retained interactions, and CompactedConversation is lossy session contin
 
 An accepted User entry and Pending Turn commit together. A generated reply is a proposal until
 verified visible-delivery evidence permits completion. WhatsApp publishes channel evidence; Agent
-owns the resulting Turn and Transcript transition. Alarms and independent maintenance recover
+owns the resulting Turn and Transcript transition. Hosted reply submission reloads the retained
+same-User route, stages exact text and correlation, schedules the original proposal deadline, and
+claims once under a fresh clock, current association/business endpoint and verified service window
+before calling the sender. Provider acceptance remains pending delivery; authenticated receipts
+cannot revive a rejected or unconfirmed hosted reply. Proactive templates and voice refusals retain
+their separate admission, expiry and recovery protocols. Alarms and independent maintenance recover
 abandoned work without granting new execution authority.
 Verified WhatsApp Turns discover every installed canonical operation permitted by the catalog access
 policy. Query and mutation adapters reuse their canonical owners under live held Turn authority,

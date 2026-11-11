@@ -120,7 +120,7 @@ const reviewRoute = (route: Route): Promise<void> => {
   if (path.endsWith("/edits")) {
     const input = Schema.decodeUnknownSync(
       Schema.Struct({
-        revision: Schema.Number,
+        revision: Schema.Int,
         draft: Schema.optionalKey(Schema.Unknown),
       })
     )(route.request().postDataJSON());

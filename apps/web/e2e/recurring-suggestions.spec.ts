@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import type { Page, Route, TestInfo } from "@playwright/test";
 import { Effect } from "effect";
 import { analyzeAccessibility } from "./accessibility";
@@ -114,9 +115,12 @@ const capturePresentation = Effect.fnUntraced(function* (
   const audit = yield* Effect.tryPromise(() => analyzeAccessibility(page));
   expect(audit.violations).toEqual([]);
   yield* Effect.tryPromise(() =>
-    page.screenshot({
-      path: testInfo.outputPath(`patterns-${display.theme}-${display.width}.png`),
-      fullPage: true,
+    captureVisualEvidence({
+      target: page,
+      options: {
+        path: testInfo.outputPath(`patterns-${display.theme}-${display.width}.png`),
+        fullPage: true,
+      },
     })
   );
 });
@@ -136,7 +140,13 @@ const inspectPresentation = Effect.fnUntraced(function* (page: Page, testInfo: T
   );
   expect(overflow).toBe(false);
   yield* Effect.tryPromise(() =>
-    page.screenshot({ path: testInfo.outputPath("patterns-enlarged-text.png"), fullPage: true })
+    captureVisualEvidence({
+      target: page,
+      options: {
+        path: testInfo.outputPath("patterns-enlarged-text.png"),
+        fullPage: true,
+      },
+    })
   );
 });
 

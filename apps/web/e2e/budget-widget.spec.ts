@@ -74,7 +74,9 @@ const acquireFixture = (
   );
 
 const captureBudgetPreview = (page: Page, name: string): Promise<void> =>
-  page.screenshot().then((body) => test.info().attach(name, { body, contentType: "image/png" }));
+  Bun.env.BROWSER_VISUAL_EVIDENCE === "true"
+    ? page.screenshot().then((body) => test.info().attach(name, { body, contentType: "image/png" }))
+    : Promise.resolve();
 
 const verifyCapChanges = (page: Page, budgetId: string): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {

@@ -1,3 +1,4 @@
+import { captureVisualEvidence } from "./visual-evidence";
 import type { Page, Route } from "@playwright/test";
 import { type Cause, DateTime, Effect, Option } from "effect";
 import { apiOrigin, installCategories, installUser, response } from "./http-fixtures";
@@ -165,9 +166,12 @@ test("reviews both originals, cancels without writing, and unlinks before a sepa
         expect(page.getByText("Correo de notificación", { exact: true })).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
-        page.screenshot({
-          path: test.info().outputPath("reconciliation-mobile.png"),
-          fullPage: true,
+        captureVisualEvidence({
+          target: page,
+          options: {
+            path: test.info().outputPath("reconciliation-mobile.png"),
+            fullPage: true,
+          },
         })
       );
       yield* Effect.tryPromise(() =>
@@ -289,9 +293,12 @@ test("pending unlink locks dismissal and selection, then refreshes both original
         page.getByRole("button", { name: "Ver vínculo", exact: true }).click()
       );
       yield* Effect.tryPromise(() =>
-        page.screenshot({
-          path: test.info().outputPath("reconciliation-grafito.png"),
-          fullPage: true,
+        captureVisualEvidence({
+          target: page,
+          options: {
+            path: test.info().outputPath("reconciliation-grafito.png"),
+            fullPage: true,
+          },
         })
       );
       yield* Effect.tryPromise(() =>

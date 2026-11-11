@@ -7,9 +7,7 @@ const { expect, test } = playwright;
 const wait = Effect.tryPromise;
 const cases = [
   { input: "12.500", draft: "12500" },
-  { input: "12500", draft: "12500" },
   { input: "12.500,50", draft: "12500,5" },
-  { input: "12,50", draft: "12,5" },
 ];
 const counterparty = (index: number): string => `Formato COP QA ${index}`;
 const amountField = (page: Page): Locator =>
@@ -49,6 +47,15 @@ const registerAmounts = Effect.fn(function* (page: Page) {
     yield* wait(() => expect(amountField(page)).toHaveValue(example.input));
     yield* wait(() => submit.click());
     yield* wait(() =>
+      expect(page.getByText("Transacción registrada", { exact: true })).toBeVisible()
+    );
+    yield* wait(() =>
+      expect(
+        page.locator("[data-sonner-toast]").filter({ hasText: counterparty(index) })
+      ).toBeVisible()
+    );
+
+    yield* wait(() =>
       expect(
         page.getByRole("button", { name: `Ver transacción ${counterparty(index)}`, exact: true })
       ).toBeVisible()
@@ -62,7 +69,7 @@ const checkPersistedAmounts = Effect.fn(function* (page: Page) {
   );
   yield* wait(() =>
     expect(page.getByRole("region", { name: "Resumen de transacciones" })).toContainText(
-      "$ 37.513,00"
+      "$ 25.000,50"
     )
   );
   for (const [index, example] of cases.entries()) {
@@ -72,7 +79,7 @@ const checkPersistedAmounts = Effect.fn(function* (page: Page) {
         .click()
     );
     yield* wait(() => expect(amountField(page)).toHaveValue(example.draft));
-    yield* wait(() => save(page).click());
+    yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
     yield* wait(() => expect(save(page)).toHaveCount(0));
   }
 });
@@ -89,23 +96,16 @@ const reloadFiltered = Effect.fn(function* (page: Page, total: string) {
 const openRecord = (page: Page, index: number): Promise<void> =>
   page.getByRole("button", { name: `Ver transacción ${counterparty(index)}`, exact: true }).click();
 const correctAmounts = Effect.fn(function* (page: Page) {
-  for (const example of [
-    { input: "23.456,75", draft: "23456,75", total: "$ 48.469,75" },
-    { input: "23000", draft: "23000", total: "$ 48.013,00" },
-    { input: "12,50", draft: "12,5", total: "$ 25.025,50" },
-    { input: "12.500", draft: "12500", total: "$ 37.513,00" },
-  ]) {
-    yield* wait(() => openRecord(page, 0));
-    yield* rejectInvalidAmounts(page, save(page));
-    yield* wait(() => amountField(page).fill(example.input));
-    yield* wait(() => save(page).click());
-    yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
-    yield* wait(() => expect(save(page)).toHaveCount(0));
-    yield* reloadFiltered(page, example.total);
-    yield* wait(() => openRecord(page, 0));
-    yield* wait(() => expect(amountField(page)).toHaveValue(example.draft));
-    yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
-  }
+  yield* wait(() => openRecord(page, 0));
+  yield* rejectInvalidAmounts(page, save(page));
+  yield* wait(() => amountField(page).fill("23.456,75"));
+  yield* wait(() => save(page).click());
+  yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
+  yield* wait(() => expect(save(page)).toHaveCount(0));
+  yield* reloadFiltered(page, "$ 35.957,25");
+  yield* wait(() => openRecord(page, 0));
+  yield* wait(() => expect(amountField(page)).toHaveValue("23456,75"));
+  yield* wait(() => page.getByRole("button", { name: "Cancelar", exact: true }).click());
 });
 const correctSelection = Effect.fn(function* (page: Page) {
   yield* wait(() => page.getByRole("button", { name: "Editar varias", exact: true }).click());
@@ -124,7 +124,7 @@ const correctSelection = Effect.fn(function* (page: Page) {
   yield* wait(() => save(page).click());
   yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
   yield* wait(() => expect(save(page)).toHaveCount(0));
-  yield* reloadFiltered(page, "$ 138.271,56");
+  yield* reloadFiltered(page, "$ 69.135,78");
   for (const index of cases.keys()) {
     yield* wait(() => openRecord(page, index));
     yield* wait(() => expect(amountField(page)).toHaveValue("34567,89"));

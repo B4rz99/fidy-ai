@@ -1,7 +1,8 @@
+import assert from "node:assert/strict";
 import { TranscriptText } from "../../src/core/agent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Cause, Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
   activateTestReminder,
   observeTestHostedContext,
@@ -626,10 +627,10 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
   ));
 
 it.each([
-  { name: "removed", days: 0, queries: 1, outcome: { _tag: "Done" } },
-  { name: "terminal", days: 0, queries: 1, outcome: { _tag: "Done" } },
-  { name: "missing", days: 0, queries: 1, outcome: new InsightUnavailable() },
-  { name: "expired", days: 2, queries: 2, outcome: { _tag: "Done" } },
+  { name: "removed", days: 0, queries: 1, outcome: Exit.succeed({ _tag: "Done" }) },
+  { name: "terminal", days: 0, queries: 1, outcome: Exit.succeed({ _tag: "Done" }) },
+  { name: "missing", days: 0, queries: 1, outcome: Exit.fail(new InsightUnavailable()) },
+  { name: "expired", days: 2, queries: 2, outcome: Exit.succeed({ _tag: "Done" }) },
 ])("$name queued content never reopens personal reports or recipients", (scenario) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -675,11 +676,15 @@ it.each([
           userId,
           id: scenario.name === "missing" ? newId() : generated.id,
         },
-      }).pipe(
-        Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
-        Effect.match({ onFailure: (error) => error, onSuccess: (value) => value })
-      );
-      expect(result).toEqual(scenario.outcome);
+      }).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch), Effect.exit);
+      const expected = Exit.match(scenario.outcome, {
+        onFailure: (cause) =>
+          Exit.failCause(
+            Cause.annotate(cause, Cause.annotations(Option.getOrThrow(Exit.getCause(result))))
+          ),
+        onSuccess: Exit.succeed,
+      });
+      assert.deepStrictEqual(result, expected);
       expect(provider).not.toHaveBeenCalled();
       expect(reads.mock.calls).toHaveLength(scenario.queries);
       expect(reads.mock.calls[0]?.[0]).toContain("FROM proactivity_delivery_metadata");

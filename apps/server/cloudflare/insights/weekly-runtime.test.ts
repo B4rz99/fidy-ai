@@ -1,5 +1,6 @@
+import assert from "node:assert/strict";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { InsightEventId } from "../../src/core/insights/contract";
 import { categoryIds } from "../../src/core/categories/contract";
 import {
@@ -23,8 +24,10 @@ import {
   weeklySummaryTestUser,
   withdrawWeeklyFixtureConsent,
 } from "../weekly-summary.test-fixture";
-import { ProactivityActivity, type ProactivityEnvironment } from "./contract";
-import { findWeeklyGovernor, findWeeklySchedule } from "./operations";
+import { InsightUnavailable, ProactivityActivity, type ProactivityEnvironment } from "./contract";
+import { findWeeklyGovernor, findWeeklySchedule, requestWeeklySummaryConsent } from "./operations";
+import { FetchHttpClient } from "effect/http";
+import { executeProactivityWork } from "./runtime";
 import { admitWeeklyResource } from "./internal/weekly-admission";
 
 const userId = weeklySummaryTestUser;
@@ -225,12 +228,13 @@ it.each(["reassociation", "withdrawal", "summary-withdrawal", "expiry", "withdra
         const response = yield* testPromise(() =>
           activity(coordinator, { kind: "weekly-question", version: 1, userId, id: insightEventId })
         );
-        expect(response.status).toBe(200);
+        const expectedStatus = change === "summary-withdrawal" ? 503 : 200;
+        expect(response.status).toBe(expectedStatus);
         expect(fetch).toHaveBeenCalledTimes(change === "withdrawal" ? 2 : 1);
         const replay = yield* testPromise(() =>
           activity(coordinator, { kind: "weekly-question", version: 1, userId, id: insightEventId })
         );
-        expect(replay.status).toBe(200);
+        expect(replay.status).toBe(expectedStatus);
         expect(fetch).toHaveBeenCalledTimes(change === "withdrawal" ? 2 : 1);
       })
     )
@@ -575,3 +579,73 @@ it("missing configuration, invalid knobs and foreign coordinator identities fail
       ).toEqual({ count: 0 });
     })
   ));
+
+it.each([
+  { name: "missing", days: 0, queries: 1, outcome: Exit.fail(new InsightUnavailable()) },
+  { name: "terminal", days: 0, queries: 1, outcome: Exit.succeed({ _tag: "Done" }) },
+  { name: "expired", days: 2, queries: 2, outcome: Exit.succeed({ _tag: "Done" }) },
+])("$name weekly question checks metadata before personal access", (scenario) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, at } = yield* testPromise(seed);
+      yield* requestWeeklySummaryConsent({
+        db,
+        userId,
+        caller: weeklySummaryTestCaller,
+        messageId: "metadata-request",
+        now: at,
+      });
+      const request = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(
+        yield* testPromise(() =>
+          db
+            .prepare(
+              "SELECT id FROM weekly_question_requests WHERE user_id=? AND request_message_id='metadata-request'"
+            )
+            .bind(userId)
+            .first()
+        )
+      );
+      if (scenario.name === "terminal") {
+        yield* testPromise(() =>
+          db
+            .prepare("UPDATE weekly_question_requests SET state='settled' WHERE user_id=? AND id=?")
+            .bind(userId, request.id)
+            .run()
+        );
+      }
+      const queries = vi.fn((sql: string) => db.prepare(sql));
+      const observedDb = new Proxy(db, {
+        get(target, key, receiver): unknown {
+          return key === "prepare" ? queries : Reflect.get(target, key, receiver);
+        },
+      });
+      const provider = fakeProvider();
+      vi.stubGlobal("fetch", provider);
+      const result = yield* executeProactivityWork({
+        environment: configuration(observedDb),
+        userId,
+        now: DateTime.add(at, { days: scenario.days }),
+        work: {
+          kind: "weekly-question",
+          version: 1,
+          userId,
+          id: scenario.name === "missing" ? "85000000-0000-4000-8000-000000000099" : request.id,
+        },
+      }).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch), Effect.exit);
+      const expected = Exit.match(scenario.outcome, {
+        onFailure: (cause) =>
+          Exit.failCause(
+            Cause.annotate(cause, Cause.annotations(Option.getOrThrow(Exit.getCause(result))))
+          ),
+        onSuccess: Exit.succeed,
+      });
+      assert.deepStrictEqual(result, expected);
+      expect(provider).not.toHaveBeenCalled();
+      expect(queries.mock.calls).toHaveLength(scenario.queries);
+      expect(queries.mock.calls[0]?.[0]).toContain("FROM proactivity_delivery_metadata");
+      if (scenario.name === "expired") {
+        expect(queries.mock.calls[1]?.[0]).toMatch(/^UPDATE weekly_question_requests/u);
+      }
+    })
+  )
+);

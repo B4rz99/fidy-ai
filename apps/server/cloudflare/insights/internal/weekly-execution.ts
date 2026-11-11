@@ -227,14 +227,12 @@ const deliverQuestion = (
 ): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     const { db, userId, work, now, senders } = input;
+    if (!(yield* continueQueuedDelivery({ db, userId, work, now: now.epochMilliseconds }))) {
+      return { _tag: "Done" } as const;
+    }
     const origin = yield* findQuestionOrigin({ db, work });
     if (Option.isNone(origin)) {
       return yield* finishQuestion({ db, work, state: "refused" });
-    }
-    if (
-      DateTime.add(origin.value.createdAt, { days: 1 }).epochMilliseconds <= now.epochMilliseconds
-    ) {
-      return yield* finishQuestion({ db, work, state: "expired" });
     }
     const queued = queuedDeliveryQuery({ userId, work, now: now.epochMilliseconds });
     const recipient = yield* findQueuedInsightRecipient({ db, userId, queued });

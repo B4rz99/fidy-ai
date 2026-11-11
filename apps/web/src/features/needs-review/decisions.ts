@@ -272,13 +272,21 @@ const expireEntry = (owner: Owner, entry: Entry): Work =>
     owner.undo = owner.undo.filter((detail) => detail.item.id !== entry.detail.item.id);
     notify(owner);
   }).pipe(Effect.raceFirst(Deferred.await(entry.retired)));
+const originalItem = (owner: Owner, item: Item): Item => ({
+  ...item,
+  expiresAt: owner.expiries.get(item.id) ?? item.expiresAt,
+});
+const retainExpiry = (owner: Owner, item: Item): Item => {
+  const original = originalItem(owner, item);
+  owner.expiries.set(item.id, original.expiresAt);
+  return original;
+};
 const originalExpiry = (owner: Owner, detail: Detail): Detail => ({
   ...detail,
-  item: { ...detail.item, expiresAt: owner.expiries.get(detail.item.id) ?? detail.item.expiresAt },
+  item: originalItem(owner, detail.item),
 });
 const replaceEntry = (owner: Owner, entry: Entry): void => {
-  entry.detail = originalExpiry(owner, entry.detail);
-  owner.expiries.set(entry.detail.item.id, entry.detail.item.expiresAt);
+  entry.detail = { ...entry.detail, item: retainExpiry(owner, entry.detail.item) };
   const previous = owner.entries.get(entry.detail.item.id);
   if (previous !== undefined) Deferred.doneUnsafe(previous.retired, Effect.void);
   owner.entries.set(entry.detail.item.id, entry);
@@ -328,15 +336,12 @@ const write = Effect.fnUntraced(function* (owner: Owner, command: Command) {
       return (yield* client.ingestion.applyReviewEdit({ payload: command })).data;
   }
 });
-const automaticReady = (owner: Owner, entry: Entry, version: number): boolean =>
-  version === entry.version &&
-  !entry.acting &&
-  owner.phase === "idle" &&
-  now() >= entry.nextAutosaveAt;
+const automaticReady = (entry: Entry, version: number): boolean =>
+  version === entry.version && !entry.acting && now() >= entry.nextAutosaveAt;
 const flush = (owner: Owner, entry: Entry, automatic = Option.none<number>()): Work =>
   entry.permit.withPermit(
     Effect.suspend(() =>
-      Option.exists(automatic, (version) => !automaticReady(owner, entry, version))
+      Option.exists(automatic, (version) => !automaticReady(entry, version))
         ? Effect.void
         : Effect.gen(function* () {
             while (current(owner, entry) && !blocked(entry) && Option.isSome(entry.wanted)) {
@@ -427,15 +432,16 @@ const finishActing = (owner: Owner, entry: Entry): void => {
 };
 const bulk = (owner: Owner, restore: boolean, items: ReadonlyArray<Item>): void => {
   if (!owner.active || owner.phase !== "idle" || items.length === 0) return;
+  const selected = items.map((item) => retainExpiry(owner, item));
   owner.phase = "writing";
   const generation = owner.generation;
   notify(owner);
   run(
     owner,
     Effect.gen(function* () {
-      const saved = yield* Effect.forEach(items, (item) => flushItem(owner, item));
+      const saved = yield* Effect.forEach(selected, (item) => flushItem(owner, item));
       if (!liveGeneration(owner, generation)) return;
-      const ready = Option.filter(Option.all(saved), () => !items.some(itemExpired));
+      const ready = Option.filter(Option.all(saved), () => !selected.some(itemExpired));
       if (Option.isNone(ready)) return failBulk(owner);
       const first = ready.value[0];
       if (first === undefined) return failBulk(owner);
@@ -447,13 +453,15 @@ const bulk = (owner: Owner, restore: boolean, items: ReadonlyArray<Item>): void 
       );
       if (!liveGeneration(owner, generation)) return;
       if (result._tag === "Failure") return failBulk(owner);
-      if (!sameItems(result.value, items)) return failBulk(owner);
+      if (!currentItems(result.value, selected)) return failBulk(owner);
       owner.phase = "idle";
       complete(owner, result.value, !restore);
-      yield* invalidateItems({ ids: items.map((item) => item.id), countsChanged: true });
+      yield* invalidateItems({ ids: selected.map((item) => item.id), countsChanged: true });
     })
   );
 };
+const currentItems = (results: ReadonlyArray<Detail>, items: ReadonlyArray<Item>): boolean =>
+  !items.some(itemExpired) && sameItems(results, items);
 const flushItem = (
   owner: Owner,
   item: Item
@@ -463,7 +471,7 @@ const flushItem = (
   Reactivity.Reactivity
 > =>
   Effect.gen(function* () {
-    if (now() >= DateTime.toEpochMillis(item.expiresAt)) return Option.none();
+    if (itemExpired(originalItem(owner, item))) return Option.none();
     const entry = owner.entries.get(item.id);
     if (entry === undefined) return Option.some({ id: item.id, revision: item.revision });
     if (entry.acting) return Option.none();

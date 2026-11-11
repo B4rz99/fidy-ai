@@ -696,3 +696,91 @@ it.live("bulk admission closes recovery before its canonical decision completes"
     expect(test.view().locked).toBe(false);
   })
 );
+
+it.live("bulk Skip cannot revive a recovered item after its original expiry", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const detail: Detail = {
+      ...test.detail,
+      item: {
+        ...test.detail.item,
+        expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 1000),
+      },
+    };
+    test.view().editor(detail).recover();
+    yield* advance(1100);
+    test.view().bulk(false, [test.detail.item]);
+    yield* advance(0);
+    expect(test.sent).toHaveLength(0);
+    expect(Option.isNone(test.view().completed)).toBe(true);
+  })
+);
+
+it.live("an unrelated held bulk decision does not consume another item's autosave timer", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const other = {
+      ...test.detail.item,
+      id: yield* Schema.decodeEffect(ReviewCommand.members[0].fields.id)(secondId),
+    };
+    test.view().editor(test.detail).change(edit("100"));
+    const release = test.holdWrite();
+    test.view().bulk(false, [other]);
+    yield* advance(500);
+    release();
+    yield* advance(2000);
+    expect(test.sent.map((command) => command._tag)).toEqual(["Skip", "SaveDraft"]);
+    expect(test.view().editor(test.detail)).toMatchObject({
+      feedback: "saved",
+      draft: { amount: "100" },
+    });
+  })
+);
+
+it.live("bulk drain rechecks the original expiry after another item's held save", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const detail: Detail = {
+      ...test.detail,
+      item: {
+        ...test.detail.item,
+        expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 100),
+      },
+    };
+    test.view().editor(detail).recover();
+    yield* advance(0);
+    const other: Detail = {
+      ...test.detail,
+      item: {
+        ...test.detail.item,
+        id: yield* Schema.decodeEffect(ReviewCommand.members[0].fields.id)(secondId),
+      },
+    };
+    const release = test.holdWrite();
+    test.view().editor(other).change(edit("200"));
+    test.view().bulk(false, [test.detail.item, other.item]);
+    yield* advance(200);
+    release();
+    yield* advance(0);
+    expect(test.sent.map((command) => command._tag)).toEqual(["SaveDraft"]);
+    expect(Option.isNone(test.view().completed)).toBe(true);
+  })
+);
+
+it.live("a late bulk acknowledgment cannot publish completion or Undo after original expiry", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture();
+    const item = {
+      ...test.detail.item,
+      expiresAt: DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 100),
+    };
+    const release = test.holdWrite();
+    test.view().bulk(false, [item]);
+    yield* advance(200);
+    release();
+    yield* advance(0);
+    expect(test.sent.map((command) => command._tag)).toEqual(["Skip"]);
+    expect(Option.isNone(test.view().completed)).toBe(true);
+    expect(test.view().undoCount).toBe(0);
+  })
+);

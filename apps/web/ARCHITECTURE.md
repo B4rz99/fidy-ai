@@ -264,9 +264,12 @@ panel disposal or authentication teardown cancels unsent work, and evidence expi
 for that item. Already-sent mutations may commit; reopening reads canonical state. The generated
 client retains authorization, transport policy and telemetry ownership.
 Automatic draft saves retain the 200 ms debounce and one-second send spacing. A queued save
-rechecks its version, decision admission, pacing and original expiry after acquiring the same
+rechecks its version, item admission, pacing and original expiry after acquiring the same
 item permit used by explicit decision drains; a superseded timer cannot submit a newer draft
-before that draft's debounce. Explicit drains bypass pacing while preserving serialization.
+before that draft's debounce. Explicit drains bypass pacing while preserving serialization. An unrelated panel decision or
+workspace refresh does not consume another item's accepted autosave. Bulk admission freezes
+selected item deadlines; both the final drain check and response publication honor those original
+deadlines even after the retained draft entry has expired.
 Editor observation binds change and recovery actions without retaining drafts, scheduling timers
 or reading HTTP. Bound actions check the mounted generation and observed item entry; recovery
 replacement and disposal retire earlier callbacks. Save acknowledgments require exactly one

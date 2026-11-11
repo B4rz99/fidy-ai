@@ -10,6 +10,15 @@ export type BudgetWriteContext = Readonly<{
   draft: Option.Option<BudgetDraft>;
   refreshQueries: () => void;
 }>;
+const makeWriteOwner = () => {
+    let generation = 0;
+    return {
+      version: (): number => generation,
+      advance: (): void => {
+        generation += 1;
+      },
+    };
+};
 const initialContext = Option.none<BudgetWriteContext>();
 /** Bridge committed read admission to retained event callbacks; disposal only retires local work. */
 export const useBudgetWriteLifetime = (
@@ -20,15 +29,7 @@ export const useBudgetWriteLifetime = (
   reset: () => void;
 }> => {
   const latest = useRef(initialContext);
-  const [owner] = useState(() => {
-    let generation = 0;
-    return {
-      version: (): number => generation,
-      advance: (): void => {
-        generation += 1;
-      },
-    };
-  });
+  const [owner] = useState(makeWriteOwner);
   useLayoutEffect(() => {
     latest.current = Option.some(context);
     return (): void => {

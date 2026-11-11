@@ -3,6 +3,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
+import { readFreshQuery } from "./fresh-query";
 import { makeFidyClient } from "./client";
 import {
   revalidateWorkspaceQuery,
@@ -185,6 +186,42 @@ it.live("keeps mounted taxonomy atoms stable through collection and an equivalen
     } finally {
       vi.restoreAllMocks();
       for (const unmount of mounts) unmount();
+      registry.dispose();
+    }
+  })
+);
+
+it.live("strict Category recovery awaits newly decoded canonical taxonomy reads", () =>
+  Effect.gen(function* () {
+    const reads: string[] = [];
+    const http = HttpClient.make((request) => {
+      const path = new URL(request.url).pathname;
+      reads.push(path);
+      const response =
+        path === "/user"
+          ? metadataResponse("Mercado")
+          : Response.json({
+              data: [{ id: "10000000-0000-4000-8000-000000000002", label: "Mercado" }],
+              next: [],
+            });
+      return Effect.succeed(HttpClientResponse.fromWeb(request, response));
+    });
+    const client = makeFidyClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: Layer.succeed(HttpClient.HttpClient, http),
+    });
+    const registry = AtomRegistry.make();
+    const categories = workspaceCategoriesQuery(client);
+    try {
+      yield* AtomRegistry.getResult(registry, categories.source);
+      expect(reads).toEqual(["/user"]);
+      expect(yield* readFreshQuery({ registry, query: categories.source })).toBe(true);
+      expect(reads).toEqual(["/user", "/user", "/categories"]);
+      expect(
+        (yield* AtomRegistry.getResult(registry, categories.source, { suspendOnWaiting: true }))
+          .data[0]?.label
+      ).toBe("Mercado");
+    } finally {
       registry.dispose();
     }
   })

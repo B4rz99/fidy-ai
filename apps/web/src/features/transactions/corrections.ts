@@ -1,11 +1,13 @@
 import { Array, Cause, type Context, Deferred, Effect, Option, Predicate } from "effect";
-import { type AsyncResult, Atom } from "effect/reactivity";
+import { type AsyncResult, Atom, Reactivity } from "effect/reactivity";
 import { type CanonicalInput, type CanonicalSuccess, type FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
+import { readFreshQuery } from "@/transport/fresh-query";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import type { HistoryCommand, HistoryState } from "./history";
 import type { Transaction } from "./presentation";
 
+type Client = Context.Service.Shape<FidyClient>;
 type Revision = Pick<Transaction, "id" | "revision">;
 type Changes = CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
 type Correction =
@@ -35,21 +37,23 @@ export type TransactionCorrections = Readonly<{
   workspaceGeneration: number;
   submit: (correction: Correction) => void;
   recover: () => void;
-  refreshAfterMutation: () => void;
+  resetWorkspace: () => void;
+  reviewingDeletion: Option.Option<Transaction["id"]>;
+  reviewDeletion: (id: Transaction["id"]) => boolean;
+  cancelDeletion: () => void;
+  confirmDeletion: (id: Transaction["id"], onDeleted: () => void) => void;
   mount: () => () => void;
 }>;
-type Client = Context.Service.Shape<FidyClient>;
-type PageFailure = Effect.Error<ReturnType<Client["transactions"]["listTransactions"]>>;
 type Query<A, E> = Atom.Atom<AsyncResult.AsyncResult<A, E>>;
 type Input = Readonly<{
   client: FidyClient;
-  firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, PageFailure>;
+  firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, unknown>;
   categories: Query<CanonicalSuccess<"categories.listCategories">, unknown>;
   history: Atom.Atom<HistoryState>;
   historyAction: Atom.Writable<Option.Option<void>, HistoryCommand>;
   saved: (transactions: ReadonlyArray<Transaction>) => void;
 }>;
-type Work = Effect.Effect<void>;
+type Work = Effect.Effect<void, never, Reactivity.Reactivity>;
 type Owner = Input & {
   get: Atom.AtomContext;
   command: Option.Option<Atom.AtomResultFn<Work, void, never>>;
@@ -57,6 +61,10 @@ type Owner = Input & {
   inlineTransaction: Option.Option<Transaction["id"]>;
   workspaceGeneration: number;
   active: boolean;
+  deletion: Option.Option<Transaction["id"]>;
+  reviewGeneration: number;
+  affected: ReadonlyArray<Transaction["id"]>;
+  cancelDeletion: () => void;
   generation: number;
   stopped: Deferred.Deferred<void>;
 };
@@ -82,26 +90,43 @@ export const makeTransactionCorrections = (input: Input): Atom.Atom<TransactionC
       inlineTransaction: Option.none(),
       workspaceGeneration: 0,
       active: false,
+      deletion: Option.none(),
+      reviewGeneration: 0,
+      affected: [],
+      cancelDeletion: () => cancelDeletion(owner),
       generation: 0,
       stopped: Deferred.makeUnsafe<void>(),
     };
     get.addFinalizer(() => dispose(owner));
     return present(owner);
   });
-const present = (owner: Owner): TransactionCorrections => ({
-  status: owner.status,
-  locked: owner.status !== "idle" && owner.status !== "recovered",
-  inlineTransaction: owner.inlineTransaction,
-  workspaceGeneration: owner.workspaceGeneration,
-  submit: (correction) => submit(owner, correction),
-  recover: () => recover(owner, "recovery"),
-  refreshAfterMutation: () => recover(owner, "saved"),
-  mount: () => {
-    owner.active = true;
-    owner.stopped = Deferred.makeUnsafe<void>();
-    return () => dispose(owner);
-  },
-});
+const present = (owner: Owner): TransactionCorrections => {
+  const generation = owner.workspaceGeneration;
+  const reviewGeneration = owner.reviewGeneration;
+  return {
+    status: owner.status,
+    locked:
+      Option.isSome(owner.deletion) || (owner.status !== "idle" && owner.status !== "recovered"),
+    reviewingDeletion: owner.deletion,
+    reviewDeletion: (id) => reviewDeletion(owner, id),
+    cancelDeletion: owner.cancelDeletion,
+    confirmDeletion: (id, onDeleted) => {
+      if (reviewGeneration === owner.reviewGeneration) confirmDeletion(owner, id, onDeleted);
+    },
+    inlineTransaction: owner.inlineTransaction,
+    workspaceGeneration: owner.workspaceGeneration,
+    submit: (correction) => {
+      if (owner.workspaceGeneration === generation) submit(owner, correction);
+    },
+    recover: () => recover(owner, "recovery"),
+    resetWorkspace: () => resetWorkspace(owner),
+    mount: () => {
+      owner.active = true;
+      owner.stopped = Deferred.makeUnsafe<void>();
+      return () => dispose(owner);
+    },
+  };
+};
 const notify = (owner: Owner): void => {
   if (owner.active) owner.get.setSelf(present(owner));
 };
@@ -198,8 +223,18 @@ const rejected = (cause: Cause.Cause<unknown>): boolean => {
       Predicate.isTagged(failure.value, "ResourceLimited"))
   );
 };
+const available = (owner: Owner): boolean =>
+  owner.active &&
+  Option.isNone(owner.deletion) &&
+  (owner.status === "idle" || owner.status === "recovered");
+const resetWorkspace = (owner: Owner): void => {
+  if (!available(owner)) return;
+  owner.workspaceGeneration += 1;
+  owner.inlineTransaction = Option.none();
+  notify(owner);
+};
 const submit = (owner: Owner, correction: Correction): void => {
-  if (!owner.active || (owner.status !== "idle" && owner.status !== "recovered")) return;
+  if (!available(owner)) return;
   owner.inlineTransaction =
     correction.kind === "single" && correction.origin === "inline"
       ? Option.some(correction.transaction.id)
@@ -211,6 +246,10 @@ const submit = (owner: Owner, correction: Correction): void => {
     run(owner, reread(owner, owner.generation, "rejected"));
     return;
   }
+  owner.affected =
+    correction.kind === "single"
+      ? [correction.transaction.id]
+      : correction.transactions.map(({ id }) => id);
   owner.status = "saving";
   notify(owner);
   const generation = owner.generation;
@@ -237,22 +276,6 @@ const submit = (owner: Owner, correction: Correction): void => {
     })
   );
 };
-// SWR publishes the refreshed source asynchronously; its cached terminal result is not recovery.
-const nextResult = <A, E>(
-  owner: Owner,
-  query: Query<A, E>,
-  previous: AsyncResult.AsyncResult<A, E>
-): Effect.Effect<boolean> =>
-  Effect.callback((resume) => {
-    const completed = (result: AsyncResult.AsyncResult<A, E>): boolean =>
-      result !== previous && result._tag !== "Initial" && !result.waiting;
-    const current = owner.get.once(query);
-    if (completed(current)) return resume(Effect.succeed(current._tag === "Success"));
-    const unsubscribe = owner.get.registry.subscribe(query, (result) => {
-      if (completed(result)) resume(Effect.succeed(result._tag === "Success"));
-    });
-    return Effect.sync(unsubscribe);
-  });
 const refreshedHistory = (owner: Owner): Effect.Effect<boolean> =>
   Effect.callback((resume) => {
     const observe = (state: HistoryState): void => {
@@ -295,16 +318,18 @@ const reread = (
     if (!afterRejection) owner.workspaceGeneration += 1;
     owner.status = statuses.waiting;
     notify(owner);
-    const categories = owner.get.once(owner.categories);
-    const firstPage = owner.get.once(owner.firstPage);
-    owner.get.refresh(owner.categories);
-    owner.get.set(owner.historyAction, "refresh");
-    const results = yield* Effect.all([
-      nextResult(owner, owner.categories, categories),
-      nextResult(owner, owner.firstPage, firstPage),
-    ]);
-    if (reason !== "saved" && results.every(Boolean)) results.push(yield* refreshedHistory(owner));
+    owner.get.set(owner.historyAction, "refresh-pages");
+    const results = yield* Effect.all(
+      [
+        readFreshQuery({ registry: owner.get.registry, query: owner.categories }),
+        readFreshQuery({ registry: owner.get.registry, query: owner.firstPage }),
+      ],
+      { concurrency: 2 }
+    );
+    if (results.every(Boolean)) results.push(yield* refreshedHistory(owner));
+    if (results.every(Boolean)) results.push(yield* readAffectedIdentities(owner));
     if (!live(owner, generation)) return;
+    if (results.every(Boolean)) owner.affected = [];
     owner.status = results.every(Boolean) ? statuses.success : statuses.failure;
     notify(owner);
   });
@@ -317,8 +342,86 @@ const recover = (owner: Owner, reason: "recovery" | "saved"): void => {
   ) {
     return;
   }
+  cancelDeletion(owner);
   const afterRejection = owner.status === "rejected";
   owner.status = afterRejection ? "refreshing" : "recovering";
   notify(owner);
   run(owner, reread(owner, owner.generation, afterRejection ? "rejected" : reason));
 };
+
+const reviewDeletion = (owner: Owner, id: Transaction["id"]): boolean => {
+  if (
+    !owner.active ||
+    Option.isSome(owner.deletion) ||
+    (owner.status !== "idle" && owner.status !== "recovered")
+  ) {
+    return false;
+  }
+  owner.reviewGeneration += 1;
+  owner.deletion = Option.some(id);
+  notify(owner);
+  return true;
+};
+const cancelDeletion = (owner: Owner): void => {
+  owner.reviewGeneration += 1;
+  owner.deletion = Option.none();
+  notify(owner);
+};
+const confirmDeletion = (owner: Owner, id: Transaction["id"], onDeleted: () => void): void => {
+  if (
+    !owner.active ||
+    !Option.contains(owner.deletion, id) ||
+    (owner.status !== "idle" && owner.status !== "recovered")
+  ) {
+    return;
+  }
+  owner.reviewGeneration += 1;
+  owner.deletion = Option.none();
+  owner.inlineTransaction = Option.none();
+  owner.affected = [id];
+  owner.status = "saving";
+  notify(owner);
+  const generation = owner.generation;
+  run(
+    owner,
+    Effect.gen(function* () {
+      const result = yield* Effect.exit(
+        Effect.gen(function* () {
+          const client = yield* owner.client;
+          yield* client.transactions.deleteTransaction({ params: { id } });
+        })
+      );
+      if (!live(owner, generation)) return;
+      if (result._tag === "Failure") {
+        yield* Reactivity.invalidate(["transaction-detail"]);
+        owner.status = rejected(result.cause) ? "rejected" : "uncertain";
+        notify(owner);
+        return;
+      }
+      onDeleted();
+      yield* reread(owner, generation, "saved");
+    })
+  );
+};
+
+const readAffectedIdentities = (owner: Owner): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const history = owner.get.once(owner.history).query;
+    if (!fresh(history)) return false;
+    const observed = new Set(history.value.data.map(({ id }) => id));
+    const missing = owner.affected.filter((id) => !observed.has(id));
+    if (missing.length === 0) return true;
+    const client = yield* owner.client;
+    for (const id of missing) {
+      if (!(yield* readIdentity(client, id))) return false;
+    }
+    return true;
+  });
+
+const readIdentity = Effect.fnUntraced(function* (client: Client, id: Transaction["id"]) {
+  const result = yield* Effect.exit(client.transactions.getTransaction({ params: { id } }));
+  if (result._tag === "Success") return result.value.data.id === id;
+  if (Cause.hasDies(result.cause) || Cause.hasInterrupts(result.cause)) return false;
+  const error = Cause.findErrorOption(result.cause);
+  return Option.isSome(error) && Predicate.isTagged(error.value, "NotFound");
+});

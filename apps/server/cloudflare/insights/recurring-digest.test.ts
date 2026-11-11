@@ -6,7 +6,7 @@ import type {
   ProactivityConsentContext,
   ProactivityConsentOffer,
 } from "../consent/contract";
-import type { InsightUnavailable } from "./contract";
+import assert from "node:assert/strict";
 import type { InsightEventId } from "../../src/core/insights/contract";
 import {
   makeExecutingWeeklyFixtureStep,
@@ -15,7 +15,7 @@ import {
 } from "../weekly-summary.test-fixture";
 import { prepareInsightRecipient, proactivityRejectedDeliveryQuery } from "../whatsapp/operations";
 import { WhatsAppStatusAdmission } from "../whatsapp/contract";
-import { ProactivityActivity, ProactivityDeliveryWork } from "./contract";
+import { InsightUnavailable, ProactivityActivity, ProactivityDeliveryWork } from "./contract";
 import {
   HostedDeliveryCorrelationToken,
   ProactivityTemplateConfiguration,
@@ -25,7 +25,7 @@ import {
 import { evaluateRecurringSeries } from "../recurring/operations";
 
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
   endTestHostedAuthority,
   proactivityDatabase,
@@ -888,6 +888,89 @@ it("preserves later same-date discoveries after backward travel in their distinc
       ).toEqual({ total: 2 });
     })
   ));
+
+it("never freezes a false empty day when discovery fails to retain its complete source count", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const context = yield* activateDigest(db);
+      yield* seedRecurringDigestSource({
+        ...context,
+        confirmedAt: "2026-10-06T19:00:00Z",
+        counterparty: "Completo",
+        index: 1,
+      });
+      vi.spyOn(Date, "now").mockReturnValue(closedNow.epochMilliseconds);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER omit_digest_confirmation BEFORE INSERT ON recurring_digest_items WHEN NEW.confirmed_at_ms IS NOT NULL BEGIN SELECT RAISE(IGNORE); END"
+          )
+          .run()
+      );
+      assert.deepStrictEqual(
+        yield* Effect.exit(advanceRecurringDigest({ ...context, now: closedNow })),
+        Exit.fail(new InsightUnavailable())
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT (SELECT count(*) FROM insight_reports WHERE kind='recurring-digest') AS reports,(SELECT count(*) FROM schedule_history WHERE record_type='digest-day') AS days"
+            )
+            .first()
+        )
+      ).toEqual({ reports: 0, days: 0 });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER omit_digest_confirmation").run());
+      const id = yield* freezeDigest(db);
+      expect(
+        Option.getOrThrow(yield* findRecurringDigestReport({ ...context, id })).payload.items.map(
+          (item) => item.counterparty
+        )
+      ).toEqual(["Completo"]);
+    })
+  ));
+
+it.each([
+  [
+    "source changes",
+    "UPDATE transactions SET amount='54321.01' WHERE id='29000000-0000-4000-8000-000000000017'",
+  ],
+  ["instruction is disabled", "UPDATE schedules SET enabled=0 WHERE kind='digest'"],
+])("refuses to mark discovery idle after its %s during backlog disposition", (_change, mutation) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const context = yield* activateDigest(db);
+      yield* seedRecurringDigestSource({
+        ...context,
+        confirmedAt: "2026-10-05T19:00:00Z",
+        counterparty: "Anterior",
+        index: 1,
+      });
+      vi.spyOn(Date, "now").mockReturnValue(closedNow.epochMilliseconds);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            `CREATE TRIGGER change_digest_source AFTER UPDATE OF disposition ON recurring_digest_items WHEN NEW.disposition='excluded' BEGIN ${mutation}; END`
+          )
+          .run()
+      );
+      assert.deepStrictEqual(
+        yield* Effect.exit(advanceRecurringDigest({ ...context, now: closedNow })),
+        Exit.fail(new InsightUnavailable())
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT last_source_identity FROM schedules WHERE kind='digest' AND user_id=?")
+            .bind(context.userId)
+            .first()
+        )
+      ).toEqual({ last_source_identity: null });
+    })
+  )
+);
 
 it("excludes earlier-day backlog and permanently suppressed confirmations while retaining the first-discovery offer", () =>
   Effect.runPromise(

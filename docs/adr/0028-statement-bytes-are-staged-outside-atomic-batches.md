@@ -18,32 +18,38 @@ object, and a D1 `batch()` is one SQL transaction; they are separate authorities
 unit between them. The protocol therefore orders durable state so that no authoritative submission
 can refer to missing or mismatched bytes:
 
-1. the body is read with an actual-byte bound and digested;
-2. a non-authoritative `pending` staging row records identity, actual size, digest, and expiry;
+1. the body is buffered with an actual-byte bound and digested; direct mutable byte input is
+   snapshotted before asynchronous use;
+2. a non-authoritative `pending` staging row records identity, actual size, digest, and original
+   expiry, atomically with an independent erasure writer reservation;
 3. the object is written with R2's own SHA-256 checksum verification;
 4. the row becomes `available`; only then can a caller hold a reference;
 5. publication re-verifies ownership, availability, expiry, reference size/digest, and the stored
    object's size and checksum before one conditional D1 unit inserts the submission, promotes the
    staging row only when that insert committed, and records metadata-only audit success.
 
-Failure, interruption, or abandonment leaves at most an unpublished staging row and object; the
-canonical mutation is never reached. A bounded sweep moves expired unpublished rows to `deleting` in
-one D1 statement, deletes their objects, and then removes the rows; D1 serializes that transition
+Failure, interruption, or abandonment may leave staging and independent writer evidence; the
+canonical mutation is never reached. An unavailable result does not prove no state changed and
+does not permit replaying a consumed Request. A bounded sweep moves expired unpublished rows to
+`deleting` in one D1 statement, deletes their objects, and then removes unreferenced rows. Rows
+referenced by submissions retain `object_deleted_at_ms` evidence. D1 serializes that transition
 against publication, so publication can never commit against material the sweep has reclaimed, and
 an interrupted sweep resumes from the durable `deleting` state, so no object is left unreachable and
-no bucket lifecycle rule is needed for correctness. Published material is excluded from the sweep and
-is owned by the submission's own retention.
+no bucket lifecycle rule is needed for correctness. Published material is excluded until its
+submission owner requests cleanup under its separate retention. Staging expiry never slides.
+Cleanup does not settle an unresolved original writer: erasure independently observes that
+reservation, and the placeholder/ETag fence prevents delayed payload resurrection after deletion.
 
 ## The comparison that selected this contract
 
 | axis                          | byte-bearing canonical input                                                                                                                                                                                                   | staged reference                                                                                                                        |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | atomic-batch request bounds   | twelve maximum statements are 12 × 6,990,508 base64 characters ≈ 80 MiB of JSON, against Cloudflare's 100 MB request-body ceiling (Free/Pro) and 128 MB isolate memory, before `JSON.parse`, base64 decoding, or a 5 MiB parse | twelve references are a few hundred bytes each                                                                                          |
-| streaming                     | impossible: a JSON body is decoded whole, and the schema's JSON codec for raw bytes is base64 anyway                                                                                                                           | bytes stream once against an actual-byte bound, then are never re-encoded                                                               |
+| buffering                     | a JSON body is decoded whole, and the schema's JSON codec for raw bytes is base64 anyway                                                                                                                                       | actual bytes are bounded and buffered before hashing and writing; no constant-memory or zero-copy streaming guarantee                   |
 | canonical-operation ownership | one canonical operation owns bytes, but "batchable" is nominal: any real multi-statement batch exceeds safe request and memory bounds                                                                                          | the canonical mutation owns publication; byte transport is a named, non-authoritative ingestion transport outside the operation surface |
 | retention                     | nothing is retained, so a failed or interrupted request loses the upload and no cleanup exists                                                                                                                                 | staging is bounded and expiring; publication promotes material into the submission's retention                                          |
 
-The byte-bearing alternative cannot satisfy both the aggregate batch bound and streaming, so the
+The byte-bearing alternative cannot satisfy the aggregate batch bound, so the
 staged reference is selected. Keeping bytes in the canonical input would also mean statement
 submissions could only be batch children alone or beside tiny siblings, which is the exemption from
 batching this decision rejects.
@@ -76,7 +82,7 @@ all; ownership of authority stays with `ingestion.submitForExtraction`.
 
 ## Rejected alternatives
 
-- **Byte-bearing canonical input.** Fails aggregate batch bounds and streaming, loses interrupted
+- **Byte-bearing canonical input.** Fails aggregate batch bounds, loses interrupted
   uploads, and has no retention or cleanup path.
 - **A standalone canonical staging mutation.** ADR 0027 permits that exception only for one-time
   account-security mutations; implementation convenience is not a reason.

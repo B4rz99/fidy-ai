@@ -1,11 +1,14 @@
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import type { UserId } from "../../../src/core/identity/contract";
 import {
   type InsightEventId,
   type RecurringDigestReport,
 } from "../../../src/core/insights/contract";
 import { captureConfirmationDay } from "../../../src/core/insights/operations";
-import { prepareConsentAction } from "../../consent/operations";
+import { prepareConsentAction, prepareProactivityConsentAction } from "../../consent/operations";
+import { prepareRecurringDigestSourceGuard } from "../../recurring/operations";
+import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
+import type { InstructionRow } from "./recurring-standing";
 import { findInstruction } from "./recurring-standing";
 import {
   type RecurringDigestAdvanceResult as AdvanceResult,
@@ -21,11 +24,12 @@ const noteIdleSource = (
     input: Scope;
     rows: ReadonlyArray<StageView>;
     sourceIdentity: string;
-    version: number;
+    checkpoint: string;
+    instruction: typeof InstructionRow.Type;
   }>
-): Effect.Effect<void, Cause.UnknownError> =>
+): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
-    const { input, rows, sourceIdentity, version } = work;
+    const { input, rows, sourceIdentity, checkpoint, instruction } = work;
     const closingTimes = rows.map(
       (row) =>
         captureConfirmationDay({
@@ -33,20 +37,29 @@ const noteIdleSource = (
           timeZone: row.context_json.timeZone,
         }).toExclusive.epochMilliseconds
     );
-    yield* Effect.tryPromise(() =>
-      input.db
-        .prepare(
-          "UPDATE schedules SET last_source_identity=?,next_closed_at_ms=? WHERE kind='digest' AND user_id=? AND version=?"
-        )
-        .bind(
-          sourceIdentity,
-          closingTimes.length === 0 ? null : Math.min(...closingTimes),
-          input.userId,
-          version
-        )
-        .run()
+    const statements = [...(yield* prepareRecurringDigestSourceGuard({ ...input, checkpoint }))];
+    statements.push(
+      prepareProactivityConsentAction({
+        ...input,
+        kind: "new-recurring-series",
+        grantId: instruction.grant_id,
+        statement: {
+          sql: "UPDATE schedules SET last_source_identity=?,next_closed_at_ms=CASE WHEN ?=0 THEN NULL ELSE ? END WHERE kind='digest' AND user_id=? AND id=? AND version=? AND consent_grant_id=? AND enabled=1",
+          params: [
+            sourceIdentity,
+            closingTimes.length,
+            closingTimes.length === 0 ? 0 : Math.min(...closingTimes),
+            input.userId,
+            instruction.id,
+            instruction.version,
+            instruction.grant_id,
+          ],
+        },
+      }),
+      prepareChangedRowAssertion({ db: input.db, scope: "proactivity_message" })
     );
-  });
+    yield* Effect.tryPromise(() => input.db.batch(statements));
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));
 const sameWindowRows = (
   first: StageView,
   closed: ReadonlyArray<StageView>
@@ -106,7 +119,8 @@ export const advance = (input: Scope): Effect.Effect<AdvanceResult, InsightUnava
         input,
         rows,
         sourceIdentity: page.sourceIdentity,
-        version: instruction.value.version,
+        checkpoint: page.checkpoint,
+        instruction: instruction.value,
       });
       return { _tag: "NoWork" } as const;
     }

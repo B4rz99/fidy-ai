@@ -67,6 +67,7 @@ type WorkspaceProps = Readonly<{
   dateFilter: Readonly<{ value: string; onChange: (date: string) => void }>;
   onRefresh: () => void;
   continuation: HistoryState["continuation"];
+  location: HistoryState["location"];
   onMore: () => void;
   onRetryMore: () => void;
 }> &
@@ -218,7 +219,6 @@ const DetailPanel = ({
   Readonly<{
     panel: Extract<TransactionPanel, { _tag: "Detail" }>;
   }>): JSX.Element => {
-  const corrections = use(TransactionCorrectionContext);
   const transaction = Option.fromNullishOr(
     props.transactions.find((record) => record.id === panel.id)
   );
@@ -251,10 +251,6 @@ const DetailPanel = ({
       onDeleted={() => {
         toast.success("Transacción eliminada");
         close();
-        Option.match(corrections, {
-          onNone: props.onRefresh,
-          onSome: (owner) => owner.refreshAfterMutation(),
-        });
       }}
     />
   );
@@ -760,6 +756,12 @@ const continuationLabels = {
   failure: "Reintentar carga de más transacciones",
   available: "Al seguir bajando cargaremos más transacciones.",
 };
+const continuationHint = (props: Pick<WorkspaceProps, "location" | "continuation">): string => {
+  if (props.location === "BoundReached") return "Para cargar otra página, usa «Seguir buscando».";
+  if (props.location === "LookupFailed") return "Reintenta la búsqueda para continuar.";
+  if (props.continuation === "loading") return "";
+  return continuationLabels[props.continuation];
+};
 const ContinuationControl = (
   props: WorkspaceProps & Readonly<{ editing: boolean }>
 ): JSX.Element => {
@@ -767,6 +769,7 @@ const ContinuationControl = (
     if (
       element === null ||
       props.continuation !== "available" ||
+      (props.location !== "None" && props.location !== "Located") ||
       props.editing ||
       (!props.editable && props.readOnly !== true)
     ) {
@@ -776,7 +779,7 @@ const ContinuationControl = (
   };
   if (props.continuation === "complete") return <></>;
   const continuation =
-    props.continuation === "loading" ? null : <span>{continuationLabels[props.continuation]}</span>;
+    props.continuation === "loading" ? null : <span>{continuationHint(props)}</span>;
   return (
     <div
       ref={attachContinuation}
@@ -850,6 +853,7 @@ const useWorkspacePanel = (
   generation: number
 ): Readonly<{ panel: TransactionPanel; onPanel: (panel: TransactionPanel) => void }> => {
   const capture = use(ManualCaptureContext);
+  const corrections = use(TransactionCorrectionContext);
   const defaultPanel: TransactionPanel = Option.exists(capture, (owner) => owner.uncertain)
     ? { _tag: "Capture", status: "uncertain" }
     : { _tag: "Summary" };
@@ -861,7 +865,16 @@ const useWorkspacePanel = (
   }
   const panel: TransactionPanel =
     interaction.generation === generation ? interaction.panel : defaultPanel;
-  const onPanel = (next: TransactionPanel): void => setInteraction({ generation, panel: next });
+  const onPanel = (next: TransactionPanel): void => {
+    if (
+      panel._tag === "Detail" &&
+      panel.mode._tag === "Deleting" &&
+      (next._tag !== "Detail" || next.mode._tag !== "Deleting" || next.id !== panel.id)
+    ) {
+      Option.map(corrections, (owner) => owner.cancelDeletion());
+    }
+    setInteraction({ generation, panel: next });
+  };
   return { panel: capturePanelStatus(panel, capture), onPanel };
 };
 type PeriodChoice = Readonly<{ kind: "date" | "month"; value: string }>;

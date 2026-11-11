@@ -183,9 +183,15 @@ chat visibility. Entering Privacy or ending the authentication lifetime discards
 The frame subscribes to its rendered access state, not the distinction between independently
 authorized and ordinary product routes. Moving between those routes keeps the shared shell stable;
 the route owners still recheck Consent, and expired ordinary access still renders refusal.
+The mounted conversation owns one synchronous admission gate. Its display snapshots bind visibility,
+confirmation and recovery actions to the exact Turn phase and mounted lifetime; same-tick repeats
+and retained older actions cannot admit another request. The reply projection contains safe text,
+display identity and bound actions, while receipts and host confirmation commands remain private.
+Disposal clears the mounted snapshot and fences late command replies before registry disposal.
 An accepted processing response starts bounded observation of that exact Turn in the command's
 Effect lifetime, without resubmitting its message. Progress failures or an exhausted observation
-bound retain explicit recovery; unresolved execution still blocks new submissions. Disposal stops
+bound retain explicit recovery; each explicit Check makes one immediate read without reopening
+automatic observation. Unresolved execution still blocks new submissions. Disposal stops
 the pending checks.
 AI Elements conversation/message presentation uses Fidy primitives and the existing
 Effect hosted Turn client, without introducing another AI transport. Text is escaped, not executed
@@ -268,6 +274,31 @@ item and panel locks. Selection changes and ordinary route hiding preserve pendi
 panel disposal or authentication teardown cancels unsent work, and evidence expiry stops new work
 for that item. Already-sent mutations may commit; reopening reads canonical state. The generated
 client retains authorization, transport policy and telemetry ownership.
+Automatic draft saves retain the 200 ms debounce and one-second send spacing. A queued save
+rechecks its version, item admission, pacing and original expiry after acquiring the same
+item permit used by explicit decision drains; a superseded timer cannot submit a newer draft
+before that draft's debounce. Explicit drains bypass pacing while preserving serialization. An unrelated panel decision or
+workspace refresh does not consume another item's accepted autosave. Bulk admission freezes
+selected item deadlines; both the final drain check and response publication honor those original
+deadlines even after the retained draft entry has expired.
+Editor observation binds change and recovery actions without retaining drafts, scheduling timers
+or reading HTTP. Bound actions check the mounted generation and observed item entry; recovery
+replacement and disposal retire earlier callbacks. Save acknowledgments require exactly one
+matching item. Missing or incomplete acknowledgments discard unsent wanted work and retain the
+displayed draft with uncertainty until an explicit successful canonical reread. Recovery shares
+the item permit and rechecks expiry after waiting. The first retained item deadline survives
+save acknowledgments, clean canonical replacement and recovery; expiry removes retained draft
+evidence and fences late results and follow-on decisions. Only deadline metadata remains until
+owner disposal so a later observation cannot revive expired work.
+
+Decisions freeze unique bounded membership and original evidence deadlines before waiting for
+shared draft permits. Every acknowledgment must match the complete requested identity set,
+operation status and next revision before any detail is published. Bulk work rechecks every member
+after the last flush and sends one canonical mutation; preflight failure retains the panel lock.
+Skip retains a volatile one-use receipt containing the committed revisions and original deadlines.
+Undo prunes receipts contradicted by current observations and restores only those exact revisions,
+without flushing newer drafts. Unconfirmed outcomes are never replayed. Only a newly requested,
+successful canonical observation can clear uncertainty; cached display state cannot unlock it.
 
 ### Dashboard first use
 
@@ -279,7 +310,11 @@ initialization attempt. Concurrent tabs rely on canonical initialization idempot
 edits invalidate the same Dashboard resource; queries themselves never create or repair domain state.
 The mounted edit module owns serialized submission, pending placement projection and canonical
 reread recovery. Uncertain or missing-Widget outcomes discard unsent edits and block new edits
-until an explicit successful canonical refresh. Route departure discards unsent edits; an
+until an explicit successful canonical refresh. The existing query owner starts a new load for
+that private recovery attempt; only its first successful, unsuperseded invocation certifies
+completion. Older in-flight reads, equal-content comparisons and timestamps confer no recovery
+authority. Equal-content fresh success is valid, and later ordinary reads do not revoke a completed
+attempt. Dashboard retry controls pass through the editing owner. Route departure discards unsent edits; an
 already-sent mutation may have committed. Presentation owns local drafts and drag mechanics.
 Budget Widget configuration keeps only the selected Widget identity and local choice in React;
 the live Dashboard supplies the current Widget configuration. The dialog loads current-month
@@ -609,10 +644,18 @@ One mounted Transaction Correction module coordinates inline Category edits, ind
 and atomic bulk Corrections for the canonical history resource. It owns synchronous write admission,
 observed revisions and outcomes. A definite save rejection automatically rereads history and Category
 data without replaying the mutation. The editor retains its draft and bulk selection through that
-reread; only an explicit subsequent save submits against the refreshed revisions. Failed refreshes
+reread; the original draft remains bound to its captured revisions. After fresh facts change,
+the User opens a new review before submitting another Correction. Failed refreshes
 retain the draft and lock writes until explicit retry succeeds. Recovery rereads the previously
 loaded history pages while retaining their display, so later-page editing remains mounted until the
-fresh pages settle. Successful saves and explicit uncertain-outcome verification keep their existing
+fresh pages settle. Every admitted mutation retains its affected identities until required Category
+and list loaders have completed fresh canonical reads and loaded history continuation has settled.
+The Correction owner resets continuation navigation without scheduling an ordinary first-page
+refresh; its strict read owns that loader invocation, so a queued display refresh cannot interrupt
+recovery's new first-page read.
+Identities absent from that history are then read directly, sequentially within the canonical batch
+bound; decoded NotFound establishes current absence but cannot attribute a lost deletion receipt.
+A failed direct lookup keeps conflicting writes locked. Successful saves and explicit uncertain-outcome verification keep their existing
 workspace reset. Drafts remain with presentation; single and atomic mutations retain their distinct
 server contracts. Closing an editing panel does not release an uncertain write. Automatic recovery
 uses the existing canonical transport observations; no financial-content telemetry or additional
@@ -799,8 +842,8 @@ bulk decisions use the fresh workspace revision.
 
 `/settings/account` composes independently mounted verified-email replacement and backup-recovery sections under one Account header. Their presentation modules accept state and action callbacks without importing the command controllers. Money presentation and Dashboard gesture declarations import their published domain contracts directly, so presentation does not initialize the complete API catalog. Each feature retains its own proof and disclosure lifetime. Recovery keeps review and one-time disclosure mounted. Its private non-secret admission marker in the existing authentication registry retains unresolved or Uncertain rotation across same-document remounts. Review and Confirm read the current marker; dispatch latches it synchronously, and only definitive live completion clears it. Authentication replacement or a new document’s fresh session observation creates a new registry. Its canonical command returns no secret into the authentication registry; only the narrow mounted presenter unwraps the redacted code. Departure or authentication replacement fences completions and wipes the owned reference. Lost or malformed rotation responses require new sign-in before another reviewed replacement, without replay or redisclosure. Clipboard cleanup retains its ten-minute lifetime independently of the disclosure; no reveal timer is added. Fresh sign-in returns to the fixed Account destination without retaining email or recovery material in navigation. Removed settings aliases have no compatibility redirects.
 
-Recurring workspace reads and writes request the compact display projection: only the latest
-revision of each plan crosses the browser boundary. Storage and historical occurrence calculations
+Recurring workspace reads and writes request the compact display projection: first, current local-date
+and latest revisions retain dated standing without projecting future settings early. Storage and historical occurrence calculations
 retain the complete revision ledger; default API reads still return the full document. Draft
 autosave starts after 200 milliseconds of idle input and subsequent automatic writes are spaced
 by at least one second; explicit Create/Skip flushes remain immediate and revision-bound.
@@ -845,3 +888,29 @@ adds matching rows to that selection; replacing the loaded period requires expli
 `transactions.updateTransactions` with each observed revision and one shared change set. The
 existing correction owner retains admission, pending state and explicit uncertainty recovery;
 there is no splitting into partially committed batches or automatic mutation replay.
+
+Canonical query projection remains observational: retained Ready data, waiting and refreshFailure
+are independent. Route preparation keeps its explicit cached/fresh/display/refresh-display modes
+and nonrejecting completion; preparation completion does not certify a successful new read.
+
+Strict Transaction recovery uses loader-owned request/completion identities in the authenticated
+registry. A requested read forces a new loader invocation, independently of retained display content;
+equal new facts qualify. Failure, supersession, runtime failure and registry retirement settle as
+unsuccessful recovery. History still owns pagination/reset, and Category recovery rereads the metadata
+projection and its canonical fallback before admission can resume. Ordinary route preparation and
+Budget/Recurring refresh policies keep their existing contracts and retention.
+
+RecurringPlan standing is observed at the effective plan zone's local calendar date. Future pauses,
+stops and settings do not change earlier standing; Scheduled marks a future start, and endDate only
+bounds generated dates. Lifecycle controls consult retained stop/open-pause facts independently of
+standing. Explicit lifecycle and current-plan edit intent capture the local date when submitted;
+canonical document revision checks and live authorization remain server-owned. Stopped plans remain
+editable under the existing forward-edit policy, including replacement of the future revision suffix.
+
+Needs Review retains each item’s earliest observed original deadline in private authentication-registry
+atoms containing only timestamps. These bounds survive page, membership and context-query disposal.
+Context projection, original selection, generated original-read admission and route preloading share
+that bound and item metadata; original expiry
+does not expire a separately retained review draft or resolve its decision. Deadline subscriptions
+recheck wall time on focus, page show, and visibility changes, including retained hidden panels.
+This logical suppression does not depend on physical source cleanup or timely execution while suspended.

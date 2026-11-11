@@ -14,6 +14,7 @@ export type AssertionScope =
   | "erasure_writer"
   | "forwarded_email"
   | "ingestion_review"
+  | "hosted_admission"
   | "hosted_compaction"
   | "hosted_mutation"
   | "insight_mutation"

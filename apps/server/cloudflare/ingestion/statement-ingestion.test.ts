@@ -57,6 +57,7 @@ import {
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import {
   acceptWhatsAppMedia,
+  advanceStatementExtraction,
   prepareHeldStatementReviewDecision,
   prepareReviewEdit,
   prepareStatementAbandonment,
@@ -2564,6 +2565,80 @@ it("captures a same-session exact-confirmed hosted row without a browser credent
     })
   ));
 
+it.each(["resolve", "skip"] as const)(
+  "refuses a prepared %s after the exact review revision changes",
+  (action) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const statement = yield* fromTestPromise(() =>
+          clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Cafe\n")
+        );
+        const id = statement.reviewIds[0];
+        if (id === undefined) return yield* Effect.die("Missing review");
+        const operation =
+          action === "resolve"
+            ? "ingestion.resolveNeedsReviewItem"
+            : "ingestion.skipNeedsReviewItem";
+        const input = yield* Schema.decodeEffect(getCanonicalOperationInput(operation))({
+          params: { id },
+          ...(action === "resolve"
+            ? {
+                payload: {
+                  extraction: {
+                    money: { amount: "13000.00", currency: "COP" },
+                    direction: "outflow",
+                    occurredAt: "2026-08-02T12:00:00.000Z",
+                  },
+                },
+              }
+            : {}),
+        });
+        const prepared = yield* prepareStatementReviewDecision({
+          operation,
+          work: {
+            db: runtime.db,
+            subject: {
+              id: sessionA,
+              userId: UserId.make(userA),
+              digest: yield* fromTestPromise(() => digest(bearer(0))),
+            },
+            current: yield* Clock.currentTimeMillis,
+            bucket: Option.some(runtime.bucket),
+            input,
+          },
+        });
+        if (prepared._tag !== "Prepared") return yield* Effect.die("Missing prepared decision");
+        const changed = yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "SaveDraft",
+            id,
+            revision: 0,
+            draft: {
+              amount: "14000",
+              counterparty: "Café",
+              occurredAt: "2026-08-01T15:00:00.000Z",
+              direction: "outflow",
+              userProvidedFields: ["money", "counterparty", "occurredAt", "direction"],
+            },
+          })
+        );
+        expect(changed.status).toBe(200);
+        yield* fromTestPromise(() =>
+          expect(runtime.db.batch([...prepared.mutation.statements])).rejects.toThrow()
+        );
+        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+        const detail = yield* fromTestPromise(() => reviewDetail(runtime, id));
+        expect(yield* fromTestPromise(() => detail.json())).toMatchObject({
+          data: { item: { id, status: "pending" }, revision: 1 },
+        });
+        expect((yield* fromTestPromise(() => reviewDecision(runtime, { id, action }))).status).toBe(
+          200
+        );
+      })
+    )
+);
+
 it("clarifies a mixed statement through canonical capture and erases evidence without losing clean Transactions", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2582,6 +2657,22 @@ it("clarifies a mixed statement through canonical capture and erases evidence wi
         reviewDecision(runtime, { id, action: "resolve" }, 1)
       );
       expect(foreign.status).toBe(404);
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(`CREATE TRIGGER refuse_clarification_audit
+        BEFORE INSERT ON audit_entries WHEN NEW.operation = 'ingestion.resolveNeedsReviewItem'
+        BEGIN SELECT RAISE(ABORT, 'clarification_audit_unavailable'); END`)
+          .run()
+      );
+      const unaudited = yield* fromTestPromise(() =>
+        reviewDecision(runtime, { id, action: "resolve" })
+      );
+      expect(unaudited.status).toBe(503);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+      expect(yield* fromTestPromise(() => count(runtime.db, "source_attestations"))).toBe(1);
+      yield* fromTestPromise(() =>
+        runtime.db.prepare("DROP TRIGGER refuse_clarification_audit").run()
+      );
       const resolved = yield* fromTestPromise(() =>
         reviewDecision(runtime, { id, action: "resolve" })
       );
@@ -4915,6 +5006,81 @@ const admitReviewEmail = (runtime: Runtime): Effect.Effect<void> =>
       })
     );
   }).pipe(Effect.orDie);
+it("suppresses expired media material and denies review restoration before cleanup", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const acceptedAt = yield* Clock.currentTimeMillis;
+      vi.setSystemTime(acceptedAt);
+      const expiresAt = acceptedAt + 2_592_000_000;
+      yield* fromTestPromise(() =>
+        runtime.db.prepare("UPDATE web_sessions SET idle_expires_at_ms=hard_expires_at_ms").run()
+      );
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','fixture','fixture',1,1)"
+          )
+          .bind(newId(), userA)
+          .run()
+      );
+      yield* admitReviewImage(runtime);
+      const inbox = yield* readReviewInbox(runtime);
+      const item = inbox.items[0];
+      if (item === undefined) return yield* Effect.die("Missing media review");
+      const material = (index: number): Promise<Response> =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/review-workspace/${item.id}/material`, {
+            headers: sessionHeaders(index),
+          })
+        );
+      const own = yield* fromTestPromise(() => material(0));
+      expect(own.status).toBe(200);
+      expect(yield* fromTestPromise(() => own.json())).toMatchObject({
+        data: { available: true, text: "Un comprobante" },
+      });
+      const foreign = yield* fromTestPromise(() => material(1));
+      expect(foreign.status).toBe(404);
+      expect(yield* fromTestPromise(() => foreign.text())).not.toContain("Un comprobante");
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Skip",
+            items: [{ id: item.id, revision: item.revision }],
+          })
+        )).status
+      ).toBe(200);
+      vi.setSystemTime(expiresAt - 1);
+      const before = yield* fromTestPromise(() => material(0));
+      expect(yield* fromTestPromise(() => before.json())).toMatchObject({
+        data: { available: true },
+      });
+      vi.setSystemTime(expiresAt);
+      const expired = yield* fromTestPromise(() => material(0));
+      expect(expired.status).toBe(200);
+      expect(expired.headers.get("cache-control")).toContain("no-store");
+      expect(yield* fromTestPromise(() => expired.json())).toMatchObject({
+        data: { available: false },
+      });
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Restore",
+            items: [{ id: item.id, revision: item.revision + 1 }],
+          })
+        )).status
+      ).toBe(400);
+      expect(
+        yield* fromTestPromise(() =>
+          runtime.db.prepare("SELECT caption,expires_at_ms FROM media_submissions").first()
+        )
+      ).toEqual({ caption: "Un comprobante", expires_at_ms: expiresAt });
+      expect((yield* readReviewInbox(runtime, "expired")).items).toHaveLength(1);
+    })
+  ));
+
 it("supports every ingestion source with atomic bulk decisions and individual creation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -4971,10 +5137,138 @@ it("supports every ingestion source with atomic bulk decisions and individual cr
       expect(createdHistory.pendingCount).toBe(0);
       expect(createdHistory.items).toHaveLength(3);
       expect(createdHistory.items.every((item) => item.status === "created")).toBe(true);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(3);
+      expect(yield* fromTestPromise(() => count(runtime.db, "source_attestations"))).toBe(3);
+      const composed = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "SELECT r.id FROM ingestion_review_items r JOIN transactions t ON t.id=r.transaction_id AND t.user_id=r.user_id JOIN source_attestations a ON a.transaction_id=t.id AND a.user_id=t.user_id AND a.review_item_id=r.id WHERE r.workspace_state='created'"
+          )
+          .all<{ id: string }>()
+      );
+      expect(composed.results.map(({ id }) => id).sort()).toEqual(
+        inbox.items.map(({ id }) => id).sort()
+      );
     })
   ));
 
 afterEach(() => vi.useRealTimers());
+
+it("rolls back the whole bulk decision when a selected revision changes at commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const own = yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          "fecha,valor,descripcion\n2026-08-01,?,Cafe\n2026-08-02,?,Tienda\n"
+        )
+      );
+      const changedId = own.reviewIds[1] ?? "";
+      const database = competingWriteDb(runtime.db, () =>
+        runtime.db
+          .prepare(
+            "UPDATE ingestion_review_items SET workspace_state='skipped',workspace_revision=1,workspace_updated_at_ms=created_at_ms,workspace_archive_row_ref='review:'||id WHERE id=? AND user_id=?"
+          )
+          .bind(changedId, userA)
+          .run()
+      );
+      const result = yield* fromTestPromise(() =>
+        editReview(
+          { ...runtime, db: database },
+          {
+            _tag: "Skip",
+            items: own.reviewIds.map((id) => ({ id, revision: 0 })),
+          }
+        )
+      );
+      expect(result.status).toBe(400);
+      const pending = yield* readReviewInbox(runtime);
+      expect(pending.items.map(({ id, revision }) => ({ id, revision }))).toEqual([
+        { id: own.reviewIds[0], revision: 0 },
+      ]);
+      const history = yield* readReviewInbox(runtime, "history");
+      expect(history.items.map(({ id, revision, status }) => ({ id, revision, status }))).toEqual([
+        { id: changedId, revision: 1, status: "skipped" },
+      ]);
+    })
+  ));
+
+it("rejects a foreign bulk member and stale Undo without changing any acknowledged member", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const own = yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          "fecha,valor,descripcion\n2026-08-01,?,Cafe\n2026-08-02,?,Tienda\n"
+        )
+      );
+      const foreign = yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "fecha,valor,descripcion\n2026-08-01,?,Ajeno\n", 1)
+      );
+      const refs = own.reviewIds.map((id) => ({ id, revision: 0 }));
+      const foreignId = foreign.reviewIds[0] ?? "";
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Skip",
+            items: [...refs, { id: foreignId, revision: 0 }],
+          })
+        )).status
+      ).toBe(400);
+      expect(
+        (yield* readReviewInbox(runtime)).items.map(({ revision, status }) => ({
+          revision,
+          status,
+        }))
+      ).toEqual([
+        { revision: 0, status: "pending" },
+        { revision: 0, status: "pending" },
+      ]);
+      const foreignDetail = yield* fromTestPromise(() => reviewDetail(runtime, foreignId, 1));
+      expect(yield* fromTestPromise(() => foreignDetail.json())).toMatchObject({
+        data: { revision: 0, item: { status: "pending" } },
+      });
+      expect(
+        (yield* fromTestPromise(() => editReview(runtime, { _tag: "Skip", items: refs }))).status
+      ).toBe(200);
+      const receipt = own.reviewIds.map((id) => ({ id, revision: 1 }));
+      const changedId = own.reviewIds[1] ?? "";
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Restore",
+            items: [{ id: changedId, revision: 1 }],
+          })
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* fromTestPromise(() =>
+          editReview(runtime, {
+            _tag: "Skip",
+            items: [{ id: changedId, revision: 2 }],
+          })
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* fromTestPromise(() => editReview(runtime, { _tag: "Restore", items: receipt })))
+          .status
+      ).toBe(400);
+      const history = yield* readReviewInbox(runtime, "history");
+      expect(
+        history.items
+          .map(({ revision, status }) => ({ revision, status }))
+          .sort((left, right) => left.revision - right.revision)
+      ).toEqual([
+        { revision: 1, status: "skipped" },
+        { revision: 3, status: "skipped" },
+      ]);
+      expect(history.pendingCount).toBe(0);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+      expect(yield* fromTestPromise(() => count(runtime.db, "source_attestations"))).toBe(0);
+    })
+  ));
 
 it("denies agent originals and refuses review reads and writes after Consent revocation", () =>
   Effect.runPromise(
@@ -5295,5 +5589,47 @@ it("shares review revisions across workspace and statement decisions without cap
         400
       );
       expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(2);
+    })
+  ));
+
+it("settles exhausted extraction without storage while preserving coordinator User ownership", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const staged = yield* fromTestPromise(() => stageOne(runtime));
+      const accepted = yield* fromTestPromise(() =>
+        publishFixture(runtime, {
+          index: 0,
+          idempotencyKey: "20000000-0000-4000-8000-000000000691",
+          reference: staged.staged,
+        })
+      );
+      const submission = yield* fromTestPromise(() => submissionOf(accepted));
+      const activity = {
+        _tag: "StatementFailed" as const,
+        version: 1 as const,
+        userId: userA,
+        submissionId: submission.id,
+      };
+      const input = { DB: runtime.db, bucket: Option.none<R2Bucket>(), activity };
+      expect(
+        yield* Effect.result(advanceStatementExtraction({ ...input, userId: userB }))
+      ).toMatchObject({ _tag: "Failure" });
+      const readState = (): Promise<typeof submissionStateRow.Type> =>
+        firstRow(
+          runtime.db,
+          {
+            schema: submissionStateRow,
+            sql: "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?",
+          },
+          submission.id
+        );
+      expect((yield* fromTestPromise(readState)).status).toBe("queued");
+      expect(yield* advanceStatementExtraction({ ...input, userId: userA })).toBe("settled");
+      const state = yield* fromTestPromise(readState);
+      expect(state.status).toBe("failed");
+      expect(state.failure_reason).toEqual(Option.some("resource-limit"));
+      expect(yield* advanceStatementExtraction({ ...input, userId: userA })).toBe("settled");
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
     })
   ));

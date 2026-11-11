@@ -20,7 +20,11 @@ One User-owned revision-bound document retains bounded planning state. The exist
 canonical unit commits state and metadata Audit together under live authority. Queries derive
 future expectations and unique exact fixed-amount associations observationally. Explicit writes
 snapshot effective completions before changing plans or allocations; incomplete bounded reads
-cannot establish a safe allocation and refuse the edit. Invalidated associations require review.
+cannot establish a safe allocation and refuse the edit. Invalidated associations require review:
+their retained Transaction identity and original occurrence allocation remain reserved for automatic
+matching while their invalid contribution is removed from totals. Workspace observations expose
+ambiguous matching through `matchesComplete` without projecting a guessed completion; complete
+ambiguous facts still permit an explicit revision-bound association.
 
 Historical detection, its confirmation and discovery semantics, and frozen digest reports remain
 unchanged. A reviewed suggestion can create or link a plan, but cannot silently rewrite it. Accounts

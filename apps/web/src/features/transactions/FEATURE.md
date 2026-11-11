@@ -80,12 +80,28 @@ The period remains visible with empty results. Counts and Money summaries descri
 matching the filters within that period; continuation feedback identifies incomplete coverage.
 Read-only privacy history keeps its separate unbounded query and has no month navigation.
 
+History route staging lives in `route-history.ts`: it resolves the addressed effective Transaction
+before selecting its occurrence month and first page. Explicit reset replaces the query generation
+and rereads the addressed identity, including Corrections or Reconciliations that move its identity
+or month. Feed continuation and location are separate observations. Automatic location reads stop
+after twenty total pages; each “Seguir buscando” action admits one further page. Finding the target
+stops location reads and restores ordinary, uncapped scroll browsing. Exhaustion means absence in
+this successful period query, while lookup and continuation failures remain retryable failures.
+Captured continuation actions belong to their exact observation; refresh or replacement invalidates
+them. Refresh retains previously read rows as read-only display while destination and page rereads are
+pending or fail, without admitting an old-generation append or claiming the old destination is
+Located. Lookup failure remains explicit even when earlier rows are visible. Each generation keeps
+the existing five-second stale-on-focus policy and five-minute source retention. Mutation recovery
+still owns affected identity and Category rereads; history reset alone does not resolve an uncertain write. Privacy history
+retains its independent authorized read-only query and policies. Row reveal remains a DOM commit
+callback and does not move keyboard focus.
+
 ## Owners
 
-- `feature.tsx` and `history.ts` project the authenticated canonical query lifetime and declared continuations.
+- `route-history.ts` stages ordinary route/destination generations; `feature.tsx` and `history.ts` project the authenticated canonical query lifetime and declared continuations.
 - `workspace.tsx` owns filters, the scroll sentinel and panel interaction; `scroll-continuation.ts` owns observer setup and cleanup through the callback ref. Capture, detail, inline Category, bulk correction and summary stay in this directory.
 - Server Transactions owns capture/correction/history/search and persistence. Public Ingress reaches private Core/D1; browser fixtures do not prove deployed infrastructure.
-- `deletion.tsx` confirms permanent removal from visible history through the canonical deletion operation. Pending deletion locks the panel and record selection; rejected or uncertain outcomes require a history refresh. Success closes the panel and reloads history. SourceAttestations remain retained under the server's policy. Local browser checks cover cancellation, mobile pending controls, rejection and lost-response recovery; the real Core/D1 pagination journey verifies deletion beyond page one after reload. This change has not been verified in Production.
+- `deletion.tsx` presents one-use deletion review while the history-level Correction owner admits and executes the identity-only canonical deletion. Pending deletion locks the panel and record selection; rejected or uncertain outcomes require a history refresh. Acknowledged success closes the panel and reloads history; the mounted owner keeps writes blocked until fresh Categories/history and every affected identity are established. Missing identities use bounded direct canonical reads; failed lookups remain blocked, while fresh NotFound establishes absence without claiming a lost delete receipt. SourceAttestations remain retained under the server's policy. Local browser checks cover cancellation, mobile pending controls, rejection and lost-response recovery; the real Core/D1 pagination journey verifies deletion beyond page one after reload. This change has not been verified in Production.
 - This view has no Reconciliation or SourceAttestation history controls. Those canonical capabilities require a separate map and checks.
 
 ## Evidence

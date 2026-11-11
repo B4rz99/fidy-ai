@@ -18,6 +18,7 @@ const State = Schema.Struct({
   ]),
   version: Schema.Int,
   cursor_id: Schema.String,
+  repair_revision: Schema.Int,
 });
 const Subject = Schema.Struct({ user_id: UserId });
 
@@ -34,7 +35,8 @@ const markForRepair = (db: D1Database, userId: string, nowMs: number): Promise<v
         },
       }),
       db
-        .prepare(`UPDATE transaction_projection_state SET readiness = 'clearing-buckets', cursor_id = ''
+        .prepare(`UPDATE transaction_projection_state SET version = 1, readiness = 'clearing-buckets', cursor_id = '',
+        repair_revision = repair_revision + 1
       WHERE user_id = ? AND (readiness IN ('dirty', 'linking') OR version != 1)`)
         .bind(userId),
       db
@@ -60,37 +62,67 @@ const clearingPhase = (state: (typeof State.Type)["readiness"]): Option.Option<C
     ? Option.some(state)
     : Option.none();
 
+const fence =
+  "user_id = ? AND version = ? AND readiness = ? AND cursor_id = ? AND repair_revision = ?";
+const fenceBindings = (
+  userId: string,
+  state: typeof State.Type
+): readonly [string, number, (typeof State.Type)["readiness"], string, number] => [
+  userId,
+  state.version,
+  state.readiness,
+  state.cursor_id,
+  state.repair_revision,
+];
+
 const clearPage = ({
   db,
   userId,
   table,
-  phase,
   next,
+  state,
 }: Readonly<{
   db: D1Database;
   userId: string;
   table: RepairTable;
-  phase: string;
   next: string;
+  state: typeof State.Type;
 }>): Promise<void> => {
   const key = table === "transaction_projection_leaf" ? "id" : "rowid";
+  const expected = fenceBindings(userId, state);
   return db
     .batch([
       db
         .prepare(`DELETE FROM ${table} WHERE user_id = ? AND ${key} IN
-      (SELECT ${key} FROM ${table} WHERE user_id = ? ORDER BY ${key} LIMIT ${pageSize})`)
-        .bind(userId, userId),
+      (SELECT ${key} FROM ${table} WHERE user_id = ? ORDER BY ${key} LIMIT ${pageSize})
+      AND EXISTS (SELECT 1 FROM transaction_projection_state WHERE ${fence})`)
+        .bind(userId, userId, ...expected),
       db
-        .prepare(`UPDATE transaction_projection_state SET readiness = ?, cursor_id = ''
-      WHERE user_id = ? AND readiness = ?
-        AND NOT EXISTS (SELECT 1 FROM ${table} WHERE user_id = ?)`)
-        .bind(next, userId, phase, userId),
+        .prepare(`UPDATE transaction_projection_state
+      SET repair_revision = repair_revision + 1,
+        readiness = CASE WHEN NOT EXISTS (SELECT 1 FROM ${table} WHERE user_id = ?)
+          THEN ? ELSE readiness END, cursor_id = ''
+      WHERE ${fence}`)
+        .bind(userId, next, ...expected),
     ])
     .then(() => undefined);
 };
 
-const rebuildPage = (db: D1Database, userId: string, previousCursor: string): Promise<void> =>
-  db
+const inconsistentReconciliation = `EXISTS (
+  SELECT 1 FROM transaction_reconciliation_decisions decision
+  WHERE decision.user_id = transaction_projection_state.user_id AND (
+    (decision.state = 'linked' AND (SELECT COUNT(*) FROM reconciled_transactions member
+      WHERE member.user_id = decision.user_id
+        AND member.first_transaction_id = decision.first_transaction_id
+        AND member.second_transaction_id = decision.second_transaction_id) != 2)
+    OR (decision.state = 'keep-separate' AND EXISTS
+      (SELECT 1 FROM reconciled_transactions member WHERE member.user_id = decision.user_id
+        AND member.first_transaction_id = decision.first_transaction_id
+        AND member.second_transaction_id = decision.second_transaction_id))))`;
+
+const rebuildPage = (db: D1Database, userId: string, state: typeof State.Type): Promise<void> => {
+  const expected = fenceBindings(userId, state);
+  return db
     .batch([
       db
         .prepare(`INSERT OR IGNORE INTO transaction_projection_leaf
@@ -98,52 +130,49 @@ const rebuildPage = (db: D1Database, userId: string, previousCursor: string): Pr
         occurred_at_ms, created_at_ms, revision)
       SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
         occurred_at_ms, created_at_ms, revision
-      FROM transaction_effective_source WHERE user_id = ? AND id >
-        (SELECT cursor_id FROM transaction_projection_state WHERE user_id = ?)
+      FROM transaction_effective_source WHERE user_id = ? AND id > ?
+        AND EXISTS (SELECT 1 FROM transaction_projection_state WHERE ${fence})
       ORDER BY id LIMIT ${pageSize}`)
-        .bind(userId, userId),
+        .bind(userId, state.cursor_id, ...expected),
       db
-        .prepare(`UPDATE transaction_projection_state SET cursor_id = COALESCE(
-      (SELECT id FROM transaction_effective_source WHERE user_id = ?
-        AND id > transaction_projection_state.cursor_id ORDER BY id LIMIT 1 OFFSET ${pageSize - 1}),
-      (SELECT MAX(id) FROM transaction_effective_source WHERE user_id = ?
-        AND id > transaction_projection_state.cursor_id), cursor_id)
-      WHERE user_id = ? AND readiness = 'rebuilding'`)
-        .bind(userId, userId, userId),
-      db
-        .prepare(`UPDATE transaction_projection_state SET readiness = 'dirty'
-      WHERE user_id = ? AND readiness = 'rebuilding' AND EXISTS (
+        .prepare(`UPDATE transaction_projection_state SET readiness = 'dirty',
+      repair_revision = repair_revision + 1
+      WHERE ${fence} AND (EXISTS (
         SELECT 1 FROM (SELECT user_id, id, amount, currency, direction, category_id, counterparty, notes,
           occurred_at_ms, created_at_ms, revision FROM transaction_effective_source
-          WHERE user_id = ? AND id > ?
-          ORDER BY id LIMIT ${pageSize}) effective
+          WHERE user_id = ? AND id > ? ORDER BY id LIMIT ${pageSize}) effective
         LEFT JOIN transaction_projection_leaf leaf ON leaf.user_id = effective.user_id
           AND leaf.id = effective.id
         WHERE leaf.id IS NULL OR leaf.amount != effective.amount
           OR leaf.currency != effective.currency OR leaf.direction != effective.direction
           OR leaf.category_id != effective.category_id OR leaf.occurred_at_ms != effective.occurred_at_ms
           OR leaf.created_at_ms != effective.created_at_ms OR leaf.revision != effective.revision
-          OR leaf.counterparty IS NOT effective.counterparty OR leaf.notes IS NOT effective.notes)`)
-        .bind(userId, userId, previousCursor),
+          OR leaf.counterparty IS NOT effective.counterparty OR leaf.notes IS NOT effective.notes)
+        OR ${inconsistentReconciliation})`)
+        .bind(...expected, userId, state.cursor_id),
       db
-        .prepare(`UPDATE transaction_projection_state SET version = 1, readiness = 'ready'
-      WHERE user_id = ? AND readiness = 'rebuilding'
-        AND NOT EXISTS (SELECT 1 FROM transaction_effective_source effective
-          WHERE effective.user_id = ? AND effective.id > transaction_projection_state.cursor_id)
-        AND NOT EXISTS (SELECT 1 FROM transaction_reconciliation_decisions decision
-          WHERE decision.user_id = ? AND (
-            (decision.state = 'linked' AND (SELECT COUNT(*) FROM reconciled_transactions member
-              WHERE member.user_id = decision.user_id
-                AND member.first_transaction_id = decision.first_transaction_id
-                AND member.second_transaction_id = decision.second_transaction_id) != 2)
-            OR (decision.state = 'keep-separate' AND EXISTS
-              (SELECT 1 FROM reconciled_transactions member
-                WHERE member.user_id = decision.user_id
-                  AND member.first_transaction_id = decision.first_transaction_id
-                  AND member.second_transaction_id = decision.second_transaction_id))))`)
-        .bind(userId, userId, userId),
+        .prepare(`UPDATE transaction_projection_state SET
+      repair_revision = repair_revision + 1,
+      readiness = CASE WHEN NOT EXISTS (SELECT 1 FROM transaction_effective_source
+        WHERE user_id = ? AND id > ? ORDER BY id LIMIT 1 OFFSET ${pageSize})
+        THEN 'ready' ELSE 'rebuilding' END,
+      cursor_id = COALESCE(
+        (SELECT id FROM transaction_effective_source WHERE user_id = ? AND id > ?
+          ORDER BY id LIMIT 1 OFFSET ${pageSize - 1}),
+        (SELECT MAX(id) FROM transaction_effective_source WHERE user_id = ? AND id > ?), cursor_id)
+      WHERE ${fence} AND version = 1`)
+        .bind(
+          userId,
+          state.cursor_id,
+          userId,
+          state.cursor_id,
+          userId,
+          state.cursor_id,
+          ...expected
+        ),
     ])
     .then(() => undefined);
+};
 
 /** Repair one User's projection in bounded pages; views stay unavailable until guarded cutover. */
 export const repairDashboardProjection = ({
@@ -159,7 +188,7 @@ export const repairDashboardProjection = ({
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "SELECT version, readiness, cursor_id FROM transaction_projection_state WHERE user_id = ?"
+          "SELECT version, readiness, cursor_id, repair_revision FROM transaction_projection_state WHERE user_id = ?"
         )
         .bind(userId)
         .first()
@@ -170,15 +199,15 @@ export const repairDashboardProjection = ({
     const phase = clearingPhase(state.value.readiness);
     if (Option.isSome(phase)) {
       yield* Effect.tryPromise(() =>
-        clearPage({ db, userId, phase: phase.value, ...clearingPhases[phase.value] })
+        clearPage({ db, userId, state: state.value, ...clearingPhases[phase.value] })
       );
     } else if (state.value.readiness === "rebuilding") {
-      yield* Effect.tryPromise(() => rebuildPage(db, userId, state.value.cursor_id));
+      yield* Effect.tryPromise(() => rebuildPage(db, userId, state.value));
     }
     const after = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          "SELECT version, readiness, cursor_id FROM transaction_projection_state WHERE user_id = ?"
+          "SELECT version, readiness, cursor_id, repair_revision FROM transaction_projection_state WHERE user_id = ?"
         )
         .bind(userId)
         .first()

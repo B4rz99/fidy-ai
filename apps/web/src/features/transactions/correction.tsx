@@ -258,9 +258,12 @@ const CorrectionActions = ({
   </div>
 );
 /** Corrects only explicitly changed facts at the observed revision; an uncertain write is never replayed. */
-export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
+export const TransactionCorrection = (input: CorrectionProps): JSX.Element => {
+  const [transaction] = useState(() => input.transaction);
+  const props = { ...input, transaction };
   const [draft, setDraft] = useState(() => initialDraft(props.transaction, props.timeZone));
   const corrections = useTransactionCorrections();
+  const [submit] = useState(() => corrections.submit);
   const [submission, setSubmission] = useState<"pristine" | "invalid" | "submitted">("pristine");
   const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
   const status: CorrectionStatus =
@@ -279,7 +282,7 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
       return;
     }
     setSubmission("submitted");
-    corrections.submit({
+    submit({
       kind: "single",
       origin: "editor",
       transaction: props.transaction,

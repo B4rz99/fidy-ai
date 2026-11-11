@@ -7,8 +7,10 @@ Import `PostalMime` from `postal-mime`; the package owns its build paths and typ
 
 ## Bound hostile input before parsing
 
-The Email Worker admits only an approved envelope recipient and collects at most 1 MiB of raw
-bytes. MIME From/To headers, display names and the parsed OTP-Token header do not establish User
+The native Email Worker refuses new deliveries while operational institution verification and
+Connection admission are unavailable. The retained receipt/storage path resolves only an approved
+envelope recipient and collects at most 1 MiB of raw bytes. Those storage checks do not establish
+institution admission. MIME From/To headers, display names and the parsed OTP-Token header do not establish User
 identity, mailbox verification, or permission to execute Work. Parser errors remain closed refusals;
 raw input, parser messages and financial content never enter diagnostics.
 

@@ -15,10 +15,22 @@ import { Badge } from "./badge";
 import "./recurring.css";
 
 const desktopQuery = "(min-width: 1280px)";
-type PlanStatus = "active" | "paused" | "stopped";
-const planLabels = { active: "Activo", paused: "Pausado", stopped: "Dejado de seguir" };
-const planVariants = { active: "success", paused: "warning", stopped: "destructive" } as const;
+type PlanStatus = "scheduled" | "active" | "paused" | "stopped";
+const planLabels = {
+  scheduled: "Programado",
+  active: "Activo",
+  paused: "Pausado",
+  stopped: "Dejado de seguir",
+};
+const planVariants = {
+  scheduled: "information",
+  active: "success",
+  paused: "warning",
+  stopped: "destructive",
+} as const;
 const planDescriptions = {
+  scheduled:
+    "El seguimiento comenzará en la fecha programada. Los registros existentes se conservan.",
   paused:
     "No aparecerán nuevas fechas de este plan mientras esté pausado. Los registros existentes se conservan.",
   stopped: "Este plan dejó de generar nuevas fechas. Los registros existentes se conservan.",

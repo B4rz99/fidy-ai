@@ -1,8 +1,9 @@
 import { PendingRead } from "@/ui/components/pending-read";
 import { Input } from "@/ui/components/input";
 
+import { earlierOriginalDeadline, originalDeadlineQuery } from "./original-deadline";
 import { reviewMaterialQuery } from "./material-query";
-import { useReviewExpired } from "./expiry";
+import { reviewHasExpired, useReviewExpired } from "./expiry";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { AsyncResult, Atom } from "effect/reactivity";
@@ -16,18 +17,31 @@ import type { Item } from "./model";
 
 export const OriginalMaterial = ({
   item,
+  expiresAt,
 }: Readonly<{
   item: Item;
+  expiresAt: Item["expiresAt"];
 }>): JSX.Element => {
-  const expired = useReviewExpired(item);
+  const deadline = useOriginalDeadline(item, expiresAt);
+  const expired = useReviewExpired({ ...item, expiresAt: deadline });
   return expired ? (
-    <p className="text-sm text-muted-foreground">
-      El original venció. Envía el material de nuevo para revisarlo.
-    </p>
+    <ExpiredOriginal />
   ) : (
-    <RetainedMaterial item={item} />
+    <RetainedMaterial item={{ ...item, expiresAt: deadline }} />
   );
 };
+const useOriginalDeadline = (item: Item, expiresAt: Item["expiresAt"]): Item["expiresAt"] => {
+  const query = originalDeadlineQuery({
+    ...item,
+    expiresAt: earlierOriginalDeadline({ first: item.expiresAt, second: expiresAt }),
+  });
+  return useAtomValue(query);
+};
+const ExpiredOriginal = (): JSX.Element => (
+  <p className="text-sm text-muted-foreground">
+    El original venció. Envía el material de nuevo para revisarlo.
+  </p>
+);
 const useMaterialQuery = (
   item: Item
 ): Atom.Atom<AsyncResult.AsyncResult<CanonicalSuccess<"ingestion.getReviewMaterial">, unknown>> => {
@@ -35,7 +49,7 @@ const useMaterialQuery = (
   const [query] = useState(() =>
     reviewMaterialQuery({
       client,
-      id: item.id,
+      item,
     })
   );
   return query;
@@ -43,9 +57,16 @@ const useMaterialQuery = (
 /** Load original bytes alongside the selected detail, within the same expiry fence. */
 export const ReviewMaterialPreload = ({
   item,
+  expiresAt,
 }: Readonly<{
   item: Item;
+  expiresAt: Item["expiresAt"];
 }>): JSX.Element => {
+  const deadline = useOriginalDeadline(item, expiresAt);
+  const expired = useReviewExpired({ ...item, expiresAt: deadline });
+  return expired ? <></> : <MaterialPreload item={{ ...item, expiresAt: deadline }} />;
+};
+const MaterialPreload = ({ item }: Readonly<{ item: Item }>): JSX.Element => {
   useAtomMount(useMaterialQuery(item));
   return <></>;
 };
@@ -57,6 +78,7 @@ const RetainedMaterial = ({
   const query = useMaterialQuery(item);
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
+  if (reviewHasExpired(item)) return <ExpiredOriginal />;
   const unavailable =
     state._tag === "Failure" ? (
       <p className="text-sm text-muted-foreground">No pudimos cargar el original.</p>
@@ -76,7 +98,13 @@ const RetainedMaterial = ({
           unavailable
         )}
         {state._tag === "Failure" ? (
-          <Button type="button" variant="outline" onClick={refresh}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              if (!reviewHasExpired(item)) refresh();
+            }}
+          >
             Reintentar original
           </Button>
         ) : null}

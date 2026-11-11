@@ -185,6 +185,11 @@
       "files": ["apps/web/src/features/transactions/scroll-restoration.ts"],
       "rules": { "effect-guards/no-react-use-effect": "off" }
     },
+    // Budget callbacks must observe committed admission and retire on month/auth disposal.
+    {
+      "files": ["apps/web/src/features/budgets/write-lifetime.ts"],
+      "rules": { "effect-guards/no-react-use-effect": "off" }
+    },
     // These libraries expose extensionless package exports that resolve to .mjs.
     {
       "files": [

@@ -1,9 +1,14 @@
-import { type PageContexts, sourceExcerpt, sourceReference } from "./source-context";
+import {
+  type PageContexts,
+  type SourceContext,
+  sourceExcerpt,
+  sourceReference,
+} from "./source-context";
 import { useId } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { File01Icon, Image01Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { Badge } from "@/ui/components/badge";
-import { useReviewExpired } from "./expiry";
+import { reviewHasExpired, useReviewExpired } from "./expiry";
 import { Option } from "effect";
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
@@ -85,7 +90,7 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
   const reference = sourceReference({ item, context, position });
   const excerpt = sourceExcerpt({ item, context });
   const evidenceLabel = contextState({
-    expired,
+    expired: originalContextExpired(item, context),
     loading: props.contextLoading,
     source: item.source,
   });
@@ -135,6 +140,10 @@ const ReviewRow = ({ item, props }: Readonly<{ item: Item; props: InboxProps }>)
     </div>
   );
 };
+
+const originalContextExpired = (item: Item, context: Option.Option<SourceContext>): boolean =>
+  reviewHasExpired(item) ||
+  Option.exists(context, (entry) => reviewHasExpired({ ...item, expiresAt: entry.expiresAt }));
 
 const contextState = ({
   expired,

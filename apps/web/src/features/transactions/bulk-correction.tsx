@@ -207,7 +207,9 @@ const BulkHeading = ({ count }: Readonly<{ count: number }>): JSX.Element => (
   </header>
 );
 /** Sends one revision-checked atomic correction and never replays an uncertain save. */
-export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
+export const BulkTransactionCorrection = (input: BulkProps): JSX.Element => {
+  const [transactions] = useState(() => input.transactions);
+  const props = { ...input, transactions };
   const [draft, setDraft] = useState<BulkDraft>({
     categoryId: "keep",
     direction: "keep",
@@ -217,6 +219,7 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
     date: "",
   });
   const corrections = useTransactionCorrections();
+  const [submit] = useState(() => corrections.submit);
   const [submission, setSubmission] = useState<"pristine" | "invalid" | "submitted">("pristine");
   const feedback = corrections.status === "recovering" ? "saving" : corrections.status;
   const status: CorrectionStatus =
@@ -231,7 +234,7 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
       return;
     }
     setSubmission("submitted");
-    corrections.submit({ kind: "bulk", transactions: props.transactions, changes: changes.value });
+    submit({ kind: "bulk", transactions: props.transactions, changes: changes.value });
   };
   return props.renderForm(
     <form

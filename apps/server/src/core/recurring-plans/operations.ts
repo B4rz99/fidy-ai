@@ -3,6 +3,7 @@ import type { ReadonlyMoney } from "~/core/_shared/money";
 import {
   InvalidRecurringEdit,
   type RecurringCommand,
+  RecurringDate,
   RecurringDocument,
   type RecurringEdit,
   type RecurringFilters,
@@ -119,6 +120,44 @@ export const planAt = ({
   const revision = plan.revisions.findLast((entry) => entry.from <= date) ?? plan.revisions[0];
   return revision.plan;
 };
+/** Observes local-date standing; command admission still depends on the retained lifecycle facts. */
+export const observeRecurringPlan = ({
+  document,
+  planId,
+  date,
+}: Readonly<{
+  document: RecurringSchedule;
+  planId: string;
+  date: string;
+}>): Effect.Effect<
+  Option.Option<
+    Readonly<{
+      plan: RecurringPlanInput;
+      status: "scheduled" | "active" | "paused" | "stopped";
+    }>
+  >,
+  InvalidRecurringEdit
+> =>
+  Effect.gen(function* () {
+    yield* Schema.decodeEffect(RecurringDate)(date).pipe(
+      Effect.mapError(() =>
+        InvalidRecurringEdit.make({ message: "Expected a valid local calendar date" })
+      )
+    );
+    const plan = document.plans.find((entry) => entry.id === planId);
+    if (plan === undefined) return Option.none();
+    const settings = planAt({ plan, date });
+    let status: "scheduled" | "active" | "paused" | "stopped" = "active";
+    if (plan.stoppedOn !== undefined && date >= plan.stoppedOn) status = "stopped";
+    else if (
+      plan.pauses.some(
+        (pause) => date >= pause.from && (pause.through === undefined || date < pause.through)
+      )
+    ) {
+      status = "paused";
+    } else if (date < settings.firstDate) status = "scheduled";
+    return Option.some({ plan: settings, status });
+  });
 const trackedOn = ({ plan, date }: Readonly<{ plan: RecurringPlan; date: string }>): boolean =>
   (plan.stoppedOn === undefined || date < plan.stoppedOn) &&
   !plan.pauses.some(

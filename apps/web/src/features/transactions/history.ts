@@ -16,19 +16,31 @@ type HistoryInput = Required<
 type PageAtom = Atom.Atom<AsyncResult.AsyncResult<TransactionPage, unknown>>;
 class PageKey extends Data.Class<{ generation: number; cursor: string }> {}
 type HistoryNavigation = Readonly<{ generation: number; pages: number }>;
+type Retry = Readonly<{ retry: () => boolean }>;
+type More = Readonly<{ more: () => boolean }>;
 export type HistoryState = Readonly<{
   query: CanonicalQueryState<Pick<TransactionPage, "data">, unknown>;
   generation: number;
+  more: More;
+  retry: Retry;
   loadedPages: number;
   continuation: "complete" | "available" | "loading" | "failure";
-  retryPage: Option.Option<PageAtom>;
+  location:
+    | "None"
+    | "Locating"
+    | "Located"
+    | "BoundReached"
+    | "NotFound"
+    | "LookupFailed"
+    | "ContinuationFailed";
 }>;
+type ReadCommand = More | Retry | Readonly<{ restorePages: number }>;
 export type HistoryCommand =
-  | "more"
-  | "retry"
+  | ReadCommand
   | "reset"
   | "refresh"
-  | Readonly<{ restorePages: number }>;
+  | "refresh-pages"
+  | Readonly<{ refreshPages: number }>;
 type History = Readonly<{
   state: Atom.Atom<HistoryState>;
   action: Atom.Writable<Option.Option<void>, HistoryCommand>;
@@ -65,7 +77,8 @@ const pendingContinuation = (
   if (Option.isSome(current.refreshFailure)) return "failure";
   return current.waiting ? "loading" : "complete";
 };
-type BrowsedHistory = HistoryState & Readonly<{ loadedPages: number }>;
+type BrowsedHistory = Omit<HistoryState, "location" | "more" | "retry"> &
+  Readonly<{ retryPage: Option.Option<PageAtom> }>;
 type Browse = Readonly<{
   first: ReadyPage;
   navigation: HistoryNavigation;
@@ -180,6 +193,87 @@ const retainLoadedHistory = (
   };
 };
 
+const locationState = (
+  current: Omit<HistoryState, "location" | "more" | "retry">,
+  locate: Option.Option<string>
+): HistoryState["location"] => {
+  if (Option.isNone(locate)) return "None";
+  if (current.query._tag === "Failure") {
+    return "ContinuationFailed";
+  }
+  if (current.query._tag !== "Ready") return "Locating";
+  return readyLocation(current.query, current.continuation, locate.value);
+};
+const readyLocation = (
+  query: ReadyPage | Extract<HistoryState["query"], { _tag: "Ready" }>,
+  continuation: HistoryState["continuation"],
+  locate: string
+): HistoryState["location"] => {
+  if (query.waiting) return "Locating";
+  if (query.value.data.some(({ id }) => id === locate)) return "Located";
+  if (Option.isSome(query.refreshFailure) || continuation === "failure") {
+    return "ContinuationFailed";
+  }
+  if (continuation === "loading") return "Locating";
+  return continuation === "complete" ? "NotFound" : "BoundReached";
+};
+const oneUse = (): (() => boolean) => {
+  let available = true;
+  return () => {
+    if (!available) return false;
+    available = false;
+    return true;
+  };
+};
+type HistoryActionInput = Readonly<{
+  navigation: Atom.Writable<HistoryNavigation>;
+  state: Atom.Atom<HistoryState>;
+  internal: Atom.Atom<BrowsedHistory>;
+  firstPage: PageAtom;
+}>;
+const readAction = (
+  command: ReadCommand,
+  get: Atom.FnContext,
+  { navigation, state, internal, firstPage }: HistoryActionInput
+): void => {
+  const changePages = (pages: number): void => get.set(navigation, { ...get(navigation), pages });
+  if ("restorePages" in command) return changePages(command.restorePages);
+  if ("retry" in command) {
+    if (command.retry !== get(state).retry.retry || !command.retry()) return;
+    Option.match(get(internal).retryPage, {
+      onNone: () => get.refresh(firstPage),
+      onSome: (atom) => get.refresh(atom),
+    });
+    return;
+  }
+  const current = get(state);
+  if (
+    current.continuation === "available" &&
+    current.more.more === command.more &&
+    command.more()
+  ) {
+    changePages(current.loadedPages + 1);
+  }
+};
+const historyActions = (input: HistoryActionInput): History["action"] =>
+  Atom.fnSync<HistoryCommand>()((command, get): void => {
+    if (typeof command !== "string") {
+      if ("refreshPages" in command) {
+        get.set(input.navigation, {
+          generation: get(input.navigation).generation + 1,
+          pages: command.refreshPages,
+        });
+        return;
+      }
+      return readAction(command, get, input);
+    }
+    get.set(input.navigation, {
+      generation: get(input.navigation).generation + 1,
+      pages: command === "reset" ? 1 : Math.max(1, get(input.state).loadedPages),
+    });
+    if (command !== "refresh-pages") get.refresh(input.firstPage);
+  });
+
 /** Canonical query atoms own records; this projection joins explicitly requested pages.
  * Reset replaces continuation identities so old responses cannot join refreshed history.
  */
@@ -198,7 +292,7 @@ export const transactionHistory = ({
 }>): History => {
   const navigation = Atom.make<HistoryNavigation>({ generation: 0, pages: initialPages });
   const pages = Atom.family((key: PageKey) => pageQuery(apiClient, period, key.cursor));
-  const state = Atom.make((get): BrowsedHistory => {
+  const internal = Atom.make((get): BrowsedHistory => {
     const current = get(navigation);
     const first = presentCanonicalQuery(get(firstPage));
     if (first._tag !== "Ready") {
@@ -222,24 +316,15 @@ export const transactionHistory = ({
     });
     return retainLoadedHistory(browsed, get.self<BrowsedHistory>(), current.pages);
   });
-  const action = Atom.fnSync<HistoryCommand>()((command, get): void => {
-    const changePages = (pages: number): void => get.set(navigation, { ...get(navigation), pages });
-    if (typeof command !== "string") return changePages(command.restorePages);
-    if (command === "reset" || command === "refresh") {
-      get.set(navigation, {
-        generation: get(navigation).generation + 1,
-        pages: command === "refresh" ? Math.max(1, get(state).loadedPages) : 1,
-      });
-      get.refresh(firstPage);
-    } else if (command === "retry") {
-      Option.match(get(state).retryPage, {
-        onNone: () => get.refresh(firstPage),
-        onSome: (atom) => get.refresh(atom),
-      });
-    } else if (get(state).continuation === "available") {
-      const current = get(navigation);
-      get.set(navigation, { ...current, pages: get(state).loadedPages + 1 });
-    }
+  const state = Atom.make((get): HistoryState => {
+    const { retryPage: _retryPage, ...publicState } = get(internal);
+    return {
+      ...publicState,
+      location: locationState(publicState, locate),
+      more: { more: oneUse() },
+      retry: { retry: oneUse() },
+    };
   });
+  const action = historyActions({ navigation, state, internal, firstPage });
   return { state, action };
 };

@@ -1,49 +1,94 @@
 import { useAtomSet } from "@effect/atom-react";
-import { Option } from "effect";
-import { useRef, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { HostedTurnClient } from "@/transport/hosted-turn-client";
 import {
+  type Conversation,
+  type ConversationLifetime,
   type HostedConversation,
+  type SetConversation,
   conversationCommands,
   initialConversation,
-  presentConversation,
   presentHostedConversation,
 } from "./conversation-state";
 
-const initialDeliveredTurn = Option.none<string>();
+type ConversationOwner = Readonly<{
+  current: () => Conversation;
+  setConversation: SetConversation;
+  subscribe: (listener: () => void) => () => void;
+  capture: () => ConversationLifetime;
+}>;
+type MountedLifetime = Readonly<{ active: () => boolean; retire: () => void }>;
+const mountedLifetime = (): MountedLifetime => {
+  let retired = false;
+  return {
+    active: (): boolean => !retired,
+    retire: (): void => {
+      retired = true;
+    },
+  };
+};
+const conversationOwner = (clearAcceptedDraft: () => void): ConversationOwner => {
+  let conversation = initialConversation;
+  let lifetime = mountedLifetime();
+  let active = false;
+  const listeners = new Set<() => void>();
+  const setConversation: SetConversation = (update) => {
+    if (!active) return;
+    conversation = typeof update === "function" ? update(conversation) : update;
+    listeners.forEach((listener) => listener());
+  };
+  return {
+    current: (): Conversation => conversation,
+    setConversation,
+    subscribe: (listener: () => void): (() => void) => {
+      active = true;
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+        active = false;
+        lifetime.retire();
+        lifetime = mountedLifetime();
+        conversation = { turn: { tag: "idle" }, history: [] };
+      };
+    },
+    capture: (): ConversationLifetime => {
+      const admitted = lifetime;
+      const isActive = (): boolean => active && admitted.active();
+      return {
+        active: isActive,
+        setConversation: (update: Parameters<SetConversation>[0]): void => {
+          if (isActive()) setConversation(update);
+        },
+        clearDraft: (): void => {
+          if (isActive()) clearAcceptedDraft();
+        },
+      };
+    },
+  };
+};
 
 /**
- * Owns one mounted conversation, including exact receipt retention and bounded visible history.
- * Mount with the authenticated layout so dismissal/navigation retain it and logout discards it.
- * Presentation reports a committed, visible reply; only this module decides whether to acknowledge
- * it. Unresolved execution or delivery blocks submission. clearDraft runs after a successful
- * proposal response, while the draft is still disabled. No conversation state is persisted.
+ * Retains one mounted conversation and its private delivery material until disposal.
+ * Call reply-bound visibility only after its exact text commits in an active, visible document.
+ * Unresolved work blocks submissions; accepted proposals clear the caller's disabled draft.
  */
 export const useHostedConversation = ({
   client,
-  clearDraft,
-}: Readonly<{ client: HostedTurnClient; clearDraft: () => void }>): HostedConversation => {
-  const [conversation, setConversation] = useState(initialConversation);
-  const [commands] = useState(() => conversationCommands({ client, setConversation, clearDraft }));
+  clearAcceptedDraft,
+}: Readonly<{ client: HostedTurnClient; clearAcceptedDraft: () => void }>): HostedConversation => {
+  const [owner] = useState(() => conversationOwner(clearAcceptedDraft));
+  const [commands] = useState(() => conversationCommands({ client, capture: owner.capture }));
   const propose = useAtomSet(commands.propose);
   const progress = useAtomSet(commands.progress);
   const acknowledge = useAtomSet(commands.receipt);
-  const deliveredTurn = useRef(initialDeliveredTurn);
-  const actions = (): HostedConversation =>
-    presentHostedConversation({
-      conversation,
-      setConversation,
-      propose,
-      progress,
-      acknowledge,
-      deliveredTurn,
-    });
-  return {
-    view: presentConversation(conversation),
-    submit: (text) => actions().submit(text),
-    confirm: () => actions().confirm(),
-    replyVisible: () => actions().replyVisible(),
-    checkProgress: () => actions().checkProgress(),
-    retryDelivery: () => actions().retryDelivery(),
-  };
+  const conversation = useSyncExternalStore(owner.subscribe, owner.current);
+  return presentHostedConversation({
+    conversation,
+    setConversation: owner.setConversation,
+    current: owner.current,
+    active: owner.capture().active,
+    propose,
+    progress,
+    acknowledge,
+  });
 };

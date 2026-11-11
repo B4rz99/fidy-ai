@@ -1,9 +1,9 @@
 import { PendingRead } from "@/ui/components/pending-read";
 
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
 import type { AsyncResult, AtomRegistry } from "effect/reactivity";
-import { type JSX, type ReactNode, Suspense, useState } from "react";
+import { type JSX, type ReactNode, Suspense, useContext, useState } from "react";
 import { lazyRouteComponent, useRouter } from "@tanstack/react-router";
 
 import { Button } from "@/ui/components/button";
@@ -13,7 +13,12 @@ import type { FidyClient } from "@/transport/client";
 import { workspaceDashboardCatalogQuery } from "@/transport/workspace-query";
 import { type DashboardEditorError, useDashboardEditing } from "./editing";
 import type { DashboardView } from "./presentation";
-import { type DashboardLoadPhase, dashboardQuery } from "./query";
+import {
+  type DashboardLoadPhase,
+  type DashboardRead,
+  type DashboardReadAttempt,
+  dashboardQuery,
+} from "./query";
 import { DashboardBudgetConfiguration } from "./budget-configuration";
 import { prepareQuery } from "@/transport/query-preparation";
 import type { AnyRouter } from "@tanstack/react-router";
@@ -35,7 +40,8 @@ export const DashboardFeature = ({
   const [dashboard] = useState(() => dashboardQuery({ apiClient, router }));
   const result = useAtomValue(dashboard.result);
   const phase = useAtomValue(dashboard.phase);
-  const refresh = useAtomRefresh(dashboard.result);
+  const registry = useContext(RegistryContext);
+  const refresh = (): DashboardReadAttempt => dashboard.refresh(registry);
   return (
     <Suspense fallback={<PendingRead label="Cargando tablero" />}>
       <DashboardRouteContent
@@ -186,15 +192,15 @@ export const DashboardRouteContent = ({
   phase,
 }: Readonly<{
   apiClient: FidyClient;
-  onRefresh: () => void;
-  result: AsyncResult.AsyncResult<Readonly<{ data: DashboardView }>, unknown>;
+  onRefresh: () => DashboardReadAttempt;
+  result: AsyncResult.AsyncResult<DashboardRead, unknown>;
   phase: DashboardLoadPhase;
 }>): JSX.Element => {
   const [catalogAtom] = useState(() => workspaceDashboardCatalogQuery(apiClient));
   const catalogResult = useAtomValue(catalogAtom);
   const refreshCatalog = useAtomRefresh(catalogAtom);
   const dashboardState = presentCanonicalQuery(result);
-  const { lifecycleRef, editError, ...editing } = useDashboardEditing({
+  const { lifecycleRef, editError, refresh, ...editing } = useDashboardEditing({
     apiClient,
     onRefresh,
     dashboard: dashboardState,
@@ -203,7 +209,7 @@ export const DashboardRouteContent = ({
     return (
       <div className="contents" ref={lifecycleRef}>
         <DashboardLoadNotice phase={phase} waiting={dashboardState.waiting} />
-        <DashboardRoutePresentation onRefresh={onRefresh} result={result} />
+        <DashboardRoutePresentation onRefresh={refresh} result={result} />
       </div>
     );
   }
@@ -223,7 +229,7 @@ export const DashboardRouteContent = ({
         <DashboardQueryNotices
           catalog={catalogState}
           dashboard={dashboardState}
-          onRefresh={onRefresh}
+          onRefresh={refresh}
           refreshCatalog={refreshCatalog}
         />
         <DashboardViewComponent

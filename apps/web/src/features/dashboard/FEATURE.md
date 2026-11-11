@@ -68,7 +68,7 @@ Capability and verification map for `/app/dashboard`. This records implementatio
 
 - `feature.tsx` owns independent query feedback.
 - `editing.ts` owns the mounted edit queue, pending placement, canonical reread and recovery; presentation receives projected placement rather than canonical edit internals.
-- `query.ts` owns read/initialize/read and its workflow phase.
+- `query.ts` owns read/initialize/read, its workflow phase, and explicit recovery attempts correlated to the first actual new load.
 - `editor-model.ts` translates closed UI gestures to canonical edits.
 - `drag-adapter.tsx` owns drag transport validation and semantic destinations.
 - `view.tsx`, `presentation.ts`, and Money presentation own rendering.
@@ -82,7 +82,7 @@ Dropping shows the placement immediately and announces “Guardando cambio…”
 
 `dashboard-editing.spec.ts` checks delayed saves, delayed and failed rereads, lost acknowledgment through the built browser. `dashboard-core.spec.ts` checks stable hover geometry and persisted edits through public Ingress, private Core, and local D1. Missing Widgets offer an explicit canonical refresh rather than a generic validation error.
 
-Uncertain outcomes and missing Widgets discard unsent edits and block further submission until an explicit successful canonical refresh. A failed refresh keeps that block. Leaving the mounted Dashboard discards unsent edits and suppresses late local feedback; an already-sent mutation may have committed and is never automatically replayed. The removed `editing.test.tsx` suite supplied historical rendered evidence for these rules. Current mounted editing checks run through the Dashboard browser journeys below.
+Uncertain outcomes and missing Widgets discard unsent edits and block further submission until an explicit successful canonical refresh. A failed refresh keeps that block. Recovery starts a new load through the query owner. Only that attempt’s first successful, unsuperseded load releases editing, including an equal-content response. Older, failed, superseded and retired reads cannot release it. Once recovered, later ordinary display reads do not revoke that completion. All Dashboard retry controls use the editing owner; catalog retries remain independent. Leaving the mounted Dashboard discards unsent edits and suppresses late local feedback; an already-sent mutation may have committed and is never automatically replayed. The removed `editing.test.tsx` suite supplied historical rendered evidence for these rules. Current mounted editing checks run through the Dashboard browser journeys below.
 
 Historical Production revision `03d94db6b3546c995be65b72c75515ae27707235` ([PR #1229](https://github.com/B4rz99/fidy-ai/pull/1229)) passed live pointer verification on 2026-10-12: hover rendered the proposed full Widget arrangement, Escape removed the preview, and a dropped swap displayed the new placement immediately before its canonical reread. The swap survived reload. Reversing it and reloading restored the original four titles and desktop positions. Deployment metadata matched the tested revision. Delayed saves and failure recovery were exercised locally, not induced in Production.
 

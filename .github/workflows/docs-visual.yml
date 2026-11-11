@@ -67,6 +67,7 @@ jobs:
           bun run --cwd apps/docs test:browser e2e/visual.spec.ts
       - name: Preserve actual browser screenshots and metadata
         if: ${{ !cancelled() }}
+        timeout-minutes: 2
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docs-browser-evidence-${{ github.event.pull_request.head.sha }}

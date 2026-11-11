@@ -231,7 +231,12 @@ const routeActions = ({
       get.set(get(owner.resource).action, command);
       get.set(navigation, {
         ...owner,
-        generation: new Generation({ ...current, number: current.number + 1 }),
+        generation: new Generation({
+          number: current.number + 1,
+          pages: current.pages,
+          period: current.period,
+          locate: current.locate,
+        }),
       });
       return;
     }

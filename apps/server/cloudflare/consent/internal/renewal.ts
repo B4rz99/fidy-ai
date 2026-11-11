@@ -69,11 +69,10 @@ const eligibleWithdrawal = ({ admission, authority }: RenewalContext): OwnedStat
     ...authority.bindings,
   ],
 });
-const retryReceipt = ({
-  db,
-  admission,
-  authority,
-}: RenewalContext): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+const retryReceipt = (
+  { db, admission, authority }: RenewalContext,
+  missingStatus = forbiddenStatus
+): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const decision = admission.renewal;
     const previous = yield* Effect.tryPromise(() =>
@@ -93,7 +92,7 @@ const retryReceipt = ({
         .all()
     );
     if (previous.results.length !== 1) {
-      return consentResponse(forbiddenStatus);
+      return consentResponse(missingStatus);
     }
     const row = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
@@ -169,6 +168,16 @@ export const renewProcessingConsent = (
         .all()
     );
     return yield* allowed.results.length === 1
-      ? commitRenewal(context, eligible)
+      ? commitRenewal(context, eligible).pipe(
+          Effect.catch(() =>
+            Effect.gen(function* () {
+              const observed = yield* Clock.currentTimeMillis;
+              return yield* retryReceipt(
+                renewalContext(input.db, input.admission, observed),
+                unavailableStatus
+              );
+            })
+          )
+        )
       : retryReceipt(context);
   }).pipe(Effect.orElseSucceed(() => consentResponse(unavailableStatus)));

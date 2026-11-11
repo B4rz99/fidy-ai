@@ -394,17 +394,20 @@ const readChoice = (
     return Option.some({ offer, choice: choice.value, message, grant });
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));
 
-const acceptChoiceAction = (
-  input: DecisionInput,
-  evidence: PreparedChoice
-): D1PreparedStatement => {
-  const grantGuard = Option.match(evidence.grant, {
+const preparedGrantGuard = (input: DecisionInput, evidence: PreparedChoice): OwnedStatement =>
+  Option.match(evidence.grant, {
     onNone: () => ({ sql: `NOT EXISTS (${liveGrant})`, params: [input.userId, input.kind] }),
     onSome: (grant) => ({
       sql: `EXISTS (${liveGrant} AND g.id=?)`,
       params: [input.userId, input.kind, grant.id],
     }),
   });
+
+const acceptChoiceAction = (
+  input: DecisionInput,
+  evidence: PreparedChoice
+): D1PreparedStatement => {
+  const grantGuard = preparedGrantGuard(input, evidence);
   return channelAction(
     input,
     {
@@ -426,6 +429,7 @@ const acceptChoiceAction = (
 
 const authorizeChoice = (input: DecisionInput, evidence: PreparedChoice): D1PreparedStatement => {
   const decision = evidence.choice[3];
+  const grantGuard = preparedGrantGuard(input, evidence);
   if (decision === "accept") return acceptChoiceAction(input, evidence);
   if (
     decision === "revoke" &&
@@ -453,7 +457,7 @@ const authorizeChoice = (input: DecisionInput, evidence: PreparedChoice): D1Prep
   return channelAction(
     input,
     {
-      sql: "UPDATE consent_offers SET decision=?,decision_message_id=? WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND decision IS NULL AND disclosure_message_id IS NOT NULL AND (?<>'accept' OR (portfolio_id=? AND bsuid=? AND expires_at_ms>?))",
+      sql: `UPDATE consent_offers SET decision=?,decision_message_id=? WHERE kind<>'weekly-summary' AND user_id=? AND kind=? AND id=? AND decision IS NULL AND disclosure_message_id IS NOT NULL AND (?<>'accept' OR (portfolio_id=? AND bsuid=? AND expires_at_ms>?)) AND ${grantGuard.sql}`,
       params: [
         decision,
         evidence.message,
@@ -464,6 +468,7 @@ const authorizeChoice = (input: DecisionInput, evidence: PreparedChoice): D1Prep
         input.caller.businessPortfolioId,
         input.caller.businessScopedUserId,
         input.now.epochMilliseconds,
+        ...grantGuard.params,
       ],
     },
     true

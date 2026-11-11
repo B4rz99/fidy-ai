@@ -522,6 +522,65 @@ it("deletes expired undecided disclosure offers independently while retaining ac
     })
   ));
 
+it("refuses a prepared decline after another offer granted the category", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup;
+      const input = {
+        db,
+        userId: users[0],
+        caller: callers[0],
+        kind: "manual-entry-reminder" as const,
+        now,
+      };
+      const original = Option.getOrThrow(yield* createProactivityConsentOffer(input));
+      yield* recordProactivityConsentDisclosure({
+        ...input,
+        offerId: original.id,
+        disclosureMessageId: "original-disclosure",
+      });
+      const decline = Option.getOrThrow(
+        yield* prepareProactivityConsentDecision({
+          ...input,
+          choice: original.declineChoice,
+          decisionMessageId: "prepared-decline",
+        })
+      );
+      expect(decline.decision).toBe("decline");
+      const later = { ...input, now: DateTime.add(now, { minutes: 11 }) };
+      const current = Option.getOrThrow(yield* createProactivityConsentOffer(later));
+      yield* recordProactivityConsentDisclosure({
+        ...later,
+        offerId: current.id,
+        disclosureMessageId: "current-disclosure",
+      });
+      const accept = Option.getOrThrow(
+        yield* prepareProactivityConsentDecision({
+          ...later,
+          choice: current.acceptChoice,
+          decisionMessageId: "current-choice",
+        })
+      );
+      yield* Effect.tryPromise(() => db.batch([...accept.statements]));
+      const grant = Option.getOrThrow(yield* findProactivityConsentGrant(input));
+      const refused = yield* Effect.exit(
+        Effect.tryPromise(() => db.batch([...decline.statements]))
+      );
+      expect(refused._tag).toBe("Failure");
+      expect(Option.getOrThrow(yield* findProactivityConsentGrant(input))).toEqual(grant);
+      const revoke = Option.getOrThrow(
+        yield* prepareProactivityConsentDecision({
+          ...later,
+          choice: original.declineChoice,
+          decisionMessageId: "current-decline",
+        })
+      );
+      expect(revoke.decision).toBe("revoke");
+      yield* Effect.tryPromise(() => db.batch([...revoke.statements]));
+      expect(Option.isNone(yield* findProactivityConsentGrant(input))).toBe(true);
+    })
+  ));
+
 it("retains exact category disclosure hashes rather than a model-generated opt-in", () =>
   Effect.runPromise(
     Effect.gen(function* () {

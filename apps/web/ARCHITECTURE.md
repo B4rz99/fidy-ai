@@ -264,6 +264,15 @@ panel disposal or authentication teardown cancels unsent work, and evidence expi
 for that item. Already-sent mutations may commit; reopening reads canonical state. The generated
 client retains authorization, transport policy and telemetry ownership.
 
+Decisions freeze unique bounded membership and original evidence deadlines before waiting for
+shared draft permits. Every acknowledgment must match the complete requested identity set,
+operation status and next revision before any detail is published. Bulk work rechecks every member
+after the last flush and sends one canonical mutation; preflight failure retains the panel lock.
+Skip retains a volatile one-use receipt containing the committed revisions and original deadlines.
+Undo prunes receipts contradicted by current observations and restores only those exact revisions,
+without flushing newer drafts. Unconfirmed outcomes are never replayed. Only a newly requested,
+successful canonical observation can clear uncertainty; cached display state cannot unlock it.
+
 ### Dashboard first use
 
 The authenticated Dashboard's Effect Atom owner explicitly reads the canonical view, initializes

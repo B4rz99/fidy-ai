@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { type Cause, Effect } from "effect";
+import { type Cause, Effect, Option } from "effect";
 import { apiOrigin, installBoundUser, installCategories, response } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
@@ -260,6 +260,39 @@ test("a Transaction removed between lookup and list loading does not look succes
     })
   ));
 
+const expectEffectiveMonth = (page: Page, month: string): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      expect(
+        page.getByRole("button", { name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u })
+      ).toBeInViewport()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue(month)
+    );
+  });
+type HeldLookup = { hold: boolean; pending: Option.Option<Route> };
+const fulfillEffectiveLookup = (route: Route, visible: typeof transaction): Promise<void> =>
+  route.fulfill({
+    contentType: "application/json",
+    body: response({
+      ...visible,
+      reconciliation: { kind: "linked", firstTransaction: transaction, secondTransaction: visible },
+      sources: [],
+    }),
+  });
+const installEffectiveLookup = (
+  page: Page,
+  visible: typeof transaction,
+  fixture: HeldLookup
+): Promise<unknown> =>
+  page.route(`${apiOrigin}/transactions/${transactionId}`, (route) => {
+    if (fixture.hold) {
+      fixture.pending = Option.some(route);
+      return Promise.resolve();
+    }
+    return fulfillEffectiveLookup(route, visible);
+  });
 const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     yield* installHistory(page);
@@ -269,29 +302,16 @@ const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =
       occurredAt: "2026-08-01T12:00:00Z",
       presentation: { kind: "suppressed-member", requestedId: transactionId },
     };
-    yield* Effect.tryPromise(() =>
-      page.route(`${apiOrigin}/transactions/${transactionId}`, (route) =>
-        route.fulfill({
-          contentType: "application/json",
-          body: response({
-            ...visible,
-            reconciliation: {
-              kind: "linked",
-              firstTransaction: transaction,
-              secondTransaction: visible,
-            },
-            sources: [],
-          }),
-        })
-      )
-    );
+    const lookup: HeldLookup = { hold: false, pending: Option.none() };
+    yield* Effect.tryPromise(() => installEffectiveLookup(page, visible, lookup));
     yield* Effect.tryPromise(() =>
       page.route(`${apiOrigin}/transactions?*`, (route) =>
         route.fulfill({
           contentType: "application/json",
           body: response(
-            new URL(route.request().url()).searchParams.get("from")?.startsWith("2026-08-01") ===
-              true
+            new URL(route.request().url()).searchParams
+              .get("from")
+              ?.startsWith(visible.occurredAt.slice(0, "YYYY-MM".length)) === true
               ? [visible]
               : []
           ),
@@ -302,14 +322,27 @@ const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =
     yield* Effect.tryPromise(() =>
       page.getByRole("link", { name: "Ver transacción", exact: true }).click()
     );
+    yield* expectEffectiveMonth(page, "08");
+    lookup.hold = true;
+    visible.occurredAt = "2026-07-01T12:00:00Z";
+    visible.id = "25000000-0000-4000-8000-000000001657";
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Actualizar transacciones", exact: true }).click()
+    );
+    yield* Effect.tryPromise(() => expect.poll(() => Option.isSome(lookup.pending)).toBe(true));
     yield* Effect.tryPromise(() =>
       expect(
         page.getByRole("button", { name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u })
-      ).toBeInViewport()
+      ).toHaveCount(1)
     );
     yield* Effect.tryPromise(() =>
-      expect(page.getByLabel("Mes de transacciones", { exact: true })).toHaveValue("08")
+      expect(page.getByRole("button", { name: "Editar varias", exact: true })).toBeDisabled()
     );
+    lookup.hold = false;
+    yield* Effect.tryPromise(() =>
+      fulfillEffectiveLookup(Option.getOrThrow(lookup.pending), visible)
+    );
+    yield* expectEffectiveMonth(page, "07");
     yield* Effect.tryPromise(() => page.reload());
     yield* Effect.tryPromise(() =>
       expect(
@@ -317,6 +350,87 @@ const effectiveJourney = (page: Page): Effect.Effect<void, Cause.UnknownError> =
       ).toHaveAttribute("aria-expanded", "false")
     );
   });
-test("review navigation resolves the current effective Transaction identity and date on entry and reload", ({
+test("review navigation resolves the current effective Transaction identity and date on entry, reset and reload", ({
   page,
 }) => Effect.runPromise(effectiveJourney(page)));
+
+const automaticPages = 20;
+const installLocationPages = (page: Page, fixture: { reads: number }): Promise<unknown> =>
+  page.route(`${apiOrigin}/transactions?*`, (route) => {
+    const url = new URL(route.request().url());
+    const cursor = url.searchParams.get("cursor");
+    const number = cursor === null ? 1 : Number(cursor.slice(-"000000000000".length)) + 1;
+    fixture.reads += 1;
+    const filler = {
+      ...transaction,
+      occurredAt: "2026-10-01T02:00:00.000Z",
+      createdAt: "2026-11-02T12:00:00.000Z",
+      id: `25000000-0000-4000-8000-${String(number).padStart("000000000000".length, "0")}`,
+      counterparty: `Otro ${number}`,
+    };
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: [number === automaticPages + 2 ? transaction : filler],
+        next: [
+          {
+            tool: "transactions.listTransactions",
+            hint: "Continue browsing.",
+            args: {
+              query: {
+                from: url.searchParams.get("from"),
+                to: url.searchParams.get("to"),
+                cursor: `${filler.occurredAt}|${filler.createdAt}|${filler.id}`,
+              },
+            },
+          },
+        ],
+      }),
+    });
+  });
+
+test("location stops after twenty pages and each explicit continuation admits only one page", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* installHistory(page);
+      const fixture = { reads: 0 };
+      yield* Effect.tryPromise(() => installLocationPages(page, fixture));
+      yield* Effect.tryPromise(() => page.goto(`/app/transactions?transaction=${transactionId}`));
+      const more = page.getByRole("button", { name: "Seguir buscando", exact: true });
+      yield* Effect.tryPromise(() => expect(more).toBeVisible());
+      expect(fixture.reads).toBe(automaticPages);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Continuación de transacciones")).toContainText("Seguir buscando")
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("Al seguir bajando cargaremos más transacciones.", { exact: true })
+        ).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Otro 21", exact: true })
+        ).toHaveCount(0)
+      );
+      expect(fixture.reads).toBe(automaticPages);
+      yield* Effect.tryPromise(() => more.click());
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Ver transacción Otro 21", exact: true })
+        ).toBeVisible()
+      );
+      expect(fixture.reads).toBe(automaticPages + 1);
+      yield* Effect.tryPromise(() => more.click());
+      const located = page.getByRole("button", {
+        name: /^Ver transacción Mercado QA revisión(?: Mercado)?$/u,
+      });
+      yield* Effect.tryPromise(() => expect(located).toBeInViewport());
+      yield* Effect.tryPromise(() => expect(located).not.toBeFocused());
+      yield* Effect.tryPromise(() => expect(more).toHaveCount(0));
+    })
+  ));

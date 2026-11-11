@@ -7,6 +7,7 @@ import { presentCanonicalQuery } from "@/transport/canonical-query";
 import type { HistoryCommand, HistoryState } from "./history";
 import type { Transaction } from "./presentation";
 
+type Client = Context.Service.Shape<FidyClient>;
 type Revision = Pick<Transaction, "id" | "revision">;
 type Changes = CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
 type Correction =
@@ -36,18 +37,17 @@ export type TransactionCorrections = Readonly<{
   workspaceGeneration: number;
   submit: (correction: Correction) => void;
   recover: () => void;
+  resetWorkspace: () => void;
   reviewingDeletion: Option.Option<Transaction["id"]>;
   reviewDeletion: (id: Transaction["id"]) => boolean;
   cancelDeletion: () => void;
   confirmDeletion: (id: Transaction["id"], onDeleted: () => void) => void;
   mount: () => () => void;
 }>;
-type Client = Context.Service.Shape<FidyClient>;
-type PageFailure = Effect.Error<ReturnType<Client["transactions"]["listTransactions"]>>;
 type Query<A, E> = Atom.Atom<AsyncResult.AsyncResult<A, E>>;
 type Input = Readonly<{
   client: FidyClient;
-  firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, PageFailure>;
+  firstPage: Query<CanonicalSuccess<"transactions.listTransactions">, unknown>;
   categories: Query<CanonicalSuccess<"categories.listCategories">, unknown>;
   history: Atom.Atom<HistoryState>;
   historyAction: Atom.Writable<Option.Option<void>, HistoryCommand>;
@@ -119,6 +119,7 @@ const present = (owner: Owner): TransactionCorrections => {
       if (owner.workspaceGeneration === generation) submit(owner, correction);
     },
     recover: () => recover(owner, "recovery"),
+    resetWorkspace: () => resetWorkspace(owner),
     mount: () => {
       owner.active = true;
       owner.stopped = Deferred.makeUnsafe<void>();
@@ -226,6 +227,12 @@ const available = (owner: Owner): boolean =>
   owner.active &&
   Option.isNone(owner.deletion) &&
   (owner.status === "idle" || owner.status === "recovered");
+const resetWorkspace = (owner: Owner): void => {
+  if (!available(owner)) return;
+  owner.workspaceGeneration += 1;
+  owner.inlineTransaction = Option.none();
+  notify(owner);
+};
 const submit = (owner: Owner, correction: Correction): void => {
   if (!available(owner)) return;
   owner.inlineTransaction =

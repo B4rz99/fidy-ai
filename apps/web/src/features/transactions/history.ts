@@ -34,13 +34,13 @@ export type HistoryState = Readonly<{
     | "LookupFailed"
     | "ContinuationFailed";
 }>;
+type ReadCommand = More | Retry | Readonly<{ restorePages: number }>;
 export type HistoryCommand =
-  | More
-  | Retry
+  | ReadCommand
   | "reset"
   | "refresh"
   | "refresh-pages"
-  | Readonly<{ restorePages: number }>;
+  | Readonly<{ refreshPages: number }>;
 type History = Readonly<{
   state: Atom.Atom<HistoryState>;
   action: Atom.Writable<Option.Option<void>, HistoryCommand>;
@@ -232,7 +232,7 @@ type HistoryActionInput = Readonly<{
   firstPage: PageAtom;
 }>;
 const readAction = (
-  command: Exclude<HistoryCommand, string>,
+  command: ReadCommand,
   get: Atom.FnContext,
   { navigation, state, internal, firstPage }: HistoryActionInput
 ): void => {
@@ -257,7 +257,16 @@ const readAction = (
 };
 const historyActions = (input: HistoryActionInput): History["action"] =>
   Atom.fnSync<HistoryCommand>()((command, get): void => {
-    if (typeof command !== "string") return readAction(command, get, input);
+    if (typeof command !== "string") {
+      if ("refreshPages" in command) {
+        get.set(input.navigation, {
+          generation: get(input.navigation).generation + 1,
+          pages: command.refreshPages,
+        });
+        return;
+      }
+      return readAction(command, get, input);
+    }
     get.set(input.navigation, {
       generation: get(input.navigation).generation + 1,
       pages: command === "reset" ? 1 : Math.max(1, get(input.state).loadedPages),

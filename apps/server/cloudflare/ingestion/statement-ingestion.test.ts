@@ -57,6 +57,7 @@ import {
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import {
   acceptWhatsAppMedia,
+  advanceStatementExtraction,
   prepareHeldStatementReviewDecision,
   prepareReviewEdit,
   prepareStatementAbandonment,
@@ -5295,5 +5296,47 @@ it("shares review revisions across workspace and statement decisions without cap
         400
       );
       expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(2);
+    })
+  ));
+
+it("settles exhausted extraction without storage while preserving coordinator User ownership", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const staged = yield* fromTestPromise(() => stageOne(runtime));
+      const accepted = yield* fromTestPromise(() =>
+        publishFixture(runtime, {
+          index: 0,
+          idempotencyKey: "20000000-0000-4000-8000-000000000691",
+          reference: staged.staged,
+        })
+      );
+      const submission = yield* fromTestPromise(() => submissionOf(accepted));
+      const activity = {
+        _tag: "StatementFailed" as const,
+        version: 1 as const,
+        userId: userA,
+        submissionId: submission.id,
+      };
+      const input = { DB: runtime.db, bucket: Option.none<R2Bucket>(), activity };
+      expect(
+        yield* Effect.result(advanceStatementExtraction({ ...input, userId: userB }))
+      ).toMatchObject({ _tag: "Failure" });
+      const readState = (): Promise<typeof submissionStateRow.Type> =>
+        firstRow(
+          runtime.db,
+          {
+            schema: submissionStateRow,
+            sql: "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?",
+          },
+          submission.id
+        );
+      expect((yield* fromTestPromise(readState)).status).toBe("queued");
+      expect(yield* advanceStatementExtraction({ ...input, userId: userA })).toBe("settled");
+      const state = yield* fromTestPromise(readState);
+      expect(state.status).toBe("failed");
+      expect(state.failure_reason).toEqual(Option.some("resource-limit"));
+      expect(yield* advanceStatementExtraction({ ...input, userId: userA })).toBe("settled");
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
     })
   ));

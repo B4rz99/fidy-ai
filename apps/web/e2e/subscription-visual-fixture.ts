@@ -122,6 +122,7 @@ type PaymentMethod = typeof methodSchema.Type;
 const preparePayload = Schema.Struct({ priceId: PriceId, method: methodSchema });
 export type SubscriptionFixtureState =
   | "form"
+  | "approved-submission"
   | "pending"
   | "approved"
   | "declined"
@@ -189,7 +190,7 @@ const enrollmentStatus = (
 const fulfillJson = (route: Route, value: unknown, status = successStatus): Promise<void> =>
   route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
 
-const providerReply = (url: URL): unknown => {
+const providerReply = (url: URL, state: SubscriptionFixtureState): unknown => {
   if (url.pathname.startsWith("/v1/tokens/nequi")) {
     return { data: { id: "nequi_test_synthetic_visual", status: "PENDING" } };
   }
@@ -208,7 +209,14 @@ const providerReply = (url: URL): unknown => {
   }
   return {
     data: {
-      subscription: { PK: daviplataToken, status: "PENDING" },
+      subscription: {
+        PK: daviplataToken,
+        status:
+          state === "approved-submission" &&
+          url.searchParams.get("operation") === "VALIDATE_OTP_API"
+            ? "APPROVED"
+            : "PENDING",
+      },
       authorization: { access_token: "synthetic-visual-sent" },
       attempts: {
         currentSendCode: 1,
@@ -312,7 +320,7 @@ const providerRoute = (route: Route, fixture: Fixture): Promise<void> => {
     status: successStatus,
     headers: providerHeaders,
     contentType: "application/json",
-    body: JSON.stringify(providerReply(url)),
+    body: JSON.stringify(providerReply(url, fixture.state)),
   });
 };
 

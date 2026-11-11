@@ -110,7 +110,13 @@ no other instance is active. The CLI does not automatically steal a lock or over
 Native operations have no cancellation API. Once begun they settle under an uninterruptible owned
 persistence section, so an interrupted caller does not abandon a pending save or release its lock
 prematurely. Preflight verifies native set/get/delete and metadata write usability before starting a
-pairing, but a later failure remains possible and never reports login success.
+pairing, but a later failure remains possible and never reports login success. Native credentials and
+metadata are serialized observations, not one atomic OS transaction. Login keeps interruption certainty
+private to the invocation: once a claim is dispatched, cancellation can leave server consumption
+committed; once saving starts, the owned section settles before interruption returns. A saved login
+may therefore exist without `LoggedIn` output. The closed interruption failure advises `fidy status`
+inspection and never undoes a saved credential. Main preserves this phase-specific guidance while
+retaining the interrupted process exit status.
 
 ## Transport, claim certainty and lifetime
 

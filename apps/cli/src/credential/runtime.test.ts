@@ -1,7 +1,18 @@
+import { deepStrictEqual } from "node:assert";
 import { IssuedPAT } from "@fidy/server/client";
 import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Option, PlatformError, Redacted, Schema } from "effect";
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Option,
+  PlatformError,
+  Redacted,
+  Schema,
+} from "effect";
 import { CliFailure, type Credential, type NativeSecrets, apiOrigin } from "./contract";
 import { makeCredentialStore } from "./runtime";
 
@@ -218,6 +229,39 @@ layer(BunServices.layer)((it) => {
         yield* normal.store.save(credential);
         expect(Exit.isFailure(yield* Effect.exit(normal.store.save(credential)))).toBe(true);
         expect(fixture.values.get("login") === bearer).toBe(true);
+      }).pipe(Effect.scoped)
+  );
+  it.effect(
+    "a competing save cannot overwrite the credential whose native write is in flight",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = yield* fs.makeTempDirectoryScoped();
+        const fixture = nativeFixture();
+        const saving = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const delayed: NativeSecrets = {
+          ...fixture.native,
+          set: (name, value) =>
+            fixture.native
+              .set(name, value)
+              .pipe(
+                Effect.andThen(Deferred.succeed(saving, undefined)),
+                Effect.andThen(Deferred.await(release))
+              ),
+        };
+        const first = yield* makeCredentialStore(directory, delayed);
+        const second = yield* makeCredentialStore(directory, fixture.native);
+        const fiber = yield* first.store.save(credential).pipe(Effect.forkChild);
+        yield* Deferred.await(saving);
+        const rejected = yield* second.store.save(credential).pipe(Effect.exit);
+        deepStrictEqual(rejected, Exit.fail(new CliFailure({ reason: "StorageUnavailable" })));
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(fiber);
+        expect(Option.isSome(yield* second.store.load)).toBe(true);
+        expect(fixture.calls.filter((call) => call === "set:login")).toHaveLength(1);
+        yield* second.store.clear;
+        expect(yield* first.store.load).toEqual(Option.none());
       }).pipe(Effect.scoped)
   );
 });

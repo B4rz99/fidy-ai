@@ -3,10 +3,15 @@ import { ChildProcessSpawner } from "effect/process";
 import { type PublicOutput } from "./command/contract";
 import { openApprovalBrowser } from "./login/browser";
 import { BunServices } from "@effect/platform-bun";
-import { Cause, Effect, Exit, Layer, Option, Path, Schema, Terminal } from "effect";
+import { Effect, Exit, Layer, Option, Path, Schema, Terminal } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { installationOutput } from "./command/installation";
-import { formatFailure, formatOutput, runCommand } from "./command/operations";
+import {
+  formatCommandFailure,
+  formatFailure,
+  formatOutput,
+  runCommand,
+} from "./command/operations";
 import { CliFailure } from "./credential/contract";
 import { makeCredentialStore, supportedBunRevision } from "./credential/runtime";
 import { makePairingClient } from "./direct-client/runtime";
@@ -144,16 +149,11 @@ if (import.meta.main) {
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", interrupt);
     if (Exit.isFailure(exit)) {
-      const failure = Cause.findErrorOption(exit.cause);
-      const reason =
-        Option.isSome(failure) && failure.value instanceof CliFailure
-          ? failure.value.reason
-          : "TransportUnavailable";
-      const interrupted = Cause.hasInterrupts(exit.cause) || reason === "Cancelled";
+      const { message, interrupted } = formatCommandFailure({ cause: exit.cause, json });
       process.stderr.write(
         commandArgs[0] === "support-recovery"
           ? "Proceso de recuperación interrumpido o no disponible. Si ya enviaste la solicitud, comprueba la vinculación en el mismo navegador; no repitas una decisión incierta ni compartas secretos.\n"
-          : formatFailure({ reason: interrupted ? "Cancelled" : reason, json })
+          : message
       );
       process.exitCode = interrupted ? interruptedExitCode : 1;
     }

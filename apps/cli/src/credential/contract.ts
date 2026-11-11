@@ -17,6 +17,7 @@ export class CliFailure extends Data.TaggedError("CliFailure")<{
   readonly reason:
     | "InvalidInput"
     | "Cancelled"
+    | "LoginSaveInterrupted"
     | "UnsupportedRuntime"
     | "StorageUnavailable"
     | "StorageInconsistent"

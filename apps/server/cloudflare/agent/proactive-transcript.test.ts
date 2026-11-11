@@ -13,9 +13,9 @@ import {
   findInsight,
   findInsightAttempt,
   findWeeklySummaryReport,
-  materializeWeeklySummary,
   prepareWeeklyDeliverySettlement,
   readProactiveTranscript,
+  runWeeklyGeneration,
   weeklyReportDeliveryQuery,
 } from "../insights/operations";
 import { makeInsightTemplateSender } from "../../src/shell/channels/whatsapp/runtime";
@@ -76,7 +76,7 @@ const deliveredFixture = (
       id: schedule.id,
       now: schedule.nextScheduledAt,
     };
-    const generated = yield* materializeWeeklySummary(work);
+    const generated = yield* runWeeklyGeneration(work);
     if (generated._tag !== "Created") {
       return yield* Effect.die("Expected report");
     }

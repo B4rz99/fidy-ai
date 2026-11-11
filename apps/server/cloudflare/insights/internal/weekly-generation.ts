@@ -17,7 +17,11 @@ import {
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { InsightTemplateSummary } from "../../../src/shell/channels/whatsapp/contract";
 import { listCategories } from "../../categories/operations";
-import { prepareConsentAction, prepareQueuedConsentAction } from "../../consent/operations";
+import {
+  findWeeklyConsentGrant,
+  prepareConsentAction,
+  prepareQueuedConsentAction,
+} from "../../consent/operations";
 import { newId } from "../../secret-material/operations";
 import {
   preparePeriodAggregateGuard,
@@ -35,6 +39,7 @@ import {
   occurrenceGuard,
   scheduleAdvance,
 } from "./weekly-schedule";
+import { admitWeeklyResource } from "./weekly-admission";
 import { findGovernor } from "./weekly-governor";
 
 type GenerationScope = Readonly<{
@@ -195,8 +200,7 @@ const eligibleWeeklySchedule = (
     );
   });
 
-/** Caller enters the existing User coordinator and security admission before financial evaluation. No provider action occurs here. */
-export const materialize = (
+const materialize = (
   input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
 ): Effect.Effect<WeeklyMaterialization, InsightUnavailable> =>
   Effect.gen(function* () {
@@ -204,6 +208,12 @@ export const materialize = (
     const found = yield* eligibleWeeklySchedule(input);
     if (Option.isNone(found)) return { _tag: "NoWork" } as const;
     const snapshot = found.value;
+    const grant = yield* findWeeklyConsentGrant(input).pipe(
+      Effect.mapError(() => new InsightUnavailable())
+    );
+    if (Option.isNone(grant) || grant.value.id !== snapshot.consentGrantId) {
+      return { _tag: "NoWork" } as const;
+    }
     const scheduledAt = latestWeeklyOccurrence({
       atOrBefore: input.now,
       timing: snapshot.timing,
@@ -240,6 +250,15 @@ export const materialize = (
     }
     yield* commit(input.db, [guard, ...reportStatements(scope, candidate), ...advance]);
     return { _tag: "Created", id: candidate.id } as const;
+  });
+
+/** Current security/resource admission precedes evaluation; caller serializes this User. */
+export const runGeneration = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
+): Effect.Effect<WeeklyMaterialization, InsightUnavailable> =>
+  Effect.gen(function* () {
+    yield* admitWeeklyResource({ ...input, phase: "generation" });
+    return yield* materialize(input);
   });
 
 /** Current enabled schedule and the same captured grant; timing revisions affect future reports only. */

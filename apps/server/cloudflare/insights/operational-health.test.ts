@@ -14,7 +14,7 @@ import {
   observeOperationalHealth,
   operationalSeverity,
 } from "../runtime/operational-health/operations";
-import { materializeWeeklySummary, observeProactivityWork } from "./operations";
+import { observeProactivityWork, runWeeklyGeneration } from "./operations";
 import { prepareProactivityWorkObservation } from "./internal/operational-observation";
 import { proactivityWorkflowId } from "./internal/proactivity-workflow";
 import {
@@ -70,7 +70,7 @@ it("observes only enabled Proactivity work and its real Workflow identities with
       const db = yield* weeklySummaryDatabaseAt(weeklySummaryTestNow);
       const schedule = yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
       yield* seedWeeklySummaryActivity({ db, at: "2026-08-04T12:00:00.000Z" });
-      const generated = yield* materializeWeeklySummary({
+      const generated = yield* runWeeklyGeneration({
         db,
         userId,
         id: schedule.id,

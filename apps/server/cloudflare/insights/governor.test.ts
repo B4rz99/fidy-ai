@@ -10,9 +10,9 @@ import { InsightUnavailable } from "./contract";
 import { executeProactivityWork } from "./runtime";
 import {
   findWeeklyGovernor,
-  materializeWeeklySummary,
   prepareWeeklyDeliverySettlement,
   prepareWeeklyQuestionDelivery,
+  runWeeklyGeneration,
 } from "./operations";
 import { InsightEventId } from "../../src/core/insights/contract";
 import {
@@ -52,7 +52,7 @@ it.live("rejects corrupt retained pause dates before materializing any report", 
     );
     assert.deepStrictEqual(
       yield* Effect.exit(
-        materializeWeeklySummary({ db, userId, id: schedule.id, now: schedule.nextScheduledAt })
+        runWeeklyGeneration({ db, userId, id: schedule.id, now: schedule.nextScheduledAt })
       ),
       Exit.fail(new InsightUnavailable())
     );

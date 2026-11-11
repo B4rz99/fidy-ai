@@ -1,3 +1,4 @@
+import { PolicyRevision } from "../../src/shell/consent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
 import {
   HostedAgentSessionId,
@@ -67,6 +68,7 @@ import {
   reply,
   retained,
   retainedChannelState,
+  sessionAdmissionFixture,
   sessions,
   setup,
   subject,
@@ -2217,33 +2219,9 @@ it.each([899_999, 900_000, 900_001])(
   (idleMs) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* Effect.tryPromise(() => setup());
-        const caller = yield* Effect.tryPromise(() => subject(0));
-        const current = now();
-        const oldId = HostedAgentSessionId.make(newId());
-        const snapshot = yield* readHostedSnapshot({ db, subject: caller, now: current });
-        if (Option.isNone(snapshot)) return yield* Effect.die("missing fixture authority");
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status) VALUES(?,?,?,?,?,'active')"
-            )
-            .bind(
-              oldId,
-              users[0],
-              encodeJson(snapshot.value.consentBasis),
-              current - idleMs,
-              current - idleMs
-            )
-            .run()
+        const { db, caller, current, oldId, selection } = yield* Effect.tryPromise(() =>
+          sessionAdmissionFixture({ idleMs })
         );
-        const fresh = yield* readHostedSnapshot({ db, subject: caller, now: current });
-        if (Option.isNone(fresh)) return yield* Effect.die("missing fixture authority");
-        const selection = selectHostedSession({
-          snapshot: fresh.value,
-          userId: UserId.make(users[0]),
-          now: current,
-        });
         expect(selection.id === oldId).toBe(idleMs < 900_000);
         yield* Effect.tryPromise(() =>
           db
@@ -2341,29 +2319,13 @@ it.each([899_999, 900_000, 900_001])(
   (idleMs) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* Effect.tryPromise(() => setup());
-        const caller = yield* Effect.tryPromise(() => subject(0));
-        const current = now();
-        const snapshot = yield* readHostedSnapshot({ db, subject: caller, now: current });
-        if (Option.isNone(snapshot)) return yield* Effect.die("missing fixture authority");
-        const accepted = snapshot.value.consentBasis;
-        const priorBasis = { ...accepted, policyRevision: "previous-accepted-policy" };
-        const oldId = HostedAgentSessionId.make(newId());
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,last_activity_at_ms,status) VALUES(?,?,?,?,?,'active')"
-            )
-            .bind(oldId, users[0], encodeJson(priorBasis), current - idleMs, current - idleMs)
-            .run()
-        );
-        const fresh = yield* readHostedSnapshot({ db, subject: caller, now: current });
-        if (Option.isNone(fresh)) return yield* Effect.die("missing fixture authority");
-        const selection = selectHostedSession({
-          snapshot: fresh.value,
-          userId: UserId.make(users[0]),
-          now: current,
-        });
+        const { db, caller, current, oldId, accepted, priorBasis, selection } =
+          yield* Effect.tryPromise(() =>
+            sessionAdmissionFixture({
+              idleMs,
+              basis: { policyRevision: PolicyRevision.make("previous-accepted-policy") },
+            })
+          );
         expect(selection.id === oldId).toBe(idleMs < 900_000);
         const turnId = TranscriptTurnId.make(newId());
         expect(

@@ -2342,3 +2342,274 @@ for (const currency of ["COP", undefined]) {
       })
     ));
 }
+
+test("suppresses retained originals on page resume without waiting for suspended timers", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        page.clock.install({
+          time: DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:00Z")),
+        })
+      );
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        page.clock.setSystemTime(DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T12:01:00Z")))
+      );
+      yield* Effect.tryPromise(() => page.evaluate(resumeReviewPage));
+      yield* Effect.tryPromise(() =>
+        expect(page.locator('[data-review="original-body"]')).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", { name: "Este elemento venció", exact: true })
+        ).toBeVisible()
+      );
+    })
+  ));
+
+test("expires selected material at the earlier context deadline while retaining its review draft", ({
+  page,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        page.clock.install({
+          time: DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:00Z")),
+        })
+      );
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, reviewRoute)
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace/context**`, earlierOriginalContext)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Valor", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.clock.fastForward("00:31"));
+      yield* Effect.tryPromise(() =>
+        expect(page.locator('[data-review="original-body"]')).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Valor", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Mercado secreto", { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("El original venció. Envía el material de nuevo para revisarlo.", {
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+    })
+  ));
+
+const resumeReviewPage = (): void => {
+  window.dispatchEvent(new Event("pageshow"));
+};
+const earlierOriginalContext = (route: Route): Promise<void> =>
+  route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: response({
+      items: [
+        { id, reference: "Fila 1", excerpt: "Mercado secreto", expiresAt: "2027-01-13T11:59:30Z" },
+      ],
+    }),
+  });
+
+test("keeps an original suppressed when page membership replaces its context query", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = replacingEvidencePage();
+      yield* Effect.tryPromise(() =>
+        page.clock.install({
+          time: DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:00Z")),
+        })
+      );
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, fixture.route)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Mercado secreto", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Compra en Café — $13.500", { exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.clock.fastForward("00:31"));
+      yield* Effect.tryPromise(() =>
+        expect(page.locator('[data-review="original-body"]')).toHaveCount(0)
+      );
+      const reads = fixture.reads();
+      fixture.replace();
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect.poll(fixture.contexts).toBeGreaterThan(1));
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(2));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Fragmento posterior", { exact: true })).toHaveCount(0)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.locator('[data-review="original-body"]')).toHaveCount(0)
+      );
+      expect(fixture.reads()).toBe(reads);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Valor", { exact: true })).toBeVisible()
+      );
+    })
+  ));
+
+const replacingEvidencePage = (): Readonly<{
+  route: (route: Route) => Promise<void>;
+  reads: () => number;
+  contexts: () => number;
+  replace: () => void;
+}> => {
+  let replaced = false;
+  let reads = 0;
+  let contexts = 0;
+  return {
+    reads: () => reads,
+    contexts: () => contexts,
+    replace: () => {
+      replaced = true;
+    },
+    route: (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/material")) {
+        reads++;
+        return reviewRoute(route);
+      }
+      if (path.endsWith("/context")) {
+        contexts++;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: response({
+            items: [
+              {
+                id,
+                reference: "Fila 1",
+                excerpt: replaced ? "Fragmento posterior" : "Mercado secreto",
+                expiresAt: replaced ? item.expiresAt : "2027-01-13T11:59:30Z",
+              },
+            ],
+          }),
+        });
+      }
+      if (replaced && !path.endsWith(id) && !path.endsWith("/edits")) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: response({
+            pendingCount: 2,
+            total: 2,
+            items: [item, { ...item, id: "24000000-0000-4000-8000-000000001355" }],
+          }),
+        });
+      }
+      return reviewRoute(route);
+    },
+  };
+};
+
+for (const delayed of ["context", "material"] as const) {
+  test(`suppresses late ${delayed} success after its original deadline`, ({ page }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = delayedEvidencePage(delayed);
+        yield* Effect.tryPromise(() =>
+          page.clock.install({
+            time: DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:00Z")),
+          })
+        );
+        yield* Effect.tryPromise(() => installUser(page));
+        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+        yield* Effect.tryPromise(() =>
+          page.route(`${apiOrigin}/ingestion/review-workspace**`, fixture.route)
+        );
+        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        yield* Effect.tryPromise(() => expect.poll(fixture.waiting).toBe(1));
+        yield* Effect.tryPromise(() =>
+          page.clock.setSystemTime(DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T12:01:00Z")))
+        );
+        yield* Effect.tryPromise(fixture.release);
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText("Material tardío", { exact: true })).toHaveCount(0)
+        );
+        yield* Effect.tryPromise(() =>
+          expect(page.locator('[data-review="original-body"]')).toHaveCount(0)
+        );
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByRole("button", { name: "Reintentar original", exact: true })
+          ).toHaveCount(0)
+        );
+      })
+    ));
+}
+
+const delayedEvidencePage = (
+  delayed: "context" | "material"
+): Readonly<{
+  route: (route: Route) => Promise<void>;
+  waiting: () => number;
+  release: () => Promise<void>;
+}> => {
+  const pending: Route[] = [];
+  return {
+    waiting: () => pending.length,
+    route: (route) => {
+      if (new URL(route.request().url()).pathname.endsWith(`/${delayed}`)) {
+        pending.push(route);
+        return Promise.resolve();
+      }
+      return reviewRoute(route);
+    },
+    release: () =>
+      Promise.all(
+        pending.map((route) =>
+          route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: response(
+              delayed === "material"
+                ? { available: true, text: "Material tardío", truncated: false }
+                : {
+                    items: [
+                      {
+                        id,
+                        reference: "Fila 1",
+                        excerpt: "Material tardío",
+                        expiresAt: item.expiresAt,
+                      },
+                    ],
+                  }
+            ),
+          })
+        )
+      ).then(() => {}),
+  };
+};

@@ -216,8 +216,7 @@ const ReviewUnavailable = ({
   loading: boolean;
 }>): JSX.Element => {
   const sourceId = useId();
-  const [source, setSource] = useState("all");
-  const [search, setSearch] = useState("");
+  const { source, setSource, search, setSearch } = useReviewFilters();
   return (
     <>
       <ReviewNavigation
@@ -338,6 +337,16 @@ const inboxCaughtUp = (
   filters.source === "all" &&
   filters.search === "" &&
   view.pendingCount === 0;
+const useReviewFilters = (): Readonly<{
+  source: string;
+  search: string;
+  setSource: (value: string) => void;
+  setSearch: (value: string) => void;
+}> => {
+  const [source, setSource] = useState("all");
+  const [search, setSearch] = useState("");
+  return { source, setSource, search, setSearch };
+};
 const ReadyInboxView = ({
   children,
   workspaceQuery,
@@ -349,8 +358,7 @@ const ReadyInboxView = ({
   filter,
   select,
 }: ReadyInboxProps): JSX.Element => {
-  const [source, setSource] = useState("all");
-  const [search, setSearch] = useState("");
+  const { source, setSource, search, setSearch } = useReviewFilters();
   const context = useReviewPageContext({ filter, page, items: view.items });
   const visible = filterReviewPage({ view, source, search, page, contexts: context.contexts });
   const inbox = useInboxControl({ view, visibleItems: visible.items, decisions });
@@ -385,6 +393,7 @@ const ReadyInboxView = ({
       <InboxWorkspace
         unfilteredItems={view.items}
         contexts={context.contexts}
+        originalDeadlines={context.deadlines}
         contextLoading={context.loading}
         workspaceQuery={workspaceQuery}
         freshness={freshness}
@@ -421,6 +430,7 @@ const EmptyInbox = ({
     </ReviewFullState>
   );
 type InboxWorkspaceProps = Readonly<{
+  originalDeadlines: ReadonlyMap<string, Workspace["items"][number]["expiresAt"]>;
   unfilteredItems: ReadonlyArray<Workspace["items"][number]>;
   contexts: PageContexts;
   contextLoading: boolean;
@@ -434,6 +444,7 @@ type InboxWorkspaceProps = Readonly<{
   pageLength: number;
 }>;
 const InboxWorkspace = ({
+  originalDeadlines,
   unfilteredItems,
   contexts,
   contextLoading,
@@ -476,6 +487,7 @@ const InboxWorkspace = ({
         workspaceQuery={workspaceQuery}
         key={item.id}
         item={item}
+        originalExpiresAt={originalDeadlines.get(item.id) ?? item.expiresAt}
         decisions={control.decisions}
         disabled={control.locked}
       />

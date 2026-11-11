@@ -6,6 +6,7 @@ import { AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyApiGroups, FidyClient } from "@/transport/client";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { useReviewPageExpiry } from "./expiry";
+import { originalDeadlineQuery } from "./original-deadline";
 import { reviewContextKey } from "./query-keys";
 import { type Item, received } from "./model";
 import type { Filter } from "./view-navigation";
@@ -52,6 +53,19 @@ export const reviewPageContextQuery = ({
   });
 };
 
+const evidenceProjection = Atom.family((query: ContextQuery) =>
+  Atom.make((get) => {
+    const state = get(query).pipe(presentCanonicalQuery);
+    const deadlines = new Map<string, Item["expiresAt"]>();
+    if (state._tag === "Ready") {
+      for (const entry of state.value.data.items) {
+        deadlines.set(entry.id, get(originalDeadlineQuery(entry)));
+      }
+    }
+    return { state, deadlines };
+  })
+);
+
 /** Page-local source evidence stays in the authentication registry and expires independently of drafts. */
 export const useReviewPageContext = ({
   filter,
@@ -63,27 +77,37 @@ export const useReviewPageContext = ({
   items: ReadonlyArray<Item>;
 }>): Readonly<{
   contexts: PageContexts;
+  deadlines: ReadonlyMap<string, Item["expiresAt"]>;
   loading: boolean;
   failed: boolean;
   refresh: () => void;
 }> => {
   const client = useRouter().options.context.apiClient;
   const query = reviewPageContextQuery({ client, filter, page, ids: items.map((item) => item.id) });
-  const state = useAtomValue(query).pipe(presentCanonicalQuery);
+  const projectionQuery = evidenceProjection(query);
+  const projection = useAtomValue(projectionQuery);
+  const state = projection.state;
   const refresh = useAtomRefresh(query);
   const entries = state._tag === "Ready" ? state.value.data.items : [];
-  useReviewPageExpiry([...items, ...entries]);
+  const deadlines = projection.deadlines;
+  useReviewPageExpiry([...items, ...[...deadlines.values()].map((expiresAt) => ({ expiresAt }))]);
   const current = DateTime.toEpochMillis(DateTime.nowUnsafe());
   return {
+    deadlines,
     contexts: new Map(
-      entries.map((entry) => [
-        entry.id,
-        {
-          ...entry,
-          excerpt:
-            DateTime.toEpochMillis(entry.expiresAt) > current ? entry.excerpt : Option.none(),
-        },
-      ])
+      entries
+        .filter((entry) => items.some((item) => item.id === entry.id))
+        .map((entry) => [
+          entry.id,
+          {
+            ...entry,
+            expiresAt: deadlines.get(entry.id) ?? entry.expiresAt,
+            excerpt:
+              DateTime.toEpochMillis(deadlines.get(entry.id) ?? entry.expiresAt) > current
+                ? entry.excerpt
+                : Option.none(),
+          },
+        ])
     ),
     loading: state._tag === "Initial",
     failed:
@@ -99,6 +123,7 @@ export const sourceExcerpt = ({
   Option.filter(
     context,
     (entry) =>
+      entry.id === item.id &&
       DateTime.toEpochMillis(item.expiresAt) > DateTime.toEpochMillis(DateTime.nowUnsafe()) &&
       DateTime.toEpochMillis(entry.expiresAt) > DateTime.toEpochMillis(DateTime.nowUnsafe())
   ).pipe(

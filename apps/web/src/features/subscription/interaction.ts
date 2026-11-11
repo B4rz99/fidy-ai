@@ -220,7 +220,7 @@ export type PaymentFlowView =
   | PaymentSubmissionView;
 export type EnrollmentInteraction = Readonly<{
   selectedId: Option.Option<PriceId>;
-  reviewedPrice: Option.Option<SubscriptionOffer>;
+  checkoutPrice: Option.Option<SubscriptionOffer>;
   method: EnrollmentMethod;
   checkout: boolean;
   enabledMethods: ReadonlyArray<EnrollmentMethod>;
@@ -261,6 +261,7 @@ type Owner = {
   checkout: boolean;
   replaceFailedSource: boolean;
   flow: Option.Option<PaymentFlowState>;
+  admittedPrice: Option.Option<SubscriptionOffer>;
   busy: boolean;
   failed: boolean;
   uncertain: boolean;
@@ -305,11 +306,13 @@ const dispose = (owner: Owner): void => {
   owner.active = false;
   stop(owner);
   owner.flow = Option.none();
+  owner.admittedPrice = Option.none();
   owner.uncertain = false;
 };
 const reset = (owner: Owner): void => {
   stop(owner);
   owner.flow = Option.none();
+  owner.admittedPrice = Option.none();
   owner.failed = false;
   owner.uncertain = false;
   owner.budget.reads = 0;
@@ -404,6 +407,7 @@ const prepare = (owner: Owner, replacing: boolean): void => {
   const priceId = owner.selectedId.value;
   owner.checkout = true;
   owner.flow = Option.none();
+  owner.admittedPrice = Option.fromNullishOr(owner.offers.find((offer) => offer.id === priceId));
   owner.budget.reads = 0;
   owner.awaitingObservation = false;
   run(owner, (gateway) =>
@@ -505,7 +509,10 @@ const present = (owner: Owner): EnrollmentInteraction => {
   const canContinue = !disabled && selected !== undefined && enabledMethods.includes(owner.method);
   return {
     selectedId: owner.selectedId,
-    reviewedPrice: Option.flatMap(owner.flow, reviewedPrice),
+    checkoutPrice: Option.orElse(
+      Option.flatMap(owner.flow, reviewedPrice),
+      () => owner.admittedPrice
+    ),
     method: owner.method,
     checkout: owner.checkout,
     enabledMethods,
@@ -571,6 +578,7 @@ export const makeEnrollmentInteraction = (
       checkout: false,
       replaceFailedSource: false,
       flow: Option.none(),
+      admittedPrice: Option.none(),
       busy: false,
       failed: false,
       uncertain: false,

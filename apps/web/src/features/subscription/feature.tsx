@@ -90,7 +90,7 @@ const useSubscriptionSelection = ({ offers, gateway }: ReadyOffersProps): Subscr
   const interaction = useAtomValue(atom);
   const presented = offers.map(presentSubscriptionOffer);
   const selectedOffer = Option.orElse(
-    Option.map(interaction.reviewedPrice, presentSubscriptionOffer),
+    Option.map(interaction.checkoutPrice, presentSubscriptionOffer),
     () =>
       Option.flatMap(interaction.selectedId, (id) =>
         EffectArray.findFirst(presented, (offer) => offer.id === id)

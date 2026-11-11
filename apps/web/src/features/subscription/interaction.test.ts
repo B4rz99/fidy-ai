@@ -654,7 +654,7 @@ it.effect(
       input.view().continueToPayment();
       yield* advance(0);
       input.view().updateOffers([replacement, replacement, replacement]);
-      expect(input.view().reviewedPrice).toEqual(Option.some(input.enrollment.price));
+      expect(input.view().checkoutPrice).toEqual(Option.some(input.enrollment.price));
       expect(input.gateway.prepare).toHaveBeenCalledTimes(1);
     })
 );
@@ -691,5 +691,37 @@ it.effect(
       expect(input.view().changeSelection()).toBe(false);
       expect(input.gateway.submit).not.toHaveBeenCalled();
       expect(input.gateway.resume).not.toHaveBeenCalled();
+    })
+);
+
+it.effect(
+  "retains admitted source recovery display after its Price leaves the refreshed catalog",
+  () =>
+    Effect.gen(function* () {
+      const input = fixture();
+      const available = {
+        status: "available" as const,
+        enrollmentId: input.enrollment.enrollmentId,
+        method: "card" as const,
+        priceId: input.enrollment.price.id,
+      };
+      input.gateway.prepare.mockResolvedValue(available);
+      input.gateway.status.mockResolvedValue(available);
+      yield* prepareFixture(input);
+      const replacement = {
+        ...input.enrollment.price,
+        id: PriceId.make("23200000-0000-4000-8000-000000000099"),
+      };
+      input.view().updateOffers([replacement, replacement, replacement]);
+      input.view().refresh();
+      yield* advance(0);
+      expect(input.view().checkoutPrice).toEqual(Option.some(input.enrollment.price));
+      expect(input.view().disabled).toBe(true);
+      expect(input.view().enrollment).toEqual(
+        Option.some({ _tag: "Enrollment", value: available })
+      );
+      expect(input.view().changeSelection()).toBe(false);
+      expect(input.gateway.prepare).toHaveBeenCalledTimes(1);
+      expect(input.gateway.submit).not.toHaveBeenCalled();
     })
 );

@@ -6,7 +6,7 @@ import type {
   ProactivityConsentContext,
   ProactivityConsentOffer,
 } from "../consent/contract";
-import type { InsightUnavailable } from "./contract";
+import assert from "node:assert/strict";
 import type { InsightEventId } from "../../src/core/insights/contract";
 import {
   makeExecutingWeeklyFixtureStep,
@@ -15,7 +15,7 @@ import {
 } from "../weekly-summary.test-fixture";
 import { prepareInsightRecipient, proactivityRejectedDeliveryQuery } from "../whatsapp/operations";
 import { WhatsAppStatusAdmission } from "../whatsapp/contract";
-import { ProactivityActivity, ProactivityDeliveryWork } from "./contract";
+import { InsightUnavailable, ProactivityActivity, ProactivityDeliveryWork } from "./contract";
 import {
   HostedDeliveryCorrelationToken,
   ProactivityTemplateConfiguration,
@@ -25,7 +25,7 @@ import {
 import { evaluateRecurringSeries } from "../recurring/operations";
 
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
   endTestHostedAuthority,
   proactivityDatabase,
@@ -908,9 +908,10 @@ it("never freezes a false empty day when discovery fails to retain its complete 
           )
           .run()
       );
-      expect(
-        (yield* Effect.exit(advanceRecurringDigest({ ...context, now: closedNow })))._tag
-      ).toBe("Failure");
+      assert.deepStrictEqual(
+        yield* Effect.exit(advanceRecurringDigest({ ...context, now: closedNow })),
+        Exit.fail(new InsightUnavailable())
+      );
       expect(
         yield* Effect.tryPromise(() =>
           db
@@ -955,9 +956,10 @@ it.each([
           )
           .run()
       );
-      expect(
-        (yield* Effect.exit(advanceRecurringDigest({ ...context, now: closedNow })))._tag
-      ).toBe("Failure");
+      assert.deepStrictEqual(
+        yield* Effect.exit(advanceRecurringDigest({ ...context, now: closedNow })),
+        Exit.fail(new InsightUnavailable())
+      );
       expect(
         yield* Effect.tryPromise(() =>
           db

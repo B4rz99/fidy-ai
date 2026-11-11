@@ -162,6 +162,19 @@ const edit = (revision: number, change: object, view?: "compact"): CanonicalWork
     payload: { expectedRevision: revision, edit: change, ...(view === undefined ? {} : { view }) },
   },
 });
+const capture = (occurredAt = "2026-10-10T12:00:00.000Z"): CanonicalWork => ({
+  _tag: "Call",
+  operation: CanonicalOperationId.make("transactions.createTransaction"),
+  input: {
+    payload: {
+      money: planInput.money,
+      direction: "outflow",
+      counterparty: "Propietario",
+      categoryId: "10000000-0000-4000-8000-000000000001",
+      occurredAt,
+    },
+  },
+});
 const read = (
   db: D1Database,
   subject: QueryCaller,
@@ -496,29 +509,25 @@ it(
   30000
 );
 it.each([
-  { correction: "Money", changes: { money: { amount: "800000", currency: "COP" } } },
-  { correction: "Counterparty", changes: { counterparty: "Otro comercio" } },
+  {
+    correction: "Money",
+    changes: { money: { amount: "800000", currency: "COP" } },
+    competingPlan: { money: { amount: "800000", currency: "COP" } },
+  },
+  {
+    correction: "Counterparty",
+    changes: { counterparty: "Otro comercio" },
+    competingPlan: { counterparty: "Otro comercio" },
+  },
 ])(
-  "revalidates retained automatic matches after a $correction Correction and persists reversal",
-  ({ changes }) =>
+  "reserves an invalid automatic allocation after a $correction Correction until explicit reversal",
+  ({ changes, competingPlan }) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const { db, subjects } = yield* fixture();
         const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
         const other = Option.getOrThrow(Option.fromUndefinedOr(subjects[1]));
-        const captured = yield* call(db, owner, {
-          _tag: "Call",
-          operation: CanonicalOperationId.make("transactions.createTransaction"),
-          input: {
-            payload: {
-              money: planInput.money,
-              direction: "outflow",
-              counterparty: "Propietario",
-              categoryId: "10000000-0000-4000-8000-000000000001",
-              occurredAt: "2026-10-10T12:00:00.000Z",
-            },
-          },
-        });
+        const captured = yield* call(db, owner, capture());
         const capturedBody = yield* Effect.tryPromise(() => captured.clone().text());
         expect(captured.status, capturedBody).toBe(201);
         const transaction = yield* Schema.decodeUnknownEffect(
@@ -552,7 +561,7 @@ it.each([
             edit(1, {
               kind: "create",
               id: "40000000-0000-4000-8000-000000000124",
-              plan: { ...planInput, firstDate: "2026-10-11" },
+              plan: { ...planInput, firstDate: "2026-10-11", ...competingPlan },
             })
           )).status
         ).toBe(200);
@@ -572,7 +581,22 @@ it.each([
         expect(corrected.status, yield* Effect.tryPromise(() => corrected.clone().text())).toBe(
           200
         );
-        expect((yield* read(db, owner)).invalidFulfillmentIds).toEqual([transaction.data.id]);
+        const reserved = yield* read(db, owner);
+        expect(reserved.invalidFulfillmentIds).toEqual([transaction.data.id]);
+        expect(reserved.occurrences.every((item) => item.status !== "completed")).toBe(true);
+        expect(reserved.matches).toEqual([]);
+        expect(reserved.document.revision).toBe(2);
+        expect(reserved.document.fulfillments).toEqual([
+          expect.objectContaining({ id: transaction.data.id, planId, date: "2026-10-11" }),
+        ]);
+        expect(reserved.linkedTransactions).toEqual([
+          expect.objectContaining({ id: transaction.data.id }),
+        ]);
+        expect((yield* call(db, owner, capture())).status).toBe(201);
+        const stillReserved = yield* read(db, owner);
+        expect(stillReserved.occurrences.every((item) => item.status !== "completed")).toBe(true);
+        expect(stillReserved.matches).toEqual([]);
+        expect(stillReserved.document).toEqual(reserved.document);
         expect(
           (yield* call(db, other, edit(0, { kind: "reverse", fulfillmentId: transaction.data.id })))
             .status
@@ -581,11 +605,88 @@ it.each([
           (yield* call(db, owner, edit(2, { kind: "reverse", fulfillmentId: transaction.data.id })))
             .status
         ).toBe(200);
-        expect((yield* read(db, owner)).occurrences[0]?.status).not.toBe("completed");
+        const resolved = yield* read(db, owner);
+        expect(resolved.invalidFulfillmentIds).toEqual([]);
+        expect(resolved.document.fulfillments).toEqual([]);
+        expect(resolved.document.excludedTransactionIds).toEqual([transaction.data.id]);
+        expect(resolved.occurrences.find((item) => item.planId === planId)?.status).toBe(
+          "completed"
+        );
       })
     ),
   30000
 );
+it(
+  "exposes neighboring-month match ambiguity without blocking an explicit association",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, subjects } = yield* fixture();
+        const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
+        for (const { revision, id, firstDate } of [
+          { revision: 0, id: planId, firstDate: "2026-09-30" },
+          { revision: 1, id: "40000000-0000-4000-8000-000000000124", firstDate: "2026-10-01" },
+        ]) {
+          expect(
+            (yield* call(
+              db,
+              owner,
+              edit(revision, {
+                kind: "create",
+                id,
+                plan: { ...planInput, firstDate },
+              })
+            )).status
+          ).toBe(200);
+        }
+        const captured = yield* call(db, owner, capture("2026-10-01T12:00:00.000Z"));
+        expect(captured.status).toBe(201);
+        const transaction = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })
+        )(yield* Effect.tryPromise(() => captured.json()));
+        const ambiguous = yield* read(db, owner);
+        expect(ambiguous.matchesComplete).toBe(false);
+        expect(ambiguous.matches).toEqual([]);
+        expect(
+          [...ambiguous.occurrences, ...ambiguous.previous].every(
+            (item) => item.status !== "completed"
+          )
+        ).toBe(true);
+        expect(ambiguous.document.revision).toBe(2);
+        expect(ambiguous.document.fulfillments).toEqual([]);
+        expect(
+          (yield* call(
+            db,
+            owner,
+            edit(2, {
+              kind: "fulfill",
+              fulfillment: {
+                id: "40000000-0000-4000-8000-000000000125",
+                planId,
+                date: "2026-09-30",
+                actualDate: "2026-10-01",
+                money: planInput.money,
+                transactionId: transaction.data.id,
+                settled: true,
+              },
+            })
+          )).status
+        ).toBe(200);
+        const resolved = yield* read(db, owner);
+        expect(resolved.matchesComplete).toBe(true);
+        expect(resolved.document.fulfillments).toEqual([
+          expect.objectContaining({
+            planId,
+            date: "2026-09-30",
+            transactionId: transaction.data.id,
+          }),
+        ]);
+        expect(resolved.occurrences.every((item) => item.status !== "completed")).toBe(true);
+      })
+    ),
+  30000
+);
+
 it(
   "rolls back a plan when its accepted Audit cannot commit, and refuses a revoked session",
   () =>

@@ -246,7 +246,6 @@ export const PlanManagement = ({
           open={open}
           disabled={disabled}
           save={save}
-          today={view.today}
         />
       ))}
     </section>
@@ -500,7 +499,6 @@ const PlanRow = ({
   open: (plan: Plan) => void;
   save: Save;
   disabled: boolean;
-  today: string;
   status: ReturnType<typeof planStatus>;
 }>): JSX.Element => {
   const input = currentPlan(plan);

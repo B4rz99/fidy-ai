@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
 import { RecurringPlanStatus } from "@/ui/components/recurring";
-import { type Plan, type Save, type planStatus, planToday } from "./model";
+import { type Plan, type Save, planStatus, planToday } from "./model";
 
 export const PlanLifecycle = ({
   plan,
@@ -19,7 +19,7 @@ export const PlanLifecycle = ({
     <RecurringPlanStatus
       status={status}
       action={
-        plan.stoppedOn !== undefined ? null : (
+        plan.stoppedOn !== undefined || status === "stopped" ? null : (
           <Button
             contentLayout="wrap"
             focusAppearance="subtle"
@@ -34,10 +34,25 @@ export const PlanLifecycle = ({
               })
             }
           >
-            {pause !== undefined ? "Reanudar plan" : "Pausar plan"}
+            {lifecycleLabel({ plan, status, disabled })}
           </Button>
         )
       }
     />
   );
+};
+
+const lifecycleLabel = ({
+  plan,
+  status,
+  disabled,
+}: Readonly<{
+  plan: Plan;
+  status: ReturnType<typeof planStatus>;
+  disabled: boolean;
+}>): string => {
+  if (disabled && status !== planStatus(plan)) {
+    return status === "paused" ? "Reanudar plan" : "Pausar plan";
+  }
+  return plan.pauses.some((pause) => pause.through === undefined) ? "Reanudar plan" : "Pausar plan";
 };

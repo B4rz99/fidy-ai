@@ -102,6 +102,5 @@ local evidence; no Production erasure was performed.
 
 ```sh
 bun run --cwd apps/server test:cloudflare cloudflare/consent cloudflare/onboarding/consent-ingress.test.ts
-bun run --cwd apps/web test:browser privacy.spec.ts --workers=1
 bun run --cwd apps/server test:core
 ```

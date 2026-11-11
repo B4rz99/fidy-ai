@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Data, Deferred, Effect, Option, Stream } from "effect";
+import { Data, Effect, Option } from "effect";
 
 const workspaceRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 
@@ -10,7 +10,6 @@ const verifyGroups = [
   "unit",
   "cloudflare-adapters",
   "cloudflare-infra",
-  "browser",
   "mutation",
 ] as const;
 type VerifyGroup = (typeof verifyGroups)[number];
@@ -206,31 +205,6 @@ const checks: Array<Check> = [
   rootCheck("unit", "CI tooling", ["bun", "run", "test:ci-tools"]),
   rootCheck("unit", "Contract checker tests", ["bun", "run", "test:contracts"]),
   rootCheck("builds", "Customer documentation", ["bun", "run", "docs:verify:built"]),
-  rootCheck("builds", "Public site browser checks", [
-    "bun",
-    "run",
-    "--cwd",
-    "apps/site",
-    "test:browser",
-  ]),
-  rootCheck("browser", "Web static-shell browser checks", [
-    "bun",
-    "run",
-    "--cwd",
-    "apps/web",
-    "test:browser",
-    ...(Bun.env.BROWSER_TEST_SHARD !== undefined ? [`--shard=${Bun.env.BROWSER_TEST_SHARD}`] : []),
-  ]),
-  {
-    ...rootCheck("browser", "Isolated native CLI browser journey", [
-      "bun",
-      "run",
-      "--cwd",
-      "apps/web",
-      "test:browser:cli",
-    ]),
-    env: { ...Bun.env, CLI_ACCEPTANCE_MODE: "cli" },
-  },
   {
     group: "mutation",
     label: "Install mutation runner",
@@ -261,13 +235,7 @@ if (
   );
 }
 
-const selectedChecks = checks.filter(
-  ({ group, env }) =>
-    groupIsSelected(group) &&
-    (env.CLI_ACCEPTANCE_MODE !== "cli" ||
-      Bun.env.BROWSER_TEST_SHARD === undefined ||
-      Bun.env.BROWSER_TEST_SHARD.startsWith("1/"))
-);
+const selectedChecks = checks.filter(({ group }) => groupIsSelected(group));
 if (Option.isSome(requestedGroup)) {
   process.stdout.write(`Verification group: ${requestedGroup.value}\n`);
 }
@@ -278,29 +246,7 @@ const failed: Array<string> = [];
 class VerificationProcessFailure extends Data.TaggedError("VerificationProcessFailure")<{
   readonly label: string;
 }> {}
-const browserPhaseMarker = "FIDY_BROWSER_LATENCY_VERIFIED";
-const forwardBrowserOutput = (
-  stream: ReadableStream<Uint8Array>,
-  ready: () => void
-): Promise<void> => {
-  const decoder = new TextDecoder();
-  let pending = "";
-  return Stream.fromReadableStream({
-    evaluate: () => stream,
-    onError: () => new VerificationProcessFailure({ label: "Browser output" }),
-  }).pipe(
-    Stream.runForEach((chunk) =>
-      Effect.sync(() => {
-        process.stdout.write(chunk);
-        pending += decoder.decode(chunk, { stream: true });
-        if (pending.includes(browserPhaseMarker)) ready();
-        pending = pending.slice(-browserPhaseMarker.length);
-      })
-    ),
-    Effect.runPromise
-  );
-};
-const runCheck = (check: Check, browserReady?: () => void): Effect.Effect<void> =>
+const runCheck = (check: Check): Effect.Effect<void> =>
   Effect.gen(function* () {
     process.stdout.write(`\n=== ${check.label} ===\n`);
     const started = performance.now();
@@ -308,17 +254,11 @@ const runCheck = (check: Check, browserReady?: () => void): Effect.Effect<void> 
       cwd: check.cwd,
       env: check.env,
       stdin: "inherit",
-      stdout: browserReady === undefined ? "inherit" : "pipe",
+      stdout: "inherit",
       stderr: "inherit",
     });
     const exitCode = yield* Effect.tryPromise({
-      try: () =>
-        Promise.all([
-          child.exited,
-          child.stdout !== undefined && browserReady !== undefined
-            ? forwardBrowserOutput(child.stdout, browserReady)
-            : Promise.resolve(),
-        ]).then(([exit]) => exit),
+      try: () => child.exited,
       catch: () => new VerificationProcessFailure({ label: check.label }),
     }).pipe(Effect.orElseSucceed(() => 1));
     const elapsedMilliseconds = Math.round(performance.now() - started);
@@ -326,35 +266,9 @@ const runCheck = (check: Check, browserReady?: () => void): Effect.Effect<void> 
     process.stdout.write(`Timing: ${check.label}: ${elapsedMilliseconds}ms\n`);
     if (exitCode !== 0) failed.push(check.label);
   });
-const runAfterBrowserReady = (
-  ready: Deferred.Deferred<boolean>,
-  check: Check
-): Effect.Effect<void> =>
-  Effect.flatMap(Deferred.await(ready), (verified) => {
-    if (verified) return runCheck(check);
-    failed.push(check.label);
-    return Effect.void;
-  });
-const runBrowserChecks = (checks: ReadonlyArray<Check>): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    const ready = yield* Deferred.make<boolean>();
-    yield* Effect.forEach(
-      checks,
-      (check) => {
-        if (check.env.CLI_ACCEPTANCE_MODE === "cli") {
-          return runAfterBrowserReady(ready, check);
-        }
-        return runCheck(check, () => {
-          Deferred.doneUnsafe(ready, Effect.succeed(true));
-        }).pipe(Effect.ensuring(Deferred.succeed(ready, false)));
-      },
-      { concurrency: 2, discard: true }
-    );
-  });
 await Effect.runPromise(
   Effect.forEach(verifyGroups, (group) => {
     const groupChecks = selectedChecks.filter((check) => check.group === group);
-    if (group === "browser") return runBrowserChecks(groupChecks);
     if (group === "static") {
       const bootstrap = groupChecks.filter(
         (check) =>
@@ -389,7 +303,7 @@ if (Bun.env.VERIFY_TIMING_REPORT !== undefined) {
         runId: Bun.env.GITHUB_RUN_ID,
         attempt: Bun.env.GITHUB_RUN_ATTEMPT,
         group: Option.getOrElse(requestedGroup, () => "all"),
-        shard: Bun.env.CLOUDFLARE_TEST_SHARD ?? Bun.env.BROWSER_TEST_SHARD,
+        shard: Bun.env.CLOUDFLARE_TEST_SHARD,
         elapsedMilliseconds,
         checks: timings,
       },

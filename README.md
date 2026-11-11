@@ -31,7 +31,7 @@ evidence, and uncertain imported material can require review instead of becoming
 financial fact.
 
 Google web signup/login is implemented with atomic Consent, trial and recovery creation, followed
-by Browser Login session redemption. Synthetic Worker/browser checks cover the journey; actual
+by Browser Login session redemption. Worker protocol tests cover the exchange; actual
 Google application registration, deployed credentials and real sign-in remain unchecked. See
 [provider configuration](docs/operations/google-authentication.md).
 
@@ -40,7 +40,7 @@ sender and connection admission before inbound routing can be enabled. Receipt/i
 not yet an executable capture path, while hosted MCP/OAuth setup and its verification limits are documented in
 [the customer connection guide](apps/docs/src/content/docs/conectar/mcp.md).
 
-## Local browser testing
+## Local browser development
 
 On macOS, run `bun run dev:browser setup` once, then `bun run dev:browser` for a persistent
 HTTPS app and real local API with synthetic test accounts. See [setup and login](docs/guides/local-browser.md).

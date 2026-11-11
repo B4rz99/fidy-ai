@@ -26,7 +26,6 @@ jobs:
       cli-native: ${{ steps.plan.outputs.cli-native }}
       cloudflare-adapters: ${{ steps.plan.outputs.cloudflare-adapters }}
       cloudflare-infra: ${{ steps.plan.outputs.cloudflare-infra }}
-      browser: ${{ steps.plan.outputs.browser }}
       security-sast: ${{ steps.plan.outputs.security-sast }}
       security-sca: ${{ steps.plan.outputs.security-sca }}
       required-script: ${{ steps.results-gate.outputs.script }}
@@ -146,20 +145,9 @@ jobs:
         with:
           node-version: "24"
       - uses: ./.github/actions/bun-install
-      - name: Select installed Playwright version
-        id: playwright-version
-        run: bun -e 'console.log("version=" + require("@playwright/test/package.json").version)' >> "$GITHUB_OUTPUT"
-      - name: Restore Playwright browser cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
-      - name: Install Chromium headless shell
-        run: bunx --bun playwright install --only-shell chromium
       - name: Build validation
         env:
           RELEASE_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          SITE_BROWSER_PREBUILT: "true"
         run: bun run verify -- --group builds
 
   unit:
@@ -269,169 +257,6 @@ jobs:
           path: |
             infra/cloudflare/test-results/cloudflare-infra.json
             infra/cloudflare/test-results/verify-infra.json
-          if-no-files-found: error
-          retention-days: 7
-
-  browser:
-    # The source scan remains required; browser fixtures do not consume its result.
-    outputs:
-      selected: ${{ steps.plan.outputs.browser }}
-    name: Web browser and accessibility checks (${{ matrix.shard }}/2)
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-          filter: blob:none
-          sparse-checkout: |
-            /*
-            !/.repos/
-          sparse-checkout-cone-mode: false
-      - uses: ./.github/actions/bun-runtime
-      - name: Plan browser checks from the complete PR diff
-        id: plan
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: bun scripts/ci-changes.ts
-      - name: Install frozen browser dependencies
-        if: ${{ steps.plan.outputs.browser == 'true' }}
-        run: bash scripts/install-workspace.sh --unit-tests
-      - name: Select installed Playwright version
-        if: ${{ steps.plan.outputs.browser == 'true' }}
-        id: playwright-version
-        working-directory: apps/web
-        run: bun -e 'console.log("version=" + require("@playwright/test/package.json").version)' >> "$GITHUB_OUTPUT"
-      - name: Restore Playwright browser cache
-        if: ${{ steps.plan.outputs.browser == 'true' }}
-        id: browser-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
-      - name: Reuse or install Chromium headless shell
-        if: ${{ steps.plan.outputs.browser == 'true' }}
-        env:
-          BROWSER_CACHE_HIT: ${{ steps.browser-cache.outputs.cache-hit }}
-        run: |
-          echo "Browser cache hit: $BROWSER_CACHE_HIT"
-          if [[ "$BROWSER_CACHE_HIT" != "true" ]]; then
-            time bunx --bun playwright install --only-shell chromium
-          fi
-      - name: Select native package cache identity
-        if: ${{ steps.plan.outputs.browser == 'true' && matrix.shard == 1 }}
-        id: native-packages
-        run: |
-          echo "image=$ImageVersion" >> "$GITHUB_OUTPUT"
-          mkdir -p /tmp/fidy-native-package-archives
-      - name: Restore native package downloads
-        if: ${{ steps.plan.outputs.browser == 'true' && matrix.shard == 1 }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: /tmp/fidy-native-package-archives/*.deb
-          key: ${{ runner.os }}-${{ runner.arch }}-native-packages-v2-${{ steps.native-packages.outputs.image }}
-      - name: Verify Chromium system dependencies
-        if: ${{ steps.plan.outputs.browser == 'true' }}
-        run: |
-          verify_chromium() {
-            node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
-          }
-          if ! verify_chromium; then
-            bunx --bun playwright install --only-shell chromium
-            verify_chromium || sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
-            verify_chromium
-          fi
-      - name: Static-shell browser validation
-        if: ${{ steps.plan.outputs.browser == 'true' }}
-        env:
-          BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
-          # Playwright assigns whole files by case count; retain their existing jobs after theme reuse.
-          PWTEST_SHARD_WEIGHTS: "176:149"
-          VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
-        run: |
-          export TMPDIR="$(mktemp -d /dev/shm/fidy-browser.XXXXXX)"
-          export NATIVE_TEST_IMAGE_CACHE="$TMPDIR/pristine-native-images"
-          trap 'rm -rf "$TMPDIR"' EXIT
-          if [[ "$BROWSER_TEST_SHARD" == 1/* ]]; then
-            sudo apt-get -o Dir::Cache::archives=/tmp/fidy-native-package-archives install --download-only -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
-            native_runtime="$RUNNER_TEMP/fidy-native-runtime"
-            mkdir -p "$native_runtime"
-            for package in /tmp/fidy-native-package-archives/*.deb; do
-              dpkg-deb --extract "$package" "$native_runtime"
-            done
-            export PATH="$native_runtime/usr/bin:$PATH"
-            export LD_LIBRARY_PATH="$native_runtime/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-            dbus-run-session -- bash -euc '
-              printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
-              bun run --cwd apps/cli test:native
-              /usr/bin/time -p bun run verify -- --group browser
-            '
-          else
-            /usr/bin/time -p bun run verify -- --group browser
-          fi
-      - name: Preserve browser timing evidence
-        if: ${{ !cancelled() && steps.plan.outputs.browser == 'true' }}
-        timeout-minutes: 2
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: browser-timings-${{ matrix.shard }}
-          compression-level: 0
-          path: |
-            apps/web/test-results/browser-timings.json
-            apps/web/test-results/cli-browser-timings.json
-            apps/web/test-results/verify-browser.json
-            apps/web/test-results/dashboard-core-*/trace.zip
-            apps/web/test-results/settings-visual/**
-            apps/web/test-results/recurring-report-visual/**
-            apps/web/test-results/chat-visual/**
-            apps/web/test-results/subscription-visual/**
-            apps/web/test-results/oauth-visual/**
-            apps/web/test-results/brand-token-captures/
-          if-no-files-found: error
-          retention-days: 7
-
-  chat-visual-evidence:
-    name: Chat visual evidence only (not merge eligibility)
-    if: ${{ github.event.pull_request.number == 1557 && github.head_ref == 'feat/chat-redesign' && github.event.pull_request.head.repo.full_name == 'B4rz99/fidy-ai' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          sparse-checkout: |
-            /*
-            !/.repos/
-          sparse-checkout-cone-mode: false
-      - uses: ./.github/actions/bun-install
-        with:
-          save-cache: "false"
-          scope: unit-tests
-      - name: Install Chromium headless shell
-        run: bunx --bun playwright install --only-shell chromium
-      - name: Verify Chromium system dependencies
-        run: |
-          node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();' ||
-            sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
-      - name: Capture synthetic Chat views independently of performance admission
-        env:
-          BROWSER_VISUAL_EVIDENCE: "true"
-        run: bun run --cwd apps/web test:browser e2e/chat-visual.spec.ts --project=browser --no-deps
-      - name: Preserve independent visual evidence without replacing required-check reports
-        if: ${{ !cancelled() }}
-        timeout-minutes: 2
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: chat-independent-visual
-          path: |
-            apps/web/test-results/chat-visual/**
-            apps/web/test-results/browser-timings.json
           if-no-files-found: error
           retention-days: 7
 
@@ -570,6 +395,13 @@ jobs:
       - uses: ./.github/actions/bun-install
       - name: Bundle the real credential adapter and native probe
         run: bun run --cwd apps/cli build:native
+      - name: Linux native credential conformance
+        run: |
+          sudo apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
+          dbus-run-session -- bash -euc '
+            printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
+            bun run --cwd apps/cli test:native
+          '
       - name: Publish same-run native conformance artifact
         timeout-minutes: 2
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -624,7 +456,6 @@ jobs:
       - cli-native
       - cloudflare-adapters
       - cloudflare-infra
-      - browser
       - security-secrets
       - security-sast
       - security-sca

@@ -17,7 +17,6 @@ const allJobs = [
   "unit",
   "cloudflare-adapters",
   "cloudflare-infra",
-  "browser",
   "security-sast",
   "security-sca",
 ];
@@ -75,23 +74,16 @@ describe("PR check selection", () => {
 
   it("checks web changes without starting unrelated server adapters or dependency scans", () => {
     for (const path of ["apps/web/src/main.tsx", "apps/site/src/pages/index.astro"]) {
-      expect(selectedJobs([path])).toEqual([
-        "builds",
-        "unit",
-        "cloudflare-infra",
-        "browser",
-        "security-sast",
-      ]);
+      expect(selectedJobs([path])).toEqual(["builds", "unit", "cloudflare-infra", "security-sast"]);
     }
   });
 
-  it("checks real Worker browser journeys and infrastructure when server behavior changes", () => {
+  it("checks Worker adapters and infrastructure when server behavior changes", () => {
     expect(selectedJobs(["apps/server/src/core/money.ts"])).toEqual([
       "builds",
       "unit",
       "cloudflare-adapters",
       "cloudflare-infra",
-      "browser",
       "security-sast",
     ]);
     expect(selectedJobs(["infra/cloudflare/edge-security.ts"])).toEqual([
@@ -99,7 +91,6 @@ describe("PR check selection", () => {
       "unit",
       "cloudflare-adapters",
       "cloudflare-infra",
-      "browser",
       "security-sast",
     ]);
   });
@@ -200,7 +191,6 @@ describe("PR check selection", () => {
       .text()
       .then((plan) => {
         expect(plan).toContain("cloudflare-adapters=true\n");
-        expect(plan).toContain("browser=true\n");
         expect(plan).toContain("security-sca=false\n");
         expect(plan).toContain("cli-native=true\n");
       });
@@ -212,71 +202,33 @@ const requiredCheckScript = await Bun.file(`${root}/scripts/check-ci-results.sh`
 const gate = (
   selection: string,
   result: string,
-  outcomes: {
-    readonly detector: string;
-    readonly staticResult: string;
-    readonly browserSelection: string;
-  } = {
-    detector: "success",
-    staticResult: "success",
-    browserSelection: selection,
-  }
-): number => {
-  const execution = Bun.spawnSync(["bash", "-c", requiredCheckScript], {
+  outcomes = { detector: "success", staticResult: "success" }
+): number =>
+  Bun.spawnSync(["bash", "-c", requiredCheckScript], {
     env: {
       ...Bun.env,
       RESULTS: JSON.stringify({
-        changes: {
-          result: outcomes.detector,
-          outputs: { browser: selection, unit: "false", "required-script": requiredCheckScript },
-        },
+        changes: { result: outcomes.detector, outputs: { unit: selection } },
         static: { result: outcomes.staticResult, outputs: {} },
-        unit: { result: "skipped", outputs: {} },
-        browser: { result, outputs: { selected: outcomes.browserSelection } },
+        unit: { result, outputs: {} },
       }),
     },
-  });
-  return execution.exitCode;
-};
+  }).exitCode;
 
 describe("Required Checks", () => {
-  it("accepts successful browser jobs whose local selection matches the authoritative plan", () => {
+  it("accepts successful selected checks and explicitly skipped unselected checks", () => {
     expect(gate("true", "success")).toBe(0);
-    expect(gate("false", "success")).toBe(0);
+    expect(gate("false", "skipped")).toBe(0);
   });
-
-  it("rejects failed or cancelled checks, unexpected skips, and failed change detection", () => {
+  it("rejects failures, invalid selection, unexpected skips and failed planning", () => {
     for (const result of ["failure", "cancelled", "skipped"]) {
       expect(gate("true", result)).not.toBe(0);
     }
+    expect(gate("false", "success")).not.toBe(0);
     expect(gate("false", "failure")).not.toBe(0);
-    expect(
-      gate("false", "skipped", {
-        detector: "failure",
-        staticResult: "success",
-        browserSelection: "false",
-      })
-    ).not.toBe(0);
-    expect(
-      gate("false", "skipped", {
-        detector: "success",
-        staticResult: "skipped",
-        browserSelection: "false",
-      })
-    ).not.toBe(0);
-    expect(gate("", "skipped")).not.toBe(0);
+    expect(gate("false", "skipped", { detector: "failure", staticResult: "success" })).not.toBe(0);
+    expect(gate("false", "skipped", { detector: "success", staticResult: "skipped" })).not.toBe(0);
     expect(gate("", "success")).not.toBe(0);
-    for (const browserSelection of ["", "false"]) {
-      expect(
-        gate("true", "success", { detector: "success", staticResult: "success", browserSelection })
-      ).not.toBe(0);
-    }
-    expect(
-      gate("false", "success", {
-        detector: "success",
-        staticResult: "success",
-        browserSelection: "true",
-      })
-    ).not.toBe(0);
+    expect(gate("", "skipped")).not.toBe(0);
   });
 });

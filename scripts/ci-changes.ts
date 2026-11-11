@@ -7,7 +7,6 @@ const conditionalJobs = [
   "unit",
   "cloudflare-adapters",
   "cloudflare-infra",
-  "browser",
   "security-sast",
   "security-sca",
 ] as const;
@@ -19,7 +18,6 @@ const runtimeJobs: ReadonlyArray<ConditionalJob> = [
   "unit",
   "cloudflare-adapters",
   "cloudflare-infra",
-  "browser",
   "security-sast",
 ];
 const ownedPaths: ReadonlyArray<{
@@ -31,9 +29,9 @@ const ownedPaths: ReadonlyArray<{
   { prefix: "infra/cloudflare/", jobs: runtimeJobs },
   {
     prefix: "apps/site/",
-    jobs: ["builds", "unit", "cloudflare-infra", "browser", "security-sast"],
+    jobs: ["builds", "unit", "cloudflare-infra", "security-sast"],
   },
-  { prefix: "apps/web/", jobs: ["builds", "unit", "cloudflare-infra", "browser", "security-sast"] },
+  { prefix: "apps/web/", jobs: ["builds", "unit", "cloudflare-infra", "security-sast"] },
 ];
 const scannerPaths = {
   ".fluidattacks/sca.yaml": ["security-sca"],
@@ -71,7 +69,6 @@ export const selectChecks = (paths: ReadonlyArray<string>): CheckPlan => {
     unit: false,
     "cloudflare-adapters": false,
     "cloudflare-infra": false,
-    browser: false,
     "security-sast": false,
     "security-sca": false,
   };

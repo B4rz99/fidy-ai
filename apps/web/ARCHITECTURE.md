@@ -533,51 +533,10 @@ architecture and production runbook.
 
 ## 5. Testing seams
 
-Functional browser checks select reduced motion; admission and latency projects retain native
-motion and clocks. Recurring lifecycle fixtures prepare prerequisite plans through the authenticated,
-revision-bound canonical API; creation journeys still exercise the visible editor. Successful
-review-image export is opt-in with `BROWSER_VISUAL_EVIDENCE=true`; accessibility, layout, focus and
-workflow assertions always run. Failure screenshots remain enabled in their owning hooks.
-
-Vitest tests exercise pure decisions and Effect programs through their public interfaces. UI workflows
-are exercised through Playwright browser acceptance. Istanbul reports logic coverage and enforces a
-90% gate at the browser transport boundary. Production-policy tests validate the generated static artifact, SPA fallbacks,
-security headers, cache behavior, and browser bundle boundary.
-
-The repository's cross-application browser acceptance remains owned by root architecture. It runs
-the built production web mode and real public/Core Worker ingress on separate loopback HTTPS origins,
-backed by isolated Miniflare D1. Loopback operator and provider fixtures supply external approvals,
-proof delivery, and Wompi responses; focused `page.route` fixtures remain for browser presentation
-and failure states. DaviPlata's focused browser tests use synthetic protocol fixtures, not recorded
-provider responses or live Sandbox evidence. They check exact-destination refusal, one-use bearer
-rotation, action/byte/time bounds, lifetime disposal and explicit same-request submission recovery.
-Successful fixture tests do not prove merchant activation, provider destinations, browser CORS or
-Production readiness; those remain separate operator-evidence gates. The server contract gate owns
-generated OpenAPI freshness, while browser checks prove that neither host publishes that artifact.
-
-Controlled browser journey sign-in fixtures advance the initial polling timer after operator approval;
-latency probes wait for real polling without installing Playwright Clock. Core proof verification,
-rate limits, and session creation stay active. A loopback-only operator
-advances the fixture clock through observed short cooldowns. Clock-sensitive admission probes run
-before concurrent journeys, and recurring read, chat, and pagination journeys own separate seeded
-Users. Latency probes retain native Date, timers and Performance across full-document authentication
-and reload, and run without competing browser cases. Their admission regression checks native
-Performance identity and real mark entries after both transitions; the unchanged latency limits
-apply only after sign-in. Mocked expiry derives its deadline from the same browser clock
-that the test advances. All production admission and timeout policies remain active.
-The browser verification group also runs the native CLI journey through
-`bun run test:browser:cli` in its dedicated `4183–4185` public/Core topology, with fresh D1 and
-isolated native credentials. The shared suite excludes that journey: other tests must not change
-its exact result comparisons or PAT Audit counts, and its loopback evidence observer exists only in
-CLI acceptance mode. CI preserves separate shared/CLI per-test JSON timings. Dashboard Core journeys
-retain failed-run traces for seven days in the repository CI artifacts while diagnosing the
-Ubuntu pointer-drop failure. Other journeys capture no traces; separate screenshot and video artifacts
-stay disabled.
-
-Approved login visual review has a separate, opt-in local harness:
-`bun --bun playwright test --config playwright.capture.config.ts` from `apps/web`. It writes
-synthetic-fixture PNGs and unfiltered Axe reports to `/tmp/fidy-login-captures`, or to
-`FIDY_LOGIN_CAPTURE_DIRECTORY` when set. Its `.capture.ts` cases are outside normal CI discovery.
+Vitest exercises pure decisions and Effect programs through their public interfaces. Istanbul
+reports logic coverage and enforces the browser transport boundary gate. Production-policy tests
+validate generated artifacts, SPA fallbacks, security headers, cache behavior and bundle boundaries.
+The repository does not maintain automated browser acceptance or visual capture suites.
 
 The authenticated `/insights/recurring/$id` route reads the complete frozen recurring-charge report
 through `insights.getRecurringDigestReport`. Its server-owned report/path schemas cross the single
@@ -599,8 +558,6 @@ server's closed completion contract permits only Fidy's fixed WhatsApp chat dest
 redemption. The unfinished private pairing survives an explicit retry within the mounted controller;
 unmount or uncertain completion discards it. Old accepted-chat handoffs retain their exact native
 confirmation requirement until expiry. Neither path can replace an existing WhatsAppIdentity.
-Built-browser checks use real public/Core/local D1 and controlled external provider edges; they do
-not establish availability of Google, Microsoft or the installed WhatsApp application.
 
 ### CLI connection approval
 
@@ -841,35 +798,6 @@ and require recovery if superseded. A completed autosave releases its draft barr
 bulk decisions use the fresh workspace revision.
 
 `/settings/account` composes independently mounted verified-email replacement and backup-recovery sections under one Account header. Their presentation modules accept state and action callbacks without importing the command controllers. Money presentation and Dashboard gesture declarations import their published domain contracts directly, so presentation does not initialize the complete API catalog. Each feature retains its own proof and disclosure lifetime. Recovery keeps review and one-time disclosure mounted. Its private non-secret admission marker in the existing authentication registry retains unresolved or Uncertain rotation across same-document remounts. Review and Confirm read the current marker; dispatch latches it synchronously, and only definitive live completion clears it. Authentication replacement or a new document’s fresh session observation creates a new registry. Its canonical command returns no secret into the authentication registry; only the narrow mounted presenter unwraps the redacted code. Departure or authentication replacement fences completions and wipes the owned reference. Lost or malformed rotation responses require new sign-in before another reviewed replacement, without replay or redisclosure. Clipboard cleanup retains its ten-minute lifetime independently of the disclosure; no reveal timer is added. Fresh sign-in returns to the fixed Account destination without retaining email or recovery material in navigation. Removed settings aliases have no compatibility redirects.
-
-## Review-return failure evidence
-
-The production browser performance gate retains its untraced capture-click to visible-review
-measurement and 16ms limit. Only a failed return from Transactions triggers one diagnostic
-Transactions → Needs Review replay; its original failure is always restored, including when
-capture fails or times out. A successful or interrupted measurement does not start diagnostics.
-
-The replay uses the existing synthetic fixture and only navigation links. Its scoped API guard
-refuses non-read requests. Authentication is outside the trace. Work has a five-second deadline;
-foreign acquisition and each cleanup request have explicit interruptible one-second budgets,
-with a two-second trace-flush budget. Supported browser actions receive cancellation signals.
-Trace-stop compensation is registered before trace start. The failed Page is closed after capture,
-so its enclosing Playwright fixture also owns late session/handle acquisition; a deadline does not
-claim to cancel an uncancellable protocol command. The guard is never removed from a still-live
-failed Page: it remains until Page/context teardown, including uncertain close. The Chromium trace is capped
-at 1MiB and the uploaded projection at 10,000 events. Only fixed timing-event names, phases and
-numeric fields survive projection: arguments, URLs, arbitrary marks and request data are dropped.
-Completion metadata is schema-decoded before it can enter the report.
-The existing JSON reporter carries attachments in the existing browser-timings artifact; no
-workflow permissions, upload paths or retention change.
-
-This replay is warmer and traced: it can identify scripting, style/layout or task gaps, but cannot
-retrospectively explain the exact untraced failure or replace its gate result. The failed original
-duration is copied into bounded failure evidence before replay; the original assertion still runs
-before any attachment, so attachment failure cannot replace its failure. Original thresholds,
-retry policy and application runtime remain unchanged. Sanitization,
-bounded accumulation, mutation refusal, failure preservation, masked acquisition/disposal deadlines
-and interruption are covered through the diagnostic helper's public seams in the web script tests.
 
 Recurring workspace reads and writes request the compact display projection: only the latest
 revision of each plan crosses the browser boundary. Storage and historical occurrence calculations

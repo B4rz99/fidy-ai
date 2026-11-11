@@ -6,7 +6,12 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { AtomRegistry } from "effect/reactivity";
-import { RecurringEdit, RecurringPlanId, RecurringPlanInput, makeFidyClient } from "@/transport/client";
+import {
+  RecurringEdit,
+  RecurringPlanId,
+  RecurringPlanInput,
+  makeFidyClient,
+} from "@/transport/client";
 import { type Edit, type Plan, currentPlan, planStatus, planToday } from "./model";
 import { recurringWorkspaceQuery, useRecurringPlanning } from "./controller";
 
@@ -91,7 +96,10 @@ const PlanningProbe = ({
       {
         disabled: planning.disabled,
         onClick: () => {
-          const submitted = Option.getOrElse(edit, () => ({ kind: "lifecycle", planId, date: "2026-10-29", action: "pause" }) as const);
+          const submitted = Option.getOrElse(
+            edit,
+            () => ({ kind: "lifecycle", planId, date: "2026-10-29", action: "pause" }) as const
+          );
           planning.save(submitted, onSaved);
           if (duplicate) planning.save(submitted, onSaved);
           if (Option.isNone(edit)) Object.assign(submitted, { action: "stop" });
@@ -100,7 +108,11 @@ const PlanningProbe = ({
       "Pause"
     ),
     createElement("button", { onClick: planning.retry }, "Refresh"),
-    createElement("output", { "data-standing": true }, Option.match(plan, { onNone: () => "", onSome: planning.statusFor }))
+    createElement(
+      "output",
+      { "data-standing": true },
+      Option.match(plan, { onNone: () => "", onSome: planning.statusFor })
+    )
   );
 };
 
@@ -147,7 +159,8 @@ it.each(["confirmed", "rejected", "uncertain"] as const)(
                   RegistryContext.Provider,
                   { value: registry },
                   createElement(PlanningProbe, {
-edit: Option.none(), plan: Option.none(),
+                    edit: Option.none(),
+                    plan: Option.none(),
                     client,
                     onSaved,
                     month: "2026-10",
@@ -363,7 +376,8 @@ it("snapshots one exact edit before dispatch and contains a throwing visible cal
                 RegistryContext.Provider,
                 { value: registry },
                 createElement(PlanningProbe, {
-edit: Option.none(), plan: Option.none(),
+                  edit: Option.none(),
+                  plan: Option.none(),
                   client,
                   onSaved,
                   month: "2026-10",
@@ -450,7 +464,8 @@ it.each(["confirmed", "uncertain"] as const)(
                 RegistryContext.Provider,
                 { value: registry },
                 createElement(PlanningProbe, {
-edit: Option.none(), plan: Option.none(),
+                  edit: Option.none(),
+                  plan: Option.none(),
                   client,
                   onSaved,
                   month,
@@ -861,7 +876,9 @@ it.each(["scheduled", "paused"] as const)(
                   RegistryContext.Provider,
                   { value: registry },
                   createElement(PlanningProbe, {
-month: "2026-10", profileStale: false, duplicate: false,
+                    month: "2026-10",
+                    profileStale: false,
+                    duplicate: false,
                     client,
                     onSaved,
                     plan: Option.some(retained),

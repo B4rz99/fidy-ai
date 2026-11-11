@@ -14,6 +14,7 @@ digests and verification dates. A matching version alone does not prove byte-ide
 | Area                                                               | Pattern                                    |
 | ------------------------------------------------------------------ | ------------------------------------------ |
 | Effect v4 core, generators, Promise interop, scopes, cancellation  | [effect-core.md](effect-core.md)           |
+| Email MIME parsing, forwarded admission, retained originals        | [email-parsing.md](email-parsing.md)       |
 | Outbound HTTP clients, retries, redirects, bounded responses       | [http-client.md](http-client.md)           |
 | HttpApi operations, typed clients, OpenAPI, middleware, testing    | [http-api.md](http-api.md)                 |
 | Schema, JSON codecs, brands, models, Money                         | [schema.md](schema.md)                     |
@@ -33,6 +34,7 @@ digests and verification dates. A matching version alone does not prove byte-ide
 | Alchemy resources, bindings, Cloudflare deployment topology        | [alchemy.md](alchemy.md)                   |
 | dnd-kit drag and drop                                              | [dnd-kit.md](dnd-kit.md)                   |
 | Astro static documents, metadata and React islands                 | [astro.md](astro.md)                       |
+| Transaction ledger table features and sorting                      | [react-table.md](react-table.md)           |
 | React component behavior and runtime                               | [react.md](react.md)                       |
 
 ## Maintaining a pattern

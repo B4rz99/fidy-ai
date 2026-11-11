@@ -623,8 +623,9 @@ it("saves a Money-bearing edit with its exact reviewed facts and confirms its vi
       const requests: string[] = [];
       const base = planningHttp(reply, reread);
       const http = HttpClient.make((request) => {
-        if (request.method === "POST" && request.body._tag === "Uint8Array")
-          {requests.push(new TextDecoder().decode(request.body.body));}
+        if (request.method === "POST" && request.body._tag === "Uint8Array") {
+          requests.push(new TextDecoder().decode(request.body.body));
+        }
         return base.execute(request);
       });
       const client = makeFidyClient({

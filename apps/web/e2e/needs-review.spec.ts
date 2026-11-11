@@ -60,7 +60,7 @@ test("saves an initial draft promptly and spaces continued autosaves", ({ page }
       contentType: "application/json",
       body: response([
         {
-          item,
+          item: { ...item, revision: writes },
           revision: writes,
           draft: Schema.decodeUnknownSync(Schema.Struct({ draft: Schema.Unknown }))(
             route.request().postDataJSON()
@@ -118,16 +118,20 @@ const reviewRoute = (route: Route): Promise<void> => {
     });
   }
   if (path.endsWith("/edits")) {
+    const input = Schema.decodeUnknownSync(
+      Schema.Struct({
+        revision: Schema.Number,
+        draft: Schema.optionalKey(Schema.Unknown),
+      })
+    )(route.request().postDataJSON());
     return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: response([
         {
-          item,
-          revision: 1,
-          draft: Schema.decodeUnknownSync(
-            Schema.Struct({ draft: Schema.optionalKey(Schema.Unknown) })
-          )(route.request().postDataJSON()).draft,
+          item: { ...item, revision: input.revision + 1 },
+          revision: input.revision + 1,
+          draft: input.draft,
         },
       ]),
     });
@@ -607,6 +611,401 @@ test("flushes a just-edited draft before bulk skip and restores it", ({ page }) 
       );
     })
   ));
+
+const decisionReferences = [
+  { id, revision: 0 },
+  { id: secondId, revision: 0 },
+];
+const decisionFixtures = (): Fixture[] =>
+  [id, secondId].map((value) => ({
+    id: value,
+    revision: 0,
+    status: "pending",
+    draft: undefined,
+  }));
+
+test("refuses an extra draft acknowledgement before submitting a review decision", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries = decisionFixtures();
+      const writes: string[] = [];
+      const route = (route: Route): Promise<void> => {
+        if (!new URL(route.request().url()).pathname.endsWith("/edits")) {
+          return lifecycleRoute(entries)(route);
+        }
+        const input = Schema.decodeUnknownSync(editInput)(route.request().postDataJSON());
+        writes.push(input._tag);
+        entries.forEach((entry) => mutateFixture(entry, input));
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: response(entries.map(detailFixture)),
+        });
+      };
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, route)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => page.getByLabel("Valor", { exact: true }).fill("98765"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Actualizar revisión", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Valor", { exact: true })).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Deshacer omisión" })).toHaveCount(0)
+      );
+      expect(writes).toEqual(["SaveDraft"]);
+    })
+  ));
+
+type DecisionCorruption =
+  | "duplicate"
+  | "partial"
+  | "extra"
+  | "wrong status"
+  | "stale revision"
+  | "advanced revision";
+const corruptDecision = (entries: Fixture[], corruption: DecisionCorruption): Fixture[] => {
+  const first = entries[0];
+  if (first === undefined) return [];
+  switch (corruption) {
+    case "duplicate":
+      return [first, first];
+    case "partial":
+      return [first];
+    case "extra":
+      return [...entries, { ...first, id: "24000000-0000-4000-8000-000000001352" }];
+    case "wrong status":
+      return entries.map((entry) => ({ ...entry, status: "pending" }));
+    case "stale revision":
+      return entries.map((entry) => ({ ...entry, revision: 0 }));
+    case "advanced revision":
+      return entries.map((entry) => ({ ...entry, revision: 2 }));
+  }
+};
+for (const corruption of [
+  "duplicate",
+  "partial",
+  "extra",
+  "wrong status",
+  "stale revision",
+  "advanced revision",
+] as const) {
+  test(`keeps the entire bulk review locked after ${corruption} decision results`, ({ page }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const entries = decisionFixtures();
+        const writes: unknown[] = [];
+        const route = (route: Route): Promise<void> => {
+          if (!new URL(route.request().url()).pathname.endsWith("/edits")) {
+            return lifecycleRoute(entries)(route);
+          }
+          writes.push(route.request().postDataJSON());
+          const input = Schema.decodeUnknownSync(editInput)(route.request().postDataJSON());
+          entries.forEach((entry) => mutateFixture(entry, input));
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: response(corruptDecision(entries, corruption).map(detailFixture)),
+          });
+        };
+        yield* Effect.tryPromise(() => installUser(page));
+        yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+        yield* Effect.tryPromise(() =>
+          page.route(`${apiOrigin}/ingestion/review-workspace**`, route)
+        );
+        yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+        yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(0).check());
+        yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(1).check());
+        const skip = page.getByRole("button", { name: "Omitir 2 seleccionados", exact: true });
+        yield* Effect.tryPromise(() => skip.click());
+        yield* Effect.tryPromise(() =>
+          expect(
+            page.getByText("No pudimos confirmar el cambio. Actualiza antes de continuar.", {
+              exact: true,
+            })
+          ).toBeVisible()
+        );
+        yield* Effect.tryPromise(() => expect(skip).toBeDisabled());
+        yield* Effect.tryPromise(() => expect(page.getByRole("checkbox").nth(0)).toBeChecked());
+        yield* Effect.tryPromise(() => expect(page.getByRole("checkbox").nth(1)).toBeChecked());
+        yield* Effect.tryPromise(() =>
+          expect(page.getByRole("button", { name: "Deshacer omisión" })).toHaveCount(0)
+        );
+        expect(writes).toEqual([
+          {
+            _tag: "Skip",
+            items: [
+              { id, revision: 0 },
+              { id: secondId, revision: 0 },
+            ],
+          },
+        ]);
+      })
+    ));
+}
+
+test("retires Undo when a fresh observation has a newer review revision", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entry: Fixture = { id, revision: 0, status: "pending", draft: undefined };
+      const entries = [entry];
+      const writes: unknown[] = [];
+      const route = (route: Route): Promise<void> => {
+        if (new URL(route.request().url()).pathname.endsWith("/edits")) {
+          writes.push(route.request().postDataJSON());
+        }
+        return lifecycleRoute(entries)(route);
+      };
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/ingestion/review-workspace**`, route)
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir", exact: true }).click()
+      );
+      const undo = page.getByRole("button", { name: "Deshacer omisión", exact: true });
+      yield* Effect.tryPromise(() => expect(undo).toBeEnabled());
+      entry.status = "pending";
+      entry.revision = 2;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+      yield* Effect.tryPromise(() => expect(undo).toHaveCount(0));
+      expect(writes).toEqual([{ _tag: "Skip", items: [{ id, revision: 0 }] }]);
+    })
+  ));
+
+const committedLostBulkRoute =
+  (entries: Fixture[], state: Readonly<{ failed: boolean }>, writes: unknown[]) =>
+  (route: Route): Promise<void> => {
+    if (!new URL(route.request().url()).pathname.endsWith("/edits")) {
+      return workspaceRefreshRoute(entries, state)(route);
+    }
+    writes.push(route.request().postDataJSON());
+    const input = Schema.decodeUnknownSync(editInput)(route.request().postDataJSON());
+    entries.forEach((entry) => mutateFixture(entry, input));
+    return route.abort("internetdisconnected");
+  };
+const concurrentDecisionRoute =
+  (
+    entries: Fixture[],
+    writes: unknown[],
+    gates: Readonly<{
+      firstRequested: PromiseWithResolvers<void>;
+      secondRequested: PromiseWithResolvers<void>;
+      releaseFirst: PromiseWithResolvers<void>;
+      releaseSecond: PromiseWithResolvers<void>;
+    }>
+  ) =>
+  (route: Route): Promise<void> => {
+    if (!new URL(route.request().url()).pathname.endsWith("/edits")) {
+      return lifecycleRoute(entries)(route);
+    }
+    const input = Schema.decodeUnknownSync(editInput)(route.request().postDataJSON());
+    writes.push(route.request().postDataJSON());
+    const first = input.items?.[0]?.id === id;
+    (first ? gates.firstRequested : gates.secondRequested).resolve();
+    return (first ? gates.releaseFirst : gates.releaseSecond).promise.then(() =>
+      saveFixture(route, entries)
+    );
+  };
+
+test("keeps a lost bulk outcome locked through failed fresh recovery without replay", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entries = decisionFixtures();
+      const state = { failed: false };
+      const writes: unknown[] = [];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/ingestion/review-workspace**`,
+          committedLostBulkRoute(entries, state, writes)
+        )
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(0).check());
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(1).check());
+      const skip = page.getByRole("button", { name: "Omitir 2 seleccionados", exact: true });
+      yield* Effect.tryPromise(() => skip.click());
+      const warning = page.getByText(
+        "No pudimos confirmar el cambio. Actualiza antes de continuar.",
+        { exact: true }
+      );
+      yield* Effect.tryPromise(() => expect(warning).toBeVisible());
+      yield* Effect.tryPromise(() => expect(skip).toBeDisabled());
+      state.failed = true;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Actualizar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText(
+            "La información anterior puede estar desactualizada. Reintenta para consultar los datos actuales.",
+            { exact: true }
+          )
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(warning).toBeVisible());
+      yield* Effect.tryPromise(() => expect(skip).toBeDisabled());
+      expect(writes).toHaveLength(1);
+      state.failed = false;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Reintentar", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Todo al día", exact: true })).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => expect(warning).toHaveCount(0));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Deshacer omisión" })).toHaveCount(0)
+      );
+      expect(writes).toEqual([{ _tag: "Skip", items: decisionReferences }]);
+    })
+  ));
+
+test("keeps another bulk scope locked when an individual review decision finishes", ({ page }) => {
+  const firstRequested = Promise.withResolvers<void>();
+  const secondRequested = Promise.withResolvers<void>();
+  const releaseFirst = Promise.withResolvers<void>();
+  const releaseSecond = Promise.withResolvers<void>();
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const entries = decisionFixtures();
+      const writes: unknown[] = [];
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/ingestion/review-workspace**`,
+          concurrentDecisionRoute(entries, writes, {
+            firstRequested,
+            secondRequested,
+            releaseFirst,
+            releaseSecond,
+          })
+        )
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => firstRequested.promise);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("checkbox", { name: "Seleccionar Extracto Fila 2" }).check()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir 1 seleccionado", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => secondRequested.promise);
+      releaseFirst.resolve();
+      yield* Effect.tryPromise(() => expect(page.getByRole("checkbox")).toHaveCount(1));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Omitir", exact: true })).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Valor", { exact: true })).toBeDisabled()
+      );
+      expect(writes).toEqual([
+        { _tag: "Skip", items: [{ id, revision: 0 }] },
+        { _tag: "Skip", items: [{ id: secondId, revision: 0 }] },
+      ]);
+      releaseSecond.resolve();
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("heading", { name: "Todo al día", exact: true })).toBeVisible()
+      );
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          releaseFirst.resolve();
+          releaseSecond.resolve();
+        })
+      )
+    )
+  );
+});
+
+const heldDraftRoute =
+  (
+    entries: Fixture[],
+    writes: unknown[],
+    gate: Readonly<{ requested: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> }>
+  ) =>
+  (route: Route): Promise<void> => {
+    if (!new URL(route.request().url()).pathname.endsWith("/edits")) {
+      return lifecycleRoute(entries)(route);
+    }
+    writes.push(route.request().postDataJSON());
+    gate.requested.resolve();
+    return gate.release.promise.then(() => saveFixture(route, entries));
+  };
+test("refuses the whole selected review set when a member expires during draft flush", ({
+  page,
+}) => {
+  const requested = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const entries = decisionFixtures();
+      const writes: unknown[] = [];
+      const start = DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:58Z"));
+      yield* Effect.tryPromise(() => page.clock.install({ time: start }));
+      yield* Effect.tryPromise(() => page.clock.pauseAt(start));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/ingestion/review-workspace**`,
+          heldDraftRoute(entries, writes, { requested, release })
+        )
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Abrir Extracto Fila 2", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(0).check());
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(1).check());
+      yield* Effect.tryPromise(() => page.getByLabel("Valor", { exact: true }).fill("98765"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir 2 seleccionados", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => requested.promise);
+      const afterOriginalExpiryMilliseconds = 3000;
+      yield* Effect.tryPromise(() => page.clock.fastForward(afterOriginalExpiryMilliseconds));
+      release.resolve();
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("No pudimos confirmar el cambio. Actualiza antes de continuar.", {
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Omitir 2 seleccionados", exact: true })
+        ).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Deshacer omisión" })).toHaveCount(0)
+      );
+      expect(writes).toEqual([
+        expect.objectContaining({ _tag: "SaveDraft", id: secondId, revision: 0 }),
+      ]);
+    }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
+  );
+});
 
 test("advances to a populated page and preserves navigation in the URL", ({ page }) =>
   Effect.runPromise(

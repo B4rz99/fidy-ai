@@ -162,6 +162,19 @@ const edit = (revision: number, change: object, view?: "compact"): CanonicalWork
     payload: { expectedRevision: revision, edit: change, ...(view === undefined ? {} : { view }) },
   },
 });
+const capture = (occurredAt = "2026-10-10T12:00:00.000Z"): CanonicalWork => ({
+  _tag: "Call",
+  operation: CanonicalOperationId.make("transactions.createTransaction"),
+  input: {
+    payload: {
+      money: planInput.money,
+      direction: "outflow",
+      counterparty: "Propietario",
+      categoryId: "10000000-0000-4000-8000-000000000001",
+      occurredAt,
+    },
+  },
+});
 const read = (
   db: D1Database,
   subject: QueryCaller,
@@ -507,19 +520,7 @@ it.each([
         const { db, subjects } = yield* fixture();
         const owner = Option.getOrThrow(Option.fromUndefinedOr(subjects[0]));
         const other = Option.getOrThrow(Option.fromUndefinedOr(subjects[1]));
-        const captured = yield* call(db, owner, {
-          _tag: "Call",
-          operation: CanonicalOperationId.make("transactions.createTransaction"),
-          input: {
-            payload: {
-              money: planInput.money,
-              direction: "outflow",
-              counterparty: "Propietario",
-              categoryId: "10000000-0000-4000-8000-000000000001",
-              occurredAt: "2026-10-10T12:00:00.000Z",
-            },
-          },
-        });
+        const captured = yield* call(db, owner, capture());
         const capturedBody = yield* Effect.tryPromise(() => captured.clone().text());
         expect(captured.status, capturedBody).toBe(201);
         const transaction = yield* Schema.decodeUnknownEffect(
@@ -584,21 +585,7 @@ it.each([
         expect(reserved.linkedTransactions).toEqual([
           expect.objectContaining({ id: transaction.data.id }),
         ]);
-        expect(
-          (yield* call(db, owner, {
-            _tag: "Call",
-            operation: CanonicalOperationId.make("transactions.createTransaction"),
-            input: {
-              payload: {
-                money: planInput.money,
-                direction: "outflow",
-                counterparty: "Propietario",
-                categoryId: "10000000-0000-4000-8000-000000000001",
-                occurredAt: "2026-10-10T12:00:00.000Z",
-              },
-            },
-          })).status
-        ).toBe(201);
+        expect((yield* call(db, owner, capture())).status).toBe(201);
         const stillReserved = yield* read(db, owner);
         expect(stillReserved.occurrences.every((item) => item.status !== "completed")).toBe(true);
         expect(stillReserved.matches).toEqual([]);
@@ -645,19 +632,7 @@ it(
             )).status
           ).toBe(200);
         }
-        const captured = yield* call(db, owner, {
-          _tag: "Call",
-          operation: CanonicalOperationId.make("transactions.createTransaction"),
-          input: {
-            payload: {
-              money: planInput.money,
-              direction: "outflow",
-              counterparty: "Propietario",
-              categoryId: "10000000-0000-4000-8000-000000000001",
-              occurredAt: "2026-10-01T12:00:00.000Z",
-            },
-          },
-        });
+        const captured = yield* call(db, owner, capture("2026-10-01T12:00:00.000Z"));
         expect(captured.status).toBe(201);
         const transaction = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.Struct({ id: Schema.String }) })

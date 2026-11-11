@@ -81,10 +81,9 @@ type ProjectionWork = Readonly<{
 }>;
 type AutomaticProjection = Readonly<{
   document: RecurringSchedule;
-  complete: boolean;
-  unambiguous: boolean;
   matches: (typeof RecurringWorkspace.Type)["matches"];
-}>;
+}> &
+  (Readonly<{ complete: false }> | Readonly<{ complete: true; unambiguous: boolean }>);
 export const matchingRange = (month: string): PlanningTransactionRange => {
   const start = DateTime.makeUnsafe(`${month}-01`);
   return {
@@ -109,7 +108,7 @@ const automaticFromFacts = ({
     return { document, complete: true, unambiguous: true, matches: [] };
   }
   if (Option.isNone(selection) || !selection.value.complete) {
-    return { document, complete: false, unambiguous: false, matches: [] };
+    return { document, complete: false, matches: [] };
   }
   const start = DateTime.makeUnsafe(`${month}-01`);
   const nextMonth = DateTime.formatIsoDateUtc(DateTime.add(start, { months: 1 })).slice(

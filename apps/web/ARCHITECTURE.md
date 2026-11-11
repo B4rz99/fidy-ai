@@ -121,6 +121,11 @@ failure retains explicit retry and metadata access. Email rows use the retained 
 in their reference and offer an explicitly scoped search of the opened original's loaded lines,
 without fetching every email body for the page.
 
+Year selection retains the complete 0002–9998 range in the Combobox collection. Its fixed-row window
+mounts only visible choices, overscan and the active choice; absolute indexes and accessibility
+position/count metadata preserve search, scrolling and keyboard access. Row measurement follows the
+root text scale. Other searchable choices retain natural-height rows.
+
 Transactions requests 25 records for its initial view, then uses the existing default 100-record
 continuations. The canonical query accepts an integer limit from 1 through 100, defaulting to 100;
 the User-owned keyset cursor remains valid across page sizes. Display summaries still describe

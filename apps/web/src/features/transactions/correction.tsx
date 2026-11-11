@@ -114,6 +114,7 @@ const DraftInputs = ({
       <div className="flex flex-col gap-2">
         <Label htmlFor="correction-currency">Moneda</Label>
         <SearchableChoiceDropdown
+          rendering="natural"
           id="correction-currency"
           label="Moneda"
           value={draft.currency}

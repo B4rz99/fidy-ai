@@ -101,6 +101,7 @@ const PeriodChoices = ({
       <div data-period-field="year">
         <Label htmlFor={`${id}-year`}>Año</Label>
         <SearchableChoiceDropdown
+          rendering="fixed-rows"
           id={`${id}-year`}
           label="Año de transacciones"
           value={year}

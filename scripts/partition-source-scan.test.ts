@@ -1,4 +1,6 @@
-import { expect, it } from "vitest";
+import { expect } from "vitest";
+import { it } from "@effect/vitest";
+import { Effect } from "effect";
 import { partitionSourceFiles, sourceScanPlan } from "./partition-source-scan";
 
 it("balances the complete source scope without duplication, omissions, or input-order dependence", () => {
@@ -32,8 +34,44 @@ it("keeps every partition on an already selected runner for every change plan", 
   for (const unit of [false, true]) {
     for (const sca of [false, true]) {
       const plan = sourceScanPlan({ unit, sca });
-      const indices = [1, 2, ...(unit ? [3] : []), ...(sca ? [plan.sca] : [])];
+      const indices = [1, ...(unit ? [2] : []), ...(sca ? [plan.sca] : [])];
       expect(indices).toEqual(Array.from({ length: plan.count }, (_, index) => index + 1));
     }
   }
 });
+
+it.effect(
+  "scans the complete source on one selected runner and refuses obsolete four-runner plans",
+  () =>
+    Effect.gen(function* () {
+      const temporary = Bun.spawnSync(["mktemp", "-d", "/tmp/fidy-source-plan.XXXXXX"]);
+      expect(temporary.exitCode).toBe(0);
+      const directory = new TextDecoder().decode(temporary.stdout).trim();
+      const script = Bun.fileURLToPath(new URL("./partition-source-scan.ts", import.meta.url));
+      try {
+        expect(Bun.spawnSync(["mkdir", "-p", `${directory}/.fluidattacks`]).exitCode).toBe(0);
+        yield* Effect.tryPromise(() =>
+          Bun.write(
+            `${directory}/.fluidattacks/sast.yaml`,
+            "sast:\n  include: ['.']\n  exclude: []\n  multifile: false\n"
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          Bun.write(`${directory}/source.ts`, "export const value = 1;\n")
+        );
+        expect(Bun.spawnSync(["git", "init", "--quiet"], { cwd: directory }).exitCode).toBe(0);
+        expect(Bun.spawnSync(["git", "add", "."], { cwd: directory }).exitCode).toBe(0);
+        const output = `${directory}/scan.yaml`;
+        const run = (selection: string): Bun.SyncSubprocess =>
+          Bun.spawnSync([process.execPath, script, selection, output], { cwd: directory });
+        expect(run("1/1").exitCode).toBe(0);
+        const source = yield* Effect.tryPromise(() => Bun.file(output).text());
+        expect(Bun.YAML.parse(source)).toMatchObject({
+          sast: { include: [".fluidattacks/sast.yaml", "source.ts"], multifile: false },
+        });
+        expect(run("4/4").exitCode).not.toBe(0);
+      } finally {
+        Bun.spawnSync(["rm", "-rf", directory]);
+      }
+    })
+);

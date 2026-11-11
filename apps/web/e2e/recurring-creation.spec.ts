@@ -259,7 +259,10 @@ const holdWorkspace = (page: Page): Promise<WorkspaceDelay> => {
     started: started.promise,
     finish: (): Promise<void> => {
       release.resolve();
-      return Promise.all(pending).then(() => page.unroute(pattern, hold));
+      return page
+        .unrouteAll({ behavior: "wait" })
+        .then(() => Promise.all(pending))
+        .then(() => undefined);
     },
   }));
 };

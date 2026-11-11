@@ -140,6 +140,7 @@ const SummaryCurrency = ({
   if (figures.length > currencyPillLimit) {
     return (
       <SearchableChoiceDropdown
+        rendering="natural"
         id="budget-summary-currency"
         label="Moneda del resumen"
         value={currency}

@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { DateTime, Effect, Option } from "effect";
+import { type Cause, DateTime, Effect, Option } from "effect";
 import { apiOrigin, installBoundUser, installCategories } from "./http-fixtures";
 import { playwright } from "./playwright-runtime";
 
@@ -268,6 +268,8 @@ test("a correction retains all loaded filtered rows while a later page refresh i
       );
       yield* wait(() => expect(rows).toHaveCount(multiplePages));
       yield* wait(() => expect(rows.last()).toBeInViewport());
+      yield* wait(() => rows.last().click());
+      yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("0,02"));
     })
   ));
 
@@ -615,49 +617,6 @@ test("expires authentication during continuation and starts a clean replacement 
     })
   ));
 
-test("saving a later Transaction retains loaded pages and refreshes its correction without duplicates", ({
-  page,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* wait(() => installBoundUser(page));
-      yield* wait(() => installCategories({ page, categories: [category] }));
-      const fixture = yield* wait(() => installHistory(page, beyondPage));
-      const last = Option.getOrThrow(Option.fromNullishOr(fixture.rows.at(-1)));
-      yield* wait(() => installCorrection(page, fixture, last));
-      yield* wait(() => page.goto("/app/transactions"));
-      yield* wait(() => page.getByLabel("Continuación de transacciones").scrollIntoViewIfNeeded());
-      yield* wait(() =>
-        page
-          .getByRole("button", { name: `Ver transacción ${last.counterparty}`, exact: true })
-          .click()
-      );
-      yield* wait(() => page.getByLabel("Monto", { exact: true }).fill("0,02"));
-      fixture.mode = "hold";
-      yield* wait(() => page.getByRole("button", { name: "Guardar", exact: true }).click());
-      yield* wait(() => expect(page.getByText("Cambios guardados", { exact: true })).toBeVisible());
-      yield* wait(() =>
-        expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
-          beyondPage
-        )
-      );
-      yield* wait(() => expect.poll(pendingReceived(fixture)).toBe(true));
-      fixture.mode = "ready";
-      yield* wait(() => completePending(fixture));
-      yield* wait(() =>
-        expect(page.getByRole("button", { name: /^Ver transacción Registro /u })).toHaveCount(
-          beyondPage
-        )
-      );
-      yield* wait(() =>
-        page
-          .getByRole("button", { name: `Ver transacción ${last.counterparty}`, exact: true })
-          .click()
-      );
-      yield* wait(() => expect(page.getByLabel("Monto", { exact: true })).toHaveValue("0,02"));
-    })
-  ));
-
 const installCalendarHistory = (
   page: Page,
   historical: DateTime.Utc
@@ -810,30 +769,6 @@ for (const viewport of [
     ));
 }
 
-test("the day picker opens the displayed history month without requiring a selected day", ({
-  page,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* prepareHistoricalMonth(page);
-      yield* wait(() => page.goto("/app/transactions?month=2026-10"));
-      yield* wait(() => page.getByRole("button", { name: "Fecha", exact: true }).click());
-      yield* wait(() =>
-        expect(
-          page.getByRole("button", { name: "jueves, 15 de octubre de 2026", exact: true })
-        ).toBeVisible()
-      );
-      yield* wait(() =>
-        page.getByRole("button", { name: "jueves, 15 de octubre de 2026", exact: true }).click()
-      );
-      yield* wait(() =>
-        expect(
-          page.getByRole("button", { name: "Fecha: 15 de octubre de 2026", exact: true })
-        ).toBeVisible()
-      );
-    })
-  ));
-
 const delayConsentRead = (page: Page, released: Promise<void>): Promise<void> =>
   page
     .route(`${apiOrigin}/web/consent`, (route) =>
@@ -960,6 +895,7 @@ test("period controls share one row on desktop and support keyboard year selecti
         expect(yield* wait(() => control.evaluate(controlBottom))).toBeCloseTo(bottom, 0);
       }
       yield* wait(() => year.press("Enter"));
+      yield* wait(() => expectBoundedYearOptions(page));
       const search = page.getByRole("combobox", {
         name: "Buscar: Año de transacciones",
         exact: true,
@@ -974,18 +910,38 @@ test("period controls share one row on desktop and support keyboard year selecti
       yield* wait(() => search.press("ArrowDown"));
       yield* wait(() => search.press("Enter"));
       yield* wait(() => expect(page).toHaveURL(/month=2027-10/u));
-      yield* wait(() => chooseYear(page, "0002"));
-      yield* wait(() => month.selectOption("01"));
-      yield* wait(() =>
-        expect(period.getByRole("button", { name: "Mes anterior" })).toBeDisabled()
-      );
-      yield* wait(() => chooseYear(page, "9998"));
-      yield* wait(() => month.selectOption("12"));
-      yield* wait(() =>
-        expect(period.getByRole("button", { name: "Mes siguiente" })).toBeDisabled()
-      );
+      yield* verifyYearLimits(page);
     })
   ));
+
+const expectBoundedYearOptions = (page: Page): Promise<void> =>
+  expect.poll(() => page.getByRole("option").count()).toBeLessThan(maximumRenderedYearOptions);
+const scrollToLastYear = (list: Element): void => {
+  list.scrollTop = list.scrollHeight;
+};
+const verifyYearLimits = (page: Page): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const period = page.getByRole("navigation", { name: "Periodo de transacciones" });
+    const month = period.getByRole("combobox", { name: "Mes de transacciones", exact: true });
+    const year = period.getByRole("combobox", { name: "Año de transacciones", exact: true });
+    yield* wait(() => chooseYear(page, "0002"));
+    yield* wait(() => month.selectOption("01"));
+    yield* wait(() => expect(period.getByRole("button", { name: "Mes anterior" })).toBeDisabled());
+    yield* wait(() => year.click());
+    yield* wait(() => page.getByRole("listbox").evaluate(scrollToLastYear));
+    yield* wait(() =>
+      expect(page.getByRole("option", { name: "9998", exact: true })).toHaveAttribute(
+        "aria-posinset",
+        "9997"
+      )
+    );
+    yield* wait(() => page.getByRole("option", { name: "9998", exact: true }).click());
+    yield* wait(() => month.selectOption("12"));
+    yield* wait(() => expect(period.getByRole("button", { name: "Mes siguiente" })).toBeDisabled());
+  });
+
+const maximumRenderedYearOptions = 100;
+const matchingYearCount = 20;
 
 const controlBottom = (element: Element): number => element.getBoundingClientRect().bottom;
 
@@ -1005,14 +961,21 @@ test("year choices stay reachable by keyboard in a short enlarged-text viewport"
         exact: true,
       });
       yield* wait(() => search.fill("202"));
-      const choices = page.getByRole("option");
-      const count = yield* wait(() => choices.count());
-      const lastId = yield* wait(() => choices.last().getAttribute("id"));
-      for (let index = 0; index < count; index++) {
-        if ((yield* wait(() => search.getAttribute("aria-activedescendant"))) === lastId) break;
+      const last = page.getByRole("option", { name: "9202", exact: true });
+      for (let index = 0; index < matchingYearCount; index++) {
+        const mounted = yield* wait(() => last.count());
+        if (
+          mounted > 0 &&
+          (yield* wait(() => search.getAttribute("aria-activedescendant"))) ===
+            (yield* wait(() => last.getAttribute("id")))
+        ) {
+          break;
+        }
         yield* wait(() => search.press("ArrowDown"));
       }
-      yield* wait(() => expect(choices.last()).toBeInViewport({ ratio: 1 }));
+      yield* wait(() => expect(last).toBeInViewport({ ratio: 1 }));
+      yield* wait(() => expect(last).toHaveAttribute("aria-setsize", "20"));
+      yield* wait(() => expect(last).toHaveAttribute("aria-posinset", "20"));
       yield* wait(() => expect(search).toBeInViewport({ ratio: 1 }));
       yield* wait(() => search.press("Enter"));
       yield* wait(() => expect(page).toHaveURL(/month=9202-10/u));

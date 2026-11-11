@@ -63,6 +63,7 @@ const FilterChoices = ({
       options={categories.map((category) => [category.id, category.label])}
     />
     <SearchableChoiceDropdown
+      rendering="natural"
       id="recurring-filter-currency"
       label="Filtrar moneda"
       value={props.draft.currency ?? ""}

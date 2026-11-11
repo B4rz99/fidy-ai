@@ -1,12 +1,64 @@
 import { retainedSecretCount } from "./browser-storage-fixture";
-import { Effect } from "effect";
-import type { Page, Route } from "@playwright/test";
+import { Effect, Redacted, Schema } from "effect";
+import { StartedBrowserLoginPairing } from "@fidy/server/client";
+import { browserAcceptanceTopology } from "../../server/cloudflare/browser-acceptance/operations";
+import { installAcceptanceClock } from "./acceptance-clock";
+import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { playwright } from "./playwright-runtime";
-import { signInWithVerifiedEmailThroughCore } from "./real-core-fixture";
 
 const { test, expect } = playwright;
 const rotationPattern = "**/recovery/backup-code/rotate";
 const successStatus = 200;
+const acceptedStatus = 202;
+const noContentStatus = 204;
+const openRecoveryThroughCore = ({
+  page,
+  request,
+  email,
+}: Readonly<{ page: Page; request: APIRequestContext; email: string }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const topology = browserAcceptanceTopology();
+      const headers = { origin: topology.app };
+      const started = yield* Effect.tryPromise(() =>
+        page.request.post(`${topology.api}/web/pairings`, { headers })
+      );
+      expect(started.status()).toBe(successStatus);
+      const pairing = yield* Effect.tryPromise(() =>
+        started
+          .json()
+          .then(Schema.decodeUnknownPromise(Schema.toCodecJson(StartedBrowserLoginPairing)))
+      );
+      const proof = {
+        pairingId: pairing.pairingId,
+        privateVerifier: Redacted.value(pairing.privateVerifier),
+      };
+      const pending = yield* Effect.tryPromise(() =>
+        page.request.post(`${topology.api}/web/email/authentication/start`, {
+          headers,
+          data: { ...proof, email },
+        })
+      );
+      expect(pending.status()).toBe(acceptedStatus);
+      const delivered = yield* Effect.tryPromise(() =>
+        request.post(`${topology.operator}/email/login/deliver?code=${pairing.publicCode}`)
+      );
+      expect(delivered.status()).toBe(noContentStatus);
+      const completed = yield* Effect.tryPromise(() =>
+        page.request.post(`${topology.api}/web/email/authentication/complete`, {
+          headers,
+          data: { ...proof, combinedCode: `${pairing.publicCode}-JKLM-NPQR-STUV-WXYZ` },
+        })
+      );
+      expect(completed.status()).toBe(successStatus);
+      const redeemed = yield* Effect.tryPromise(() =>
+        page.request.post(`${topology.api}/web/pairings/redeem`, { headers, data: proof })
+      );
+      expect(redeemed.status()).toBe(successStatus);
+      yield* Effect.tryPromise(() => installAcceptanceClock(page));
+      yield* Effect.tryPromise(() => page.goto("/settings/account"));
+    })
+  );
 const denyClipboard = (): void => {
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
@@ -101,7 +153,7 @@ test("discloses a real rotated recovery code only in its mounted settings view",
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInWithVerifiedEmailThroughCore({
+        openRecoveryThroughCore({
           page,
           request,
           email: "recovery-disclosure@example.com",
@@ -163,13 +215,12 @@ for (const mode of ["lost", "malformed"] as const) {
     Effect.runPromise(
       Effect.gen(function* () {
         yield* Effect.tryPromise(() =>
-          signInWithVerifiedEmailThroughCore({
+          openRecoveryThroughCore({
             page,
             request,
             email: `recovery-${mode}@example.com`,
           })
         );
-        yield* Effect.tryPromise(() => page.goto("/settings/account"));
         let rotations = 0;
         const observeRotation = (): void => {
           rotations += 1;
@@ -202,13 +253,12 @@ for (const mode of ["lost", "malformed"] as const) {
           page.getByRole("link", { name: "Iniciar sesión", exact: true }).click()
         );
         yield* Effect.tryPromise(() =>
-          signInWithVerifiedEmailThroughCore({
+          openRecoveryThroughCore({
             page,
             request,
             email: `recovery-${mode}@example.com`,
           })
         );
-        yield* Effect.tryPromise(() => page.goto("/settings/account"));
         yield* Effect.tryPromise(() => startRotation(page));
         yield* Effect.tryPromise(() =>
           expect(page.getByText("Guárdalo ahora", { exact: true })).toBeVisible()
@@ -224,13 +274,12 @@ test("leaving during rotation retains uncertainty when the settings task remount
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInWithVerifiedEmailThroughCore({
+        openRecoveryThroughCore({
           page,
           request,
           email: "recovery-disposal@example.com",
         })
       );
-      yield* Effect.tryPromise(() => page.goto("/settings/account"));
       const held = yield* Effect.tryPromise(() => holdRotation(page));
       yield* Effect.tryPromise(() => startRotation(page));
       yield* Effect.tryPromise(() => held.started);
@@ -257,13 +306,12 @@ test("leaving the document fences a late committed rotation response", ({ page, 
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
-        signInWithVerifiedEmailThroughCore({
+        openRecoveryThroughCore({
           page,
           request,
           email: "recovery-disposal@example.com",
         })
       );
-      yield* Effect.tryPromise(() => page.goto("/settings/account"));
       const held = yield* Effect.tryPromise(() => holdRotation(page));
       yield* Effect.tryPromise(() => startRotation(page));
       yield* Effect.tryPromise(() => held.started);
@@ -288,9 +336,8 @@ test("an old Copy completion cannot replace a new mounted recovery disclosure", 
     Effect.gen(function* () {
       yield* Effect.tryPromise(() => page.addInitScript(pendingClipboard));
       yield* Effect.tryPromise(() =>
-        signInWithVerifiedEmailThroughCore({ page, request, email: "recovery-copy@example.com" })
+        openRecoveryThroughCore({ page, request, email: "recovery-copy@example.com" })
       );
-      yield* Effect.tryPromise(() => page.goto("/settings/account"));
       yield* Effect.tryPromise(() => startRotation(page));
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Copiar código" }).click());
       const oldCode = yield* Effect.tryPromise(() => page.locator("code").innerText());

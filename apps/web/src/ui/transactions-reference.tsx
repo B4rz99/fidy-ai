@@ -86,6 +86,7 @@ const ReferenceMoneyFields = ({
   <>
     <Label htmlFor="reference-transaction-currency">Moneda</Label>
     <SearchableChoiceDropdown
+      rendering="natural"
       id="reference-transaction-currency"
       label="Moneda"
       value={currency}

@@ -56,6 +56,7 @@ const ChoiceExamples = (): JSX.Element => {
           onChange={setCategory}
         />
         <SearchableChoiceDropdown
+          rendering="natural"
           id="pattern-currency"
           label="Moneda del patrón"
           value={currency}

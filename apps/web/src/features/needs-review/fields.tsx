@@ -48,6 +48,7 @@ const ReviewFieldControls = memo((props: Props): JSX.Element => (
       <div className="grid content-start gap-2.5">
         <Label htmlFor="review-currency">Moneda</Label>
         <SearchableChoiceDropdown
+          rendering="natural"
           id="review-currency"
           label="Moneda"
           value={Option.getOrElse(props.draft.currency, () => "")}

@@ -15,6 +15,8 @@ const switchRegressionMilliseconds = 10;
 const budgetRegressionMilliseconds = 16;
 const measurementSamples = 5;
 const expiredDisplayMilliseconds = 6_000;
+const quietWindowMilliseconds = 1500;
+const expiredRegistryHintMilliseconds = 2100;
 const freshConsentTimeoutMilliseconds = 500;
 const successfulResponse = 200;
 const constrainConnection = (
@@ -68,18 +70,18 @@ for (const connection of [
           }
         });
         yield* Effect.tryPromise(() =>
-          signInNavigationPerformanceThroughCore({ page, request, identity: "navigationBudget" })
+          signInNavigationThroughCore({ page, request, identity: "navigationBudget" })
         );
         yield* Effect.tryPromise(() =>
           expect(page.getByRole("button", { name: "+ Registrar", exact: true })).toBeVisible()
         );
         yield* Effect.tryPromise(() => page.waitForLoadState("networkidle"));
-        yield* Effect.sleep("1500 millis");
+        yield* Effect.tryPromise(() => page.clock.runFor(quietWindowMilliseconds));
         expect(budgetReads).toHaveLength(0);
         yield* Effect.tryPromise(() =>
           page.getByRole("link", { name: "Presupuestos", exact: true }).hover()
         );
-        yield* Effect.sleep("1500 millis");
+        yield* Effect.tryPromise(() => page.clock.runFor(quietWindowMilliseconds));
         expect(budgetReads).toHaveLength(0);
         const response = page.waitForResponse(
           (reply) =>
@@ -120,7 +122,7 @@ for (const destination of [
           page.addInitScript(constrainConnection, { saveData: true, effectiveType: "4g" })
         );
         yield* Effect.tryPromise(() =>
-          signInNavigationPerformanceThroughCore({
+          signInNavigationThroughCore({
             page,
             request,
             identity: destination.identity,
@@ -135,7 +137,7 @@ for (const destination of [
           expect(page.getByRole("heading", { name: "Todo al día", exact: true })).toBeVisible()
         );
         // Include the registry's one-second timeout buckets when retiring the 400 ms hint.
-        yield* Effect.sleep("2100 millis");
+        yield* Effect.tryPromise(() => page.clock.runFor(expiredRegistryHintMilliseconds));
         expect(profileReads).toHaveLength(0);
         const current = yield* Clock.currentTimeMillis;
         yield* Effect.tryPromise(() =>
@@ -231,14 +233,14 @@ test("reads and initializes a first Dashboard only on the actual visit", ({ page
         }
       });
       yield* Effect.tryPromise(() =>
-        signInNavigationPerformanceThroughCore({
+        signInNavigationThroughCore({
           page,
           request,
           identity: "navigationFirstDashboard",
         })
       );
       yield* Effect.tryPromise(() => page.waitForLoadState("networkidle"));
-      yield* Effect.sleep("1500 millis");
+      yield* Effect.tryPromise(() => page.clock.runFor(quietWindowMilliseconds));
       expect(initializations).toEqual([]);
       expect(reads).toEqual([]);
       yield* Effect.tryPromise(() => openWorkspace(page, "Tablero"));

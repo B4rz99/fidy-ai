@@ -57,13 +57,6 @@ jobs:
             cat scripts/check-ci-results.sh
             echo 'FIDY_REQUIRED_CHECK_SCRIPT'
           } >> "$GITHUB_OUTPUT"
-      - name: Scan source partition 1 on this existing runner
-        if: ${{ steps.plan.outputs.security-sast == 'true' }}
-        env:
-          SOURCE_PARTITION_COUNT: ${{ steps.plan.outputs.source-partitions }}
-        run: |
-          bun scripts/partition-source-scan.ts "1/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
-          docker run --rm --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
 
   static:
     name: Workspace Gate
@@ -451,13 +444,13 @@ jobs:
         run: git fetch origin "$BASE_BRANCH"
       - uses: ./.github/actions/bun-runtime
         if: ${{ needs.changes.outputs.security-sast == 'true' }}
-      - name: Start source partition 2 on this existing runner
+      - name: Start source partition 1 on this existing runner
         id: source-scan
         if: ${{ needs.changes.outputs.security-sast == 'true' }}
         env:
           SOURCE_PARTITION_COUNT: ${{ needs.changes.outputs.source-partitions }}
         run: |
-          bun scripts/partition-source-scan.ts "2/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          bun scripts/partition-source-scan.ts "1/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
           docker pull ghcr.io/trufflesecurity/trufflehog:3.97.1@sha256:deb2af10659a488a14d262a323addcde099d99827a1cf1dc4e93c17915c39f08 > "$RUNNER_TEMP/trufflehog-image-pull.log" 2>&1 &
           trufflehog_pull_pid=$!
           docker pull docker.io/fluidattacks/ss@sha256:78d9db21bebed26b83dc64f7b52c5aeb13e60bb9d1f4744063060f8f9dbe4da9 > "$RUNNER_TEMP/secrets-image-pull.log" 2>&1 &
@@ -479,7 +472,7 @@ jobs:
         run: >-
           docker run --rm --pull=always -v "$PWD:/src" -w /src docker.io/fluidattacks/ss@sha256:78d9db21bebed26b83dc64f7b52c5aeb13e60bb9d1f4744063060f8f9dbe4da9
           ss scan --strict --config /src/.fluidattacks/secrets.yaml
-      - name: Require source partition 2 result
+      - name: Require source partition 1 result
         if: ${{ !cancelled() && steps.source-scan.outcome == 'success' }}
         run: |
           result=$(docker wait fidy-source-scan)
@@ -560,13 +553,13 @@ jobs:
             !/.repos/
           sparse-checkout-cone-mode: false
       - uses: ./.github/actions/bun-runtime
-      - name: Start source partition 3 on this existing runner
+      - name: Start source partition 2 on this existing runner
         id: source-scan
         if: ${{ needs.changes.outputs.security-sast == 'true' }}
         env:
           SOURCE_PARTITION_COUNT: ${{ needs.changes.outputs.source-partitions }}
         run: |
-          bun scripts/partition-source-scan.ts "3/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
+          bun scripts/partition-source-scan.ts "2/$SOURCE_PARTITION_COUNT" "$RUNNER_TEMP/source-scan.yaml"
           docker run --detach --name fidy-source-scan --pull=always -v "$PWD:/src" -v "$RUNNER_TEMP:/ci" docker.io/fluidattacks/sast@sha256:4dad6e668aa1de9dd36a6201fd17bed50534326b37620f4240d986c6651b9167 sast --strict scan /ci/source-scan.yaml
       - uses: ./.github/actions/bun-install
       - name: Bundle the real credential adapter and native probe
@@ -578,7 +571,7 @@ jobs:
           path: apps/cli/dist/native-store/
           if-no-files-found: error
           retention-days: 1
-      - name: Require source partition 3 result
+      - name: Require source partition 2 result
         if: ${{ !cancelled() && steps.source-scan.outcome == 'success' }}
         run: |
           result=$(docker wait fidy-source-scan)

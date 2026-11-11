@@ -2575,13 +2575,13 @@ it("propagates a fresh-read failure after Compaction without reusing deleted Tra
             };
           }
           if (property === "batch") {
-            return async (
+            return (
               statements: Parameters<D1Database["batch"]>[0]
-            ): ReturnType<D1Database["batch"]> => {
-              const result = await target.batch(statements);
-              if (compactionPrepared) committed = true;
-              return result;
-            };
+            ): ReturnType<D1Database["batch"]> =>
+              target.batch(statements).then((result) => {
+                if (compactionPrepared) committed = true;
+                return result;
+              });
           }
           const value: unknown = Reflect.get(target, property);
           return typeof value === "function" ? value.bind(target) : value;

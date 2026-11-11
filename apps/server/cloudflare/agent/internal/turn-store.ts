@@ -613,6 +613,9 @@ export const commitHostedCompaction = ({
       onSome: ({ throughSequence: cursor, revision }) => ({ throughSequence: cursor, revision }),
     });
     const nextRevision = prior.revision + 1;
+    const selectedIdentities = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.Array(Schema.Tuple([Schema.String, TranscriptEntryId])))
+    )(selected.map(({ sequence, entry }) => [String(sequence), entry.id] as const));
     if (signal.aborted) return false;
     return yield* Effect.tryPromise(() =>
       db.batch([
@@ -648,7 +651,7 @@ export const commitHostedCompaction = ({
             sessionId,
             throughSequence,
             selected.length,
-            JSON.stringify(selected.map(({ sequence, entry }) => [String(sequence), entry.id])),
+            selectedIdentities,
             userId,
             sessionId,
             userId,

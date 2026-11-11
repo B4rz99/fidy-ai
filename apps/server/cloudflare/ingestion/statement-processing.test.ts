@@ -2025,6 +2025,72 @@ effectIt.effect(
     })
 );
 effectIt.effect(
+  "claims processing before reading source and retains the claim on interruption",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+      const interrupted = new Proxy(bucket, {
+        get(target, property): unknown {
+          if (property === "get") return () => Promise.reject(new Error("source read interrupted"));
+          const method: unknown = Reflect.get(target, property, target);
+          return typeof method === "function" ? method.bind(target) : method;
+        },
+      });
+      deepStrictEqual(
+        yield* Effect.exit(
+          processStatementSubmission({
+            DB: db,
+            STATEMENT_STAGING_BUCKET: interrupted,
+            userId: userA,
+            submissionId,
+          })
+        ),
+        Exit.fail(new StatementProcessingUnavailable())
+      );
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`SELECT status,source_parse_attempts,
+        (SELECT count(*) FROM statement_record_outcomes) AS outcomes
+        FROM statement_submissions WHERE id=?`)
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ status: "processing", source_parse_attempts: 1, outcomes: 0 });
+      expect(
+        yield* processStatementSubmission({
+          DB: db,
+          STATEMENT_STAGING_BUCKET: bucket,
+          userId: userA,
+          submissionId,
+        })
+      ).toBe("continue");
+    })
+);
+effectIt.effect(
+  "refuses a substituted ready fragment and checksum without capturing later records",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+      const reads = observeStatementReads(bucket);
+      const input = { DB: db, STATEMENT_STAGING_BUCKET: reads.bucket, userId: userA, submissionId };
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      yield* fromTestPromise(() => corruptPublication(db, "body-and-checksum"));
+      expect(yield* processStatementSubmission(input)).toBe("completed");
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`SELECT status,failure_reason,
+            (SELECT count(*) FROM transactions) AS captures
+            FROM statement_submissions WHERE id=?`)
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ status: "failed", failure_reason: "malformed-file", captures: 32 });
+      expect(reads.observed.gets).toBe(1);
+    })
+);
+effectIt.effect(
   "refuses a substituted source digest after publication without consuming another chunk",
   () =>
     Effect.gen(function* () {

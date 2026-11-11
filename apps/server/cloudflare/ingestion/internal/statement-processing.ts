@@ -506,13 +506,6 @@ const advanceSubmission = (
     const rows = yield* Schema.decodeEffect(Schema.toType(Schema.Array(ParsedStatementRow)))(
       parsed.rows
     );
-    const current = yield* Clock.currentTimeMillis;
-    yield* attempt(() =>
-      input.DB.prepare(`UPDATE statement_submissions SET status = 'processing',
-    started_at_ms = coalesce(started_at_ms, ?) WHERE id = ? AND user_id = ? AND status = 'queued'`)
-        .bind(current, input.submissionId, input.userId)
-        .run()
-    );
     const progress = yield* readProgress(input);
     if (
       progress.total > parsed.totalRows ||
@@ -583,6 +576,12 @@ export const processStatementSubmission = (
       });
       return "completed";
     }
+    yield* attempt(() =>
+      input.DB.prepare(`UPDATE statement_submissions SET status = 'processing',
+    started_at_ms = coalesce(started_at_ms, ?) WHERE id = ? AND user_id = ? AND status = 'queued'`)
+        .bind(current, input.submissionId, input.userId)
+        .run()
+    );
     const progress = yield* readProgress(input);
     const chunk = yield* acquireStatementChunk(sourceInput(input, context.value, progress.total));
     return yield* advanceSubmission(input, context.value, chunk);

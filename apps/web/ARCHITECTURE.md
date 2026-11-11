@@ -178,9 +178,15 @@ chat visibility. Entering Privacy or ending the authentication lifetime discards
 The frame subscribes to its rendered access state, not the distinction between independently
 authorized and ordinary product routes. Moving between those routes keeps the shared shell stable;
 the route owners still recheck Consent, and expired ordinary access still renders refusal.
+The mounted conversation owns one synchronous admission gate. Its display snapshots bind visibility,
+confirmation and recovery actions to the exact Turn phase and mounted lifetime; same-tick repeats
+and retained older actions cannot admit another request. The reply projection contains safe text,
+display identity and bound actions, while receipts and host confirmation commands remain private.
+Disposal clears the mounted snapshot and fences late command replies before registry disposal.
 An accepted processing response starts bounded observation of that exact Turn in the command's
 Effect lifetime, without resubmitting its message. Progress failures or an exhausted observation
-bound retain explicit recovery; unresolved execution still blocks new submissions. Disposal stops
+bound retain explicit recovery; each explicit Check makes one immediate read without reopening
+automatic observation. Unresolved execution still blocks new submissions. Disposal stops
 the pending checks.
 AI Elements conversation/message presentation uses Fidy primitives and the existing
 Effect hosted Turn client, without introducing another AI transport. Text is escaped, not executed

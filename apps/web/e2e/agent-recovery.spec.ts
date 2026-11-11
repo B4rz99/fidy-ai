@@ -54,6 +54,30 @@ const recoverDelivery: Response = (route, count) =>
   count === 1 ? unavailable(route) : acknowledge(route);
 const processingReply = (route: Route): Promise<void> =>
   reply(route, { status: "processing", turnId });
+const hideDocument = (): void => {
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+  document.dispatchEvent(new Event("visibilitychange"));
+};
+const revealDocument = (): void => {
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  document.dispatchEvent(new Event("visibilitychange"));
+  document.dispatchEvent(new Event("visibilitychange"));
+};
+const doubleClick = (button: HTMLElement): void => {
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+};
+const doubleSubmit = (button: HTMLElement): void => {
+  const form = button.closest("form");
+  form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+};
+const holdRecordedRoute =
+  (pending: ReturnType<typeof Promise.withResolvers<Route>>): Response =>
+  (route) => {
+    pending.resolve(route);
+    return Promise.resolve();
+  };
 const holdRoute =
   (pending: ReturnType<typeof Promise.withResolvers<Route>>) =>
   (route: Route): void =>
@@ -174,6 +198,7 @@ test("a reply received with chat closed is acknowledged only after it becomes vi
       yield* Effect.tryPromise(() => openAndSend(page, "Consulta mientras cierro el chat"));
       const route = yield* Effect.tryPromise(() => pending.promise);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar chat" }).click());
+      yield* Effect.tryPromise(() => page.evaluate(hideDocument));
       yield* Effect.tryPromise(() =>
         reply(route, {
           turnId,
@@ -196,6 +221,11 @@ test("a reply received with chat closed is acknowledged only after it becomes vi
           page.getByText("Respuesta recibida con el chat cerrado", { exact: true })
         ).toBeVisible()
       );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Mensaje", { exact: true })).toBeDisabled()
+      );
+      expect(receipts).toEqual([]);
+      yield* Effect.tryPromise(() => page.evaluate(revealDocument));
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Mensaje", { exact: true })).toBeEnabled()
       );
@@ -412,7 +442,13 @@ test("uncertain chat progress and failed delivery recover without replaying the 
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Consulta recuperada", { exact: true })).toHaveCount(1)
       );
-      yield* Effect.tryPromise(() => retry.click());
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar chat" }).click());
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Abrir agente Fidy" }).click()
+      );
+      yield* Effect.tryPromise(() => expect(retry).toBeVisible());
+      expect(receipts).toEqual([{ turnId, receipt: "a".repeat(nonceHexLength) }]);
+      yield* Effect.tryPromise(() => retry.evaluate(doubleClick));
       yield* Effect.tryPromise(() => expect(composer).toBeEnabled());
       yield* Effect.tryPromise(() => expect(retry).toHaveCount(0));
       yield* Effect.tryPromise(() => expect(check).toHaveCount(0));
@@ -424,6 +460,19 @@ test("uncertain chat progress and failed delivery recover without replaying the 
       ]);
     })
   ));
+
+const checkOnceAfterExhaustion = (
+  page: Page,
+  progress: Requests
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Consultar estado", exact: true }).evaluate(doubleClick)
+    );
+    yield* Effect.tryPromise(() => expectProgressCount(progress, maximumProgressChecks + 1));
+    yield* Effect.tryPromise(() => page.clock.fastForward(twoProgressIntervals));
+    expect(progress).toEqual(Array.from({ length: maximumProgressChecks + 1 }, () => ({ turnId })));
+  });
 
 test("processing observation stops at its bound and Privacy disposes pending checks", ({
   page,
@@ -458,6 +507,7 @@ test("processing observation stops at its bound and Privacy disposes pending che
       expect(progress).toHaveLength(maximumProgressChecks);
       yield* Effect.tryPromise(() => expect(page.getByLabel("Mensaje")).toBeDisabled());
       expect(submissions).toEqual([{ text: "Consulta demorada" }]);
+      yield* checkOnceAfterExhaustion(page, progress);
       yield* discardAtPrivacy(page);
       yield* Effect.tryPromise(() => page.getByLabel("Mensaje").fill("Segunda consulta demorada"));
       yield* Effect.tryPromise(() =>
@@ -465,9 +515,9 @@ test("processing observation stops at its bound and Privacy disposes pending che
       );
       yield* Effect.tryPromise(() => expect(page.getByLabel("Mensaje")).toHaveValue(""));
       yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
-      yield* Effect.tryPromise(() => expectProgressCount(progress, maximumProgressChecks + 1));
-      yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
       yield* Effect.tryPromise(() => expectProgressCount(progress, maximumProgressChecks + 2));
+      yield* Effect.tryPromise(() => page.clock.fastForward(progressIntervalMilliseconds));
+      yield* Effect.tryPromise(() => expectProgressCount(progress, maximumProgressChecks + 3));
       yield* visitPrivacy(page);
       const progressAtPrivacy = progress.length;
       yield* Effect.tryPromise(() => page.clock.fastForward(observationWindowMilliseconds));
@@ -476,5 +526,69 @@ test("processing observation stops at its bound and Privacy disposes pending che
       yield* Effect.tryPromise(() => page.clock.fastForward(observationWindowMilliseconds));
       expect(progress).toHaveLength(progressAtPrivacy);
       expect(submissions).toHaveLength(2);
+    })
+  ));
+
+test("same-tick submits admit one User entry and one exact proposal", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({ page, request, identity: "recurringChat" })
+      );
+      const pending = Promise.withResolvers<Route>();
+      const submissions: unknown[] = [];
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/web/hosted-turns`,
+          recordRequests(submissions, holdRecordedRoute(pending))
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/hosted-turns/delivery`, acknowledge)
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Abrir agente Fidy" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Mensaje", { exact: true }).fill("Una consulta")
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Enviar", exact: true }).evaluate(doubleSubmit)
+      );
+      const route = yield* Effect.tryPromise(() => pending.promise);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("log").getByText("Una consulta", { exact: true })).toHaveCount(1)
+      );
+      expect(submissions).toEqual([{ text: "Una consulta" }]);
+      yield* Effect.tryPromise(() => recoveredReply(route));
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Mensaje", { exact: true })).toBeEnabled()
+      );
+    })
+  ));
+
+test("Privacy fences a proposal arriving after its conversation is disposed", ({ page, request }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        signInRecurringThroughCore({ page, request, identity: "recurringChat" })
+      );
+      const pending = Promise.withResolvers<Route>();
+      const receipts: unknown[] = [];
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/hosted-turns`, holdRoute(pending))
+      );
+      yield* Effect.tryPromise(() =>
+        page.route(`${apiOrigin}/web/hosted-turns/delivery`, recordRequests(receipts, acknowledge))
+      );
+      yield* Effect.tryPromise(() => openAndSend(page, "Consulta privada pendiente"));
+      const route = yield* Effect.tryPromise(() => pending.promise);
+      yield* visitPrivacy(page);
+      yield* Effect.tryPromise(() => recoveredReply(route));
+      yield* returnFromPrivacy(page);
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Consulta recuperada", { exact: true })).toHaveCount(0)
+      );
+      expect(receipts).toEqual([]);
     })
   ));

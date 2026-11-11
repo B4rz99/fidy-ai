@@ -25,7 +25,7 @@ export const HostedAgentProvider = ({
 }: Readonly<{ children: ReactNode; client: HostedTurnClient }>): JSX.Element => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const conversation = useHostedConversation({ client, clearDraft: () => setText("") });
+  const conversation = useHostedConversation({ client, clearAcceptedDraft: () => setText("") });
   return (
     <AgentContext.Provider value={Option.some({ conversation, open, setOpen, text, setText })}>
       {children}

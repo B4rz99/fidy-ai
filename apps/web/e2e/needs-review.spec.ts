@@ -60,7 +60,7 @@ test("saves an initial draft promptly and spaces continued autosaves", ({ page }
       contentType: "application/json",
       body: response([
         {
-          item,
+          item: { ...item, revision: writes },
           revision: writes,
           draft: Schema.decodeUnknownSync(Schema.Struct({ draft: Schema.Unknown }))(
             route.request().postDataJSON()
@@ -118,16 +118,20 @@ const reviewRoute = (route: Route): Promise<void> => {
     });
   }
   if (path.endsWith("/edits")) {
+    const input = Schema.decodeUnknownSync(
+      Schema.Struct({
+        revision: Schema.Number,
+        draft: Schema.optionalKey(Schema.Unknown),
+      })
+    )(route.request().postDataJSON());
     return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: response([
         {
-          item,
-          revision: 1,
-          draft: Schema.decodeUnknownSync(
-            Schema.Struct({ draft: Schema.optionalKey(Schema.Unknown) })
-          )(route.request().postDataJSON()).draft,
+          item: { ...item, revision: input.revision + 1 },
+          revision: input.revision + 1,
+          draft: input.draft,
         },
       ]),
     });
@@ -694,7 +698,7 @@ for (const corruption of [
   "stale revision",
   "advanced revision",
 ] as const) {
-  test(`keeps the entire bulk review locked after a ${corruption} decision result`, ({ page }) =>
+  test(`keeps the entire bulk review locked after ${corruption} decision results`, ({ page }) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const entries = decisionFixtures();
@@ -930,6 +934,76 @@ test("keeps another bulk scope locked when an individual review decision finishe
         })
       )
     )
+  );
+});
+
+const heldDraftRoute =
+  (
+    entries: Fixture[],
+    writes: unknown[],
+    gate: Readonly<{ requested: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> }>
+  ) =>
+  (route: Route): Promise<void> => {
+    if (!new URL(route.request().url()).pathname.endsWith("/edits")) {
+      return lifecycleRoute(entries)(route);
+    }
+    writes.push(route.request().postDataJSON());
+    gate.requested.resolve();
+    return gate.release.promise.then(() => saveFixture(route, entries));
+  };
+test("refuses the whole selected review set when a member expires during draft flush", ({
+  page,
+}) => {
+  const requested = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const entries = decisionFixtures();
+      const writes: unknown[] = [];
+      const start = DateTime.toDateUtc(DateTime.makeUnsafe("2027-01-13T11:59:58Z"));
+      yield* Effect.tryPromise(() => page.clock.install({ time: start }));
+      yield* Effect.tryPromise(() => page.clock.pauseAt(start));
+      yield* Effect.tryPromise(() => installUser(page));
+      yield* Effect.tryPromise(() => installCategories({ page, categories: [] }));
+      yield* Effect.tryPromise(() =>
+        page.route(
+          `${apiOrigin}/ingestion/review-workspace**`,
+          heldDraftRoute(entries, writes, { requested, release })
+        )
+      );
+      yield* Effect.tryPromise(() => page.goto("/app/needs-review"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Abrir Extracto Fila 2", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(0).check());
+      yield* Effect.tryPromise(() => page.getByRole("checkbox").nth(1).check());
+      yield* Effect.tryPromise(() => page.getByLabel("Valor", { exact: true }).fill("98765"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Omitir 2 seleccionados", exact: true }).click()
+      );
+      yield* Effect.tryPromise(() => requested.promise);
+      const afterOriginalExpiryMilliseconds = 3000;
+      yield* Effect.tryPromise(() => page.clock.fastForward(afterOriginalExpiryMilliseconds));
+      release.resolve();
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("No pudimos confirmar el cambio. Actualiza antes de continuar.", {
+            exact: true,
+          })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: "Omitir 2 seleccionados", exact: true })
+        ).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("button", { name: "Deshacer omisión" })).toHaveCount(0)
+      );
+      expect(writes).toEqual([
+        expect.objectContaining({ _tag: "SaveDraft", id: secondId, revision: 0 }),
+      ]);
+    }).pipe(Effect.ensuring(Effect.sync(() => release.resolve())))
   );
 });
 

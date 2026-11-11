@@ -61,7 +61,7 @@ const prepareHandoffConsumption = (
     : [
         context.input.db
           .prepare(`UPDATE whatsapp_provider_handoffs SET consumed_at_ms=?
-      WHERE id=? AND pairing_id=? AND decision='confirmed' AND consumed_at_ms IS NULL AND expires_at_ms>?
+      WHERE id=? AND pairing_id=? AND decision='confirmed' AND consumed_at_ms IS NULL AND expires_at_ms>? AND review_attempt_id=?
       AND EXISTS(SELECT 1 FROM provider_authentication_attempts a
         WHERE a.id=? AND a.handoff_id=whatsapp_provider_handoffs.id
         AND a.pairing_id=whatsapp_provider_handoffs.pairing_id AND a.user_id=?
@@ -71,6 +71,7 @@ const prepareHandoffConsumption = (
             context.attempt.handoff_id,
             context.proof.pairingId,
             context.current,
+            context.attempt.id,
             context.attempt.id,
             userId,
             context.current
@@ -242,8 +243,8 @@ const confirmedExchange = ({
       const raw = yield* Effect.tryPromise(() =>
         input.db
           .prepare(`SELECT exchange_id FROM whatsapp_provider_handoffs
-        WHERE id=? AND pairing_id=? AND consumed_at_ms IS NULL AND expires_at_ms>? AND decision='confirmed' AND review_message_id IS NOT NULL`)
-          .bind(attempt.handoff_id, proof.pairingId, current)
+        WHERE id=? AND pairing_id=? AND consumed_at_ms IS NULL AND expires_at_ms>? AND decision='confirmed' AND review_message_id IS NOT NULL AND review_attempt_id=?`)
+          .bind(attempt.handoff_id, proof.pairingId, current, attempt.id)
           .first()
       );
       const handoff = yield* Schema.decodeUnknownEffect(

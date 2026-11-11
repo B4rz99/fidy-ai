@@ -1,22 +1,18 @@
 import { createContext } from "react";
 import { Option } from "effect";
-import type { CaptureStatus } from "./capture";
-import type { CaptureDraft } from "./capture-draft";
+import type { TransactionCaptureTask } from "./capture-task";
 
-export type CaptureHistoryVersion = Readonly<{ month: string; generation: number }>;
-export type ManualCaptureState = Readonly<{
-  draft: CaptureDraft;
-  status: CaptureStatus;
-  attempt: Option.Option<CaptureDraft>;
-  check: Option.Option<CaptureHistoryVersion>;
+export type CaptureHistoryVersion = Readonly<{
+  month: string;
+  timeZone: string;
+  generation: number;
 }>;
-export type ManualCapture = ManualCaptureState &
+export type ManualCapture = TransactionCaptureTask &
   Readonly<{
-    change: (draft: CaptureDraft) => void;
-    onStatus: (status: CaptureStatus) => void;
+    check: Option.Option<CaptureHistoryVersion>;
     clear: () => void;
     checkHistory: (version: CaptureHistoryVersion) => void;
-    resume: () => void;
+    resumeAfterInspection: (version: CaptureHistoryVersion) => void;
   }>;
 
 export const ManualCaptureContext = createContext<Option.Option<ManualCapture>>(Option.none());

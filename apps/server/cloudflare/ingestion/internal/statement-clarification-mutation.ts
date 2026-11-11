@@ -396,8 +396,6 @@ const observeReview = ({
     }
     return Option.map(row, (value) => ({
       row: value,
-      // A pending draft can change without settling the row. The prepared decision must
-      // retain the exact revision observed before capture and state transition are composed.
       source: {
         sql: `SELECT user_id FROM (${source.sql}) WHERE EXISTS (
           SELECT 1 FROM ingestion_review_sources WHERE id = ? AND user_id = ? AND revision = ?

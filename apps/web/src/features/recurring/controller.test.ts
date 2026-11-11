@@ -208,6 +208,20 @@ const planningHttp = (
     return Effect.map(response, (value) => HttpClientResponse.fromWeb(request, value));
   });
 };
+const recordedPlanningHttp = (
+  reply: Deferred.Deferred<Response>,
+  reread: { current: Deferred.Deferred<Response> }
+): Readonly<{ http: HttpClient.HttpClient; requests: ReadonlyArray<string> }> => {
+  const requests: string[] = [];
+  const base = planningHttp(reply, reread);
+  const http = HttpClient.make((request) => {
+    if (request.method === "POST" && request.body._tag === "Uint8Array") {
+      requests.push(new TextDecoder().decode(request.body.body));
+    }
+    return base.execute(request);
+  });
+  return { http, requests };
+};
 const failReread = (reply: Deferred.Deferred<Response>): Promise<void> =>
   Promise.resolve(
     act(() => Effect.runPromise(Deferred.succeed(reply, Response.json({}))).then(() => undefined))
@@ -314,21 +328,13 @@ it("retains equivalent mounted Recurring queries through collection and rerender
     })
   ));
 
-// The same rendered controller seam drives navigation, explicit recovery and saved feedback.
 it("snapshots one exact edit before dispatch and contains a throwing visible callback", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
       const reply = Deferred.makeUnsafe<Response>();
       const reread = { current: Deferred.makeUnsafe<Response>() };
-      const requests: string[] = [];
-      const base = planningHttp(reply, reread);
-      const http = HttpClient.make((request) => {
-        if (request.method === "POST" && request.body._tag === "Uint8Array") {
-          requests.push(new TextDecoder().decode(request.body.body));
-        }
-        return base.execute(request);
-      });
+      const { http, requests } = recordedPlanningHttp(reply, reread);
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, http),
@@ -465,7 +471,6 @@ it.each(["confirmed", "uncertain"] as const)(
           expect(onSaved).not.toHaveBeenCalled();
           expect(writes).toBe(1);
           if (outcome === "confirmed") {
-            // A successful replacement-month read at revision nine cannot complete October's receipt.
             yield* Effect.tryPromise(() =>
               reactWork(() => container.querySelectorAll("button")[1]?.click())
             );
@@ -620,14 +625,7 @@ it("saves a Money-bearing edit with its exact reviewed facts and confirms its vi
       vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
       const reply = Deferred.makeUnsafe<Response>();
       const reread = { current: Deferred.makeUnsafe<Response>() };
-      const requests: string[] = [];
-      const base = planningHttp(reply, reread);
-      const http = HttpClient.make((request) => {
-        if (request.method === "POST" && request.body._tag === "Uint8Array") {
-          requests.push(new TextDecoder().decode(request.body.body));
-        }
-        return base.execute(request);
-      });
+      const { http, requests } = recordedPlanningHttp(reply, reread);
       const client = makeFidyClient({
         apiOrigin: "https://api.test.fidyapp.com",
         httpClient: Layer.succeed(HttpClient.HttpClient, http),

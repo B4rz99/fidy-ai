@@ -10,7 +10,7 @@ export type BudgetWriteContext = Readonly<{
   draft: Option.Option<BudgetDraft>;
   refreshQueries: () => void;
 }>;
-const makeWriteOwner = () => {
+const makeWriteOwner = (): Readonly<{ version: () => number; advance: () => void }> => {
   let generation = 0;
   return {
     version: (): number => generation,

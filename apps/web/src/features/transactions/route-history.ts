@@ -215,6 +215,16 @@ export const transactionRouteHistory = (input: RouteHistoryInput): TransactionRo
 const resetPages = (command: string, loadedPages: number): number =>
   command === "refresh" ? Math.max(1, loadedPages) : 1;
 
+const advanceContinuation = (owner: GenerationOwner): GenerationOwner => ({
+  ...owner,
+  generation: new Generation({
+    number: owner.generation.number + 1,
+    pages: owner.generation.pages,
+    period: owner.generation.period,
+    locate: owner.generation.locate,
+  }),
+});
+
 const routeActions = ({
   input,
   navigation,
@@ -229,15 +239,7 @@ const routeActions = ({
     const current = owner.generation;
     if (command === "refresh-pages") {
       get.set(get(owner.resource).action, command);
-      get.set(navigation, {
-        ...owner,
-        generation: new Generation({
-          number: current.number + 1,
-          pages: current.pages,
-          period: current.period,
-          locate: current.locate,
-        }),
-      });
+      get.set(navigation, advanceContinuation(owner));
       return;
     }
     if (typeof command === "string") {

@@ -334,7 +334,6 @@ const useTransactionQueries = (
       rememberTransactionPages({ router, scope, pages: history.loadedPages + 1 });
       dispatch(history.more);
     },
-    onRetryMore: () => dispatch(history.retry),
     onRefresh: () => {
       if (corrections.locked) return corrections.recover();
       dispatch("reset");
@@ -344,8 +343,9 @@ const useTransactionQueries = (
       if (
         router.options.context.registry.get(historyResource.state).retry.retry !==
         history.retry.retry
-      )
+      ) {
         return;
+      }
       if (corrections.locked) return corrections.recover();
       dispatch(history.retry);
     },

@@ -254,10 +254,10 @@ export const prepareReminderRevision = (
   InsightUnavailable | ReminderRevisionConflict
 > => reminder.prepareRevision(input);
 
-/** Materialize only the latest still-fresh reminder with an exact enabled instruction/grant guard. Event, immutable deadline, outbox and advancement commit together; replay cannot create a backlog. */
+/** Under existing User coordination, read the current reminder and admit at most one latest due occurrence. Event, original deadline, outbox, history and advancement commit together under the exact enabled revision and live grant; Created means admitted intent, not delivered. */
 export const materializeReminder = (
-  input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
-): Effect.Effect<ReminderMaterialization, InsightUnavailable> => reminder.materialize(input);
+  input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>
+): Effect.Effect<ReminderMaterialization, InsightUnavailable> => reminder.advanceReminderDue(input);
 
 /** Reject invalid governor knobs before production execution or delivery settlement. */
 export const readWeeklyThresholds: typeof weeklyThresholds = (input) => weeklyThresholds(input);

@@ -41,6 +41,20 @@ the deployed workload: for example, an hourly 128-grant admission cleanup can pr
 grants per day, and a daily Audit sweep selects at most eight subjects with 64 rows per projection.
 The idle budget below is not evidence of production backlog capacity.
 
+## Reminder advancement
+
+Reminder discovery wakes one User; it does not capture a schedule revision or grant authority.
+Inside User coordination, Insights reads the current enabled instructions and standing, selects
+only the latest due local occurrence, and commits its event, delivery intent, execution history and
+next instant in one guarded D1 batch. A changed revision, next instant, disabled schedule or withdrawn
+grant refuses the batch. A later wake reads current state again.
+
+The admitted deadline remains the earlier of twenty-four elapsed hours after the scheduled instant
+and the following calendar occurrence. Delays skip backlog without moving the scheduled instant to
+execution time. Expired opportunities record history and advance without a message. A Created result
+means admitted delivery intent; WhatsApp owns send and delivery evidence separately. An unavailable
+commit response does not authorize replay or extend the deadline.
+
 ## Operational signals
 
 Core runs bounded owner inspections under `ASYNC_HEALTH_ENABLED`. Workers Logs retain closed

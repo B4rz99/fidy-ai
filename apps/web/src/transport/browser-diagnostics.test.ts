@@ -2,7 +2,7 @@ import { telemetryTraceHeader } from "@fidy/server/browser-transport";
 // @vitest-environment node
 
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -125,6 +125,50 @@ describe("browser transport diagnostics", () => {
           vi.mocked(diagnosticConsole.info).mock.calls
         )
       ).not.toContain(sentinel);
+    })
+  );
+
+  it.effect("preserves mixed failure and interruption as failed work when export throws", () =>
+    Effect.gen(function* () {
+      let sent = 0;
+      const client = yield* makeClient(
+        HttpClient.make((request) => {
+          sent++;
+          return Effect.failCause(
+            Cause.combine(
+              Cause.fail(
+                new HttpClientError.HttpClientError({
+                  reason: new HttpClientError.TransportError({ request }),
+                })
+              ),
+              Cause.interrupt(1)
+            )
+          );
+        })
+      );
+      const result = yield* Effect.exit(client.post(`${origin}/work`));
+      expect(Exit.isFailure(result)).toBe(true);
+      if (!Exit.isFailure(result)) return;
+      expect(Cause.hasInterrupts(result.cause)).toBe(true);
+      expect(Cause.findErrorOption(result.cause)._tag).toBe("Some");
+      expect(diagnosticConsole.info).toHaveBeenCalledExactlyOnceWith("fidy.browser.transport", {
+        component: "browser",
+        operation: "browser.transport",
+        boundary: "web-auth",
+        outcome: "failed",
+        attempts: 1,
+        durationMilliseconds: 0,
+        error: "TransportError",
+      });
+      vi.mocked(diagnosticConsole.info).mockImplementation(() => {
+        throw new Error("sink unavailable");
+      });
+      const unavailable = yield* Effect.exit(client.post(`${origin}/work`));
+      expect(Exit.isFailure(unavailable)).toBe(true);
+      if (!Exit.isFailure(unavailable)) return;
+      expect(Cause.hasInterrupts(unavailable.cause)).toBe(true);
+      expect(Cause.findErrorOption(unavailable.cause)._tag).toBe("Some");
+      expect(sent).toBe(2);
     })
   );
 

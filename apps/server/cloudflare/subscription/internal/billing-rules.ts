@@ -17,8 +17,9 @@ export const wompiRetryOpportunity = Duration.minutes(3);
 
 /** One retained provider transaction contributing to a BillingAttempt's aggregate outcome. */
 export type BillingTransactionFact = Readonly<{
-  status: WompiBillingStatus;
+  status: Option.Option<WompiBillingStatus>;
   firstObservedAt: DateTime.Utc;
+  negativeObservedAt: Option.Option<DateTime.Utc>;
   finalizedAt: Option.Option<DateTime.Utc>;
 }>;
 
@@ -38,7 +39,10 @@ const terminalNegativeStatuses: Readonly<Record<WompiBillingStatus, boolean>> = 
 export const approvingFinalizedAtFor = (
   transactions: ReadonlyArray<BillingTransactionFact>
 ): Effect.Effect<Option.Option<DateTime.Utc>> => {
-  const approving = transactions.find((transaction) => transaction.status === "APPROVED");
+  const approving = transactions.find(
+    (transaction) =>
+      Option.contains(transaction.status, "APPROVED") && Option.isSome(transaction.finalizedAt)
+  );
   return Effect.succeed(approving === undefined ? Option.none() : approving.finalizedAt);
 };
 
@@ -69,16 +73,29 @@ type BillingAttemptOutcomeInput = Readonly<{
 
 const nextBillingAttemptOutcome = (input: BillingAttemptOutcomeInput): BillingAttemptStatus => {
   if (input.current === "succeeded") return "succeeded";
-  if (input.transactions.some((transaction) => transaction.status === "APPROVED")) {
+  if (
+    input.transactions.some(
+      (transaction) =>
+        Option.contains(transaction.status, "APPROVED") && Option.isSome(transaction.finalizedAt)
+    )
+  ) {
     return "succeeded";
   }
   if (input.current === "failed") return "failed";
   if (input.transactions.length === 0) return "pending";
-  if (!input.transactions.every((transaction) => terminalNegativeStatuses[transaction.status])) {
+  if (
+    !input.transactions.every(
+      (transaction) =>
+        Option.isSome(transaction.status) && terminalNegativeStatuses[transaction.status.value]
+    )
+  ) {
+    return "pending";
+  }
+  if (input.transactions.some((transaction) => Option.isNone(transaction.negativeObservedAt))) {
     return "pending";
   }
   const earliest = input.transactions
-    .map((transaction) => transaction.firstObservedAt)
+    .flatMap((transaction) => Option.toArray(transaction.negativeObservedAt))
     .reduce((candidate, observedAt) => DateTime.min(candidate, observedAt));
   const elapsed = DateTime.distance(earliest, input.observedAt);
   return Duration.toMillis(elapsed) >= Duration.toMillis(wompiRetryOpportunity)
@@ -88,7 +105,7 @@ const nextBillingAttemptOutcome = (input: BillingAttemptOutcomeInput): BillingAt
 
 /**
  * Aggregates every retained provider transaction into the BillingAttempt's next state. One verified
- * approval succeeds the attempt; an unresolved transaction keeps it pending; observed final
+ * finalized approval succeeds the attempt; an unresolved transaction keeps it pending; observed final
  * negatives fail it only after Wompi's retry opportunity elapses. Without any observed transaction
  * there is no failure evidence, and `failed` never returns to `pending`.
  */

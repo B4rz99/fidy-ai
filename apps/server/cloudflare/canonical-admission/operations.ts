@@ -541,7 +541,7 @@ const finishReplay = <E, R>(
       catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
     });
     const current = yield* Clock.currentTimeMillis;
-    yield* batch(call.db, [
+    const rows = yield* batch(call.db, [
       ...prepareAuthorizedQuotaRead({
         db: call.db,
         userId: call.caller.value.userId,
@@ -557,6 +557,9 @@ const finishReplay = <E, R>(
         body,
       }),
     ]);
+    if (rows[2]?.meta.changes !== 1) {
+      return yield* new CanonicalAdmissionUnavailable({ cause: "Retained acceptance unavailable" });
+    }
   });
 const retainReviewConsumption = <E, R>(
   call: MeteredCall<E, R>,
@@ -591,31 +594,6 @@ const retainReviewConsumption = <E, R>(
     }
   });
 
-const externalCall = <E, R>(
-  call: MeteredCall<E, R>
-): Effect.Effect<Response, E | CanonicalAdmissionUnavailable | Schema.SchemaError, R> =>
-  Effect.gen(function* () {
-    const replay = yield* replayOf(call);
-    if (Option.isSome(replay)) return replay.value;
-    const acceptance = yield* batch(call.db, acceptanceStatements(call)).pipe(Effect.result);
-    if (acceptance._tag === "Failure") return yield* recoverAcceptance(call, acceptance.failure);
-    const response = yield* call.work;
-    yield* retainReviewConsumption(call, response);
-    yield* finishReplay(call, response);
-    return response;
-  });
-const operationResponse = <E, R>(
-  call: MeteredCall<E, R>
-): Effect.Effect<Response, E | CanonicalAdmissionUnavailable | Schema.SchemaError, R> => {
-  if (
-    call.operation.id === "quota.getQuota" ||
-    call.operation.id === "subscription.getUpgradeUrl"
-  ) {
-    return call.work;
-  }
-  if (call.caller._tag === "WebSession") return call.work;
-  return externalCall(call);
-};
 const primaryScopeFailure = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Option.Option<Response>, CanonicalAdmissionUnavailable> => {
@@ -665,42 +643,87 @@ const invalidInputResponse = <E, R>(
     ? input.work
     : unadmittedRefusal(input, identity, invalid("Invalid canonical operation input."));
 
-const authorizedCall = <E, R>(
+type RetainedPreparation<E, R> =
+  | Readonly<{ _tag: "Ready"; call: MeteredCall<E, R> }>
+  | Readonly<{ _tag: "Refused"; response: Response }>;
+const prepareRetainedCall = <E, R>(
   input: RequestCall<E, R>,
   identity: string
-): Effect.Effect<Response, E | CanonicalAdmissionUnavailable | Schema.SchemaError, R> =>
+): Effect.Effect<RetainedPreparation<E, R>, E | CanonicalAdmissionUnavailable, R> =>
   Effect.gen(function* () {
-    if (input.caller._tag === "WebSession") {
-      return yield* input.work;
-    }
     const primaryFailure = yield* primaryScopeFailure(input);
     if (Option.isSome(primaryFailure)) {
-      return yield* unadmittedRefusal(input, identity, primaryFailure.value);
+      return {
+        _tag: "Refused",
+        response: yield* unadmittedRefusal(input, identity, primaryFailure.value),
+      };
     }
     const valid = yield* validatedCanonicalInput(input);
-    if (Option.isNone(valid)) return yield* invalidInputResponse(input, identity);
+    if (Option.isNone(valid)) {
+      return { _tag: "Refused", response: yield* invalidInputResponse(input, identity) };
+    }
     const authorized: Call<E, R> = { ...input, scopes: valid.value.scopes };
     const scopeFailure = yield* checkScopes(authorized);
     if (Option.isSome(scopeFailure)) {
-      return yield* unadmittedRefusal(input, identity, scopeFailure.value);
+      return {
+        _tag: "Refused",
+        response: yield* unadmittedRefusal(input, identity, scopeFailure.value),
+      };
     }
     const wireKey = retryWireKey(input);
     const key = Option.flatMap(wireKey, Schema.decodeUnknownOption(CanonicalRetryKey));
     if (Option.isSome(wireKey) && Option.isNone(key)) {
-      return yield* unadmittedRefusal(input, identity, invalid("Invalid canonical retry key."));
+      return {
+        _tag: "Refused",
+        response: yield* unadmittedRefusal(
+          input,
+          identity,
+          invalid("Invalid canonical retry key.")
+        ),
+      };
     }
     const retryKey = Option.isNone(key)
       ? Option.none<string>()
       : Option.some(yield* cryptoHash(key.value));
     const consumptionIdentity = yield* consumptionReference(input, identity, valid.value.inputHash);
-    const response = yield* operationResponse({
-      ...authorized,
-      identity,
-      consumptionIdentity,
-      inputHash: valid.value.inputHash,
-      retryKey,
-    });
-    return yield* disclose(authorized, response);
+    return {
+      _tag: "Ready",
+      call: {
+        ...authorized,
+        identity,
+        consumptionIdentity,
+        inputHash: valid.value.inputHash,
+        retryKey,
+      },
+    };
+  });
+
+/** Own one exact invocation through acceptance, retention and current-authority disclosure. A pending outcome never authorizes another execution. */
+const runRetainedCall = <E, R>(
+  input: RequestCall<E, R>,
+  identity: string
+): Effect.Effect<Response, E | CanonicalAdmissionUnavailable | Schema.SchemaError, R> =>
+  Effect.gen(function* () {
+    if (input.caller._tag === "WebSession") return yield* input.work;
+    const prepared = yield* prepareRetainedCall(input, identity);
+    if (prepared._tag === "Refused") return prepared.response;
+    const { call } = prepared;
+    if (
+      call.operation.id === "quota.getQuota" ||
+      call.operation.id === "subscription.getUpgradeUrl"
+    ) {
+      return yield* disclose(call, yield* call.work);
+    }
+    const replay = yield* replayOf(call);
+    if (Option.isSome(replay)) return yield* disclose(call, replay.value);
+    const acceptance = yield* batch(call.db, acceptanceStatements(call)).pipe(Effect.result);
+    if (acceptance._tag === "Failure") {
+      return yield* disclose(call, yield* recoverAcceptance(call, acceptance.failure));
+    }
+    const response = yield* call.work;
+    yield* retainReviewConsumption(call, response);
+    yield* finishReplay(call, response);
+    return yield* disclose(call, response);
   });
 
 /** Trusted public ingress supplies a keyed source; no caller-selected policy or plaintext source is accepted. */
@@ -770,7 +793,7 @@ const executeAcquiredRequest = <E, R>({
   timings: Option.Option<CanonicalRequestTimings>;
 }>): Effect.Effect<Response, never, R> =>
   restore(
-    authorizedCall(input, id).pipe(
+    runRetainedCall(input, id).pipe(
       Effect.catch((failure) =>
         Effect.succeed(
           failure instanceof CanonicalAdmissionUnavailable &&
@@ -1110,7 +1133,7 @@ export const protectCanonicalBrowserSnapshot = (
 export const admitCanonicalOperation = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Response, never, R> =>
-  authorizedCall(input, newId()).pipe(
+  runRetainedCall(input, newId()).pipe(
     Effect.orElseSucceed(unavailable),
     Effect.flatMap((response) =>
       discloseCanonicalAllowance({ db: input.db, caller: input.caller, response })

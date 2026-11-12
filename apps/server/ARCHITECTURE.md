@@ -121,6 +121,17 @@ the User-scoped mutation unit. Dedicated browser/proof transports retain separat
 authority; using one does not confer canonical, agent or batch privileges.
 See [ADR 0029](../../docs/adr/0029-atomic-batch-accountability-boundaries.md).
 
+Canonical Admission privately owns each retained call from catalog normalization and live scope
+checks through atomic acceptance, owner execution, retention and current-authority disclosure.
+Replay identity remains User/retry-key scoped; another authorized PAT observes the retained outcome
+with its own guarded Audit and current allowance standing, without a new commercial consumption.
+Pending uncertainty never permits execution. Completion must update the exact accepted identity;
+a stale owner cannot complete a replacement or present its unretained result as completed.
+The original twenty-four-hour cutoff and separate capacity lease remain unchanged. Sensitive OAuth
+work continues to disable retry keys, and its lifetime fence encloses admission as well as owner
+work. Retention preserves status, body and content type; an independent response-byte ceiling is
+separate policy work.
+
 ### Hosted MCP and OAuth development authority
 
 Browser OAuthConnection listing resolves the exact mounted cookie once and rechecks that live

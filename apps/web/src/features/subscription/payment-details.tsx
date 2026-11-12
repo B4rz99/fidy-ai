@@ -328,7 +328,12 @@ const NequiFormContents = ({
           value={phoneNumber}
           change={changePhone}
         />
-        <BillingEmailField email={billingEmail} disabled={busy} setEmail={setBillingEmail} />
+        <BillingEmailField
+          email={billingEmail}
+          invalid={false}
+          disabled={busy}
+          setEmail={setBillingEmail}
+        />
         <EnrollmentConsent
           enrollment={enrollment}
           disabled={busy}
@@ -370,22 +375,47 @@ const useCardAuthorizationLifetime = (
     },
   };
 };
+const useBillingEmailDraft = (
+  initial: string
+): Readonly<{
+  binding: Pick<ComponentProps<typeof BillingEmailField>, "email" | "invalid" | "setEmail">;
+  validate: () => Option.Option<string>;
+}> => {
+  const [email, setEmail] = useState(initial);
+  const [attempted, setAttempted] = useState(false);
+  const normalized = email.trim().toLowerCase();
+  const valid = Schema.is(BillingEmail)(normalized);
+  return {
+    binding: {
+      email,
+      invalid: attempted && !valid,
+      setEmail: (value) => {
+        setEmail(value);
+        setAttempted(false);
+      },
+    },
+    validate: () => {
+      setAttempted(true);
+      return valid ? Option.some(normalized) : Option.none();
+    },
+  };
+};
 const PreparedCardEnrollmentForm = ({
   enrollment,
   offer,
   busy,
   submit,
 }: EnrollmentFormProps): JSX.Element => {
-  const [billingEmail, setBillingEmail] = useState<string>(enrollment.billingEmail);
+  const billingEmail = useBillingEmailDraft(enrollment.billingEmail);
   const [fields, setFields] = useState<CardFields>(emptyCardFields);
   const [decisions, setDecisions] = useState<EnrollmentDecisions>(emptyDecisions);
   const { admit, formLifetimeRef } = useCardAuthorizationLifetime(() => setFields(emptyCardFields));
   const allAccepted = allDecisionsAccepted(decisions);
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    const email = billingEmail.trim().toLowerCase();
+    const email = billingEmail.validate();
     if (
-      !Schema.is(BillingEmail)(email) ||
+      Option.isNone(email) ||
       !allAccepted ||
       busy ||
       !event.currentTarget.checkValidity() ||
@@ -398,7 +428,10 @@ const PreparedCardEnrollmentForm = ({
       return;
     }
     setFields(emptyCardFields);
-    submit(email, enrollment.paymentSourceMode === "create" ? { ...fields, signal } : undefined);
+    submit(
+      email.value,
+      enrollment.paymentSourceMode === "create" ? { ...fields, signal } : undefined
+    );
   };
   return (
     <form ref={formLifetimeRef} className="subscription-form" onSubmit={onSubmit}>
@@ -409,7 +442,7 @@ const PreparedCardEnrollmentForm = ({
           Usaremos de nuevo tu fuente de pago guardada. No necesitas ingresar los datos de nuevo.
         </p>
       )}
-      <BillingEmailField email={billingEmail} disabled={busy} setEmail={setBillingEmail} />
+      <BillingEmailField {...billingEmail.binding} disabled={busy} />
       <EnrollmentConsent
         decisions={decisions}
         disabled={busy}

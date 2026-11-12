@@ -724,6 +724,21 @@ const fillCardInput = (
     });
   });
 
+const expectBillingEmailFeedback = (container: HTMLElement, invalid: boolean): void => {
+  const input = container.querySelector("#billing-email");
+  if (input === null) {
+    throw new Error("Missing billing email input");
+  }
+  expect(input.getAttribute("aria-invalid")).toBe(String(invalid));
+  const feedback = container.querySelector("#billing-email-error");
+  if (invalid) {
+    expect(input.getAttribute("aria-describedby")).toBe("billing-email-error");
+    expect(feedback?.textContent).toContain("nombre@dominio.com");
+  } else {
+    expect(feedback).toBeNull();
+  }
+};
+
 it("allows email correction before consuming the mounted card draft once and revokes authorization on departure", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -775,10 +790,12 @@ it("allows email correction before consuming the mounted card draft once and rev
           form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
         });
         expect(submit).not.toHaveBeenCalled();
+        expectBillingEmailFeedback(container, true);
         expect(container.querySelector<HTMLInputElement>("#card-number")?.value).toBe(
           "4242424242424242"
         );
         yield* fillCardInput(container, "billing-email", "payer@example.invalid");
+        expectBillingEmailFeedback(container, false);
         yield* reactAct(() => {
           form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
           form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));

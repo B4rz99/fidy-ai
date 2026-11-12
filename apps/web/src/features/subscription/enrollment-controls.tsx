@@ -68,10 +68,12 @@ export const EnrollmentConsent = ({
 export const BillingEmailField = ({
   email,
   disabled,
+  invalid,
   setEmail,
 }: Readonly<{
   email: string;
   disabled: boolean;
+  invalid: boolean;
   setEmail: (email: string) => void;
 }>): JSX.Element => (
   <label className="subscription-field" htmlFor="billing-email">
@@ -80,6 +82,8 @@ export const BillingEmailField = ({
       <Input
         id="billing-email"
         autoComplete="email"
+        aria-invalid={invalid}
+        aria-describedby={invalid ? "billing-email-error" : undefined}
         disabled={disabled}
         placeholder="tu-correo@ejemplo.com"
         required
@@ -88,5 +92,10 @@ export const BillingEmailField = ({
         onChange={(event) => setEmail(event.target.value)}
       />
     </SubscriptionInputDecoration>
+    {invalid && (
+      <span id="billing-email-error" role="alert">
+        Ingresa un correo como nombre@dominio.com.
+      </span>
+    )}
   </label>
 );

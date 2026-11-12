@@ -29,11 +29,11 @@ const click = (container: HTMLElement, label: string): Promise<void> =>
 const editGrant = (container: HTMLElement): Promise<void> =>
   reactWork(() => {
     const input = container.querySelector("input#pat-recipient");
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    if (!(input instanceof HTMLInputElement) || setter === undefined) {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    if (!(input instanceof HTMLInputElement) || descriptor?.set === undefined) {
       throw new Error("Missing recipient input");
     }
-    setter.call(input, "Mi agente");
+    descriptor.set.call(input, "Mi agente");
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }).then(() =>
     reactWork(() => {

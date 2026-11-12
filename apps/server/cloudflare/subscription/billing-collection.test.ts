@@ -454,7 +454,7 @@ it("holds verified negative until the retry opportunity and admits a later verif
     })
   ));
 
-it("restarts the negative retry opportunity after a verified pending observation", () =>
+it("retains the original terminal negative and retry anchor after a verified pending observation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => fixture());
@@ -468,11 +468,51 @@ it("restarts the negative retry opportunity after a verified pending observation
       SET negative_observed_at_ms = negative_observed_at_ms - 180001`)
           .run()
       );
+      const retained = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT status,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE transaction_id=?"
+          )
+          .bind(transactionId)
+          .first()
+      );
       observed = transaction("PENDING");
       yield* verify();
-      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("failed");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT status,negative_observed_at_ms,finalized_at_ms FROM billing_provider_transactions WHERE transaction_id=?"
+            )
+            .bind(transactionId)
+            .first()
+        )
+      ).toEqual(retained);
       observed = transaction("DECLINED");
       yield* verify();
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("failed");
+    })
+  ));
+
+it("keeps an attempt pending while a sibling provider candidate has no verified status", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      yield* verifyProviderTransaction(db, () => transaction("DECLINED"));
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare(
+            "UPDATE billing_provider_transactions SET negative_observed_at_ms=negative_observed_at_ms-180001"
+          ),
+          db
+            .prepare(
+              "INSERT INTO billing_provider_transactions(transaction_id,attempt_id) VALUES (?,?)"
+            )
+            .bind("unresolved-sibling", attemptId),
+        ])
+      );
+      yield* verifyProviderTransaction(db, () => transaction("DECLINED"));
       expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
     })
   ));

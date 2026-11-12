@@ -15,8 +15,12 @@ const fact = (
   firstObservedAt: DateTime.Utc,
   finalizedAt: Option.Option<DateTime.Utc> = Option.none()
 ): BillingTransactionFact => ({
-  status,
+  status: Option.some(status),
   firstObservedAt,
+  negativeObservedAt:
+    status === "DECLINED" || status === "VOIDED" || status === "ERROR"
+      ? Option.some(firstObservedAt)
+      : Option.none(),
   finalizedAt,
 });
 
@@ -76,6 +80,16 @@ it.effect("keeps a BillingAttempt pending while any provider transaction is unre
       yield* decideBillingAttemptOutcome({
         current: "pending",
         transactions: [fact("DECLINED", first), fact("PENDING", observedAt)],
+        observedAt,
+      })
+    ).toBe("pending");
+    expect(
+      yield* decideBillingAttemptOutcome({
+        current: "pending",
+        transactions: [
+          fact("DECLINED", first),
+          { ...fact("PENDING", first), status: Option.none() },
+        ],
         observedAt,
       })
     ).toBe("pending");
@@ -187,4 +201,20 @@ it.effect("converts exact billing amounts without floating-point arithmetic", ()
     expect(yield* amountInCentsForBilling(BigDecimal.fromStringUnsafe("99.99"))).toBe(9_999);
     expect(yield* amountInCentsForBilling(BigDecimal.fromStringUnsafe("28900"))).toBe(2_890_000);
   })
+);
+
+it.effect(
+  "anchors retry timing to the first negative rather than an earlier pending observation",
+  () =>
+    Effect.gen(function* () {
+      const first = DateTime.makeUnsafe("2026-03-01T12:00:00.000Z");
+      const negative = DateTime.makeUnsafe("2026-03-01T12:05:00.000Z");
+      expect(
+        yield* decideBillingAttemptOutcome({
+          current: "pending",
+          transactions: [{ ...fact("DECLINED", first), negativeObservedAt: Option.some(negative) }],
+          observedAt: DateTime.makeUnsafe("2026-03-01T12:07:59.999Z"),
+        })
+      ).toBe("pending");
+    })
 );

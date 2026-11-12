@@ -3,7 +3,7 @@ import { openAiTestKey } from "../openai.test-fixture";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { afterEach, expect, vi } from "vitest";
 import { it as effectIt } from "@effect/vitest";
-import { type Cause, Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { handleErasureRequest, withErasureRecovery } from "./runtime";
@@ -89,7 +89,7 @@ const verifyCoordinatorClearance = (
   failure: "present" | "delete" | "verification"
 ): Effect.Effect<
   void,
-  Effect.Error<typeof setup> | Schema.SchemaError | Cause.UnknownError,
+  Effect.Error<typeof setup> | Schema.SchemaError,
   Effect.Services<typeof setup>
 > =>
   Effect.gen(function* () {

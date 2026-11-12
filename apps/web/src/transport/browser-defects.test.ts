@@ -32,29 +32,36 @@ describe("browser defect diagnostics", () => {
     expect(() => makeBrowserDefectReporter()("render_caught")).not.toThrow();
   });
 
-  it("consumes failed exports and shares the document allowance across listener remounts", async () => {
-    vi.resetModules();
-    const { installBrowserDefectListeners: install, reportBrowserDefect: report } =
-      await import("./browser-defects");
-    vi.mocked(diagnosticConsole.info).mockImplementation(() => {
-      throw new Error("private-sink-failure");
-    });
-    let dispose = install(window);
-    for (let index = 0; index < 10; index++) window.dispatchEvent(new Event("error"));
-    dispose();
-    dispose = install(window);
-    for (let index = 0; index < 10; index++) {
-      window.dispatchEvent(new Event("unhandledrejection"));
-    }
-    dispose();
-    expect(diagnosticConsole.info).toHaveBeenCalledTimes(20);
-    vi.mocked(diagnosticConsole.info).mockImplementation(() => {});
-    report("render_uncaught");
-    dispose = install(window);
-    window.dispatchEvent(new Event("error"));
-    dispose();
-    expect(diagnosticConsole.info).toHaveBeenCalledTimes(20);
-  });
+  it.effect(
+    "consumes failed exports and shares the document allowance across listener remounts",
+    () =>
+      Effect.gen(function* () {
+        vi.resetModules();
+        const { installBrowserDefectListeners: install, reportBrowserDefect: report } =
+          yield* Effect.tryPromise({
+            try: () => import("./browser-defects"),
+            catch: () => "test_module_unavailable" as const,
+          });
+        vi.mocked(diagnosticConsole.info).mockImplementation(() => {
+          throw new Error("private-sink-failure");
+        });
+        let dispose = install(window);
+        for (let index = 0; index < 10; index++) window.dispatchEvent(new Event("error"));
+        dispose();
+        dispose = install(window);
+        for (let index = 0; index < 10; index++) {
+          window.dispatchEvent(new Event("unhandledrejection"));
+        }
+        dispose();
+        expect(diagnosticConsole.info).toHaveBeenCalledTimes(20);
+        vi.mocked(diagnosticConsole.info).mockImplementation(() => {});
+        report("render_uncaught");
+        dispose = install(window);
+        window.dispatchEvent(new Event("error"));
+        dispose();
+        expect(diagnosticConsole.info).toHaveBeenCalledTimes(20);
+      })
+  );
 
   it("records global error categories without inspecting payloads and removes owned listeners", () => {
     const dispose = installBrowserDefectListeners(window);

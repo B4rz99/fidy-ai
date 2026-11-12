@@ -92,7 +92,8 @@ const settle = (
           .run()
       )
     ),
-    Effect.asVoid
+    Effect.asVoid,
+    Effect.tapError(() => settle(db, id, Option.none()))
   );
 };
 const submissionClaim = (

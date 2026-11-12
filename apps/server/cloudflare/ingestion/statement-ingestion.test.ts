@@ -30,7 +30,7 @@ import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { StatementDeliveryUnavailable, StatementWork } from "./contract";
 import { deepStrictEqual } from "node:assert/strict";
 import { DurableTraceContext } from "../../src/shell/observability/contract";
-import { Cause, Clock, Data, DateTime, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
+import { Cause, Clock, Data, DateTime, Effect, Fiber, Option, Result, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 
@@ -1435,8 +1435,7 @@ it.each(["reconciliation", "dispatch"] as const)(
         const settled: Array<string> = [];
         const offered: Array<unknown> = [];
         let lookups = 0;
-        // Re-fail outside the span so strict equality excludes Effect tracing annotations.
-        const result = yield* Effect.exit(
+        const result = yield* Effect.result(
           recoverUserStatementExtraction({
             DB: runtime.db,
             userId: UserId.make(userA),
@@ -1465,11 +1464,11 @@ it.each(["reconciliation", "dispatch"] as const)(
                 },
               }),
             },
-          }).pipe(Effect.catch((error) => Effect.fail(error)))
+          })
         );
         deepStrictEqual(
           result,
-          Exit.fail(
+          Result.fail(
             new StatementDeliveryUnavailable({
               cause:
                 failedPhase === "reconciliation"

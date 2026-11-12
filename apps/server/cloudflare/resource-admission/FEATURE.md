@@ -34,6 +34,15 @@ admission's internal statement results are not exposed. Attempt pressure remains
 a distinct, deliberately committed charge before work admission: a refused work claim does not undo
 its attempt charge. Outstanding release still commits with the owner's completion statements.
 
+## Occupancy claim settlement
+
+Release addresses only unreleased outstanding claims of the original grant. Duplicate release leaves
+its first settlement intact; a late release cannot free a replacement grant's occupancy. Appended
+owner statements still require their own replay guards and exact terminal-transition proof.
+Admission excludes each claim at its original expiry even when cleanup has not run. Neither reads
+nor release renew that deadline. Attempt pressure and windowed spend retain their independent
+accounting windows after occupancy release or expiry.
+
 ## Counter and ownership contracts
 
 `ResourceAdmissionCounterTransition` admits only the accepted email pairing User/global,

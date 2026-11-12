@@ -14,6 +14,7 @@ import {
   separatedErasurePlatform,
 } from "./native.test-fixture";
 import type { ErasureUnavailable } from "../erasure-store/contract";
+import { verifyCustodyCompletion, verifyCustodyRetention } from "./custody.test-fixture";
 import { resumeErasureCases } from "./operations";
 import { handleErasureOperator, withErasureRecovery } from "./runtime";
 import { makePublicWorker } from "../public-worker";
@@ -56,6 +57,61 @@ const advanceToExternal = (
     }
     expect.fail("Erasure did not reach ExternalPending");
   });
+
+const verifyCustodyAdmission = Effect.fn(function* (
+  input: Readonly<{
+    db: D1Database;
+    coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+  }>
+) {
+  const current = yield* Clock.currentTimeMillis;
+  const admission = {
+    userId,
+    reference,
+    deadlineMs: current + 5000,
+    authority: {
+      permission: "titular.erase",
+      operatorRef: "operator",
+      expiresAtMs: current + 5000,
+    },
+    evidence: {
+      reference,
+      custodian: "Kapso",
+      evidenceRef: "12740000-0000-4000-8000-000000000079",
+      outcome: { status: "Accepted" },
+    },
+  };
+  for (const candidate of [
+    { ...admission, userId: foreignUser },
+    { ...admission, reference: expiredRequest },
+    { ...admission, deadlineMs: current - 1 },
+    { ...admission, deadlineMs: current + 60000 },
+    { ...admission, authority: { ...admission.authority, expiresAtMs: current - 1 } },
+    { ...admission, rawJwt: "must-not-be-retained" },
+    { ...admission, evidence: { ...admission.evidence, custodian: "Unknown" } },
+  ]) {
+    const body = yield* Schema.encodeEffect(json)(candidate);
+    const response = yield* Effect.tryPromise(() =>
+      input.coordinator.getByName(userId).fetch(
+        new Request("https://coordinator.internal/erasure-custody-evidence", {
+          method: "POST",
+          body,
+        })
+      )
+    );
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  }
+  expect(
+    yield* Effect.tryPromise(() =>
+      input.db
+        .prepare(
+          "SELECT count(*) FROM erasure_custody_records WHERE record_type='event' AND id='12740000-0000-4000-8000-000000000079'"
+        )
+        .first("count(*)")
+    )
+  ).toBe(0);
+});
 
 const verifyProcessorEvidence = (
   send: (command: unknown) => Effect.Effect<Response, Schema.SchemaError | Cause.UnknownError>
@@ -119,6 +175,14 @@ const verifyProcessorEvidence = (
       reason: "retention-conflict",
     });
   });
+
+const verifyCustodyProgress = Effect.fn(function* (
+  input: Parameters<typeof verifyCustodyRetention>[0]
+) {
+  yield* verifyCustodyAdmission(input);
+  yield* verifyProcessorEvidence(input.send);
+  yield* verifyCustodyRetention(input);
+});
 
 const expiredRequest = "12740000-0000-4000-8000-000000000084";
 const expiredUser = "12740000-0000-4000-8000-000000000083";
@@ -511,6 +575,22 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
         .sign(privateKey)
     );
     expect((yield* send({ action: "Initialize" }, assertion, "candidate")).status).toBe(401);
+    expect(
+      (yield* send(
+        {
+          action: "CustodyEvidence",
+          userId,
+          evidence: {
+            reference,
+            custodian: "Kapso",
+            evidenceRef: "12740000-0000-4000-8000-000000000079",
+            outcome: { status: "Accepted" },
+          },
+        },
+        assertion,
+        "candidate"
+      )).status
+    ).toBe(401);
   }
   const forged = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
   const forgedAssertion = yield* Effect.tryPromise(() =>
@@ -608,7 +688,13 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
     privateBody,
     separated,
   });
-  yield* verifyProcessorEvidence(send);
+  yield* verifyCustodyProgress({
+    db: native.db,
+    userId,
+    reference,
+    send,
+    coordinator: native.coordinator,
+  });
   native = yield* Effect.tryPromise(() => platform.restoreSnapshot());
   const guarded = withErasureRecovery({
     DB: native.db,
@@ -688,6 +774,13 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
         .first("state")
     )
   ).toBe("Pending");
+  yield* verifyCustodyCompletion({
+    db: native.db,
+    userId,
+    reference,
+    send,
+    coordinator: native.coordinator,
+  });
 });
 effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
   it.effect(

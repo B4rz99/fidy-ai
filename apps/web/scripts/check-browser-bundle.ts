@@ -281,13 +281,18 @@ const findForbiddenServerImport = (
 
 const assertSourceBoundary = (
   sources: ReadonlyArray<Source>,
-  webRoot: string,
-  workspaceRoot: string
+  roots: Pick<BrowserBundleCheckOptions, "webRoot" | "workspaceRoot">,
+  bundledSources: ReadonlySet<string>
 ): void => {
+  const { webRoot, workspaceRoot } = roots;
   const imports = sourceImports(sources);
   const forbiddenServerImport = findForbiddenServerImport(imports, webRoot, workspaceRoot);
-  const forbiddenSourceImport = imports.find(({ importPath }) =>
-    forbiddenNodeBuiltin.test(importPath)
+  // Node assertions may live in unbundled tests; a test imported by production has no exemption.
+  const forbiddenSourceImport = imports.find(
+    ({ importPath, sourceFile }) =>
+      forbiddenNodeBuiltin.test(importPath) &&
+      (!sourceFile.endsWith(".test.ts") ||
+        bundledSources.has(Bun.fileURLToPath(new URL(sourceFile, `file://${webRoot}/`))))
   );
   // The dependency-free document-entry adapter prepares one response for the bounded SDK decoder.
   // Every other module must use the normal Effect transport seam.
@@ -344,8 +349,12 @@ export const checkBrowserBundle = (options: BrowserBundleCheckOptions): Promise<
           catch: (cause) =>
             new BrowserBundleFailure({ message: "Reading web sources failed", cause }),
         }),
-        options.webRoot,
-        options.workspaceRoot
+        options,
+        new Set(
+          Object.keys(metafile.inputs).map((input) =>
+            Bun.fileURLToPath(new URL(input, `file://${process.cwd()}/`))
+          )
+        )
       );
       assertDashboardChunkIsolation(metafile, options.webRoot, options.workspaceRoot);
       process.stdout.write(`web browser graph clean: ${inputs} bundled modules\n`);

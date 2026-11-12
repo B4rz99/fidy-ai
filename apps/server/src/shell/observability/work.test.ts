@@ -101,3 +101,91 @@ it.effect("contains synchronous export failure without changing authoritative Wo
     expect(Exit.findErrorOption(failure)).toEqual(Option.some("application-failure"));
   })
 );
+
+it.effect(
+  "drops a malformed success projection without exporting private metadata or repeating Work",
+  () =>
+    Effect.gen(function* () {
+      const records: Array<TelemetryWorkRecord> = [];
+      let executions = 0;
+      const telemetry = makeTelemetryService({
+        ...DisabledTelemetryResource.adapter,
+        exportWork: (record) => records.push(record),
+      });
+      const result = yield* telemetry.observeWork(
+        {
+          ...options,
+          projectSuccess: () =>
+            new Proxy(options.projectSuccess(), {
+              get: (target, key, receiver): unknown =>
+                key === "outcome"
+                  ? "private-projector-sentinel"
+                  : Reflect.get(target, key, receiver),
+            }),
+        },
+        Effect.sync(() => {
+          executions += 1;
+          return "authoritative-result";
+        })
+      );
+      expect(result).toBe("authoritative-result");
+      expect(executions).toBe(1);
+      expect(records).toEqual([]);
+    })
+);
+
+it.effect(
+  "contains throwing projectors and exporters while preserving the complete Work Cause",
+  () =>
+    Effect.gen(function* () {
+      let exports = 0;
+      const telemetry = makeTelemetryService({
+        ...DisabledTelemetryResource.adapter,
+        exportWork: () => {
+          exports += 1;
+          throw new Error("private-export-sentinel");
+        },
+      });
+      const throwingOptions = {
+        ...options,
+        projectSuccess: (): TelemetryWorkSuccess => {
+          throw new Error("private-projection-sentinel");
+        },
+      };
+      expect(yield* telemetry.observeWork(throwingOptions, Effect.succeed("completed"))).toBe(
+        "completed"
+      );
+      expect(exports).toBe(0);
+      const failure = new Error("private-typed-failure");
+      const cause = Cause.combine(Cause.fail(failure), Cause.interrupt());
+      const observed = yield* Effect.exit(telemetry.observeWork(options, Effect.failCause(cause)));
+      expect(Exit.isFailure(observed) && observed.cause).toEqual(cause);
+      expect(exports).toBe(1);
+    })
+);
+
+it.effect(
+  "projects mixed interruption as failure and keeps explicit interruption distinct from deadline failure",
+  () =>
+    Effect.gen(function* () {
+      const records: Array<TelemetryWorkRecord> = [];
+      const telemetry = makeTelemetryService({
+        ...DisabledTelemetryResource.adapter,
+        exportWork: (record) => records.push(record),
+      });
+      const deadline = new Cause.TimeoutError();
+      yield* Effect.exit(telemetry.observeWork(options, Effect.fail(deadline)));
+      yield* Effect.exit(
+        telemetry.observeWork(
+          options,
+          Effect.failCause(Cause.combine(Cause.fail("failure"), Cause.interrupt()))
+        )
+      );
+      const runExit = Effect.runPromiseExitWith(yield* Effect.context<never>());
+      const interrupted = yield* Effect.tryPromise(() =>
+        runExit(telemetry.observeWork(options, Effect.interrupt))
+      );
+      expect(Exit.isFailure(interrupted) && Cause.hasInterrupts(interrupted.cause)).toBe(true);
+      expect(records.map(({ outcome }) => outcome)).toEqual(["failed", "failed", "interrupted"]);
+    })
+);

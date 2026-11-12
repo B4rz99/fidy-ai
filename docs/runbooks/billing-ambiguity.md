@@ -9,7 +9,10 @@ Verified terminal negatives retain their original status, first negative observa
 across later pending or negative observations. The three-minute retry opportunity starts at that
 first negative, not an earlier pending observation. Any candidate without a verified status keeps a
 pending BillingAttempt unresolved; it cannot be ignored when deciding failure. Verified approval
-with finalization can still supersede a negative or failed outcome.
+with finalization can still supersede a negative or failed outcome. Settlement commits provider
+evidence, outcome, paid dates, standing, Audit and follow-up intent together. A later genuine sibling
+approval stays visible as a real charge even when that renewal boundary already has its one paid
+interval; it does not advance the calendar again.
 
 ## Recover a lost creation response
 

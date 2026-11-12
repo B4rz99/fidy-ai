@@ -361,6 +361,72 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
     })
   ));
 
+it("admits only finalized approval and rolls back evidence, paid dates and Audit together", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      let observed: ProviderTransactionFixture = { ...transaction("APPROVED"), finalized_at: null };
+      let lookups = 0;
+      const verify = (): Effect.Effect<void, Cause.UnknownError> =>
+        verifyProviderTransaction(db, () => {
+          lookups++;
+          return observed;
+        });
+      expect((yield* Effect.exit(verify()))._tag).toBe("Failure");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
+      yield* Effect.tryPromise(() =>
+        db.exec(
+          "CREATE TRIGGER reject_billing_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='billing_transition' BEGIN SELECT RAISE(ABORT,'test_billing_audit_unavailable'); END;"
+        )
+      );
+      observed = transaction("APPROVED");
+      expect((yield* Effect.exit(verify()))._tag).toBe("Failure");
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT status FROM billing_provider_transactions WHERE status IS NOT NULL")
+            .all()
+        )).results
+      ).toEqual([]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT paid_starts_at_ms,followup_due_at_ms FROM billing_attempts WHERE id=?")
+            .bind(attemptId)
+            .first()
+        )
+      ).toEqual({ paid_starts_at_ms: null, followup_due_at_ms: null });
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM subscription_standing").all()))
+          .results
+      ).toEqual([]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT attempt_id FROM audit_entries WHERE record_type='billing_transition'")
+            .all()
+        )).results
+      ).toEqual([]);
+      yield* Effect.tryPromise(() => db.exec("DROP TRIGGER reject_billing_audit;"));
+      yield* Effect.all([verify(), verify()], { concurrency: 2 });
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT id FROM billing_attempts WHERE paid_starts_at_ms IS NOT NULL").all()
+        )).results
+      ).toHaveLength(1);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT attempt_id FROM audit_entries WHERE record_type='billing_transition'")
+            .all()
+        )).results
+      ).toHaveLength(1);
+      expect(lookups).toBe(4);
+    })
+  ));
+
 it("holds verified negative until the retry opportunity and admits a later verified success", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -458,10 +524,20 @@ it("retains the original terminal negative and retry anchor after a verified pen
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => fixture());
-      let observed = transaction("DECLINED");
+      let observed = transaction("PENDING");
       const verify = (): Effect.Effect<void, Cause.UnknownError> =>
         verifyProviderTransaction(db, () => observed);
       yield* verify();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE billing_provider_transactions SET first_observed_at_ms=first_observed_at_ms-600000"
+          )
+          .run()
+      );
+      observed = transaction("DECLINED");
+      yield* verify();
+      expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       yield* Effect.tryPromise(() =>
         db
           .prepare(`UPDATE billing_provider_transactions

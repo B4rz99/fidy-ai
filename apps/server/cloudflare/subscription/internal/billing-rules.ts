@@ -39,8 +39,9 @@ const terminalNegativeStatuses: Readonly<Record<WompiBillingStatus, boolean>> = 
 export const approvingFinalizedAtFor = (
   transactions: ReadonlyArray<BillingTransactionFact>
 ): Effect.Effect<Option.Option<DateTime.Utc>> => {
-  const approving = transactions.find((transaction) =>
-    Option.contains(transaction.status, "APPROVED")
+  const approving = transactions.find(
+    (transaction) =>
+      Option.contains(transaction.status, "APPROVED") && Option.isSome(transaction.finalizedAt)
   );
   return Effect.succeed(approving === undefined ? Option.none() : approving.finalizedAt);
 };
@@ -72,7 +73,12 @@ type BillingAttemptOutcomeInput = Readonly<{
 
 const nextBillingAttemptOutcome = (input: BillingAttemptOutcomeInput): BillingAttemptStatus => {
   if (input.current === "succeeded") return "succeeded";
-  if (input.transactions.some((transaction) => Option.contains(transaction.status, "APPROVED"))) {
+  if (
+    input.transactions.some(
+      (transaction) =>
+        Option.contains(transaction.status, "APPROVED") && Option.isSome(transaction.finalizedAt)
+    )
+  ) {
     return "succeeded";
   }
   if (input.current === "failed") return "failed";
@@ -99,7 +105,7 @@ const nextBillingAttemptOutcome = (input: BillingAttemptOutcomeInput): BillingAt
 
 /**
  * Aggregates every retained provider transaction into the BillingAttempt's next state. One verified
- * approval succeeds the attempt; an unresolved transaction keeps it pending; observed final
+ * finalized approval succeeds the attempt; an unresolved transaction keeps it pending; observed final
  * negatives fail it only after Wompi's retry opportunity elapses. Without any observed transaction
  * there is no failure evidence, and `failed` never returns to `pending`.
  */

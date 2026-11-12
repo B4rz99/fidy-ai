@@ -48,3 +48,21 @@ it("retains accepted custody evidence and safe unresolved reasons", () => {
     ).toEqual(value);
   }
 });
+
+it("refuses unknown custodians, initialization outcomes and unapproved unresolved reasons", () => {
+  const evidence = {
+    reference,
+    custodian: "Kapso",
+    evidenceRef: "10000000-0000-4000-8000-000000000002",
+    outcome: { status: "Accepted" },
+  };
+  for (const candidate of [
+    { ...evidence, custodian: "Unknown" },
+    { ...evidence, outcome: { status: "Pending" } },
+    { ...evidence, outcome: { status: "Unresolved", reason: "attempts-exhausted" } },
+  ]) {
+    expect(Result.isFailure(Schema.decodeUnknownResult(ErasureCustodyEvidence)(candidate))).toBe(
+      true
+    );
+  }
+});

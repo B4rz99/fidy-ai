@@ -1,10 +1,49 @@
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { recoveryWindowMs } from "./retention-policy";
 import { ErasureUnavailable } from "../../erasure-store/contract";
-import type { ErasureCustodyAdmission } from "../contract";
+import { ErasureCustodyAdmission } from "../contract";
+import { requireInventory } from "./inventory";
+import type { ErasureStore } from "../../erasure-store/contract";
 
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
+const admissionLifetimeMs = 5000;
+
+/** Recorded confirms the current projection; Conflict may retain a rejected event. */
+export const submitCustodyEvidence = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    candidate: unknown;
+    stores: ReadonlyArray<ErasureStore>;
+  }>
+): Effect.Effect<"Recorded" | "Conflict", ErasureUnavailable> =>
+  Effect.gen(function* () {
+    const decoded = Schema.decodeUnknownOption(ErasureCustodyAdmission, {
+      onExcessProperty: "error",
+    })(input.candidate);
+    const current = yield* Clock.currentTimeMillis;
+    if (
+      Option.isNone(decoded) ||
+      decoded.value.userId !== input.userId ||
+      decoded.value.reference !== decoded.value.evidence.reference ||
+      decoded.value.deadlineMs <= current ||
+      decoded.value.deadlineMs > current + admissionLifetimeMs ||
+      decoded.value.authority.expiresAtMs <= current
+    ) {
+      return "Conflict";
+    }
+    const admission = decoded.value;
+    yield* requireInventory({
+      db: input.db,
+      scope: { reference: admission.reference, userId: input.userId },
+      stores: input.stores,
+    });
+    return (yield* recordCustodyEvidence({ db: input.db, admission, current }))
+      ? "Recorded"
+      : "Conflict";
+  });
+
 const validOutcome = (
   input: Readonly<{
     admission: typeof ErasureCustodyAdmission.Type;
@@ -65,16 +104,15 @@ const persistEvidence = (
   );
 };
 
-export const recordCustodyEvidence = (
+const recordCustodyEvidence = (
   input: Readonly<{
     db: D1Database;
     admission: typeof ErasureCustodyAdmission.Type;
+    current: number;
   }>
 ): Effect.Effect<boolean, ErasureUnavailable> =>
   Effect.gen(function* () {
-    const { admission, db } = input;
-    if (admission.reference !== admission.evidence.reference) return false;
-    const current = yield* Clock.currentTimeMillis;
+    const { admission, db, current } = input;
     const raw = yield* io(() =>
       db
         .prepare(`SELECT last_erased_at_ms AS lastErasedAtMs

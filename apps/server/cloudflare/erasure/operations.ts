@@ -5,13 +5,12 @@ import { requireInventory } from "./internal/inventory";
 import { purgeCompletedCases } from "./internal/control-retention";
 import { expectedGeneration } from "./internal/generation";
 import { restoreCase } from "./internal/restore-case";
-import { recordCustodyEvidence } from "./internal/provider-evidence";
+import { submitCustodyEvidence } from "./internal/provider-evidence";
 import { receipt } from "./internal/receipt";
 import { Clock, Effect, Option, Schema } from "effect";
 import {
   ErasureBrowserAdmission,
   ErasureContinuation,
-  ErasureCustodyAdmission,
   type ErasureExecution,
   type ErasureRecoveryConfiguration,
   type ErasureRegistryInitialization,
@@ -101,41 +100,43 @@ export const executeErasureControl = (
   }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const decoded =
-      input.operation === "CustodyEvidence"
-        ? Schema.decodeUnknownOption(ErasureCustodyAdmission, { onExcessProperty: "error" })(
-            input.candidate
-          )
-        : Schema.decodeUnknownOption(ErasureContinuation, { onExcessProperty: "error" })(
-            input.candidate
-          );
+    if (input.operation === "CustodyEvidence") {
+      const result = yield* submitCustodyEvidence(input);
+      return new Response(null, {
+        status: result === "Recorded" ? acceptedStatus : conflictStatus,
+        headers: { "cache-control": "no-store" },
+      });
+    }
+    const decoded = Schema.decodeUnknownOption(ErasureContinuation, {
+      onExcessProperty: "error",
+    })(input.candidate);
     const current = yield* Clock.currentTimeMillis;
     if (
       Option.isNone(decoded) ||
       !validContinuation({ admission: decoded.value, current, userId: input.userId })
     ) {
-      return new Response(null, { status: conflictStatus });
+      return new Response(null, {
+        status: conflictStatus,
+        headers: { "cache-control": "no-store" },
+      });
     }
     yield* requireInventory({
       db: input.db,
       scope: { reference: decoded.value.reference, userId: input.userId },
       stores: input.stores,
     });
-    if (input.operation === "CustodyEvidence") {
-      const admission = yield* Schema.decodeUnknownEffect(ErasureCustodyAdmission)(decoded.value);
-      const recorded = yield* recordCustodyEvidence({ db: input.db, admission });
-      return new Response(null, {
-        status: recorded ? acceptedStatus : conflictStatus,
-        headers: { "cache-control": "no-store" },
-      });
-    }
     const result = yield* receipt({
       db: input.db,
       scope: { reference: decoded.value.reference, userId: input.userId },
       stores: input.stores,
     });
     return Response.json(result, { headers: { "cache-control": "no-store" } });
-  }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
+  }).pipe(
+    Effect.orElseSucceed(
+      () =>
+        new Response(null, { status: unavailableStatus, headers: { "cache-control": "no-store" } })
+    )
+  );
 
 const validContinuation = (
   input: Readonly<{ admission: ErasureContinuation; current: number; userId: string }>

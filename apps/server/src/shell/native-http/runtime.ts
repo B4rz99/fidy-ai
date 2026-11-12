@@ -83,7 +83,11 @@ const ownBody = (
   return body;
 };
 
-/** Transfers native response ownership, containing cleanup failures without waiting for disposal. */
+/**
+ * Transfers one unlocked, unconsumed native Response and its exact resolved request signal.
+ * Use only the returned Response, and consume, cancel or abort its scope instead of abandoning it.
+ * Cleanup failures stay private and never delay disposal or replace the primary outcome.
+ */
 export const ownNativeResponse = ({
   response,
   signal,

@@ -25,7 +25,11 @@ const initialResponse = (sendUrl = policy.sendUrl): Response =>
       },
     },
   });
-const otpResponse = (status: "PENDING" | "APPROVED", bearer: string, pk = tokenId): Response =>
+const otpResponse = (
+  status: "PENDING" | "APPROVED" | "DECLINED",
+  bearer: string,
+  pk = tokenId
+): Response =>
   Response.json({
     data: {
       subscription: { PK: pk, status },
@@ -613,3 +617,20 @@ it.each(["expired", "lost-mutation"] as const)(
       })
     )
 );
+
+it("retains conclusive initial OTP refusal separately from setup mutation loss", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const provider = vi
+        .fn(() => Promise.resolve(otpResponse("DECLINED", "synthetic-declined")))
+        .mockResolvedValueOnce(initialResponse());
+      const status = yield* start(provider).pipe(
+        Effect.match({
+          onSuccess: () => "unexpected-success",
+          onFailure: (error) => error.status,
+        })
+      );
+      expect(status).toBe("refused");
+      expect(provider).toHaveBeenCalledTimes(2);
+    })
+  ));

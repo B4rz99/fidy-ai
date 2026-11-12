@@ -783,3 +783,67 @@ it.each(["approved", "declined", "unknown"] as const)(
       })
     )
 );
+
+for (const step of ["tokenization", "first-send"] as const) {
+  effectIt.effect(`keeps expired setup uncertain after dispatched ${step}`, () =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const enrollment = { ...prepared(now), expiresAt: DateTime.makeUnsafe(now + 5_000) };
+      const clock = yield* Clock.Clock;
+      const input = challengeFixture(enrollment);
+      const started = Promise.withResolvers<void>();
+      const pending = Promise.withResolvers<Response>();
+      input.provider.mockReset().mockImplementation(() => {
+        started.resolve();
+        return pending.promise;
+      });
+      if (step === "first-send") input.provider.mockResolvedValueOnce(initial());
+      const client = {
+        ...input.client,
+        execute: <A, E>(
+          use: Parameters<typeof input.client.execute<A, E>>[0],
+          options?: Parameters<typeof input.client.execute>[1]
+        ): Promise<A> =>
+          input.client.execute(
+            (transport) => use(transport).pipe(Effect.provideService(Clock.Clock, clock)),
+            options
+          ),
+      };
+      const published = vi.fn();
+      const uncertain = vi.fn();
+      const lock = vi.fn();
+      const task = makeMountedDaviplata({
+        enrollment,
+        start: makeEnrollmentGateway(client).startDaviplata,
+        publish: published,
+        lock,
+        onSubmitted: vi.fn(),
+        onUncertain: uncertain,
+      });
+      const unmount = task.mount();
+      const fields = (): Parameters<typeof task.begin>[0] => ({
+        email: "synthetic@example.invalid",
+        decisions: { endUserPolicy: true, personalData: true },
+        documentNumber: Redacted.make("1122233"),
+        productNumber: Redacted.make("3991111111"),
+      });
+      task.begin(fields());
+      yield* Effect.tryPromise(() => started.promise);
+      yield* TestClock.adjust("6 seconds");
+      yield* Effect.yieldNow;
+      expect(published).toHaveBeenLastCalledWith("uncertain");
+      expect(uncertain).toHaveBeenCalledTimes(1);
+      expect(lock).toHaveBeenLastCalledWith(true);
+      const rejected = fields();
+      task.begin(rejected);
+      task.resend();
+      task.retry();
+      expect(() => Redacted.value(rejected.documentNumber)).toThrow();
+      pending.resolve(step === "tokenization" ? initial() : otpResponse("PENDING"));
+      yield* Effect.yieldNow;
+      expect(input.provider).toHaveBeenCalledTimes(step === "tokenization" ? 1 : 2);
+      expect(input.payloads).toHaveLength(0);
+      unmount();
+    })
+  );
+}

@@ -93,7 +93,7 @@ const settle = (
       )
     ),
     Effect.asVoid,
-    Effect.catch((error) => settle(db, id, Option.none()).pipe(Effect.andThen(Effect.fail(error))))
+    Effect.tapError(() => settle(db, id, Option.none()))
   );
 };
 const submissionClaim = (

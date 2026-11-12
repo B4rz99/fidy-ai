@@ -750,9 +750,13 @@ it("bounds scheduled void ordinals while duplicate lookup delivery retains unres
         const now = initial + ordinal * 60_000;
         yield* dispatchVoidVerification(dispatch).pipe(
           Effect.provideService(Clock.Clock, {
-            ...clock,
             currentTimeMillis: Effect.succeed(now),
             currentTimeMillisUnsafe: () => now,
+            currentTimeNanos: Effect.succeed(BigInt(now) * 1_000_000n),
+            currentTimeNanosUnsafe: () => BigInt(now) * 1_000_000n,
+            monotonicTimeNanos: clock.monotonicTimeNanos,
+            monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+            sleep: (duration) => clock.sleep(duration),
           })
         );
         expect(publications).toHaveLength(Math.min(ordinal, 8));

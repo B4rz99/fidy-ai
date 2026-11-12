@@ -43,8 +43,6 @@ const Source = Schema.Struct({
   }),
 });
 const offerCooldownMs = 60_000;
-// Recheck retained authority at every write across provider I/O. Immutable schema facts
-// complement this fence; a User's pending state alone is not the observed cancellation.
 const pendingSnapshotCondition = `subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)
  AND subscription_id=? AND paid_attempt_id=? AND payment_source_id=?
  AND cancelled_at_ms=? AND paid_through_ms=? AND source_cancellation_state='void-pending'

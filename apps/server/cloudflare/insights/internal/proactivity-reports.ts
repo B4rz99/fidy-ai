@@ -1,3 +1,4 @@
+import { prepareNativeReceiptAgreement } from "./native-receipt";
 import { Effect, Option, Schema } from "effect";
 import { TranscriptText } from "../../../src/core/agent/contract";
 import { ProactivityMessageRole } from "../../../src/core/insights/contract";
@@ -91,6 +92,17 @@ export const deliveryQuery = (input: Readonly<{ userId: UserId; id: string }>): 
 export const prepareSettlement = (
   input: Readonly<{ db: D1Database; userId: UserId; id: string; proof: OwnedStatement }>
 ): ReadonlyArray<D1PreparedStatement> => [
+  prepareNativeReceiptAgreement({
+    db: input.db,
+    receipts: {
+      sql: `SELECT e.delivery_receipt_id,e.delivery_sent_at_ms,e.delivery_channel,
+        e.delivery_provider,e.delivery_provider_message_id,v.send_started_at_ms,v.provider_message_id
+        FROM insight_events AS e JOIN (${input.proof.sql}) AS v
+          ON v.user_id=e.user_id AND v.delivery_id=e.message_id
+        WHERE e.message_kind='proactivity-delivery' AND e.user_id=? AND e.message_id=?`,
+      params: [...input.proof.params, input.userId, input.id],
+    },
+  }),
   input.db
     .prepare(
       `UPDATE insight_events SET

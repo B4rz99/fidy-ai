@@ -1,7 +1,8 @@
+import assert from "node:assert/strict";
 import { TranscriptText } from "../../src/core/agent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Cause, Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
   activateTestReminder,
   observeTestHostedContext,
@@ -21,15 +22,16 @@ import {
 import {
   controlManualReminders,
   findInsight,
+  findInsightAttempt,
   findProactivityReport,
   findReminderGovernor,
   findReminderSchedule,
   materializeReminder,
-  materializeWeeklySummary,
   prepareReminderRevision,
   readProactiveTranscript,
   recordProactivityDecision,
   requestProactivityConsent,
+  runWeeklyGeneration,
 } from "./operations";
 import { contextualProactiveInsightQuery, prepareInsightRecipient } from "../whatsapp/operations";
 import {
@@ -273,6 +275,15 @@ it("the installed User coordinator generates the latest reminder and frozen mess
     })
   ));
 
+const receiptProvider = vi.fn(() =>
+  Promise.resolve(
+    Response.json({
+      messaging_product: "whatsapp",
+      messages: [{ id: "reminder-provider" }],
+    })
+  )
+);
+
 it("a category send is one-shot, provider acceptance is not delivery, and verified evidence settles the exact occurrence", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -283,7 +294,6 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
       const generated = yield* materializeReminder({
         db,
         userId: proactivityTestUsers[0],
-        id: schedule.id,
         now,
       });
       if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
@@ -295,7 +305,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         caller: proactivityTestCallers[0],
       });
       yield* seedWeeklySummaryActivity({ db, at: DateTime.formatIso(now) });
-      const weeklyReport = yield* materializeWeeklySummary({
+      const weeklyReport = yield* runWeeklyGeneration({
         db,
         userId: proactivityTestUsers[0],
         id: weekly.id,
@@ -346,11 +356,8 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
           }),
         ])
       );
-      const provider = vi.fn(() =>
-        Promise.resolve(
-          Response.json({ messaging_product: "whatsapp", messages: [{ id: "reminder-provider" }] })
-        )
-      );
+      const provider = receiptProvider;
+      provider.mockClear();
       vi.stubGlobal("fetch", withOpenAiFetch(provider));
       const coordinator = makeProactivityCoordinator({
         environment: configuration(db),
@@ -625,16 +632,84 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
     })
   ));
 
+it.each([
+  { name: "removed", days: 0, queries: 1, outcome: Exit.succeed({ _tag: "Done" }) },
+  { name: "terminal", days: 0, queries: 1, outcome: Exit.succeed({ _tag: "Done" }) },
+  { name: "missing", days: 0, queries: 1, outcome: Exit.fail(new InsightUnavailable()) },
+  { name: "expired", days: 2, queries: 2, outcome: Exit.succeed({ _tag: "Done" }) },
+])("$name queued content never reopens personal reports or recipients", (scenario) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      yield* activateTestReminder(db);
+      const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
+      const userId = proactivityTestUsers[0];
+      const generated = yield* materializeReminder({ db, userId, now });
+      if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
+      if (scenario.name === "removed") {
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE proactive_messages SET text=NULL WHERE user_id=? AND id=?")
+            .bind(userId, generated.id)
+            .run()
+        );
+      }
+      if (scenario.name === "terminal") {
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "UPDATE proactive_messages SET dispatch_state='settled' WHERE user_id=? AND id=?"
+            )
+            .bind(userId, generated.id)
+            .run()
+        );
+      }
+      const reads = vi.fn((sql: string) => db.prepare(sql));
+      const observedDb = new Proxy(db, {
+        get(target, key, receiver): unknown {
+          return key === "prepare" ? reads : Reflect.get(target, key, receiver);
+        },
+      });
+      const provider = vi.fn(() => Promise.reject(new Error("Unexpected provider send")));
+      vi.stubGlobal("fetch", provider);
+      const result = yield* executeProactivityWork({
+        environment: configuration(observedDb),
+        userId,
+        now: DateTime.add(now, { days: scenario.days }),
+        work: {
+          kind: "proactivity-delivery",
+          version: 1,
+          userId,
+          id: scenario.name === "missing" ? newId() : generated.id,
+        },
+      }).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch), Effect.exit);
+      const expected = Exit.match(scenario.outcome, {
+        onFailure: (cause) =>
+          Exit.failCause(
+            Cause.annotate(cause, Cause.annotations(Option.getOrThrow(Exit.getCause(result))))
+          ),
+        onSuccess: Exit.succeed,
+      });
+      assert.deepStrictEqual(result, expected);
+      expect(provider).not.toHaveBeenCalled();
+      expect(reads.mock.calls).toHaveLength(scenario.queries);
+      expect(reads.mock.calls[0]?.[0]).toContain("FROM proactivity_delivery_metadata");
+      if (scenario.name === "expired") {
+        expect(reads.mock.calls[1]?.[0]).toMatch(/^UPDATE proactive_messages/u);
+      }
+    })
+  )
+);
+
 it("refuses approved-template drift between a deferred staging and the irreversible claim", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* proactivityDatabase;
-      const schedule = yield* activateTestReminder(db);
+      yield* activateTestReminder(db);
       const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
       const created = yield* materializeReminder({
         db,
         userId: proactivityTestUsers[0],
-        id: schedule.id,
         now,
       });
       if (created._tag !== "Created") return yield* Effect.die("Expected reminder");
@@ -830,12 +905,11 @@ it.each(refusalCases)(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
-        const schedule = yield* activateTestReminder(db);
+        yield* activateTestReminder(db);
         const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
         const generated = yield* materializeReminder({
           db,
           userId: proactivityTestUsers[0],
-          id: schedule.id,
           now,
         });
         if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
@@ -912,13 +986,13 @@ it.each([false, true])(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
-        const schedule = yield* activateTestReminder(db);
+        yield* activateTestReminder(db);
         const userId = proactivityTestUsers[0];
         const caller = proactivityTestCallers[0];
         const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
         const context = { db, userId, caller, now, kind: "manual-entry-reminder" as const };
         const originalGrant = Option.getOrThrow(yield* findProactivityConsentGrant(context));
-        const generated = yield* materializeReminder({ db, userId, id: schedule.id, now });
+        const generated = yield* materializeReminder({ db, userId, now });
         if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
         yield* Effect.tryPromise(() =>
           db.batch([
@@ -1356,7 +1430,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* proactivityDatabase;
-      const schedule = yield* activateTestReminder(db);
+      yield* activateTestReminder(db);
       const userId = proactivityTestUsers[0];
       const caller = proactivityTestCallers[0];
       const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
@@ -1430,7 +1504,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       for (const day of [6, 7, 8]) {
         const now = DateTime.makeUnsafe(`2026-10-${String(day).padStart(2, "0")}T23:00:00Z`);
         vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
-        const occurrence = yield* materializeReminder({ db, userId, id: schedule.id, now });
+        const occurrence = yield* materializeReminder({ db, userId, now });
         if (occurrence._tag !== "Created") return yield* Effect.die("Expected reminder");
         yield* send(occurrence.id, now);
         yield* verify(occurrence.id, now);
@@ -1488,6 +1562,16 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       );
       const later = DateTime.makeUnsafe("2026-10-10T14:00:00Z");
       vi.spyOn(Date, "now").mockReturnValue(later.epochMilliseconds);
+      expect(yield* send(question.delivery_id, later)).toEqual({ _tag: "Done" });
+      expect(sent).toBe(4);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT dispatch_state FROM proactive_messages WHERE user_id=? AND id=?")
+            .bind(userId, question.delivery_id)
+            .first()
+        )
+      ).toEqual({ dispatch_state: "ready" });
       yield* expireDeliveryWork({ db, now: later.epochMilliseconds });
       expect(
         yield* Effect.tryPromise(() =>
@@ -1599,7 +1683,7 @@ it.each(["paused", "stopped"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* proactivityDatabase;
-        const schedule = yield* activateTestReminder(db);
+        yield* activateTestReminder(db);
         const userId = proactivityTestUsers[0];
         const caller = proactivityTestCallers[0];
         yield* Effect.tryPromise(() =>
@@ -1697,7 +1781,7 @@ it.each(["paused", "stopped"] as const)(
         for (const day of [6, 7, 8, 9, 10, 11]) {
           const now = DateTime.makeUnsafe(`2026-10-${String(day).padStart(2, "0")}T23:00:00Z`);
           vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
-          const occurrence = yield* materializeReminder({ db, userId, id: schedule.id, now });
+          const occurrence = yield* materializeReminder({ db, userId, now });
           if (occurrence._tag !== "Created") return yield* Effect.die("Expected latest reminder");
           yield* deliver(occurrence.id, now);
           if (day === 8 || day === 9) {
@@ -1910,7 +1994,6 @@ it.each(["paused", "stopped"] as const)(
         const after = yield* materializeReminder({
           db,
           userId,
-          id: schedule.id,
           now: afterTime,
         });
         expect(after._tag).toBe("NoWork");
@@ -2056,11 +2139,134 @@ it.each(["paused", "stopped"] as const)(
             );
             const resumedAt = DateTime.makeUnsafe("2026-10-13T23:00:00Z");
             vi.spyOn(Date, "now").mockReturnValue(resumedAt.epochMilliseconds);
-            expect(
-              (yield* materializeReminder({ db, userId, id: schedule.id, now: resumedAt }))._tag
-            ).toBe("Created");
+            expect((yield* materializeReminder({ db, userId, now: resumedAt }))._tag).toBe(
+              "Created"
+            );
           });
         yield* reactivate();
+      })
+    )
+);
+
+it.each(["read", "dismissed", "conflicting-receipt"] as const)(
+  "native category receipt settlement preserves %s attention and the first receipt",
+  (attention) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* proactivityDatabase;
+        yield* activateTestReminder(db);
+        const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
+        vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
+        const generated = yield* materializeReminder({
+          db,
+          userId: proactivityTestUsers[0],
+          now,
+        });
+        if (generated._tag !== "Created") return yield* Effect.die("Expected reminder");
+        const id = generated.id;
+        const scope = { db, userId: proactivityTestUsers[0], id };
+        const caller = proactivityTestCallers[0];
+        const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            prepareInsightRecipient({
+              db,
+              userId: scope.userId,
+              recipient: {
+                portfolioId: caller.businessPortfolioId,
+                bsuid: caller.businessScopedUserId,
+                businessPhoneNumberId: phone,
+              },
+              receivedAtMs: now.epochMilliseconds,
+            }),
+          ])
+        );
+        receiptProvider.mockClear();
+        vi.stubGlobal("fetch", withOpenAiFetch(receiptProvider));
+        const coordinator = makeProactivityCoordinator({
+          environment: configuration(db),
+          userId: scope.userId,
+        });
+        const work = (): Request =>
+          workRequest({ kind: "proactivity-delivery", version: 1, userId: scope.userId, id });
+        yield* Effect.tryPromise(() => coordinator.fetch(work()));
+        expect(receiptProvider).toHaveBeenCalledOnce();
+        const claim = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ correlation_token: HostedDeliveryCorrelationToken })
+        )(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT correlation_token FROM whatsapp_deliveries WHERE kind='proactivity' AND user_id=? AND delivery_id=?"
+              )
+              .bind(scope.userId, id)
+              .first()
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE insight_events SET lifecycle_state=? WHERE user_id=? AND id=?")
+            .bind(attention === "conflicting-receipt" ? "read" : attention, scope.userId, id)
+            .run()
+        );
+        if (attention === "conflicting-receipt") {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                `UPDATE insight_events SET delivery_receipt_id=?,delivery_sent_at_ms=?,delivery_channel='whatsapp',delivery_provider='kapso',delivery_provider_message_id='original-message' WHERE user_id=? AND id=?`
+              )
+              .bind(newId(), now.epochMilliseconds, scope.userId, id)
+              .run()
+          );
+        }
+        const before = yield* findInsightAttempt(scope);
+        const status = (): Request =>
+          new Request("https://coordinator/hosted-turn/whatsapp/status", {
+            method: "POST",
+            body: Schema.encodeSync(Schema.fromJsonString(WhatsAppStatusAdmission))({
+              userId: scope.userId,
+              correlationToken: claim.correlation_token,
+              businessPhoneNumberId: phone,
+              providerMessageId: WhatsAppProviderMessageId.make("reminder-provider"),
+              outcome: "delivered",
+              occurredAtMs: now.epochMilliseconds,
+              receivedAtMs: now.epochMilliseconds,
+            }),
+          });
+        expect((yield* Effect.tryPromise(() => coordinator.fetch(status()))).status).toBe(
+          attention === "conflicting-receipt" ? 503 : 200
+        );
+        const receipt = yield* findInsightAttempt(scope);
+        expect(Option.getOrThrow(yield* findInsight(scope)).lifecycleState).toBe(
+          attention === "conflicting-receipt" ? "read" : attention
+        );
+        if (attention === "conflicting-receipt") {
+          expect(receipt).toEqual(before);
+          expect(Option.getOrThrow(yield* findReminderGovernor(scope))).toEqual({
+            _tag: "Attentive",
+            unanswered: 0,
+          });
+          expect(
+            Option.isNone(
+              yield* readProactiveTranscript({
+                ...scope,
+                insightEventId: id,
+                now: now.epochMilliseconds,
+              })
+            )
+          ).toBe(true);
+        } else {
+          expect(Option.isNone(before)).toBe(true);
+          expect(Option.getOrThrow(receipt).providerMessageId).toBe("reminder-provider");
+          expect((yield* Effect.tryPromise(() => coordinator.fetch(status()))).status).toBe(200);
+          expect(yield* findInsightAttempt(scope)).toEqual(receipt);
+          expect(Option.getOrThrow(yield* findReminderGovernor(scope))).toEqual({
+            _tag: "Attentive",
+            unanswered: 1,
+          });
+        }
+        yield* Effect.tryPromise(() => coordinator.fetch(work()));
+        expect(receiptProvider).toHaveBeenCalledOnce();
       })
     )
 );

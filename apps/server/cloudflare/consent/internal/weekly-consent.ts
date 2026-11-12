@@ -51,6 +51,14 @@ const liveGrant = `SELECT g.id FROM (SELECT * FROM consent_history WHERE record_
  AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_grant') r WHERE r.user_id = g.user_id AND r.grant_id = g.id)
  AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM consent_history WHERE record_type='weekly_revocation') r WHERE r.user_id = g.user_id AND r.grant_id = g.id)`;
 
+/** Current weekly grant identity for atomic owner evidence correlation. */
+export const currentGrantQuery = (input: Readonly<{ userId: UserId }>): OwnedStatement =>
+  protectConsentStatement({
+    subject: { _tag: "User", userId: input.userId },
+    requirement: "active",
+    statement: { sql: liveGrant, params: [input.userId] },
+  });
+
 export const findGrant = ({
   db,
   userId,

@@ -1207,6 +1207,15 @@ it.effect("rejects malformed structured output without exposing it", () =>
       })
     );
     expect(String(exit)).not.toContain(privateValue);
+    assertHostedFailure(
+      yield* Effect.exit(prepared.execute),
+      hostedFailure({ _tag: "InvalidAuthority" })
+    );
+    assertHostedFailure(
+      yield* Effect.exit(prepared.discard),
+      hostedFailure({ _tag: "InvalidAuthority" })
+    );
+    expect(binding.calls).toHaveLength(1);
   })
 );
 

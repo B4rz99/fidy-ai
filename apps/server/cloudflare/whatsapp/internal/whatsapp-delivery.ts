@@ -1,18 +1,21 @@
 import { TranscriptText, TranscriptTurnId } from "../../../src/core/agent/contract";
-import { UserId } from "../../../src/core/identity/contract";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { E164PhoneNumber, UserId } from "../../../src/core/identity/contract";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import {
   HostedDeliveryCorrelationToken,
   type WhatsAppHostedLifecycleEvidence,
   WhatsAppProviderMessageId,
 } from "../../../src/shell/channels/whatsapp/contract";
+import { isWhatsAppWindowOpen } from "./whatsapp-turn";
 import { deliveryAcknowledgmentWindowMs } from "../../agent/contract";
 import { hostedChannelTurnQuery, prepareHostedChannelTurn } from "../../agent/operations";
 import { prepareWhatsAppIdentity } from "../../identity/operations";
 import { newId } from "../../secret-material/operations";
 import {
   type WhatsAppDeliveryProposal,
+  type WhatsAppHostedRecipient,
   WhatsAppHostedSubject,
+  WhatsAppInboundEvidence,
   type WhatsAppStatusAdmission,
   type WhatsAppStatusReconciliation,
   type WhatsAppUnavailable,
@@ -36,9 +39,27 @@ const Proposal = Schema.Struct({
 
 type AuthenticatedHostedStatus = Pick<
   WhatsAppHostedLifecycleEvidence,
-  "correlationToken" | "messageEvidence" | "businessPhoneNumberId" | "occurredAt"
+  | "correlationToken"
+  | "messageEvidence"
+  | "businessPhoneNumberId"
+  | "occurredAt"
+  | "recipientUserId"
+  | "recipientPhone"
 > &
   Readonly<{ outcome: "sent" | "delivered" | "failed" }>;
+
+const hostedRecipientGuard = `AND EXISTS (SELECT 1 FROM hosted_turns AS recipient
+  WHERE recipient.id = hosted_whatsapp_delivery.turn_id AND recipient.user_id = hosted_whatsapp_delivery.user_id
+    AND ((recipient.inbound_sandbox_phone IS NULL AND recipient.inbound_bsuid = ?)
+      OR (recipient.inbound_sandbox_phone IS NOT NULL AND recipient.inbound_sandbox_phone = ?))
+    AND (? IS NULL OR recipient.inbound_bsuid = ?))`;
+
+const recipientParams = (evidence: AuthenticatedHostedStatus): ReadonlyArray<unknown> => [
+  Option.getOrNull(evidence.recipientUserId),
+  Option.getOrNull(evidence.recipientPhone),
+  Option.getOrNull(evidence.recipientUserId),
+  Option.getOrNull(evidence.recipientUserId),
+];
 
 /** Reserve before any network call; the unique Turn row prevents a second visible send. */
 export const stageWhatsAppDelivery = ({
@@ -97,6 +118,7 @@ export const startWhatsAppSend = ({
       SET send_started_at_ms = ?
       WHERE kind='hosted' AND turn_id = ? AND user_id = ? AND correlation_token = ?
         AND state = 'sending' AND send_started_at_ms IS NULL
+        AND proposed_at_ms + ? > ?
         AND EXISTS (SELECT 1 FROM (${turns.sql}) AS t
           WHERE t.id = hosted_whatsapp_delivery.turn_id AND t.user_id = ? AND t.status = 'pending')
         AND EXISTS (SELECT 1 FROM (SELECT rowid,id AS turn_id,user_id,inbound_portfolio_id AS portfolio_id,inbound_bsuid AS bsuid,inbound_message_id AS message_id,inbound_business_phone_number_id AS business_phone_number_id,inbound_occurred_at_ms AS occurred_at_ms,inbound_received_at_ms AS received_at_ms,inbound_reply_to_message_id AS reply_to_message_id,inbound_sandbox_phone AS sandbox_phone,dispatch_offered_at_ms,dispatch_created_at_ms FROM hosted_turns WHERE inbound_message_id IS NOT NULL) AS i
@@ -105,12 +127,19 @@ export const startWhatsAppSend = ({
           JOIN identity_associations AS identity ON identity.userId = i.user_id
             AND identity.businessPortfolioId = i.portfolio_id AND identity.businessScopedUserId = i.bsuid
           WHERE i.turn_id = hosted_whatsapp_delivery.turn_id AND i.user_id = ?
+            AND i.business_phone_number_id = hosted_whatsapp_delivery.business_phone_number_id
+            AND NOT EXISTS (SELECT 1 FROM whatsapp_recipients AS recipient
+              WHERE recipient.user_id = i.user_id AND
+                (recipient.portfolio_id <> i.portfolio_id OR recipient.bsuid <> i.bsuid
+                  OR recipient.business_phone_number_id <> i.business_phone_number_id))
             AND w.last_verified_inbound_at_ms > ?)`,
           params: [
             now,
             turnId,
             userId,
             token,
+            deliveryAcknowledgmentWindowMs,
+            now,
             ...turns.params,
             userId,
             userId,
@@ -203,7 +232,7 @@ const prepareStatusEvidence = ({
       (kind,correlation_token,provider_message_id,status,occurred_at_ms,received_at_ms)
       SELECT 'delivery-status',?,?,?,?,? WHERE EXISTS (SELECT 1 FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery
         WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
-          AND (provider_message_id IS NULL OR provider_message_id = ?))`)
+          AND (provider_message_id IS NULL OR provider_message_id = ?) ${hostedRecipientGuard})`)
     .bind(
       token,
       id,
@@ -213,7 +242,8 @@ const prepareStatusEvidence = ({
       userId,
       token,
       phoneId,
-      id
+      id,
+      ...recipientParams(evidence)
     );
 };
 
@@ -243,7 +273,7 @@ const retainWhatsAppStatus = ({
         THEN ? ELSE delivered_at_ms END
       WHERE kind='hosted' AND user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
         AND state IN ('sending','accepted','ambiguous') AND send_started_at_ms IS NOT NULL
-        AND (provider_message_id IS NULL OR provider_message_id = ?)`)
+        AND (provider_message_id IS NULL OR provider_message_id = ?) ${hostedRecipientGuard}`)
         .bind(
           id,
           status,
@@ -257,7 +287,8 @@ const retainWhatsAppStatus = ({
           userId,
           token,
           phoneId,
-          id
+          id,
+          ...recipientParams(evidence)
         ),
     ])
   ).pipe(Effect.asVoid);
@@ -287,8 +318,8 @@ export const recordWhatsAppStatus = ({
       db
         .prepare(`SELECT turn_id, user_id, text, state, provider_message_id
         FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
-          AND (provider_message_id IS NULL OR provider_message_id = ?)`)
-        .bind(userId, token, phoneId, id)
+          AND (provider_message_id IS NULL OR provider_message_id = ?) ${hostedRecipientGuard}`)
+        .bind(userId, token, phoneId, id, ...recipientParams(evidence))
         .first()
     );
     if (existing === null) return Option.none();
@@ -298,8 +329,8 @@ export const recordWhatsAppStatus = ({
       db
         .prepare(`SELECT turn_id, user_id, text, state, provider_message_id
         FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='hosted') AS hosted_whatsapp_delivery WHERE user_id = ? AND correlation_token = ? AND business_phone_number_id = ?
-          AND (provider_message_id IS NULL OR provider_message_id = ?)`)
-        .bind(userId, token, phoneId, id)
+          AND (provider_message_id IS NULL OR provider_message_id = ?) ${hostedRecipientGuard}`)
+        .bind(userId, token, phoneId, id, ...recipientParams(evidence))
         .first()
     );
     if (updated === null) return Option.none();
@@ -314,6 +345,8 @@ export const recordWhatsAppStatus = ({
   });
 
 const admittedStatusEvidence = (admission: WhatsAppStatusAdmission): AuthenticatedHostedStatus => ({
+  recipientUserId: Option.fromUndefinedOr(admission.recipientUserId),
+  recipientPhone: Option.fromUndefinedOr(admission.recipientPhone),
   correlationToken: admission.correlationToken,
   businessPhoneNumberId: admission.businessPhoneNumberId,
   messageEvidence: {
@@ -384,4 +417,115 @@ export const reconcileWhatsAppStatus = ({
         now: admission.receivedAtMs,
       },
     };
+  });
+
+const findHostedRecipient = ({
+  db,
+  userId,
+  turnId,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+}>): Effect.Effect<
+  Option.Option<WhatsAppHostedRecipient>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const turns = hostedChannelTurnQuery(userId);
+    const rawRecipient = yield* Effect.tryPromise(() =>
+      prepareWhatsAppIdentity({
+        db,
+        userId,
+        statement: {
+          sql: `SELECT t.inbound_portfolio_id AS portfolioId, t.inbound_bsuid AS bsuid,
+        t.inbound_business_phone_number_id AS businessPhoneNumberId,
+        t.inbound_sandbox_phone AS sandboxPhone, t.inbound_reply_to_message_id AS replyToMessageId
+        FROM hosted_turns AS t JOIN (${turns.sql}) AS turn
+          ON turn.id = t.id AND turn.user_id = t.user_id
+        JOIN identity_associations AS identity ON identity.userId = t.user_id
+          AND identity.businessPortfolioId = t.inbound_portfolio_id
+          AND identity.businessScopedUserId = t.inbound_bsuid
+        WHERE t.id = ? AND t.user_id = ? AND turn.status = 'pending' AND t.inbound_message_id IS NOT NULL`,
+          params: [...turns.params, turnId, userId],
+        },
+      }).first()
+    );
+    if (rawRecipient === null) return Option.none();
+    return Option.some(
+      yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          portfolioId: WhatsAppHostedSubject.fields.portfolioId,
+          bsuid: WhatsAppHostedSubject.fields.bsuid,
+          businessPhoneNumberId: WhatsAppInboundEvidence.fields.businessPhoneNumberId,
+          sandboxPhone: Schema.OptionFromNullOr(E164PhoneNumber),
+          replyToMessageId: Schema.OptionFromNullOr(WhatsAppProviderMessageId),
+        })
+      )(rawRecipient)
+    );
+  });
+
+type HostedReplySender<E> = (
+  input: Readonly<{
+    text: TranscriptText;
+    turnId: TranscriptTurnId;
+    correlationToken: HostedDeliveryCorrelationToken;
+    recipient: WhatsAppHostedRecipient;
+  }>
+) => Effect.Effect<
+  | Readonly<{ kind: "accepted"; messageId: WhatsAppProviderMessageId }>
+  | Readonly<{ kind: "ambiguous" | "rejected" }>,
+  E
+>;
+
+/** Own the complete hosted provider boundary; Agent still owns terminal Turn settlement. */
+export const submitHostedReply = <E>({
+  db,
+  userId,
+  turnId,
+  text,
+  send,
+  scheduleRecovery,
+}: Readonly<{
+  db: D1Database;
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  text: TranscriptText;
+  send: HostedReplySender<E>;
+  scheduleRecovery: (dueAtMs: number) => Promise<void>;
+}>): Effect.Effect<
+  Readonly<{ _tag: "Refused" | "NotSubmitted" | "AwaitingDelivery" }>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const recipient = yield* findHostedRecipient({ db, userId, turnId });
+    if (Option.isNone(recipient)) return { _tag: "Refused" as const };
+    const proposedAt = yield* Clock.currentTimeMillis;
+    if (!(yield* isWhatsAppWindowOpen({ db, userId, turnId, now: proposedAt }))) {
+      return { _tag: "Refused" as const };
+    }
+    const token = yield* stageWhatsAppDelivery({ db, userId, turnId, text, now: proposedAt });
+    if (Option.isNone(token)) return { _tag: "NotSubmitted" as const };
+    yield* Effect.tryPromise(() => scheduleRecovery(proposedAt + deliveryAcknowledgmentWindowMs));
+    const started = yield* startWhatsAppSend({
+      db,
+      userId,
+      turnId,
+      token: token.value,
+      now: yield* Clock.currentTimeMillis,
+    });
+    if (!started) {
+      yield* rejectUnstartedWhatsAppDelivery({ db, userId, turnId, token: token.value });
+      return { _tag: "Refused" as const };
+    }
+    const outcome = yield* send({
+      text,
+      turnId,
+      correlationToken: token.value,
+      recipient: recipient.value,
+    }).pipe(Effect.orElseSucceed(() => ({ kind: "ambiguous" as const })));
+    const recorded = yield* recordWhatsAppSend({ db, userId, turnId, token: token.value, outcome });
+    return outcome.kind === "rejected" && recorded
+      ? { _tag: "Refused" as const }
+      : { _tag: "AwaitingDelivery" as const };
   });

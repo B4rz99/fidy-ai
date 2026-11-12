@@ -296,11 +296,11 @@ it("serializes OTP confirmation and permits a resend after a retryable provider 
       yield* Effect.tryPromise(() => started.promise);
       const duplicateOtp = Redacted.make("574829");
       expect(yield* Effect.tryPromise(() => challenge.confirm(duplicateOtp))).toEqual({
-        status: "retry-allowed",
+        status: "busy",
       });
       expect(() => Redacted.value(duplicateOtp)).toThrow();
       expect(yield* Effect.tryPromise(() => challenge.resend())).toEqual({
-        status: "retry-allowed",
+        status: "busy",
       });
       expect(input.provider).toHaveBeenCalledTimes(3);
       pending.resolve(otpResponse("PENDING", "synthetic-retry-bearer"));
@@ -360,8 +360,7 @@ it.each(["completed", "cancelled"] as const)(
         const first = challenge.confirm(otp);
         yield* Deferred.await(started);
         expect(yield* Effect.tryPromise(() => challenge.retrySubmission())).toEqual({
-          status: "uncertain",
-          retrySubmission: true,
+          status: "busy",
         });
         const duplicateOtp = Redacted.make("574829");
         expect(yield* Effect.tryPromise(() => challenge.confirm(duplicateOtp))).toEqual({

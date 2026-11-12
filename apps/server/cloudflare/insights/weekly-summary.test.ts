@@ -1,21 +1,24 @@
-import { type WeeklyScheduleSnapshot, WeeklySummaryReport } from "./contract";
+import { deepStrictEqual } from "node:assert";
+import { InsightUnavailable, type WeeklyScheduleSnapshot, WeeklySummaryReport } from "./contract";
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import { categoryIds } from "../../src/core/categories/contract";
 import {
   createWeeklyGovernorConsentOffer,
   findWeeklyConsentGrant,
+  prepareWeeklyConsentDecision,
   recordWeeklyConsentDisclosure,
 } from "../consent/operations";
 import {
   findWeeklySchedule,
   findWeeklySummaryReport,
-  materializeWeeklySummary,
-  prepareWeeklyScheduleAdvance,
   recordWeeklySummaryDecision,
+  runWeeklyGeneration,
+  weeklyReportDeliveryQuery,
 } from "./operations";
 import {
+  seedWeeklySummaryActivity,
   weeklySummaryOtherUser,
   weeklySummaryTestCaller,
   weeklySummaryTestDatabase,
@@ -51,6 +54,36 @@ const enable = (db: D1Database): Effect.Effect<WeeklyScheduleSnapshot, object> =
       decisionMessageId: "accepted",
     });
     return Option.getOrThrow(yield* findWeeklySchedule(context));
+  });
+
+const prepareWithdrawal = (
+  db: D1Database
+): Effect.Effect<ReadonlyArray<D1PreparedStatement>, object> =>
+  Effect.gen(function* () {
+    const context = {
+      db,
+      userId: weeklySummaryTestUser,
+      caller: weeklySummaryTestCaller,
+      now: weeklySummaryTestNow,
+    };
+    const offer = Option.getOrThrow(
+      yield* createWeeklyGovernorConsentOffer({
+        ...context,
+        request: { _tag: "ShortOffer", origin: "proactive" },
+      })
+    );
+    yield* recordWeeklyConsentDisclosure({
+      ...context,
+      offerId: offer.id,
+      disclosureMessageId: "withdrawal-disclosed",
+    });
+    return Option.getOrThrow(
+      yield* prepareWeeklyConsentDecision({
+        ...context,
+        choice: offer.revokeChoice,
+        decisionMessageId: "withdrawal-accepted",
+      })
+    ).statements;
   });
 
 it.live(
@@ -111,7 +144,7 @@ it.live(
         id: schedule.id,
         now: DateTime.makeUnsafe("2026-08-10T14:00:00Z"),
       };
-      const outcome = yield* materializeWeeklySummary(input);
+      const outcome = yield* runWeeklyGeneration(input);
       if (outcome._tag !== "Created") return yield* Effect.die("Expected created summary");
       const report = Option.getOrThrow(
         yield* findWeeklySummaryReport({ ...input, id: outcome.id })
@@ -131,7 +164,12 @@ it.live(
           })
         )
       ).toBe(true);
-      expect(yield* materializeWeeklySummary(input)).toEqual({ _tag: "NoWork" });
+      expect(yield* runWeeklyGeneration(input)).toEqual({ _tag: "NoWork" });
+      yield* Effect.tryPromise(() => db.batch([seed("06", { amount: "9999" })]));
+      expect(yield* findWeeklySummaryReport({ ...input, id: outcome.id })).toEqual(
+        Option.some(report)
+      );
+
       const outbox = yield* Effect.tryPromise(() =>
         db
           .prepare(
@@ -161,7 +199,10 @@ it.live("does not convert unavailable aggregates into an empty-week advancement"
       id: snapshot.id,
       now: snapshot.nextScheduledAt,
     };
-    expect((yield* Effect.exit(materializeWeeklySummary(input)))._tag).toBe("Failure");
+    deepStrictEqual(
+      yield* Effect.exit(runWeeklyGeneration(input)),
+      Exit.fail(new InsightUnavailable())
+    );
     expect(
       DateTime.formatIso(Option.getOrThrow(yield* findWeeklySchedule(input)).nextScheduledAt)
     ).toBe(DateTime.formatIso(snapshot.nextScheduledAt));
@@ -252,60 +293,305 @@ it.live(
     })
 );
 
+it.live("advances only the latest complete empty occurrence after a multiweek delay", () =>
+  Effect.gen(function* () {
+    const db = yield* weeklySummaryTestDatabase;
+    const snapshot = yield* enable(db);
+    const input = {
+      db,
+      userId: weeklySummaryTestUser,
+      id: snapshot.id,
+      now: DateTime.makeUnsafe("2026-08-23T23:00:00Z"),
+    };
+    expect(yield* runWeeklyGeneration(input)).toEqual({ _tag: "NoActivity" });
+    expect(
+      DateTime.formatIso(Option.getOrThrow(yield* findWeeklySchedule(input)).nextScheduledAt)
+    ).toBe("2026-08-30T23:00:00.000Z");
+    expect(yield* runWeeklyGeneration(input)).toEqual({ _tag: "NoWork" });
+    const history = yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "SELECT scheduled_at,outcome FROM schedule_history WHERE record_type='execution' AND kind='weekly' AND user_id=?"
+        )
+        .bind(input.userId)
+        .all()
+    );
+    expect(history.results).toEqual([
+      { scheduled_at: "2026-08-23T23:00:00.000Z", outcome: "empty" },
+    ]);
+  })
+);
+
+it.live("expires at the exact original deadline without requiring financial facts", () =>
+  Effect.gen(function* () {
+    const db = yield* weeklySummaryTestDatabase;
+    const snapshot = yield* enable(db);
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare("UPDATE transaction_projection_state SET readiness='dirty' WHERE user_id=?")
+        .bind(snapshot.userId)
+        .run()
+    );
+    const input = {
+      db,
+      userId: snapshot.userId,
+      id: snapshot.id,
+      now: DateTime.makeUnsafe("2026-08-10T23:00:00Z"),
+    };
+    expect(yield* runWeeklyGeneration(input)).toEqual({ _tag: "Expired" });
+    expect(
+      DateTime.formatIso(Option.getOrThrow(yield* findWeeklySchedule(input)).nextScheduledAt)
+    ).toBe("2026-08-16T23:00:00.000Z");
+    const history = yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "SELECT scheduled_at,outcome FROM schedule_history WHERE record_type='execution' AND kind='weekly'"
+        )
+        .all()
+    );
+    expect(history.results).toEqual([
+      { scheduled_at: "2026-08-09T23:00:00.000Z", outcome: "expired" },
+    ]);
+  })
+);
+
+const assertUnpublished = (
+  db: D1Database,
+  snapshot: WeeklyScheduleSnapshot
+): Effect.Effect<void, object> =>
+  Effect.gen(function* () {
+    expect(
+      DateTime.formatIso(
+        Option.getOrThrow(yield* findWeeklySchedule({ db, userId: snapshot.userId }))
+          .nextScheduledAt
+      )
+    ).toBe(DateTime.formatIso(snapshot.nextScheduledAt));
+    const retained = yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "SELECT (SELECT count(*) FROM insight_events) AS events,(SELECT count(*) FROM insight_reports) AS reports,(SELECT count(*) FROM proactive_messages WHERE kind='weekly-summary') AS intents,(SELECT count(*) FROM schedule_history WHERE record_type='execution') AS executions"
+        )
+        .first()
+    );
+    expect(retained).toEqual({ events: 0, reports: 0, intents: 0, executions: 0 });
+  });
+
+for (const change of ["revision", "withdrawal", "schedule"] as const) {
+  for (const activity of [false, true]) {
+    it.live(
+      `refuses ${activity ? "report" : "empty"} publication when ${change} changes after complete facts`,
+      () =>
+        Effect.gen(function* () {
+          const db = yield* weeklySummaryTestDatabase;
+          const snapshot = yield* enable(db);
+          yield* seedWeeklySummaryActivity({
+            db,
+            at: activity ? "2026-08-04T12:00:00Z" : "2026-07-01T12:00:00Z",
+          });
+          const withdrawal = change === "withdrawal" ? yield* prepareWithdrawal(db) : [];
+          const originalRevision = yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT fact_revision FROM transaction_projection_state WHERE user_id=?")
+              .bind(snapshot.userId)
+              .first("fact_revision")
+          );
+          let mutationSucceeded = false;
+          let calls = 0;
+          let interleaved = false;
+          const intercepted: D1Database["batch"] = <Row>(
+            statements: D1PreparedStatement[]
+          ): Promise<D1Result<Row>[]> => {
+            calls += 1;
+            return db.batch<Row>(statements).then((result) => {
+              if (calls !== 2) return result;
+              interleaved = true;
+              if (change === "withdrawal") {
+                return db.batch([...withdrawal]).then(() => {
+                  mutationSucceeded = true;
+                  return result;
+                });
+              }
+              const mutation =
+                change === "revision"
+                  ? db
+                      .prepare(
+                        "UPDATE transaction_projection_state SET fact_revision=fact_revision+1 WHERE user_id=?"
+                      )
+                      .bind(snapshot.userId)
+                  : db
+                      .prepare(
+                        "UPDATE schedules SET version=version+1 WHERE kind='weekly' AND user_id=?"
+                      )
+                      .bind(snapshot.userId);
+              return mutation.run().then((committed) => {
+                mutationSucceeded = committed.meta.changes === 1;
+                return result;
+              });
+            });
+          };
+          const guardedDb = new Proxy(db, {
+            get(target, key, receiver): unknown {
+              return key === "batch" ? intercepted : Reflect.get(target, key, receiver);
+            },
+          });
+          const result = yield* Effect.exit(
+            runWeeklyGeneration({
+              db: guardedDb,
+              userId: snapshot.userId,
+              id: snapshot.id,
+              now: snapshot.nextScheduledAt,
+            })
+          );
+          expect(interleaved).toBe(true);
+          expect(mutationSucceeded).toBe(true);
+          if (change === "revision") {
+            const revision = yield* Effect.tryPromise(() =>
+              db
+                .prepare("SELECT fact_revision FROM transaction_projection_state WHERE user_id=?")
+                .bind(snapshot.userId)
+                .first("fact_revision")
+            );
+            const beforeRevision = yield* Schema.decodeUnknownEffect(Schema.Int)(originalRevision);
+            const afterRevision = yield* Schema.decodeUnknownEffect(Schema.Int)(revision);
+            expect(afterRevision).toBe(beforeRevision + 1);
+          }
+          deepStrictEqual(result, Exit.fail(new InsightUnavailable()));
+          if (change === "schedule") {
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare("UPDATE schedules SET version=? WHERE kind='weekly' AND user_id=?")
+                .bind(snapshot.version, snapshot.userId)
+                .run()
+            );
+          }
+          yield* assertUnpublished(db, snapshot);
+        })
+    );
+  }
+}
+
+it.live("rolls back the complete occurrence when report insertion fails and freshly retries", () =>
+  Effect.gen(function* () {
+    const db = yield* weeklySummaryTestDatabase;
+    const snapshot = yield* enable(db);
+    yield* seedWeeklySummaryActivity({ db, at: "2026-08-04T12:00:00Z" });
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "CREATE TRIGGER fail_weekly_report BEFORE INSERT ON insight_reports BEGIN SELECT RAISE(ABORT,'forced report failure'); END"
+        )
+        .run()
+    );
+    const input = { db, userId: snapshot.userId, id: snapshot.id, now: snapshot.nextScheduledAt };
+    deepStrictEqual(
+      yield* Effect.exit(runWeeklyGeneration(input)),
+      Exit.fail(new InsightUnavailable())
+    );
+    yield* assertUnpublished(db, snapshot);
+    yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER fail_weekly_report").run());
+    expect((yield* runWeeklyGeneration(input))._tag).toBe("Created");
+    expect(yield* runWeeklyGeneration(input)).toEqual({ _tag: "NoWork" });
+  })
+);
+
+it.live("unavailable projection cannot masquerade as a complete empty period", () =>
+  Effect.gen(function* () {
+    const db = yield* weeklySummaryTestDatabase;
+    const snapshot = yield* enable(db);
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare("DELETE FROM transaction_projection_state WHERE user_id=?")
+        .bind(snapshot.userId)
+        .run()
+    );
+    deepStrictEqual(
+      yield* Effect.exit(
+        runWeeklyGeneration({
+          db,
+          userId: snapshot.userId,
+          id: snapshot.id,
+          now: snapshot.nextScheduledAt,
+        })
+      ),
+      Exit.fail(new InsightUnavailable())
+    );
+    yield* assertUnpublished(db, snapshot);
+  })
+);
+
+it.live("withdrawn category refuses generation independently of active Processing Consent", () =>
+  Effect.gen(function* () {
+    const db = yield* weeklySummaryTestDatabase;
+    const snapshot = yield* enable(db);
+    const withdrawal = yield* prepareWithdrawal(db);
+    yield* Effect.tryPromise(() => db.batch([...withdrawal]));
+    expect(
+      yield* runWeeklyGeneration({
+        db,
+        userId: snapshot.userId,
+        id: snapshot.id,
+        now: snapshot.nextScheduledAt,
+      })
+    ).toEqual({ _tag: "NoWork" });
+    yield* assertUnpublished(db, snapshot);
+  })
+);
+
 it.live(
-  "advances a genuinely empty latest occurrence once and rolls back stale or revoked schedule publication",
+  "delayed discovery freezes only the latest local-calendar report and its original deadline",
   () =>
     Effect.gen(function* () {
       const db = yield* weeklySummaryTestDatabase;
-      const context = {
+      const snapshot = yield* enable(db);
+      yield* seedWeeklySummaryActivity({ db, at: "2026-08-20T12:00:00Z" });
+      const input = {
         db,
-        userId: weeklySummaryTestUser,
-        caller: weeklySummaryTestCaller,
-        now: weeklySummaryTestNow,
+        userId: snapshot.userId,
+        id: snapshot.id,
+        now: DateTime.makeUnsafe("2026-08-24T14:00:00Z"),
       };
-      const offer = Option.getOrThrow(
-        yield* createWeeklyGovernorConsentOffer({
-          ...context,
-          request: { _tag: "ShortOffer", origin: "proactive" },
-        })
+      const result = yield* runWeeklyGeneration(input);
+      if (result._tag !== "Created") return yield* Effect.die("Expected latest report");
+      const report = Option.getOrThrow(yield* findWeeklySummaryReport({ ...input, id: result.id }));
+      expect(DateTime.formatIso(report.payload.periods.current.from)).toBe(
+        "2026-08-16T23:00:00.000Z"
       );
-      yield* recordWeeklyConsentDisclosure({
-        ...context,
-        offerId: offer.id,
-        disclosureMessageId: "disclosure",
-      });
-      yield* recordWeeklySummaryDecision({
-        ...context,
-        choice: offer.acceptChoice,
-        decisionMessageId: "accepted",
-      });
-      const snapshot = Option.getOrThrow(yield* findWeeklySchedule(context));
-      const now = DateTime.makeUnsafe("2026-08-23T23:00:00Z");
-      const advance = (): ReadonlyArray<D1PreparedStatement> =>
-        prepareWeeklyScheduleAdvance({
-          db,
-          snapshot,
-          now,
-          materializedScheduledAt: now,
-          outcome: "empty",
-        });
-      yield* Effect.tryPromise(() => db.batch([...advance()]));
-      expect(
-        DateTime.formatIso(Option.getOrThrow(yield* findWeeklySchedule(context)).nextScheduledAt)
-      ).toBe("2026-08-30T23:00:00.000Z");
-      expect((yield* Effect.exit(Effect.tryPromise(() => db.batch([...advance()]))))._tag).toBe(
-        "Failure"
+      expect(DateTime.formatIso(report.payload.periods.current.toExclusive)).toBe(
+        "2026-08-23T23:00:00.000Z"
       );
-      const executions = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "SELECT scheduled_at,outcome FROM (SELECT rowid,kind,user_id,schedule_id,version AS schedule_version,scheduled_at,outcome FROM schedule_history WHERE record_type='execution') WHERE kind='weekly' AND user_id = ?"
-          )
-          .bind(context.userId)
-          .all()
-      );
-      expect(executions.results).toEqual([
-        { scheduled_at: "2026-08-23T23:00:00.000Z", outcome: "empty" },
-      ]);
+      expect(DateTime.formatIso(report.expiresAt)).toBe("2026-08-24T23:00:00.000Z");
+      expect(report.consentGrantId).toBe(snapshot.consentGrantId);
+      expect(yield* runWeeklyGeneration(input)).toEqual({ _tag: "NoWork" });
     })
+);
+
+it.live("retains the frozen grant and deadline across a later enabled timing revision", () =>
+  Effect.gen(function* () {
+    const db = yield* weeklySummaryTestDatabase;
+    const snapshot = yield* enable(db);
+    yield* seedWeeklySummaryActivity({ db, at: "2026-08-04T12:00:00Z" });
+    const input = { db, userId: snapshot.userId, id: snapshot.id, now: snapshot.nextScheduledAt };
+    const outcome = yield* runWeeklyGeneration(input);
+    if (outcome._tag !== "Created") return yield* Effect.die("Expected frozen report");
+    const before = Option.getOrThrow(yield* findWeeklySummaryReport({ ...input, id: outcome.id }));
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "UPDATE schedules SET version=version+1,snapshot_json=json_set(snapshot_json,'$.version',version+1,'$.timing.hour',19) WHERE kind='weekly' AND user_id=?"
+        )
+        .bind(input.userId)
+        .run()
+    );
+    const query = weeklyReportDeliveryQuery({ userId: input.userId, insightEventId: outcome.id });
+    const eligible = yield* Effect.tryPromise(() =>
+      db
+        .prepare(query.sql)
+        .bind(...query.params)
+        .all()
+    );
+    expect(eligible.results).toHaveLength(1);
+    const after = Option.getOrThrow(yield* findWeeklySummaryReport({ ...input, id: outcome.id }));
+    expect(after).toEqual(before);
+    expect(Option.getOrThrow(yield* findWeeklySchedule(input)).version).toBe(snapshot.version + 1);
+  })
 );

@@ -7,6 +7,7 @@ import {
 
 export type DaviplataConfirmation =
   | Readonly<{ status: "retry-allowed" }>
+  | Readonly<{ status: "busy" }>
   | Readonly<{ status: "submitted"; submission: PaymentSubmissionType }>
   | Readonly<{ status: "refused" }>
   | Readonly<{ status: "uncertain"; retrySubmission: boolean }>;
@@ -33,7 +34,10 @@ const wipeOtpAfterConfirmation = (
   result.finally(() => {
     Redacted.wipeUnsafe(otp);
   });
-const submissionUncertainty = (input: ChallengeInput): Promise<DaviplataConfirmation> =>
+const submissionUncertainty = (
+  input: ChallengeInput,
+  remember: (allowed: boolean) => void
+): Promise<DaviplataConfirmation> =>
   input.client
     .execute(() => input.provider.retrySubmission())
     .then(
@@ -42,13 +46,24 @@ const submissionUncertainty = (input: ChallengeInput): Promise<DaviplataConfirma
         retrySubmission: outcome.status === "approved",
       }),
       (): DaviplataConfirmation => ({ status: "uncertain", retrySubmission: false })
-    );
+    )
+    .then((outcome) => {
+      remember(outcome.status === "uncertain" && outcome.retrySubmission);
+      return outcome;
+    });
+
+const unapprovedOutcome = (
+  approved: boolean,
+  outcome: Exclude<DaviplataProviderOutcome, { status: "approved" | "uncertain" }>
+): Promise<DaviplataConfirmation> =>
+  Promise.resolve(approved ? { status: "uncertain", retrySubmission: false } : outcome);
 
 /** Encloses provider approval and projects only safe submission outcomes for the mounted form. */
 export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChallenge => {
   let disposed = false;
   let busy = false;
   let approved = false;
+  let retryAllowed = false;
   const dispose = (): void => {
     disposed = true;
     input.provider.dispose();
@@ -57,14 +72,18 @@ export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChalleng
     if (outcome.status === "uncertain") {
       return Promise.resolve({ status: "uncertain", retrySubmission: false });
     }
-    if (outcome.status !== "approved") return Promise.resolve(outcome);
+    if (outcome.status !== "approved") return unapprovedOutcome(approved, outcome);
     approved = true;
+    retryAllowed = false;
     return input.submitApproved(outcome.token).then(
       (submission): DaviplataConfirmation => {
         dispose();
         return { status: "submitted", submission };
       },
-      () => submissionUncertainty(input)
+      () =>
+        submissionUncertainty(input, (allowed) => {
+          retryAllowed = allowed;
+        })
     );
   };
   const execute = (
@@ -72,9 +91,10 @@ export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChalleng
   ): Promise<DaviplataConfirmation> => {
     if (disposed || input.client.signal.aborted) return Promise.resolve({ status: "refused" });
     if (busy) {
-      return approved ? submissionUncertainty(input) : Promise.resolve({ status: "retry-allowed" });
+      return Promise.resolve({ status: "busy" });
     }
     busy = true;
+    retryAllowed = false;
     return input.client
       .execute(() => action)
       .then(apply, (): DaviplataConfirmation => ({ status: "uncertain", retrySubmission: false }))
@@ -90,8 +110,12 @@ export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChalleng
         otp,
         approved ? Promise.resolve({ status: "refused" }) : execute(input.provider.confirm(otp))
       ),
-    retrySubmission: () =>
-      approved ? execute(input.provider.retrySubmission()) : Promise.resolve({ status: "refused" }),
+    retrySubmission: () => {
+      if (busy) return Promise.resolve({ status: "busy" });
+      return retryAllowed
+        ? execute(input.provider.retrySubmission())
+        : Promise.resolve({ status: "refused" });
+    },
     dispose,
   };
 };

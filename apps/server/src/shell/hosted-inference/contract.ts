@@ -62,7 +62,8 @@ export type HostedStructuredContext = Readonly<{
 }>;
 /**
  * One-shot text authority. `execute` is valid initially and remains valid only after a retryable
- * ProviderUnavailable failure. InvalidOutput permits exactly one `repairInvalidOutput`, which
+ * pure typed ProviderUnavailable failure while the fixed two-attempt budget remains. InvalidOutput
+ * permits exactly one separate `repairInvalidOutput`, which
  * prepares corrected format feedback against the original context without executing another round;
  * terminal failures do not. `discard` is valid before execution or after InvalidOutput and consumes
  * the authority.
@@ -76,8 +77,9 @@ export type PreparedHostedText = Readonly<{
 
 /**
  * One-shot strict structured authority. `execute` is valid initially and can be retried only after
- * a retryable ProviderUnavailable failure. `discard` is valid before execution or after a retryable
- * ProviderUnavailable failure, and consumes the authority. Every other completion consumes it.
+ * a pure typed retryable ProviderUnavailable failure with budget remaining (two attempts total).
+ * `discard` is valid while execution is available and consumes the authority. Every other completion
+ * consumes it; a retryable error does not promise another execution right.
  */
 export type PreparedHostedStructured<Output> = Readonly<{
   execute: Effect.Effect<Output, HostedInferenceError>;

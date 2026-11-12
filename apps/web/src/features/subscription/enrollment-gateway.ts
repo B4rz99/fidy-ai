@@ -235,14 +235,16 @@ const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
       ).pipe(
         Effect.map(Redacted.make),
         Effect.flatMap((cardToken) =>
-          transport.subscriptionEnrollment.submit({
-            payload: {
-              paymentSourceMode: "create",
-              method: "card",
-              ...facts,
-              cardToken,
-            },
-          })
+          transport.subscriptionEnrollment
+            .submit({
+              payload: {
+                paymentSourceMode: "create",
+                method: "card",
+                ...facts,
+                cardToken,
+              },
+            })
+            .pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(cardToken))))
         )
       ),
     executionOptions(Option.getOrUndefined(signal))

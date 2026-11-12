@@ -442,17 +442,19 @@ export const weeklySummaryReplyQuery = (proof: WhatsAppTurnAdmission): OwnedStat
     bsuid: proof.bsuid,
   });
   const statement: OwnedStatement = {
-    sql: `SELECT d.user_id,d.insight_event_id,NULL AS question_id,? AS occurred_at_ms,d.delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.provider_message_id=? AND d.state='delivered' UNION ALL SELECT d.user_id,NULL,d.id,?,d.delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.provider_message_id=? AND d.state='delivered'`,
+    sql: `SELECT d.user_id,d.insight_event_id,NULL AS question_id,NULL AS consent_grant_id,? AS occurred_at_ms,d.delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='insight') AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.business_phone_number_id=? AND d.provider_message_id=? AND d.state='delivered' UNION ALL SELECT d.user_id,NULL,d.id,d.consent_grant_id,?,d.delivered_at_ms FROM (SELECT rowid,* FROM whatsapp_deliveries WHERE kind='weekly-question') AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.business_phone_number_id=? AND d.provider_message_id=? AND d.state='delivered'`,
     params: [
       proof.occurredAtMs,
       proof.userId,
       proof.portfolioId,
       proof.bsuid,
+      proof.businessPhoneNumberId,
       Option.getOrElse(proof.replyToMessageId, () => ""),
       proof.occurredAtMs,
       proof.userId,
       proof.portfolioId,
       proof.bsuid,
+      proof.businessPhoneNumberId,
       Option.getOrElse(proof.replyToMessageId, () => ""),
     ],
   };

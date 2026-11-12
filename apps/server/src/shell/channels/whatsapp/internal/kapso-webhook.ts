@@ -131,7 +131,12 @@ export const RawKapsoEnvelope = Schema.Union([
   }),
 ]);
 
+// Kapso retains raw Meta status history, including BSUID and international phone digits:
+// https://kapso.com/guides/business-scoped-user-ids/introduction/reading-the-new-payload
+// https://github.com/gokapso/agent-skills/blob/master/skills/integrate-whatsapp/references/webhooks-event-types.md
 const RawDisclosureStatus = Schema.Struct({
+  recipient_user_id: Schema.optionalKey(WhatsAppBusinessScopedUserId),
+  recipient_id: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^[1-9][0-9]{7,14}$/u))),
   id: WhatsAppProviderMessageId,
   status: Schema.Literals(["sent", "delivered", "failed"]),
   timestamp: Schema.String.check(Schema.isPattern(/^[0-9]{1,16}$/u)),
@@ -464,6 +469,17 @@ const projectReceiptHistory = Effect.fn(function* (
   receivedAt: DateTime.Utc
 ) {
   yield* Effect.forEach(statuses, (status) => parseOccurredAt(status.timestamp, receivedAt));
+  const userIds = new Set(
+    statuses.flatMap((status) =>
+      status.recipient_user_id === undefined ? [] : [status.recipient_user_id]
+    )
+  );
+  const phones = new Set(
+    statuses.flatMap((status) => (status.recipient_id === undefined ? [] : [status.recipient_id]))
+  );
+  if (userIds.size > 1 || phones.size > 1) {
+    return yield* invalidKapsoInvariant("inconsistent status recipient");
+  }
   const tokens = statuses.map((status) => status.biz_opaque_callback_data);
   const token = tokens[0] ?? Option.none<string>();
   if (
@@ -477,6 +493,10 @@ const projectReceiptHistory = Effect.fn(function* (
   const correlated = yield* Effect.forEach(selected, (status) =>
     Schema.decodeUnknownEffect(RawDisclosureStatus)({
       id: status.id,
+      ...(status.recipient_user_id === undefined
+        ? {}
+        : { recipient_user_id: status.recipient_user_id }),
+      ...(status.recipient_id === undefined ? {} : { recipient_id: status.recipient_id }),
       status: status.status,
       timestamp: status.timestamp,
       ...Option.match(status.errors, { onNone: () => ({}), onSome: (errors) => ({ errors }) }),
@@ -646,6 +666,10 @@ export const projectHostedStatus = (
 ): WhatsAppHostedLifecycleEvidence => {
   const status = latest.status;
   const evidence = {
+    recipientUserId: Option.fromUndefinedOr(status.recipient_user_id),
+    recipientPhone: Option.map(Option.fromUndefinedOr(status.recipient_id), (phone) =>
+      E164PhoneNumber.make(`+${phone}`)
+    ),
     correlationToken: HostedDeliveryCorrelationToken.make(status.biz_opaque_callback_data),
     messageEvidence: latest.evidence.messageEvidence,
     businessPhoneNumberId: latest.businessPhoneNumberId,

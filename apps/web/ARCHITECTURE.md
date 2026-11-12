@@ -242,6 +242,18 @@ provider authorization and transient credentials private. An uncertain submissio
 submission and selection changes. Explicit recovery checks the same enrollment and resumes an
 admitted submission with its retained PaymentRequestId, then observes its BillingAttempt; source
 availability alone does not complete recovery. Failed or missing continuation retains the lock.
+The prepared Price and recurring disclosure govern checkout and its summary. Until prepared facts
+are known, source-only recovery retains its admitted Price for display even if the offer catalog
+changes; that display fallback grants no new submission authority. Offer read feedback
+keeps the same mounted task and review drafts. Observation retains its original 65-read budget
+across explicit checks and visibility changes; exhaustion remains unresolved and offers an explicit
+check of the same BillingAttempt. A final observation of another attempt cannot settle this task.
+Only settled eligible DaviPlata submission uncertainty grants an approved same-request retry;
+busy approval does not grant another action.
+Cancellation is admitted only while the mounted OTP task is idle; an in-flight provider mutation
+or approved submission retains its lock. Child uncertainty exposes the parent's same-enrollment
+recovery without restoring OTP authority, and expired approved retry authority cannot establish
+that an uncertain payment failed.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
 OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,
@@ -914,3 +926,6 @@ that bound and item metadata; original expiry
 does not expire a separately retained review draft or resolve its decision. Deadline subscriptions
 recheck wall time on focus, page show, and visibility changes, including retained hidden panels.
 This logical suppression does not depend on physical source cleanup or timely execution while suspended.
+
+A current manual Pro grant suppresses an unsubmitted checkout. An admitted or uncertain payment
+retains its mounted observation and exact identity independently of that access observation.

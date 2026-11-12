@@ -1,5 +1,10 @@
+import {
+  makeTestOutboundTransport,
+  testOutboundTransportResponse,
+} from "~/shell/outbound-http/testing";
+import { makeLifecycleVerifier } from "./runtime";
 import { expect, it } from "@effect/vitest";
-import { Cause, DateTime, Effect, Exit, Redacted, Schema } from "effect";
+import { Cause, DateTime, Effect, Exit, Option, Redacted, Schema } from "effect";
 import assert from "node:assert/strict";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expectNotInspected } from "~/shell/testing/credential-evidence-harness";
@@ -315,5 +320,79 @@ it.effect("authenticates a known HMAC-SHA256 vector and rejects malformed signat
       ),
       Exit.fail(new InvalidWhatsAppSignature())
     );
+  })
+);
+
+it.effect.each([
+  { lookup: false, phone: false },
+  { lookup: false, phone: true },
+  { lookup: true, phone: false },
+  { lookup: true, phone: true },
+])("preserves verified recipient from raw status history (%o)", ({ lookup, phone }) =>
+  Effect.gen(function* () {
+    const recipient = phone
+      ? { recipient_id: "573001234567" }
+      : { recipient_user_id: "CO.13491208655302741918" };
+    const statuses = [{ ...status("delivered", "1775217960"), ...recipient }];
+    const body = lookup
+      ? new TextEncoder().encode(
+          yield* Schema.encodeEffect(UnknownJsonString)({
+            phone_number_id: "123456789",
+            message: {
+              id: providerMessageId,
+              kapso: { direction: "outbound", status: "delivered" },
+            },
+          })
+        )
+      : encodedBody(statuses);
+    let reads = 0;
+    const verifier = makeLifecycleVerifier({
+      apiKey: Redacted.make("test-kapso-key"),
+      admitLookup: () => Effect.void,
+      httpClient: makeTestOutboundTransport((request) => {
+        reads++;
+        return Effect.succeed(
+          testOutboundTransportResponse(
+            request,
+            Response.json({
+              id: providerMessageId,
+              kapso: { direction: "outbound", phone_number_id: "123456789", statuses },
+            })
+          )
+        );
+      }),
+    });
+    const result = yield* verifier({
+      rawBody: body,
+      secret: Redacted.make(secret),
+      signature: new Bun.CryptoHasher("sha256", secret).update(body).digest("hex"),
+      eventName: "whatsapp.message.delivered",
+      receivedAt,
+    });
+    expect(Option.isSome(result) && result.value).toMatchObject(
+      phone
+        ? { recipientPhone: Option.some("+573001234567") }
+        : { recipientUserId: Option.some("CO.13491208655302741918") }
+    );
+    expect(reads).toBe(lookup ? 1 : 0);
+  })
+);
+
+it.effect("refuses contradictory recipient identities within authenticated message history", () =>
+  Effect.gen(function* () {
+    const body = encodedBody([
+      { ...status("sent", "1775217959"), recipient_user_id: "CO.13491208655302741918" },
+      { ...status("delivered", "1775217960"), recipient_user_id: "CO.13491208655302741919" },
+    ]);
+    const result = yield* Effect.exit(
+      authenticateHostedStatus({
+        rawBody: body,
+        secret: Redacted.make(secret),
+        signature: new Bun.CryptoHasher("sha256", secret).update(body).digest("hex"),
+        eventName: "whatsapp.message.delivered",
+        receivedAt,
+      })
+    );
+    expect(Exit.isFailure(result)).toBe(true);
   })
 );

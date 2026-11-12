@@ -288,6 +288,11 @@
       "types": "./src/shell/agent/contract.ts",
       "import": "./src/shell/agent/contract.ts",
       "default": "./src/shell/agent/contract.ts"
+    },
+    "./native-http": {
+      "types": "./src/shell/native-http/runtime.ts",
+      "import": "./src/shell/native-http/runtime.ts",
+      "default": "./src/shell/native-http/runtime.ts"
     }
   },
   "scripts": {

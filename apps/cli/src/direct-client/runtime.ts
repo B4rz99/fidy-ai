@@ -1,3 +1,4 @@
+import { ownNativeFetch } from "@fidy/server/native-http";
 import {
   CanonicalAllowance,
   PATPairingApi,
@@ -27,76 +28,6 @@ const noContentStatus = 204;
 const resetContentStatus = 205;
 const notModifiedStatus = 304;
 const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
-
-const responseMetadata = (response: Response): ResponseInit => ({
-  status: response.status,
-  statusText: response.statusText,
-  headers: response.headers,
-});
-
-// Native reader cancellation may never settle; release the lock without awaiting it.
-const ownedResponse = (response: Response, init: Pick<RequestInit, "signal"> = {}): Response => {
-  const signal = init.signal;
-  const source = response.body;
-  if (source === null) return response;
-  const reader = source.getReader();
-  let released = false;
-  const release = (): void => {
-    if (released) return;
-    released = true;
-    signal?.removeEventListener("abort", cancel);
-    reader.releaseLock();
-  };
-  const cancel = (): void => {
-    if (released) return;
-    try {
-      reader.cancel().catch(() => undefined);
-    } finally {
-      release();
-    }
-  };
-  signal?.addEventListener("abort", cancel, { once: true });
-  if (noBodyStatuses.has(response.status)) {
-    cancel();
-    return new Response(null, responseMetadata(response));
-  }
-  const body = new ReadableStream<Uint8Array>(
-    {
-      pull(controller): Promise<void> {
-        return reader
-          .read()
-          .then((next) => {
-            if (released) return;
-            if (next.done) {
-              release();
-              controller.close();
-            } else {
-              controller.enqueue(Schema.decodeUnknownSync(Schema.Uint8Array)(next.value));
-            }
-          })
-          .catch((error: unknown) => {
-            if (released) return;
-            try {
-              reader.cancel().catch(() => undefined);
-            } finally {
-              release();
-            }
-            controller.error(error);
-          });
-      },
-      cancel,
-    },
-    { highWaterMark: 0 }
-  );
-  if (signal?.aborted === true) cancel();
-  return new Response(body, responseMetadata(response));
-};
-const ownFetch = (fetch: typeof globalThis.fetch): typeof globalThis.fetch =>
-  Object.assign(
-    (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
-      fetch(input, init).then((response) => ownedResponse(response, init)),
-    { preconnect: fetch.preconnect }
-  );
 
 const maximumRequestBytes = 16_384;
 const requestDeadline = "15 seconds";
@@ -249,7 +180,7 @@ export const makeProtectedClient = (
         }),
         Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
         Effect.provideService(HttpClient.TracerPropagationEnabled, false),
-        Effect.provideService(FetchHttpClient.Fetch, ownFetch(fetch)),
+        Effect.provideService(FetchHttpClient.Fetch, ownNativeFetch(fetch)),
         Effect.scoped
       );
     });

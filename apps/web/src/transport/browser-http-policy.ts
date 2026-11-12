@@ -25,24 +25,12 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/http";
-import { ownBrowserResponse } from "./browser-response-lifetime";
-
-const ownBrowserFetch = (nativeFetch: typeof globalThis.fetch): typeof globalThis.fetch =>
-  Object.assign(
-    (
-      input: Parameters<typeof nativeFetch>[0],
-      init?: Parameters<typeof nativeFetch>[1]
-    ): Promise<Response> =>
-      nativeFetch(input, init).then((response) =>
-        ownBrowserResponse({ response, signal: Option.fromNullishOr(init?.signal) })
-      ),
-    nativeFetch
-  );
+import { ownNativeFetch } from "@fidy/server/native-http";
 
 const ownNativeResponses = (client: HttpClient.HttpClient): HttpClient.HttpClient =>
   HttpClient.transformResponse(client, (response) =>
     Effect.flatMap(FetchHttpClient.Fetch, (nativeFetch) =>
-      response.pipe(Effect.provideService(FetchHttpClient.Fetch, ownBrowserFetch(nativeFetch)))
+      response.pipe(Effect.provideService(FetchHttpClient.Fetch, ownNativeFetch(nativeFetch)))
     )
   );
 

@@ -250,20 +250,24 @@ across explicit checks and visibility changes; exhaustion remains unresolved and
 check of the same BillingAttempt. A final observation of another attempt cannot settle this task.
 Only settled eligible DaviPlata submission uncertainty grants an approved same-request retry;
 busy approval does not grant another action.
-Cancellation is admitted only while the mounted OTP task is idle; an in-flight provider mutation
-or approved submission retains its lock. Child uncertainty exposes the parent's same-enrollment
-recovery without restoring OTP authority, and expired approved retry authority cannot establish
-that an uncertain payment failed.
+The mounted DaviPlata task synchronously admits commands and derives the selection lock from its
+private phase. Cancellation revokes authority during setup, OTP mutation and approved submission;
+cancelling admitted work preserves uncertainty and the parent's same-enrollment recovery lock.
+Idle OTP cancellation may safely refuse. An expired approved retry cannot establish that an uncertain
+payment failed.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
 OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,
-or shared atoms. The form retains its opaque challenge in a mounted ref; the gateway and transport
+or shared atoms. The mounted task retains its opaque challenge; the gateway and transport
 closures enclose rotating, one-use bearer authority and the approved token. Only safe interaction
 state and selection locks can enter shared view state. The transport independently verifies the
 exact operator-reviewed destinations against the prepared merchant environment, bounds requests,
 responses, attempts and the absolute authorization lifetime, and serializes actions. Unmount,
 explicit cancellation or authentication-lifetime revocation abort pending requests/readers and
-clear retained secrets and authority; authorization expiry also revokes the provider closure.
+clear retained secrets and authority. The original deadline retires the challenge and notifies the
+task synchronously, clearing visible OTP drafts and removing OTP actions. Idle expiry is refusal;
+expiry during admitted work preserves uncertainty. Known provider refusal and confirmed submission
+carry distinct retirement evidence so retirement cannot overwrite their conclusive outcomes.
 
 An uncertain authorization stops rather than blindly replaying an OTP mutation. Only an explicitly
 eligible uncertain Fidy submission can use `retrySubmission`, while its approved token remains in

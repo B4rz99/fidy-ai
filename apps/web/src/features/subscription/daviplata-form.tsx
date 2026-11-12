@@ -184,7 +184,19 @@ const useMountedDaviplata = (props: FormProps): Draft & Commands => {
   const draft = useDraft(props.enrollment.billingEmail);
   const [stage, setStage] = useState<Stage>("fields");
   const lock = useAtomSet(DaviplataAuthorizationLock.use());
-  const [task] = useState(() => makeMountedDaviplata({ ...props, publish: setStage, lock }));
+  const [task] = useState(() =>
+    makeMountedDaviplata({
+      ...props,
+      lock,
+      publish: (next) => {
+        if (next === "refused" || next === "uncertain") {
+          draft.setOtp("");
+          draft.setFields(emptyFields);
+        }
+        setStage(next);
+      },
+    })
+  );
   const [lifetimeRef] = useState<RefCallback<HTMLFormElement>>(
     () =>
       (
@@ -222,10 +234,7 @@ const useMountedDaviplata = (props: FormProps): Draft & Commands => {
     },
     retry: task.retry,
     cancel: () => {
-      if (task.cancel()) {
-        draft.setOtp("");
-        draft.setFields(emptyFields);
-      }
+      task.cancel();
     },
   };
 };

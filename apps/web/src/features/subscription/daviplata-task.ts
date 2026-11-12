@@ -66,6 +66,13 @@ const uncertain = (task: Task, retry: boolean): void => {
   change(task, retry ? "submission-retry" : "uncertain");
   task.input.onUncertain();
 };
+const stop = (task: Task): void => {
+  if (task.state.phase !== "otp") uncertain(task, false);
+  else {
+    retire(task);
+    change(task, "refused");
+  }
+};
 const apply = (task: Task, outcome: DaviplataConfirmation): void => {
   if (!active(task) || outcome.status === "busy") return;
   if (outcome.status === "submitted") {
@@ -97,6 +104,23 @@ const run = (
   );
   return true;
 };
+const install = (task: Task, current: DaviplataChallenge): void => {
+  if (!active(task)) {
+    current.dispose();
+    return;
+  }
+  task.state.challenge = Option.some(current);
+  const retired = (): void => {
+    if (!active(task) || current.retirement.reason === "submitted") return;
+    if (current.retirement.reason === "refused") {
+      retire(task);
+      change(task, "refused");
+    } else stop(task);
+  };
+  current.retirement.addEventListener("abort", retired, { once: true });
+  change(task, "otp");
+  if (current.retirement.aborted) retired();
+};
 const begin = (task: Task, fields: BeginInput): void => {
   if (!active(task) || task.state.phase !== "fields" || !allDecisionsAccepted(fields.decisions)) {
     Redacted.wipeUnsafe(fields.documentNumber);
@@ -112,13 +136,7 @@ const begin = (task: Task, fields: BeginInput): void => {
       signal: task.controller.signal,
     })
     .then(
-      (current) => {
-        if (!active(task)) current.dispose();
-        else {
-          task.state.challenge = Option.some(current);
-          change(task, "otp");
-        }
-      },
+      (current) => install(task, current),
       (error: unknown) => {
         if (!active(task)) return;
         if (error instanceof DaviplataSetupFailed && error.status === "refused") {
@@ -167,8 +185,7 @@ export const makeMountedDaviplata = (input: TaskInput): MountedDaviplata => {
       ) {
         return false;
       }
-      retire(task);
-      change(task, "refused");
+      stop(task);
       return true;
     },
   };

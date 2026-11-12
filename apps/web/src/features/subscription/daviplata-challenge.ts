@@ -17,6 +17,7 @@ export type DaviplataConfirmation =
  * within the original authorization lifetime, with the same PaymentRequestId and no new OTP call.
  */
 export type DaviplataChallenge = Readonly<{
+  retirement: AbortSignal;
   resend: () => Promise<DaviplataConfirmation>;
   confirm: (otp: Redacted.Redacted<string>) => Promise<DaviplataConfirmation>;
   retrySubmission: () => Promise<DaviplataConfirmation>;
@@ -93,12 +94,14 @@ type ChallengeControl = Readonly<{
   retryAllowed: () => boolean;
   pendingOtp: Set<Redacted.Redacted<string>>;
   dispose: () => void;
+  retirement: AbortSignal;
 }>;
 const bindActions = (
   input: ChallengeInput,
   execute: (action: Effect.Effect<DaviplataProviderOutcome>) => Promise<DaviplataConfirmation>,
   control: ChallengeControl
 ): DaviplataChallenge => ({
+  retirement: control.retirement,
   resend: () =>
     control.approved() ? Promise.resolve({ status: "refused" }) : execute(input.provider.resend()),
   confirm: (otp) =>
@@ -119,12 +122,32 @@ const bindActions = (
   dispose: control.dispose,
 });
 
-/** Encloses provider approval and projects only safe submission outcomes for the mounted form. */
-export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChallenge => {
+const forwardRetirement = (source: AbortSignal, controller: AbortController): void => {
+  const retire = (): void => controller.abort(source.reason === "refused" ? "refused" : "retired");
+  source.addEventListener("abort", retire, { once: true });
+  if (source.aborted) retire();
+};
+const completeSubmission = (controller: AbortController, dispose: () => void): void => {
+  controller.abort("submitted");
+  dispose();
+};
+const makeLifetime = (
+  input: ChallengeInput
+): Readonly<{
+  controller: AbortController;
+  signal: AbortSignal;
+  pendingOtp: Set<Redacted.Redacted<string>>;
+}> => {
   const controller = new AbortController();
   const signal = AbortSignal.any([controller.signal, input.provider.signal, input.client.signal]);
   const pendingOtp = new Set<Redacted.Redacted<string>>();
   signal.addEventListener("abort", () => pendingOtp.forEach(Redacted.wipeUnsafe), { once: true });
+  forwardRetirement(input.provider.signal, controller);
+  return { controller, signal, pendingOtp };
+};
+/** Encloses provider approval and projects only safe submission outcomes for the mounted form. */
+export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChallenge => {
+  const { controller, signal, pendingOtp } = makeLifetime(input);
   let disposed = false;
   let busy = false;
   let approved = false;
@@ -142,7 +165,12 @@ export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChalleng
     approved = true;
     retryAllowed = false;
     return input.submitApproved(outcome.token, signal).then(
-      (submission) => submittedOutcome(submission, () => !disposed && !signal.aborted, dispose),
+      (submission) =>
+        submittedOutcome(
+          submission,
+          () => !disposed && !signal.aborted,
+          () => completeSubmission(controller, dispose)
+        ),
       () =>
         recoverSubmission(
           input,
@@ -173,6 +201,7 @@ export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChalleng
     busy: () => busy,
     retryAllowed: () => retryAllowed,
     pendingOtp,
+    retirement: controller.signal,
     dispose,
   });
 };

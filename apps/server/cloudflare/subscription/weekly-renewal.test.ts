@@ -2546,12 +2546,10 @@ it.each([
       const retained = yield* fromPromise(() =>
         db
           .prepare("SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices")
-          .first()
+          .first<unknown>()
       );
-      expect(retained).toEqual({
-        send_started_at_ms: expect.any(Number),
-        provider_accepted_at_ms: null,
-      });
+      expect(retained).toHaveProperty("send_started_at_ms", expect.any(Number));
+      expect(retained).toMatchObject({ provider_accepted_at_ms: null });
       yield* fromPromise(() => runNotice(db));
       const send = vi.fn(() => Promise.resolve());
       yield* dispatchBillingPriceNotices({ DB: db, BILLING_COLLECTION_QUEUE: { send } });

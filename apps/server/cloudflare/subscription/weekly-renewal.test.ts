@@ -1778,7 +1778,7 @@ const runObservedRenewal = ({
 }: Readonly<{
   db: D1Database;
   id: string;
-  status: "DECLINED" | "APPROVED";
+  status: "DECLINED" | "APPROVED" | "PENDING";
   now: number;
   amountInCents: number;
 }>): Effect.Effect<void, Cause.UnknownError> =>
@@ -1836,6 +1836,292 @@ const latestRenewal = (db: D1Database): Effect.Effect<string, Cause.UnknownError
     Effect.map((row) => row.id),
     Effect.orDie
   );
+
+const runRetainedRenewal = (
+  input: Readonly<{ db: D1Database; payload: unknown }>
+): Effect.Effect<void, Cause.UnknownError> =>
+  fromPromise(() =>
+    runBillingCollectionWorkflow({
+      environment: {
+        DB: input.db,
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+      },
+      payload: input.payload,
+      sleep: (_name, _duration) => Promise.resolve(),
+      activity: (_name, _options, work) => work(),
+    })
+  );
+
+it.each([false, true])(
+  "settles sent renewal after grace with cancellation=%s without reopening collection",
+  (cancelAfterSend) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* cancellationFixture("card");
+        yield* admission(db);
+        const id = yield* latestRenewal(db);
+        let approved = false;
+        let posts = 0;
+        let gets = 0;
+        vi.stubGlobal(
+          "fetch",
+          withOpenAiFetch((_request, init) => {
+            if (init?.method === "POST") posts++;
+            else gets++;
+            return Promise.resolve(
+              Response.json({
+                data: {
+                  ...recordedTransactions[approved ? "APPROVED" : "PENDING"].data,
+                  id: `late-${id}`,
+                  reference: `fidy-${id}`,
+                  amount_in_cents: 990000,
+                  payment_source_id: 3891,
+                  finalized_at: approved ? "2026-10-17T15:00:00Z" : null,
+                },
+              })
+            );
+          })
+        );
+        const collection = { version: 1, attemptId: id };
+        yield* runRetainedRenewal({ db, payload: collection });
+        expect(posts).toBe(1);
+        if (cancelAfterSend) expect((yield* cancel(db, dueAt + 1000)).status).toBe(200);
+        vi.setSystemTime(dueAt + 345600000);
+        yield* fromPromise(() =>
+          db.prepare("UPDATE test_database_clock SET instant='2026-10-17T15:00:00Z'").run()
+        );
+        yield* Effect.all([admission(db, dueAt + 345600000), admission(db, dueAt + 345600001)], {
+          concurrency: 2,
+        });
+        yield* runRetainedRenewal({ db, payload: collection });
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT status,collection_state,collection_sent_at_ms FROM billing_attempt_context WHERE id=?"
+              )
+              .bind(id)
+              .first()
+          )
+        ).toEqual({ status: "pending", collection_state: "sent", collection_sent_at_ms: dueAt });
+        approved = true;
+        yield* runRetainedRenewal({
+          db,
+          payload: { version: 1, kind: "lookup", transactionId: `late-${id}` },
+        });
+        yield* runRetainedRenewal({ db, payload: collection });
+        expect(posts).toBe(1);
+        expect(gets).toBe(2);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT status,period_starts_at_ms,period_ends_at_ms,calendar_anchor_ms,collection_sent_at_ms FROM billing_attempt_context WHERE previous_paid_attempt_id=?"
+              )
+              .bind(attemptId)
+              .all()
+          )).results
+        ).toEqual([
+          {
+            status: "succeeded",
+            period_starts_at_ms: dueAt,
+            period_ends_at_ms: Date.parse("2026-10-20T15:00:00Z"),
+            calendar_anchor_ms: Date.parse("2026-10-06T15:00:00Z"),
+            collection_sent_at_ms: dueAt,
+          },
+        ]);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare("SELECT id FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL")
+              .all()
+          )).results
+        ).toHaveLength(2);
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare("SELECT renewal_anchor_ms FROM subscription_standing WHERE user_id=?")
+              .bind(userId)
+              .first()
+          )
+        ).toEqual({ renewal_anchor_ms: Date.parse("2026-10-20T15:00:00Z") });
+      })
+    )
+);
+
+it("retains an unknown sent renewal after grace without fabricating failure or another collection", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* admission(db);
+      const id = yield* latestRenewal(db);
+      const provider = vi.fn(() => Promise.reject(new Error("Unknown provider outcome")));
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
+      const payload = { version: 1, attemptId: id };
+      yield* runRetainedRenewal({ db, payload });
+      vi.setSystemTime(dueAt + 345600000);
+      yield* fromPromise(() =>
+        db.prepare("UPDATE test_database_clock SET instant='2026-10-17T15:00:00Z'").run()
+      );
+      yield* runRetainedRenewal({ db, payload });
+      yield* admission(db, dueAt + 345600000);
+      yield* admission(db, dueAt + 432000000);
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT status,collection_state,collection_sent_at_ms,no_charge_confirmed_at_ms FROM billing_attempt_context WHERE previous_paid_attempt_id=?"
+            )
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toEqual([
+        {
+          status: "pending",
+          collection_state: "sent",
+          collection_sent_at_ms: dueAt,
+          no_charge_confirmed_at_ms: null,
+        },
+      ]);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT transaction_id FROM billing_provider_transactions WHERE attempt_id=?")
+            .bind(id)
+            .all()
+        )).results
+      ).toHaveLength(0);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL")
+            .all()
+        )).results
+      ).toHaveLength(1);
+    })
+  ));
+
+it("converges concurrent sent sibling approvals after grace on one original monthly period", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture("card", billingCalendars[1]));
+      const boundary = Date.parse("2026-02-28T23:30:00Z");
+      yield* admission(db, boundary);
+      const first = yield* latestRenewal(db);
+      yield* runObservedRenewal({
+        db,
+        id: first,
+        status: "DECLINED",
+        now: boundary,
+        amountInCents: 2890000,
+      });
+      yield* admission(db, boundary + 86400000);
+      const retry = yield* latestRenewal(db);
+      expect(retry).not.toBe(first);
+      yield* runObservedRenewal({
+        db,
+        id: retry,
+        status: "PENDING",
+        now: boundary + 86400000,
+        amountInCents: 2890000,
+      });
+      vi.setSystemTime(boundary + 345600000);
+      yield* fromPromise(() =>
+        db.prepare("UPDATE test_database_clock SET instant='2026-03-04T23:30:00Z'").run()
+      );
+      let posts = 0;
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((request, init) => {
+          if (init?.method === "POST") posts++;
+          else gets++;
+          const id = new Request(request, init).url.endsWith(`dunning-${first}`) ? first : retry;
+          return Promise.resolve(
+            Response.json({
+              data: {
+                ...recordedTransactions.APPROVED.data,
+                id: `dunning-${id}`,
+                reference: `fidy-${id}`,
+                amount_in_cents: 2890000,
+                payment_source_id: 3891,
+                finalized_at: "2026-03-04T23:30:00Z",
+              },
+            })
+          );
+        })
+      );
+      yield* Effect.forEach(
+        [first, retry],
+        (id) =>
+          runRetainedRenewal({
+            db,
+            payload: { version: 1, kind: "lookup", transactionId: `dunning-${id}` },
+          }),
+        { concurrency: 2 }
+      );
+      yield* Effect.all(
+        [
+          admission(db, boundary + 345600000),
+          ...[first, retry].map((id) =>
+            runRetainedRenewal({ db, payload: { version: 1, attemptId: id } })
+          ),
+        ],
+        { concurrency: 3 }
+      );
+      expect(posts).toBe(0);
+      expect(gets).toBe(2);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT status,collection_state FROM billing_attempt_context WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
+            )
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toEqual([
+        { status: "succeeded", collection_state: "sent" },
+        { status: "succeeded", collection_state: "sent" },
+      ]);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT paid_starts_at_ms,paid_ends_at_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL ORDER BY paid_starts_at_ms"
+            )
+            .all()
+        )).results
+      ).toEqual([
+        { paid_starts_at_ms: Date.parse("2026-01-31T23:30:00Z"), paid_ends_at_ms: boundary },
+        { paid_starts_at_ms: boundary, paid_ends_at_ms: Date.parse("2026-03-31T23:30:00Z") },
+      ]);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT renewal_anchor_ms FROM subscription_standing WHERE user_id=?")
+            .bind(userId)
+            .first()
+        )
+      ).toEqual({ renewal_anchor_ms: Date.parse("2026-03-31T23:30:00Z") });
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT transaction_id,status FROM billing_provider_transactions WHERE attempt_id IN (?,?) ORDER BY transaction_id"
+            )
+            .bind(first, retry)
+            .all()
+        )).results
+      ).toEqual(
+        [first, retry].sort().map((id) => ({ transaction_id: `dunning-${id}`, status: "APPROVED" }))
+      );
+    })
+  ));
 
 it.each(["card", "nequi", "daviplata"] as const)(
   "bounds $0 retries at 24/48 hours and exhausts grace without granting another paid period",

@@ -18,7 +18,7 @@ import { WompiSourceId, type WompiTransactionId, WompiTransactionReference } fro
 import { amountInCentsForBilling } from "./billing-rules";
 import { paidPeriodFor } from "../../../src/core/subscription/operations";
 import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
-import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { type WompiTransportFactory } from "./wompi-runtime";
 import { BillingCollectionFailure, type BillingRuntime } from "../contract";
 
@@ -244,7 +244,7 @@ const claimCollection = (
 ): Effect.Effect<boolean, BillingCollectionFailure> => {
   const { environment, captured, attemptId, now } = input;
   const collectionClaim = {
-    sql: `UPDATE billing_attempts AS billing_collection_work SET collection_state = 'sent', collection_sent_at_ms = ? WHERE collection_state IS NOT NULL AND id = ? AND collection_state = 'armed'`,
+    sql: `UPDATE billing_attempts AS billing_collection_work SET collection_state = 'sent', collection_sent_at_ms = ? WHERE collection_state IS NOT NULL AND id = ? AND collection_state = 'armed' AND status = 'pending'`,
     params: [now, attemptId],
   };
   const protectedClaim = Option.isSome(captured.previous_paid_attempt_id)
@@ -267,13 +267,55 @@ const claimCollection = (
           ],
         },
       })
-    : collectionClaim;
+    : protectConsentStatement({
+        subject: { _tag: "User", userId: UserId.make(captured.user_id) },
+        requirement: "active",
+        statement: collectionClaim,
+      });
   return attempt(() =>
     environment.DB.prepare(protectedClaim.sql)
       .bind(...protectedClaim.params)
       .run()
   ).pipe(Effect.map((result) => result.meta.changes === 1));
 };
+
+const rejectCollection = (
+  db: D1Database,
+  attemptId: BillingAttemptId,
+  claimedAtMs: number
+): Effect.Effect<void, BillingCollectionFailure> =>
+  attempt(() =>
+    db
+      .prepare(`UPDATE billing_attempts SET collection_state = 'rejected'
+      WHERE id = ? AND collection_state = 'sent' AND collection_sent_at_ms = ?`)
+      .bind(attemptId, claimedAtMs)
+      .run()
+  ).pipe(Effect.asVoid);
+
+const retainCollectionCandidate = (
+  db: D1Database,
+  captured: typeof Snapshot.Type,
+  candidate: WompiTransactionId
+): Effect.Effect<void, BillingCollectionFailure> =>
+  attempt(() =>
+    db.batch([
+      db
+        .prepare(`INSERT INTO billing_provider_transactions
+      (transaction_id, attempt_id) VALUES (?, ?)
+      ON CONFLICT(transaction_id) DO UPDATE SET attempt_id=excluded.attempt_id
+      WHERE billing_provider_transactions.attempt_id IS NULL`)
+        .bind(candidate, captured.id),
+      ...(captured.method === "card" && Option.isNone(captured.previous_paid_attempt_id)
+        ? [
+            db
+              .prepare(
+                `UPDATE billing_attempts SET checkout_transaction_id=incoming.transaction_id FROM (SELECT ? AS attempt_id,? AS transaction_id) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.checkout_transaction_id IS NULL`
+              )
+              .bind(captured.id, candidate),
+          ]
+        : []),
+    ])
+  ).pipe(Effect.asVoid);
 
 export const collectBillingTransaction = (
   input: Readonly<{
@@ -292,7 +334,7 @@ export const collectBillingTransaction = (
     const now = yield* Clock.currentTimeMillis;
     const claimed = yield* claimCollection({ environment, captured, attemptId, now });
     if (!claimed) return;
-    const created = yield* Effect.exit(
+    const created = yield* Effect.result(
       client.createTransaction({
         reference: captured.wompi_reference,
         amountInCents: amount,
@@ -304,12 +346,17 @@ export const collectBillingTransaction = (
     );
     // Wompi documents charge lookup by provider id, not by reference. Without a response id,
     // retain ambiguity until a signed callback supplies a lookup hint; NEVER repeat the POST.
-    if (Exit.isFailure(created)) return;
+    if (Result.isFailure(created)) {
+      if (created.failure.certainty === "rejected") {
+        yield* rejectCollection(environment.DB, attemptId, now);
+      }
+      return;
+    }
     if (
       !matchesSnapshot({
-        found: created.value,
+        found: created.success,
         captured,
-        expectedId: created.value.transactionId,
+        expectedId: created.success.transactionId,
         expectedAmount: amount,
         environment: client.environment,
         requireFinalization: false,
@@ -317,21 +364,7 @@ export const collectBillingTransaction = (
     ) {
       return;
     }
-    const candidate = created.value.transactionId;
-    yield* attempt(() =>
-      environment.DB.batch([
-        environment.DB.prepare(`INSERT INTO billing_provider_transactions
-      (transaction_id, attempt_id) VALUES (?, ?)
-      ON CONFLICT(transaction_id) DO UPDATE SET attempt_id=excluded.attempt_id
-      WHERE billing_provider_transactions.attempt_id IS NULL`).bind(candidate, attemptId),
-        ...(captured.method === "card" && Option.isNone(captured.previous_paid_attempt_id)
-          ? [
-              environment.DB.prepare(
-                `UPDATE billing_attempts SET checkout_transaction_id=incoming.transaction_id FROM (SELECT ? AS attempt_id,? AS transaction_id) AS incoming WHERE billing_attempts.id=incoming.attempt_id AND billing_attempts.checkout_transaction_id IS NULL`
-              ).bind(attemptId, candidate),
-            ]
-          : []),
-      ])
-    );
+    const candidate = created.success.transactionId;
+    yield* retainCollectionCandidate(environment.DB, captured, candidate);
     yield* reconcileBillingTransaction({ db: environment.DB, client, transactionId: candidate });
   }).pipe(Effect.withSpan("billing.collection.collect"));

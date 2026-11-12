@@ -1975,6 +1975,51 @@ it.each(["card", "nequi", "daviplata"] as const)(
       })
     )
 );
+const verifyQueuedSiblingRefusal = (
+  db: D1Database,
+  queued: string,
+  succeeded: string
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const facts = (): Promise<unknown> =>
+      db
+        .prepare(`SELECT retry.collection_state,retry.collection_sent_at_ms,retry.status,
+        retry.paid_starts_at_ms,paid.status AS original_status,paid.paid_ends_at_ms,
+        sub.current_paid_attempt_id
+        FROM billing_attempt_context retry JOIN subscriptions sub ON sub.id=retry.subscription_id
+        JOIN billing_attempt_context paid ON paid.id=? WHERE retry.id=?`)
+        .bind(succeeded, queued)
+        .first();
+    const retained = yield* fromPromise(facts);
+    expect(retained).toEqual({
+      collection_state: "rejected",
+      collection_sent_at_ms: null,
+      status: "pending",
+      paid_starts_at_ms: null,
+      original_status: "succeeded",
+      paid_ends_at_ms: Date.parse("2026-03-31T23:30:00Z"),
+      current_paid_attempt_id: succeeded,
+    });
+    const provider = vi.fn(() => Promise.reject(new Error("Fenced sibling must not reach Wompi")));
+    vi.stubGlobal("fetch", withOpenAiFetch(provider));
+    yield* fromPromise(() =>
+      runBillingCollectionWorkflow({
+        environment: {
+          DB: db,
+          WOMPI_ENVIRONMENT: "sandbox",
+          WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+          WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+          WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+        },
+        payload: { version: 1, attemptId: queued },
+        sleep: (_name, _duration) => Promise.resolve(),
+        activity: (_name, _options, work) => work(),
+      })
+    );
+    expect(provider).not.toHaveBeenCalled();
+    expect(yield* fromPromise(facts)).toEqual(retained);
+  });
+
 it("recovers on an earlier verified success while a retry is still queued", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1990,6 +2035,7 @@ it("recovers on an earlier verified success while a retry is still queued", () =
         amountInCents: 2890000,
       });
       yield* admission(db, boundary + 86400000);
+      const queued = yield* latestRenewal(db);
       yield* runObservedRenewal({
         db,
         id: first,
@@ -1997,6 +2043,7 @@ it("recovers on an earlier verified success while a retry is still queued", () =
         now: boundary + 86400001,
         amountInCents: 2890000,
       });
+      yield* verifyQueuedSiblingRefusal(db, queued, first);
       const response = yield* executeSubscriptionRenewalAdmission({
         db,
         userId,

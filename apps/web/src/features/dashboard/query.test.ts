@@ -5,6 +5,7 @@ import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
+import { retireQueryLifetime } from "@/transport/query-lifetime";
 import { type DashboardReadAttempt, dashboardQuery } from "./query";
 
 const view = {
@@ -41,11 +42,11 @@ const requiredGate = (
   index: number
 ): Deferred.Deferred<void> => Option.getOrThrow(Array.get(gates, index));
 const retireAuthentication = Effect.fnUntraced(function* (
-  events: EventTarget,
+  registry: AtomRegistry.AtomRegistry,
   attempts: readonly DashboardReadAttempt[],
   held: Deferred.Deferred<void>
 ) {
-  events.dispatchEvent(new Event("fidy:authentication-ended"));
+  retireQueryLifetime(registry);
   expect(attempts.every((attempt) => !attempt.completed())).toBe(true);
   yield* Deferred.succeed(held, undefined);
   yield* Effect.yieldNow;
@@ -143,7 +144,7 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
       );
       const retired = query.refresh(registry);
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(7)));
-      yield* retireAuthentication(events, [attempt, retired], requiredGate(gates, 6));
+      yield* retireAuthentication(registry, [attempt, retired], requiredGate(gates, 6));
       unmount();
       registry.dispose();
       const replacementRegistry = AtomRegistry.make();

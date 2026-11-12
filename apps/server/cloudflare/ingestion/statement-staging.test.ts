@@ -1146,3 +1146,49 @@ effectIt.layer(NodeFileSystem.layer)((it) => {
     );
   }
 });
+
+it("rechecks original staging expiry after placeholder acknowledgment without writing payload", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => makeRuntime());
+      let payloads = 0;
+      const bucket = new Proxy(runtime.bucket, {
+        get(target, property): unknown {
+          if (property === "put") {
+            return (...args: Parameters<R2Bucket["put"]>): ReturnType<R2Bucket["put"]> => {
+              const placeholder = args[2]?.customMetadata?.purpose === "private-object-placeholder";
+              if (!placeholder) payloads++;
+              return target.put(...args).then((stored) => {
+                if (placeholder) {
+                  nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime;
+                }
+                return stored;
+              });
+            };
+          }
+          return Reflect.get(target, property, target);
+        },
+      });
+      const staging = StatementStaging.make({
+        database: runtime.database,
+        bucket,
+        nowEpochMs: currentNowEpochMs,
+      });
+      expect(
+        Result.isFailure(
+          yield* Effect.result(
+            staging.stageStatementBytes({ userId: userA, request: request(statementBytes) })
+          )
+        )
+      ).toBe(true);
+      expect(payloads).toBe(0);
+      expect(
+        yield* fromTestPromise(() => count(runtime.database, "statement_staging_objects"))
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          runtime.database.prepare("SELECT user_id,bucket FROM erasure_writers").all()
+        )
+      ).toMatchObject({ results: [{ user_id: userA, bucket: "statement" }] });
+    })
+  ));

@@ -9,11 +9,13 @@ export type PrivateObjectBucket = Readonly<{
 /** Keys and metadata are fixed owner projections. Authorization must recheck the exact live owner reservation after the placeholder settles. */
 export type PrivateObjectWrite<E, R> = Readonly<{
   bucket: PrivateObjectBucket;
+  userId: string;
   key: string;
   bytes: Uint8Array;
   metadata: Readonly<Record<string, string>>;
   digest: Option.Option<Uint8Array>;
-  predecessor: Option.Option<string>;
+  /** Exact payload observation established as lawful by the owner, never a listed control ETag. */
+  predecessor: Option.Option<Readonly<{ etag: string; purpose: string }>>;
   authorise: Effect.Effect<boolean, E, R>;
 }>;
 

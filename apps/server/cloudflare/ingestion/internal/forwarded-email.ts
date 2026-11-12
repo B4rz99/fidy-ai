@@ -354,6 +354,7 @@ export const receiveForwardedEmail = Effect.fn(function* (
       const stored = yield* Effect.result(
         writePrivateObject({
           bucket: environment.EMAIL_BUCKET,
+          userId: approved.user_id,
           key: objectKey,
           bytes,
           metadata: { purpose: "forwarded-email" },
@@ -368,9 +369,11 @@ export const receiveForwardedEmail = Effect.fn(function* (
         }).pipe(Effect.mapError(authorityUnavailable))
       );
       if (Result.isFailure(stored)) {
-        yield* erasePrivateObject({ bucket: environment.EMAIL_BUCKET, key: objectKey }).pipe(
-          Effect.mapError(authorityUnavailable)
-        );
+        yield* erasePrivateObject({
+          bucket: environment.EMAIL_BUCKET,
+          userId: approved.user_id,
+          key: objectKey,
+        }).pipe(Effect.mapError(authorityUnavailable));
         yield* io(() =>
           environment.DB.prepare(
             "DELETE FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'storing'"
@@ -406,9 +409,11 @@ export const receiveForwardedEmail = Effect.fn(function* (
       const published = Schema.decodeUnknownOption(ReceiptState)(committed);
       if (committed !== null && Option.isNone(published)) return yield* authorityUnavailable();
       if (Option.isSome(published) && published.value.state === "queued") return;
-      yield* erasePrivateObject({ bucket: environment.EMAIL_BUCKET, key: objectKey }).pipe(
-        Effect.mapError(authorityUnavailable)
-      );
+      yield* erasePrivateObject({
+        bucket: environment.EMAIL_BUCKET,
+        userId: approved.user_id,
+        key: objectKey,
+      }).pipe(Effect.mapError(authorityUnavailable));
       yield* io(() =>
         environment.DB.prepare(
           "DELETE FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'storing'"
@@ -536,9 +541,11 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
         ),
       ])
     );
-    yield* erasePrivateObject({ bucket: environment.EMAIL_BUCKET, key: row.object_key }).pipe(
-      Effect.mapError(authorityUnavailable)
-    );
+    yield* erasePrivateObject({
+      bucket: environment.EMAIL_BUCKET,
+      userId: row.user_id,
+      key: row.object_key,
+    }).pipe(Effect.mapError(authorityUnavailable));
     yield* io(() =>
       environment.DB.prepare(
         "UPDATE forwarded_email_receipts SET state = 'expired' WHERE id = ? AND user_id = ? AND state IN ('storing', 'queued')"

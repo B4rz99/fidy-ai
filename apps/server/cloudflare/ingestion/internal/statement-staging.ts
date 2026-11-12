@@ -215,7 +215,11 @@ const AdmissionStateRow = Schema.Struct({
 });
 type AdmissionStateRow = typeof AdmissionStateRow.Type;
 
-const ExpiredRow = Schema.Struct({ id: Schema.String, object_key: Schema.String });
+const ExpiredRow = Schema.Struct({
+  id: Schema.String,
+  user_id: Schema.String,
+  object_key: Schema.String,
+});
 const ExpiredSubmissionRow = Schema.Struct({ id: Schema.String, staging_id: Schema.String });
 
 const unavailable = (): StatementStagingUnavailable =>
@@ -364,9 +368,10 @@ const submissionByKey = (
  * `deleting` row, so the bounded sweep retries instead of leaking an unreachable object. */
 const removeObject = (
   bucket: R2Bucket,
+  userId: string,
   objectKey: string
 ): Effect.Effect<void, StatementStagingUnavailable> =>
-  erasePrivateObject({ bucket, key: objectKey }).pipe(Effect.mapError(() => unavailable()));
+  erasePrivateObject({ bucket, userId, key: objectKey }).pipe(Effect.mapError(() => unavailable()));
 
 const statementFailure = (reason: BoundedBodyReadFailed["reason"]): StatementStagingFailed => {
   if (reason === "resource-limit") return failed("resource-limit");
@@ -434,6 +439,7 @@ const writeStagingObject = (
 ): Effect.Effect<boolean, StatementStagingUnavailable> =>
   writePrivateObject({
     bucket: config.bucket,
+    userId: input.userId,
     key: input.objectKey,
     bytes: input.bytes,
     metadata: { purpose: "statement-original" },
@@ -481,11 +487,11 @@ const markStagingAvailable = (
  * object delete leaves the row behind for the bounded sweep instead of an unreachable object. */
 const discardStagedUpload = (
   config: StatementStagingConfig,
-  input: Readonly<{ stagingId: string; objectKey: string }>
+  input: Readonly<{ stagingId: string; objectKey: string; userId: string }>
 ): Effect.Effect<void, StatementStagingUnavailable> =>
   Effect.gen(function* () {
     yield* markStagingDeleting(config.database, input.stagingId);
-    yield* removeObject(config.bucket, input.objectKey);
+    yield* removeObject(config.bucket, input.userId, input.objectKey);
     yield* removeDeletingStagingRow(config.database, input.stagingId);
   });
 
@@ -1631,7 +1637,7 @@ const prepareStagingRetention = (database: D1Database, nowEpochMs: number): D1Pr
                )
              ) ORDER BY expires_at_ms,id LIMIT ?
            )
-           RETURNING id, object_key`
+           RETURNING id, user_id, object_key`
     )
     .bind(
       maximumStatementStagingSweep,
@@ -1656,7 +1662,8 @@ const sweepExpiredStatementStaging = (
     if (rows.length === 0) return { objectsDeleted: 0, rowsDeleted: 0 };
     yield* Effect.forEach(
       rows,
-      ({ object_key: objectKey }) => removeObject(config.bucket, objectKey),
+      ({ user_id: userId, object_key: objectKey }) =>
+        removeObject(config.bucket, userId, objectKey),
       { discard: true }
     );
     const ids = encodeRetentionIds(rows.map(({ id }) => id));

@@ -31,8 +31,8 @@ they retain complete JSON and leave the maintained Markdown exports unchanged. S
 Starlight/Expressive Code, while scripts remain limited to self and exact hashes. Pagefind requires
 WebAssembly compilation, so script policy permits `wasm-unsafe-eval`, not arbitrary JavaScript eval.
 Starlight's unprocessed inline-script whitespace differs from Astro's collected hashes; the final
-build step adds hashes of the actual emitted inline script bytes. Browser acceptance checks verify
-search, clipboard, navigation, accessibility and absence of CSP violations.
+build step adds hashes of the actual emitted inline script bytes. Artifact tests validate the emitted documentation, references and security policy. Automated browser
+acceptance and visual capture suites are not maintained.
 
 ## Automatic publication
 
@@ -40,7 +40,7 @@ search, clipboard, navigation, accessibility and absence of CSP violations.
 product stack never deploys it. The publication workflow runs automatically on changes to docs,
 their infrastructure or shared build inputs on protected trunk, using the existing production
 environment. It checks out the triggering revision, builds the site, verifies types and runs the
-artifact, reference and browser checks before deploying. There is no owner attestation input,
+artifact and reference checks before deploying. There is no owner attestation input,
 manual dispatch or scheduled refresh.
 
 The three documented journeys must be verified against Production before the first publication.

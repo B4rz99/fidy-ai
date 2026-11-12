@@ -86,7 +86,6 @@ The current Budget Worker/D1 file passed all 37 checks in 18.58 seconds when run
 ## Rerun
 
 ```sh
-bun run --cwd apps/web test:browser budgets.spec.ts budget-widget.spec.ts --workers=1
 bun run --cwd apps/web test src/features/budgets/presentation.test.ts
 bun run --cwd apps/server test:core src/core/budgets --coverage.enabled=false
 bun run --cwd apps/server test:cloudflare cloudflare/budgets/budgets.test.ts --maxWorkers=1

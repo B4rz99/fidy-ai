@@ -1,6 +1,5 @@
 import { Clock, Effect } from "effect";
 import type { Scope } from "effect";
-import { chromium } from "@playwright/test";
 import type { Browser, BrowserContext, Page, Route } from "@playwright/test";
 import { approvePairing, attempt, requireCheck } from "./production-fixture";
 import type { ApprovedScope, VerificationFailure } from "./production-fixture";
@@ -10,7 +9,9 @@ const REDIRECT = 302;
 const OAUTH_START_TIMEOUT_MS = 30_000;
 const CALLBACK = /http:\/\/(?:127\.0\.0\.1|localhost):\d+\/callback\?/u;
 export const productionBrowser = Effect.acquireRelease(
-  attempt("Cannot start verification browser", () => chromium.launch({ headless: true })),
+  attempt("Cannot start verification browser", () =>
+    import("@playwright/test").then(({ chromium }) => chromium.launch({ headless: true }))
+  ),
   (browser) =>
     attempt("Cannot close verification browser", () => browser.close()).pipe(Effect.orDie)
 );

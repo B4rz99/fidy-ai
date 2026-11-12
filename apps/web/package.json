@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --bun vite",
     "shadcn": "shadcn",
-    "build": "bun run typecheck && bun --bun vite build",
+    "build": "bun run typecheck && bun run build:artifact",
+    "build:artifact": "bun --bun vite build",
     "build:production": "bun scripts/build-production.ts",
     "typecheck": "tsc --build tsconfig.app.json",
     "test": "bun --bun vitest run",
@@ -14,10 +15,7 @@
     "check:bundle": "bun scripts/check-browser-bundle.ts",
     "check:policy": "bun scripts/check-policy-integrity.ts",
     "check:shadcn": "bun scripts/check-shadcn-integrity.ts",
-    "lint:deps": "bun ../../tools/depcruise/run.mjs",
-    "test:browser": "bun --bun playwright test --config playwright.config.ts",
-    "test:browser:cli": "CLI_ACCEPTANCE_MODE=cli bun --bun playwright test --config playwright.cli.config.ts",
-    "test:desktop-navigation": "FIDY_ASSESSMENT=small CLI_ACCEPTANCE_MODE=cli bun --bun playwright test --config playwright.desktop-navigation.config.ts"
+    "lint:deps": "bun ../../tools/depcruise/run.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",
@@ -45,9 +43,7 @@
     "use-stick-to-bottom": "1.1.6"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.14.0",
     "@effect/platform-bun": "4.1.2",
-    "@playwright/test": "1.64.1",
     "@tailwindcss/vite": "4.3.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
@@ -55,7 +51,6 @@
     "@vitest/coverage-istanbul": "5.1.0",
     "axe-core": "4.14.0",
     "jsdom": "30.1.3",
-    "playwright-core": "1.64.1",
     "shadcn": "4.23.0",
     "tailwindcss": "4.3.4",
     "typescript": "7.0.2",

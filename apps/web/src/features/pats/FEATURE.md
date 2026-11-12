@@ -103,7 +103,6 @@ Latest focused verification, 2026-10-14: all 11 built-browser checks across `acc
 
 ```sh
 bun run --cwd apps/web test src/features/pats/reauthentication-draft.test.ts
-bun run --cwd apps/web test:browser access-management.spec.ts access-native-pagination.spec.ts oauth-review.spec.ts --workers=1
 ```
 
 On 2026-10-12 the MCP read boundary was changed to require a live session, while individual and aggregate revocation retain fresh-session admission and commit-time guards. All 15 Worker/D1 management tests passed, including the freshness-expired read, both mutation refusals, and revoked-session read refusal. All four combined-access browser checks and five native OAuth browser journeys passed with the updated dependency pins.

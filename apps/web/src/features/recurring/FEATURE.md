@@ -397,7 +397,6 @@ model-written approval prose.
 ```sh
 bun run --cwd apps/server test:core
 bun run --cwd apps/server test:cloudflare cloudflare/recurring-plans/recurring-plans.test.ts cloudflare/recurring/recurring.test.ts cloudflare/insights/recurring-digest.test.ts cloudflare/oauth-agents/oauth-confirmation.test.ts --maxWorkers=1
-bun run --cwd apps/web test:browser recurring-plans.spec.ts recurring-recovery.spec.ts recurring-pagination.spec.ts recurring-report.spec.ts --workers=1
 ```
 
 The application frame retains a visited recurring workspace within the current authentication

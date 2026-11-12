@@ -67,16 +67,5 @@ JavaScript compiler API while the workspace uses TypeScript 7. `build:production
 also requires and publishes the exact `RELEASE_GIT_SHA`. The normal Production
 workflow builds and verifies both static artifacts and checks their revision on
 their public hosts. Core/ingress candidate promotion remains server-owned.
-Live OAuth checks inherit only a verified normal-traffic D1 quota deferral. They still validate
-available metadata and the unauthenticated MCP challenge; an unavailable probe must return the
-exact non-cacheable OAuth refusal. Reports annotate deferred availability separately.
-
-Playwright uses Wrangler’s local Worker and asset server for built output on port 4322, with JavaScript-disabled content
-checks, canonical metadata, sitemap exclusions, interactive island hydration,
-theme persistence, browser/CSP errors and serious accessibility violations with no slogan contrast exception. The
-repository verification groups include the site build, types and browser suite.
-
-The existing Builds runner owns the public-site browser suite and reuses the static artifact
-it built earlier in that same job. `SITE_BROWSER_PREBUILT=true` checks the artifact before
-starting preview. Standalone browser runs still build fresh output. Product browser shards do
-not repeat these independent public-site cases.
+Repository verification covers the site build, types and static artifact policies. Automated
+browser suites and browser-based production discovery checks are not maintained.

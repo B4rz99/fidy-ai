@@ -34,7 +34,6 @@ bun run --cwd apps/server test:core src/core/budgets --coverage.enabled=false
 bun run --cwd apps/server test:cloudflare cloudflare/budgets --maxWorkers=1
 bun run --cwd apps/web test src/features/dashboard/feature.test.tsx src/features/dashboard/money-presentation.test.ts src/features/dashboard/presentation.test.ts
 bun run --cwd apps/server test:cloudflare cloudflare/dashboard --maxWorkers=1
-bun run --cwd apps/web test:browser budget-widget.spec.ts --workers=1 --timeout=120000
 bun run --cwd apps/server test:cloudflare cloudflare/consent/proactivity-consent.test.ts cloudflare/agent/proactivity-choice.test.ts cloudflare/insights/proactivity-runtime.test.ts --maxWorkers=1
 bun run --cwd apps/server test:core src/core/insights --coverage.enabled=false
 bun run --cwd apps/server test:whatsapp

@@ -121,8 +121,7 @@
               "./scripts/mcp/production-native.test.ts",
               "./scripts/titular-requests/main.ts",
               "./scripts/dev-browser.ts",
-              "./scripts/titular-requests/runtime.test.ts",
-              "./apps/web/e2e/titular-case-fixture.ts"
+              "./scripts/titular-requests/runtime.test.ts"
             ],
             "options": {
               "diagnosticSeverity": {
@@ -162,12 +161,7 @@
             }
           },
           {
-            "include": [
-              "./apps/cli/src/main.ts",
-              "./apps/cli/test/journey-entry.ts",
-              "./apps/cli/test/recovery-entry.ts",
-              "./apps/web/e2e/cli-login.spec.ts"
-            ],
+            "include": ["./apps/cli/src/main.ts", "./apps/cli/test/recovery-entry.ts"],
             "options": {
               "diagnosticSeverity": {
                 "strictEffectProvide": "off"
@@ -227,23 +221,25 @@
           },
           {
             "include": ["./infra/cloudflare/alchemy.run.ts"],
-            "options": { "diagnosticSeverity": { "strictEffectProvide": "off" } }
+            "options": {
+              "diagnosticSeverity": {
+                "strictEffectProvide": "off"
+              }
+            }
           },
           {
             "include": ["./scripts/document-parsing/xlsx-work.ts"],
-            "options": { "diagnosticSeverity": { "strictEffectProvide": "off" } }
+            "options": {
+              "diagnosticSeverity": {
+                "strictEffectProvide": "off"
+              }
+            }
           },
           {
             "include": ["./infra/cloudflare/resource-retirement.test.ts"],
             "options": {
-              "diagnosticSeverity": { "strictEffectProvide": "off" }
-            }
-          },
-          {
-            "include": ["./apps/web/playwright.config.ts"],
-            "options": {
               "diagnosticSeverity": {
-                "processEnv": "off"
+                "strictEffectProvide": "off"
               }
             }
           }

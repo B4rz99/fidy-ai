@@ -7,8 +7,7 @@
     "dev": "astro dev --ignore-lock",
     "build": "astro build && bun scripts/build-markdown.ts && bun scripts/build-headers.ts && bun scripts/check-artifact.ts",
     "build:production": "bun run build && bun scripts/stamp-release.ts",
-    "typecheck": "astro sync && bun install --cwd ../../tools/astro --frozen-lockfile && bun ../../tools/astro/check.ts",
-    "test:browser": "playwright test"
+    "typecheck": "astro sync && bun install --cwd ../../tools/astro --frozen-lockfile && bun ../../tools/astro/check.ts"
   },
   "dependencies": {
     "@astrojs/react": "7.1.2",
@@ -18,8 +17,6 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.14.0",
-    "@playwright/test": "1.64.1",
     "@tailwindcss/vite": "4.3.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

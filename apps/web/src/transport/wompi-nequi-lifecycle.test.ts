@@ -504,8 +504,13 @@ effectIt.effect(
           consumer
         ).pipe(
           Effect.provideService(Clock.Clock, {
-            ...clock,
+            currentTimeMillisUnsafe: clock.currentTimeMillisUnsafe.bind(clock),
             currentTimeMillis: Effect.sync(() => now),
+            currentTimeNanosUnsafe: clock.currentTimeNanosUnsafe.bind(clock),
+            currentTimeNanos: clock.currentTimeNanos,
+            monotonicTimeNanosUnsafe: clock.monotonicTimeNanosUnsafe.bind(clock),
+            monotonicTimeNanos: clock.monotonicTimeNanos,
+            sleep: clock.sleep.bind(clock),
           })
         )
       );

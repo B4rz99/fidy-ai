@@ -1,3 +1,4 @@
+import { queryLifetime } from "@/transport/query-lifetime";
 import { revalidateWorkspaceQuery, workspaceQueryRetention } from "@/transport/workspace-query";
 import { type Context, Data, Effect, Option, Schema } from "effect";
 import type { AnyRouter } from "@tanstack/react-router";
@@ -19,9 +20,9 @@ type DashboardReadRequest = Readonly<{
  * retired loads leave completed() false.
  */
 export type DashboardReadAttempt = Readonly<{ completed: () => boolean }>;
-const makeReadRequest = (): DashboardReadRequest => {
+const makeReadRequest = (active: () => boolean): DashboardReadRequest => {
   let completed = false;
-  const attempt = { completed: (): boolean => completed };
+  const attempt = { completed: (): boolean => completed && active() };
   let started = false;
   const complete = (): void => {
     completed = true;
@@ -112,6 +113,7 @@ const retainedDashboardQuery = Atom.family(
     const phase = dashboardPhase(apiClient);
     const result = apiClient.runtime
       .atom((get) => {
+        queryLifetime(get.registry);
         const request = get(dashboardRequest(new DashboardQueryKey({ apiClient, isVisiting })));
         return loadObservedDashboard({
           apiClient,
@@ -137,7 +139,9 @@ export const dashboardQuery = (input: DashboardQueryContext): DashboardLoad => {
     phase: dashboardPhase(input.apiClient),
     result: revalidateWorkspaceQuery(query),
     refresh: (registry) => {
-      const request = makeReadRequest();
+      const lifetime = queryLifetime(registry);
+      const request = makeReadRequest(lifetime.active);
+      if (!lifetime.active()) return request.attempt;
       registry.set(
         dashboardRequest(
           new DashboardQueryKey({

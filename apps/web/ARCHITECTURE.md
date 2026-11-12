@@ -915,6 +915,9 @@ equal new facts qualify. Failure, supersession, runtime failure and registry ret
 unsuccessful recovery. History still owns pagination/reset, and Category recovery rereads the metadata
 projection and its canonical fallback before admission can resume. Ordinary route preparation and
 Budget/Recurring refresh policies keep their existing contracts and retention.
+Authentication replacement synchronously retires strict query waiters and Dashboard completion
+evidence through the registry-owned query lifetime, before the React provider’s delayed physical
+disposal. Retired registries cannot start new strict recovery reads.
 
 RecurringPlan standing is observed at the effective plan zone's local calendar date. Future pauses,
 stops and settings do not change earlier standing; Scheduled marks a future start, and endDate only

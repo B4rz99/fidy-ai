@@ -9,7 +9,8 @@ import {
   type SubscriptionCancellationDispatchInput,
   type SubscriptionCancellationWork,
 } from "../contract";
-import { WompiSourceId } from "./wompi-model";
+import { BillingAttemptId, SubscriptionId } from "../../../src/core/subscription/contract";
+import { PaymentSourceId, WompiSourceId } from "./wompi-model";
 import { type WompiTransportFactory } from "./wompi-runtime";
 
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A, BillingCollectionFailure> =>
@@ -25,6 +26,11 @@ const decode = <A, E>(
     Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
   );
 const Snapshot = Schema.Struct({
+  subscription_id: SubscriptionId,
+  paid_attempt_id: BillingAttemptId,
+  payment_source_id: PaymentSourceId,
+  cancelled_at_ms: Schema.Int,
+  paid_through_ms: Schema.Int,
   wompi_source_id: WompiSourceId,
   wompi_environment: WompiEnvironment,
   void_started_at_ms: Schema.OptionFromNullOr(Schema.Int),
@@ -37,6 +43,32 @@ const Source = Schema.Struct({
   }),
 });
 const offerCooldownMs = 60_000;
+// Recheck retained authority at every write across provider I/O. Immutable schema facts
+// complement this fence; a User's pending state alone is not the observed cancellation.
+const pendingSnapshotCondition = `subscription_id=(SELECT id FROM subscriptions WHERE user_id=?)
+ AND subscription_id=? AND paid_attempt_id=? AND payment_source_id=?
+ AND cancelled_at_ms=? AND paid_through_ms=? AND source_cancellation_state='void-pending'
+ AND EXISTS (SELECT 1 FROM payment_source_context source
+ JOIN billing_attempt_context a ON a.id=subscription_cancellations.paid_attempt_id
+ AND a.user_id=source.user_id AND a.payment_source_id=source.id
+ WHERE source.id=subscription_cancellations.payment_source_id
+ AND source.subscription_id=subscription_cancellations.subscription_id
+ AND source.method='daviplata' AND source.wompi_source_id=?
+ AND source.wompi_environment=? AND a.wompi_environment=?)`;
+const snapshotBindings = (
+  userId: string,
+  source: typeof Snapshot.Type
+): ReadonlyArray<string | number> => [
+  userId,
+  source.subscription_id,
+  source.paid_attempt_id,
+  source.payment_source_id,
+  source.cancelled_at_ms,
+  source.paid_through_ms,
+  source.wompi_source_id,
+  source.wompi_environment,
+  source.wompi_environment,
+];
 const httpSuccessMinimum = 200;
 const httpSuccessMaximum = 300;
 
@@ -84,9 +116,11 @@ export const cancelSource = (
     const { DB: db } = input.environment;
     const row = yield* wait(() =>
       db
-        .prepare(`SELECT source.wompi_source_id,a.wompi_environment,c.void_started_at_ms
+        .prepare(`SELECT c.subscription_id,c.paid_attempt_id,c.payment_source_id,c.cancelled_at_ms,c.paid_through_ms,
+    source.wompi_source_id,a.wompi_environment,c.void_started_at_ms
     FROM subscription_cancellation_context c JOIN payment_source_context source ON source.id=c.payment_source_id AND source.user_id=c.user_id
     JOIN billing_attempt_context a ON a.id=c.paid_attempt_id AND a.user_id=c.user_id
+    AND a.payment_source_id=source.id AND a.wompi_environment=source.wompi_environment
     WHERE c.user_id=? AND source.method='daviplata' AND c.source_cancellation='void-pending' AND c.verification_count<8`)
         .bind(input.work.userId)
         .first()
@@ -105,9 +139,9 @@ export const cancelSource = (
     const reservation = yield* wait(() =>
       db
         .prepare(
-          "UPDATE subscription_cancellations SET verification_count=verification_count+1 WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND source_cancellation_state='void-pending' AND verification_count<8"
+          `UPDATE subscription_cancellations SET verification_count=verification_count+1 WHERE ${pendingSnapshotCondition} AND verification_count<8`
         )
-        .bind(input.work.userId)
+        .bind(...snapshotBindings(input.work.userId, source))
         .run()
     );
     if (reservation.meta.changes !== 1) return;
@@ -124,16 +158,16 @@ export const cancelSource = (
     if (verified.data.id !== source.wompi_source_id) {
       return yield* new BillingCollectionFailure({ cause: Option.none() });
     }
-    if (verified.data.status === "VOIDED") {
-      yield* wait(() =>
-        db
-          .prepare(
-            "UPDATE subscription_cancellations SET source_cancellation_state='voided',void_verified_at_ms=? WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND source_cancellation_state='void-pending'"
-          )
-          .bind(now, input.work.userId)
-          .run()
-      );
-    }
+    if (verified.data.status !== "VOIDED") return;
+    const verifiedAt = yield* Clock.currentTimeMillis;
+    yield* wait(() =>
+      db
+        .prepare(
+          `UPDATE subscription_cancellations SET source_cancellation_state='voided',void_verified_at_ms=? WHERE ${pendingSnapshotCondition}`
+        )
+        .bind(verifiedAt, ...snapshotBindings(input.work.userId, source))
+        .run()
+    );
   });
 
 const submitVoid = (
@@ -150,9 +184,9 @@ const submitVoid = (
       const claim = yield* wait(() =>
         input.db
           .prepare(
-            "UPDATE subscription_cancellations SET void_started_at_ms=? WHERE subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND void_started_at_ms IS NULL AND source_cancellation_state='void-pending'"
+            `UPDATE subscription_cancellations SET void_started_at_ms=? WHERE ${pendingSnapshotCondition} AND void_started_at_ms IS NULL AND verification_count<8`
           )
-          .bind(input.now, input.userId)
+          .bind(input.now, ...snapshotBindings(input.userId, input.source))
           .run()
       );
       if (claim.meta.changes === 1) {

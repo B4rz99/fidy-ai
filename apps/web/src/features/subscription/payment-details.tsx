@@ -258,6 +258,7 @@ const NequiEnrollmentForm = ({ enrollment, busy, submit }: EnrollmentFormProps):
       method: "nequi",
       phoneNumber: Redacted.make(phoneNumber),
       signal: controller.signal,
+      clearPhone: () => setPhoneNumber(""),
       onAwaiting: () => {
         if (!controller.signal.aborted) setAwaitingApproval(true);
       },

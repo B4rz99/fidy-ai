@@ -551,6 +551,18 @@ underfills it; filters and authoritative record revisions render immediately.
 Collapsed Recurring transaction-source and link controls mount their read owners on first expansion
 and retain them on close, so opening a blank editor performs only its needed work.
 
+Nequi authorization owns one scoped operation from phone submission through approved-token
+consumption. Its original five-minute authorization deadline includes the token POST, with
+three-second polling spacing, fifteen-second request bounds and 16 KiB streamed response bounds.
+Every permitted lookup is evaluated before attempt exhaustion; the original deadline still wins
+at equality. Only Pending exposes awaiting feedback. Phone drafts clear on preflight refusal and
+all exits, and the borrowed token is wiped when the consumer exits. Declined, Unavailable and Expired
+are closed authorization refusals, never proof of collection failure. Once admitted, the existing
+submission owner retains its own bounds and uncertainty; authorization expiry cannot time out a
+charge. Disposal aborts local work and fences later consumer admission without promising rollback.
+No phone or token enters browser persistence, shared observations or diagnostics. Existing browser
+submission diagnostics retain their owner; this private provider bracket adds no sensitive telemetry.
+
 ## 4. Static production artifact
 
 Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.com`.

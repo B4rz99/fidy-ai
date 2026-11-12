@@ -1,6 +1,6 @@
 import { Effect, Exit, Redacted } from "effect";
 import { expect, it, vi } from "vitest";
-import { NequiAuthorizationFailed, authorizeNequiWithWompi } from "./wompi-nequi";
+import { NequiAuthorizationFailed, withApprovedNequiWithWompi } from "./wompi-nequi";
 
 it("refuses rejected authorization without waiting for provider cancellation", () => {
   let cancellations = 0;
@@ -12,12 +12,16 @@ it("refuses rejected authorization without waiting for provider cancellation", (
   });
   return expect(
     Effect.runPromise(
-      authorizeNequiWithWompi({
-        publicKey: "pub_test_example",
-        phoneNumber: Redacted.make("3991111111"),
-        fetchImplementation: () => Promise.resolve(new Response(body, { status: 422 })),
-        onAwaiting: () => undefined,
-      })
+      withApprovedNequiWithWompi(
+        {
+          publicKey: "pub_test_example",
+          phoneNumber: Redacted.make("3991111111"),
+          fetchImplementation: () => Promise.resolve(new Response(body, { status: 422 })),
+          clearPhone: () => undefined,
+          onAwaiting: () => undefined,
+        },
+        (token) => Effect.succeed(Redacted.value(token))
+      )
     )
   )
     .rejects.toBeInstanceOf(NequiAuthorizationFailed)
@@ -27,7 +31,7 @@ it("refuses rejected authorization without waiting for provider cancellation", (
     });
 });
 
-it("waits for Nequi approval and returns only the token without retaining account evidence", () => {
+it("borrows only the approved Nequi token without retaining account evidence", () => {
   const provider = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
     expect(url instanceof Request ? url.url : url.toString()).toMatch(
       /^https:\/\/sandbox\.wompi\.co\/v1\/tokens\/nequi/u
@@ -41,12 +45,16 @@ it("waits for Nequi approval and returns only the token without retaining accoun
     );
   });
   return Effect.runPromise(
-    authorizeNequiWithWompi({
-      publicKey: "pub_test_example",
-      phoneNumber: Redacted.make("3991111111"),
-      fetchImplementation: provider,
-      onAwaiting: () => undefined,
-    }).pipe(Effect.map((token) => expect(Redacted.value(token)).toBe("nequi_test_example")))
+    withApprovedNequiWithWompi(
+      {
+        publicKey: "pub_test_example",
+        phoneNumber: Redacted.make("3991111111"),
+        fetchImplementation: provider,
+        clearPhone: () => undefined,
+        onAwaiting: () => undefined,
+      },
+      (token) => Effect.sync(() => expect(Redacted.value(token)).toBe("nequi_test_example"))
+    )
   );
 });
 
@@ -59,12 +67,16 @@ it("rejects mismatched, malformed and overflowing provider responses without ref
         new Response("CANARY-account".repeat(2000)),
       ]) {
         const result = yield* Effect.exit(
-          authorizeNequiWithWompi({
-            publicKey: "pub_test_example",
-            phoneNumber: Redacted.make("3991111111"),
-            fetchImplementation: () => Promise.resolve(response),
-            onAwaiting: () => undefined,
-          })
+          withApprovedNequiWithWompi(
+            {
+              publicKey: "pub_test_example",
+              phoneNumber: Redacted.make("3991111111"),
+              fetchImplementation: () => Promise.resolve(response),
+              clearPhone: () => undefined,
+              onAwaiting: () => undefined,
+            },
+            (token) => Effect.succeed(Redacted.value(token))
+          )
         );
         expect(Exit.isFailure(result)).toBe(true);
         expect(String(result)).not.toContain("CANARY-account");

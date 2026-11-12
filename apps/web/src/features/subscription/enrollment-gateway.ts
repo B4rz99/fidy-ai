@@ -13,7 +13,7 @@ import {
   type SubscriptionEnrollmentClient,
 } from "@/transport/client";
 import { type CardFields, tokenizeCardWithWompi } from "@/transport/wompi-tokenization";
-import { authorizeNequiWithWompi } from "@/transport/wompi-nequi";
+import { withApprovedNequiWithWompi } from "@/transport/wompi-nequi";
 import { type DaviplataFields, startDaviplataWithWompi } from "@/transport/wompi-daviplata";
 import { type DaviplataChallenge, makeDaviplataChallenge } from "./daviplata-challenge";
 import { paymentSubmissionIsTerminal } from "./payment-status";
@@ -54,6 +54,7 @@ type PendingPayment = Extract<PaymentSubmission, { status: "payment-pending" }>;
 export type NequiFields = Readonly<{
   method: "nequi";
   phoneNumber: Redacted.Redacted<string>;
+  clearPhone: () => void;
   onAwaiting: () => void;
   signal: AbortSignal;
 }>;
@@ -186,35 +187,51 @@ const submitNequiSource = ({
   fields,
   signal,
 }: Omit<NewSourceInput, "fields"> &
-  Readonly<{ fields: NequiFields }>): Promise<PaymentSubmission> =>
-  client.execute(
-    (transport) =>
-      authorizeNequiWithWompi({
-        publicKey: enrollment.wompiPublicKey,
-        phoneNumber: fields.phoneNumber,
-        fetchImplementation: globalThis.fetch.bind(globalThis),
-        onAwaiting: fields.onAwaiting,
-      }).pipe(
-        Effect.flatMap((nequiToken) =>
-          transport.subscriptionEnrollment
-            .submit({
-              payload: {
-                paymentSourceMode: "create",
-                method: "nequi",
-                ...facts,
-                nequiToken,
-              },
-            })
-            .pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(nequiToken))))
-        )
-      ),
-    {
-      signal: Option.match(signal, {
-        onNone: () => fields.signal,
-        onSome: (signal) => AbortSignal.any([fields.signal, signal]),
-      }),
-    }
-  );
+  Readonly<{ fields: NequiFields }>): Promise<PaymentSubmission> => {
+  const authorizationSignal = Option.match(signal, {
+    onNone: () => fields.signal,
+    onSome: (signal) => AbortSignal.any([fields.signal, signal]),
+  });
+  let phoneCleared = false;
+  const clearPhone = (): void => {
+    Redacted.wipeUnsafe(fields.phoneNumber);
+    if (phoneCleared) return;
+    phoneCleared = true;
+    try {
+      fields.clearPhone();
+    } catch {}
+  };
+  return client
+    .execute(
+      (transport) =>
+        Effect.suspend(() =>
+          authorizationSignal.aborted
+            ? Effect.interrupt
+            : withApprovedNequiWithWompi(
+                {
+                  publicKey: enrollment.wompiPublicKey,
+                  phoneNumber: fields.phoneNumber,
+                  fetchImplementation: globalThis.fetch.bind(globalThis),
+                  clearPhone,
+                  onAwaiting: fields.onAwaiting,
+                },
+                (nequiToken) =>
+                  authorizationSignal.aborted
+                    ? Effect.interrupt
+                    : transport.subscriptionEnrollment.submit({
+                        payload: {
+                          paymentSourceMode: "create",
+                          method: "nequi",
+                          ...facts,
+                          nequiToken,
+                        },
+                      })
+              )
+        ),
+      { signal: authorizationSignal }
+    )
+    .finally(clearPhone);
+};
 
 const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
   const { client, enrollment, facts, fields, signal } = input;

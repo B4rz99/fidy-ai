@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Redacted, Result, Schema } from "effect";
+import { Clock, Data, Effect, Function, Option, Redacted, Result, Schema } from "effect";
 import { UnknownJsonString, jsonStringSchema } from "@/schema-compatibility";
 import {
   type WompiFetch,
@@ -6,10 +6,13 @@ import {
   wompiTokenizationOrigin,
 } from "./wompi-tokenization";
 
-export class NequiAuthorizationFailed extends Data.TaggedError("NequiAuthorizationFailed")<{}> {}
+export class NequiAuthorizationFailed extends Data.TaggedError("NequiAuthorizationFailed")<{
+  readonly reason: "declined" | "unavailable" | "expired";
+}> {}
 const ignoreCancellation = (): void => {};
 const maximumTokenCharacters = 4096;
 const maximumApprovalChecks = 100;
+const authorizationLifetimeMillis = 300_000;
 const TokenResponse = Schema.Struct({
   data: Schema.Struct({
     id: Schema.String.check(
@@ -23,7 +26,8 @@ const PhoneNumber = Schema.String.check(Schema.isPattern(/^3[0-9]{9}$/u));
 const NequiRequest = jsonStringSchema(Schema.Struct({ phone_number: PhoneNumber }));
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 const decodeToken = Schema.decodeUnknownResult(TokenResponse);
-const failure = (): NequiAuthorizationFailed => new NequiAuthorizationFailed();
+const failure = (): NequiAuthorizationFailed =>
+  new NequiAuthorizationFailed({ reason: "unavailable" });
 
 const requestToken = (
   input: Readonly<{
@@ -33,7 +37,7 @@ const requestToken = (
     body: Option.Option<string>;
   }>
 ): Effect.Effect<
-  Readonly<{ token: Redacted.Redacted<string>; status: typeof TokenResponse.Type.data.status }>,
+  Readonly<{ token: string; status: typeof TokenResponse.Type.data.status }>,
   NequiAuthorizationFailed
 > =>
   Effect.gen(function* () {
@@ -65,13 +69,14 @@ const requestToken = (
     if (Result.isFailure(json)) return yield* failure();
     const decoded = decodeToken(json.success);
     if (Result.isFailure(decoded)) return yield* failure();
-    return { token: Redacted.make(decoded.success.data.id), status: decoded.success.data.status };
+    return { token: decoded.success.data.id, status: decoded.success.data.status };
   }).pipe(Effect.timeout("15 seconds"), Effect.mapError(failure));
 
 type NequiAuthorizationInput = Readonly<{
   publicKey: string;
   phoneNumber: Redacted.Redacted<string>;
   fetchImplementation: WompiFetch;
+  clearPhone: () => void;
   onAwaiting: () => void;
 }>;
 
@@ -93,35 +98,111 @@ const initiateAuthorization = (
         )
       ),
     });
-  }).pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(input.phoneNumber))));
+  });
 
-/**
- * Sends the Nequi number only to Wompi, then waits within five minutes for app approval.
- * The callback clears the caller's number and displays the approval stage after tokenization.
- * Cancellation aborts requests and owned readers. The returned token is transient submission
- * material: never persist it, expose it in a navigation URL, or put it into shared state.
- */
-export const authorizeNequiWithWompi = (
-  input: NequiAuthorizationInput
+const notify = (callback: () => void): Effect.Effect<void> =>
+  Effect.try({ try: callback, catch: () => undefined }).pipe(Effect.ignore);
+
+type TokenObservation = Effect.Success<ReturnType<typeof requestToken>>;
+const approvalObserved = (
+  observation: TokenObservation,
+  token: Redacted.Redacted<string>,
+  deadline: number
+): Effect.Effect<boolean, NequiAuthorizationFailed> =>
+  Effect.gen(function* () {
+    if ((yield* Clock.currentTimeMillis) >= deadline) {
+      return yield* new NequiAuthorizationFailed({ reason: "expired" });
+    }
+    if (observation.token !== Redacted.value(token)) return yield* failure();
+    if (observation.status === "APPROVED") return true;
+    if (observation.status === "DECLINED") {
+      return yield* new NequiAuthorizationFailed({ reason: "declined" });
+    }
+    if (observation.status !== "PENDING") return yield* failure();
+    return false;
+  });
+
+const waitForApproval = (
+  input: NequiAuthorizationInput,
+  initial: TokenObservation,
+  authorization: Readonly<{ origin: string; token: Redacted.Redacted<string>; deadline: number }>
 ): Effect.Effect<Redacted.Redacted<string>, NequiAuthorizationFailed> =>
   Effect.gen(function* () {
-    const origin = yield* wompiTokenizationOrigin(input.publicKey).pipe(Effect.mapError(failure));
-    let current = yield* initiateAuthorization(input, origin);
-    const prefix = input.publicKey.startsWith("pub_test_") ? "nequi_test_" : "nequi_prod_";
-    if (!Redacted.value(current.token).startsWith(prefix)) return yield* failure();
-    const token = current.token;
-    yield* Effect.sync(input.onAwaiting);
-    for (let check = 0; check < maximumApprovalChecks; check++) {
-      if (current.status === "APPROVED") return token;
-      if (current.status !== "PENDING") return yield* failure();
+    const { origin, token, deadline } = authorization;
+    let current = initial;
+    let checks = 0;
+    while (!(yield* approvalObserved(current, token, deadline))) {
+      if (checks >= maximumApprovalChecks) return yield* failure();
+      if (checks === 0) yield* notify(input.onAwaiting);
       yield* Effect.sleep("3 seconds");
+      checks++;
       current = yield* requestToken({
         url: `${origin}/v1/tokens/nequi/${encodeURIComponent(Redacted.value(token))}`,
         publicKey: input.publicKey,
         fetchImplementation: input.fetchImplementation,
         body: Option.none(),
       });
-      if (Redacted.value(current.token) !== Redacted.value(token)) return yield* failure();
     }
-    return yield* failure();
-  }).pipe(Effect.timeout("5 minutes"), Effect.mapError(failure));
+    return token;
+  });
+
+/**
+ * Borrows one approved authorization into the consumer, then wipes the token on every exit.
+ * Phone drafts are cleared even on preflight failure; progress callbacks cannot reject work.
+ * Only authorization has the original five-minute deadline. Consumer failures and interruption
+ * retain their own meaning and approval does not establish collection settlement.
+ */
+export const withApprovedNequiWithWompi: {
+  <A, E, R>(
+    consume: (token: Redacted.Redacted<string>) => Effect.Effect<A, E, R>
+  ): (input: NequiAuthorizationInput) => Effect.Effect<A, NequiAuthorizationFailed | E, R>;
+  <A, E, R>(
+    input: NequiAuthorizationInput,
+    consume: (token: Redacted.Redacted<string>) => Effect.Effect<A, E, R>
+  ): Effect.Effect<A, NequiAuthorizationFailed | E, R>;
+} = Function.dual(
+  2,
+  <A, E, R>(
+    input: NequiAuthorizationInput,
+    consume: (token: Redacted.Redacted<string>) => Effect.Effect<A, E, R>
+  ): Effect.Effect<A, NequiAuthorizationFailed | E, R> =>
+    Effect.suspend(() => {
+      let ownedToken: Option.Option<Redacted.Redacted<string>> = Option.none();
+      let phoneCleared = false;
+      const clearPhone = Effect.suspend(() => {
+        if (phoneCleared) return Effect.void;
+        phoneCleared = true;
+        Redacted.wipeUnsafe(input.phoneNumber);
+        return notify(input.clearPhone);
+      });
+      const authorize = Effect.gen(function* () {
+        const startedAt = yield* Clock.currentTimeMillis;
+        const deadline = startedAt + authorizationLifetimeMillis;
+        const origin = yield* wompiTokenizationOrigin(input.publicKey).pipe(
+          Effect.mapError(failure)
+        );
+        const initial = yield* initiateAuthorization(input, origin).pipe(
+          Effect.ensuring(clearPhone)
+        );
+        const prefix = input.publicKey.startsWith("pub_test_") ? "nequi_test_" : "nequi_prod_";
+        if (!initial.token.startsWith(prefix)) return yield* failure();
+        const token = Redacted.make(initial.token);
+        ownedToken = Option.some(token);
+        return yield* waitForApproval(input, initial, { origin, token, deadline });
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: "5 minutes",
+          orElse: () => Effect.fail(new NequiAuthorizationFailed({ reason: "expired" })),
+        })
+      );
+      const wipeToken = Effect.sync(() => {
+        if (Option.isSome(ownedToken)) Redacted.wipeUnsafe(ownedToken.value);
+        ownedToken = Option.none();
+      });
+      return authorize.pipe(
+        Effect.flatMap(consume),
+        Effect.ensuring(clearPhone),
+        Effect.ensuring(wipeToken)
+      );
+    })
+);

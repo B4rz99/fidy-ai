@@ -1,4 +1,4 @@
-import { queryLifetime } from "@/transport/query-lifetime";
+import { queryLifetime, retireQueryLifetime } from "@/transport/query-lifetime";
 import {
   announceAuthenticationTransition,
   authenticationEndedEvent,
@@ -20,8 +20,13 @@ type SessionRegistryProviderProps = Readonly<{
 const QueryLifetime = (): React.JSX.Element => {
   const registry = useContext(RegistryContext);
   const initialize = useCallback(
-    (_node: HTMLSpanElement): void => {
+    (_node: HTMLSpanElement): (() => void) => {
       queryLifetime(registry);
+      const retire = (): void => retireQueryLifetime(registry);
+      window.addEventListener(authenticationEndedEvent, retire);
+      return () => {
+        window.removeEventListener(authenticationEndedEvent, retire);
+      };
     },
     [registry]
   );

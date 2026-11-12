@@ -1,4 +1,3 @@
-import { authenticationEndedEvent } from "@/session/authentication-channel";
 import { Atom, type AtomRegistry } from "effect/reactivity";
 
 type QueryLifetime = Readonly<{
@@ -15,12 +14,9 @@ const lifetime = Atom.make((get) => {
     for (const settle of pending) settle();
     pending.clear();
   };
-  if (typeof window !== "undefined") window.addEventListener(authenticationEndedEvent, retire);
-  get.addFinalizer(() => {
-    if (typeof window !== "undefined") window.removeEventListener(authenticationEndedEvent, retire);
-    retire();
-  });
+  get.addFinalizer(retire);
   return {
+    retire,
     active: (): boolean => active,
     observe: (settle: () => void): (() => void) => {
       if (active) pending.add(settle);
@@ -32,3 +28,6 @@ const lifetime = Atom.make((get) => {
 
 export const queryLifetime = (registry: AtomRegistry.AtomRegistry): QueryLifetime =>
   registry.get(lifetime);
+
+export const retireQueryLifetime = (registry: AtomRegistry.AtomRegistry): void =>
+  registry.get(lifetime).retire();

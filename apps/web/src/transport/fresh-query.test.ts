@@ -3,6 +3,7 @@ import { Atom, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
 import { makeFreshQuery, readFreshQuery } from "./fresh-query";
+import { retireQueryLifetime } from "./query-lifetime";
 
 it.live(
   "strict recovery starts a new loader and accepts equal fresh facts instead of an older pending read",
@@ -132,10 +133,8 @@ it.live(
     })
 );
 
-it.live("authentication replacement retires pending strict reads before registry disposal", () =>
+it.live("logical retirement settles pending strict reads before registry disposal", () =>
   Effect.gen(function* () {
-    const events = new EventTarget();
-    vi.stubGlobal("window", events);
     const held = yield* Deferred.make<void>();
     let reads = 0;
     const query = makeFreshQuery({
@@ -152,7 +151,7 @@ it.live("authentication replacement retires pending strict reads before registry
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
       const pending = yield* readFreshQuery({ registry, query }).pipe(Effect.forkChild);
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(2)));
-      events.dispatchEvent(new Event("fidy:authentication-ended"));
+      retireQueryLifetime(registry);
       yield* Deferred.succeed(held, undefined);
       expect(yield* Fiber.join(pending)).toBe(false);
       expect(yield* readFreshQuery({ registry, query })).toBe(false);
@@ -160,7 +159,6 @@ it.live("authentication replacement retires pending strict reads before registry
     } finally {
       unmount();
       registry.dispose();
-      vi.unstubAllGlobals();
     }
   })
 );

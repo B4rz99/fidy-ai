@@ -3,7 +3,7 @@ import { SubscriptionIntroduction } from "@/ui/components/subscription-introduct
 import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
 import { Input } from "@/ui/components/input";
 import { Button } from "@/ui/components/button";
-import { DateTime, Option, Redacted } from "effect";
+import { DateTime, Option, Redacted, Schema } from "effect";
 import { type PaymentFlowView, type PaymentSubmissionView } from "./interaction";
 import { DaviplataEnrollmentForm } from "./daviplata-form";
 import { BillingEmailField, EnrollmentConsent } from "./enrollment-controls";
@@ -20,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { type EnrollmentMethod } from "@/transport/client";
+import { BillingEmail, type EnrollmentMethod } from "@/transport/client";
 import { type SubscriptionOfferPresentation, paymentMethodCopy } from "./presentation";
 import { type CardFields } from "@/transport/wompi-tokenization";
 import {
@@ -383,7 +383,9 @@ const PreparedCardEnrollmentForm = ({
   const allAccepted = allDecisionsAccepted(decisions);
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+    const email = billingEmail.trim().toLowerCase();
     if (
+      !Schema.is(BillingEmail)(email) ||
       !allAccepted ||
       busy ||
       !event.currentTarget.checkValidity() ||
@@ -396,10 +398,7 @@ const PreparedCardEnrollmentForm = ({
       return;
     }
     setFields(emptyCardFields);
-    submit(
-      billingEmail.trim().toLowerCase(),
-      enrollment.paymentSourceMode === "create" ? { ...fields, signal } : undefined
-    );
+    submit(email, enrollment.paymentSourceMode === "create" ? { ...fields, signal } : undefined);
   };
   return (
     <form ref={formLifetimeRef} className="subscription-form" onSubmit={onSubmit}>
@@ -660,6 +659,18 @@ const EnrollmentContent = ({
 const focusPaymentHeading: RefCallback<HTMLHeadingElement> = (node) => {
   node?.focus();
 };
+const enrollmentFailureCopy = (
+  needsRecovery: boolean,
+  enrollment: Option.Option<PaymentFlowView>
+): string => {
+  if (needsRecovery) {
+    return "No pudimos confirmar el resultado. Consulta el estado antes de volver a intentarlo.";
+  }
+  if (Option.isNone(enrollment)) {
+    return "No pudimos preparar el formulario. Intenta de nuevo.";
+  }
+  return "Revisa los datos para continuar.";
+};
 const EnrollmentFeedback = ({
   failed,
   enrollment,
@@ -678,11 +689,7 @@ const EnrollmentFeedback = ({
         Reintentar preparación
       </Button>
     ) : null}
-    {failed ? (
-      <p role="alert">
-        No pudimos confirmar el resultado. Consulta el estado antes de volver a intentarlo.
-      </p>
-    ) : null}
+    {failed ? <p role="alert">{enrollmentFailureCopy(needsRecovery, enrollment)}</p> : null}
     {awaitingObservation ? (
       <output>
         La verificación automática terminó sin confirmar el pago. Consulta el estado para verificar

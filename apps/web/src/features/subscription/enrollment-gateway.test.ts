@@ -724,7 +724,7 @@ const fillCardInput = (
     });
   });
 
-it("clears the mounted card draft, admits one same-tick submit and revokes its authorization on departure", () =>
+it("allows email correction before consuming the mounted card draft once and revokes authorization on departure", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -770,6 +770,15 @@ it("clears the mounted card draft, admits one same-tick submit and revokes its a
         if (form === null) {
           throw new Error("Missing form");
         }
+        yield* fillCardInput(container, "billing-email", "payer@localhost");
+        yield* reactAct(() => {
+          form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        });
+        expect(submit).not.toHaveBeenCalled();
+        expect(container.querySelector<HTMLInputElement>("#card-number")?.value).toBe(
+          "4242424242424242"
+        );
+        yield* fillCardInput(container, "billing-email", "payer@example.invalid");
         yield* reactAct(() => {
           form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
           form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -790,3 +799,52 @@ it("clears the mounted card draft, admits one same-tick submit and revokes its a
       }
     })
   ));
+
+it.each([false, true])(
+  "offers actionable enrollment failure feedback with recovery=%s",
+  (needsRecovery) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+        const container = document.createElement("div");
+        document.body.append(container);
+        const root = createRoot(container);
+        const enrollment = prepared(yield* Clock.currentTimeMillis);
+        try {
+          yield* reactAct(() =>
+            root.render(
+              createElement(PaymentDetails, {
+                offer: presentSubscriptionOffer(enrollment.price),
+                gateway: Option.none(),
+                onDaviplataSubmitted: () => undefined,
+                onDaviplataUncertain: () => undefined,
+                enrollment: Option.none(),
+                busy: false,
+                failed: true,
+                needsRecovery,
+                awaitingObservation: false,
+                prepare: () => undefined,
+                submit: () => undefined,
+                refresh: () => undefined,
+                method: "card",
+              })
+            )
+          );
+          const alert = container.querySelector('[role="alert"]');
+          expect(alert?.textContent).toContain(
+            needsRecovery
+              ? "No pudimos confirmar el resultado. Consulta el estado"
+              : "No pudimos preparar el formulario. Intenta de nuevo."
+          );
+          const actions = Array.from(
+            container.querySelectorAll("button"),
+            (button) => button.textContent
+          );
+          expect(actions.includes("Consultar estado")).toBe(needsRecovery);
+        } finally {
+          yield* reactAct(() => root.unmount());
+          container.remove();
+        }
+      })
+    )
+);

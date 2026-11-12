@@ -54,26 +54,29 @@ const latestValue = (state: ClipboardState): Option.Option<string> => {
   return state.current.value.value;
 };
 
-const write = async (
+const repair = (state: ClipboardState, obsolete: string, observed: string): Promise<void> => {
+  if (observed !== obsolete) return Promise.resolve();
+  // Choose repair only after observing obsolete text. A delayed repair is itself fenced;
+  // it never publishes Copied or restarts the owner's original deadline.
+  const latest = latestValue(state);
+  if (Option.isSome(latest)) return write(state, latest.value, state.current);
+  return obsolete === "" ? Promise.resolve() : write(state, "", Option.none());
+};
+
+const write = (
   state: ClipboardState,
   value: string,
   owner: Option.Option<CopyOwner>
 ): Promise<void> => {
   const generation = state.generation;
-  if (Option.isNone(state.clipboard)) throw new ClipboardAccessFailed();
+  if (Option.isNone(state.clipboard)) return Promise.reject(new ClipboardAccessFailed());
   const available = state.clipboard.value;
-  await available.writeText(value);
-  if (writeStillCurrent(state, owner, generation)) return;
-  const observed = await available.readText();
-  if (observed !== value) return;
-  // Choose repair only after observing obsolete text. A delayed repair is itself fenced;
-  // it never publishes Copied or restarts the owner's original deadline.
-  const latest = latestValue(state);
-  if (Option.isSome(latest)) {
-    await write(state, latest.value, state.current);
-  } else if (value !== "") {
-    await write(state, "", Option.none());
-  }
+  return Promise.resolve()
+    .then(() => available.writeText(value))
+    .then(() => {
+      if (writeStillCurrent(state, owner, generation)) return undefined;
+      return available.readText().then((observed) => repair(state, value, observed));
+    });
 };
 
 const release = (state: ClipboardState, owner: CopyOwner): void => {
@@ -86,8 +89,9 @@ const release = (state: ClipboardState, owner: CopyOwner): void => {
   Promise.resolve()
     .then(() => clipboard.value.readText())
     .then((observed) => {
-      if (state.generation !== generation || Option.isSome(state.current)) return;
+      if (state.generation !== generation || Option.isSome(state.current)) return undefined;
       if (observed === value.value) return write(state, "", Option.none());
+      return undefined;
     })
     .catch(() => undefined);
 };

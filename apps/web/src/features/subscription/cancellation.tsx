@@ -136,7 +136,7 @@ const CancellationActions = ({
       ) : (
         <Button
           contentLayout="wrap"
-          ref={restoreFocus ? focusElement : undefined}
+          ref={restoreFocus && !current.busy ? focusElement : undefined}
           type="button"
           variant="destructive"
           disabled={current.busy || current.uncertain}

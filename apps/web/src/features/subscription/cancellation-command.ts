@@ -254,7 +254,13 @@ export const makeCancellationManagement = (client: FidyClient): Atom.Atom<Cancel
     };
     get.mount(command);
     get.mount(subscriptionStatusQuery(client));
-    get.subscribe(subscriptionStatusQuery(client), () => notify(owner));
+    get.subscribe(subscriptionStatusQuery(client), (observation) => {
+      if (owner.phase._tag === "Reviewing" && owner.phase.observation !== observation) {
+        owner.phase = { _tag: "Ready" };
+        owner.restoreFocus = true;
+      }
+      notify(owner);
+    });
     get.addFinalizer(() => dispose(owner));
     return present(owner);
   });

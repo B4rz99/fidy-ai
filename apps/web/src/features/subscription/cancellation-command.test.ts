@@ -232,63 +232,76 @@ it.effect(
       expect(harness.requests.filter((method) => method === "POST")).toHaveLength(1);
     })
 );
-it.effect("keeps mounted review admission and keyboard focus through React updates", () =>
-  Effect.gen(function* () {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    const harness = fixture();
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    cleanup.push(() => {
-      act(() => root.unmount());
-      container.remove();
-      vi.unstubAllGlobals();
-    });
-    yield* Effect.tryPromise(() =>
-      act(() => {
-        root.render(
-          createElement(
-            StrictMode,
-            {},
+it.effect(
+  "invalidates reviewed cancellation on shared status refresh and preserves focus through submission",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const harness = fixture();
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      cleanup.push(() => {
+        act(() => root.unmount());
+        container.remove();
+        vi.unstubAllGlobals();
+      });
+      yield* Effect.tryPromise(() =>
+        act(() => {
+          root.render(
             createElement(
-              RegistryContext.Provider,
-              { value: harness.registry },
-              createElement(SubscriptionCancellationManagement, { command: harness.resource })
+              StrictMode,
+              {},
+              createElement(
+                RegistryContext.Provider,
+                { value: harness.registry },
+                createElement(SubscriptionCancellationManagement, { command: harness.resource })
+              )
             )
-          )
-        );
-        return flush();
-      })
-    );
-    const button = (text: string): HTMLButtonElement => {
-      const found = Array.from(container.querySelectorAll("button")).find(
-        (node) => node.textContent === text
+          );
+          return flush();
+        })
       );
-      if (found === undefined) throw new Error("Missing cancellation action");
-      return found;
-    };
-    act(() => button("Cancelar renovaciones futuras").click());
-    expect(document.activeElement?.textContent).toBe("¿Cancelar renovaciones futuras?");
-    act(() => button("Conservar renovaciones").click());
-    expect(document.activeElement?.textContent).toBe("Cancelar renovaciones futuras");
-    act(() => button("Cancelar renovaciones futuras").click());
-    harness.behavior.postDelay = 100;
-    yield* Effect.tryPromise(() =>
-      act(() => {
-        button("Confirmar cancelación").click();
-        return flush();
-      })
-    );
-    expect(container.textContent).toContain("Cancelando renovaciones…");
-    expect(container.textContent).toContain("25 de noviembre de 2026");
-    expect(document.activeElement?.textContent).toBe("Cancelando renovaciones…");
-    expect(button("Confirmar cancelación").disabled).toBe(true);
-    expect(button("Consultar cancelación").disabled).toBe(true);
-    yield* Effect.tryPromise(() => act(() => advance(100)));
-    expect(container.textContent).toContain("Renovaciones canceladas");
-    expect(container.textContent).toContain("25 de noviembre de 2026");
-    expect(harness.requests.filter((method) => method === "POST")).toHaveLength(1);
-  })
+      const button = (text: string): HTMLButtonElement => {
+        const found = Array.from(container.querySelectorAll("button")).find(
+          (node) => node.textContent === text
+        );
+        if (found === undefined) throw new Error("Missing cancellation action");
+        return found;
+      };
+      act(() => button("Cancelar renovaciones futuras").click());
+      expect(document.activeElement?.textContent).toBe("¿Cancelar renovaciones futuras?");
+      act(() => button("Conservar renovaciones").click());
+      expect(document.activeElement?.textContent).toBe("Cancelar renovaciones futuras");
+      act(() => button("Cancelar renovaciones futuras").click());
+      const staleConfirm = harness.view().confirm;
+      harness.behavior.getDelay = 100;
+      act(harness.passiveRefresh);
+      expect(container.textContent).not.toContain("¿Cancelar renovaciones futuras?");
+      expect(button("Cancelar renovaciones futuras").disabled).toBe(true);
+      staleConfirm();
+      yield* Effect.tryPromise(() => act(() => advance(100)));
+      expect(document.activeElement?.textContent).toBe("Cancelar renovaciones futuras");
+      expect(harness.requests.filter((method) => method === "POST")).toHaveLength(0);
+      act(() => button("Cancelar renovaciones futuras").click());
+      harness.behavior.getDelay = 0;
+      harness.behavior.postDelay = 100;
+      yield* Effect.tryPromise(() =>
+        act(() => {
+          button("Confirmar cancelación").click();
+          return flush();
+        })
+      );
+      expect(container.textContent).toContain("Cancelando renovaciones…");
+      expect(container.textContent).toContain("25 de noviembre de 2026");
+      expect(document.activeElement?.textContent).toBe("Cancelando renovaciones…");
+      expect(button("Confirmar cancelación").disabled).toBe(true);
+      expect(button("Consultar cancelación").disabled).toBe(true);
+      yield* Effect.tryPromise(() => act(() => advance(100)));
+      expect(container.textContent).toContain("Renovaciones canceladas");
+      expect(container.textContent).toContain("25 de noviembre de 2026");
+      expect(harness.requests.filter((method) => method === "POST")).toHaveLength(1);
+    })
 );
 
 it.effect("recovers a lost response from retained evidence on fresh load without replay", () =>

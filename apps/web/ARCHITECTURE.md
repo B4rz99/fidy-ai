@@ -232,6 +232,12 @@ form; pending or successful payment and live DaviPlata authorization keep that a
 feedback separates source availability from verified settlement, and paid access/history use canonical
 SubscriptionStatus rather than invented renewal or payment-source metadata.
 Paid Users can review and cancel future renewals through the existing canonical cancellation operation.
+The mounted management owner consumes the current review synchronously before dispatch, serializes
+cancellation and explicit status recovery, and retires callbacks on unmount or authentication replacement.
+A review captures the displayed paid-through period and status observation; a changed observation
+requires a new review. Acknowledged cancellation evidence takes precedence over older status reads.
+Unknown cancellation remains locked across passive query updates and failed recovery; only a fresh
+explicit status result can admit a new review. Review and confirmation authority never enter storage.
 Cancellation results distinguish the Fidy renewal fence from pending or verified provider source
 annulment. The canonical SubscriptionStatus includes retained cancellation evidence so reload can
 recover the paid-through date and detachment outcome. A failed or uncertain mutation blocks another

@@ -1,6 +1,6 @@
 import { PendingRead } from "@/ui/components/pending-read";
 import { SubscriptionCancellationManagement } from "./cancellation";
-import { makeCancellationCommand, subscriptionStatusQuery } from "./cancellation-command";
+import { makeCancellationManagement, subscriptionStatusQuery } from "./cancellation-command";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
@@ -415,7 +415,7 @@ const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
 const useSubscriptionStanding = (): SubscriptionStandingPresentation => {
   const router = useRouter();
   const client = router.options.context.apiClient;
-  const [cancellation] = useState(() => client.pipe(makeCancellationCommand));
+  const [cancellation] = useState(() => client.pipe(makeCancellationManagement));
   const query = subscriptionStatusQuery(client);
   const status = useAtomValue(query);
   const refresh = useAtomRefresh(query);
@@ -431,7 +431,7 @@ const useSubscriptionStanding = (): SubscriptionStandingPresentation => {
             _tag: view._tag,
           },
     refresh,
-    management: <SubscriptionCancellationManagement client={client} command={cancellation} />,
+    management: <SubscriptionCancellationManagement command={cancellation} />,
   };
 };
 const readyOffersState = ({

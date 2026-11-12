@@ -2428,20 +2428,7 @@ it.each([
         vi.setSystemTime(dueAt + runtimeOffset);
         const provider = vi.fn(() => Promise.reject(new Error("Unknown provider outcome")));
         vi.stubGlobal("fetch", withOpenAiFetch(provider));
-        yield* fromPromise(() =>
-          runBillingCollectionWorkflow({
-            environment: {
-              DB: db,
-              WOMPI_ENVIRONMENT: "sandbox",
-              WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-              WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
-              WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-            },
-            payload: { version: 1, attemptId: queued },
-            sleep: (_name, _duration) => Promise.resolve(),
-            activity: (_name, _options, work) => work(),
-          })
-        );
+        yield* runRetainedRenewal({ db, payload: { version: 1, attemptId: queued } });
         expect(provider).toHaveBeenCalledTimes(posts);
         expect(
           yield* fromPromise(() =>

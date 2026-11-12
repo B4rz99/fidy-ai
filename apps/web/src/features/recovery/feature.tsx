@@ -89,11 +89,7 @@ const confirmRotation = (
 };
 
 const mountRecoveryTask =
-  (
-    owner: RecoveryOwner,
-    clipboard: SensitiveClipboard,
-    requiresObservation: boolean
-  ): RefCallback<HTMLDivElement> =>
+  (owner: RecoveryOwner, requiresObservation: boolean): RefCallback<HTMLDivElement> =>
   (node) => {
     if (node === null) return;
     owner.active = true;
@@ -106,7 +102,6 @@ const mountRecoveryTask =
       const previous = owner.current;
       owner.current = { _tag: "Disposed" };
       if (previous._tag === "Disclosed") {
-        clipboard.clear(Redacted.value(previous.code));
         Redacted.wipeUnsafe(previous.code);
       }
     };
@@ -131,8 +126,8 @@ const MountedRecoveryTask = ({ apiClient, clipboard }: RotationViewProps): JSX.E
   );
   const owner = useRef<RecoveryOwner>({ current: state, active: false, setState }).current;
   const lifecycleRef = useCallback<RefCallback<HTMLDivElement>>(
-    (node) => mountRecoveryTask(owner, clipboard, registry.get(rotationUnresolved))(node),
-    [owner, clipboard, registry]
+    (node) => mountRecoveryTask(owner, registry.get(rotationUnresolved))(node),
+    [owner, registry]
   );
   const [rotateAtom] = useState(() => makeRotateCommand({ apiClient }));
   const rotate = useAtomSet(rotateAtom);

@@ -185,3 +185,205 @@ effectIt.effect("late clipboard completion after disposal preserves unrelated ne
     expect(stub.read()).toBe("new clipboard text");
   })
 );
+
+effectIt.effect("an exact release cannot erase a newer identical copy", () =>
+  Effect.gen(function* () {
+    const stub = clipboardStub();
+    const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
+    const first = command.copy("same-secret");
+    yield* Effect.yieldNow;
+    const second = command.copy("same-secret");
+    yield* Effect.yieldNow;
+    first.release();
+    yield* Effect.yieldNow;
+    expect(stub.read()).toBe("same-secret");
+    second.release();
+    yield* Effect.yieldNow;
+    expect(stub.read()).toBe("");
+  })
+);
+
+effectIt.effect("a released copy's delayed read cannot clear a newer identical copy", () =>
+  Effect.gen(function* () {
+    const stub = clipboardStub();
+    const read = Promise.withResolvers<string>();
+    const reading = yield* Deferred.make<void>();
+    const context = yield* Effect.context<never>();
+    const command = yield* makeSensitiveClipboard(
+      Option.some({
+        writeText: stub.clipboard.writeText,
+        readText: () => {
+          Effect.runSyncWith(context)(Deferred.succeed(reading, undefined));
+          return read.promise;
+        },
+      }),
+      "10 minutes"
+    );
+    const first = command.copy("same-secret");
+    yield* Effect.yieldNow;
+    first.release();
+    yield* Deferred.await(reading);
+    command.copy("same-secret");
+    yield* Effect.yieldNow;
+    read.resolve("same-secret");
+    yield* Effect.yieldNow;
+    expect(stub.read()).toBe("same-secret");
+  })
+);
+
+effectIt.effect(
+  "reversed native completions repair to the live copy without renewing its deadline",
+  () =>
+    Effect.gen(function* () {
+      const stub = clipboardStub();
+      const pending = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+      const callbacks = [vi.fn(), vi.fn(), vi.fn()];
+      let writes = 0;
+      const clipboard: BrowserClipboard = {
+        readText: stub.clipboard.readText,
+        writeText: (text) => {
+          const index = writes++;
+          if (index < 2) {
+            return (pending[index]?.promise ?? Promise.resolve()).then(() => stub.replace(text));
+          }
+          stub.replace(text);
+          return Promise.resolve();
+        },
+      };
+      const command = yield* makeSensitiveClipboard(Option.some(clipboard), "10 minutes");
+      command.copy("oldest", callbacks[0]);
+      yield* Effect.yieldNow;
+      command.copy("middle", callbacks[1]);
+      yield* Effect.yieldNow;
+      command.copy("latest", callbacks[2]);
+      yield* Effect.yieldNow;
+      yield* TestClock.adjust("9 minutes");
+      pending[1]?.resolve();
+      yield* Effect.yieldNow;
+      pending[0]?.resolve();
+      yield* Effect.yieldNow;
+      expect(stub.read()).toBe("latest");
+      expect(callbacks.map((callback) => callback.mock.calls.length)).toEqual([0, 0, 1]);
+      yield* TestClock.adjust("1 minute");
+      expect(stub.read()).toBe("");
+      expect(callbacks[2]).toHaveBeenCalledTimes(1);
+    })
+);
+
+effectIt.effect(
+  "release before native settlement suppresses Copied and cleans the late write",
+  () =>
+    Effect.gen(function* () {
+      const stub = clipboardStub();
+      const pending = Promise.withResolvers<void>();
+      const copied = vi.fn();
+      const command = yield* makeSensitiveClipboard(
+        Option.some({
+          readText: stub.clipboard.readText,
+          writeText: (text) =>
+            text === "late-secret"
+              ? pending.promise.then(() => stub.replace(text))
+              : stub.clipboard.writeText(text),
+        }),
+        "10 minutes"
+      );
+      const release = command.copy("late-secret", copied);
+      yield* Effect.yieldNow;
+      release.release();
+      pending.resolve();
+      yield* Effect.yieldNow;
+      expect(copied).not.toHaveBeenCalled();
+      expect(stub.read()).toBe("");
+    })
+);
+
+effectIt.effect("copying does not extend the independent reveal deadline", () =>
+  Effect.gen(function* () {
+    const stub = clipboardStub();
+    const expired = vi.fn();
+    const command = yield* makeSensitiveClipboard(Option.some(stub.clipboard), "10 minutes");
+    command.reveal(expired);
+    yield* TestClock.adjust("9 minutes");
+    command.copy("secret");
+    yield* Effect.yieldNow;
+    yield* TestClock.adjust("1 minute");
+    expect(expired).toHaveBeenCalledTimes(1);
+    expect(stub.read()).toBe("");
+  })
+);
+
+effectIt.effect("a rejected write never acknowledges Copied and later copy remains usable", () =>
+  Effect.gen(function* () {
+    const stub = clipboardStub();
+    const copied = vi.fn();
+    const command = yield* makeSensitiveClipboard(
+      Option.some({
+        readText: stub.clipboard.readText,
+        writeText: (text) =>
+          text === "rejected"
+            ? Promise.reject(new Error("denied"))
+            : stub.clipboard.writeText(text),
+      }),
+      "10 minutes"
+    );
+    command.copy("rejected", copied);
+    yield* Effect.yieldNow;
+    expect(copied).not.toHaveBeenCalled();
+    command.copy("accepted", copied);
+    yield* Effect.yieldNow;
+    expect(copied).toHaveBeenCalledTimes(1);
+    expect(stub.read()).toBe("accepted");
+  })
+);
+
+for (const denied of ["read", "clear"] as const) {
+  effectIt.effect(`denied ${denied} drops cleanup authority without a second release attempt`, () =>
+    Effect.gen(function* () {
+      const stub = clipboardStub();
+      const readText = vi.fn(() =>
+        denied === "read" ? Promise.reject(new Error("denied")) : stub.clipboard.readText()
+      );
+      const writeText = vi.fn((text: string) =>
+        text === "" && denied === "clear"
+          ? Promise.reject(new Error("denied"))
+          : stub.clipboard.writeText(text)
+      );
+      const command = yield* makeSensitiveClipboard(
+        Option.some({ readText, writeText }),
+        "10 minutes"
+      );
+      const copy = command.copy("secret");
+      yield* Effect.yieldNow;
+      copy.release();
+      yield* Effect.yieldNow;
+      copy.release();
+      yield* TestClock.adjust("10 minutes");
+      expect(stub.read()).toBe("secret");
+      expect(readText).toHaveBeenCalledTimes(1);
+      expect(writeText).toHaveBeenCalledTimes(denied === "clear" ? 2 : 1);
+    })
+  );
+}
+
+effectIt.effect("commands after scope closure admit no native writes or callbacks", () =>
+  Effect.gen(function* () {
+    const scope = yield* Effect.acquireRelease(Scope.make(), (owner, exit) =>
+      Scope.close(owner, exit)
+    );
+    const writeText = vi.fn(() => Promise.resolve());
+    const callback = vi.fn();
+    const command = yield* makeSensitiveClipboard(
+      Option.some({
+        readText: () => Promise.resolve(""),
+        writeText,
+      }),
+      "10 minutes"
+    ).pipe(Scope.provide(scope));
+    yield* Scope.close(scope, Exit.void);
+    command.copy("secret", callback).release();
+    command.reveal(callback);
+    yield* TestClock.adjust("20 minutes");
+    expect(writeText).not.toHaveBeenCalled();
+    expect(callback).not.toHaveBeenCalled();
+  })
+);

@@ -83,9 +83,11 @@ export const renewalPeriod = (
 };
 
 /**
- * Persisted enrollment lifecycle: prepared waits for submission; creating has been claimed;
- * available has a reusable payment source; refused is a definitive provider rejection; expired
- * exceeded its preparation window; verifying awaits operator resolution of an uncertain outcome.
+ * Portable enrollment decision input, not the native durable schema. Native preparation also
+ * reserves a preparing intent. Creating has been claimed; available publishes its source with
+ * the first BillingAttempt; verifying retains uncertainty and permits bounded exact-candidate
+ * lookup on submission replay. Missing candidate identity never permits another source POST.
+ * Observing expiry need not persist expired.
  */
 export type EnrollmentCheckpoint =
   | Readonly<{ status: "prepared"; priceId: PriceId; expiresAt: DateTime.Utc }>

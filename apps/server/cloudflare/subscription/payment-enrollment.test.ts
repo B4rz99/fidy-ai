@@ -3813,3 +3813,260 @@ it("resolves a pending provider source by authenticated lookup without another s
       ).toHaveLength(1);
     })
   ));
+
+it("recovers the durable first BillingAttempt notification after its first offer fails", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, environment, request } = yield* fromTestPromise(setup);
+      const provider = vi.fn((url: URL, init?: RequestInit) =>
+        Promise.resolve(
+          new Response(providerBody(url, "AVAILABLE"), {
+            status: init?.method === "POST" ? 201 : 200,
+          })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      const prepared = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({
+          environment,
+          request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+        })
+      );
+      const data = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+        yield* fromTestPromise(() => prepared.json())
+      );
+      const onAccepted = vi.fn().mockImplementationOnce(() => {
+        throw new Error("offer unavailable");
+      });
+      const send = (): Promise<Response> =>
+        handlePaymentEnrollment({
+          environment: { ...environment, onAccepted },
+          request: request("/web/subscription/payment-enrollments/submit", "POST", {
+            enrollmentId: data.enrollmentId,
+            paymentSourceMode: "create",
+            paymentRequestId: "30000000-0000-4000-8000-000000000097",
+            billingEmail: "payer@example.com",
+            cardToken: "tok_test_browser_only",
+            decisions: {
+              acceptedEndUserPolicy: true,
+              acceptedPersonalDataAuthorization: true,
+              authorizedRecurringCharges: true,
+            },
+          }),
+        });
+      expect((yield* fromTestPromise(send)).status).toBe(503);
+      const recovered = yield* fromTestPromise(send);
+      expect(recovered.status).toBe(200);
+      expect(yield* fromTestPromise(() => recovered.json())).toMatchObject({
+        status: "payment-pending",
+      });
+      expect(onAccepted).toHaveBeenCalledTimes(2);
+      expect(onAccepted.mock.calls[1]).toEqual(onAccepted.mock.calls[0]);
+      expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM billing_attempt_context").first()
+        )
+      ).toEqual({ count: 1 });
+    })
+  ));
+
+it.each(["rollback", "lost-acknowledgment"] as const)(
+  "keeps first enrollment publication atomic after native %s and recovers the exact candidate",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, environment, request } = yield* fromTestPromise(setup);
+        const provider = vi.fn((url: URL, init?: RequestInit) =>
+          Promise.resolve(
+            new Response(providerBody(url, "AVAILABLE"), {
+              status: init?.method === "POST" ? 201 : 200,
+            })
+          )
+        );
+        vi.stubGlobal("fetch", provider);
+        const prepared = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+          })
+        );
+        const data = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+          yield* fromTestPromise(() => prepared.json())
+        );
+        if (failure === "rollback") {
+          yield* fromTestPromise(() =>
+            db
+              .prepare(
+                `CREATE TRIGGER reject_first_attempt BEFORE INSERT ON billing_attempts BEGIN SELECT RAISE(ABORT, 'first_attempt_unavailable'); END`
+              )
+              .run()
+          );
+        }
+        const uncertainDb = new Proxy(db, {
+          get: (target, key): unknown =>
+            key === "batch" && failure === "lost-acknowledgment"
+              ? (statements: Array<D1PreparedStatement>) =>
+                  target.batch(statements).then(() => {
+                    throw new Error("native commit acknowledgment lost");
+                  })
+              : Reflect.get(target, key, target),
+        });
+        const onAccepted = vi.fn();
+        const submit = (binding: D1Database): Promise<Response> =>
+          handlePaymentEnrollment({
+            environment: { ...environment, DB: binding, onAccepted },
+            request: request("/web/subscription/payment-enrollments/submit", "POST", {
+              enrollmentId: data.enrollmentId,
+              paymentSourceMode: "create",
+              paymentRequestId: "30000000-0000-4000-8000-000000000096",
+              billingEmail: "payer@example.com",
+              cardToken: "tok_test_browser_only",
+              decisions: {
+                acceptedEndUserPolicy: true,
+                acceptedPersonalDataAuthorization: true,
+                authorizedRecurringCharges: true,
+              },
+            }),
+          });
+        const uncertain = yield* fromTestPromise(() => submit(uncertainDb));
+        expect(uncertain.status).toBe(503);
+        expect(yield* fromTestPromise(() => uncertain.json())).toMatchObject({
+          error: { code: "card_enrollment_unavailable" },
+        });
+        expect(onAccepted).not.toHaveBeenCalled();
+        const count = failure === "rollback" ? 0 : 1;
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM payment_source_context").first()
+          )
+        ).toEqual({ count });
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM billing_attempt_context").first()
+          )
+        ).toEqual({ count });
+        const observed = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request(`/web/subscription/payment-enrollments/${data.enrollmentId}`),
+          })
+        );
+        expect(yield* fromTestPromise(() => observed.json())).toMatchObject({
+          status: failure === "rollback" ? "verifying" : "available",
+        });
+        if (failure === "rollback") {
+          yield* fromTestPromise(() => db.prepare("DROP TRIGGER reject_first_attempt").run());
+          yield* fromTestPromise(() =>
+            db
+              .prepare("UPDATE payment_enrollments SET last_verification_at_ms=0 WHERE id=?")
+              .bind(data.enrollmentId)
+              .run()
+          );
+        }
+        const recovered = yield* fromTestPromise(() => submit(db));
+        expect(recovered.status).toBe(200);
+        expect(yield* fromTestPromise(() => recovered.json())).toMatchObject({
+          status: "payment-pending",
+        });
+        expect(onAccepted).toHaveBeenCalledTimes(1);
+        expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM payment_source_context").first()
+          )
+        ).toEqual({ count: 1 });
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM billing_attempt_context").first()
+          )
+        ).toEqual({ count: 1 });
+      })
+    )
+);
+
+it("retains an exhausted exact candidate without searching or creating a replacement source", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, environment, request } = yield* fromTestPromise(setup);
+      const provider = vi.fn((url: URL, init?: RequestInit) =>
+        Promise.resolve(
+          new Response(providerBody(url, "PENDING"), {
+            status: init?.method === "POST" ? 201 : 200,
+          })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      const prepared = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({
+          environment,
+          request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+        })
+      );
+      const data = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+        yield* fromTestPromise(() => prepared.json())
+      );
+      const onAccepted = vi.fn();
+      const submit = (): Promise<Response> =>
+        handlePaymentEnrollment({
+          environment: { ...environment, onAccepted },
+          request: request("/web/subscription/payment-enrollments/submit", "POST", {
+            enrollmentId: data.enrollmentId,
+            paymentSourceMode: "create",
+            paymentRequestId: "30000000-0000-4000-8000-000000000095",
+            billingEmail: "payer@example.com",
+            cardToken: "tok_test_browser_only",
+            decisions: {
+              acceptedEndUserPolicy: true,
+              acceptedPersonalDataAuthorization: true,
+              authorizedRecurringCharges: true,
+            },
+          }),
+        });
+      for (let attempt = 0; attempt < 10; attempt++) {
+        yield* fromTestPromise(() =>
+          db
+            .prepare("UPDATE payment_enrollments SET last_verification_at_ms=0 WHERE id=?")
+            .bind(data.enrollmentId)
+            .run()
+        );
+        const unresolved = yield* fromTestPromise(submit);
+        expect(unresolved.status).toBe(200);
+        expect(yield* fromTestPromise(() => unresolved.json())).toMatchObject({
+          status: "source-verifying",
+        });
+      }
+      const sourceLookups = provider.mock.calls.filter(([url]) =>
+        url.pathname.includes("/payment_sources/")
+      );
+      expect(sourceLookups).toHaveLength(8);
+      expect(sourceLookups.every(([url]) => url.pathname === "/v1/payment_sources/3891")).toBe(
+        true
+      );
+      expect(provider.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+      expect(onAccepted).not.toHaveBeenCalled();
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM payment_source_context").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM billing_attempt_context").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT status,wompi_candidate_source_id,payment_request_id FROM payment_enrollment_context"
+            )
+            .first()
+        )
+      ).toEqual({
+        status: "verifying",
+        wompi_candidate_source_id: 3891,
+        payment_request_id: "30000000-0000-4000-8000-000000000095",
+      });
+    })
+  ));

@@ -239,6 +239,8 @@ const makeAuthority = (
   const dispose = (): void => {
     state.disposed = true;
     controller.abort();
+    Redacted.wipeUnsafe(input.fields.documentNumber);
+    Redacted.wipeUnsafe(input.fields.productNumber);
     Option.map(state.bearer, Redacted.wipeUnsafe);
     Option.map(state.token, Redacted.wipeUnsafe);
     state.spentBearerDigests.length = 0;

@@ -108,7 +108,7 @@ const bindActions = (
       consumeOtp(
         otp,
         (owned) =>
-          approved
+          control.approved()
             ? Promise.resolve({ status: "refused" })
             : execute(input.provider.confirm(owned)),
         control.pendingOtp

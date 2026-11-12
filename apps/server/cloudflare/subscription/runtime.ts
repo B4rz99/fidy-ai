@@ -23,6 +23,7 @@ import type {
   EnrollmentEnvironment,
   SubscriptionCancellationDispatchInput,
   SubscriptionRenewalDispatchInput,
+  WeeklyPricePublication,
 } from "./contract";
 import {
   WorkflowEntrypoint,
@@ -246,12 +247,22 @@ export const dispatchSubscriptionRenewals = (
   input: SubscriptionRenewalDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> => dispatchRenewals(input);
 
-/** Publish immutable weekly replacement terms and promptly offer the atomically retained notice intent. */
+/** Commit immutable weekly terms, then attempt one bounded notice page. Deferred offers recover through dispatch; interruption and publication failure still propagate. */
 export const publishWeeklyPriceAndNotify = (
   input: BillingPriceNoticeDispatchInput & Readonly<{ price: Price }>
-): Effect.Effect<void, BillingCollectionFailure> =>
+): Effect.Effect<WeeklyPricePublication, BillingCollectionFailure> =>
   publishWeeklyPrice({ db: input.DB, price: input.price }).pipe(
-    Effect.flatMap(() => dispatchPriceNotices(input))
+    Effect.flatMap(() =>
+      dispatchPriceNotices(input).pipe(
+        Effect.as<WeeklyPricePublication>({ priceId: input.price.id, noticeOffer: "attempted" }),
+        Effect.catchTag("BillingCollectionFailure", () =>
+          Effect.succeed<WeeklyPricePublication>({
+            priceId: input.price.id,
+            noticeOffer: "deferred",
+          })
+        )
+      )
+    )
   );
 /** Recover missed publication offers; provider ambiguity never authorizes a second notice submission. */
 export const dispatchBillingPriceNotices = (

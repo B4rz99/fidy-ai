@@ -1,7 +1,7 @@
 import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { type OAuthConfirmationWork } from "../oauth-confirmation/contract";
-import { type Cause, Clock, DateTime, Effect, Fiber, Option, Schema } from "effect";
+import { Cause, Clock, DateTime, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { type BillingCollectionFailure, type BillingRuntime } from "./contract";
 import {
   OAuthClientId,
@@ -23,13 +23,14 @@ import {
   queuedBillingExecution,
 } from "./payment-enrollment-d1.test-fixture";
 import {
+  dispatchBillingPriceNotices,
   dispatchSubscriptionCancellations,
   dispatchSubscriptionRenewals,
   publishWeeklyPriceAndNotify,
   receiveBillingCollection,
   runBillingCollectionWorkflow,
 } from "./runtime";
-import { Price } from "../../src/core/subscription/contract";
+import { Price, PriceId } from "../../src/core/subscription/contract";
 import {
   executeProtectedSubscriptionQuery,
   executeSubscriptionRenewalAdmission,
@@ -517,7 +518,7 @@ it("offers Price-change notices immediately and sends the retained billing email
         paymentMethods: ["card", "nequi", "daviplata"],
       });
       let work: unknown;
-      yield* publishWeeklyPriceAndNotify({
+      const publication = yield* publishWeeklyPriceAndNotify({
         DB: db,
         BILLING_COLLECTION_QUEUE: {
           send: (body) => {
@@ -527,6 +528,7 @@ it("offers Price-change notices immediately and sends the retained billing email
         },
         price: newPrice,
       });
+      expect(publication).toEqual({ priceId: newPrice.id, noticeOffer: "attempted" });
       expect(work).toEqual({ version: 1, kind: "price-notice", userId, priceId: newPrice.id });
       let sends = 0;
       vi.stubGlobal(
@@ -802,6 +804,9 @@ it("uses the current payer and retries a definitively rejected notice", () =>
         "fetch",
         withOpenAiFetch((url: RequestInfo | URL, init?: RequestInit) =>
           new Request(url, init).json().then((body: unknown) => {
+            expect(new Headers(init?.headers).get("Idempotency-Key")).toBe(
+              `price-${priceId}-${userId}`
+            );
             expect(body).toMatchObject({ to: ["payer@example.com"] });
             sends++;
             return sends === 1
@@ -2439,3 +2444,248 @@ it(
     ),
   25_000
 );
+
+const replacementPrice = Schema.decodeSync(Schema.toCodecJson(Price))({
+  id: "22700000-0000-4000-8000-000000000004",
+  money: { amount: "10900", currency: "COP" },
+  billingPeriod: "weekly",
+  serviceMarket: "CO",
+  taxTreatment: "not-taxable",
+  renewalTerms: {
+    automaticRenewal: true,
+    renewalReminder: "none",
+    cancellation: "future-renewals-only",
+    paidAccessEnds: "paid-period-end",
+  },
+  paymentMethods: ["card", "nequi", "daviplata"],
+});
+
+effectIt.effect(
+  "returns committed Price after failed offer and recovers without republishing",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* TestClock.setTime(dueAt);
+      const publication = yield* publishWeeklyPriceAndNotify({
+        DB: db,
+        price: replacementPrice,
+        BILLING_COLLECTION_QUEUE: { send: () => Promise.reject(new Error("Queue unavailable")) },
+      });
+      expect(publication).toEqual({ priceId: replacementPrice.id, noticeOffer: "deferred" });
+      yield* admission(db);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT price_id,amount FROM billing_attempt_context WHERE previous_paid_attempt_id=?"
+            )
+            .bind(attemptId)
+            .first()
+        )
+      ).toEqual({ price_id: replacementPrice.id, amount: "10900" });
+      const offered: unknown[] = [];
+      const dispatch = (): Effect.Effect<void, BillingCollectionFailure> =>
+        dispatchBillingPriceNotices({
+          DB: db,
+          BILLING_COLLECTION_QUEUE: {
+            send: (work) => {
+              offered.push(work);
+              return Promise.resolve();
+            },
+          },
+        });
+      yield* dispatch();
+      expect(offered).toHaveLength(0);
+      yield* TestClock.adjust("60001 millis");
+      yield* Effect.all([dispatch(), dispatch()], { concurrency: 2 });
+      expect(offered).toEqual([
+        { version: 1, kind: "price-notice", userId, priceId: replacementPrice.id },
+      ]);
+    })
+);
+
+it("keeps publication failure separate from deferred notice handoff", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      const send = vi.fn(() => Promise.resolve());
+      const result = yield* Effect.exit(
+        publishWeeklyPriceAndNotify({
+          DB: db,
+          price: { ...replacementPrice, id: PriceId.make(priceId) },
+          BILLING_COLLECTION_QUEUE: { send },
+        })
+      );
+      expect(result._tag).toBe("Failure");
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        (yield* fromPromise(() => db.prepare("SELECT * FROM billing_price_notices").all())).results
+      ).toHaveLength(0);
+    })
+  ));
+
+it("preserves interruption after Price commits while retaining notice recovery", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      const started = Promise.withResolvers<void>();
+      const fiber = yield* publishWeeklyPriceAndNotify({
+        DB: db,
+        price: replacementPrice,
+        BILLING_COLLECTION_QUEUE: {
+          send: () => {
+            started.resolve();
+            return Promise.withResolvers<unknown>().promise;
+          },
+        },
+      }).pipe(Effect.forkChild({ startImmediately: true }));
+      yield* fromPromise(() => started.promise);
+      yield* Fiber.interrupt(fiber);
+      const result = yield* Fiber.await(fiber);
+      expect(Exit.isFailure(result) && Cause.hasInterruptsOnly(result.cause)).toBe(true);
+      expect(
+        (yield* fromPromise(() => db.prepare("SELECT price_id FROM billing_price_notices").all()))
+          .results
+      ).toEqual([{ price_id: replacementPrice.id }]);
+    })
+  ));
+
+it.each([
+  { label: "missing receipt", receipt: {}, rejectWrite: false },
+  { label: "empty receipt", receipt: { id: "" }, rejectWrite: false },
+  { label: "oversized receipt", receipt: { id: "x".repeat(129) }, rejectWrite: false },
+  { label: "lost acceptance write", receipt: { id: "accepted" }, rejectWrite: true },
+])("retains an unknown notice after $label and suppresses replay", ({ receipt, rejectWrite }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* fromPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO billing_price_notices(subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
+          )
+          .bind(priceId, userId)
+          .run()
+      );
+      if (rejectWrite) {
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "CREATE TRIGGER reject_notice_acceptance BEFORE UPDATE OF provider_accepted_at_ms ON billing_price_notices BEGIN SELECT RAISE(ABORT,'unavailable'); END"
+            )
+            .run()
+        );
+      }
+      const fetch = vi.fn(() => Promise.resolve(Response.json(receipt)));
+      vi.stubGlobal("fetch", withOpenAiFetch(fetch));
+      expect((yield* Effect.exit(fromPromise(() => runNotice(db))))._tag).toBe("Failure");
+      const retained = yield* fromPromise(() =>
+        db
+          .prepare("SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices")
+          .first<unknown>()
+      );
+      expect(retained).toHaveProperty("send_started_at_ms", expect.any(Number));
+      expect(retained).toMatchObject({ provider_accepted_at_ms: null });
+      yield* fromPromise(() => runNotice(db));
+      const send = vi.fn(() => Promise.resolve());
+      yield* dispatchBillingPriceNotices({ DB: db, BILLING_COLLECTION_QUEUE: { send } });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices")
+            .first()
+        )
+      ).toEqual(retained);
+    })
+  )
+);
+
+it("keeps the pending renewal Price when replacement terms publish", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* admission(db);
+      yield* publishWeeklyPriceAndNotify({
+        DB: db,
+        price: replacementPrice,
+        BILLING_COLLECTION_QUEUE: { send: () => Promise.resolve() },
+      });
+      yield* admission(db);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT price_id,amount FROM billing_attempt_context WHERE previous_paid_attempt_id=?"
+            )
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toEqual([{ price_id: priceId, amount: "9900" }]);
+    })
+  ));
+
+it.each([
+  { method: "nequi" as const, calendar: billingCalendars[0] },
+  { method: "daviplata" as const, calendar: billingCalendars[0] },
+  { method: "card" as const, calendar: billingCalendars[1] },
+  { method: "card" as const, calendar: billingCalendars[2] },
+])(
+  "does not expand Price notices to $method $calendar.billingPeriod subscriptions",
+  ({ method, calendar }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture(method, calendar));
+        const send = vi.fn(() => Promise.resolve());
+        expect(
+          yield* publishWeeklyPriceAndNotify({
+            DB: db,
+            price: replacementPrice,
+            BILLING_COLLECTION_QUEUE: { send },
+          })
+        ).toEqual({ priceId: replacementPrice.id, noticeOffer: "attempted" });
+        expect(send).not.toHaveBeenCalled();
+        expect(
+          (yield* fromPromise(() => db.prepare("SELECT * FROM billing_price_notices").all()))
+            .results
+        ).toHaveLength(0);
+      })
+    )
+);
+
+it("rejects missing notice configuration before reserving a send", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* fromPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO billing_price_notices(subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
+          )
+          .bind(priceId, userId)
+          .run()
+      );
+      const fetch = vi.fn(() => Promise.reject(new Error("No provider authority")));
+      vi.stubGlobal("fetch", withOpenAiFetch(fetch));
+      const result = yield* Effect.exit(
+        fromPromise(() =>
+          runBillingCollectionWorkflow({
+            environment: { ...noticeEnvironment(db), RESEND_API_KEY: "" },
+            payload: noticeWork,
+            sleep: () => Promise.resolve(),
+            activity: (_name, _options, work) => work(),
+          })
+        )
+      );
+      expect(result._tag).toBe("Failure");
+      expect(fetch).not.toHaveBeenCalled();
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices")
+            .first()
+        )
+      ).toEqual({ send_started_at_ms: null, provider_accepted_at_ms: null });
+    })
+  ));

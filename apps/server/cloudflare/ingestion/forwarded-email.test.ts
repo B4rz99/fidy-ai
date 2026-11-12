@@ -1653,7 +1653,7 @@ it("records interrupted reservations visibly before expiring their private bytes
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
       const id = "00000000-0000-4000-8000-000000000912";
-      const key = `email/v1/${id}`;
+      const key = `users/${userA}/email/v1/${id}`;
       yield* wait(() =>
         db
           .prepare(`INSERT INTO forwarded_email_receipts
@@ -1689,7 +1689,7 @@ it("makes an interrupted reservation visible after its bounded write window", ()
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
       const id = "00000000-0000-4000-8000-000000000913";
-      const key = `email/v1/${id}`;
+      const key = `users/${userA}/email/v1/${id}`;
       const current = yield* Clock.currentTimeMillis;
       yield* wait(() =>
         db
@@ -1719,7 +1719,7 @@ it("does not sweep an interrupted R2 write before the hard retention deadline", 
     Effect.gen(function* () {
       const { env, db, bucket } = yield* setup();
       const now = yield* Clock.currentTimeMillis;
-      const key = "email/v1/00000000-0000-4000-8000-000000000911";
+      const key = `users/${userA}/email/v1/00000000-0000-4000-8000-000000000911`;
       yield* wait(() =>
         db
           .prepare(`INSERT INTO forwarded_email_receipts

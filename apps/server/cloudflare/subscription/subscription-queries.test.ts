@@ -32,7 +32,7 @@ const patId = "30000000-0000-4000-8000-000000000001";
 const token = new Uint8Array(32);
 const pastEnd = Date.parse("2026-09-08T12:00:00Z");
 
-const fixture = (): Promise<D1Database> =>
+const fixture = (expiration: Option.Option<number> = Option.none()): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const created = yield* makePaymentEnrollmentD1([
@@ -59,6 +59,7 @@ const fixture = (): Promise<D1Database> =>
       );
       const past = Date.parse("2026-09-01T12:00:00Z");
       const future = (yield* Clock.currentTimeMillis) + 86_400_000;
+      const sessionExpiresAt = Option.getOrElse(expiration, () => future);
       yield* fromTestPromise(() =>
         db.batch([
           db
@@ -79,10 +80,10 @@ const fixture = (): Promise<D1Database> =>
             .bind(userB, past, past + 604_800_000),
           db
             .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?)")
-            .bind(sessionA, userA, token, future, future),
+            .bind(sessionA, userA, token, sessionExpiresAt, sessionExpiresAt),
           db
             .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?)")
-            .bind(sessionB, userB, token, future, future),
+            .bind(sessionB, userB, token, sessionExpiresAt, sessionExpiresAt),
           db
             .prepare("INSERT INTO pats VALUES (?, ?, ?, '[\"write\"]', ?, NULL, NULL)")
             .bind(patId, userA, token, future),
@@ -465,14 +466,7 @@ const observeStanding = (
 
 effectIt.effect("agrees with the access predicate through trial and paid grace boundaries", () =>
   Effect.gen(function* () {
-    const db = yield* fromTestPromise(() => fixture());
-    yield* fromTestPromise(() =>
-      db
-        .prepare(
-          "UPDATE web_sessions SET idle_expires_at_ms=100000000000000,hard_expires_at_ms=100000000000000"
-        )
-        .run()
-    );
+    const db = yield* fromTestPromise(() => fixture(Option.some(100000000000000)));
     const observe = (at: number, expected: "free" | "pro"): ReturnType<typeof observeStanding> =>
       observeStanding(db, at, expected);
     yield* observe(Date.parse("2026-09-01T12:00:00Z") - 1, "free");
@@ -559,14 +553,7 @@ effectIt.effect(
   "preserves paid-through after cancellation, removes grace, and retains an independent manual grant",
   () =>
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => fixture());
-      yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "UPDATE web_sessions SET idle_expires_at_ms=100000000000000,hard_expires_at_ms=100000000000000"
-          )
-          .run()
-      );
+      const db = yield* fromTestPromise(() => fixture(Option.some(100000000000000)));
       yield* seedPaidCardSubscription({ db, userId: userA });
       yield* TestClock.setTime(pastEnd + 1);
       yield* fromTestPromise(() =>
@@ -593,14 +580,7 @@ effectIt.effect(
   "keeps trial and manual access independent of queued and verified refund adjustments",
   () =>
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => fixture());
-      yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "UPDATE web_sessions SET idle_expires_at_ms=100000000000000,hard_expires_at_ms=100000000000000"
-          )
-          .run()
-      );
+      const db = yield* fromTestPromise(() => fixture(Option.some(100000000000000)));
       const trialStart = Date.parse("2026-09-01T12:00:00Z");
       yield* changeGrant(db, "grant", trialStart);
       expect((yield* observeStanding(db, trialStart, "pro")).hasProGrant).toBe(true);

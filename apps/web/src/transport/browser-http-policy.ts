@@ -548,7 +548,8 @@ const preparePolicyRequest = (
           expiresAt,
         })
       ),
-      Effect.timeoutOrElse({ duration: remaining, orElse: deadlineFailure })
+      Effect.timeoutOrElse({ duration: remaining, orElse: deadlineFailure }),
+      Effect.scoped
     );
   });
 };
@@ -560,7 +561,12 @@ const makePolicyClient = (
 ): HttpClient.HttpClient => {
   const scopedClient = HttpClient.withScope(client);
   const canonicalTransfers = Semaphore.makeUnsafe(canonicalTransferConcurrency);
-  return HttpClient.makeWith(
+  return HttpClient.makeWith<
+    HttpClientError.HttpClientError,
+    never,
+    HttpClientError.HttpClientError,
+    never
+  >(
     (requestEffect) =>
       Effect.gen(function* () {
         const startedAt = yield* Clock.currentTimeMillis;

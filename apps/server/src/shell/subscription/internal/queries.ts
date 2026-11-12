@@ -180,6 +180,7 @@ export const projectSubscriptionStatus = ({
   attemptRows: ReadonlyArray<unknown>;
   now: number;
 }>): SubscriptionStatus => {
+  decode(Schema.Finite, now);
   const row = decode(StandingRow, standingRow);
   const paidSubscription =
     row.price_id === null

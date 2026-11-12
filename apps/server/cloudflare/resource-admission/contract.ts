@@ -174,6 +174,8 @@ export type ResourceAdmissionRequest = ResourceAdmissionTransition &
     /**
      * D1 statements that must commit with admission, such as a proof/replay record or bounded outbox
      * publication. They execute after the grant exists and roll the complete admission back on error.
+     * A conditional required owner write must assert its changed-row count in the same batch;
+     * a zero-row write alone does not fail admission. Grant identity proves accounting, not authority.
      */
     readonly statements: ReadonlyArray<D1PreparedStatement>;
   }>;

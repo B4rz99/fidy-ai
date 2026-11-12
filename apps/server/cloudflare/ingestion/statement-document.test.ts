@@ -269,3 +269,44 @@ it("refuses another User's admitted document without provider work, charges or s
       ).toBeNull();
     })
   ));
+
+it("rolls back document work admission when its pending Turn proof changes no row, retaining attempt pressure", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const input = yield* heldDocument();
+      let workCalls = 0;
+      const caller = {
+        ...input.caller,
+        authority: { ...input.caller.authority, bindings: ["another-turn"] },
+      };
+      const result = yield* Effect.exit(
+        withHeldStatementDocumentUpload({
+          ...input,
+          caller,
+          work: () =>
+            Effect.sync(() => {
+              workCalls += 1;
+            }),
+        })
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(workCalls).toBe(0);
+      expect((yield* wait(() => input.bucket.list())).objects).toEqual([]);
+      const charges = yield* wait(() =>
+        input.db
+          .prepare("SELECT policy_key FROM resource_admission_events ORDER BY policy_key")
+          .all()
+      );
+      expect(charges.results).toEqual([
+        { policy_key: "ingestion.upload.attempt.global.v1" },
+        { policy_key: "ingestion.upload.attempt.user.v1" },
+      ]);
+      const owner = yield* wait(() =>
+        input.db
+          .prepare("SELECT status,document_upload_grant_id FROM hosted_turns WHERE id=?")
+          .bind(input.caller.turnId)
+          .first()
+      );
+      expect(owner).toEqual({ status: "pending", document_upload_grant_id: null });
+    })
+  ));

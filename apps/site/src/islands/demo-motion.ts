@@ -60,13 +60,15 @@ const playConversation = (root: HTMLElement): ReadonlyArray<Animation> => {
   return animations;
 };
 
+type DemonstrationSession = {
+  replay: (instant: boolean, replace?: () => void) => void;
+  dispose: () => void;
+};
+
 const mountDemonstration = (
   root: HTMLElement,
   play: () => ReadonlyArray<Animation>
-): {
-  replay: (instant: boolean, replace?: () => void) => void;
-  dispose: () => void;
-} => {
+): DemonstrationSession => {
   let played = false;
   let stopped = false;
   let handles = new Set<Animation>();
@@ -104,7 +106,9 @@ const mountDemonstration = (
     },
     { threshold: [0, visibilityThreshold] }
   );
-  const changePolicy = (): void => replay(true);
+  const changePolicy = (): void => {
+    if (!stopped) settle();
+  };
   observer.observe(root);
   preference.addEventListener("change", changePolicy);
   document.addEventListener("visibilitychange", changePolicy);
@@ -121,7 +125,7 @@ const mountDemonstration = (
   };
 };
 
-export const mountConversation = (shell: HTMLElement): ReturnType<typeof mountDemonstration> =>
+export const mountConversation = (shell: HTMLElement): DemonstrationSession =>
   mountDemonstration(shell, () => playConversation(shell));
 
 const playPreview = (root: HTMLElement): ReadonlyArray<Animation> => {

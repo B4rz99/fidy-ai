@@ -15,8 +15,12 @@ const fact = (
   firstObservedAt: DateTime.Utc,
   finalizedAt: Option.Option<DateTime.Utc> = Option.none()
 ): BillingTransactionFact => ({
-  status,
+  status: Option.some(status),
   firstObservedAt,
+  negativeObservedAt:
+    status === "DECLINED" || status === "VOIDED" || status === "ERROR"
+      ? Option.some(firstObservedAt)
+      : Option.none(),
   finalizedAt,
 });
 
@@ -82,7 +86,17 @@ it.effect("keeps a BillingAttempt pending while any provider transaction is unre
     expect(
       yield* decideBillingAttemptOutcome({
         current: "pending",
-        transactions: [fact("APPROVED", first)],
+        transactions: [
+          fact("DECLINED", first),
+          { ...fact("PENDING", first), status: Option.none() },
+        ],
+        observedAt,
+      })
+    ).toBe("pending");
+    expect(
+      yield* decideBillingAttemptOutcome({
+        current: "pending",
+        transactions: [fact("APPROVED", first, Option.some(first))],
         observedAt,
       })
     ).toBe("succeeded");
@@ -146,7 +160,10 @@ it.effect("allows a late verified approval to recover aggregate failure", () =>
     expect(
       yield* decideBillingAttemptOutcome({
         current: "failed",
-        transactions: [fact("DECLINED", first), fact("APPROVED", observedAt)],
+        transactions: [
+          fact("DECLINED", first),
+          fact("APPROVED", observedAt, Option.some(observedAt)),
+        ],
         observedAt,
       })
     ).toBe("succeeded");
@@ -186,5 +203,48 @@ it.effect("converts exact billing amounts without floating-point arithmetic", ()
   Effect.gen(function* () {
     expect(yield* amountInCentsForBilling(BigDecimal.fromStringUnsafe("99.99"))).toBe(9_999);
     expect(yield* amountInCentsForBilling(BigDecimal.fromStringUnsafe("28900"))).toBe(2_890_000);
+  })
+);
+
+it.effect(
+  "anchors retry timing to the first negative rather than an earlier pending observation",
+  () =>
+    Effect.gen(function* () {
+      const first = DateTime.makeUnsafe("2026-03-01T12:00:00.000Z");
+      const negative = DateTime.makeUnsafe("2026-03-01T12:05:00.000Z");
+      expect(
+        yield* decideBillingAttemptOutcome({
+          current: "pending",
+          transactions: [{ ...fact("DECLINED", first), negativeObservedAt: Option.some(negative) }],
+          observedAt: DateTime.makeUnsafe("2026-03-01T12:07:59.999Z"),
+        })
+      ).toBe("pending");
+    })
+);
+
+it.effect("requires finalized approval before succeeding or anchoring a paid period", () =>
+  Effect.gen(function* () {
+    const observedAt = DateTime.makeUnsafe("2026-03-01T12:05:00.000Z");
+    const unfinalized = fact("APPROVED", observedAt);
+    expect(
+      yield* decideBillingAttemptOutcome({
+        current: "pending",
+        transactions: [unfinalized],
+        observedAt,
+      })
+    ).toBe("pending");
+    expect(
+      yield* decideBillingAttemptOutcome({
+        current: "failed",
+        transactions: [unfinalized],
+        observedAt,
+      })
+    ).toBe("failed");
+    expect(
+      yield* approvingFinalizedAtFor([
+        unfinalized,
+        fact("APPROVED", observedAt, Option.some(observedAt)),
+      ])
+    ).toEqual(Option.some(observedAt));
   })
 );

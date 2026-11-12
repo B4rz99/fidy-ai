@@ -5,6 +5,8 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { handleErasureRequest, withErasureRecovery } from "./runtime";
 import { executeErasureRestore, makeErasureOwner } from "./operations";
+import { UserId } from "../../src/core/identity/contract";
+import type { ErasureContinuation } from "./contract";
 import { nativeErasurePlatform } from "./native.test-fixture";
 import { ErasureOperatorReceipt, ErasureProvider } from "../../src/core/erasure/contract";
 import { ErasureUnavailable } from "../erasure-store/contract";
@@ -114,8 +116,8 @@ const verifyExternalCustody = Effect.gen(function* () {
   const admitted = yield* Schema.decodeUnknownEffect(Schema.Struct({ reference: Schema.String }))(
     yield* Effect.tryPromise(() => accepted.json())
   );
-  const candidate = (now: number): unknown => ({
-    userId,
+  const candidate = (now: number): ErasureContinuation => ({
+    userId: UserId.make(userId),
     reference: admitted.reference,
     deadlineMs: now + 5000,
     authority: {
@@ -154,18 +156,8 @@ const verifyExternalCustody = Effect.gen(function* () {
     suffix: number
   ): Effect.Effect<Response> =>
     Effect.gen(function* () {
-      const admission = {
-        userId,
-        reference: admitted.reference,
-        deadlineMs: (yield* Clock.currentTimeMillis) + 5000,
-        authority: {
-          permission: "titular.erase",
-          operatorRef: "operator",
-          expiresAtMs: (yield* Clock.currentTimeMillis) + 60000,
-        },
-      };
       return yield* owner.custody({
-        ...admission,
+        ...candidate(yield* Clock.currentTimeMillis),
         evidence: {
           reference: admitted.reference,
           custodian,

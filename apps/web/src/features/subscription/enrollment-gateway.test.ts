@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { it as effectIt } from "@effect/vitest";
+import { TestClock } from "effect/testing";
 import {
   BigDecimal,
   type Cause,
@@ -27,6 +29,7 @@ import { PaymentDetails } from "./payment-details";
 import { presentSubscriptionOffer } from "./presentation";
 import { UnknownJsonString } from "@/schema-compatibility";
 import { type DaviplataChallenge } from "./daviplata-challenge";
+import { makeMountedDaviplata } from "./daviplata-task";
 import { type PreparedEnrollment, makeEnrollmentGateway } from "./enrollment-gateway";
 
 const policy = {
@@ -92,7 +95,7 @@ const initial = (): Response =>
     },
   });
 const otpResponse = (
-  status: "PENDING" | "APPROVED",
+  status: "PENDING" | "APPROVED" | "DECLINED",
   bearer = `synthetic-${status}-bearer`
 ): Response =>
   Response.json({
@@ -865,3 +868,253 @@ it.each([false, true])(
       })
     )
 );
+
+it("cancels an approved mounted authorization and fences its late submission and retained actions", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const enrollment = prepared(yield* Clock.currentTimeMillis);
+      const submitting = Promise.withResolvers<void>();
+      const pending = Promise.withResolvers<Response>();
+      const input = challengeFixture(enrollment, () => {
+        submitting.resolve();
+        return Effect.tryPromise(() => pending.promise).pipe(Effect.orDie);
+      });
+      const awaiting = Promise.withResolvers<void>();
+      const stages: Array<string> = [];
+      const submitted = vi.fn();
+      const uncertain = vi.fn();
+      const lock = vi.fn();
+      const task = makeMountedDaviplata({
+        enrollment,
+        start: makeEnrollmentGateway(input.client).startDaviplata,
+        publish: (stage) => {
+          stages.push(stage);
+          if (stage === "otp") awaiting.resolve();
+        },
+        lock,
+        onSubmitted: submitted,
+        onUncertain: uncertain,
+      });
+      const unmount = task.mount();
+      task.begin({
+        email: " SYNTHETIC@example.invalid ",
+        decisions: { endUserPolicy: true, personalData: true },
+        documentNumber: Redacted.make("1122233"),
+        productNumber: Redacted.make("3991111111"),
+      });
+      yield* Effect.tryPromise(() => awaiting.promise);
+      task.confirm(Redacted.make("574829"));
+      yield* Effect.tryPromise(() => submitting.promise);
+      expect(task.cancel()).toBe(true);
+      const staleOtp = Redacted.make("574829");
+      task.confirm(staleOtp);
+      task.resend();
+      task.retry();
+      expect(() => Redacted.value(staleOtp)).toThrow();
+      pending.resolve(
+        Response.json({ status: "source-verifying", enrollmentId: enrollment.enrollmentId })
+      );
+      yield* Effect.yieldNow;
+      expect(stages).toEqual(["sending", "otp", "confirming", "uncertain"]);
+      expect(submitted).not.toHaveBeenCalled();
+      expect(uncertain).toHaveBeenCalledTimes(1);
+      expect(lock).toHaveBeenLastCalledWith(true);
+      expect(input.provider).toHaveBeenCalledTimes(3);
+      expect(input.payloads).toHaveLength(1);
+      unmount();
+    })
+  ));
+
+for (const phase of ["idle", "submitting"] as const) {
+  effectIt.effect(`retires mounted DaviPlata at its original deadline while ${phase}`, () =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const enrollment = { ...prepared(now), expiresAt: DateTime.makeUnsafe(now + 5_000) };
+      const clock = yield* Clock.Clock;
+      const submitting = Promise.withResolvers<void>();
+      const pending = Promise.withResolvers<Response>();
+      const input = challengeFixture(enrollment, () => {
+        submitting.resolve();
+        return Effect.tryPromise(() => pending.promise).pipe(Effect.orDie);
+      });
+      const client = {
+        ...input.client,
+        execute: <A, E>(
+          use: Parameters<typeof input.client.execute<A, E>>[0],
+          options?: Parameters<typeof input.client.execute>[1]
+        ): Promise<A> =>
+          input.client.execute(
+            (transport) => use(transport).pipe(Effect.provideService(Clock.Clock, clock)),
+            options
+          ),
+      };
+      const awaiting = Promise.withResolvers<void>();
+      const publish = vi.fn((stage: string) => {
+        if (stage === "otp") awaiting.resolve();
+      });
+      const submitted = vi.fn();
+      const uncertain = vi.fn();
+      const lock = vi.fn();
+      const task = makeMountedDaviplata({
+        enrollment,
+        start: makeEnrollmentGateway(client).startDaviplata,
+        publish,
+        lock,
+        onSubmitted: submitted,
+        onUncertain: uncertain,
+      });
+      const unmount = task.mount();
+      task.begin({
+        email: "synthetic@example.invalid",
+        decisions: { endUserPolicy: true, personalData: true },
+        documentNumber: Redacted.make("1122233"),
+        productNumber: Redacted.make("3991111111"),
+      });
+      yield* Effect.tryPromise(() => awaiting.promise);
+      if (phase === "submitting") {
+        task.confirm(Redacted.make("574829"));
+        yield* Effect.tryPromise(() => submitting.promise);
+      }
+      yield* TestClock.adjust("6 seconds");
+      expect(publish).toHaveBeenLastCalledWith(phase === "idle" ? "refused" : "uncertain");
+      expect(lock).toHaveBeenLastCalledWith(phase !== "idle");
+      expect(uncertain).toHaveBeenCalledTimes(phase === "idle" ? 0 : 1);
+      const stale = Redacted.make("574829");
+      task.confirm(stale);
+      task.resend();
+      task.retry();
+      expect(() => Redacted.value(stale)).toThrow();
+      pending.resolve(
+        Response.json({ status: "source-verifying", enrollmentId: enrollment.enrollmentId })
+      );
+      yield* Effect.yieldNow;
+      expect(submitted).not.toHaveBeenCalled();
+      expect(input.provider).toHaveBeenCalledTimes(phase === "idle" ? 2 : 3);
+      unmount();
+    })
+  );
+}
+
+it.each(["approved", "declined", "unknown"] as const)(
+  "preserves %s confirmation evidence when the mounted provider retires",
+  (outcome) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const enrollment = prepared(yield* Clock.currentTimeMillis);
+        const input = challengeFixture(enrollment, () =>
+          Effect.succeed(
+            Response.json({
+              status: "source-verifying",
+              enrollmentId: enrollment.enrollmentId,
+            })
+          )
+        );
+        if (outcome === "unknown") {
+          input.provider.mockRejectedValueOnce(new Error("Synthetic loss"));
+        } else {
+          input.provider.mockResolvedValueOnce(
+            otpResponse(outcome === "approved" ? "APPROVED" : "DECLINED")
+          );
+        }
+        const awaiting = Promise.withResolvers<void>();
+        const settled = Promise.withResolvers<void>();
+        const submitted = vi.fn(() => settled.resolve());
+        const uncertain = vi.fn();
+        const publish = vi.fn((stage: string) => {
+          if (stage === "otp") awaiting.resolve();
+          if (stage === "refused" || stage === "uncertain") settled.resolve();
+        });
+        const task = makeMountedDaviplata({
+          enrollment,
+          start: makeEnrollmentGateway(input.client).startDaviplata,
+          publish,
+          lock: vi.fn(),
+          onSubmitted: submitted,
+          onUncertain: uncertain,
+        });
+        const unmount = task.mount();
+        task.begin({
+          email: "synthetic@example.invalid",
+          decisions: { endUserPolicy: true, personalData: true },
+          documentNumber: Redacted.make("1122233"),
+          productNumber: Redacted.make("3991111111"),
+        });
+        yield* Effect.tryPromise(() => awaiting.promise);
+        task.confirm(Redacted.make("574829"));
+        yield* Effect.tryPromise(() => settled.promise);
+        expect(submitted).toHaveBeenCalledTimes(outcome === "approved" ? 1 : 0);
+        expect(uncertain).toHaveBeenCalledTimes(outcome === "unknown" ? 1 : 0);
+        if (outcome !== "approved") {
+          expect(publish).toHaveBeenLastCalledWith(
+            outcome === "declined" ? "refused" : "uncertain"
+          );
+        }
+        expect(input.payloads).toHaveLength(outcome === "approved" ? 1 : 0);
+        unmount();
+      })
+    )
+);
+
+for (const step of ["tokenization", "first-send"] as const) {
+  effectIt.effect(`keeps expired setup uncertain after dispatched ${step}`, () =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const enrollment = { ...prepared(now), expiresAt: DateTime.makeUnsafe(now + 5_000) };
+      const clock = yield* Clock.Clock;
+      const input = challengeFixture(enrollment);
+      const started = Promise.withResolvers<void>();
+      const pending = Promise.withResolvers<Response>();
+      input.provider.mockReset().mockImplementation(() => {
+        started.resolve();
+        return pending.promise;
+      });
+      if (step === "first-send") input.provider.mockResolvedValueOnce(initial());
+      const client = {
+        ...input.client,
+        execute: <A, E>(
+          use: Parameters<typeof input.client.execute<A, E>>[0],
+          options?: Parameters<typeof input.client.execute>[1]
+        ): Promise<A> =>
+          input.client.execute(
+            (transport) => use(transport).pipe(Effect.provideService(Clock.Clock, clock)),
+            options
+          ),
+      };
+      const published = vi.fn();
+      const uncertain = vi.fn();
+      const lock = vi.fn();
+      const task = makeMountedDaviplata({
+        enrollment,
+        start: makeEnrollmentGateway(client).startDaviplata,
+        publish: published,
+        lock,
+        onSubmitted: vi.fn(),
+        onUncertain: uncertain,
+      });
+      const unmount = task.mount();
+      const fields = (): Parameters<typeof task.begin>[0] => ({
+        email: "synthetic@example.invalid",
+        decisions: { endUserPolicy: true, personalData: true },
+        documentNumber: Redacted.make("1122233"),
+        productNumber: Redacted.make("3991111111"),
+      });
+      task.begin(fields());
+      yield* Effect.tryPromise(() => started.promise);
+      yield* TestClock.adjust("6 seconds");
+      yield* Effect.yieldNow;
+      expect(published).toHaveBeenLastCalledWith("uncertain");
+      expect(uncertain).toHaveBeenCalledTimes(1);
+      expect(lock).toHaveBeenLastCalledWith(true);
+      const rejected = fields();
+      task.begin(rejected);
+      task.resend();
+      task.retry();
+      expect(() => Redacted.value(rejected.documentNumber)).toThrow();
+      pending.resolve(step === "tokenization" ? initial() : otpResponse("PENDING"));
+      yield* Effect.yieldNow;
+      expect(input.provider).toHaveBeenCalledTimes(step === "tokenization" ? 1 : 2);
+      expect(input.payloads).toHaveLength(0);
+      unmount();
+    })
+  );
+}

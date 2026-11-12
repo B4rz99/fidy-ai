@@ -83,7 +83,7 @@ const seedStaging = (
       input.count,
       input.prefix,
       input.owner,
-      input.prefix,
+      `users/${input.owner}/staging/statement/v1/${input.prefix}`,
       "a".repeat(64),
       input.state,
       input.expires,
@@ -306,9 +306,9 @@ it("staging reclaims only bounded due objects, resumes deleting objects and reta
           owner: other,
         })
       );
-      yield* io(() => bucket.put("due-1", "expired"));
-      yield* io(() => bucket.put("retry-1", "discarded"));
-      yield* io(() => bucket.put("foreign-live-1", "retained"));
+      yield* io(() => bucket.put(`users/${user}/staging/statement/v1/due-1`, "expired"));
+      yield* io(() => bucket.put(`users/${user}/staging/statement/v1/retry-1`, "discarded"));
+      yield* io(() => bucket.put(`users/${other}/staging/statement/v1/foreign-live-1`, "retained"));
       yield* io(() =>
         db
           .prepare(`INSERT INTO statement_submissions
@@ -330,9 +330,11 @@ it("staging reclaims only bounded due objects, resumes deleting objects and reta
         expect(observed.cost().rowsRead).toBeLessThanOrEqual(4_000);
         expect(observed.cost().rowsWritten).toBeLessThanOrEqual(2_000);
       }
-      expect(yield* io(() => bucket.get("due-1"))).toBeNull();
-      expect(yield* io(() => bucket.get("retry-1"))).toBeNull();
-      expect(yield* io(() => bucket.head("foreign-live-1"))).not.toBeNull();
+      expect(yield* io(() => bucket.get(`users/${user}/staging/statement/v1/due-1`))).toBeNull();
+      expect(yield* io(() => bucket.get(`users/${user}/staging/statement/v1/retry-1`))).toBeNull();
+      expect(
+        yield* io(() => bucket.head(`users/${other}/staging/statement/v1/foreign-live-1`))
+      ).not.toBeNull();
       expect(
         yield* io(() =>
           db

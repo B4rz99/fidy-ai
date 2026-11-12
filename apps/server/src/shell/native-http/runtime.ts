@@ -6,7 +6,7 @@ const notModifiedStatus = 304;
 const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
 
 const disposeReader = (
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+  reader: ReadableStreamDefaultReader<unknown>,
   cancelSource: boolean
 ): void => {
   try {
@@ -23,7 +23,7 @@ const disposeReader = (
 };
 
 const ownBody = (
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+  reader: ReadableStreamDefaultReader<unknown>,
   signal: Option.Option<AbortSignal>
 ): ReadableStream<Uint8Array> => {
   let phase: "Open" | "Reading" | "Closed" | "Cancelled" | "Errored" = "Open";
@@ -89,7 +89,7 @@ export const ownNativeResponse = ({
   signal,
 }: Readonly<{ response: Response; signal: Option.Option<AbortSignal> }>): Response => {
   if (response.body === null) return response;
-  const reader = response.body.getReader();
+  const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
   const init = {
     status: response.status,
     statusText: response.statusText,

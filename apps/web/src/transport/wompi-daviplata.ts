@@ -434,6 +434,16 @@ const perform = (authority: Authority, action: Action): Effect.Effect<DaviplataP
       })
     )
   );
+const checkInitialSend = (
+  authority: Authority,
+  first: DaviplataProviderOutcome
+): Effect.Effect<void, DaviplataAuthorizationFailed> =>
+  Effect.gen(function* () {
+    if (first.status === "refused" && authority.signal.reason === "refused") {
+      return yield* new DaviplataAuthorizationFailed({ status: "refused" });
+    }
+    if (first.status === "uncertain" || first.status === "refused") return yield* failure();
+  });
 const initialize = (
   authority: Authority,
   origin: string
@@ -474,7 +484,7 @@ const initialize = (
     state.token = Option.some(data.id);
     state.bearer = Option.some(data.url_services.token);
     const first = yield* perform(authority, { type: "send" });
-    if (first.status === "uncertain" || first.status === "refused") return yield* failure();
+    yield* checkInitialSend(authority, first);
   });
 /**
  * Tokenizes CC/product fields directly and sends the first OTP. Actions consume rotating bearers
@@ -499,14 +509,6 @@ export const startDaviplataWithWompi = (
     }
     const authority = makeAuthority(input, { deadline, now, clock: yield* Clock.Clock });
     yield* initialize(authority, origin).pipe(
-      Effect.catch(() =>
-        Effect.gen(function* () {
-          const expired = (yield* Clock.currentTimeMillis) >= deadline;
-          return yield* new DaviplataAuthorizationFailed({
-            status: expired ? "refused" : "uncertain",
-          });
-        })
-      ),
       Effect.onExit((exit) =>
         exit._tag === "Failure" ? Effect.sync(authority.dispose) : Effect.void
       )

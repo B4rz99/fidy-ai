@@ -1,7 +1,7 @@
 import { Miniflare } from "miniflare";
 import { type NativeImagePool, nativeImagePool } from "./d1-test-images.test-fixture";
 import { asynchronousNativeDatabase } from "./d1-test-bridge.test-fixture";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 export const consentHistoryTestSchema =
   "CREATE TABLE IF NOT EXISTS consent_history (sequence INTEGER PRIMARY KEY AUTOINCREMENT, record_type TEXT NOT NULL, id TEXT,user_id TEXT,disclosure_json TEXT,disclosure_message_id TEXT,decision_message_id TEXT,decision_received_at_ms INTEGER,grant_record_id TEXT,session_id TEXT,occurred_at_ms INTEGER,withdrawal_id TEXT,grant_id TEXT,offer_id TEXT,record_json TEXT,decision TEXT,kind TEXT,pairing_id TEXT,request_id TEXT,grant_consent_id TEXT,pat_id TEXT,connection_id TEXT,reason TEXT)";
@@ -13,6 +13,34 @@ const schemaStatements = new Map<string, Promise<ReadonlyArray<string>>>();
 const schemaInstallers = new WeakMap<D1Database, (sql: ReadonlyArray<string>) => Promise<void>>();
 const completeSchemas = new WeakMap<D1Database, Promise<void>>();
 const installedObjects = new WeakMap<D1Database, Set<string>>();
+/** Control SQLite's current-time operand while preserving native SQL and schema bookkeeping. */
+export const withTestDatabaseClock = Effect.fnUntraced(function* ({
+  db,
+  initialTime,
+}: Readonly<{ db: D1Database; initialTime: string }>) {
+  yield* Effect.tryPromise(() =>
+    db.batch([
+      db.prepare("CREATE TABLE test_database_clock (instant TEXT NOT NULL) STRICT"),
+      db.prepare("INSERT INTO test_database_clock VALUES (?)").bind(initialTime),
+    ])
+  );
+  const clocked: D1Database = {
+    prepare: (sql: string): D1PreparedStatement =>
+      db.prepare(sql.replaceAll("'now'", "(SELECT instant FROM test_database_clock)")),
+    batch: db.batch.bind(db),
+    exec: db.exec.bind(db),
+    dump: db.dump.bind(db),
+    withSession: db.withSession.bind(db),
+  };
+  const installed = installedObjects.get(db);
+  if (installed !== undefined) installedObjects.set(clocked, installed);
+  const install = schemaInstallers.get(db);
+  if (install !== undefined) schemaInstallers.set(clocked, install);
+  const complete = completeSchemas.get(db);
+  if (complete !== undefined) completeSchemas.set(clocked, complete);
+  return clocked;
+});
+
 const baseline = new URL("./migrations/0001_schema.sql", import.meta.url);
 const loadSchemaStatements = (): Promise<ReadonlyArray<string>> => {
   const previous = schemaStatements.get(baseline.href);

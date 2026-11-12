@@ -60,7 +60,10 @@ const prepareRenewalClaim = (
       JOIN payment_source_context source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       JOIN subscription_prices price ON price.published_order IS NOT NULL AND price.billing_period = a.billing_period AND price.service_market = a.service_market
       WHERE s.user_id = ? AND a.id = ?
-        AND a.wompi_environment = ? AND a.status = 'succeeded'
+        AND a.wompi_environment = ?
+        AND a.paid_ends_at_ms <= ?
+        AND MAX(?, CAST(unixepoch('now', 'subsec') * 1000 AS INTEGER)) < a.paid_ends_at_ms + ${renewalGraceMs}
+        AND a.status = 'succeeded'
         AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id = s.user_id)
         AND NOT EXISTS (SELECT 1 FROM billing_attempt_context renewal WHERE renewal.previous_paid_attempt_id = a.id)
         AND NOT (${unresolvedCollectionSql("s.user_id")})`,
@@ -74,6 +77,8 @@ const prepareRenewalClaim = (
         input.userId,
         input.previousPaidAttemptId,
         input.environment,
+        input.now,
+        input.now,
       ],
     },
   });
@@ -89,7 +94,7 @@ const prepareRetryClaim = (input: RenewalClaimInput & Readonly<{ id: string }>):
           WHERE first.user_id=? AND first.previous_paid_attempt_id=? AND first.renewal_attempt_number=1
             AND first.wompi_environment=? AND last.status='failed' AND last.renewal_attempt_number<3
             AND ? >= first.period_starts_at_ms + last.renewal_attempt_number * 86400000
-            AND ? < first.period_starts_at_ms + ${renewalGraceMs}
+            AND MAX(?, CAST(unixepoch('now', 'subsec') * 1000 AS INTEGER)) < first.period_starts_at_ms + ${renewalGraceMs}
             AND NOT EXISTS (SELECT 1 FROM billing_attempt_context sibling WHERE sibling.previous_paid_attempt_id=first.previous_paid_attempt_id
               AND (sibling.status<>'failed' OR sibling.renewal_attempt_number>last.renewal_attempt_number))
             AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id=sub.user_id)
@@ -163,6 +168,7 @@ export const dispatchSubscriptionRenewals = (
     FROM billing_attempt_context a JOIN subscription_standing s ON s.attempt_id = a.id AND a.user_id = s.user_id
     JOIN payment_source_context source ON source.id = a.payment_source_id AND source.user_id = a.user_id
     WHERE a.followup_due_at_ms <= ?
+      AND ? < a.paid_ends_at_ms + ${renewalGraceMs}
       AND a.wompi_environment = ?
       AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id = s.user_id)
       AND (NOT EXISTS (SELECT 1 FROM billing_attempt_context r WHERE r.previous_paid_attempt_id = a.id)
@@ -173,7 +179,7 @@ export const dispatchSubscriptionRenewals = (
             AND (newer.status<>'failed' OR newer.renewal_attempt_number>r.renewal_attempt_number))))
       AND NOT (${unresolvedCollectionSql("s.user_id")})
     `,
-        params: [now, input.WOMPI_ENVIRONMENT, now, now],
+        params: [now, now, input.WOMPI_ENVIRONMENT, now, now],
       },
     });
     const result = yield* fromPromise(() =>

@@ -1041,7 +1041,7 @@ const seedSubmission = (
         .bind(
           stagingId,
           input.userId,
-          `staging/statement/v1/seed-${input.seed}`,
+          `users/${input.userId}/staging/statement/v1/seed-${input.seed}`,
           "a".repeat(64),
           input.submittedAtMs,
           retention,

@@ -51,10 +51,10 @@ it("joins an in-flight write and fences queued or late callbacks before clearing
       const scheduling = owner.schedule(10);
       yield* fromTestPromise(() => entered.promise);
       const queued = owner.schedule(5);
-      const clearing = owner.clear();
+      const clearing = owner.retireAndClear();
       release.resolve();
       yield* fromTestPromise(() => Promise.all([scheduling, queued]));
-      expect(yield* fromTestPromise(() => clearing)).toBe(true);
+      expect(yield* fromTestPromise(() => clearing)).toEqual({ _tag: "AlarmAbsent" });
       yield* fromTestPromise(() => owner.schedule(1));
       expect(Option.isNone(alarm)).toBe(true);
     })
@@ -86,6 +86,172 @@ it("does not poison future alarm work after a rejected native write", () =>
       );
       yield* fromTestPromise(() => owner.schedule(20));
       expect(Option.getOrNull(alarm)).toBe(20);
-      expect(yield* fromTestPromise(() => owner.clear())).toBe(true);
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
+    })
+  ));
+
+it("moves installed wakes earlier for decreasing deadlines without postponing them", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let alarm = Option.none<number>();
+      const writes: Array<number | Date> = [];
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+          Promise.resolve(Option.getOrNull(alarm)),
+        setAlarm: (due): Promise<void> => {
+          writes.push(due);
+          alarm = Option.some(Number(due));
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => Promise.resolve(),
+      });
+      yield* fromTestPromise(() => Promise.all([30, 20, 10, 10, 40].map(owner.schedule)));
+      expect(writes).toEqual([30, 20, 10]);
+      expect(Option.getOrNull(alarm)).toBe(10);
+    })
+  ));
+
+it("retires synchronously during a suspended read before any write can enter", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entered = Promise.withResolvers<void>();
+      const release =
+        Promise.withResolvers<Awaited<ReturnType<DurableObjectStorage["getAlarm"]>>>();
+      const calls: string[] = [];
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => {
+          calls.push("read");
+          entered.resolve();
+          return release.promise;
+        },
+        setAlarm: (): Promise<void> => {
+          calls.push("write");
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => {
+          calls.push("delete");
+          return Promise.resolve();
+        },
+      });
+      const scheduling = owner.schedule(10);
+      yield* fromTestPromise(() => entered.promise);
+      const clearing = owner.retireAndClear();
+      const late = owner.schedule(1);
+      release.resolve(null);
+      yield* fromTestPromise(() => Promise.all([scheduling, late]));
+      expect(yield* fromTestPromise(() => clearing)).toEqual({ _tag: "AlarmAbsent" });
+      expect(calls).toEqual(["read", "delete", "read"]);
+    })
+  ));
+
+it("reports uncertainty when deletion leaves an alarm and retries without reopening admission", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let alarm = Option.some(10);
+      let deletions = 0;
+      const writes: Array<number | Date> = [];
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+          Promise.resolve(Option.getOrNull(alarm)),
+        setAlarm: (due): Promise<void> => {
+          writes.push(due);
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => {
+          deletions += 1;
+          if (deletions > 1) alarm = Option.none();
+          return Promise.resolve();
+        },
+      });
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({
+        _tag: "ClearUnconfirmed",
+      });
+      yield* fromTestPromise(() => owner.schedule(1));
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({
+        _tag: "AlarmAbsent",
+      });
+      expect(deletions).toBe(2);
+      expect(writes).toEqual([]);
+    })
+  ));
+
+it.each(["delete", "verification"] as const)(
+  "rejects failed %s and permits cleanup retry while keeping scheduling retired",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        let failed = false;
+        const calls: string[] = [];
+        const owner = makeUserRecoveryAlarm({
+          getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => {
+            calls.push("read");
+            if (failure === "verification" && !failed) {
+              failed = true;
+              return Promise.reject(new Error("Native verification unavailable"));
+            }
+            return Promise.resolve(null);
+          },
+          setAlarm: (): Promise<void> => {
+            calls.push("write");
+            return Promise.resolve();
+          },
+          deleteAlarm: (): Promise<void> => {
+            calls.push("delete");
+            if (failure === "delete" && !failed) {
+              failed = true;
+              return Promise.reject(new Error("Native deletion unavailable"));
+            }
+            return Promise.resolve();
+          },
+        });
+        yield* fromTestPromise(() =>
+          expect(owner.retireAndClear()).rejects.toMatchObject({
+            _tag: "RecoveryAlarmUnavailable",
+          })
+        );
+        yield* fromTestPromise(() => owner.schedule(1));
+        expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({
+          _tag: "AlarmAbsent",
+        });
+        expect(calls).toEqual(
+          failure === "delete" ? ["delete", "delete", "read"] : ["delete", "read", "delete", "read"]
+        );
+      })
+    )
+);
+
+it("serializes repeated retirement attempts while native deletion is pending", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const calls: string[] = [];
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => {
+          calls.push("read");
+          return Promise.resolve(null);
+        },
+        setAlarm: (): Promise<void> => {
+          calls.push("write");
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => {
+          calls.push("delete");
+          entered.resolve();
+          return release.promise;
+        },
+      });
+      const first = owner.retireAndClear();
+      yield* fromTestPromise(() => entered.promise);
+      const second = owner.retireAndClear();
+      const scheduling = owner.schedule(1);
+      expect(calls).toEqual(["delete"]);
+      release.resolve();
+      expect(yield* fromTestPromise(() => Promise.all([first, second]))).toEqual([
+        { _tag: "AlarmAbsent" },
+        { _tag: "AlarmAbsent" },
+      ]);
+      yield* fromTestPromise(() => scheduling);
+      expect(calls).toEqual(["delete", "read", "delete", "read"]);
     })
   ));

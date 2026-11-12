@@ -82,13 +82,7 @@ export const renewalPeriod = (
   return Effect.succeed({ startsAt: input.previousEndsAt, endsAt, renewalAnchor: endsAt });
 };
 
-/**
- * Portable enrollment decision input, not the native durable schema. Native preparation also
- * reserves a preparing intent. Creating has been claimed; available publishes its source with
- * the first BillingAttempt; verifying retains uncertainty and permits bounded exact-candidate
- * lookup on submission replay. Missing candidate identity never permits another source POST.
- * Observing expiry need not persist expired.
- */
+/** Portable input to enrollment decisions; it does not describe the native durable schema. */
 export type EnrollmentCheckpoint =
   | Readonly<{ status: "prepared"; priceId: PriceId; expiresAt: DateTime.Utc }>
   | Readonly<{

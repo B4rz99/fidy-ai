@@ -3814,6 +3814,26 @@ it("resolves a pending provider source by authenticated lookup without another s
     })
   ));
 
+const cardSubmissionDefaults = {
+  paymentSourceMode: "create",
+  paymentRequestId: "30000000-0000-4000-8000-000000000097",
+  billingEmail: "payer@example.com",
+  cardToken: "tok_test_browser_only",
+  decisions: {
+    acceptedEndUserPolicy: true,
+    acceptedPersonalDataAuthorization: true,
+    authorizedRecurringCharges: true,
+  },
+};
+const validCardSubmission = (
+  enrollmentId: string,
+  overrides: Partial<typeof cardSubmissionDefaults> = {}
+): typeof cardSubmissionDefaults & { readonly enrollmentId: string } => ({
+  enrollmentId,
+  ...cardSubmissionDefaults,
+  ...overrides,
+});
+
 it("recovers the durable first BillingAttempt notification after its first offer fails", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -3841,18 +3861,11 @@ it("recovers the durable first BillingAttempt notification after its first offer
       const send = (): Promise<Response> =>
         handlePaymentEnrollment({
           environment: { ...environment, onAccepted },
-          request: request("/web/subscription/payment-enrollments/submit", "POST", {
-            enrollmentId: data.enrollmentId,
-            paymentSourceMode: "create",
-            paymentRequestId: "30000000-0000-4000-8000-000000000097",
-            billingEmail: "payer@example.com",
-            cardToken: "tok_test_browser_only",
-            decisions: {
-              acceptedEndUserPolicy: true,
-              acceptedPersonalDataAuthorization: true,
-              authorizedRecurringCharges: true,
-            },
-          }),
+          request: request(
+            "/web/subscription/payment-enrollments/submit",
+            "POST",
+            validCardSubmission(data.enrollmentId)
+          ),
         });
       expect((yield* fromTestPromise(send)).status).toBe(503);
       const recovered = yield* fromTestPromise(send);
@@ -3916,18 +3929,13 @@ it.each(["rollback", "lost-acknowledgment"] as const)(
         const submit = (binding: D1Database): Promise<Response> =>
           handlePaymentEnrollment({
             environment: { ...environment, DB: binding, onAccepted },
-            request: request("/web/subscription/payment-enrollments/submit", "POST", {
-              enrollmentId: data.enrollmentId,
-              paymentSourceMode: "create",
-              paymentRequestId: "30000000-0000-4000-8000-000000000096",
-              billingEmail: "payer@example.com",
-              cardToken: "tok_test_browser_only",
-              decisions: {
-                acceptedEndUserPolicy: true,
-                acceptedPersonalDataAuthorization: true,
-                authorizedRecurringCharges: true,
-              },
-            }),
+            request: request(
+              "/web/subscription/payment-enrollments/submit",
+              "POST",
+              validCardSubmission(data.enrollmentId, {
+                paymentRequestId: "30000000-0000-4000-8000-000000000096",
+              })
+            ),
           });
         const uncertain = yield* fromTestPromise(() => submit(uncertainDb));
         expect(uncertain.status).toBe(503);
@@ -4010,18 +4018,13 @@ it("retains an exhausted exact candidate without searching or creating a replace
       const submit = (): Promise<Response> =>
         handlePaymentEnrollment({
           environment: { ...environment, onAccepted },
-          request: request("/web/subscription/payment-enrollments/submit", "POST", {
-            enrollmentId: data.enrollmentId,
-            paymentSourceMode: "create",
-            paymentRequestId: "30000000-0000-4000-8000-000000000095",
-            billingEmail: "payer@example.com",
-            cardToken: "tok_test_browser_only",
-            decisions: {
-              acceptedEndUserPolicy: true,
-              acceptedPersonalDataAuthorization: true,
-              authorizedRecurringCharges: true,
-            },
-          }),
+          request: request(
+            "/web/subscription/payment-enrollments/submit",
+            "POST",
+            validCardSubmission(data.enrollmentId, {
+              paymentRequestId: "30000000-0000-4000-8000-000000000095",
+            })
+          ),
         });
       for (let attempt = 0; attempt < 10; attempt++) {
         yield* fromTestPromise(() =>

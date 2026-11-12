@@ -1,6 +1,9 @@
+import { UserTransactionCoordinator } from "../transactions/runtime";
+import { openAiTestKey } from "../openai.test-fixture";
+import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { afterEach, expect, vi } from "vitest";
 import { it as effectIt } from "@effect/vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { handleErasureRequest, withErasureRecovery } from "./runtime";
@@ -82,7 +85,108 @@ const submit = (
     });
   });
 
+const verifyCoordinatorClearance = (
+  failure: "present" | "delete" | "verification"
+): Effect.Effect<
+  void,
+  Effect.Error<typeof setup> | Schema.SchemaError | Cause.UnknownError,
+  Effect.Services<typeof setup>
+> =>
+  Effect.gen(function* () {
+    const native = yield* setup;
+    let unavailable = true;
+    const instance = new UserTransactionCoordinator(
+      {
+        id: { name: userId },
+        storage: {
+          getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => {
+            if (unavailable && failure === "verification") {
+              return Promise.reject(new Error("Native verification unavailable"));
+            }
+            return Promise.resolve(unavailable ? 10 : null);
+          },
+          setAlarm: (): Promise<void> => Promise.reject(new Error("No scheduling expected")),
+          deleteAlarm: (): Promise<void> =>
+            unavailable && failure === "delete"
+              ? Promise.reject(new Error("Native deletion unavailable"))
+              : Promise.resolve(),
+        },
+      },
+      {
+        DB: native.db,
+        ERASURE_BUCKET: native.bucket,
+        ERASURE_REGISTRY: native.bucket,
+        OPENAI_API_KEY: openAiTestKey({
+          run: (): Promise<never> => Promise.reject(new Error("No inference expected")),
+        }),
+        HOSTED_AI_MODEL: approvedOpenAiModel,
+      }
+    );
+    const coordinator = {
+      getByName: (): Pick<Fetcher, "fetch"> => ({
+        fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
+      }),
+    };
+    const admission = yield* submit({ ...native, coordinator });
+    expect(admission.status).toBe(202);
+    const admitted = yield* Schema.decodeUnknownEffect(Schema.Struct({ reference: Schema.String }))(
+      yield* Effect.tryPromise(() => admission.json())
+    );
+    const continuation = Effect.gen(function* () {
+      const current = yield* Clock.currentTimeMillis;
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        userId,
+        reference: admitted.reference,
+        authority: {
+          permission: "titular.erase",
+          operatorRef: "operator",
+          expiresAtMs: current + 300000,
+        },
+        deadlineMs: current + 5000,
+      });
+      return yield* Effect.tryPromise(() =>
+        instance.fetch(
+          new Request("https://coordinator.internal/erasure-continue", {
+            method: "POST",
+            body,
+          })
+        )
+      );
+    });
+    expect((yield* continuation).status).toBe(202);
+    expect((yield* continuation).status).toBe(failure === "present" ? 202 : 503);
+    expect(
+      yield* Effect.tryPromise(() =>
+        native.db
+          .prepare(
+            "SELECT state,coordinator_cleared,marker_written FROM erasure_requests WHERE id=?"
+          )
+          .bind(admitted.reference)
+          .first()
+      )
+    ).toEqual({ state: "Sealing", coordinator_cleared: 0, marker_written: 0 });
+    unavailable = false;
+    expect((yield* continuation).status).toBe(202);
+    expect(
+      yield* Effect.tryPromise(() =>
+        native.db
+          .prepare(
+            "SELECT state,coordinator_cleared,marker_written FROM erasure_requests WHERE id=?"
+          )
+          .bind(admitted.reference)
+          .first()
+      )
+    ).toEqual({ state: "Erasing", coordinator_cleared: 1, marker_written: 1 });
+  });
+
 effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
+  for (const failure of ["present", "delete", "verification"] as const) {
+    it.effect(
+      `blocks coordinator disposal after ${failure} uncertainty and permits cleanup retry`,
+      () => verifyCoordinatorClearance(failure)
+    );
+  }
+
   it.effect("refuses caller-selected subjects without creating an erasure request", () =>
     Effect.gen(function* () {
       const native = yield* setup;

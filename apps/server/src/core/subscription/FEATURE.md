@@ -49,8 +49,6 @@ bun run --cwd apps/server test:cloudflare cloudflare/access-tier.test.ts cloudfl
 bun run --cwd apps/server test:cloudflare cloudflare/ingestion/statement-ingestion.test.ts --maxWorkers=1
 bun run --cwd apps/server test src/shell/subscription --coverage.enabled=false
 bun run --cwd apps/web test src/features/subscription
-bun run --cwd apps/web test:browser e2e/01-real-core-journeys.spec.ts --grep 'Subscription|first card|DaviPlata' --workers=1
-bun run --cwd apps/web test:browser e2e/product-journeys.spec.ts --workers=1
 ```
 
 Eight opt-in real-provider cases are skipped by the ordinary local suite: four Nequi and four

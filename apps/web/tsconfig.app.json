@@ -16,15 +16,18 @@
       "@fidy/server/client": ["../server/src/client.ts"]
     }
   },
-  "references": [{ "path": "../server" }, { "path": "../cli" }],
+  "references": [
+    {
+      "path": "../server"
+    },
+    {
+      "path": "../cli"
+    }
+  ],
   "include": [
     "cloudflare/**/*.ts",
     "scripts/**/*.ts",
-    "e2e/**/*.ts",
     "entry-preload.ts",
-    "playwright.config.ts",
-    "playwright.assessment.config.ts",
-    "playwright.cli.config.ts",
     "server-client-boundary.ts",
     "src/**/*.ts",
     "src/**/*.tsx",

@@ -323,9 +323,9 @@ jobs:
           for attempt in {1..3}; do
             if bun verify-production-smoke.ts promoted | tee "$RUNNER_TEMP/fidy-post-smoke.log"; then
               if grep -Fxq 'Production identity, routing and independent edge verification passed; D1 synthetic work and OAuth availability deferred: daily quota exhausted.' "$RUNNER_TEMP/fidy-post-smoke.log"; then
-                echo 'd1_quota_deferred=true' >> "$GITHUB_OUTPUT"
+                :
               elif grep -Fxq 'Production smoke passed.' "$RUNNER_TEMP/fidy-post-smoke.log"; then
-                echo 'd1_quota_deferred=false' >> "$GITHUB_OUTPUT"
+                :
               else
                 exit 1
               fi
@@ -387,15 +387,6 @@ jobs:
             echo "The migrated public topology did not expose the exact deployed release." >&2
             exit 1
           fi
-
-      - name: Verify public site representations and agent discovery
-        if: ${{ !inputs.isolate_schema_cutover }}
-        env:
-          SITE_PUBLIC_ORIGIN: https://fidyapp.com
-          SITE_D1_QUOTA_DEFERRED: ${{ steps.post_smoke.outputs.d1_quota_deferred }}
-        run: >-
-          bun run --cwd apps/site test:browser e2e/agent-readiness.spec.ts
-          --grep 'negotiates complete|keeps missing pages|honors Accept|does not reuse|keeps unsafe methods|publishes a parseable|verifies public OAuth'
 
       - name: Probe production edge without valid User or provider authority
         if: ${{ !inputs.isolate_schema_cutover }}

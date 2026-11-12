@@ -2,11 +2,11 @@
 
 /** Use only runners that the ordinary change plan already selects. */
 export const sourceScanPlan = ({
-  unit,
+  native,
   sca,
-}: Readonly<{ unit: boolean; sca: boolean }>): Readonly<{ count: number; sca: number }> => ({
-  count: 2 + Number(unit) + Number(sca),
-  sca: 3 + Number(unit),
+}: Readonly<{ native: boolean; sca: boolean }>): Readonly<{ count: number; sca: number }> => ({
+  count: 1 + Number(native) + Number(sca),
+  sca: 2 + Number(native),
 });
 
 /** Distribute the complete source scope over existing jobs; never select only changed files. */
@@ -99,8 +99,8 @@ const sourceEntries = (
   return entries;
 };
 
-const minimumPartitions = 2;
-const maximumPartitions = 4;
+const minimumPartitions = 1;
+const maximumPartitions = 3;
 const validPartitionCount = (count: number): boolean =>
   [minimumPartitions, minimumPartitions + 1, maximumPartitions].includes(count);
 const sourceSelection = (selection: string): Readonly<{ index: number; count: number }> => {
@@ -112,7 +112,7 @@ const sourceSelection = (selection: string): Readonly<{ index: number; count: nu
     index < 1 ||
     index > count
   ) {
-    throw new Error("Use one complete source partition from a 2–4 runner plan");
+    throw new Error("Use one complete source partition from a 1–3 existing runner plan");
   }
   return { index, count };
 };

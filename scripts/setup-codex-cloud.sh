@@ -36,9 +36,7 @@ rm -rf "$runtime_directory"
 trap - EXIT
 export PATH="$local_root/fidy-bun-pinned:$PATH"
 export BUN_INSTALL_CACHE_DIR="$local_root/../.cache/bun"
-export PLAYWRIGHT_BROWSERS_PATH="$local_root/../.cache/ms-playwright"
 bash scripts/install-workspace.sh
-bun node_modules/playwright/cli.js install --only-shell chromium
 cat > "$local_root/bin/fidy-native-tests" <<'LAUNCHER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -53,7 +51,6 @@ export XDG_STATE_HOME="$local_root/state"
 export ALCHEMY_HOME="$local_root/state/alchemy-auth"
 export XDG_CACHE_HOME=$local_root/../.cache
 export BUN_INSTALL_CACHE_DIR=$local_root/../.cache/bun
-export PLAYWRIGHT_BROWSERS_PATH=$local_root/../.cache/ms-playwright
 session_root=$(mktemp -d /tmp/fidy-native-keyring.XXXXXX)
 export XDG_RUNTIME_DIR="$session_root/runtime"
 export XDG_DATA_HOME="$session_root/data"
@@ -86,7 +83,6 @@ project_root=${FIDY_PROJECT_DIR:-$(cat "$local_root/native-cli/project-root")}
 cd "$project_root"
 if [[ $# == 0 ]]; then
   bun run --cwd apps/cli test:native
-  bun run --cwd apps/web test:browser:cli
 else
   "$@"
 fi

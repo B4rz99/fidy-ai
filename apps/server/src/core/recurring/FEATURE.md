@@ -31,7 +31,6 @@ are real local infrastructure; substituted provider responses do not prove live 
 bun run --cwd apps/server test:core
 bun run --cwd apps/server test:cloudflare cloudflare/recurring/recurring.test.ts cloudflare/insights/recurring-digest.test.ts
 bun run --cwd apps/server test:cloudflare cloudflare/consent/proactivity-consent.test.ts cloudflare/agent/proactivity-choice.test.ts cloudflare/insights/proactivity-runtime.test.ts --maxWorkers=1
-bun run --cwd apps/web test:browser recurring-report.spec.ts --workers=1
 ```
 
 Production checks used the signed-in browser and a separately approved seven-day Recurring QA

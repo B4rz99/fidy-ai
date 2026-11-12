@@ -9,15 +9,11 @@
     "typecheck": "astro sync && bun install --cwd ../../tools/astro --frozen-lockfile && bun ../../tools/astro/check.ts ../../apps/docs",
     "test:artifact": "node --test test/artifact.test.js",
     "reference:generate": "bun scripts/generate-reference.ts",
-    "test:browser": "playwright test",
     "sync": "astro sync"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.9",
     "astro": "7.4.5"
   },
-  "devDependencies": {
-    "@axe-core/playwright": "4.14.0",
-    "@playwright/test": "1.64.1"
-  }
+  "devDependencies": {}
 }

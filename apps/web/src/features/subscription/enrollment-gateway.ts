@@ -381,7 +381,9 @@ const makeStartDaviplata = (
       .execute(
         () =>
           Effect.gen(function* () {
-            if (!admitted) return yield* new EnrollmentSubmissionFailed();
+            if (!admitted || enrollment.method !== "daviplata") {
+              return yield* new EnrollmentSubmissionFailed();
+            }
             const facts = submissionFacts(paymentRequests, enrollment, billingEmail);
             const signal = AbortSignal.any([fields.signal, client.signal]);
             const provider = yield* startDaviplataWithWompi({

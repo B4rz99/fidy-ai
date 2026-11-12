@@ -98,30 +98,26 @@ const bindActions = (
   input: ChallengeInput,
   execute: (action: Effect.Effect<DaviplataProviderOutcome>) => Promise<DaviplataConfirmation>,
   control: ChallengeControl
-): DaviplataChallenge => {
-  return {
-    resend: () =>
-      control.approved()
-        ? Promise.resolve({ status: "refused" })
-        : execute(input.provider.resend()),
-    confirm: (otp) =>
-      consumeOtp(
-        otp,
-        (owned) =>
-          control.approved()
-            ? Promise.resolve({ status: "refused" })
-            : execute(input.provider.confirm(owned)),
-        control.pendingOtp
-      ),
-    retrySubmission: () => {
-      if (control.busy()) return Promise.resolve({ status: "busy" });
-      return control.retryAllowed()
-        ? execute(input.provider.retrySubmission())
-        : Promise.resolve({ status: "refused" });
-    },
-    dispose: control.dispose,
-  };
-};
+): DaviplataChallenge => ({
+  resend: () =>
+    control.approved() ? Promise.resolve({ status: "refused" }) : execute(input.provider.resend()),
+  confirm: (otp) =>
+    consumeOtp(
+      otp,
+      (owned) =>
+        control.approved()
+          ? Promise.resolve({ status: "refused" })
+          : execute(input.provider.confirm(owned)),
+      control.pendingOtp
+    ),
+  retrySubmission: () => {
+    if (control.busy()) return Promise.resolve({ status: "busy" });
+    return control.retryAllowed()
+      ? execute(input.provider.retrySubmission())
+      : Promise.resolve({ status: "refused" });
+  },
+  dispose: control.dispose,
+});
 
 /** Encloses provider approval and projects only safe submission outcomes for the mounted form. */
 export const makeDaviplataChallenge = (input: ChallengeInput): DaviplataChallenge => {

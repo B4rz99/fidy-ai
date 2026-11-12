@@ -187,7 +187,9 @@ const useMountedDaviplata = (props: FormProps): Draft & Commands => {
   const [task] = useState(() => makeMountedDaviplata({ ...props, publish: setStage, lock }));
   const [lifetimeRef] = useState<RefCallback<HTMLFormElement>>(
     () =>
-      (node): ReturnType<RefCallback<HTMLFormElement>> => {
+      (
+        node: Parameters<RefCallback<HTMLFormElement>>[0]
+      ): ReturnType<RefCallback<HTMLFormElement>> => {
         if (node === null) return;
         return task.mount();
       }

@@ -1639,15 +1639,19 @@ it("does not settle an obsolete cancellation after provider verification", () =>
       let gets = 0;
       vi.stubGlobal(
         "fetch",
-        withOpenAiFetch(async (input: RequestInfo | URL, init?: RequestInit) => {
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
           const request = new Request(input, init);
+          const response = Response.json({
+            data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" },
+          });
           if (request.method === "GET") {
             gets++;
-            await db
+            return db
               .prepare("UPDATE subscription_cancellations SET cancelled_at_ms=cancelled_at_ms+1")
-              .run();
+              .run()
+              .then(() => response);
           }
-          return Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" } });
+          return Promise.resolve(response);
         })
       );
       yield* fromPromise(() => observeCancellation(db));
@@ -1669,15 +1673,20 @@ it("does not spend a verification on a cancellation replaced during annulment", 
       let gets = 0;
       vi.stubGlobal(
         "fetch",
-        withOpenAiFetch(async (input: RequestInfo | URL, init?: RequestInit) => {
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
           const request = new Request(input, init);
+          const response = Response.json({
+            data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" },
+          });
           if (request.method === "PUT") {
             puts++;
-            await db
+            return db
               .prepare("UPDATE subscription_cancellations SET paid_through_ms=paid_through_ms-1")
-              .run();
-          } else gets++;
-          return Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" } });
+              .run()
+              .then(() => response);
+          }
+          gets++;
+          return Promise.resolve(response);
         })
       );
       yield* fromPromise(() => observeCancellation(db));

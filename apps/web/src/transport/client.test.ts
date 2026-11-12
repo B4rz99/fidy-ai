@@ -273,12 +273,12 @@ describe("browser HTTP policy", () => {
 
   it.effect("uses only the original remaining boundary budget after preparation", () =>
     Effect.gen(function* () {
-      for (const [boundary, path, remainingSeconds] of [
-        ["canonical", "/categories", 13],
-        ["web-auth", "/web/consent", 8],
-        ["web-auth", "/web/connections/begin", 33],
-        ["enrollment", "/enroll", 18],
-        ["hosted-turn", "/turn", 133],
+      for (const { boundary, path, remainingSeconds } of [
+        { boundary: "canonical", path: "/categories", remainingSeconds: 13 },
+        { boundary: "web-auth", path: "/web/consent", remainingSeconds: 8 },
+        { boundary: "web-auth", path: "/web/connections/begin", remainingSeconds: 33 },
+        { boundary: "enrollment", path: "/enroll", remainingSeconds: 18 },
+        { boundary: "hosted-turn", path: "/turn", remainingSeconds: 133 },
       ] as const) {
         const preparing = Deferred.makeUnsafe<void>();
         const prepared = Deferred.makeUnsafe<void>();

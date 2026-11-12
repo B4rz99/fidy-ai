@@ -995,6 +995,164 @@ it("replays until the exact original deadline and permits key reuse at that dead
     })
   ));
 
+it("matches normalized catalog input while refusing another operation under the same key", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      const first = yield* read(fixture, Option.some("normalized"), {
+        id: `%33${targetId.slice(1)}`,
+        implementation: work(fixture.db),
+      });
+      expect(first.status).toBe(404);
+      expect((yield* read(fixture, Option.some("normalized"))).status).toBe(404);
+      const different = yield* protectCanonicalRequest({
+        ...fixture,
+        caller,
+        operation: operation("transactions.listTransactions"),
+        request: new Request("https://core.internal/transactions", {
+          headers: { "Fidy-Retry-Key": "normalized" },
+        }),
+        work: work(fixture.db),
+      });
+      expect(different.status).toBe(400);
+      expect(yield* io(() => different.json())).toMatchObject({
+        error: {
+          code: "validation_failed",
+          message: "The retry key is already bound to different operation inputs.",
+        },
+      });
+      expect(yield* effects(fixture.db)).toEqual({ total: 1 });
+    })
+  ));
+
+it("keeps simultaneous exact requests to one acceptance and one domain execution", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      const responses = yield* Effect.all(
+        [read(fixture, Option.some("simultaneous")), read(fixture, Option.some("simultaneous"))],
+        { concurrency: 2 }
+      );
+      expect(responses.map((response) => response.status)).toContain(404);
+      expect(responses.every((response) => [404, 503].includes(response.status))).toBe(true);
+      expect(yield* effects(fixture.db)).toEqual({ total: 1 });
+      expect((yield* read(fixture, Option.some("simultaneous"))).status).toBe(404);
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ total: 1 });
+    })
+  ));
+
+it("never executes a live pending request while its admitted owner is still running", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* setup;
+        const started = yield* Deferred.make<void>();
+        const finish = yield* Deferred.make<void>();
+        const owner = yield* read(fixture, Option.some("pending"), {
+          id: targetId,
+          implementation: Effect.gen(function* () {
+            const response = yield* work(fixture.db);
+            yield* Deferred.succeed(started, undefined);
+            yield* Deferred.await(finish);
+            return response;
+          }),
+        }).pipe(Effect.forkScoped);
+        yield* Deferred.await(started);
+        expect((yield* read(fixture, Option.some("pending"))).status).toBe(503);
+        expect(yield* effects(fixture.db)).toEqual({ total: 1 });
+        yield* Deferred.succeed(finish, undefined);
+        expect((yield* Fiber.join(owner)).status).toBe(404);
+        expect((yield* read(fixture, Option.some("pending"))).status).toBe(404);
+        expect(yield* effects(fixture.db)).toEqual({ total: 1 });
+      })
+    )
+  ));
+
+for (const failure of ["body", "retention"] as const) {
+  it(`keeps pending uncertainty after committed work and ${failure} failure`, () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* setup;
+        const response = yield* read(fixture, Option.some("uncertain"), {
+          id: targetId,
+          implementation: Effect.gen(function* () {
+            const outcome = yield* work(fixture.db);
+            if (failure === "retention") {
+              yield* io(() =>
+                fixture.db
+                  .prepare(
+                    "CREATE TRIGGER unavailable_retention BEFORE UPDATE ON canonical_request_replays BEGIN SELECT RAISE(ABORT, 'retention unavailable'); END"
+                  )
+                  .run()
+              );
+              return outcome;
+            }
+            return new Response(
+              new ReadableStream({
+                start(controller): void {
+                  controller.error(new Error("body unavailable"));
+                },
+              })
+            );
+          }),
+        });
+        expect(response.status).toBe(503);
+        if (failure === "retention") {
+          yield* io(() => fixture.db.prepare("DROP TRIGGER unavailable_retention").run());
+        }
+        expect((yield* read(fixture, Option.some("uncertain"))).status).toBe(503);
+        expect(yield* effects(fixture.db)).toEqual({ total: 1 });
+        expect(
+          yield* io(() =>
+            fixture.db.prepare("SELECT state,status,body FROM canonical_request_replays").first()
+          )
+        ).toEqual({ state: "pending", status: null, body: null });
+        expect(
+          yield* io(() =>
+            fixture.db
+              .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+              .first()
+          )
+        ).toEqual({ total: 1 });
+      })
+    ));
+}
+
+it("refuses stale completion after the original key lifetime admits a replacement", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      const replacement = { ...fixture, current: fixture.current + 86_400_000 };
+      const first = yield* read(fixture, Option.some("replaced"), {
+        id: targetId,
+        implementation: Effect.gen(function* () {
+          yield* work(fixture.db);
+          const fresh = yield* read(replacement, Option.some("replaced"));
+          expect(fresh.status).toBe(404);
+          return Response.json({ data: "stale result", next: [] });
+        }),
+      });
+      expect(first.status).toBe(503);
+      const retained = yield* read(replacement, Option.some("replaced"));
+      expect(retained.status).toBe(404);
+      expect(yield* io(() => retained.json())).toMatchObject({ error: { code: "not_found" } });
+      expect(yield* effects(fixture.db)).toEqual({ total: 2 });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ total: 2 });
+    })
+  ));
+
 it("keeps inspection and upgrade available at zero and refuses before domain execution", () =>
   Effect.runPromise(
     Effect.gen(function* () {

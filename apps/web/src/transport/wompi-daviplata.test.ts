@@ -327,8 +327,10 @@ it("serializes competing OTP actions without consuming the next one-use bearer",
         startImmediately: true,
       });
       yield* Effect.tryPromise(() => started.promise);
-      expect((yield* challenge.resend()).status).toBe("retry-allowed");
-      expect((yield* challenge.confirm(Redacted.make("574829"))).status).toBe("retry-allowed");
+      expect((yield* challenge.resend()).status).toBe("busy");
+      const competingOtp = Redacted.make("574829");
+      expect((yield* challenge.confirm(competingOtp)).status).toBe("busy");
+      expect(() => Redacted.value(competingOtp)).toThrow();
       expect(provider).toHaveBeenCalledTimes(3);
       pending.resolve(otpResponse("PENDING", "synthetic-rotated-bearer"));
       yield* Fiber.join(first);
@@ -579,4 +581,35 @@ it.each([
       expect(provider).toHaveBeenCalledTimes(1);
     })
   )
+);
+
+it.each(["expired", "lost-mutation"] as const)(
+  "classifies initial setup with evidence for %s and wipes transferred fields",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = vi.fn((): Promise<Response> =>
+          Promise.reject(new Error("Synthetic lost mutation"))
+        );
+        const documentNumber = Redacted.make("1122233");
+        const productNumber = Redacted.make("3991111111");
+        const result = yield* startDaviplataWithWompi({
+          publicKey: "pub_test_synthetic",
+          policy,
+          fields: { documentNumber, productNumber },
+          fetchImplementation: provider,
+          signal: mountedSignal(),
+          expiresAt: (yield* Clock.currentTimeMillis) + (scenario === "expired" ? -1 : 60_000),
+        }).pipe(
+          Effect.match({
+            onSuccess: () => "unexpected-success",
+            onFailure: (error) => error.status,
+          })
+        );
+        expect(result).toBe(scenario === "expired" ? "refused" : "uncertain");
+        expect(provider).toHaveBeenCalledTimes(scenario === "expired" ? 0 : 1);
+        expect(() => Redacted.value(documentNumber)).toThrow();
+        expect(() => Redacted.value(productNumber)).toThrow();
+      })
+    )
 );

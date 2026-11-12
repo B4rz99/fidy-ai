@@ -8,10 +8,11 @@ import {
   wompiTokenizationOrigin,
 } from "./wompi-tokenization";
 
-export class DaviplataAuthorizationFailed extends Data.TaggedError(
-  "DaviplataAuthorizationFailed"
-)<{}> {}
-const failure = (): DaviplataAuthorizationFailed => new DaviplataAuthorizationFailed();
+export class DaviplataAuthorizationFailed extends Data.TaggedError("DaviplataAuthorizationFailed")<{
+  readonly status: "refused" | "uncertain";
+}> {}
+const failure = (): DaviplataAuthorizationFailed =>
+  new DaviplataAuthorizationFailed({ status: "uncertain" });
 const maximumSecretLength = 4096;
 const maximumUrlLength = 2048;
 const maximumRequestBytes = 8192;
@@ -73,12 +74,14 @@ export type DaviplataFields = Readonly<{
   productNumber: Redacted.Redacted<string>;
 }>;
 export type DaviplataProviderOutcome =
+  | Readonly<{ status: "busy" }>
   | Readonly<{ status: "retry-allowed" }>
   | Readonly<{ status: "approved"; token: Redacted.Redacted<string> }>
   | Readonly<{ status: "refused" }>
   | Readonly<{ status: "uncertain" }>;
 /** Provider authority stays enclosed; only the enrollment gateway may consume an approved token. */
 export type DaviplataProviderChallenge = Readonly<{
+  signal: AbortSignal;
   resend: () => Effect.Effect<DaviplataProviderOutcome>;
   confirm: (otp: Redacted.Redacted<string>) => Effect.Effect<DaviplataProviderOutcome>;
   retrySubmission: () => Effect.Effect<DaviplataProviderOutcome>;
@@ -410,7 +413,7 @@ const perform = (authority: Authority, action: Action): Effect.Effect<DaviplataP
       authority.dispose();
       return { status: "refused" } as const;
     }
-    if (state.busy) return { status: "retry-allowed" } as const;
+    if (state.busy) return { status: "busy" } as const;
     if (state.approved) return { status: "refused" } as const;
     if (!actionAllowed(authority, action)) return { status: "refused" } as const;
     return yield* sendAction(authority, action);
@@ -480,20 +483,33 @@ export const startDaviplataWithWompi = (
 ): Effect.Effect<DaviplataProviderChallenge, DaviplataAuthorizationFailed> =>
   Effect.gen(function* () {
     const origin = yield* wompiTokenizationOrigin(input.publicKey).pipe(Effect.mapError(failure));
-    yield* checkEndpoint(input.policy.sendUrl, origin);
-    yield* checkEndpoint(input.policy.confirmUrl, origin);
+    yield* checkEndpoint(input.policy.sendUrl, origin).pipe(
+      Effect.mapError(() => new DaviplataAuthorizationFailed({ status: "refused" }))
+    );
+    yield* checkEndpoint(input.policy.confirmUrl, origin).pipe(
+      Effect.mapError(() => new DaviplataAuthorizationFailed({ status: "refused" }))
+    );
     const now = yield* Clock.currentTimeMillis;
     const deadline = Math.min(input.expiresAt, now + maximumLifetimeMilliseconds);
     if (!Number.isFinite(deadline) || deadline <= now || input.signal.aborted) {
-      return yield* failure();
+      return yield* new DaviplataAuthorizationFailed({ status: "refused" });
     }
     const authority = makeAuthority(input, { deadline, now, clock: yield* Clock.Clock });
     yield* initialize(authority, origin).pipe(
+      Effect.catch(() =>
+        Effect.gen(function* () {
+          const expired = (yield* Clock.currentTimeMillis) >= deadline;
+          return yield* new DaviplataAuthorizationFailed({
+            status: expired ? "refused" : "uncertain",
+          });
+        })
+      ),
       Effect.onExit((exit) =>
         exit._tag === "Failure" ? Effect.sync(authority.dispose) : Effect.void
       )
     );
     return {
+      signal: authority.signal,
       resend: () => perform(authority, { type: "send" }),
       confirm: (otp: Redacted.Redacted<string>) => perform(authority, { type: "confirm", otp }),
       retrySubmission: () =>

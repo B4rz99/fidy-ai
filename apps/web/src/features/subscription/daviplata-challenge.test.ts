@@ -37,6 +37,7 @@ const fixture = (overrides: Partial<DaviplataProviderChallenge> = {}): Challenge
   const client = makeSubscriptionEnrollmentClient({ apiOrigin: "https://api.test.fidyapp.com" });
   clients.push(client);
   const provider: DaviplataProviderChallenge = {
+    signal: new AbortController().signal,
     resend: vi.fn(() => Effect.succeed({ status: "retry-allowed" } as const)),
     confirm: vi.fn(() => Effect.succeed(approval())),
     retrySubmission: vi.fn(() => Effect.succeed(approval())),
@@ -127,3 +128,18 @@ it("keeps a lost approved submission uncertain when its retry authority later ex
       challenge.dispose();
     })
   ));
+
+it("consumes supplied OTP immediately and fences a submitted result after disposal", async () => {
+  const input = fixture();
+  const pending = Promise.withResolvers<PaymentSubmissionType>();
+  input.submitApproved.mockReturnValue(pending.promise);
+  const challenge = makeDaviplataChallenge(input);
+  const otp = Redacted.make("574829");
+  const confirming = challenge.confirm(otp);
+  expect(() => Redacted.value(otp)).toThrow();
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
+  challenge.dispose();
+  pending.resolve(submission);
+  expect(await confirming).toEqual({ status: "refused" });
+  expect(await challenge.retrySubmission()).toEqual({ status: "refused" });
+});

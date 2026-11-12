@@ -14,12 +14,20 @@ import {
 } from "@/transport/client";
 import { type CardFields, tokenizeCardWithWompi } from "@/transport/wompi-tokenization";
 import { authorizeNequiWithWompi } from "@/transport/wompi-nequi";
-import { type DaviplataFields, startDaviplataWithWompi } from "@/transport/wompi-daviplata";
+import {
+  type DaviplataAuthorizationFailed,
+  type DaviplataFields,
+  startDaviplataWithWompi,
+} from "@/transport/wompi-daviplata";
 import { type DaviplataChallenge, makeDaviplataChallenge } from "./daviplata-challenge";
 import { paymentSubmissionIsTerminal } from "./payment-status";
 
 export type Enrollment = PaymentEnrollmentType;
 export type PaymentSubmission = PaymentSubmissionType;
+
+export class DaviplataSetupFailed extends Data.TaggedError("DaviplataSetupFailed")<{
+  readonly status: "refused" | "uncertain";
+}> {}
 
 class EnrollmentSubmissionFailed extends Data.TaggedError("EnrollmentSubmissionFailed")<{}> {}
 
@@ -319,26 +327,61 @@ const makeContinue =
     );
   };
 
+const daviplataSetupFailure = (
+  error: EnrollmentSubmissionFailed | DaviplataAuthorizationFailed
+): DaviplataSetupFailed =>
+  new DaviplataSetupFailed({
+    status: error instanceof EnrollmentSubmissionFailed ? "refused" : error.status,
+  });
+
+const submitDaviplata =
+  (
+    client: SubscriptionEnrollmentClient,
+    paymentRequests: PaymentRequestStore,
+    context: Readonly<{ enrollment: PreparedEnrollment; facts: SubmissionFacts }>
+  ): Parameters<typeof makeDaviplataChallenge>[0]["submitApproved"] =>
+  (daviplataToken, signal) =>
+    completed(
+      paymentRequests,
+      context.enrollment,
+      client.execute(
+        (transport) =>
+          transport.subscriptionEnrollment.submit({
+            payload: {
+              ...context.facts,
+              paymentSourceMode: "create",
+              method: "daviplata",
+              daviplataToken,
+            },
+          }),
+        { signal }
+      )
+    );
+
+const admitDaviplata = (started: Set<string>, enrollment: PreparedEnrollment): boolean => {
+  if (
+    enrollment.method !== "daviplata" ||
+    enrollment.paymentSourceMode !== "create" ||
+    started.has(enrollment.enrollmentId)
+  ) {
+    return false;
+  }
+  started.add(enrollment.enrollmentId);
+  return true;
+};
+
 const makeStartDaviplata = (
   client: SubscriptionEnrollmentClient,
   paymentRequests: PaymentRequestStore
 ): EnrollmentGateway["startDaviplata"] => {
   const started = new Set<string>();
-  return (enrollment, billingEmail, fields) =>
-    client
+  return (enrollment, billingEmail, fields) => {
+    const admitted = admitDaviplata(started, enrollment);
+    return client
       .execute(
         () =>
           Effect.gen(function* () {
-            if (
-              enrollment.method !== "daviplata" ||
-              enrollment.paymentSourceMode !== "create" ||
-              started.has(enrollment.enrollmentId)
-            ) {
-              Redacted.wipeUnsafe(fields.documentNumber);
-              Redacted.wipeUnsafe(fields.productNumber);
-              return yield* new EnrollmentSubmissionFailed();
-            }
-            started.add(enrollment.enrollmentId);
+            if (!admitted) return yield* new EnrollmentSubmissionFailed();
             const facts = submissionFacts(paymentRequests, enrollment, billingEmail);
             const signal = AbortSignal.any([fields.signal, client.signal]);
             const provider = yield* startDaviplataWithWompi({
@@ -353,31 +396,20 @@ const makeStartDaviplata = (
             return makeDaviplataChallenge({
               provider,
               client,
-              submitApproved: (daviplataToken) =>
-                completed(
-                  paymentRequests,
-                  enrollment,
-                  client.execute(
-                    (transport) =>
-                      transport.subscriptionEnrollment.submit({
-                        payload: {
-                          ...facts,
-                          paymentSourceMode: "create",
-                          method: "daviplata",
-                          daviplataToken,
-                        },
-                      }),
-                    { signal }
-                  )
-                ),
+              submitApproved: submitDaviplata(client, paymentRequests, { enrollment, facts }),
             });
-          }),
+          }).pipe(Effect.catch((error) => Effect.succeed(daviplataSetupFailure(error)))),
         { signal: fields.signal }
       )
+      .then((result) => {
+        if (result instanceof DaviplataSetupFailed) throw result;
+        return result;
+      })
       .finally(() => {
         Redacted.wipeUnsafe(fields.documentNumber);
         Redacted.wipeUnsafe(fields.productNumber);
       });
+  };
 };
 
 const makePrepare =

@@ -198,6 +198,10 @@ const emptyCardFields: CardFields = {
   cardholderName: "",
 };
 const enrollmentSubmitLabel = (busy: boolean): string => (busy ? "Activando Pro…" : "Activar Pro");
+const nequiSubmitLabel = (busy: boolean, awaitingApproval: boolean): string => {
+  if (!busy) return "Autorizar con Nequi";
+  return awaitingApproval ? "Esperando autorización…" : "Procesando…";
+};
 type DaviplataFormActions = Readonly<{
   gateway: Option.Option<EnrollmentGateway>;
   onDaviplataSubmitted: (email: string, submission: PaymentSubmission) => void;
@@ -339,7 +343,7 @@ const NequiFormContents = ({
       </>
     )}
     <Button disabled={!allDecisionsAccepted(decisions) || busy} type="submit">
-      {busy ? "Esperando autorización…" : "Autorizar con Nequi"}
+      {nequiSubmitLabel(busy, awaitingApproval)}
     </Button>
   </form>
 );

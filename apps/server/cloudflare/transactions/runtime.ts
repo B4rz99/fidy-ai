@@ -504,6 +504,7 @@ const privateErasureRestore = (
         db: input.environment.DB,
         userId: input.userId,
         candidate: input.candidate,
+        signal: input.request.signal,
         stores: erasureStores(input.environment.DB),
         recovery: erasureRecovery(input.environment),
       })
@@ -968,6 +969,10 @@ class CoordinatorRecoveryUnavailable extends Data.TaggedError("CoordinatorRecove
 /** Advance at most four incomplete Users once per private scheduled tick. */
 export const repairDashboardProjections: typeof ownerRepairDashboardProjections = (...args) =>
   ownerRepairDashboardProjections(...args);
+
+/** Current local deletion inventory used by guarded restoration release. */
+export const coordinatorErasureStoreIds = (db: D1Database): ReadonlyArray<string> =>
+  erasureStores(db).map((store) => store.id);
 
 const erasureStores = (db: D1Database): ReadonlyArray<ErasureStore> => [
   ...makeAgentErasureStores(db),

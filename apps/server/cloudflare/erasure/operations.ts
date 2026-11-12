@@ -239,6 +239,7 @@ export const executeErasureRestore = (
     stores: ReadonlyArray<ErasureStore>;
     userId: string;
     candidate: unknown;
+    signal: AbortSignal;
   }>
 ): Effect.Effect<Response> =>
   restoreCase({ ...input, configuration: input.recovery }).pipe(

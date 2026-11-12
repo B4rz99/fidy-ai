@@ -318,7 +318,11 @@ Uncertain or restored checkpoints require existing restore/release reconciliatio
 transfer witness prevents first-release initialization after complete independent metadata loss.
 Fresh authenticated account deletion fences new activity and waits for confirmed upload settlement
 before removing owner records and User file prefixes. Minimal independent markers protect restoration;
-external acknowledgments remain distinct from verified cleanup. Metadata outlives supported backups,
+external acknowledgments remain distinct from verified cleanup. Restoration replay rechecks original operator
+expiry and cancellation before scan writes, and case import rechecks its short admission after independent
+evidence reads. Same-generation retries retain exact original request identity and time. Guarded release
+compares completed local steps against the current coordinator-composed inventory in its publication unit;
+ExternalPending remains separate from external completion. Metadata outlives supported backups,
 then expires after external completion. Migration and release checks follow the
 [release procedure](../../docs/operations/production-releases.md).
 

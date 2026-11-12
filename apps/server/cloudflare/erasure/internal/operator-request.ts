@@ -28,6 +28,7 @@ export const operatorRequest = (
   input: Readonly<{
     request: Request;
     environment: ErasureOperatorEnvironment;
+    storeIds: ReadonlyArray<string>;
     http: OutboundHttpService;
   }>
 ): Effect.Effect<Response> =>
@@ -58,6 +59,7 @@ const dispatchOperator = (
   input: Readonly<{
     request: Request;
     environment: ErasureOperatorEnvironment;
+    storeIds: ReadonlyArray<string>;
     http: OutboundHttpService;
     command: typeof ErasureOperatorAction.Type;
     operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;

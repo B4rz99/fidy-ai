@@ -1938,7 +1938,7 @@ const verifyQueuedSiblingRefusal = (
   db: D1Database,
   queued: string,
   succeeded: string
-): Effect.Effect<void> =>
+): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     const facts = (): Promise<unknown> =>
       db

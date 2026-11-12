@@ -9,6 +9,7 @@ import { RecoveryCase } from "./recovery-case";
 import { expectedGeneration } from "./generation";
 
 const maximumCaseBytes = 512;
+const canceled = (signal: AbortSignal): boolean => signal.aborted;
 const admissionLifetimeMs = 5000;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
@@ -50,7 +51,7 @@ export const restoreCase = (
     })(input.candidate);
     const current = yield* Clock.currentTimeMillis;
     if (
-      input.signal.aborted ||
+      canceled(input.signal) ||
       !validRestoreAdmission({ admission, current, userId: input.userId })
     ) {
       return yield* new ErasureUnavailable();
@@ -64,7 +65,7 @@ export const restoreCase = (
     );
     const committedAt = yield* Clock.currentTimeMillis;
     if (
-      input.signal.aborted ||
+      canceled(input.signal) ||
       committedAt >= Math.min(admission.deadlineMs, admission.authority.expiresAtMs)
     ) {
       return yield* new ErasureUnavailable();

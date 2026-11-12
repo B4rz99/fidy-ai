@@ -177,4 +177,4 @@ export const releaseRestore = (input: RestoreInput): Effect.Effect<Response, Era
         headers: { "cache-control": "no-store" },
       }
     );
-  });
+  }).pipe(Effect.mapError(() => new ErasureUnavailable()));

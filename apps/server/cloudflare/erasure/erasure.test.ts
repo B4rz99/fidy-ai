@@ -1,6 +1,6 @@
 import { afterEach, expect, vi } from "vitest";
 import { it as effectIt } from "@effect/vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { handleErasureRequest, withErasureRecovery } from "./runtime";
@@ -9,6 +9,13 @@ import { nativeErasurePlatform } from "./native.test-fixture";
 import { makeMemoryErasureStores } from "../memory/runtime";
 
 afterEach(() => vi.useRealTimers());
+const json = Schema.fromJsonString(Schema.Unknown);
+// The test owns this controller to abort the real request during a blocked platform read.
+const cancellationController = (): AbortController => new AbortController();
+const publishCase = Effect.fn(function* (bucket: R2Bucket, record: unknown) {
+  const body = yield* Schema.encodeEffect(json)(record);
+  yield* Effect.tryPromise(() => bucket.put(`recovery/cases/${reference}`, body));
+});
 const userId = "12740000-0000-4000-8000-000000000001";
 const foreignUser = "12740000-0000-4000-8000-000000000099";
 const sessionId = "12740000-0000-4000-8000-000000000002";
@@ -208,17 +215,17 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
             .bind(reference),
         ])
       );
-      yield* Effect.tryPromise(() =>
-        native.bucket.put(
-          `recovery/cases/${reference}`,
-          JSON.stringify({ reference, userId, requestedAtMs: current, sealed: false })
-        )
-      );
+      yield* publishCase(native.bucket, {
+        reference,
+        userId,
+        requestedAtMs: current,
+        sealed: false,
+      });
       expect(
         (yield* executeErasureRestore({
           db: native.db,
           userId,
-          signal: new AbortController().signal,
+          signal: yield* Effect.abortSignal,
           stores: makeMemoryErasureStores(native.db),
           recovery: { db: native.db, bucket: Option.some(native.bucket) },
           candidate: {
@@ -254,21 +261,21 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
     Effect.gen(function* () {
       const native = yield* setup;
       const current = yield* Clock.currentTimeMillis;
-      const cancellation = new AbortController();
-      yield* Effect.tryPromise(() =>
-        native.bucket.put(
-          `recovery/cases/${reference}`,
-          JSON.stringify({ reference, userId, requestedAtMs: current, sealed: true })
-        )
-      );
+      const cancellation = cancellationController();
+      yield* publishCase(native.bucket, {
+        reference,
+        userId,
+        requestedAtMs: current,
+        sealed: true,
+      });
       const registry = new Proxy(native.bucket, {
         get: (target, property): unknown =>
           property === "get"
-            ? async (key: string) => {
-                const object = await target.get(key);
-                if (key.startsWith("recovery/cases/")) cancellation.abort();
-                return object;
-              }
+            ? (key: string) =>
+                target.get(key).then((object) => {
+                  if (key.startsWith("recovery/cases/")) cancellation.abort();
+                  return object;
+                })
             : Reflect.get(target, property, target),
       });
       expect(
@@ -315,7 +322,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         },
       };
       const restore = executeErasureRestore({
-        signal: new AbortController().signal,
+        signal: yield* Effect.abortSignal,
         db: native.db,
         userId,
         candidate,
@@ -326,8 +333,18 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
       for (const value of [
         "invalid JSON",
         "x".repeat(513),
-        JSON.stringify({ reference, userId: foreignUser, requestedAtMs: current, sealed: true }),
-        JSON.stringify({ reference: foreignSession, userId, requestedAtMs: current, sealed: true }),
+        yield* Schema.encodeEffect(json)({
+          reference,
+          userId: foreignUser,
+          requestedAtMs: current,
+          sealed: true,
+        }),
+        yield* Schema.encodeEffect(json)({
+          reference: foreignSession,
+          userId,
+          requestedAtMs: current,
+          sealed: true,
+        }),
       ]) {
         yield* Effect.tryPromise(() => native.bucket.put(`recovery/cases/${reference}`, value));
         expect((yield* restore).status).toBe(503);
@@ -338,7 +355,8 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         )
       ).toBe(0);
       const generation = yield* Effect.tryPromise(() => native.bucket.get("recovery/generation"));
-      expect(yield* Effect.tryPromise(() => generation?.text())).toBe("initial");
+      if (generation === null) return yield* Effect.die("Missing independent generation");
+      expect(yield* Effect.tryPromise(() => generation.text())).toBe("initial");
     })
   );
 
@@ -346,15 +364,12 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
     Effect.gen(function* () {
       const native = yield* setup;
       const current = yield* Clock.currentTimeMillis;
-      const publish = (requestedAtMs: number): Effect.Effect<unknown, unknown> =>
-        Effect.tryPromise(() =>
-          native.bucket.put(
-            `recovery/cases/${reference}`,
-            JSON.stringify({ reference, userId, requestedAtMs, sealed: true })
-          )
-        );
+      const publish = (
+        requestedAtMs: number
+      ): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
+        publishCase(native.bucket, { reference, userId, requestedAtMs, sealed: true });
       const restore = executeErasureRestore({
-        signal: new AbortController().signal,
+        signal: yield* Effect.abortSignal,
         db: native.db,
         userId,
         stores: makeMemoryErasureStores(native.db),
@@ -405,23 +420,28 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
     Effect.gen(function* () {
       const native = yield* setup;
       const current = yield* Clock.currentTimeMillis;
-      const marker = JSON.stringify({ reference, userId, requestedAtMs: current, sealed: true });
+      const marker = yield* Schema.encodeEffect(json)({
+        reference,
+        userId,
+        requestedAtMs: current,
+        sealed: true,
+      });
       yield* Effect.tryPromise(() => native.bucket.put(`recovery/cases/${reference}`, marker));
       const registry = new Proxy(native.bucket, {
         get: (target, property): unknown =>
           property === "get"
-            ? async (key: string) => {
-                const object = await target.get(key);
-                if (key.startsWith("recovery/cases/")) {
-                  vi.useFakeTimers({ toFake: ["Date"], now: current + 5001 });
-                }
-                return object;
-              }
+            ? (key: string) =>
+                target.get(key).then((object) => {
+                  if (key.startsWith("recovery/cases/")) {
+                    vi.useFakeTimers({ toFake: ["Date"], now: current + 5001 });
+                  }
+                  return object;
+                })
             : Reflect.get(target, property, target),
       });
       expect(
         (yield* executeErasureRestore({
-          signal: new AbortController().signal,
+          signal: yield* Effect.abortSignal,
           db: native.db,
           userId,
           stores: makeMemoryErasureStores(native.db),
@@ -488,7 +508,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         expect((yield* Effect.result(observe))._tag).toBe("Failure");
         expect(
           (yield* executeErasureRestore({
-            signal: new AbortController().signal,
+            signal: yield* Effect.abortSignal,
             db,
             userId,
             recovery,

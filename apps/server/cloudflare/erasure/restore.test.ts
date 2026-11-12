@@ -30,6 +30,7 @@ const ingress = makePublicWorker(
 );
 const override = 'private-core="12740000-0000-4000-8000-000000000001"';
 const json = Schema.fromJsonString(Schema.Unknown);
+const cancellationController = (): AbortController => new AbortController();
 afterEach(() => vi.restoreAllMocks());
 const advanceToExternal = (
   input: Readonly<{
@@ -357,17 +358,13 @@ const verifyBoundedReplay = Effect.fn(function* (
   const replayGeneration = "12740000-0000-4000-8000-000000000088";
   for (let index = 1; index <= 4; index++) {
     const caseRef = `ffffffff-0000-4000-8000-${String(index).padStart(12, "0")}`;
-    yield* Effect.tryPromise(() =>
-      input.registry.put(
-        `recovery/cases/${caseRef}`,
-        JSON.stringify({
-          reference: caseRef,
-          userId: caseRef,
-          requestedAtMs: input.current,
-          sealed: false,
-        })
-      )
-    );
+    const marker = yield* Schema.encodeEffect(json)({
+      reference: caseRef,
+      userId: caseRef,
+      requestedAtMs: input.current,
+      sealed: false,
+    });
+    yield* Effect.tryPromise(() => input.registry.put(`recovery/cases/${caseRef}`, marker));
   }
   yield* Effect.tryPromise(() => input.registry.put("recovery/generation", replayGeneration));
   const members = (): Effect.Effect<unknown, Cause.UnknownError> =>
@@ -471,7 +468,7 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
   );
   const transport: { reply: "Pass" | "Lose" | "Abort"; cancellation: AbortController } = {
     reply: "Pass",
-    cancellation: new AbortController(),
+    cancellation: cancellationController(),
   };
   const send = (
     command: unknown,
@@ -496,19 +493,22 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
               ERASURE_SUPPORT_AUDIENCE: audience,
               USER_TRANSACTION_COORDINATOR: {
                 getByName: (name) => ({
-                  fetch: async (value, init) => {
-                    const response = await native.coordinator.getByName(name).fetch(value, init);
-                    if (
-                      new URL(new Request(value, init).url).pathname === "/erasure-restore" &&
-                      response.status === 202
-                    ) {
-                      const outcome = transport.reply;
-                      transport.reply = "Pass";
-                      if (outcome === "Lose") throw new Error("Accepted restore reply lost");
-                      if (outcome === "Abort") transport.cancellation.abort();
-                    }
-                    return response;
-                  },
+                  fetch: (value, init) =>
+                    native.coordinator
+                      .getByName(name)
+                      .fetch(value, init)
+                      .then((response) => {
+                        if (
+                          new URL(new Request(value, init).url).pathname === "/erasure-restore" &&
+                          response.status === 202
+                        ) {
+                          const outcome = transport.reply;
+                          transport.reply = "Pass";
+                          if (outcome === "Lose") throw new Error("Accepted restore reply lost");
+                          if (outcome === "Abort") transport.cancellation.abort();
+                        }
+                        return response;
+                      }),
                 }),
               },
             },
@@ -776,7 +776,7 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
       transport.reply = outcome;
     },
     resetCancellation: () => {
-      transport.cancellation = new AbortController();
+      transport.cancellation = cancellationController();
     },
   });
 });

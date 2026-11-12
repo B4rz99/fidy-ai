@@ -58,42 +58,40 @@ const CancellationReview = ({
   busy: boolean;
   confirm: () => void;
   back: () => void;
-}>): JSX.Element => {
-  return (
-    <section aria-label="Revisar cancelación" className="flex flex-col gap-3">
-      <h2 ref={focusElement} tabIndex={-1}>
-        ¿Cancelar renovaciones futuras?
-      </h2>
-      <p>
-        Detendremos las próximas renovaciones. Conservarás el acceso del período pagado hasta el{" "}
-        {dateFormatter.format(paid.endsAt.epochMilliseconds)}.
-      </p>
-      <p>
-        Desvincularemos la fuente de pago reutilizable de los cobros de Fidy. Si requiere anulación
-        en Wompi, te mostraremos si está pendiente o confirmada.
-      </p>
-      <p>
-        Tu historial de pagos se conserva. Cancelar no solicita un reembolso ni revierte cobros ya
-        iniciados.
-      </p>
-      <div className="flex flex-wrap gap-3">
-        <Button contentLayout="wrap" type="button" variant="outline" disabled={busy} onClick={back}>
-          Conservar renovaciones
-        </Button>
-        <Button
-          contentLayout="wrap"
-          type="button"
-          variant="destructive"
-          disabled={busy}
-          onClick={confirm}
-        >
-          Confirmar cancelación
-        </Button>
-      </div>
-      {busy ? <output aria-live="polite">Cancelando renovaciones…</output> : null}
-    </section>
-  );
-};
+}>): JSX.Element => (
+  <section aria-label="Revisar cancelación" className="flex flex-col gap-3">
+    <h2 ref={focusElement} tabIndex={-1}>
+      ¿Cancelar renovaciones futuras?
+    </h2>
+    <p>
+      Detendremos las próximas renovaciones. Conservarás el acceso del período pagado hasta el{" "}
+      {dateFormatter.format(paid.endsAt.epochMilliseconds)}.
+    </p>
+    <p>
+      Desvincularemos la fuente de pago reutilizable de los cobros de Fidy. Si requiere anulación en
+      Wompi, te mostraremos si está pendiente o confirmada.
+    </p>
+    <p>
+      Tu historial de pagos se conserva. Cancelar no solicita un reembolso ni revierte cobros ya
+      iniciados.
+    </p>
+    <div className="flex flex-wrap gap-3">
+      <Button contentLayout="wrap" type="button" variant="outline" disabled={busy} onClick={back}>
+        Conservar renovaciones
+      </Button>
+      <Button
+        contentLayout="wrap"
+        type="button"
+        variant="destructive"
+        disabled={busy}
+        onClick={confirm}
+      >
+        Confirmar cancelación
+      </Button>
+    </div>
+    {busy ? <output aria-live="polite">Cancelando renovaciones…</output> : null}
+  </section>
+);
 
 type CancellationCommand = ReturnType<typeof makeCancellationManagement>;
 const CancellationActions = ({

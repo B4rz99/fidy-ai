@@ -5,6 +5,9 @@ import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/can
 import type { CanonicalSuccess, FidyClient, SubscriptionStatus } from "@/transport/client";
 
 export type Cancellation = CanonicalSuccess<"subscription.cancelSubscription">["data"];
+type CancellationFailure = Effect.Error<
+  ReturnType<Effect.Success<FidyClient>["subscription"]["cancelSubscription"]>
+>;
 type StatusFailure = Effect.Error<
   ReturnType<Effect.Success<FidyClient>["subscription"]["getSubscriptionStatus"]>
 >;
@@ -16,10 +19,14 @@ export const subscriptionStatusQuery: (
   client.query("subscription", "getSubscriptionStatus", { timeToLive: "0 seconds" })
 );
 
+type Observation = AsyncResult.AsyncResult<
+  CanonicalSuccess<"subscription.getSubscriptionStatus">,
+  StatusFailure
+>;
 type Paid = Option.Option.Value<SubscriptionStatus["paidSubscription"]>;
 type Phase =
   | Readonly<{ _tag: "Ready" | "Confirmed" | "Unknown" | "Cancelling" | "Disposed" }>
-  | Readonly<{ _tag: "Reviewing"; paid: Paid; observation: unknown }>
+  | Readonly<{ _tag: "Reviewing"; paid: Paid; observation: Observation }>
   | Readonly<{ _tag: "Refreshing"; uncertain: boolean }>;
 export type CancellationManagement = Readonly<{
   cancellation: Option.Option<Cancellation>;
@@ -62,16 +69,17 @@ const dispose = (owner: Owner): void => {
 };
 const mount = (owner: Owner): (() => void) => {
   owner.active = true;
+  notify(owner);
   const retire = (): void => {
     dispose(owner);
     owner.phase = { _tag: "Disposed" };
     notify(owner);
   };
-  globalThis.addEventListener?.(authenticationEndedEvent, retire);
-  globalThis.addEventListener?.("pagehide", retire);
+  globalThis.addEventListener(authenticationEndedEvent, retire);
+  globalThis.addEventListener("pagehide", retire);
   return () => {
-    globalThis.removeEventListener?.(authenticationEndedEvent, retire);
-    globalThis.removeEventListener?.("pagehide", retire);
+    globalThis.removeEventListener(authenticationEndedEvent, retire);
+    globalThis.removeEventListener("pagehide", retire);
     dispose(owner);
   };
 };
@@ -88,7 +96,7 @@ const fresh = (owner: Owner): Option.Option<SubscriptionStatus> => {
 const execute = (
   owner: Owner,
   phase: Phase,
-  work: Effect.Effect<Option.Option<Cancellation>, unknown>
+  work: Effect.Effect<Option.Option<Cancellation>, CancellationFailure | StatusFailure>
 ): void => {
   owner.phase = phase;
   owner.interacted = true;

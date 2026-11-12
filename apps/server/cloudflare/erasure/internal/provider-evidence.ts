@@ -3,11 +3,11 @@ import { recoveryWindowMs } from "./retention-policy";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 import { ErasureCustodyAdmission } from "../contract";
 import { requireInventory } from "./inventory";
+import { validContinuation } from "./control-admission";
 import type { ErasureStore } from "../../erasure-store/contract";
 
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
-const admissionLifetimeMs = 5000;
 
 /** Recorded confirms the current projection; Conflict may retain a rejected event. */
 export const submitCustodyEvidence = (
@@ -25,11 +25,8 @@ export const submitCustodyEvidence = (
     const current = yield* Clock.currentTimeMillis;
     if (
       Option.isNone(decoded) ||
-      decoded.value.userId !== input.userId ||
-      decoded.value.reference !== decoded.value.evidence.reference ||
-      decoded.value.deadlineMs <= current ||
-      decoded.value.deadlineMs > current + admissionLifetimeMs ||
-      decoded.value.authority.expiresAtMs <= current
+      !validContinuation({ admission: decoded.value, current, userId: input.userId }) ||
+      decoded.value.reference !== decoded.value.evidence.reference
     ) {
       return "Conflict";
     }

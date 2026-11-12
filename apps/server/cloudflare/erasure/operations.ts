@@ -19,9 +19,9 @@ import { progress } from "./internal/progress";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import type { ErasureStore } from "../erasure-store/contract";
 import { admitDeletion } from "./internal/admission";
+import { admissionLifetimeMs, validContinuation } from "./internal/control-admission";
 
 const conflictStatus = 409;
-const admissionLifetimeMs = 5000;
 const acceptedStatus = 202;
 const unavailableStatus = 503;
 /** Accepts only private Core admissions, rechecked under the named User's existing coordinator. */
@@ -78,10 +78,7 @@ export const executeErasureContinuation = (
     const current = yield* Clock.currentTimeMillis;
     if (
       Option.isNone(admission) ||
-      admission.value.userId !== input.userId ||
-      admission.value.deadlineMs <= current ||
-      admission.value.authority.expiresAtMs <= current ||
-      admission.value.deadlineMs > current + admissionLifetimeMs
+      !validContinuation({ admission: admission.value, current, userId: input.userId })
     ) {
       return new Response(null, { status: conflictStatus });
     }
@@ -137,14 +134,6 @@ export const executeErasureControl = (
         new Response(null, { status: unavailableStatus, headers: { "cache-control": "no-store" } })
     )
   );
-
-const validContinuation = (
-  input: Readonly<{ admission: ErasureContinuation; current: number; userId: string }>
-): boolean =>
-  input.admission.userId === input.userId &&
-  input.admission.deadlineMs > input.current &&
-  input.admission.deadlineMs <= input.current + admissionLifetimeMs &&
-  input.admission.authority.expiresAtMs > input.current;
 
 const maximumResumedCases = 4;
 export const resumeErasureCases = (

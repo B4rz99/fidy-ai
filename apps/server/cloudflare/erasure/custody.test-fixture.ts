@@ -65,7 +65,6 @@ const eventIdentity = (
       .first("id")
   );
 
-/** Native persistence evidence: event identity is replayable, not a consumable authority. */
 export const verifyCustodyRetention = Effect.fn(function* (input: CustodyFixture) {
   const accepted = evidence(input, "Kapso", { suffix: "080", status: "Accepted" });
   expect((yield* submit(input, accepted)).status).toBe(acceptedStatus);
@@ -121,7 +120,6 @@ export const verifyCustodyRetention = Effect.fn(function* (input: CustodyFixture
 });
 
 const verifyTerminalProjections = Effect.fn(function* (input: CustodyFixture) {
-  // Verified can be submitted directly, and a different event cannot replace it.
   const verified = evidence(input, "Meta", { suffix: "081", status: "Verified" });
   expect((yield* submit(input, verified)).status).toBe(acceptedStatus);
   const conflicting = evidence(input, "Meta", { suffix: "082", status: "Accepted" });
@@ -142,7 +140,6 @@ const verifyTerminalProjections = Effect.fn(function* (input: CustodyFixture) {
   expect(observed.custodians).toContainEqual({ custodian: "Resend", status: "NotApplicable" });
 });
 
-/** Completion remains owned by continuation, with exact coverage and the latest local recovery horizon. */
 const verifyCloudflareReset = Effect.fn(function* (input: CustodyFixture) {
   expect(
     (yield* submit(
@@ -160,8 +157,6 @@ const verifyCloudflareReset = Effect.fn(function* (input: CustodyFixture) {
       .run()
   );
   expect((yield* submit(input, cloudflare)).status).toBe(acceptedStatus);
-  // Re-run local erasure through its owner. The historical event remains, but its
-  // original timestamp cannot establish the current Cloudflare projection again.
   yield* Effect.tryPromise(() =>
     input.db
       .prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?")
@@ -183,7 +178,6 @@ const verifyCloudflareReset = Effect.fn(function* (input: CustodyFixture) {
       .run()
   );
   expect(yield* eventIdentity(input, cloudflare.evidenceRef)).toBe(cloudflare.evidenceRef);
-  // Put the retained event before this newer local erasure while keeping the horizon mature.
   yield* Effect.tryPromise(() =>
     input.db
       .prepare(
@@ -242,7 +236,6 @@ export const verifyCustodyCompletion = Effect.fn(function* (input: CustodyFixtur
       .status
   ).toBe(acceptedStatus);
   expect((yield* receipt(input)).state).toBe("Complete");
-  // A missing/non-pending request retains the existing unavailable distinction.
   const unavailable = yield* submit(
     input,
     evidence(input, "Cloudflare", { suffix: "088", status: "Verified" })

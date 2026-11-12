@@ -239,6 +239,87 @@ describe("browser HTTP policy", () => {
     })
   );
 
+  it.effect("interrupts preparation at the original deadline without dispatching", () =>
+    Effect.gen(function* () {
+      const preparing = Deferred.makeUnsafe<void>();
+      let interrupted = false;
+      const markInterrupted = (): void => {
+        interrupted = true;
+      };
+      let attempts = 0;
+      const base = makeHttpClient((request) => {
+        attempts++;
+        return Effect.succeed(responseJson(request, {}));
+      }).pipe(
+        HttpClient.mapRequestEffect((request) =>
+          Deferred.succeed(preparing, undefined).pipe(
+            Effect.andThen(Effect.never),
+            Effect.ensuring(Effect.sync(markInterrupted)),
+            Effect.as(request)
+          )
+        )
+      );
+      const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, base));
+      const work = yield* Effect.forkChild(
+        client.get(`${policyTestOrigin}/categories`).pipe(Effect.exit)
+      );
+      yield* Deferred.await(preparing);
+      yield* TestClock.adjust("15 seconds");
+      expect(interrupted).toBe(true);
+      expect(Exit.isFailure(yield* Fiber.join(work))).toBe(true);
+      expect(attempts).toBe(0);
+    })
+  );
+
+  it.effect("uses only the original remaining boundary budget after preparation", () =>
+    Effect.gen(function* () {
+      for (const { boundary, path, remainingSeconds } of [
+        { boundary: "canonical", path: "/categories", remainingSeconds: 13 },
+        { boundary: "web-auth", path: "/web/consent", remainingSeconds: 8 },
+        { boundary: "web-auth", path: "/web/connections/begin", remainingSeconds: 33 },
+        { boundary: "enrollment", path: "/enroll", remainingSeconds: 18 },
+        { boundary: "hosted-turn", path: "/turn", remainingSeconds: 133 },
+      ] as const) {
+        const preparing = Deferred.makeUnsafe<void>();
+        const prepared = Deferred.makeUnsafe<void>();
+        const transferring = Deferred.makeUnsafe<void>();
+        let interrupted = false;
+        const markInterrupted = (): void => {
+          interrupted = true;
+        };
+        const base = makeHttpClient(() =>
+          Deferred.succeed(transferring, undefined).pipe(
+            Effect.andThen(Effect.never),
+            Effect.ensuring(Effect.sync(markInterrupted))
+          )
+        ).pipe(
+          HttpClient.mapRequestEffect((request) =>
+            Deferred.succeed(preparing, undefined).pipe(
+              Effect.andThen(Deferred.await(prepared)),
+              Effect.as(request)
+            )
+          )
+        );
+        const client = yield* makePolicyTestClient(
+          Layer.succeed(HttpClient.HttpClient, base),
+          boundary
+        );
+        const work = yield* Effect.forkChild(
+          client.get(`${policyTestOrigin}${path}`).pipe(Effect.exit)
+        );
+        yield* Deferred.await(preparing);
+        yield* TestClock.adjust("2 seconds");
+        yield* Deferred.succeed(prepared, undefined);
+        yield* Deferred.await(transferring);
+        yield* TestClock.adjust(`${remainingSeconds - 1} seconds`);
+        expect(interrupted).toBe(false);
+        yield* TestClock.adjust("1 second");
+        expect(interrupted).toBe(true);
+        expect(Exit.isFailure(yield* Fiber.join(work))).toBe(true);
+      }
+    })
+  );
+
   it.effect("counts transfer queue time inside the original canonical deadline", () =>
     Effect.gen(function* () {
       let attempts = 0;
@@ -377,31 +458,38 @@ describe("browser HTTP policy", () => {
     })
   );
 
-  it.effect("bounds resource-refusal retries and preserves the final declared body", () =>
-    Effect.gen(function* () {
-      let attempts = 0;
-      const started = Deferred.makeUnsafe<void>();
-      const body = { error: { code: "rate_limited", message: "Retry later." }, next: [] };
-      const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
-        attempts++;
-        yield* Deferred.succeed(started, undefined);
-        return HttpClientResponse.fromWeb(
-          request,
-          Response.json(body, { status: 429, headers: { "retry-after": "1" } })
-        );
-      });
-      const base = makeHttpClient(respond);
-      const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, base));
-      const work = yield* Effect.forkChild(client.get(`${policyTestOrigin}/dashboard/view`));
-      yield* Deferred.await(started);
-      for (let index = 0; index < 6; index++) {
-        yield* TestClock.adjust("1 second");
-      }
-      const result = yield* Fiber.join(work);
-      expect(result.status).toBe(429);
-      expect(yield* result.json).toEqual(body);
-      expect(attempts).toBe(7);
-    })
+  it.effect(
+    "nests one safe-read transport retry in each resource round and preserves the final body",
+    () =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        const started = Deferred.makeUnsafe<void>();
+        const body = { error: { code: "rate_limited", message: "Retry later." }, next: [] };
+        const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
+          attempts++;
+          yield* Deferred.succeed(started, undefined);
+          if (attempts % 2 === 1) {
+            return yield* new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({ request }),
+            });
+          }
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json(body, { status: 429, headers: { "retry-after": "1" } })
+          );
+        });
+        const base = makeHttpClient(respond);
+        const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, base));
+        const work = yield* Effect.forkChild(client.get(`${policyTestOrigin}/dashboard/view`));
+        yield* Deferred.await(started);
+        for (let index = 0; index < 6; index++) {
+          yield* TestClock.adjust("1 second");
+        }
+        const result = yield* Fiber.join(work);
+        expect(result.status).toBe(429);
+        expect(yield* result.json).toEqual(body);
+        expect(attempts).toBe(14);
+      })
   );
 
   it.effect("keeps resource pacing inside the original deadline and interruption lifetime", () =>

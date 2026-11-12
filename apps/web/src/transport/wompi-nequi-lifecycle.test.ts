@@ -1,3 +1,4 @@
+import { deepStrictEqual } from "node:assert";
 import { it as effectIt } from "@effect/vitest";
 import { Cause, Clock, Effect, Exit, Fiber, Option, Redacted } from "effect";
 import { TestClock } from "effect/testing";
@@ -77,7 +78,8 @@ it.each([
           (token) => Effect.succeed(Redacted.value(token))
         )
       );
-      expect(result).toEqual(
+      deepStrictEqual(
+        result,
         Exit.fail(
           new NequiAuthorizationFailed({
             reason: name === "declined" ? "declined" : "unavailable",
@@ -241,7 +243,7 @@ it("borrows approval once, wipes its token on consumer failure and never shows a
           }
         )
       );
-      expect(result).toEqual(Exit.fail(consumerFailure));
+      deepStrictEqual(result, Exit.fail(consumerFailure));
       expect(borrowed).toHaveLength(1);
       for (const token of borrowed) expect(() => Redacted.value(token)).toThrow();
       expect(clearPhone).toHaveBeenCalledTimes(1);
@@ -280,7 +282,8 @@ for (const status of ["APPROVED", "PENDING"] as const) {
       yield* TestClock.adjust("3 seconds");
       const result = yield* Fiber.await(fiber);
       expect(requests).toBe(101);
-      expect(result).toEqual(
+      deepStrictEqual(
+        result,
         status === "APPROVED"
           ? Exit.succeed("submitted once")
           : Exit.fail(new NequiAuthorizationFailed({ reason: "unavailable" }))
@@ -328,7 +331,8 @@ effectIt.effect(
       yield* TestClock.adjust("10 seconds");
       post.resolve(tokenResponse("PENDING"));
       yield* TestClock.adjust("290 seconds");
-      expect(yield* Fiber.await(fiber)).toEqual(
+      deepStrictEqual(
+        yield* Fiber.await(fiber),
         Exit.fail(new NequiAuthorizationFailed({ reason: "expired" }))
       );
       expect(requests).toBe(97);
@@ -366,7 +370,8 @@ effectIt.effect(
       );
       yield* Effect.tryPromise(() => started.promise);
       yield* TestClock.adjust("15 seconds");
-      expect(yield* Fiber.await(fiber)).toEqual(
+      deepStrictEqual(
+        yield* Fiber.await(fiber),
         Exit.fail(new NequiAuthorizationFailed({ reason: "unavailable" }))
       );
       expect(Option.map(signal, (signal) => signal.aborted)).toEqual(Option.some(true));
@@ -476,7 +481,7 @@ effectIt.effect("contains throwing progress callbacks while consuming only match
     );
     yield* Effect.tryPromise(() => awaiting.promise);
     yield* TestClock.adjust("3 seconds");
-    expect(yield* Fiber.await(fiber)).toEqual(Exit.succeed("submission remains separate"));
+    deepStrictEqual(yield* Fiber.await(fiber), Exit.succeed("submission remains separate"));
     expect(provider).toHaveBeenCalledTimes(2);
     expect(consumer).toHaveBeenCalledTimes(1);
   })
@@ -514,7 +519,7 @@ effectIt.effect(
           })
         )
       );
-      expect(result).toEqual(Exit.fail(new NequiAuthorizationFailed({ reason: "expired" })));
+      deepStrictEqual(result, Exit.fail(new NequiAuthorizationFailed({ reason: "expired" })));
       expect(consumer).not.toHaveBeenCalled();
     })
 );

@@ -687,3 +687,62 @@ it("wipes Nequi fields even when cancellation prevents the client from starting 
       expect(() => Redacted.value(phoneNumber)).toThrow();
     })
   ));
+
+it.each(["storage", "billing-email"] as const)(
+  "clears Nequi fields when %s preflight fails before provider admission",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const enrollment: PreparedEnrollment = {
+          ...prepared(yield* Clock.currentTimeMillis),
+          method: "nequi",
+        };
+        const payloads: Array<unknown> = [];
+        const client = makeSubscriptionEnrollmentClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(
+            HttpClient.HttpClient,
+            submissionBoundary(enrollment, payloads)
+          ),
+        });
+        clients.push(client);
+        const provider = vi.fn();
+        vi.stubGlobal("fetch", provider);
+        const phoneNumber = Redacted.make("3991111111");
+        const clearPhone = vi.fn();
+        const storage = vi.spyOn(Storage.prototype, "setItem");
+        if (failure === "storage") {
+          storage.mockImplementation(() => {
+            throw new Error("storage unavailable");
+          });
+        }
+        try {
+          const result = yield* Effect.exit(
+            Effect.tryPromise(() =>
+              makeEnrollmentGateway(client).submit(
+                enrollment,
+                failure === "billing-email" ? "invalid-email" : "synthetic@example.invalid",
+                {
+                  fields: Option.some({
+                    method: "nequi",
+                    phoneNumber,
+                    clearPhone,
+                    onAwaiting: () => undefined,
+                    signal: mountedSignal(),
+                  }),
+                  signal: Option.none(),
+                }
+              )
+            )
+          );
+          expect(result._tag).toBe("Failure");
+          expect(payloads).toEqual([]);
+          expect(provider).not.toHaveBeenCalled();
+          expect(clearPhone).toHaveBeenCalledTimes(1);
+          expect(() => Redacted.value(phoneNumber)).toThrow();
+        } finally {
+          storage.mockRestore();
+        }
+      })
+    )
+);

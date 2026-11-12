@@ -60,6 +60,14 @@ export type NequiFields = Readonly<{
 }>;
 export type PaymentFields = CardFields | NequiFields;
 
+export const clearNequiPhone = (fields?: PaymentFields): void => {
+  if (fields === undefined || !("method" in fields)) return;
+  Redacted.wipeUnsafe(fields.phoneNumber);
+  try {
+    fields.clearPhone();
+  } catch {}
+};
+
 type SubmissionOptions = Readonly<{
   fields: Option.Option<PaymentFields>;
   signal: Option.Option<AbortSignal>;
@@ -241,6 +249,7 @@ const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
       : Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
   }
   if (enrollment.method !== "card" || "method" in fields) {
+    clearNequiPhone(fields);
     return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
   }
   return client.execute(
@@ -275,35 +284,41 @@ const makeSubmit =
   ): EnrollmentGateway["submit"] =>
   (enrollment, billingEmail, options = { fields: Option.none(), signal: Option.none() }) => {
     const { fields, signal } = options;
-    globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
-    const common = submissionFacts(paymentRequests, enrollment, billingEmail);
-    if (enrollment.paymentSourceMode === "reuse") {
+    try {
+      globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
+      const common = submissionFacts(paymentRequests, enrollment, billingEmail);
+      if (enrollment.paymentSourceMode === "reuse") {
+        clearNequiPhone(Option.getOrUndefined(fields));
+        return completed(
+          paymentRequests,
+          enrollment,
+          clientService.execute(
+            (client) =>
+              client.subscriptionEnrollment.submit({
+                payload: { paymentSourceMode: "reuse", ...common },
+              }),
+            executionOptions(Option.getOrUndefined(signal))
+          )
+        );
+      }
+      if (Option.isNone(fields)) {
+        return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+      }
       return completed(
         paymentRequests,
         enrollment,
-        clientService.execute(
-          (client) =>
-            client.subscriptionEnrollment.submit({
-              payload: { paymentSourceMode: "reuse", ...common },
-            }),
-          executionOptions(Option.getOrUndefined(signal))
-        )
+        submitNewSource({
+          client: clientService,
+          enrollment,
+          facts: common,
+          fields: fields.value,
+          signal,
+        })
       );
+    } catch (error) {
+      clearNequiPhone(Option.getOrUndefined(fields));
+      throw error;
     }
-    if (Option.isNone(fields)) {
-      return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
-    }
-    return completed(
-      paymentRequests,
-      enrollment,
-      submitNewSource({
-        client: clientService,
-        enrollment,
-        facts: common,
-        fields: fields.value,
-        signal,
-      })
-    );
   };
 
 const makeContinue =

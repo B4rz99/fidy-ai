@@ -666,8 +666,7 @@ it("wipes Nequi fields even when cancellation prevents the client from starting 
       vi.stubGlobal("fetch", provider);
       const phoneNumber = Redacted.make("3991111111");
       const clearPhone = vi.fn();
-      const controller = new AbortController();
-      controller.abort();
+      const signal = AbortSignal.abort();
       yield* Effect.exit(
         Effect.tryPromise(() =>
           makeEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
@@ -676,7 +675,7 @@ it("wipes Nequi fields even when cancellation prevents the client from starting 
               phoneNumber,
               clearPhone,
               onAwaiting: () => undefined,
-              signal: controller.signal,
+              signal,
             }),
             signal: Option.none(),
           })

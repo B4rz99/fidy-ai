@@ -5,12 +5,12 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { handleErasureRequest, withErasureRecovery } from "./runtime";
 import { executeErasureAdmission, executeErasureRestore } from "./operations";
+import { ErasureRestoreAdmission } from "./contract";
 import { nativeErasurePlatform } from "./native.test-fixture";
 import { makeMemoryErasureStores } from "../memory/runtime";
 
 afterEach(() => vi.useRealTimers());
 const json = Schema.fromJsonString(Schema.Unknown);
-// The test owns this controller to abort the real request during a blocked platform read.
 const cancellationController = (): AbortController => new AbortController();
 const publishCase = Effect.fn(function* (bucket: R2Bucket, record: unknown) {
   const body = yield* Schema.encodeEffect(json)(record);
@@ -67,6 +67,38 @@ const setup = Effect.gen(function* () {
     );
   }
   return { db, bucket, coordinator: native.coordinator, digest };
+});
+const restoreAdmission = (
+  current: number,
+  overrides: Partial<typeof ErasureRestoreAdmission.Type> = {}
+): typeof ErasureRestoreAdmission.Type =>
+  Schema.decodeSync(ErasureRestoreAdmission)({
+    userId,
+    reference,
+    generation: "initial",
+    deadlineMs: current + 5000,
+    authority: {
+      permission: "titular.erase",
+      operatorRef: "operator",
+      expiresAtMs: current + 300000,
+    },
+    ...overrides,
+  });
+const restoreFixture = Effect.fn(function* (
+  native: Effect.Success<typeof setup>,
+  current: number,
+  overrides: Partial<Parameters<typeof executeErasureRestore>[0]> = {}
+) {
+  const input: Parameters<typeof executeErasureRestore>[0] = {
+    db: native.db,
+    userId,
+    signal: yield* Effect.abortSignal,
+    stores: makeMemoryErasureStores(native.db),
+    recovery: { db: native.db, bucket: Option.some(native.bucket) },
+    candidate: restoreAdmission(current),
+    ...overrides,
+  };
+  return input;
 });
 const submit = (
   input: Effect.Success<typeof setup>,
@@ -221,26 +253,9 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         requestedAtMs: current,
         sealed: false,
       });
-      expect(
-        (yield* executeErasureRestore({
-          db: native.db,
-          userId,
-          signal: yield* Effect.abortSignal,
-          stores: makeMemoryErasureStores(native.db),
-          recovery: { db: native.db, bucket: Option.some(native.bucket) },
-          candidate: {
-            userId,
-            reference,
-            generation: "initial",
-            deadlineMs: current + 5000,
-            authority: {
-              permission: "titular.erase",
-              operatorRef: "operator",
-              expiresAtMs: current + 300000,
-            },
-          },
-        })).status
-      ).toBe(202);
+      expect((yield* executeErasureRestore(yield* restoreFixture(native, current))).status).toBe(
+        202
+      );
       expect(
         (yield* Effect.tryPromise(() =>
           native.db
@@ -279,24 +294,12 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
             : Reflect.get(target, property, target),
       });
       expect(
-        (yield* executeErasureRestore({
-          db: native.db,
-          userId,
-          signal: cancellation.signal,
-          stores: makeMemoryErasureStores(native.db),
-          recovery: { db: native.db, bucket: Option.some(registry) },
-          candidate: {
-            userId,
-            reference,
-            generation: "initial",
-            deadlineMs: current + 5000,
-            authority: {
-              permission: "titular.erase",
-              operatorRef: "operator",
-              expiresAtMs: current + 300000,
-            },
-          },
-        })).status
+        (yield* executeErasureRestore(
+          yield* restoreFixture(native, current, {
+            signal: cancellation.signal,
+            recovery: { db: native.db, bucket: Option.some(registry) },
+          })
+        )).status
       ).toBe(503);
       expect(
         yield* Effect.tryPromise(() =>
@@ -310,25 +313,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
     Effect.gen(function* () {
       const native = yield* setup;
       const current = yield* Clock.currentTimeMillis;
-      const candidate = {
-        userId,
-        reference,
-        generation: "initial",
-        deadlineMs: current + 5000,
-        authority: {
-          permission: "titular.erase",
-          operatorRef: "operator",
-          expiresAtMs: current + 300000,
-        },
-      };
-      const restore = executeErasureRestore({
-        signal: yield* Effect.abortSignal,
-        db: native.db,
-        userId,
-        candidate,
-        stores: makeMemoryErasureStores(native.db),
-        recovery: { db: native.db, bucket: Option.some(native.bucket) },
-      });
+      const restore = executeErasureRestore(yield* restoreFixture(native, current));
       expect((yield* restore).status).toBe(503);
       for (const value of [
         "invalid JSON",
@@ -368,24 +353,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         requestedAtMs: number
       ): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
         publishCase(native.bucket, { reference, userId, requestedAtMs, sealed: true });
-      const restore = executeErasureRestore({
-        signal: yield* Effect.abortSignal,
-        db: native.db,
-        userId,
-        stores: makeMemoryErasureStores(native.db),
-        recovery: { db: native.db, bucket: Option.some(native.bucket) },
-        candidate: {
-          userId,
-          reference,
-          generation: "initial",
-          deadlineMs: current + 5000,
-          authority: {
-            permission: "titular.erase",
-            operatorRef: "operator",
-            expiresAtMs: current + 300000,
-          },
-        },
-      });
+      const restore = executeErasureRestore(yield* restoreFixture(native, current));
       yield* publish(current);
       expect((yield* restore).status).toBe(202);
       expect((yield* restore).status).toBe(202);
@@ -440,24 +408,11 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
             : Reflect.get(target, property, target),
       });
       expect(
-        (yield* executeErasureRestore({
-          signal: yield* Effect.abortSignal,
-          db: native.db,
-          userId,
-          stores: makeMemoryErasureStores(native.db),
-          recovery: { db: native.db, bucket: Option.some(registry) },
-          candidate: {
-            userId,
-            reference,
-            generation: "initial",
-            deadlineMs: current + 5000,
-            authority: {
-              permission: "titular.erase",
-              operatorRef: "operator",
-              expiresAtMs: current + 300000,
-            },
-          },
-        })).status
+        (yield* executeErasureRestore(
+          yield* restoreFixture(native, current, {
+            recovery: { db: native.db, bucket: Option.some(registry) },
+          })
+        )).status
       ).toBe(503);
       expect(
         yield* Effect.tryPromise(() =>
@@ -513,17 +468,7 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
             userId,
             recovery,
             stores: [],
-            candidate: {
-              userId,
-              reference,
-              authority: {
-                permission: "titular.erase",
-                operatorRef: "operator",
-                expiresAtMs: current + 300000,
-              },
-              deadlineMs: current + 5000,
-              generation: "initial",
-            },
+            candidate: restoreAdmission(current),
           })).status
         ).toBe(503);
         yield* Effect.tryPromise(Option.getOrThrow(latePublication));

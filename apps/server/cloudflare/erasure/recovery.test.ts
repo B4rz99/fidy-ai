@@ -99,7 +99,6 @@ it("retains fresh generation checks across prepared statements, native methods a
         const result = yield* Effect.result(Effect.tryPromise(execute));
         expect(result._tag, `native unit ${index}`).toBe("Success");
       }
-      // Neither prepared work nor an already used Session retains permission after restore.
       yield* Effect.tryPromise(() => bucket.put("recovery/generation", generation));
       for (const execute of units) {
         expect((yield* Effect.result(Effect.tryPromise(execute)))._tag).toBe("Failure");
@@ -114,7 +113,6 @@ it("retains fresh generation checks across prepared statements, native methods a
         const result = yield* Effect.result(Effect.tryPromise(execute));
         expect(result._tag, `native unit ${index}`).toBe("Success");
       }
-      // A matching generation still does not enable unsupported bypasses.
       for (const execute of [
         (): Promise<unknown> => guarded.exec("SELECT 7"),
         (): Promise<unknown> => guarded.dump(),

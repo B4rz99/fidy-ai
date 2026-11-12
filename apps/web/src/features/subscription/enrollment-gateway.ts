@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   BillingEmail,
@@ -236,15 +236,15 @@ const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
       tokenizeCardWithWompi(publicKey, fields, globalThis.fetch.bind(globalThis)).pipe(
         Effect.map(Redacted.make),
         Effect.flatMap((cardToken) =>
-          Effect.suspend(() => {
+          Effect.gen(function* () {
             if (
-              Date.now() >= expiresAt ||
+              (yield* Clock.currentTimeMillis) >= expiresAt ||
               enrollment.wompiPublicKey !== publicKey ||
               enrollment.enrollmentId !== enrollmentId
             ) {
-              return Effect.fail(new EnrollmentSubmissionFailed());
+              return yield* new EnrollmentSubmissionFailed();
             }
-            return transport.subscriptionEnrollment.submit({
+            return yield* transport.subscriptionEnrollment.submit({
               payload: {
                 paymentSourceMode: "create",
                 method: "card",
@@ -276,7 +276,7 @@ const reserveCard = (
   }
   if (
     authorizedCards.has(enrollment.enrollmentId) ||
-    Date.now() >= enrollment.expiresAt.epochMilliseconds ||
+    DateTime.nowUnsafe().epochMilliseconds >= enrollment.expiresAt.epochMilliseconds ||
     Option.isNone(fields) ||
     "method" in fields.value
   ) {

@@ -3,7 +3,7 @@ import { SubscriptionIntroduction } from "@/ui/components/subscription-introduct
 import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
 import { Input } from "@/ui/components/input";
 import { Button } from "@/ui/components/button";
-import { Option, Redacted } from "effect";
+import { DateTime, Option, Redacted } from "effect";
 import { type PaymentFlowView, type PaymentSubmissionView } from "./interaction";
 import { DaviplataEnrollmentForm } from "./daviplata-form";
 import { BillingEmailField, EnrollmentConsent } from "./enrollment-controls";
@@ -387,7 +387,7 @@ const PreparedCardEnrollmentForm = ({
       !allAccepted ||
       busy ||
       !event.currentTarget.checkValidity() ||
-      Date.now() >= enrollment.expiresAt.epochMilliseconds
+      DateTime.nowUnsafe().epochMilliseconds >= enrollment.expiresAt.epochMilliseconds
     ) {
       return;
     }

@@ -963,6 +963,46 @@ const deniedClaimResponse = (
     )
   );
 
+const existingSubmission = ({
+  environment,
+  session,
+  enrollmentId,
+  requestId,
+}: Readonly<{
+  environment: ConfiguredEnrollmentEnvironment;
+  session: typeof Session.Type;
+  enrollmentId: PaymentEnrollmentId;
+  requestId: PaymentRequestId;
+}>): Effect.Effect<Option.Option<Response>, EnrollmentBoundaryFailure | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const existing = yield* waitFor(() =>
+      environment.DB.prepare(
+        "SELECT id, enrollment_id FROM billing_attempt_context WHERE user_id = ? AND payment_request_id = ?"
+      )
+        .bind(session.user_id, requestId)
+        .first()
+    );
+    const existingId = decodeRow(
+      Schema.Struct({ id: BillingAttemptId, enrollment_id: PaymentEnrollmentId }),
+      existing
+    );
+    if (Option.isSome(existingId)) {
+      if (existingId.value.enrollment_id !== enrollmentId) return Option.some(invalid());
+      const attempt = yield* waitFor(() =>
+        attemptFor(environment.DB, session.user_id, existingId.value.id)
+      );
+      if (Option.isNone(attempt)) return Option.some(invalid());
+      if (attempt.value.status === "pending") environment.onAccepted(existingId.value.id);
+      const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentSubmission))({
+        status: "payment-pending",
+        enrollmentId,
+        billingAttempt: attempt.value,
+      });
+      return Option.some(json(presented));
+    }
+    return Option.none<Response>();
+  });
+
 const submit = ({
   request,
   session,
@@ -988,30 +1028,13 @@ const submit = ({
     ) {
       return invalid();
     }
-    const existing = yield* waitFor(() =>
-      environment.DB.prepare(
-        "SELECT id, enrollment_id FROM billing_attempt_context WHERE user_id = ? AND payment_request_id = ?"
-      )
-        .bind(session.user_id, input.paymentRequestId)
-        .first()
-    );
-    const existingId = decodeRow(
-      Schema.Struct({ id: BillingAttemptId, enrollment_id: PaymentEnrollmentId }),
-      existing
-    );
-    if (Option.isSome(existingId)) {
-      if (existingId.value.enrollment_id !== row.value.id) return invalid();
-      const attempt = yield* waitFor(() =>
-        attemptFor(environment.DB, session.user_id, existingId.value.id)
-      );
-      if (Option.isNone(attempt)) return invalid();
-      const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentSubmission))({
-        status: "payment-pending",
-        enrollmentId: row.value.id,
-        billingAttempt: attempt.value,
-      });
-      return json(presented);
-    }
+    const existing = yield* existingSubmission({
+      environment,
+      session,
+      enrollmentId: row.value.id,
+      requestId: input.paymentRequestId,
+    });
+    if (Option.isSome(existing)) return existing.value;
     const blocked = yield* waitFor(() =>
       environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempt_context AS a
       WHERE a.user_id = ? AND a.status <> 'succeeded'

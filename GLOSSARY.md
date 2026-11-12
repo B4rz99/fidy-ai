@@ -478,7 +478,8 @@ _Avoid_: Current price, price config, rate.
 One short-lived, User-owned authorization intent for a selected Price and reusable PaymentSource.
 Its EnrollmentMethod is `card`, `nequi`, or `daviplata`: direct wallet authorization is distinct from
 an issuer's card, which uses `card`. It retains the accepted billing email, provider environment and safe
-displayed terms through `prepared`, `creating`, `available`, `refused`, `expired`, or `verifying`;
+displayed terms through private durable `preparing`, `prepared`, `creating`, `available`, `refused`,
+`expired`, or `verifying`;
 only an atomic live-authority claim of `prepared` may create a provider source. Card details, wallet
 numbers, identity document values, OTPs and transient provider tokens are never PaymentEnrollment state.
 _Avoid_: Checkout, payment attempt, card session, CardEnrollment, nequi-account.

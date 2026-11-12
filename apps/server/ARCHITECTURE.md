@@ -182,6 +182,17 @@ Consent and User context in one native read. Core delegates binding verification
 availability does not fetch a mailbox credential. Other enrollment operations retain their existing
 ingress and commit checks. The available-method response remains uncached.
 
+Subscription's browser enrollment handler privately claims source creation and verifies only the
+retained candidate. An uncertain source response without a candidate remains unresolved and never
+permits another source POST. Native finish attaches the exact source, marks enrollment available
+and inserts its deterministic first BillingAttempt in one guarded D1 batch. An unavailable or lost
+batch response is not provider refusal; replay observes that same enrollment and PaymentRequestId.
+Pending durable attempts reoffer `onAccepted` so a missed notification can recover without another
+source creation or first attempt. Receivers tolerate duplicate offers; collection and paid access
+remain separate billing observations. Native preparing reservations and observed expiry are distinct
+from the portable core enrollment decision input. Existing claim predicates, fifteen-minute expiry,
+three-second lookup spacing and eight-attempt ceiling remain authoritative.
+
 OAuthConnection listing composes its User resource admission, bounded connection/activity selection
 and outstanding-work completion in the final native batch. The ingress source grant and exact
 mounted-cookie lookup share the preceding native unit. Cleanup remains idempotent when the final reply is lost;

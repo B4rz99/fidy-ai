@@ -362,7 +362,7 @@ const firstSuccessStatus = 200;
 const transportOutcome = (
   exit: TransportExit
 ): "succeeded" | "rejected" | "failed" | "interrupted" => {
-  if (Exit.isFailure(exit)) return Cause.hasInterrupts(exit.cause) ? "interrupted" : "failed";
+  if (Exit.isFailure(exit)) return Cause.hasInterruptsOnly(exit.cause) ? "interrupted" : "failed";
   if (exit.value.status >= firstServerFailureStatus) return "failed";
   return exit.value.status >= firstFailureStatus ? "rejected" : "succeeded";
 };
@@ -387,7 +387,7 @@ const diagnosticError = (
   exit: TransportExit
 ): Readonly<{ error: string }> | Readonly<Record<never, never>> => {
   if (observation.deadlineExceeded) return { error: "timeout" };
-  if (Exit.isSuccess(exit) || Cause.hasInterrupts(exit.cause)) return {};
+  if (Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)) return {};
   const failure = Cause.findErrorOption(exit.cause);
   return Option.isSome(failure)
     ? { error: failure.value.reason._tag }

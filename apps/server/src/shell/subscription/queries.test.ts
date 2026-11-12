@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { Option } from "effect";
-import { prepareSubscriptionStatus } from "~/shell/subscription/operations";
+import { prepareSubscriptionStatus } from "./operations";
 import { activeProForUserSelection, activeProUserCondition } from "~/shell/access-tier/operations";
 import {
   projectSubscriptionOffers,

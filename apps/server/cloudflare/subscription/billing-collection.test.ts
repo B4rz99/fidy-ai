@@ -361,6 +361,78 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
     })
   ));
 
+it.each(["Money", "environment"] as const)(
+  "keeps a verified GET with wrong %s unavailable without settlement effects",
+  (mismatch) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => fixture());
+        const provider = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          expect(request.method).toBe("GET");
+          expect(new URL(request.url).host).toBe(
+            mismatch === "environment" ? "production.wompi.co" : "sandbox.wompi.co"
+          );
+          return Promise.resolve(
+            Response.json({
+              data: {
+                ...transaction("APPROVED"),
+                amount_in_cents: mismatch === "Money" ? 990001 : 990000,
+              },
+            })
+          );
+        });
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
+        const result = yield* Effect.exit(
+          Effect.tryPromise(() =>
+            runBillingCollectionWorkflow({
+              environment: {
+                ...billingRuntime(db),
+                WOMPI_ENVIRONMENT: mismatch === "environment" ? "production" : "sandbox",
+              },
+              payload: { version: 1, kind: "lookup", transactionId },
+              sleep: (_name, _duration) => Promise.resolve(),
+              activity: (_name, _options, run) => run(),
+            })
+          )
+        );
+        expect(result._tag).toBe("Failure");
+        expect(provider).toHaveBeenCalledTimes(1);
+        expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT status FROM billing_provider_transactions WHERE status IS NOT NULL")
+              .all()
+          )).results
+        ).toEqual([]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT paid_starts_at_ms,paid_ends_at_ms,followup_due_at_ms FROM billing_attempts WHERE id=?"
+              )
+              .bind(attemptId)
+              .first()
+          )
+        ).toEqual({ paid_starts_at_ms: null, paid_ends_at_ms: null, followup_due_at_ms: null });
+        expect(
+          (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM subscription_standing").all()))
+            .results
+        ).toEqual([]);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT attempt_id FROM audit_entries WHERE record_type='billing_transition'"
+              )
+              .all()
+          )).results
+        ).toEqual([]);
+      })
+    )
+);
+
 it("admits only finalized approval and rolls back evidence, paid dates and Audit together", () =>
   Effect.runPromise(
     Effect.gen(function* () {

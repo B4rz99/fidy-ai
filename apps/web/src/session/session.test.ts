@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
-import { Deferred, Effect, Layer, Option } from "effect";
-import { type AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
+import { Deferred, Effect, Fiber, Layer, Option } from "effect";
+import { Atom, type AtomRegistry } from "effect/reactivity";
 import { act, createElement, useContext } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
@@ -19,22 +19,6 @@ const SessionProbe = ({
 };
 
 const reactWork = (work: () => void | Promise<void>): Promise<void> => Promise.resolve(act(work));
-const retirePending = Effect.fnUntraced(function* ({
-  previous,
-  held,
-  recovery,
-  query,
-}: Readonly<{
-  previous: Owner;
-  held: Deferred.Deferred<void>;
-  recovery: Promise<boolean>;
-  query: Atom.Atom<AsyncResult.AsyncResult<void, never>>;
-}>) {
-  previous.session.replaceAuthenticationLifetime();
-  yield* Deferred.succeed(held, undefined);
-  expect(yield* Effect.tryPromise(() => recovery)).toBe(false);
-  expect(yield* readFreshQuery({ registry: previous.registry, query })).toBe(false);
-});
 
 it.each([false, true])(
   "authentication replacement refuses old-registry recovery before delayed disposal (pending: %s)",
@@ -66,13 +50,14 @@ it.each([false, true])(
           );
           yield* Effect.tryPromise(() => reactWork(() => root.render(element)));
           const previous = Option.getOrThrow(owner);
-          const recovery = pending
-            ? Effect.runPromise(readFreshQuery({ registry: previous.registry, query }))
-            : Promise.resolve(false);
+          const recovery = yield* (
+            pending ? readFreshQuery({ registry: previous.registry, query }) : Effect.succeed(false)
+          ).pipe(Effect.forkChild);
           if (pending) yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
-          yield* Effect.tryPromise(() =>
-            reactWork(() => Effect.runPromise(retirePending({ previous, held, recovery, query })))
-          );
+          yield* Effect.tryPromise(() => reactWork(previous.session.replaceAuthenticationLifetime));
+          yield* Deferred.succeed(held, undefined);
+          expect(yield* Fiber.join(recovery)).toBe(false);
+          expect(yield* readFreshQuery({ registry: previous.registry, query })).toBe(false);
           const current = Option.getOrThrow(owner);
           expect(current.registry).not.toBe(previous.registry);
           expect(yield* readFreshQuery({ registry: current.registry, query })).toBe(true);

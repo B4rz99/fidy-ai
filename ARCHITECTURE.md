@@ -1,93 +1,74 @@
 # Architecture
 
 Fidy is one domain model served through web, CLI, MCP and a hosted agent. This document describes
-system ownership, runtime topology and cross-application boundaries. Feature specifications, schema
-fields and operational procedures live in their linked references.
+system ownership, runtime topology and cross-application boundaries.
+
+Architecture documents cover responsibilities, dependencies, trust boundaries and durable design
+choices. Keep feature behavior in owner-local `FEATURE.md` files, design rationale in ADRs,
+procedures in guides and runbooks, and implementation evidence with the relevant issue or PR.
 
 ## System ownership
 
-| Package                                                      | Responsibility                                                                                       |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| [Server](apps/server/ARCHITECTURE.md)                        | Domain model, canonical operations, provider contracts and Cloudflare application adapters           |
-| [Web](apps/web/ARCHITECTURE.md)                              | React product application and browser interactions                                                   |
-| [CLI](apps/cli/ARCHITECTURE.md)                              | Bun executable, server-derived client and native credential storage                                  |
-| [Docs](apps/docs/ARCHITECTURE.md)                            | Public customer and User-owned-agent guides, generated reference snapshots and automatic publication |
-| [Site](apps/site/ARCHITECTURE.md)                            | Public marketing, legal documents and discovery                                                      |
-| [Cloudflare infrastructure](infra/cloudflare/alchemy.run.ts) | Deployment topology, resource wiring and edge policy                                                 |
-| Workspace                                                    | Dependencies, shared tooling and CI                                                                  |
+| Application                                       | Responsibility                                                                    |
+| ------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [Server](apps/server/ARCHITECTURE.md)             | Domain model, canonical operations, provider integration and Cloudflare execution |
+| [Web](apps/web/ARCHITECTURE.md)                   | Product UI and browser interactions                                               |
+| [CLI](apps/cli/ARCHITECTURE.md)                   | Terminal client and local credential custody                                      |
+| [Docs](apps/docs/ARCHITECTURE.md)                 | Public customer and User-owned-agent guides and API reference                     |
+| [Site](apps/site/ARCHITECTURE.md)                 | Public marketing, legal documents and discovery                                   |
+| [Infrastructure](infra/cloudflare/alchemy.run.ts) | Deployment topology, resource wiring and edge policy                              |
+
+The workspace owns shared dependencies, tooling and CI.
 
 ## Production boundary
 
-Cloudflare is the sole Production runtime. The public ingress Worker has no D1 binding. With the shared-read binding enabled, it forwards
-existing query declarations and browser data GET transports to a reserved shared read object in the
-Core artifact, and other requests to the private Core Worker. Core owns the User-scoped data API;
-the unrouted Email Worker has
-narrow forwarded-mail admission and retention authority. Static site and web Workers serve the
-marketing and product applications separately. The customer docs use an independent assets-only
-stack, automatically published when documentation or its build inputs change on trunk.
+Cloudflare is the sole Production runtime. Public ingress has no database binding and forwards
+API traffic to private server execution. Core owns the User-scoped API and coordinates mutations
+through per-User Durable Objects. When enabled, a shared read object serves existing query
+transports. The private Email Worker has a separate, narrow admission and retention boundary.
+Web, marketing and customer documentation are served by separate Workers.
 
 ```mermaid
 flowchart LR
   Clients[Web / CLI / MCP clients] --> Ingress[Public ingress]
   Ingress --> Core[Private Core]
-  Ingress --> Reads[Reserved shared read object]
-  Reads --> D1
-  Core -- Recovery metadata --> Reads
-  Core --> Coordinator[Per-User Durable Objects]
-  Coordinator --> D1[(D1)]
+  Ingress --> Reads[Shared read object]
+  Reads --> D1[(D1)]
+  Core --> Coordinator[Per-User coordination]
+  Coordinator --> D1
   Core --> Background[Queues / Workflows]
   Background --> Coordinator
   Email[Private Email Worker] --> D1
-  Email -- Metadata-only entrypoint --> Core
 ```
 
-D1 retains application state; Durable Objects coordinate per-User work; Queues redeliver bounded
-identities; Workflows execute durable steps; R2 retains private bytes; OpenAI supplies
-Fidy-controlled hosted inference. The shared read object's independent SQLite erasure registry
-protects deletion across D1 restoration. Protected units freshly read its generation; private original
-bytes remain in R2. Local development uses the same Worker entrypoints and binding graph.
-See [ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md).
+D1 holds application state; Durable Objects coordinate work; Queues and Workflows drive durable
+background execution; R2 holds private files. An independent erasure registry protects deletion
+across database restoration. External providers supply inference, messaging, authentication and
+payments through server-owned adapters. Local development uses the same Worker entrypoints and
+binding graph. See [the runtime decision](docs/adr/0026-cloudflare-native-production-replatform.md).
 
 ## Cross-application contract
 
-The server declares canonical operations once. HTTP, typed clients, MCP and the hosted agent derive
-from those declarations and share authorization and owner behavior. Web and CLI consume browser-safe
-server contracts; server implementations stay private. OpenAPI and operation-policy artifacts are
-generated evidence. See [contract generation](docs/server-contract-artifacts.md).
+The server declares canonical operations once. HTTP clients, MCP and hosted tools derive from those
+declarations and share owner behavior and authorization. Web and CLI consume browser-safe contracts
+and published transport resources. Dedicated authentication, payment, privacy and delivery transports
+retain their own authority boundaries. Browser sessions, PATs and OAuth agent grants
+remain distinct credentials.
 
-Credential bootstrap, statement-byte staging, hosted conversation/delivery, payment enrollment and
-privacy controls have dedicated transports with their own proof boundaries. They do not gain
-canonical or agent authority merely by being reachable. OAuth agent grants, browser sessions and
-PATs remain separate credentials; the hosted agent uses the same canonical tools as external agents.
-
-## Owner publication
-
-Owners publish only the interfaces they earn: `contract.ts` for declarations, `operations.ts` for
-behavior and `runtime.ts` for construction. Private implementation stays with its owner. These
-boundaries apply to application code, tests, tooling and infrastructure. Portable domain code
-remains independent of native adapters. See
-[ADR 0031](docs/adr/0031-published-owner-interfaces-and-visible-internals.md).
-
-### Public-surface review
-
-Review changed publications for leaked private functions, types and storage/provider shapes,
-including indirect exports. Dependency checks complement this semantic review; the detailed
-[review criteria](docs/adr/0031-published-owner-interfaces-and-visible-internals.md#public-surface-review)
-live with the publication decision.
+Owners publish declarations, behavior and runtime construction through narrow interfaces. Domain
+code stays independent of native adapters, and consumers cannot depend on another owner's private
+implementation. See [owner publication](docs/adr/0031-published-owner-interfaces-and-visible-internals.md)
+and [contract generation](docs/server-contract-artifacts.md).
 
 ## State and delivery
 
-User-scoped D1 units commit owner changes, live authority checks and accountability together.
-Durable Object serialization complements database guards. External calls and object storage cannot
-participate in that database commit: retained intent, bounded dispatch and verified outcomes bridge
-those boundaries. A successful handoff is distinct from completed delivery or provider settlement.
+User-scoped database units commit owner changes, live authority checks and accountability together.
+External calls and object storage require retained intent and reconciliation across that boundary.
+Acceptance of work is distinct from completed delivery or verified provider settlement.
 
-## Deployment and evolution
+## Further reading
 
-GitHub Actions deploys an exact trunk revision, applies migrations and verifies staged Worker
-versions before promotion. Code rollback changes traffic, not database or external state. The
-[Production runbook](docs/operations/production-releases.md) owns the release procedure.
-
-Domain terms belong in [GLOSSARY.md](GLOSSARY.md), coding and storage conventions in
-[CODING_STANDARDS.md](CODING_STANDARDS.md), security invariants in
-[SECURITY_STANDARDS.md](SECURITY_STANDARDS.md), and durable design rationale in [ADRs](docs/adr/).
+- [Glossary](GLOSSARY.md): domain vocabulary.
+- [Coding standards](CODING_STANDARDS.md) and [security standards](SECURITY_STANDARDS.md): shared invariants.
+- [ADRs](docs/adr/): design decisions and tradeoffs.
+- [Production runbook](docs/operations/production-releases.md): release and rollback procedures.

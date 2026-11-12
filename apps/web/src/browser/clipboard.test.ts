@@ -387,3 +387,87 @@ effectIt.effect("commands after scope closure admit no native writes or callback
     expect(callback).not.toHaveBeenCalled();
   })
 );
+
+effectIt.effect("a failed replacement does not strand the prior successful copy", () =>
+  Effect.gen(function* () {
+    const stub = clipboardStub();
+    const copied = vi.fn();
+    const command = yield* makeSensitiveClipboard(
+      Option.some({
+        readText: stub.clipboard.readText,
+        writeText: (text) =>
+          text === "rejected-replacement"
+            ? Promise.reject(new Error("denied"))
+            : stub.clipboard.writeText(text),
+      }),
+      "10 minutes"
+    );
+    command.copy("prior-secret", copied);
+    yield* Effect.yieldNow;
+    yield* TestClock.adjust("5 minutes");
+    command.copy("rejected-replacement", copied);
+    yield* Effect.yieldNow;
+    yield* TestClock.adjust("20 minutes");
+    expect(copied).toHaveBeenCalledTimes(1);
+    expect(stub.read()).toBe("");
+  })
+);
+
+effectIt.effect("a replacement's deferred cleanup read cannot erase a later identical copy", () =>
+  Effect.gen(function* () {
+    const stub = clipboardStub();
+    const pending = Promise.withResolvers<string>();
+    let reads = 0;
+    const command = yield* makeSensitiveClipboard(
+      Option.some({
+        readText: () => (++reads === 1 ? pending.promise : stub.clipboard.readText()),
+        writeText: stub.clipboard.writeText,
+      }),
+      "10 minutes"
+    );
+    const copied = vi.fn();
+    command.copy("same", copied);
+    yield* Effect.yieldNow;
+    command.copy("middle", copied);
+    yield* Effect.yieldNow;
+    command.copy("same", copied);
+    yield* Effect.yieldNow;
+    pending.resolve("same");
+    yield* Effect.yieldNow;
+    expect(stub.read()).toBe("same");
+    expect(copied).toHaveBeenCalledTimes(2);
+  })
+);
+
+effectIt.effect("a delayed replacement cleanup write repairs to the latest original deadline", () =>
+  Effect.gen(function* () {
+    const stub = clipboardStub();
+    const pending = Promise.withResolvers<void>();
+    let clears = 0;
+    const command = yield* makeSensitiveClipboard(
+      Option.some({
+        readText: stub.clipboard.readText,
+        writeText: (value) =>
+          value === "" && ++clears === 1
+            ? pending.promise.then(() => stub.replace(value))
+            : stub.clipboard.writeText(value),
+      }),
+      "10 minutes"
+    );
+    const copied = vi.fn();
+    command.copy("first", copied);
+    yield* Effect.yieldNow;
+    command.copy("middle", copied);
+    yield* Effect.yieldNow;
+    command.copy("latest", copied);
+    yield* Effect.yieldNow;
+    yield* TestClock.adjust("9 minutes");
+    pending.resolve();
+    yield* Effect.yieldNow;
+    expect(stub.read()).toBe("latest");
+    expect(copied).toHaveBeenCalledTimes(2);
+    yield* TestClock.adjust("1 minute");
+    expect(stub.read()).toBe("");
+    expect(copied).toHaveBeenCalledTimes(2);
+  })
+);

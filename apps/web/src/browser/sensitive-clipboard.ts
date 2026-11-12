@@ -19,7 +19,7 @@ export type SensitiveClipboard = Readonly<{
   copy: (value: string, onCopied?: () => void) => CopyRelease;
 }>;
 
-type CopyOwner = { value: Option.Option<string> };
+type CopyOwner = { value: Option.Option<string>; prior: Option.Option<string>; written: boolean };
 type ClipboardState = {
   open: boolean;
   generation: number;
@@ -37,6 +37,7 @@ const retire = (state: ClipboardState): Option.Option<string> => {
   if (Option.isNone(previous)) return Option.none();
   const value = previous.value.value;
   previous.value.value = Option.none();
+  previous.value.prior = Option.none();
   return value;
 };
 
@@ -56,8 +57,6 @@ const latestValue = (state: ClipboardState): Option.Option<string> => {
 
 const repair = (state: ClipboardState, obsolete: string, observed: string): Promise<void> => {
   if (observed !== obsolete) return Promise.resolve();
-  // Choose repair only after observing obsolete text. A delayed repair is itself fenced;
-  // it never publishes Copied or restarts the owner's original deadline.
   const latest = latestValue(state);
   if (Option.isSome(latest)) return write(state, latest.value, state.current);
   return obsolete === "" ? Promise.resolve() : write(state, "", Option.none());
@@ -81,6 +80,7 @@ const write = (
 
 const release = (state: ClipboardState, owner: CopyOwner): void => {
   if (!owns(state, owner)) return;
+  const prior = owner.prior;
   const value = retire(state);
   const generation = state.generation;
   const clipboard = state.clipboard;
@@ -90,29 +90,62 @@ const release = (state: ClipboardState, owner: CopyOwner): void => {
     .then(() => clipboard.value.readText())
     .then((observed) => {
       if (state.generation !== generation || Option.isSome(state.current)) return undefined;
-      if (observed === value.value) return write(state, "", Option.none());
+      if (observed === value.value || (Option.isSome(prior) && observed === prior.value)) {
+        return write(state, "", Option.none());
+      }
       return undefined;
     })
     .catch(() => undefined);
+};
+
+const cleanPrior = (state: ClipboardState, owner: CopyOwner): Promise<void> => {
+  const prior = owner.prior;
+  const clipboard = state.clipboard;
+  if (Option.isNone(prior) || Option.isNone(clipboard)) return Promise.resolve();
+  return Promise.resolve()
+    .then(() => clipboard.value.readText())
+    .then((observed) => {
+      if (owns(state, owner) && observed === prior.value) {
+        return write(state, "", Option.some(owner));
+      }
+      return undefined;
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      owner.prior = Option.none();
+    });
+};
+
+const writeCopy = (state: ClipboardState, value: string, owner: CopyOwner): Promise<void> =>
+  cleanPrior(state, owner).then(() =>
+    owns(state, owner) ? write(state, value, Option.some(owner)) : undefined
+  );
+
+const priorValue = (state: ClipboardState): Option.Option<string> => {
+  if (Option.isNone(state.current)) return Option.none();
+  const owner = state.current.value;
+  return owner.written ? owner.value : owner.prior;
 };
 
 const copy =
   (state: ClipboardState, run: Run, lifetime: Duration.Input): SensitiveClipboard["copy"] =>
   (value, onCopied) => {
     if (!state.open) return { release: () => undefined };
+    const prior = priorValue(state);
     retire(state);
     state.generation += 1;
-    const owner: CopyOwner = { value: Option.some(value) };
+    const owner: CopyOwner = { value: Option.some(value), prior, written: false };
     state.current = Option.some(owner);
     run(
       Effect.tryPromise({
-        try: () => write(state, value, Option.some(owner)),
+        try: () => writeCopy(state, value, owner),
         catch: () => new ClipboardAccessFailed(),
       }).pipe(
         Effect.matchEffect({
           onFailure: () => Effect.sync(() => release(state, owner)),
           onSuccess: () => {
             if (!owns(state, owner)) return Effect.void;
+            owner.written = true;
             return Effect.sync(() => onCopied?.()).pipe(
               Effect.andThen(Effect.sleep(lifetime)),
               Effect.andThen(Effect.sync(() => release(state, owner)))

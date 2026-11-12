@@ -14,9 +14,18 @@ const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
 type RestoreInput = Readonly<{
   environment: ErasureOperatorEnvironment;
+  storeIds: ReadonlyArray<string>;
   operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;
   signal: AbortSignal;
 }>;
+const requireRestoreAuthority = (input: RestoreInput): Effect.Effect<number, ErasureUnavailable> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    if (current >= input.operator.expiresAtMs || input.signal.aborted) {
+      return yield* new ErasureUnavailable();
+    }
+    return current;
+  });
 const readRecord = (
   input: Readonly<{ bucket: ErasureRegistry; key: string }>
 ): Effect.Effect<typeof RecoveryCase.Type, ErasureUnavailable> =>
@@ -39,10 +48,7 @@ const restoreOne = (
   input: RestoreInput & Readonly<{ record: typeof RecoveryCase.Type; generation: string }>
 ): Effect.Effect<void, ErasureUnavailable> =>
   Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    if (current >= input.operator.expiresAtMs || input.signal.aborted) {
-      return yield* new ErasureUnavailable();
-    }
+    const current = yield* requireRestoreAuthority(input);
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
       reference: input.record.reference,
       userId: input.record.userId,
@@ -71,6 +77,7 @@ export const restoreNext = (input: RestoreInput): Effect.Effect<Response, Erasur
     const configuration = { db: input.environment.DB, bucket };
     const expected = yield* expectedGeneration(configuration);
     const { db } = configuration;
+    yield* requireRestoreAuthority(input);
     const results = yield* io(() =>
       db.batch([
         db
@@ -102,6 +109,7 @@ export const restoreNext = (input: RestoreInput): Effect.Effect<Response, Erasur
       const record = yield* readRecord({ bucket: bucket.value, key: object.key });
       yield* restoreOne({ ...input, record, generation: expected.generation });
     }
+    yield* requireRestoreAuthority(input);
     yield* io(() =>
       db
         .prepare(
@@ -134,6 +142,9 @@ export const releaseRestore = (input: RestoreInput): Effect.Effect<Response, Era
     if (current >= input.operator.expiresAtMs || input.signal.aborted) {
       return yield* new ErasureUnavailable();
     }
+    const inventory = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+      input.storeIds
+    );
     const { db } = configuration;
     const result = yield* io(() =>
       db
@@ -141,7 +152,9 @@ export const releaseRestore = (input: RestoreInput): Effect.Effect<Response, Era
     AND EXISTS(SELECT 1 FROM erasure_control WHERE kind='restore' AND generation=? AND scanned=1)
     AND NOT EXISTS(SELECT 1 FROM erasure_restore_members m LEFT JOIN erasure_requests q ON q.id=m.request_id
       WHERE m.generation=? AND (q.id IS NULL OR q.user_id<>m.user_id OR q.restore_generation IS NOT m.generation
-      OR q.state NOT IN('ExternalPending','Complete') OR NOT EXISTS(SELECT 1 FROM erasure_steps WHERE request_id=q.id) OR EXISTS(SELECT 1 FROM erasure_steps s WHERE s.request_id=q.id AND s.delete_done=0)))
+      OR q.state NOT IN('ExternalPending','Complete')
+      OR EXISTS(SELECT 1 FROM json_each(?) required WHERE NOT EXISTS(SELECT 1 FROM erasure_steps s WHERE s.request_id=q.id AND s.store_id=required.value AND s.delete_done=1))
+      OR EXISTS(SELECT 1 FROM erasure_steps s WHERE s.request_id=q.id AND (s.delete_done=0 OR s.store_id NOT IN(SELECT value FROM json_each(?))))))
     AND NOT EXISTS(SELECT 1 FROM erasure_requests q WHERE NOT EXISTS(SELECT 1 FROM erasure_restore_members m WHERE m.generation=? AND m.request_id=q.id AND m.user_id=q.user_id)
       AND NOT(q.state='Complete' AND q.last_erased_at_ms IS NOT NULL AND q.last_erased_at_ms+?<=? AND q.marker_written=1 AND q.coordinator_cleared=1
         AND NOT EXISTS(SELECT 1 FROM erasure_writers WHERE user_id=q.user_id)))`)
@@ -149,6 +162,8 @@ export const releaseRestore = (input: RestoreInput): Effect.Effect<Response, Era
           expected.generation,
           expected.generation,
           expected.generation,
+          inventory,
+          inventory,
           expected.generation,
           recoveryWindowMs,
           current
@@ -162,4 +177,4 @@ export const releaseRestore = (input: RestoreInput): Effect.Effect<Response, Era
         headers: { "cache-control": "no-store" },
       }
     );
-  });
+  }).pipe(Effect.mapError(() => new ErasureUnavailable()));

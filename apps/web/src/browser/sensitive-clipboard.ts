@@ -1,128 +1,187 @@
-import { Duration, Effect, FiberHandle, Function, Option, Ref, type Scope } from "effect";
-import {
-  type BrowserClipboard,
-  ClipboardAccessFailed,
-  readClipboardText,
-  writeClipboardText,
-} from "./clipboard";
+import { Duration, Effect, FiberHandle, Function, Option, type Scope } from "effect";
+import { type BrowserClipboard, ClipboardAccessFailed } from "./clipboard";
 
 const sensitiveClipboardMinutes = 10;
 
 /** Expiry interval for copied sensitive values. */
 export const sensitiveClipboardLifetime = Duration.minutes(sensitiveClipboardMinutes);
 
+/** Idempotent release of one exact copy; equal text never grants ownership. */
+export type CopyRelease = Readonly<{ release: () => void }>;
+
 /**
- * Scoped commands for one mounted disclosure. `copy` reports success only after the browser write,
- * suppresses access failures, and replaces the previous copy expiry. `clear` erases only a matching
- * clipboard value. `reveal` owns an independent deadline; another reveal replaces that deadline.
- * Closing the owner interrupts every callback and makes the commands inert.
+ * Mounted disclosure commands. Copied acknowledges only a successful current write. Reveal and
+ * copy deadlines are independent. Cleanup is best effort: browser read/write is not atomic and
+ * neither release nor scope closure proves physical clipboard erasure.
  */
 export type SensitiveClipboard = Readonly<{
   reveal: (onExpired: () => void) => void;
-  copy: (value: string, onCopied: () => void) => void;
-  clear: (value: string) => void;
+  copy: (value: string, onCopied?: () => void) => CopyRelease;
 }>;
 
-const clearMatching = (
-  clipboard: Option.Option<BrowserClipboard>,
-  value: string
-): Effect.Effect<void> =>
-  readClipboardText(clipboard).pipe(
-    Effect.flatMap((current) =>
-      current === value ? writeClipboardText(clipboard, "") : Effect.void
-    ),
-    Effect.ignore
+type CopyOwner = { value: Option.Option<string>; prior: Option.Option<string>; written: boolean };
+type ClipboardState = {
+  open: boolean;
+  generation: number;
+  current: Option.Option<CopyOwner>;
+  clipboard: Option.Option<BrowserClipboard>;
+};
+type Run = (effect: Effect.Effect<void>) => void;
+
+const owns = (state: ClipboardState, owner: CopyOwner): boolean =>
+  state.open && Option.isSome(state.current) && state.current.value === owner;
+
+const retire = (state: ClipboardState): Option.Option<string> => {
+  const previous = state.current;
+  state.current = Option.none();
+  if (Option.isNone(previous)) return Option.none();
+  const value = previous.value.value;
+  previous.value.value = Option.none();
+  previous.value.prior = Option.none();
+  return value;
+};
+
+const writeStillCurrent = (
+  state: ClipboardState,
+  owner: Option.Option<CopyOwner>,
+  generation: number
+): boolean =>
+  Option.isSome(owner)
+    ? owns(state, owner.value)
+    : state.generation === generation && Option.isNone(state.current);
+
+const latestValue = (state: ClipboardState): Option.Option<string> => {
+  if (!state.open || Option.isNone(state.current)) return Option.none();
+  return state.current.value.value;
+};
+
+const repair = (state: ClipboardState, obsolete: string, observed: string): Promise<void> => {
+  if (observed !== obsolete) return Promise.resolve();
+  const latest = latestValue(state);
+  if (Option.isSome(latest)) return write(state, latest.value, state.current);
+  return obsolete === "" ? Promise.resolve() : write(state, "", Option.none());
+};
+
+const write = (
+  state: ClipboardState,
+  value: string,
+  owner: Option.Option<CopyOwner>
+): Promise<void> => {
+  const generation = state.generation;
+  if (Option.isNone(state.clipboard)) return Promise.reject(new ClipboardAccessFailed());
+  const available = state.clipboard.value;
+  return Promise.resolve()
+    .then(() => available.writeText(value))
+    .then(() => {
+      if (writeStillCurrent(state, owner, generation)) return undefined;
+      return available.readText().then((observed) => repair(state, value, observed));
+    });
+};
+
+const release = (state: ClipboardState, owner: CopyOwner): void => {
+  if (!owns(state, owner)) return;
+  const prior = owner.prior;
+  const value = retire(state);
+  const generation = state.generation;
+  const clipboard = state.clipboard;
+  if (Option.isNone(clipboard) || Option.isNone(value)) return;
+  // Native operations can outlive the scope. Recheck local authority after the read.
+  Promise.resolve()
+    .then(() => clipboard.value.readText())
+    .then((observed) => {
+      if (state.generation !== generation || Option.isSome(state.current)) return undefined;
+      if (observed === value.value || (Option.isSome(prior) && observed === prior.value)) {
+        return write(state, "", Option.none());
+      }
+      return undefined;
+    })
+    .catch(() => undefined);
+};
+
+const cleanPrior = (state: ClipboardState, owner: CopyOwner): Promise<void> => {
+  const prior = owner.prior;
+  const clipboard = state.clipboard;
+  if (Option.isNone(prior) || Option.isNone(clipboard)) return Promise.resolve();
+  return Promise.resolve()
+    .then(() => clipboard.value.readText())
+    .then((observed) => {
+      if (owns(state, owner) && observed === prior.value) {
+        return write(state, "", Option.some(owner));
+      }
+      return undefined;
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      owner.prior = Option.none();
+    });
+};
+
+const writeCopy = (state: ClipboardState, value: string, owner: CopyOwner): Promise<void> =>
+  cleanPrior(state, owner).then(() =>
+    owns(state, owner) ? write(state, value, Option.some(owner)) : undefined
   );
 
-type LatestCopy = { current: Option.Option<CopyOwner> };
+const priorValue = (state: ClipboardState): Option.Option<string> => {
+  if (Option.isNone(state.current)) return Option.none();
+  const owner = state.current.value;
+  return owner.written ? owner.value : owner.prior;
+};
 
-const writeOwned = (
-  clipboard: Option.Option<BrowserClipboard>,
-  value: string,
-  latest: LatestCopy
-): Effect.Effect<void, ClipboardAccessFailed> =>
-  Option.match(clipboard, {
-    onNone: () => Effect.fail(new ClipboardAccessFailed()),
-    onSome: (available) =>
-      Effect.suspend(() => {
-        let active = true;
-        const pendingWrite = available.writeText(value);
-        return Effect.tryPromise({
-          try: () =>
-            pendingWrite.then(() => {
-              if (active) return;
-              return available.readText().then((current) => {
-                if (current !== value) return;
-                return Option.match(latest.current, {
-                  onNone: () => available.writeText(""),
-                  onSome: (owner) => available.writeText(owner.value),
-                });
-              });
-            }),
-          catch: () => new ClipboardAccessFailed(),
-        }).pipe(Effect.ensuring(Effect.sync(() => (active = false))));
-      }),
+const copy =
+  (state: ClipboardState, run: Run, lifetime: Duration.Input): SensitiveClipboard["copy"] =>
+  (value, onCopied) => {
+    if (!state.open) return { release: () => undefined };
+    const prior = priorValue(state);
+    retire(state);
+    state.generation += 1;
+    const owner: CopyOwner = { value: Option.some(value), prior, written: false };
+    state.current = Option.some(owner);
+    run(
+      Effect.tryPromise({
+        try: () => writeCopy(state, value, owner),
+        catch: () => new ClipboardAccessFailed(),
+      }).pipe(
+        Effect.matchEffect({
+          onFailure: () => Effect.sync(() => release(state, owner)),
+          onSuccess: () => {
+            if (!owns(state, owner)) return Effect.void;
+            owner.written = true;
+            return Effect.sync(() => onCopied?.()).pipe(
+              Effect.andThen(Effect.sleep(lifetime)),
+              Effect.andThen(Effect.sync(() => release(state, owner)))
+            );
+          },
+        })
+      )
+    );
+    return { release: () => release(state, owner) };
+  };
+
+const reveal =
+  (state: ClipboardState, run: Run, lifetime: Duration.Input): SensitiveClipboard["reveal"] =>
+  (onExpired) => {
+    if (!state.open) return;
+    run(
+      Effect.sleep(lifetime).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            if (!state.open) return;
+            const revealedCopy = state.current;
+            onExpired();
+            if (Option.isSome(revealedCopy)) release(state, revealedCopy.value);
+          })
+        )
+      )
+    );
+  };
+
+const close = (state: ClipboardState): Effect.Effect<void> =>
+  Effect.sync(() => {
+    if (Option.isSome(state.current)) release(state, state.current.value);
+    state.open = false;
   });
 
-type CopyOwner = Readonly<{ value: string }>;
-
-type ClipboardState = Readonly<{
-  owner: Ref.Ref<Option.Option<CopyOwner>>;
-  latest: LatestCopy;
-  clipboard: Option.Option<BrowserClipboard>;
-}>;
-
-const clearCopied = (state: ClipboardState): Effect.Effect<void> =>
-  Ref.getAndSet(state.owner, Option.none()).pipe(
-    Effect.tap(() => Effect.sync(() => (state.latest.current = Option.none()))),
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.void,
-        onSome: (owner) => clearMatching(state.clipboard, owner.value),
-      })
-    )
-  );
-
-const activateCopy = (state: ClipboardState, value: string): Effect.Effect<void> =>
-  Ref.modify(state.owner, (current) => {
-    if (Option.isSome(current) && current.value.value === value) {
-      return [{ owner: current.value, replaced: Option.none<CopyOwner>() }, current] as const;
-    }
-    const owner: CopyOwner = { value };
-    return [{ owner, replaced: current }, Option.some(owner)] as const;
-  }).pipe(
-    Effect.tap(({ owner }) => Effect.sync(() => (state.latest.current = Option.some(owner)))),
-    Effect.tap(({ replaced }) =>
-      Option.match(replaced, {
-        onNone: () => Effect.void,
-        onSome: (previous) => clearMatching(state.clipboard, previous.value),
-      })
-    ),
-    Effect.asVoid
-  );
-
-const clearOwned = (state: ClipboardState, value: string): Effect.Effect<void> =>
-  Ref.modify(state.owner, (current) => {
-    if (Option.isSome(current) && current.value.value === value) {
-      return [Option.some(current.value), Option.none()] as const;
-    }
-    return [Option.none<CopyOwner>(), current] as const;
-  }).pipe(
-    Effect.flatMap(
-      Option.match({
-        onNone: () => clearMatching(state.clipboard, value),
-        onSome: () =>
-          Effect.sync(() => (state.latest.current = Option.none())).pipe(
-            Effect.andThen(clearMatching(state.clipboard, value))
-          ),
-      })
-    )
-  );
-
-/**
- * Creates scoped sensitive-value commands. Values are forgotten after expiry, explicit clearing,
- * or scope close and never enter the typed error channel or generic Cause rendering.
- */
+/** Creates a private owner; scope closure disables admission and retires its exact copy. */
 export const makeSensitiveClipboard: {
   (
     clipboard: Option.Option<BrowserClipboard>,
@@ -135,37 +194,10 @@ export const makeSensitiveClipboard: {
   ) => Effect.Effect<SensitiveClipboard, never, Scope.Scope>;
 } = Function.dual(2, (clipboard: Option.Option<BrowserClipboard>, lifetime: Duration.Input) =>
   Effect.gen(function* () {
-    const owner = yield* Ref.make(Option.none<CopyOwner>());
-    const state: ClipboardState = { owner, latest: { current: Option.none() }, clipboard };
-    yield* Effect.addFinalizer(() => clearCopied(state));
-    const copyHandle = yield* FiberHandle.make<void, never>();
-    const copyRun = yield* FiberHandle.runtime(copyHandle)<never>();
+    const state: ClipboardState = { open: true, generation: 0, current: Option.none(), clipboard };
+    const copyRun = yield* FiberHandle.makeRuntime<never, never, void>();
     const revealRun = yield* FiberHandle.makeRuntime<never, never, void>();
-
-    return {
-      reveal: (onExpired: () => void) => {
-        revealRun(
-          Effect.sleep(lifetime).pipe(
-            Effect.andThen(Effect.sync(onExpired)),
-            Effect.andThen(FiberHandle.clear(copyHandle)),
-            Effect.andThen(clearCopied(state))
-          )
-        );
-      },
-      copy: (value: string, onCopied: () => void) => {
-        copyRun(
-          activateCopy(state, value).pipe(
-            Effect.flatMap(() =>
-              writeOwned(clipboard, value, state.latest).pipe(
-                Effect.match({ onFailure: () => undefined, onSuccess: onCopied })
-              )
-            ),
-            Effect.andThen(Effect.sleep(lifetime)),
-            Effect.andThen(clearCopied(state))
-          )
-        );
-      },
-      clear: (value: string) => copyRun(clearOwned(state, value)),
-    };
+    yield* Effect.addFinalizer(() => close(state));
+    return { copy: copy(state, copyRun, lifetime), reveal: reveal(state, revealRun, lifetime) };
   })
 );

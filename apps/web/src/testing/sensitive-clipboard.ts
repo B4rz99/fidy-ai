@@ -1,17 +1,20 @@
 import { vi } from "vitest";
-import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
+import type { CopyRelease, SensitiveClipboard } from "@/browser/sensitive-clipboard";
 
 export type SensitiveClipboardSpy = Readonly<{
   reveal: ReturnType<typeof vi.fn<(onExpired: () => void) => void>>;
-  copy: ReturnType<typeof vi.fn<(value: string, onCopied: () => void) => void>>;
-  clear: ReturnType<typeof vi.fn<(value: string) => void>>;
+  copy: ReturnType<typeof vi.fn<(value: string, onCopied?: () => void) => CopyRelease>>;
+  release: ReturnType<typeof vi.fn<() => void>>;
 }>;
 
-export const makeSensitiveClipboardSpy = (copySucceeded = true): SensitiveClipboardSpy =>
-  ({
+export const makeSensitiveClipboardSpy = (copySucceeded = true): SensitiveClipboardSpy => {
+  const release = vi.fn();
+  return {
     reveal: vi.fn(),
-    copy: vi.fn((_value: string, onCopied: () => void) => {
-      if (copySucceeded) onCopied();
+    copy: vi.fn((_value: string, onCopied?: () => void) => {
+      if (copySucceeded) onCopied?.();
+      return { release };
     }),
-    clear: vi.fn(),
-  }) satisfies SensitiveClipboard;
+    release,
+  } satisfies SensitiveClipboard & { release: () => void };
+};

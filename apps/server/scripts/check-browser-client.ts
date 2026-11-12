@@ -8,10 +8,16 @@ const serverRoot = Bun.fileURLToPath(new URL("..", import.meta.url))
 const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url))
   .replaceAll("\\", "/")
   .replace(/\/$/u, "");
-const entrypoints = ["src/client.ts", "src/browser-bootstrap.ts", "src/browser-transport.ts"];
+const entrypoints = [
+  "src/client.ts",
+  "src/browser-bootstrap.ts",
+  "src/browser-transport.ts",
+  "src/shell/native-http/runtime.ts",
+];
 
 const safeSource = [
   /^src\/client\.ts$/u,
+  /^src\/shell\/native-http\/runtime\.ts$/u,
   /^src\/(?:browser-bootstrap|browser-transport)\.ts$/u,
   /^src\/shell\/(?:browser-transport|processing-consent|identity|categories|transactions|subscription|tokens|budgets|dashboard|insights|recurring|recurring-plans|connections|public-http|schema-codecs|browser-login|recovery|ingestion|web-session|web-authentication|provider-authentication|oauth-agents|memory|quotas)\/contract\.ts$/u,
   /^src\/shell\/agent\/contract\.ts$/u,

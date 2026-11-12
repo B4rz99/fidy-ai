@@ -18,12 +18,10 @@ const makeMountedClipboard = (lifetime: Duration.Input): MountedSensitiveClipboa
     reveal: (onExpired): void => {
       if (Option.isSome(owner)) owner.value.command.reveal(onExpired);
     },
-    copy: (value, onCopied): void => {
-      if (Option.isSome(owner)) owner.value.command.copy(value, onCopied);
-    },
-    clear: (value): void => {
-      if (Option.isSome(owner)) owner.value.command.clear(value);
-    },
+    copy: (value, onCopied) =>
+      Option.isSome(owner)
+        ? owner.value.command.copy(value, onCopied)
+        : { release: () => undefined },
   };
   const lifecycleRef: RefCallback<HTMLDivElement> = (node) => {
     if (node === null) return;

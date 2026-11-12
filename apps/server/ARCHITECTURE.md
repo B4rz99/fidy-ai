@@ -121,6 +121,17 @@ the User-scoped mutation unit. Dedicated browser/proof transports retain separat
 authority; using one does not confer canonical, agent or batch privileges.
 See [ADR 0029](../../docs/adr/0029-atomic-batch-accountability-boundaries.md).
 
+Canonical Admission privately owns each retained call from catalog normalization and live scope
+checks through atomic acceptance, owner execution, retention and current-authority disclosure.
+Replay identity remains User/retry-key scoped; another authorized PAT observes the retained outcome
+with its own guarded Audit and current allowance standing, without a new commercial consumption.
+Pending uncertainty never permits execution. Completion must update the exact accepted identity;
+a stale owner cannot complete a replacement or present its unretained result as completed.
+The original twenty-four-hour cutoff and separate capacity lease remain unchanged. Sensitive OAuth
+work continues to disable retry keys, and its lifetime fence encloses admission as well as owner
+work. Retention preserves status, body and content type; an independent response-byte ceiling is
+separate policy work.
+
 ### Hosted MCP and OAuth development authority
 
 Browser OAuthConnection listing resolves the exact mounted cookie once and rechecks that live
@@ -181,6 +192,17 @@ Payment enrollment availability composes its exact mounted cookie, session fresh
 Consent and User context in one native read. Core delegates binding verification to that read;
 availability does not fetch a mailbox credential. Other enrollment operations retain their existing
 ingress and commit checks. The available-method response remains uncached.
+
+Subscription's browser enrollment handler privately claims source creation and verifies only the
+retained candidate. An uncertain source response without a candidate remains unresolved and never
+permits another source POST. Native finish attaches the exact source, marks enrollment available
+and inserts its deterministic first BillingAttempt in one guarded D1 batch. An unavailable or lost
+batch response is not provider refusal; replay observes that same enrollment and PaymentRequestId.
+Pending durable attempts reoffer `onAccepted` so a missed notification can recover without another
+source creation or first attempt. Receivers tolerate duplicate offers; collection and paid access
+remain separate billing observations. Native preparing reservations and observed expiry are distinct
+from the portable core enrollment decision input. Existing claim predicates, fifteen-minute expiry,
+three-second lookup spacing and eight-attempt ceiling remain authoritative.
 
 OAuthConnection listing composes its User resource admission, bounded connection/activity selection
 and outstanding-work completion in the final native batch. The ingress source grant and exact
@@ -302,6 +324,10 @@ in its independent SQLite storage after the authenticated handoff; it never cons
 With the shared-read binding enabled, existing query declarations and browser data GET transports execute canonical HTTP in that same
 object; commands, User coordination and admission policies retain their existing owners. Each
 protected D1 unit reads the current registry generation and asserts it inside its native transaction.
+Sessions prepare that assertion through the same Session executing the owner statements; retained
+Sessions and prepared statements revalidate on every execution. Missing, malformed or unavailable
+independent proof refuses the unit without initializing replacement evidence. Native row methods
+remain protected, while `exec`, `dump` and raw tuple access remain unavailable.
 Other executors reach the same metadata through a bounded private binding. ForwardedEmail receives
 only the named metadata transport entrypoint, without the coordinator namespace. No generation or response
 cache grants authority. Private original bytes remain in R2.
@@ -312,9 +338,22 @@ captured ETag, publishes the SQLite authority durably, then attempts one conditi
 The native journal grants that final attempt once; a retry only observes an already published result.
 Uncertain or restored checkpoints require existing restore/release reconciliation. The retained R2
 transfer witness prevents first-release initialization after complete independent metadata loss.
+Erasure binds its execution configuration to the exact User inside the serialized coordinator.
+Its private `admit`, `continue`, `receipt` and `custody` operations decode and authorize each
+invocation independently; binding retains no credential, receipt or lifecycle observation.
+Continuation reads and decodes the durable phase and offers one bounded opportunity.
+Per-store acknowledgments survive credential deletion and coordinator restart. Original bytes must
+be confirmed absent before `ExternalPending`; that guarded handoff records the last erasure instant
+and resets Cloudflare custody. Completion requires every configured store and all five custodians,
+terminal evidence and the 30-day recovery horizon. Accepted custody and elapsed time alone never
+prove completion. The browser reports acceptance as unfinished and provides support without login.
 Fresh authenticated account deletion fences new activity and waits for confirmed upload settlement
 before removing owner records and User file prefixes. Minimal independent markers protect restoration;
-external acknowledgments remain distinct from verified cleanup. Metadata outlives supported backups,
+external acknowledgments remain distinct from verified cleanup. Restoration replay rechecks original operator
+expiry and cancellation before scan writes, and case import rechecks its short admission after independent
+evidence reads. Same-generation retries retain exact original request identity and time. Guarded release
+compares completed local steps against the current coordinator-composed inventory in its publication unit;
+ExternalPending remains separate from external completion. Metadata outlives supported backups,
 then expires after external completion. Migration and release checks follow the
 [release procedure](../../docs/operations/production-releases.md).
 
@@ -413,8 +452,10 @@ recovery path when both offers fail. Neither handoff means extraction has comple
 Committed queued statement readback can wake the owning User coordinator's durable alarm.
 Its dispatcher selects only that User's published intents. One coalesced alarm preserves the
 earliest statement or hosted recovery deadline; the alarm attempts both recovery owners and
-hosted recovery restores any later deadline. Erasure retires the resident alarm scheduler before
-joining pending native writes and clearing the alarm, so late callbacks cannot recreate custody.
+hosted recovery restores any later deadline. Erasure calls the resident alarm scheduler's `retireAndClear` after MCP settlement. It retires
+admission before joining pending native writes and clearing the alarm, so late callbacks cannot
+recreate custody. Only verified `AlarmAbsent` permits coordinator clearance; `ClearUnconfirmed`
+and native failures keep erasure blocked without reopening scheduling.
 Publication succeeds when a best-effort wake fails; D1 intent and independent cron discovery
 remain authoritative recovery.
 
@@ -530,3 +571,12 @@ An unknown receipt-publication response requires a same-User receipt readback be
 cleanup. A failed or malformed readback retains both private bytes and the original writer's
 unresolved custody; only authoritative queued state can recover successful publication. Retries
 reuse the original receipt and deadline rather than rewriting material or extending retention.
+
+## Native HTTP response lifetime
+
+`@fidy/server/native-http` publishes the browser-safe native response owner from
+`src/shell/native-http/runtime.ts`. Browser and CLI Fetch integrations transfer one response and
+the resolved Request/init signal to this owner. It terminalizes before best-effort cancellation,
+releases the native reader without waiting for cancellation, and fails pending reads with a fixed
+abort error. Byte limits, deadlines, status policy and remote outcome interpretation remain with
+the calling transport. This local resource boundary adds no telemetry or provider authority.

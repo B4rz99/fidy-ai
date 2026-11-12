@@ -1,7 +1,7 @@
 import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { type OAuthConfirmationWork } from "../oauth-confirmation/contract";
-import { type Cause, Clock, DateTime, Effect, Fiber, Option, Schema } from "effect";
+import { Cause, Clock, DateTime, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { type BillingCollectionFailure, type BillingRuntime } from "./contract";
 import {
   OAuthClientId,
@@ -13,7 +13,11 @@ import { TestClock } from "effect/testing";
 import { UserId } from "../../src/core/identity/contract";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import { consentHistoryTestSchema, installCurrentTestObjects } from "../d1-test-fixture";
+import {
+  consentHistoryTestSchema,
+  installCurrentTestObjects,
+  withTestDatabaseClock,
+} from "../d1-test-fixture";
 import coreWorker, { UserTransactionCoordinator } from "../core-worker";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
@@ -23,13 +27,14 @@ import {
   queuedBillingExecution,
 } from "./payment-enrollment-d1.test-fixture";
 import {
+  dispatchBillingPriceNotices,
   dispatchSubscriptionCancellations,
   dispatchSubscriptionRenewals,
   publishWeeklyPriceAndNotify,
   receiveBillingCollection,
   runBillingCollectionWorkflow,
 } from "./runtime";
-import { Price } from "../../src/core/subscription/contract";
+import { Price, PriceId } from "../../src/core/subscription/contract";
 import {
   executeProtectedSubscriptionQuery,
   executeSubscriptionRenewalAdmission,
@@ -177,7 +182,9 @@ const fixture = (
             .bind(attemptId, Date.parse(calendar.endsAt)),
         ])
       );
-      return db;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(Date.parse(calendar.endsAt));
+      return yield* withTestDatabaseClock({ db, initialTime: calendar.endsAt });
     })
   );
 
@@ -256,6 +263,27 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
       ).toHaveLength(1);
     })
   ));
+
+it.each([
+  [259199999, 1],
+  [259200000, 0],
+  [345600000, 0],
+])("admits a first renewal at boundary +%i milliseconds only inside grace", (offset, count) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      const response = yield* admission(db, dueAt + offset);
+      expect(response.status).toBe(202);
+      const rows = yield* fromPromise(() =>
+        db
+          .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
+          .bind(attemptId)
+          .all()
+      );
+      expect(rows.results).toHaveLength(count);
+    })
+  )
+);
 
 it("settles a late renewal once into the frozen adjacent week and schedules the following boundary", () =>
   Effect.runPromise(
@@ -517,7 +545,7 @@ it("offers Price-change notices immediately and sends the retained billing email
         paymentMethods: ["card", "nequi", "daviplata"],
       });
       let work: unknown;
-      yield* publishWeeklyPriceAndNotify({
+      const publication = yield* publishWeeklyPriceAndNotify({
         DB: db,
         BILLING_COLLECTION_QUEUE: {
           send: (body) => {
@@ -527,6 +555,7 @@ it("offers Price-change notices immediately and sends the retained billing email
         },
         price: newPrice,
       });
+      expect(publication).toEqual({ priceId: newPrice.id, noticeOffer: "attempted" });
       expect(work).toEqual({ version: 1, kind: "price-notice", userId, priceId: newPrice.id });
       let sends = 0;
       vi.stubGlobal(
@@ -802,6 +831,9 @@ it("uses the current payer and retries a definitively rejected notice", () =>
         "fetch",
         withOpenAiFetch((url: RequestInfo | URL, init?: RequestInit) =>
           new Request(url, init).json().then((body: unknown) => {
+            expect(new Headers(init?.headers).get("Idempotency-Key")).toBe(
+              `price-${priceId}-${userId}`
+            );
             expect(body).toMatchObject({ to: ["payer@example.com"] });
             sends++;
             return sends === 1
@@ -908,7 +940,7 @@ it("freezes one March 31 monthly renewal across duplicate delayed scheduler clai
           endsAt: "2026-02-28T23:30:00Z",
         })
       );
-      const now = Date.parse("2026-03-04T10:00:00Z");
+      const now = Date.parse("2026-03-03T10:00:00Z");
       yield* Effect.all([admission(db, now), admission(db, now)], { concurrency: 2 });
       expect(
         (yield* fromPromise(() =>
@@ -1139,7 +1171,7 @@ it.each(
 );
 
 effectIt.effect.each(renewalCalendars)(
-  "discovers a $method $billingPeriod renewal at its captured boundary and preserves it after scheduler delay",
+  "discovers a $method $billingPeriod renewal only inside its original grace window",
   (calendar) =>
     Effect.gen(function* () {
       const db = yield* fromPromise(() => fixture(calendar.method, calendar));
@@ -1173,6 +1205,12 @@ effectIt.effect.each(renewalCalendars)(
         userId,
         previousPaidAttemptId: attemptId,
       });
+      yield* TestClock.setTime(boundary + 259199999);
+      yield* dispatch();
+      expect(requests).toHaveLength(2);
+      yield* TestClock.setTime(boundary + 259200000);
+      yield* dispatch();
+      expect(requests).toHaveLength(2);
       yield* TestClock.setTime(boundary + 4 * 86400000);
       yield* dispatch();
       expect(requests).toHaveLength(2);
@@ -1568,11 +1606,13 @@ it.each(["card", "nequi", "daviplata"] as const)(
         const db = yield* cancellationFixture(method);
         yield* cancel(db, dueAt - 1000);
         let puts = 0;
+        let gets = 0;
         vi.stubGlobal(
           "fetch",
           withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
             const request = new Request(input, init);
             if (request.method === "PUT") puts++;
+            else gets++;
             expect(new URL(request.url).pathname).toBe(
               request.method === "PUT"
                 ? "/v1/payment_sources/3891/void"
@@ -1598,7 +1638,10 @@ it.each(["card", "nequi", "daviplata"] as const)(
           });
         yield* fromPromise(run);
         yield* fromPromise(run);
-        expect(puts).toBe(method === "daviplata" ? 1 : 0);
+        expect({ puts, gets }).toEqual({
+          puts: method === "daviplata" ? 1 : 0,
+          gets: method === "daviplata" ? 1 : 0,
+        });
         const response = yield* cancel(db, dueAt);
         expect(yield* fromPromise(() => response.json())).toMatchObject({
           data: { sourceCancellation: method === "daviplata" ? "voided" : "detached" },
@@ -1606,6 +1649,296 @@ it.each(["card", "nequi", "daviplata"] as const)(
       })
     )
 );
+const observeCancellation = (
+  db: D1Database,
+  wompiEnvironment: "sandbox" | "production" = "sandbox"
+): Promise<void> =>
+  runBillingCollectionWorkflow({
+    environment: {
+      DB: db,
+      WOMPI_ENVIRONMENT: wompiEnvironment,
+      WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+      WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+      WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+    },
+    payload: { version: 1, kind: "source-cancellation", userId },
+    sleep: (_name, _duration) => Promise.resolve(),
+    activity: (_name, _options, work) => work(),
+  });
+
+it("does not settle an obsolete cancellation after provider verification", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      // Deliberately permit replacement of retained evidence to exercise the I/O snapshot fence,
+      // independently of today's immutable storage facts.
+      yield* fromPromise(() => db.exec("DROP TRIGGER subscription_cancellation_immutable"));
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          const response = Response.json({
+            data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" },
+          });
+          if (request.method === "GET") {
+            gets++;
+            return db
+              .prepare("UPDATE subscription_cancellations SET cancelled_at_ms=cancelled_at_ms+1")
+              .run()
+              .then(() => response);
+          }
+          return Promise.resolve(response);
+        })
+      );
+      yield* fromPromise(() => observeCancellation(db));
+      expect(gets).toBe(1);
+      const standing = yield* cancel(db, dueAt);
+      expect(yield* fromPromise(() => standing.json())).toMatchObject({
+        data: { sourceCancellation: "void-pending", paidThrough: "2026-10-13T15:00:00.000Z" },
+      });
+    })
+  ));
+
+it("does not spend a verification on a cancellation replaced during annulment", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      yield* fromPromise(() => db.exec("DROP TRIGGER subscription_cancellation_immutable"));
+      let puts = 0;
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          const response = Response.json({
+            data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" },
+          });
+          if (request.method === "PUT") {
+            puts++;
+            return db
+              .prepare("UPDATE subscription_cancellations SET paid_through_ms=paid_through_ms-1")
+              .run()
+              .then(() => response);
+          }
+          gets++;
+          return Promise.resolve(response);
+        })
+      );
+      yield* fromPromise(() => observeCancellation(db));
+      expect({ puts, gets }).toEqual({ puts: 1, gets: 0 });
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT verification_count,source_cancellation_state FROM subscription_cancellations"
+            )
+            .first()
+        )
+      ).toEqual({
+        verification_count: 0,
+        source_cancellation_state: "void-pending",
+      });
+    })
+  ));
+
+it.each([
+  {
+    name: "foreign source ID",
+    body: { data: { id: 3892, type: "DAVIPLATA", status: "VOIDED" } },
+    status: 200,
+  },
+  {
+    name: "foreign source type",
+    body: { data: { id: 3891, type: "CARD", status: "VOIDED" } },
+    status: 200,
+  },
+  {
+    name: "unrecognized status",
+    body: { data: { id: 3891, type: "DAVIPLATA", status: "UNKNOWN" } },
+    status: 200,
+  },
+  {
+    name: "available source",
+    body: { data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } },
+    status: 200,
+  },
+  {
+    name: "rejected lookup",
+    body: { data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" } },
+    status: 500,
+  },
+  {
+    name: "lost lookup",
+    body: { data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" } },
+    status: 200,
+  },
+])(
+  "exhausts the original eight reservations without claiming revocation for $name",
+  ({ name, body, status }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* cancellationFixture("daviplata");
+        yield* cancel(db, dueAt - 1000);
+        let puts = 0;
+        let gets = 0;
+        vi.stubGlobal(
+          "fetch",
+          withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+            const request = new Request(input, init);
+            if (request.method === "PUT") {
+              puts++;
+              return Promise.resolve(new Response(null, { status: 400 }));
+            }
+            gets++;
+            if (name === "lost lookup") return Promise.reject(new Error("lost lookup response"));
+            return Promise.resolve(Response.json(body, { status }));
+          })
+        );
+        for (let index = 0; index < 10; index++) {
+          yield* Effect.exit(fromPromise(() => observeCancellation(db)));
+        }
+        expect({ puts, gets }).toEqual({ puts: 1, gets: 8 });
+        const offers: unknown[] = [];
+        yield* dispatchSubscriptionCancellations({
+          DB: db,
+          BILLING_COLLECTION_QUEUE: {
+            send: (work) => {
+              offers.push(work);
+              return Promise.resolve();
+            },
+          },
+        });
+        expect(offers).toHaveLength(0);
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT verification_count,void_verified_at_ms FROM subscription_cancellations"
+              )
+              .first()
+          )
+        ).toEqual({
+          verification_count: 8,
+          void_verified_at_ms: null,
+        });
+        const standing = yield* cancel(db, dueAt);
+        expect(yield* fromPromise(() => standing.json())).toMatchObject({
+          data: { sourceCancellation: "void-pending", paidThrough: "2026-10-13T15:00:00.000Z" },
+        });
+      })
+    )
+);
+
+it("recovers a committed claim without a PUT after a crash before submission", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      // This is the retained native state of an execution lost between claim commit and PUT.
+      yield* fromPromise(() =>
+        db
+          .prepare("UPDATE subscription_cancellations SET void_started_at_ms=?")
+          .bind(dueAt - 500)
+          .run()
+      );
+      let puts = 0;
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          if (request.method === "PUT") puts++;
+          else gets++;
+          return Promise.resolve(
+            Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } })
+          );
+        })
+      );
+      yield* fromPromise(() => observeCancellation(db));
+      yield* fromPromise(() => observeCancellation(db));
+      expect({ puts, gets }).toEqual({ puts: 0, gets: 2 });
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT void_started_at_ms,verification_count FROM subscription_cancellations")
+            .first()
+        )
+      ).toEqual({
+        void_started_at_ms: dueAt - 500,
+        verification_count: 2,
+      });
+      const standing = yield* cancel(db, dueAt);
+      expect(yield* fromPromise(() => standing.json())).toMatchObject({
+        data: { sourceCancellation: "void-pending" },
+      });
+    })
+  ));
+
+it("refuses a mismatching runtime environment before consuming provider opportunities", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      const provider = vi.fn(() => Promise.reject(new Error("unexpected provider call")));
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
+      expect(
+        (yield* Effect.exit(fromPromise(() => observeCancellation(db, "production"))))._tag
+      ).toBe("Failure");
+      expect(provider).not.toHaveBeenCalled();
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT void_started_at_ms,verification_count FROM subscription_cancellations")
+            .first()
+        )
+      ).toEqual({
+        void_started_at_ms: null,
+        verification_count: 0,
+      });
+    })
+  ));
+
+it("shares one submission and eight reservations across concurrent cancellation deliveries", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      let puts = 0;
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          if (request.method === "PUT") puts++;
+          else gets++;
+          return Promise.resolve(
+            Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } })
+          );
+        })
+      );
+      yield* fromPromise(() =>
+        Promise.all(Array.from({ length: 12 }, () => observeCancellation(db)))
+      );
+      yield* fromPromise(() => observeCancellation(db));
+      expect({ puts, gets }).toEqual({ puts: 1, gets: 8 });
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT verification_count,source_cancellation_state FROM subscription_cancellations"
+            )
+            .first()
+        )
+      ).toEqual({
+        verification_count: 8,
+        source_cancellation_state: "void-pending",
+      });
+    })
+  ));
+
 it("recovers one cancellation execution after an engine interruption and preserves the eight-check budget and ambiguous void claim", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1745,7 +2078,7 @@ const runObservedRenewal = ({
 }: Readonly<{
   db: D1Database;
   id: string;
-  status: "DECLINED" | "APPROVED";
+  status: "DECLINED" | "APPROVED" | "PENDING";
   now: number;
   amountInCents: number;
 }>): Effect.Effect<void, Cause.UnknownError> =>
@@ -1803,6 +2136,292 @@ const latestRenewal = (db: D1Database): Effect.Effect<string, Cause.UnknownError
     Effect.map((row) => row.id),
     Effect.orDie
   );
+
+const runRetainedRenewal = (
+  input: Readonly<{ db: D1Database; payload: unknown }>
+): Effect.Effect<void, Cause.UnknownError> =>
+  fromPromise(() =>
+    runBillingCollectionWorkflow({
+      environment: {
+        DB: input.db,
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+      },
+      payload: input.payload,
+      sleep: (_name, _duration) => Promise.resolve(),
+      activity: (_name, _options, work) => work(),
+    })
+  );
+
+it.each([false, true])(
+  "settles sent renewal after grace with cancellation=%s without reopening collection",
+  (cancelAfterSend) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* cancellationFixture("card");
+        yield* admission(db);
+        const id = yield* latestRenewal(db);
+        let approved = false;
+        let posts = 0;
+        let gets = 0;
+        vi.stubGlobal(
+          "fetch",
+          withOpenAiFetch((_request, init) => {
+            if (init?.method === "POST") posts++;
+            else gets++;
+            return Promise.resolve(
+              Response.json({
+                data: {
+                  ...recordedTransactions[approved ? "APPROVED" : "PENDING"].data,
+                  id: `late-${id}`,
+                  reference: `fidy-${id}`,
+                  amount_in_cents: 990000,
+                  payment_source_id: 3891,
+                  finalized_at: approved ? "2026-10-17T15:00:00Z" : null,
+                },
+              })
+            );
+          })
+        );
+        const collection = { version: 1, attemptId: id };
+        yield* runRetainedRenewal({ db, payload: collection });
+        expect(posts).toBe(1);
+        if (cancelAfterSend) expect((yield* cancel(db, dueAt + 1000)).status).toBe(200);
+        vi.setSystemTime(dueAt + 345600000);
+        yield* fromPromise(() =>
+          db.prepare("UPDATE test_database_clock SET instant='2026-10-17T15:00:00Z'").run()
+        );
+        yield* Effect.all([admission(db, dueAt + 345600000), admission(db, dueAt + 345600001)], {
+          concurrency: 2,
+        });
+        yield* runRetainedRenewal({ db, payload: collection });
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT status,collection_state,collection_sent_at_ms FROM billing_attempt_context WHERE id=?"
+              )
+              .bind(id)
+              .first()
+          )
+        ).toEqual({ status: "pending", collection_state: "sent", collection_sent_at_ms: dueAt });
+        approved = true;
+        yield* runRetainedRenewal({
+          db,
+          payload: { version: 1, kind: "lookup", transactionId: `late-${id}` },
+        });
+        yield* runRetainedRenewal({ db, payload: collection });
+        expect(posts).toBe(1);
+        expect(gets).toBe(2);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT status,period_starts_at_ms,period_ends_at_ms,calendar_anchor_ms,collection_sent_at_ms FROM billing_attempt_context WHERE previous_paid_attempt_id=?"
+              )
+              .bind(attemptId)
+              .all()
+          )).results
+        ).toEqual([
+          {
+            status: "succeeded",
+            period_starts_at_ms: dueAt,
+            period_ends_at_ms: Date.parse("2026-10-20T15:00:00Z"),
+            calendar_anchor_ms: Date.parse("2026-10-06T15:00:00Z"),
+            collection_sent_at_ms: dueAt,
+          },
+        ]);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare("SELECT id FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL")
+              .all()
+          )).results
+        ).toHaveLength(2);
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare("SELECT renewal_anchor_ms FROM subscription_standing WHERE user_id=?")
+              .bind(userId)
+              .first()
+          )
+        ).toEqual({ renewal_anchor_ms: Date.parse("2026-10-20T15:00:00Z") });
+      })
+    )
+);
+
+it("retains an unknown sent renewal after grace without fabricating failure or another collection", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* admission(db);
+      const id = yield* latestRenewal(db);
+      const provider = vi.fn(() => Promise.reject(new Error("Unknown provider outcome")));
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
+      const payload = { version: 1, attemptId: id };
+      yield* runRetainedRenewal({ db, payload });
+      vi.setSystemTime(dueAt + 345600000);
+      yield* fromPromise(() =>
+        db.prepare("UPDATE test_database_clock SET instant='2026-10-17T15:00:00Z'").run()
+      );
+      yield* runRetainedRenewal({ db, payload });
+      yield* admission(db, dueAt + 345600000);
+      yield* admission(db, dueAt + 432000000);
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT status,collection_state,collection_sent_at_ms,no_charge_confirmed_at_ms FROM billing_attempt_context WHERE previous_paid_attempt_id=?"
+            )
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toEqual([
+        {
+          status: "pending",
+          collection_state: "sent",
+          collection_sent_at_ms: dueAt,
+          no_charge_confirmed_at_ms: null,
+        },
+      ]);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT transaction_id FROM billing_provider_transactions WHERE attempt_id=?")
+            .bind(id)
+            .all()
+        )).results
+      ).toHaveLength(0);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL")
+            .all()
+        )).results
+      ).toHaveLength(1);
+    })
+  ));
+
+it("converges concurrent sent sibling approvals after grace on one original monthly period", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture("card", billingCalendars[1]));
+      const boundary = Date.parse("2026-02-28T23:30:00Z");
+      yield* admission(db, boundary);
+      const first = yield* latestRenewal(db);
+      yield* runObservedRenewal({
+        db,
+        id: first,
+        status: "DECLINED",
+        now: boundary,
+        amountInCents: 2890000,
+      });
+      yield* admission(db, boundary + 86400000);
+      const retry = yield* latestRenewal(db);
+      expect(retry).not.toBe(first);
+      yield* runObservedRenewal({
+        db,
+        id: retry,
+        status: "PENDING",
+        now: boundary + 86400000,
+        amountInCents: 2890000,
+      });
+      vi.setSystemTime(boundary + 345600000);
+      yield* fromPromise(() =>
+        db.prepare("UPDATE test_database_clock SET instant='2026-03-04T23:30:00Z'").run()
+      );
+      let posts = 0;
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((request, init) => {
+          if (init?.method === "POST") posts++;
+          else gets++;
+          const id = new Request(request, init).url.endsWith(`dunning-${first}`) ? first : retry;
+          return Promise.resolve(
+            Response.json({
+              data: {
+                ...recordedTransactions.APPROVED.data,
+                id: `dunning-${id}`,
+                reference: `fidy-${id}`,
+                amount_in_cents: 2890000,
+                payment_source_id: 3891,
+                finalized_at: "2026-03-04T23:30:00Z",
+              },
+            })
+          );
+        })
+      );
+      yield* Effect.forEach(
+        [first, retry],
+        (id) =>
+          runRetainedRenewal({
+            db,
+            payload: { version: 1, kind: "lookup", transactionId: `dunning-${id}` },
+          }),
+        { concurrency: 2 }
+      );
+      yield* Effect.all(
+        [
+          admission(db, boundary + 345600000),
+          ...[first, retry].map((id) =>
+            runRetainedRenewal({ db, payload: { version: 1, attemptId: id } })
+          ),
+        ],
+        { concurrency: 3 }
+      );
+      expect(posts).toBe(0);
+      expect(gets).toBe(2);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT status,collection_state FROM billing_attempt_context WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
+            )
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toEqual([
+        { status: "succeeded", collection_state: "sent" },
+        { status: "succeeded", collection_state: "sent" },
+      ]);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT paid_starts_at_ms,paid_ends_at_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL ORDER BY paid_starts_at_ms"
+            )
+            .all()
+        )).results
+      ).toEqual([
+        { paid_starts_at_ms: Date.parse("2026-01-31T23:30:00Z"), paid_ends_at_ms: boundary },
+        { paid_starts_at_ms: boundary, paid_ends_at_ms: Date.parse("2026-03-31T23:30:00Z") },
+      ]);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT renewal_anchor_ms FROM subscription_standing WHERE user_id=?")
+            .bind(userId)
+            .first()
+        )
+      ).toEqual({ renewal_anchor_ms: Date.parse("2026-03-31T23:30:00Z") });
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT transaction_id,status FROM billing_provider_transactions WHERE attempt_id IN (?,?) ORDER BY transaction_id"
+            )
+            .bind(first, retry)
+            .all()
+        )).results
+      ).toEqual(
+        [first, retry].sort().map((id) => ({ transaction_id: `dunning-${id}`, status: "APPROVED" }))
+      );
+    })
+  ));
 
 it.each(["card", "nequi", "daviplata"] as const)(
   "bounds $0 retries at 24/48 hours and exhausts grace without granting another paid period",
@@ -1970,6 +2589,51 @@ it.each(["card", "nequi", "daviplata"] as const)(
       })
     )
 );
+const verifyQueuedSiblingRefusal = (
+  db: D1Database,
+  queued: string,
+  succeeded: string
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const facts = (): Promise<unknown> =>
+      db
+        .prepare(`SELECT retry.collection_state,retry.collection_sent_at_ms,retry.status,
+        retry.paid_starts_at_ms,paid.status AS original_status,paid.paid_ends_at_ms,
+        sub.current_paid_attempt_id
+        FROM billing_attempt_context retry JOIN subscriptions sub ON sub.id=retry.subscription_id
+        JOIN billing_attempt_context paid ON paid.id=? WHERE retry.id=?`)
+        .bind(succeeded, queued)
+        .first();
+    const retained = yield* fromPromise(facts);
+    expect(retained).toEqual({
+      collection_state: "rejected",
+      collection_sent_at_ms: null,
+      status: "pending",
+      paid_starts_at_ms: null,
+      original_status: "succeeded",
+      paid_ends_at_ms: Date.parse("2026-03-31T23:30:00Z"),
+      current_paid_attempt_id: succeeded,
+    });
+    const provider = vi.fn(() => Promise.reject(new Error("Fenced sibling must not reach Wompi")));
+    vi.stubGlobal("fetch", withOpenAiFetch(provider));
+    yield* fromPromise(() =>
+      runBillingCollectionWorkflow({
+        environment: {
+          DB: db,
+          WOMPI_ENVIRONMENT: "sandbox",
+          WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+          WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+          WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+        },
+        payload: { version: 1, attemptId: queued },
+        sleep: (_name, _duration) => Promise.resolve(),
+        activity: (_name, _options, work) => work(),
+      })
+    );
+    expect(provider).not.toHaveBeenCalled();
+    expect(yield* fromPromise(facts)).toEqual(retained);
+  });
+
 it("recovers on an earlier verified success while a retry is still queued", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1985,6 +2649,7 @@ it("recovers on an earlier verified success while a retry is still queued", () =
         amountInCents: 2890000,
       });
       yield* admission(db, boundary + 86400000);
+      const queued = yield* latestRenewal(db);
       yield* runObservedRenewal({
         db,
         id: first,
@@ -1992,6 +2657,7 @@ it("recovers on an earlier verified success while a retry is still queued", () =
         now: boundary + 86400001,
         amountInCents: 2890000,
       });
+      yield* verifyQueuedSiblingRefusal(db, queued, first);
       const response = yield* executeSubscriptionRenewalAdmission({
         db,
         userId,
@@ -2123,6 +2789,89 @@ it("reconciles an ambiguous DaviPlata void without repeating PUT or trusting for
       });
     })
   ));
+it.each([
+  [259199999, 259199999, 1],
+  [259200000, 259200000, 0],
+  [259199999, 259200000, 0],
+])(
+  "dispatches an armed first renewal at runtime +%i / database +%i only inside grace",
+  (runtimeOffset, databaseOffset, posts) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture());
+        yield* admission(db);
+        const queued = yield* latestRenewal(db);
+        yield* fromPromise(() =>
+          db
+            .prepare("UPDATE test_database_clock SET instant=?")
+            .bind(DateTime.formatIso(DateTime.makeUnsafe(dueAt + databaseOffset)))
+            .run()
+        );
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(dueAt + runtimeOffset);
+        const provider = vi.fn(() => Promise.reject(new Error("Unknown provider outcome")));
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
+        yield* runRetainedRenewal({ db, payload: { version: 1, attemptId: queued } });
+        expect(provider).toHaveBeenCalledTimes(posts);
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare("SELECT status,collection_state FROM billing_attempt_context WHERE id=?")
+              .bind(queued)
+              .first()
+          )
+        ).toEqual({ status: "pending", collection_state: posts === 1 ? "sent" : "armed" });
+      })
+    )
+);
+
+it("refuses first admission when database time crosses grace after coordinator evaluation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* fromPromise(() =>
+        db.prepare("UPDATE test_database_clock SET instant='2026-10-16T15:00:00Z'").run()
+      );
+      expect((yield* admission(db, dueAt + 259199999)).status).toBe(202);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toHaveLength(0);
+    })
+  ));
+
+it("refuses retry admission when database time crosses the original grace boundary", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* admission(db);
+      const first = yield* latestRenewal(db);
+      yield* runObservedRenewal({
+        db,
+        id: first,
+        status: "DECLINED",
+        now: dueAt,
+        amountInCents: 990000,
+      });
+      yield* fromPromise(() =>
+        db.prepare("UPDATE test_database_clock SET instant='2026-10-16T15:00:00Z'").run()
+      );
+      expect((yield* admission(db, dueAt + 172800000)).status).toBe(202);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toHaveLength(1);
+    })
+  ));
+
 it("does not submit a queued retry after its grace boundary", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2439,3 +3188,248 @@ it(
     ),
   25_000
 );
+
+const replacementPrice = Schema.decodeSync(Schema.toCodecJson(Price))({
+  id: "22700000-0000-4000-8000-000000000004",
+  money: { amount: "10900", currency: "COP" },
+  billingPeriod: "weekly",
+  serviceMarket: "CO",
+  taxTreatment: "not-taxable",
+  renewalTerms: {
+    automaticRenewal: true,
+    renewalReminder: "none",
+    cancellation: "future-renewals-only",
+    paidAccessEnds: "paid-period-end",
+  },
+  paymentMethods: ["card", "nequi", "daviplata"],
+});
+
+effectIt.effect(
+  "returns committed Price after failed offer and recovers without republishing",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* TestClock.setTime(dueAt);
+      const publication = yield* publishWeeklyPriceAndNotify({
+        DB: db,
+        price: replacementPrice,
+        BILLING_COLLECTION_QUEUE: { send: () => Promise.reject(new Error("Queue unavailable")) },
+      });
+      expect(publication).toEqual({ priceId: replacementPrice.id, noticeOffer: "deferred" });
+      yield* admission(db);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT price_id,amount FROM billing_attempt_context WHERE previous_paid_attempt_id=?"
+            )
+            .bind(attemptId)
+            .first()
+        )
+      ).toEqual({ price_id: replacementPrice.id, amount: "10900" });
+      const offered: unknown[] = [];
+      const dispatch = (): Effect.Effect<void, BillingCollectionFailure> =>
+        dispatchBillingPriceNotices({
+          DB: db,
+          BILLING_COLLECTION_QUEUE: {
+            send: (work) => {
+              offered.push(work);
+              return Promise.resolve();
+            },
+          },
+        });
+      yield* dispatch();
+      expect(offered).toHaveLength(0);
+      yield* TestClock.adjust("60001 millis");
+      yield* Effect.all([dispatch(), dispatch()], { concurrency: 2 });
+      expect(offered).toEqual([
+        { version: 1, kind: "price-notice", userId, priceId: replacementPrice.id },
+      ]);
+    })
+);
+
+it("keeps publication failure separate from deferred notice handoff", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      const send = vi.fn(() => Promise.resolve());
+      const result = yield* Effect.exit(
+        publishWeeklyPriceAndNotify({
+          DB: db,
+          price: { ...replacementPrice, id: PriceId.make(priceId) },
+          BILLING_COLLECTION_QUEUE: { send },
+        })
+      );
+      expect(result._tag).toBe("Failure");
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        (yield* fromPromise(() => db.prepare("SELECT * FROM billing_price_notices").all())).results
+      ).toHaveLength(0);
+    })
+  ));
+
+it("preserves interruption after Price commits while retaining notice recovery", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      const started = Promise.withResolvers<void>();
+      const fiber = yield* publishWeeklyPriceAndNotify({
+        DB: db,
+        price: replacementPrice,
+        BILLING_COLLECTION_QUEUE: {
+          send: () => {
+            started.resolve();
+            return Promise.withResolvers<unknown>().promise;
+          },
+        },
+      }).pipe(Effect.forkChild({ startImmediately: true }));
+      yield* fromPromise(() => started.promise);
+      yield* Fiber.interrupt(fiber);
+      const result = yield* Fiber.await(fiber);
+      expect(Exit.isFailure(result) && Cause.hasInterruptsOnly(result.cause)).toBe(true);
+      expect(
+        (yield* fromPromise(() => db.prepare("SELECT price_id FROM billing_price_notices").all()))
+          .results
+      ).toEqual([{ price_id: replacementPrice.id }]);
+    })
+  ));
+
+it.each([
+  { label: "missing receipt", receipt: {}, rejectWrite: false },
+  { label: "empty receipt", receipt: { id: "" }, rejectWrite: false },
+  { label: "oversized receipt", receipt: { id: "x".repeat(129) }, rejectWrite: false },
+  { label: "lost acceptance write", receipt: { id: "accepted" }, rejectWrite: true },
+])("retains an unknown notice after $label and suppresses replay", ({ receipt, rejectWrite }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* fromPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO billing_price_notices(subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
+          )
+          .bind(priceId, userId)
+          .run()
+      );
+      if (rejectWrite) {
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "CREATE TRIGGER reject_notice_acceptance BEFORE UPDATE OF provider_accepted_at_ms ON billing_price_notices BEGIN SELECT RAISE(ABORT,'unavailable'); END"
+            )
+            .run()
+        );
+      }
+      const fetch = vi.fn(() => Promise.resolve(Response.json(receipt)));
+      vi.stubGlobal("fetch", withOpenAiFetch(fetch));
+      expect((yield* Effect.exit(fromPromise(() => runNotice(db))))._tag).toBe("Failure");
+      const retained = yield* fromPromise(() =>
+        db
+          .prepare("SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices")
+          .first<unknown>()
+      );
+      expect(retained).toHaveProperty("send_started_at_ms", expect.any(Number));
+      expect(retained).toMatchObject({ provider_accepted_at_ms: null });
+      yield* fromPromise(() => runNotice(db));
+      const send = vi.fn(() => Promise.resolve());
+      yield* dispatchBillingPriceNotices({ DB: db, BILLING_COLLECTION_QUEUE: { send } });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices")
+            .first()
+        )
+      ).toEqual(retained);
+    })
+  )
+);
+
+it("keeps the pending renewal Price when replacement terms publish", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* admission(db);
+      yield* publishWeeklyPriceAndNotify({
+        DB: db,
+        price: replacementPrice,
+        BILLING_COLLECTION_QUEUE: { send: () => Promise.resolve() },
+      });
+      yield* admission(db);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT price_id,amount FROM billing_attempt_context WHERE previous_paid_attempt_id=?"
+            )
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toEqual([{ price_id: priceId, amount: "9900" }]);
+    })
+  ));
+
+it.each([
+  { method: "nequi" as const, calendar: billingCalendars[0] },
+  { method: "daviplata" as const, calendar: billingCalendars[0] },
+  { method: "card" as const, calendar: billingCalendars[1] },
+  { method: "card" as const, calendar: billingCalendars[2] },
+])(
+  "does not expand Price notices to $method $calendar.billingPeriod subscriptions",
+  ({ method, calendar }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture(method, calendar));
+        const send = vi.fn(() => Promise.resolve());
+        expect(
+          yield* publishWeeklyPriceAndNotify({
+            DB: db,
+            price: replacementPrice,
+            BILLING_COLLECTION_QUEUE: { send },
+          })
+        ).toEqual({ priceId: replacementPrice.id, noticeOffer: "attempted" });
+        expect(send).not.toHaveBeenCalled();
+        expect(
+          (yield* fromPromise(() => db.prepare("SELECT * FROM billing_price_notices").all()))
+            .results
+        ).toHaveLength(0);
+      })
+    )
+);
+
+it("rejects missing notice configuration before reserving a send", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* fromPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO billing_price_notices(subscription_id,price_id,created_at_ms) SELECT id,?,1 FROM subscriptions WHERE user_id=?"
+          )
+          .bind(priceId, userId)
+          .run()
+      );
+      const fetch = vi.fn(() => Promise.reject(new Error("No provider authority")));
+      vi.stubGlobal("fetch", withOpenAiFetch(fetch));
+      const result = yield* Effect.exit(
+        fromPromise(() =>
+          runBillingCollectionWorkflow({
+            environment: { ...noticeEnvironment(db), RESEND_API_KEY: "" },
+            payload: noticeWork,
+            sleep: () => Promise.resolve(),
+            activity: (_name, _options, work) => work(),
+          })
+        )
+      );
+      expect(result._tag).toBe("Failure");
+      expect(fetch).not.toHaveBeenCalled();
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT send_started_at_ms,provider_accepted_at_ms FROM billing_price_notices")
+            .first()
+        )
+      ).toEqual({ send_started_at_ms: null, provider_accepted_at_ms: null });
+    })
+  ));

@@ -1,5 +1,7 @@
 import { expect, it } from "vitest";
 import { Option } from "effect";
+import { prepareSubscriptionStatus } from "./operations";
+import { activeProForUserSelection, activeProUserCondition } from "~/shell/access-tier/operations";
 import {
   projectSubscriptionOffers,
   projectSubscriptionStatus,
@@ -76,3 +78,24 @@ it("derives Pro from a paid period while exposing its exact immutable Price snap
 it("rejects an incomplete offer set rather than presenting partial Prices", () => {
   expect(() => projectSubscriptionOffers([])).toThrow();
 });
+
+it.each([NaN, Infinity, -Infinity])(
+  "rejects an unavailable decision instant %s instead of displaying Free",
+  (now) => {
+    expect(() => projectSubscriptionStatus({ standingRow: trial, attemptRows: [], now })).toThrow();
+    expect(() => activeProUserCondition({ userId: "invalid", nowEpochMs: now })).toThrow();
+    expect(() =>
+      activeProForUserSelection({
+        users: { sql: "SELECT ? AS userId", params: ["10000000-0000-4000-8000-000000000001"] },
+        nowEpochMs: now,
+      })
+    ).toThrow();
+    expect(() =>
+      prepareSubscriptionStatus({
+        users: { sql: "SELECT ? AS userId", params: ["10000000-0000-4000-8000-000000000001"] },
+        current: now,
+        authority: { table: "web_sessions", predicate: "id=?", bindings: ["session"] },
+      })
+    ).toThrow();
+  }
+);

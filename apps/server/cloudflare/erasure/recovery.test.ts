@@ -1,10 +1,12 @@
+import assert from "node:assert/strict";
+import { PrivateObjectUnavailable } from "../private-objects/contract";
 import {
   prepareLocalErasureRegistry,
   resumeErasureCases,
   sweepErasureControlObjects,
 } from "./operations";
 import { afterAll, expect, it } from "vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Exit, Option, Schema } from "effect";
 import {
   installRetentionTestSchema,
   isolatedTestStorage,
@@ -12,7 +14,7 @@ import {
 } from "../d1-test-fixture";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import { withErasureRecovery } from "./runtime";
-import { writePrivateObject } from "../private-objects/operations";
+import { erasePrivateObject, writePrivateObject } from "../private-objects/operations";
 import { generationAssertion } from "./internal/generation";
 
 const storage = isolatedTestStorage();
@@ -69,6 +71,107 @@ it("rechecks separate metadata on every unit and refuses its loss without fallin
       expect(
         yield* Effect.tryPromise(() =>
           bucket.get("recovery/generation").then((object) => object?.text())
+        )
+      ).toBe("initial");
+    })
+  ));
+
+it("retains fresh generation checks across prepared statements, native methods and Sessions", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
+      const guarded = withErasureRecovery({ DB: db, ERASURE_BUCKET: bucket }).DB;
+      const statement = guarded.prepare("SELECT 7 AS value");
+      const session = guarded.withSession("first-primary");
+      const sessionStatement = session.prepare("SELECT 7 AS value");
+      const units = [
+        (): Promise<unknown> => statement.first("value"),
+        (): Promise<unknown> => statement.first(),
+        (): Promise<unknown> => statement.all(),
+        (): Promise<unknown> => statement.run(),
+        (): Promise<unknown> => guarded.batch([statement]),
+        (): Promise<unknown> => sessionStatement.first("value"),
+        (): Promise<unknown> => sessionStatement.all(),
+        (): Promise<unknown> => sessionStatement.run(),
+        (): Promise<unknown> => session.batch([sessionStatement]),
+      ];
+      for (const [index, execute] of units.entries()) {
+        const result = yield* Effect.result(Effect.tryPromise(execute));
+        expect(result._tag, `native unit ${index}`).toBe("Success");
+      }
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", generation));
+      for (const execute of units) {
+        expect((yield* Effect.result(Effect.tryPromise(execute)))._tag).toBe("Failure");
+      }
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE erasure_control SET generation=? WHERE kind='published'")
+          .bind(generation)
+          .run()
+      );
+      for (const [index, execute] of units.entries()) {
+        const result = yield* Effect.result(Effect.tryPromise(execute));
+        expect(result._tag, `native unit ${index}`).toBe("Success");
+      }
+      for (const execute of [
+        (): Promise<unknown> => guarded.exec("SELECT 7"),
+        (): Promise<unknown> => guarded.dump(),
+        (): Promise<unknown> => statement.raw(),
+        (): Promise<unknown> => sessionStatement.raw(),
+      ]) {
+        expect((yield* Effect.result(Effect.tryPromise(execute)))._tag).toBe("Failure");
+      }
+    })
+  ));
+
+it("refuses missing, malformed, oversized and unavailable generation without owner effects", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      const guarded = withErasureRecovery({ DB: db, ERASURE_BUCKET: bucket }).DB;
+      const insert = guarded
+        .prepare(
+          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+        )
+        .bind(userId);
+      for (const value of ["", "publishing:" + generation, "x".repeat(65), "not-a-generation"]) {
+        yield* Effect.tryPromise(() => bucket.put("recovery/generation", value));
+        expect((yield* Effect.result(Effect.tryPromise(() => insert.run())))._tag).toBe("Failure");
+      }
+      yield* Effect.tryPromise(() => bucket.delete("recovery/generation"));
+      expect((yield* Effect.result(Effect.tryPromise(() => insert.run())))._tag).toBe("Failure");
+      expect(yield* Effect.tryPromise(() => bucket.head("recovery/generation"))).toBeNull();
+      const unavailable = new Proxy(bucket, {
+        get: (target, property): unknown =>
+          property === "get"
+            ? () => Promise.reject(new Error("Registry unavailable"))
+            : Reflect.get(target, property, target),
+      });
+      const refused = withErasureRecovery({ DB: db, ERASURE_BUCKET: unavailable }).DB;
+      expect(
+        (yield* Effect.result(
+          Effect.tryPromise(() =>
+            refused.batch([
+              refused
+                .prepare(
+                  "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+                )
+                .bind(userId),
+            ])
+          )
+        ))._tag
+      ).toBe("Failure");
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT count(*) AS n FROM users").first("n"))
+      ).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT generation FROM erasure_control WHERE kind='published'")
+            .first("generation")
         )
       ).toBe("initial");
     })
@@ -374,7 +477,8 @@ it("reconciles expired orphan control objects without touching financial bytes o
       const interrupted = yield* Effect.result(
         writePrivateObject({
           bucket,
-          key: "interrupted-upload",
+          userId,
+          key: `users/${userId}/interrupted-upload`,
           bytes: new TextEncoder().encode("unpublished financial bytes"),
           metadata: { purpose: "statement-original" },
           digest: Option.none(),
@@ -383,7 +487,9 @@ it("reconciles expired orphan control objects without touching financial bytes o
         })
       );
       expect(interrupted._tag).toBe("Failure");
-      const placeholder = yield* Effect.tryPromise(() => bucket.head("interrupted-upload"));
+      const placeholder = yield* Effect.tryPromise(() =>
+        bucket.head(`users/${userId}/interrupted-upload`)
+      );
       expect(Number(placeholder?.customMetadata?.["expiresAtMs"])).toBeGreaterThan(current);
       for (const [key, purpose, expiresAtMs] of [
         ["expired-placeholder", "private-object-placeholder", current - 1],
@@ -404,7 +510,9 @@ it("reconciles expired orphan control objects without touching financial bytes o
       expect(yield* Effect.tryPromise(() => bucket.head("expired-placeholder"))).toBeNull();
       expect(yield* Effect.tryPromise(() => bucket.head("expired-nonce"))).toBeNull();
       expect(yield* Effect.tryPromise(() => bucket.head("live-placeholder"))).not.toBeNull();
-      expect(yield* Effect.tryPromise(() => bucket.head("interrupted-upload"))).not.toBeNull();
+      expect(
+        yield* Effect.tryPromise(() => bucket.head(`users/${userId}/interrupted-upload`))
+      ).not.toBeNull();
       expect(
         yield* Effect.tryPromise(() =>
           bucket.get("held-financial").then((object) => object?.text())
@@ -538,3 +646,215 @@ it("avoids empty cursor writes and resumes a multi-page control sweep", () =>
       expect((yield* Effect.tryPromise(() => bucket.list())).objects).toHaveLength(40);
     })
   ));
+
+it("refuses another User's retained object target before publication or owner deletion", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      const key = `users/${userId}0/original`;
+      let puts = 0;
+      let deletes = 0;
+      const guarded = {
+        put: (key: string, bytes: Uint8Array, options: R2PutOptions): Promise<unknown> => {
+          puts++;
+          return bucket.put(key, bytes, options);
+        },
+        delete: (key: string): Promise<unknown> => {
+          deletes++;
+          return bucket.delete(key);
+        },
+      };
+      yield* Effect.tryPromise(() => bucket.put(key, "another User's bytes"));
+      assert.deepStrictEqual(
+        yield* Effect.exit(
+          writePrivateObject({
+            bucket: guarded,
+            userId,
+            key,
+            bytes: new TextEncoder().encode("replacement"),
+            metadata: { purpose: "statement-original" },
+            digest: Option.none(),
+            predecessor: Option.none(),
+            authorise: Effect.succeed(true),
+          })
+        ),
+        Exit.fail(new PrivateObjectUnavailable())
+      );
+      assert.deepStrictEqual(
+        yield* Effect.exit(erasePrivateObject({ bucket: guarded, userId, key })),
+        Exit.fail(new PrivateObjectUnavailable())
+      );
+      expect({ puts, deletes }).toEqual({ puts: 0, deletes: 0 });
+      expect(yield* Effect.tryPromise(() => bucket.get(key).then((object) => object?.text()))).toBe(
+        "another User's bytes"
+      );
+    })
+  ));
+
+it.each(["private-object-placeholder", "private-object-erased"])(
+  "refuses a listed %s predecessor as replacement authority",
+  (purpose) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { bucket } = yield* Effect.tryPromise(() => storage.acquire());
+        const key = `users/${userId}/replacement`;
+        const predecessor = yield* Effect.tryPromise(() =>
+          bucket.put(key, "control", { customMetadata: { purpose } })
+        );
+        let puts = 0;
+        const guarded = {
+          put: (key: string, bytes: Uint8Array, options: R2PutOptions): Promise<unknown> => {
+            puts++;
+            return bucket.put(key, bytes, options);
+          },
+          delete: (key: string): Promise<unknown> => bucket.delete(key),
+        };
+        const result = yield* Effect.exit(
+          writePrivateObject({
+            bucket: guarded,
+            userId,
+            key,
+            bytes: new TextEncoder().encode("payload"),
+            metadata: { purpose: "statement-original" },
+            digest: Option.none(),
+            predecessor: Option.some({ etag: predecessor.etag, purpose }),
+            authorise: Effect.succeed(true),
+          })
+        );
+        assert.deepStrictEqual(result, Exit.fail(new PrivateObjectUnavailable()));
+        expect(puts).toBe(0);
+        expect(
+          yield* Effect.tryPromise(() => bucket.get(key).then((object) => object?.text()))
+        ).toBe("control");
+      })
+    )
+);
+
+it("publishes against an exact owner-established payload predecessor without discovering a newer version", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      const key = `users/${userId}/replacement`;
+      const purpose = "statement-original";
+      const previous = yield* Effect.tryPromise(() =>
+        bucket.put(key, "old payload", { customMetadata: { purpose } })
+      );
+      const publication = writePrivateObject({
+        bucket,
+        userId,
+        key,
+        bytes: new TextEncoder().encode("new payload"),
+        metadata: { purpose },
+        digest: Option.none(),
+        predecessor: Option.some({ etag: previous.etag, purpose }),
+        authorise: Effect.succeed(true),
+      });
+      yield* publication;
+      assert.deepStrictEqual(
+        yield* Effect.exit(publication),
+        Exit.fail(new PrivateObjectUnavailable())
+      );
+      expect(yield* Effect.tryPromise(() => bucket.get(key).then((object) => object?.text()))).toBe(
+        "new payload"
+      );
+    })
+  ));
+
+it.each(["lost", "empty-etag", "oversized-etag"])(
+  "leaves cleanup unresolved with zero deletes after a %s fence acknowledgment",
+  (acknowledgment) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+        yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+        const key = "expired-control";
+        yield* Effect.tryPromise(() =>
+          bucket.put(key, "placeholder", {
+            customMetadata: { purpose: "private-object-placeholder", expiresAtMs: "1" },
+          })
+        );
+        let deletes = 0;
+        const guarded = new Proxy(bucket, {
+          get(target, property): unknown {
+            if (property === "put") {
+              return (...args: Parameters<R2Bucket["put"]>): Promise<unknown> =>
+                target.put(...args).then(() => {
+                  if (acknowledgment === "lost") {
+                    throw new Error("synthetic lost fence acknowledgment");
+                  }
+                  return { etag: acknowledgment === "empty-etag" ? "" : "x".repeat(129) };
+                });
+            }
+            if (property === "delete") {
+              return (key: string): Promise<void> => {
+                deletes++;
+                return target.delete(key);
+              };
+            }
+            const value: unknown = Reflect.get(target, property);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+        assert.deepStrictEqual(
+          yield* Effect.exit(
+            sweepErasureControlObjects({
+              db,
+              buckets: [{ id: "erasure", bucket: Option.some(guarded) }],
+            })
+          ),
+          Exit.fail(new ErasureUnavailable())
+        );
+        expect(deletes).toBe(0);
+        expect((yield* Effect.tryPromise(() => bucket.head(key)))?.customMetadata?.purpose).toBe(
+          "private-object-erased"
+        );
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT cursor FROM erasure_control WHERE kind='erasure'").first("cursor")
+          )
+        ).toBeNull();
+      })
+    )
+);
+
+it.each(["placeholder", "payload"])(
+  "does not claim publication after a malformed %s acknowledgment",
+  (stage) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { bucket } = yield* Effect.tryPromise(() => storage.acquire());
+        const key = `users/${userId}/malformed`;
+        let puts = 0;
+        const guarded = {
+          put: (key: string, bytes: Uint8Array, options: R2PutOptions): Promise<unknown> => {
+            puts++;
+            return bucket
+              .put(key, bytes, options)
+              .then((stored) =>
+                puts === (stage === "placeholder" ? 1 : 2) ? { etag: "" } : stored
+              );
+          },
+          delete: (key: string): Promise<unknown> => bucket.delete(key),
+        };
+        assert.deepStrictEqual(
+          yield* Effect.exit(
+            writePrivateObject({
+              bucket: guarded,
+              userId,
+              key,
+              bytes: new TextEncoder().encode("private payload"),
+              metadata: { purpose: "statement-original" },
+              digest: Option.none(),
+              predecessor: Option.none(),
+              authorise: Effect.succeed(true),
+            })
+          ),
+          Exit.fail(new PrivateObjectUnavailable())
+        );
+        expect(puts).toBe(stage === "placeholder" ? 1 : 2);
+        expect((yield* Effect.tryPromise(() => bucket.head(key)))?.customMetadata?.purpose).toBe(
+          stage === "placeholder" ? "private-object-placeholder" : "statement-original"
+        );
+      })
+    )
+);

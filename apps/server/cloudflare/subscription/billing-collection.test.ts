@@ -43,6 +43,11 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
               "WITH fixture_user(id,time_zone) AS (VALUES (?, 'America/Bogota')) INSERT INTO users(id,time_zone,service_market,locale,created_at_ms) SELECT id,time_zone,'CO','es-CO',0 FROM fixture_user"
             )
             .bind(userId),
+          db
+            .prepare(
+              "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_grant',?)"
+            )
+            .bind(userId),
           db.prepare("INSERT OR IGNORE INTO subscriptions(id,user_id) SELECT id,id FROM users"),
           db
             .prepare(`INSERT INTO payment_enrollments (id,subscription_id, price_id, billing_email, status,
@@ -208,6 +213,283 @@ it("collects a Nequi source without card installment fields and settles the comm
             .first()
         )
       ).toEqual({ count: 1 });
+    })
+  ));
+
+const collect = (db: D1Database): Promise<void> =>
+  runBillingCollectionWorkflow({
+    environment: billingRuntime(db),
+    payload: { version: 1, attemptId },
+    sleep: (_name, _duration) => Promise.resolve(),
+    activity: (_name, _options, run) => run(),
+  });
+
+const dispatchFacts = (db: D1Database): Promise<unknown> =>
+  db
+    .prepare(`SELECT collection_state, collection_sent_at_ms, status, paid_starts_at_ms
+    FROM billing_attempt_context WHERE id=?`)
+    .bind(attemptId)
+    .first();
+
+const claimedAtTimestampMatcher: unknown = expect.any(Number);
+
+it.each([400, 401, 403, 422])(
+  "retains the consumed claim after definitive provider refusal %s without fabricating a paid outcome",
+  (status) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => fixture());
+        const provider = vi.fn(() => Promise.resolve(Response.json({}, { status })));
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
+        yield* Effect.tryPromise(() => collect(db));
+        const retained = yield* Effect.tryPromise(() => dispatchFacts(db));
+        expect(retained).toEqual({
+          collection_state: "rejected",
+          collection_sent_at_ms: claimedAtTimestampMatcher,
+          status: "pending",
+          paid_starts_at_ms: null,
+        });
+        yield* Effect.tryPromise(() => collect(db));
+        expect(provider).toHaveBeenCalledTimes(1);
+        expect(yield* Effect.tryPromise(() => dispatchFacts(db))).toEqual(retained);
+      })
+    )
+);
+
+it("rechecks withdrawn Consent before consuming an initial collection claim", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO consent_history(record_type,user_id) VALUES ('processing_withdrawal',?)"
+          )
+          .bind(userId)
+          .run()
+      );
+      const provider = vi.fn(() =>
+        Promise.resolve(Response.json({ data: transaction("APPROVED") }))
+      );
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
+      yield* Effect.tryPromise(() => collect(db));
+      expect(provider).not.toHaveBeenCalled();
+      expect(yield* Effect.tryPromise(() => dispatchFacts(db))).toEqual({
+        collection_state: "armed",
+        collection_sent_at_ms: null,
+        status: "pending",
+        paid_starts_at_ms: null,
+      });
+    })
+  ));
+
+it("can collect after a failure before the durable claim", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      const provider = vi.fn(() =>
+        Promise.resolve(Response.json({ data: transaction("APPROVED") }))
+      );
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER fail_claim BEFORE UPDATE OF collection_state ON billing_attempts
+    WHEN NEW.collection_state='sent' BEGIN SELECT RAISE(ABORT,'claim_unavailable'); END`)
+          .run()
+      );
+      yield* Effect.tryPromise(() => expect(collect(db)).rejects.toThrow());
+      expect(provider).not.toHaveBeenCalled();
+      expect(yield* Effect.tryPromise(() => dispatchFacts(db))).toEqual({
+        collection_state: "armed",
+        collection_sent_at_ms: null,
+        status: "pending",
+        paid_starts_at_ms: null,
+      });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER fail_claim").run());
+      yield* Effect.tryPromise(() => collect(db));
+      expect(provider.mock.calls).toHaveLength(2);
+      expect(yield* Effect.tryPromise(() => dispatchFacts(db))).toMatchObject({
+        collection_state: "sent",
+        status: "succeeded",
+        paid_starts_at_ms: Date.parse("2026-09-08T12:00:00Z"),
+      });
+    })
+  ));
+
+it("retains a committed claim when execution stops before any provider POST", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      const prepare = db.prepare.bind(db);
+      const crashDb: D1Database = {
+        batch: (statements) => db.batch(statements),
+        exec: (query) => db.exec(query),
+        dump: () => db.dump(),
+        withSession: (bookmark) => db.withSession(bookmark),
+        prepare: (query) => {
+          const statement = prepare(query);
+          if (!query.includes("SET collection_state = 'sent'")) return statement;
+          return new Proxy(statement, {
+            get(target, key, receiver): unknown {
+              if (key !== "bind") return Reflect.get(target, key, receiver);
+              return (...values: unknown[]) => {
+                const bound = target.bind(...values);
+                return new Proxy(bound, {
+                  get(target, key, receiver): unknown {
+                    if (key !== "run") return Reflect.get(target, key, receiver);
+                    return () =>
+                      target.run().then(() => {
+                        throw new Error("execution stopped after commit");
+                      });
+                  },
+                });
+              };
+            },
+          });
+        },
+      };
+      const provider = vi.fn(() =>
+        Promise.resolve(Response.json({ data: transaction("APPROVED") }))
+      );
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
+      yield* Effect.tryPromise(() => expect(collect(crashDb)).rejects.toThrow());
+      const retained = yield* Effect.tryPromise(() => dispatchFacts(db));
+      expect(retained).toEqual({
+        collection_state: "sent",
+        collection_sent_at_ms: claimedAtTimestampMatcher,
+        status: "pending",
+        paid_starts_at_ms: null,
+      });
+      yield* Effect.tryPromise(() => collect(db));
+      expect(provider).not.toHaveBeenCalled();
+      expect(yield* Effect.tryPromise(() => dispatchFacts(db))).toEqual(retained);
+    })
+  ));
+
+it.each(["candidate", "settlement", "refusal"] as const)(
+  "does not repeat POST after a %s persistence failure",
+  (phase) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => fixture());
+        let fault: string;
+        switch (phase) {
+          case "candidate":
+            fault = `CREATE TRIGGER fail_write BEFORE INSERT ON billing_provider_transactions BEGIN SELECT RAISE(ABORT,'candidate_unavailable'); END`;
+            break;
+          case "settlement":
+            fault = `CREATE TRIGGER fail_write BEFORE UPDATE OF paid_starts_at_ms ON billing_attempts WHEN NEW.paid_starts_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'settlement_unavailable'); END`;
+            break;
+          case "refusal":
+            fault = `CREATE TRIGGER fail_write BEFORE UPDATE OF collection_state ON billing_attempts WHEN NEW.collection_state='rejected' BEGIN SELECT RAISE(ABORT,'refusal_unavailable'); END`;
+            break;
+        }
+        yield* Effect.tryPromise(() => db.prepare(fault).run());
+        let posts = 0;
+        let gets = 0;
+        const provider = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+          if (init?.method === "POST") posts++;
+          else gets++;
+          return Promise.resolve(
+            phase === "refusal"
+              ? Response.json({}, { status: 422 })
+              : Response.json({ data: transaction("APPROVED") })
+          );
+        });
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
+        yield* Effect.tryPromise(() => expect(collect(db)).rejects.toThrow());
+        const retained = yield* Effect.tryPromise(() => dispatchFacts(db));
+        expect(retained).toEqual({
+          collection_state: "sent",
+          collection_sent_at_ms: claimedAtTimestampMatcher,
+          status: "pending",
+          paid_starts_at_ms: null,
+        });
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT transaction_id FROM billing_provider_transactions").all()
+          )).results
+        ).toHaveLength(phase === "settlement" ? 1 : 0);
+        yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER fail_write").run());
+        yield* Effect.tryPromise(() => collect(db));
+        expect(posts).toBe(1);
+        expect(gets).toBe(phase === "settlement" ? 1 : 0);
+        expect(yield* Effect.tryPromise(() => dispatchFacts(db))).toEqual(retained);
+      })
+    )
+);
+
+it("admits one immutable captured charge across concurrent invocations", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      let posts = 0;
+      let gets = 0;
+      const provider = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          posts++;
+          return new Request(input, init).json().then((body: unknown) => {
+            expect(body).toMatchObject({
+              reference,
+              amount_in_cents: 990000,
+              currency: "COP",
+              payment_source_id: 3891,
+            });
+            return Response.json({ data: transaction("PENDING") });
+          });
+        }
+        gets++;
+        return Promise.resolve(Response.json({ data: transaction("APPROVED") }));
+      });
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
+      yield* Effect.tryPromise(() => Promise.all([collect(db), collect(db)]));
+      expect(posts).toBe(1);
+      expect(gets).toBe(1);
+      expect(yield* Effect.tryPromise(() => dispatchFacts(db))).toEqual({
+        collection_state: "sent",
+        collection_sent_at_ms: claimedAtTimestampMatcher,
+        status: "succeeded",
+        paid_starts_at_ms: Date.parse("2026-09-08T12:00:00Z"),
+      });
+    })
+  ));
+
+it.each([429, 500, 200])(
+  "keeps HTTP %s without valid transaction evidence unresolved on replay",
+  (status) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => fixture());
+        const provider = vi.fn(() => Promise.resolve(Response.json({}, { status })));
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
+        yield* Effect.tryPromise(() => collect(db));
+        const retained = yield* Effect.tryPromise(() => dispatchFacts(db));
+        expect(retained).toEqual({
+          collection_state: "sent",
+          collection_sent_at_ms: claimedAtTimestampMatcher,
+          status: "pending",
+          paid_starts_at_ms: null,
+        });
+        yield* Effect.tryPromise(() => collect(db));
+        expect(provider).toHaveBeenCalledTimes(1);
+        expect(yield* Effect.tryPromise(() => dispatchFacts(db))).toEqual(retained);
+      })
+    )
+);
+
+it("does not dispatch an armed attempt whose original transaction has already settled", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture());
+      yield* verifyProviderTransaction(db, () => transaction("APPROVED"));
+      const retained = yield* Effect.tryPromise(() => dispatchFacts(db));
+      const provider = vi.fn(() =>
+        Promise.resolve(Response.json({ data: transaction("APPROVED") }))
+      );
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
+      yield* Effect.tryPromise(() => collect(db));
+      expect(provider).not.toHaveBeenCalled();
+      expect(yield* Effect.tryPromise(() => dispatchFacts(db))).toEqual(retained);
     })
   ));
 

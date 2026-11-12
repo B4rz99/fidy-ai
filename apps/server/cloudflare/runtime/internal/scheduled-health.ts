@@ -117,7 +117,9 @@ const reportOperationalSignals = (
         severity,
         message: `fidy.operational component=${signal.component} operation=${signal.operation} state=${signal.state} severity=${severity}`,
       };
-      return severity === "none" ? Effect.logInfo(observation) : Effect.logWarning(observation);
+      return (
+        severity === "none" ? Effect.logInfo(observation) : Effect.logWarning(observation)
+      ).pipe(Effect.catchDefect(() => Effect.void));
     },
     { discard: true }
   ).pipe(Effect.andThen(reportInspectionCoverage(environment, signals)));
@@ -147,7 +149,7 @@ const reportInspectionCoverage = (
     operation: "ownerInspections",
     state,
     message: `fidy.operational component=inspection-coverage operation=ownerInspections state=${state}`,
-  });
+  }).pipe(Effect.catchDefect(() => Effect.void));
 };
 
 const scheduledSignals = (

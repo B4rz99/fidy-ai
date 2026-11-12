@@ -5,7 +5,8 @@ import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect, vi } from "vitest";
 import { makeFidyClient } from "@/transport/client";
-import { dashboardQuery } from "./query";
+import { retireQueryLifetime } from "@/transport/query-lifetime";
+import { type DashboardReadAttempt, dashboardQuery } from "./query";
 
 const view = {
   title: "Mi tablero",
@@ -40,8 +41,21 @@ const requiredGate = (
   gates: readonly Deferred.Deferred<void>[],
   index: number
 ): Deferred.Deferred<void> => Option.getOrThrow(Array.get(gates, index));
+const retireAuthentication = Effect.fnUntraced(function* (
+  registry: AtomRegistry.AtomRegistry,
+  attempts: readonly DashboardReadAttempt[],
+  held: Deferred.Deferred<void>
+) {
+  retireQueryLifetime(registry);
+  expect(attempts.every((attempt) => !attempt.completed())).toBe(true);
+  yield* Deferred.succeed(held, undefined);
+  yield* Effect.yieldNow;
+  expect(attempts.every((attempt) => !attempt.completed())).toBe(true);
+});
 it.live("only the requested new Dashboard load certifies recovery, even with equal content", () =>
   Effect.gen(function* () {
+    const events = Object.assign(new EventTarget(), { Uint8Array });
+    vi.stubGlobal("window", events);
     const gates = yield* Effect.all([
       Deferred.make<void>(),
       Deferred.make<void>(),
@@ -130,6 +144,7 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
       );
       const retired = query.refresh(registry);
       yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(7)));
+      yield* retireAuthentication(registry, [attempt, retired], requiredGate(gates, 6));
       unmount();
       registry.dispose();
       const replacementRegistry = AtomRegistry.make();
@@ -153,6 +168,7 @@ it.live("only the requested new Dashboard load certifies recovery, even with equ
     } finally {
       unmount();
       registry.dispose();
+      vi.unstubAllGlobals();
     }
   })
 );

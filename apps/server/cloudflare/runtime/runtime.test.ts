@@ -262,3 +262,40 @@ it.effect("reports D1 unavailability and complete owner inspection after recover
     ]);
   })
 );
+
+it.effect("keeps inspection coverage available after a signal exporter throws", () =>
+  Effect.gen(function* () {
+    const { db } = yield* Effect.tryPromise(() => storage.acquire());
+    const logs: unknown[] = [];
+    let attempts = 0;
+    const logger = Logger.make<unknown, void>(({ message }) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("private exporter failure");
+      logs.push(message);
+    });
+    const result = yield* Effect.exit(
+      makePlatformMaintenance(input(db, { ASYNC_HEALTH_ENABLED: Option.some("enabled") }))
+        .inspectHealth()
+        .pipe(Effect.provideService(Logger.CurrentLoggers, new Set([logger])))
+    );
+    expect(result).toEqual(Exit.void);
+    const brokenLogger = Logger.make(() => {
+      throw new Error("private exporter failure");
+    });
+    const allExportsFailed = yield* Effect.exit(
+      makePlatformMaintenance(input(db, { ASYNC_HEALTH_ENABLED: Option.some("enabled") }))
+        .inspectHealth()
+        .pipe(Effect.provideService(Logger.CurrentLoggers, new Set([brokenLogger])))
+    );
+    expect(allExportsFailed).toEqual(Exit.void);
+    expect(logs).toContainEqual([
+      {
+        component: "inspection-coverage",
+        operation: "ownerInspections",
+        state: "complete",
+        message:
+          "fidy.operational component=inspection-coverage operation=ownerInspections state=complete",
+      },
+    ]);
+  })
+);

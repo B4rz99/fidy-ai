@@ -254,6 +254,7 @@ const statementActivities = (
       onNone: () => Effect.void,
       onSome: (workflow) =>
         reconcileStatementExtraction({
+          userId: Option.none(),
           DB: environment.DB,
           STATEMENT_EXTRACTION_WORKFLOW: workflow,
           USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,

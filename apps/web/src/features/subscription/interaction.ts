@@ -8,6 +8,7 @@ import {
   type PaymentFields,
   type PaymentSubmission,
   type PreparedEnrollment,
+  clearNequiPhone,
 } from "./enrollment-gateway";
 import { makeEnrollmentCommand } from "./enrollment-command";
 import { isAwaitingPaymentStatus, paymentStatusRefreshDelay } from "./payment-status";
@@ -423,16 +424,25 @@ const fieldsMatchMethod = (prepared: PreparedEnrollment, fields?: PaymentFields)
   if (prepared.method === "card") return !("method" in fields);
   return "method" in fields && fields.method === prepared.method;
 };
+const canAdmitSubmission = (owner: Owner): boolean =>
+  owner.active && Option.isSome(owner.gateway) && !selectionLocked(owner);
 const submit = (owner: Owner, email: string, fields?: PaymentFields): void => {
-  if (selectionLocked(owner) || Option.isNone(owner.flow)) return;
+  if (!canAdmitSubmission(owner) || Option.isNone(owner.flow)) {
+    clearNequiPhone(fields);
+    return;
+  }
   const current = owner.flow.value;
-  if (current._tag !== "Enrollment" || current.value.status !== "prepared") return;
+  if (current._tag !== "Enrollment" || current.value.status !== "prepared") {
+    clearNequiPhone(fields);
+    return;
+  }
   const prepared = current.value;
   if (
     !Schema.is(BillingEmail)(email) ||
     !fieldsMatchMethod(prepared, fields) ||
     DateTime.nowUnsafe().epochMilliseconds >= prepared.expiresAt.epochMilliseconds
   ) {
+    clearNequiPhone(fields);
     owner.failed = true;
     notify(owner);
     return;
@@ -537,6 +547,7 @@ const present = (owner: Owner): EnrollmentInteraction => {
     prepare: (replacing = false) => prepare(owner, replacing),
     submit: (email, fields) => {
       if (owner.generation === generation) submit(owner, email, fields);
+      else clearNequiPhone(fields);
     },
     refresh: () => refresh(owner),
     refreshMethods: () => {

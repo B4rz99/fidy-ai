@@ -1,3 +1,4 @@
+import { admissionLifetimeMs, validContinuation } from "./internal/control-admission";
 import type { ErasureRegistry } from "./contract";
 import { initializeRegistryStorage } from "./internal/registry-initialization";
 import { sweepControlObjects } from "./internal/control-objects";
@@ -5,14 +6,14 @@ import { requireInventory } from "./internal/inventory";
 import { purgeCompletedCases } from "./internal/control-retention";
 import { expectedGeneration } from "./internal/generation";
 import { restoreCase } from "./internal/restore-case";
-import { recordCustodyEvidence } from "./internal/provider-evidence";
+import { submitCustodyEvidence } from "./internal/provider-evidence";
 import { receipt } from "./internal/receipt";
 import { Clock, Effect, Option, Schema } from "effect";
 import {
   ErasureBrowserAdmission,
   ErasureContinuation,
-  ErasureCustodyAdmission,
   type ErasureExecution,
+  type ErasureOwner,
   type ErasureRecoveryConfiguration,
   type ErasureRegistryInitialization,
 } from "./contract";
@@ -20,13 +21,29 @@ import { progress } from "./internal/progress";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import type { ErasureStore } from "../erasure-store/contract";
 import { admitDeletion } from "./internal/admission";
+import { ErasureReceipt } from "../../src/core/erasure/contract";
+
+/** Composition inside the serialized User coordinator. Binding supplies no authority:
+ * each call decodes its own admission and retains the original credentials and deadline.
+ * No receipt, credential or lifecycle observation is retained across invocations. */
+export const makeErasureOwner = (
+  configuration: ErasureExecution & Readonly<{ userId: string }>
+): ErasureOwner => ({
+  admit: (candidate: unknown, signal: AbortSignal): Effect.Effect<Response> =>
+    executeErasureAdmission({ ...configuration, candidate, signal }),
+  continue: (candidate: unknown): Effect.Effect<Response> =>
+    executeErasureContinuation({ ...configuration, candidate }),
+  receipt: (candidate: unknown): Effect.Effect<Response> =>
+    executeErasureControl({ ...configuration, candidate, operation: "Receipt" }),
+  custody: (candidate: unknown): Effect.Effect<Response> =>
+    executeErasureControl({ ...configuration, candidate, operation: "CustodyEvidence" }),
+});
 
 const conflictStatus = 409;
-const admissionLifetimeMs = 5000;
 const acceptedStatus = 202;
 const unavailableStatus = 503;
 /** Accepts only private Core admissions, rechecked under the named User's existing coordinator. */
-export const executeErasureAdmission = (
+const executeErasureAdmission = (
   input: Readonly<{
     db: D1Database;
     userId: string;
@@ -64,7 +81,7 @@ export const executeErasureAdmission = (
   }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
 
 /** A continuation is bound to the reviewed User and inventory; unresolved independent stores refuse progression. */
-export const executeErasureContinuation = (
+const executeErasureContinuation = (
   input: Readonly<{
     db: D1Database;
     userId: string;
@@ -79,10 +96,7 @@ export const executeErasureContinuation = (
     const current = yield* Clock.currentTimeMillis;
     if (
       Option.isNone(admission) ||
-      admission.value.userId !== input.userId ||
-      admission.value.deadlineMs <= current ||
-      admission.value.authority.expiresAtMs <= current ||
-      admission.value.deadlineMs > current + admissionLifetimeMs
+      !validContinuation({ admission: admission.value, current, userId: input.userId })
     ) {
       return new Response(null, { status: conflictStatus });
     }
@@ -91,7 +105,7 @@ export const executeErasureContinuation = (
     return new Response(null, { status: acceptedStatus });
   }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
 
-export const executeErasureControl = (
+const executeErasureControl = (
   input: Readonly<{
     db: D1Database;
     userId: string;
@@ -101,49 +115,43 @@ export const executeErasureControl = (
   }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const decoded =
-      input.operation === "CustodyEvidence"
-        ? Schema.decodeUnknownOption(ErasureCustodyAdmission, { onExcessProperty: "error" })(
-            input.candidate
-          )
-        : Schema.decodeUnknownOption(ErasureContinuation, { onExcessProperty: "error" })(
-            input.candidate
-          );
+    if (input.operation === "CustodyEvidence") {
+      const result = yield* submitCustodyEvidence(input);
+      return new Response(null, {
+        status: result === "Recorded" ? acceptedStatus : conflictStatus,
+        headers: { "cache-control": "no-store" },
+      });
+    }
+    const decoded = Schema.decodeUnknownOption(ErasureContinuation, {
+      onExcessProperty: "error",
+    })(input.candidate);
     const current = yield* Clock.currentTimeMillis;
     if (
       Option.isNone(decoded) ||
       !validContinuation({ admission: decoded.value, current, userId: input.userId })
     ) {
-      return new Response(null, { status: conflictStatus });
+      return new Response(null, {
+        status: conflictStatus,
+        headers: { "cache-control": "no-store" },
+      });
     }
     yield* requireInventory({
       db: input.db,
       scope: { reference: decoded.value.reference, userId: input.userId },
       stores: input.stores,
     });
-    if (input.operation === "CustodyEvidence") {
-      const admission = yield* Schema.decodeUnknownEffect(ErasureCustodyAdmission)(decoded.value);
-      const recorded = yield* recordCustodyEvidence({ db: input.db, admission });
-      return new Response(null, {
-        status: recorded ? acceptedStatus : conflictStatus,
-        headers: { "cache-control": "no-store" },
-      });
-    }
     const result = yield* receipt({
       db: input.db,
       scope: { reference: decoded.value.reference, userId: input.userId },
       stores: input.stores,
     });
     return Response.json(result, { headers: { "cache-control": "no-store" } });
-  }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
-
-const validContinuation = (
-  input: Readonly<{ admission: ErasureContinuation; current: number; userId: string }>
-): boolean =>
-  input.admission.userId === input.userId &&
-  input.admission.deadlineMs > input.current &&
-  input.admission.deadlineMs <= input.current + admissionLifetimeMs &&
-  input.admission.authority.expiresAtMs > input.current;
+  }).pipe(
+    Effect.orElseSucceed(
+      () =>
+        new Response(null, { status: unavailableStatus, headers: { "cache-control": "no-store" } })
+    )
+  );
 
 const maximumResumedCases = 4;
 export const resumeErasureCases = (
@@ -239,6 +247,7 @@ export const executeErasureRestore = (
     stores: ReadonlyArray<ErasureStore>;
     userId: string;
     candidate: unknown;
+    signal: AbortSignal;
   }>
 ): Effect.Effect<Response> =>
   restoreCase({ ...input, configuration: input.recovery }).pipe(
@@ -263,7 +272,9 @@ const continueDisposition = (
           .first(),
       catch: () => new ErasureUnavailable(),
     });
-    const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ state: Schema.String }))(raw);
+    const row = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ state: ErasureReceipt.fields.state })
+    )(raw);
     yield* progress({ ...input, scope, phase: row.state });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 

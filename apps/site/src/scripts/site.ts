@@ -42,22 +42,26 @@ const mountTheme = (root: HTMLDivElement): void => {
 };
 
 const root = document.querySelector<HTMLDivElement>(".fidy-landing");
-if (root !== null) {
-  mountTheme(root);
-  if (!root.classList.contains("feature-detail-open")) {
-    const stopMotion = mountMotion(root);
-    window.addEventListener("pagehide", stopMotion, { once: true });
+if (root !== null) mountTheme(root);
+let disposeMotion = (): void => {};
+const mountDocumentMotion = (): void => {
+  disposeMotion();
+  const disposers: (() => void)[] = [];
+  if (root !== null && !root.classList.contains("feature-detail-open")) {
+    disposers.push(mountMotion(root));
   }
-}
-const mountDemos = (): void => {
   for (const shell of document.querySelectorAll<HTMLElement>(".demo-shell")) {
-    const stopDemo = mountPhoneDemo(shell);
-    window.addEventListener("pagehide", stopDemo, { once: true });
+    disposers.push(mountPhoneDemo(shell));
   }
+  disposeMotion = (): void => {
+    disposeMotion = (): void => {};
+    for (const dispose of disposers) dispose();
+  };
 };
-mountDemos();
+mountDocumentMotion();
+window.addEventListener("pagehide", () => disposeMotion());
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted) mountDemos();
+  if (event.persisted) mountDocumentMotion();
 });
 for (const summary of document.querySelectorAll("summary")) {
   summary.addEventListener("click", (event) => {

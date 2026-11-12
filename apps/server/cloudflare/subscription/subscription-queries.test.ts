@@ -1,5 +1,5 @@
 import { openAiTestKey } from "../openai.test-fixture";
-import { executeProCommand } from "../../src/shell/pro-grants/operations";
+import { executeProCommand, prepareProGrant } from "../../src/shell/pro-grants/operations";
 import { ProGrantFailure } from "../../src/shell/pro-grants/contract";
 import { expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
@@ -7,7 +7,7 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { SubscriptionOffers, SubscriptionStatus } from "../../src/core/subscription/contract";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
-import { executeProtectedSubscriptionQuery } from "./operations";
+import { executeProtectedSubscriptionQuery, startRefund } from "./operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import {
   executeCanonicalHttpQuery,
@@ -15,6 +15,11 @@ import {
 } from "../canonical-operations/operations";
 import coreWorker from "../core-worker";
 import { auditEntriesTestSchema, installCurrentTestObjects } from "../d1-test-fixture";
+
+import { TestClock } from "effect/testing";
+import { activeProUserCondition } from "../../src/shell/access-tier/operations";
+import { prepareSubscriptionStatus } from "../../src/shell/subscription/operations";
+import { seedPaidCardSubscription } from "./refund-charge.test-fixture";
 
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
@@ -27,7 +32,7 @@ const patId = "30000000-0000-4000-8000-000000000001";
 const token = new Uint8Array(32);
 const pastEnd = Date.parse("2026-09-08T12:00:00Z");
 
-const fixture = (): Promise<D1Database> =>
+const fixture = (expiration: Option.Option<number> = Option.none()): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const created = yield* makePaymentEnrollmentD1([
@@ -54,6 +59,7 @@ const fixture = (): Promise<D1Database> =>
       );
       const past = Date.parse("2026-09-01T12:00:00Z");
       const future = (yield* Clock.currentTimeMillis) + 86_400_000;
+      const sessionExpiresAt = Option.getOrElse(expiration, () => future);
       yield* fromTestPromise(() =>
         db.batch([
           db
@@ -74,10 +80,10 @@ const fixture = (): Promise<D1Database> =>
             .bind(userB, past, past + 604_800_000),
           db
             .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?)")
-            .bind(sessionA, userA, token, future, future),
+            .bind(sessionA, userA, token, sessionExpiresAt, sessionExpiresAt),
           db
             .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?)")
-            .bind(sessionB, userB, token, future, future),
+            .bind(sessionB, userB, token, sessionExpiresAt, sessionExpiresAt),
           db
             .prepare("INSERT INTO pats VALUES (?, ?, ?, '[\"write\"]', ?, NULL, NULL)")
             .bind(patId, userA, token, future),
@@ -426,5 +432,204 @@ effectIt.effect(
       const revoked = yield* status;
       expect(revoked.data.accessTier).toBe("free");
       expect(revoked.data.hasProGrant).toBe(false);
+    })
+);
+
+const observeStanding = (
+  db: D1Database,
+  at: number,
+  expected: "free" | "pro"
+): Effect.Effect<SubscriptionStatus, Schema.SchemaError> =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(at);
+    const pro = activeProUserCondition({ userId: userA, nowEpochMs: at });
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`SELECT ${pro.sql} AS active`)
+          .bind(...pro.params)
+          .first()
+      )
+    ).toEqual({ active: expected === "pro" ? 1 : 0 });
+    const response = yield* executeProtectedSubscriptionQuery({
+      db,
+      subject: { id: sessionA, userId: userA, digest: token },
+      operation: "subscription.getSubscriptionStatus",
+    });
+    expect(response.status).toBe(200);
+    const body = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.toCodecJson(SubscriptionStatus) })
+    )(yield* fromTestPromise(() => response.json()));
+    expect(body.data.accessTier).toBe(expected);
+    return body.data;
+  });
+
+effectIt.effect("agrees with the access predicate through trial and paid grace boundaries", () =>
+  Effect.gen(function* () {
+    const db = yield* fromTestPromise(() => fixture(Option.some(100000000000000)));
+    const observe = (at: number, expected: "free" | "pro"): ReturnType<typeof observeStanding> =>
+      observeStanding(db, at, expected);
+    yield* observe(Date.parse("2026-09-01T12:00:00Z") - 1, "free");
+    yield* observe(Date.parse("2026-09-01T12:00:00Z"), "pro");
+    yield* observe(pastEnd - 1, "pro");
+    yield* observe(pastEnd, "free");
+    yield* seedPaidCardSubscription({ db, userId: userA });
+    yield* observe(9999999999999, "pro");
+    yield* observe(9999999999999 + 259200000 - 1, "pro");
+    yield* observe(9999999999999 + 259200000, "free");
+    const read = (
+      sql: string,
+      params: ReadonlyArray<string>
+    ): ReturnType<typeof prepareSubscriptionStatus> =>
+      prepareSubscriptionStatus({
+        users: { sql, params },
+        current: pastEnd,
+        authority: { table: "web_sessions", predicate: "id=?", bindings: [sessionA] },
+      });
+    for (const sql of [
+      "SELECT ? AS userId WHERE 0",
+      "SELECT ? AS userId UNION ALL SELECT '10000000-0000-4000-8000-000000000002'",
+    ]) {
+      const prepared = read(sql, [userA]);
+      const results = yield* fromTestPromise(() =>
+        db.batch(
+          prepared.statements.map((statement) =>
+            db.prepare(statement.sql).bind(...statement.params)
+          )
+        )
+      );
+      expect(() => prepared.decode(results.map((result) => result.results))).toThrow();
+    }
+    const prepared = read("SELECT ? AS userId UNION ALL SELECT ?", [userA, userA]);
+    const results = yield* fromTestPromise(() =>
+      db.batch(
+        prepared.statements.map((statement) => db.prepare(statement.sql).bind(...statement.params))
+      )
+    );
+    expect(prepared.decode(results.map((result) => result.results))).toMatchObject({
+      accessTier: "pro",
+    });
+  })
+);
+
+effectIt.effect(
+  "returns unavailable without a partial explanation when standing storage is missing",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => fixture());
+      yield* fromTestPromise(() => db.prepare("DROP TABLE pro_grant_events").run());
+      const response = yield* executeProtectedSubscriptionQuery({
+        db,
+        subject: { id: sessionA, userId: userA, digest: token },
+        operation: "subscription.getSubscriptionStatus",
+      });
+      expect(response.status).toBe(503);
+      expect(yield* fromTestPromise(() => response.json())).toMatchObject({
+        error: { code: "unavailable" },
+      });
+    })
+);
+
+const changeGrant = (
+  db: D1Database,
+  action: "grant" | "revoke",
+  now: number
+): Effect.Effect<void> => {
+  const statement = prepareProGrant({
+    action,
+    selector: { userId: userA },
+    operator: "test-operator",
+    now,
+  });
+  return fromTestPromise(() =>
+    db
+      .prepare(statement.sql)
+      .bind(...statement.params)
+      .run()
+  ).pipe(Effect.asVoid);
+};
+
+effectIt.effect(
+  "preserves paid-through after cancellation, removes grace, and retains an independent manual grant",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => fixture(Option.some(100000000000000)));
+      yield* seedPaidCardSubscription({ db, userId: userA });
+      yield* TestClock.setTime(pastEnd + 1);
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO subscription_cancellations(subscription_id,paid_attempt_id,payment_source_id,cancelled_at_ms,paid_through_ms,source_cancellation_state,verification_count)
+      VALUES (?,'40000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',?,9999999999999,'detached',0)`)
+          .bind(userA, pastEnd + 1)
+          .run()
+      );
+      const cancelled = yield* observeStanding(db, pastEnd + 1, "pro");
+      expect(Option.getOrThrow(cancelled.cancellation).paidThrough.epochMilliseconds).toBe(
+        9999999999999
+      );
+      yield* observeStanding(db, 9999999999998, "pro");
+      yield* observeStanding(db, 9999999999999, "free");
+      yield* changeGrant(db, "grant", 9999999999999);
+      expect((yield* observeStanding(db, 9999999999999, "pro")).hasProGrant).toBe(true);
+      yield* changeGrant(db, "revoke", 9999999999999);
+      yield* observeStanding(db, 9999999999999, "free");
+    })
+);
+
+effectIt.effect(
+  "keeps trial and manual access independent of queued and verified refund adjustments",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => fixture(Option.some(100000000000000)));
+      const trialStart = Date.parse("2026-09-01T12:00:00Z");
+      yield* changeGrant(db, "grant", trialStart);
+      expect((yield* observeStanding(db, trialStart, "pro")).hasProGrant).toBe(true);
+      yield* changeGrant(db, "revoke", trialStart + 1);
+      expect((yield* observeStanding(db, trialStart + 1, "pro")).hasProGrant).toBe(false);
+      yield* seedPaidCardSubscription({ db, userId: userA });
+      const refund = yield* startRefund({
+        db,
+        environment: "sandbox",
+        authority: {
+          operatorId: "test-operator",
+          permission: "billing.refund",
+          expiresAtMs: 9999999999999,
+        },
+        input: {
+          userId: userA,
+          billingAttemptId: "40000000-0000-4000-8000-000000000001",
+          requestId: "50000000-0000-4000-8000-000000000002",
+          intent: { kind: "refund", money: { amount: "4000", currency: "COP" } },
+          reason: "user-request",
+        },
+      });
+      const queued = yield* observeStanding(db, trialStart + 2, "pro");
+      expect(Option.getOrThrow(queued.paidSubscription).endsAt.epochMilliseconds).toBe(
+        9999999999999
+      );
+      yield* observeStanding(db, pastEnd, "pro");
+      const adjustedAt = trialStart + 3;
+      yield* fromTestPromise(() =>
+        db.batch([
+          db
+            .prepare("UPDATE refund_attempts SET submission_claimed_at_ms=? WHERE id=?")
+            .bind(adjustedAt, refund.id),
+          db
+            .prepare(
+              "UPDATE refund_attempts SET provider_refund_id='verified-refund',verified_status='APPROVED',observed_at_ms=? WHERE id=?"
+            )
+            .bind(adjustedAt, refund.id),
+        ])
+      );
+      const adjusted = yield* observeStanding(db, adjustedAt, "pro");
+      expect(Option.getOrThrow(adjusted.paidSubscription).endsAt.epochMilliseconds).toBe(
+        adjustedAt
+      );
+      yield* observeStanding(db, pastEnd - 1, "pro");
+      yield* observeStanding(db, pastEnd, "free");
+      yield* changeGrant(db, "grant", pastEnd);
+      expect((yield* observeStanding(db, pastEnd, "pro")).hasProGrant).toBe(true);
+      yield* changeGrant(db, "revoke", pastEnd);
+      yield* observeStanding(db, pastEnd, "free");
     })
 );

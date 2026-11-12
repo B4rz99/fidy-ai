@@ -54,8 +54,8 @@
     "shadcn": "4.23.0",
     "tailwindcss": "4.3.4",
     "typescript": "7.0.2",
-    "vite": "8.3.5",
+    "vite": "8.3.6",
     "vitest": "5.1.0",
-    "wrangler": "4.157.0"
+    "wrangler": "4.158.0"
   }
 }

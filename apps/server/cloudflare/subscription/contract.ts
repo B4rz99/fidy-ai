@@ -69,6 +69,9 @@ export type SubscriptionQueryInput = Readonly<{
 /** Explicit native bindings for direct browser enrollment and accepted-work notification. */
 export type EnrollmentEnvironment = Readonly<{
   DB: D1Database;
+  /** Offers already durable BillingAttempt work; pending submission replay may repeat the offer.
+   * Receivers must tolerate duplicate notification. This does not establish collection or paid access.
+   */
   onAccepted: (id: string) => void;
 }> &
   Partial<
@@ -177,6 +180,10 @@ export const BillingPriceNoticeWork = Schema.Struct({
   userId: UserId,
   priceId: PriceId,
 });
+export type WeeklyPricePublication = Readonly<{
+  priceId: PriceId;
+  noticeOffer: "attempted" | "deferred";
+}>;
 export type BillingPriceNoticeDispatchInput = Readonly<{
   DB: D1Database;
   BILLING_COLLECTION_QUEUE: Readonly<{

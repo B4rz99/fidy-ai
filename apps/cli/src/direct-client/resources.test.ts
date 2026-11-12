@@ -1,5 +1,6 @@
+import { ownNativeFetch } from "@fidy/server/native-http";
 import { expect, it, layer } from "@effect/vitest";
-import { Effect, Exit, Fiber } from "effect";
+import { Effect, Exit, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientResponse } from "effect/http";
 import { protectClient } from "./runtime";
@@ -216,3 +217,93 @@ it.effect(
       expect(sent).toBe(false);
     })
 );
+
+for (const mode of ["inherited", "undefined", "null", "replacement"] as const) {
+  it.effect(`honors ${mode} Fetch signal precedence`, () => {
+    const original = new AbortController();
+    const replacement = new AbortController();
+    return Effect.gen(function* () {
+      const body = new ReadableStream<Uint8Array>();
+      const native = Object.assign(() => Promise.resolve(new Response(body)), {
+        preconnect: fetch.preconnect,
+      });
+      const request = new Request("https://api.fidyapp.com/pat-pairings", {
+        signal: original.signal,
+      });
+      let init: RequestInit = {};
+      if (mode === "null") init = { signal: null };
+      if (mode === "replacement") init = { signal: replacement.signal };
+      if (mode === "undefined") init = { signal: undefined };
+      // Native Request construction is the independent reference for Fetch signal precedence.
+      const reference = new Request(request, init);
+      const response = yield* Effect.tryPromise({
+        try: () => ownNativeFetch(native)(request, init),
+        catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+      });
+      const reader = Option.getOrThrow(Option.fromNullishOr(response.body)).getReader();
+      const pending = reader.read();
+      const failed =
+        mode === "null" ? pending : expect(pending).rejects.toThrow("Response body aborted");
+      original.abort("private request reason");
+      expect(reference.signal.aborted).toBe(mode === "inherited" || mode === "undefined");
+      expect(body.locked).toBe(!reference.signal.aborted);
+      if (mode === "null") {
+        yield* Effect.tryPromise({
+          try: () => reader.cancel(),
+          catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+        });
+      }
+      if (mode === "replacement") replacement.abort();
+      yield* Effect.tryPromise({
+        try: () => failed.then(() => undefined),
+        catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+      });
+      expect(body.locked).toBe(false);
+    });
+  });
+}
+
+for (const status of [204, 205, 304]) {
+  it.effect(`disposes an anomalous ${status} body immediately without reading bytes`, () =>
+    Effect.gen(function* () {
+      let reads = 0;
+      let cancellations = 0;
+      const body = new ReadableStream<Uint8Array>({}, { highWaterMark: 0 });
+      const acquire = body.getReader.bind(body);
+      Object.defineProperty(body, "getReader", {
+        value: (): ReturnType<typeof acquire> => {
+          const reader = acquire();
+          reader.read = (): ReturnType<typeof reader.read> => {
+            reads++;
+            return Promise.resolve({ done: false, value: new Uint8Array([1]) });
+          };
+          reader.cancel = (): Promise<void> => {
+            cancellations++;
+            throw new Error("private disposal failure");
+          };
+          return reader;
+        },
+      });
+      const native = new Response(null, {
+        status,
+        statusText: "Protocol status",
+        headers: { "x-response": "retained" },
+      });
+      Object.defineProperty(native, "body", { value: body });
+      const response = yield* Effect.tryPromise({
+        try: () =>
+          ownNativeFetch(
+            Object.assign(() => Promise.resolve(native), { preconnect: fetch.preconnect })
+          )("https://api.fidyapp.com/pat-pairings"),
+        catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+      });
+      expect(response.status).toBe(status);
+      expect(response.statusText).toBe("Protocol status");
+      expect(response.headers.get("x-response")).toBe("retained");
+      expect(response.body).toBeNull();
+      expect(reads).toBe(0);
+      expect(cancellations).toBe(1);
+      expect(body.locked).toBe(false);
+    })
+  );
+}

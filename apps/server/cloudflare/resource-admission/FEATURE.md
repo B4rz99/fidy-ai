@@ -12,6 +12,17 @@ includes all prepared statements in its D1 batch with its proof, state and outbo
 required claim cardinality is still enforced by D1; refusal rolls back the owner's writes as well.
 Preparation is not an admission receipt. Only successful settlement permits external work.
 
+Claim cardinality proves accounting completeness, not owner eligibility. Every conditional required
+owner transition must include its changed-row assertion before publishing work in the same native
+batch. A zero-row write is otherwise a successful SQL statement. The hosted statement-document
+owner uses its exact pending Turn proof and a changed-row assertion before media work. Resource
+scope and grant identity supply neither User authority nor a Consent basis.
+
+An unavailable batch response can follow a committed attempt or work admission. Callers stop before
+provider execution and preserve accounting without blind compensation or automatic replay. Each
+actual inference attempt still crosses `makeAdmittedOpenAiRun`, then the exact Consent egress check;
+the original pending Turn exception is reloaded rather than inferred from a grant.
+
 The owner must use the configured binding, preserve preparation order and wait for its native batch
 to settle on interruption. `classifyResourceAdmissionFailure` distinguishes native admission-trigger
 refusal from unavailable persistence without publishing raw SQL errors. Consent's disclosure exchange
@@ -22,6 +33,15 @@ the complete admission batch commits. Callers decode those results using their o
 admission's internal statement results are not exposed. Attempt pressure remains
 a distinct, deliberately committed charge before work admission: a refused work claim does not undo
 its attempt charge. Outstanding release still commits with the owner's completion statements.
+
+## Occupancy claim settlement
+
+Release addresses only unreleased outstanding claims of the original grant. Duplicate release leaves
+its first settlement intact; a late release cannot free a replacement grant's occupancy. Appended
+owner statements still require their own replay guards and exact terminal-transition proof.
+Admission excludes each claim at its original expiry even when cleanup has not run. Neither reads
+nor release renew that deadline. Attempt pressure and windowed spend retain their independent
+accounting windows after occupancy release or expiry.
 
 ## Counter and ownership contracts
 

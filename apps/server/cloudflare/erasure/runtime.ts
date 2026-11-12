@@ -200,6 +200,7 @@ export const handleErasureOperator = (
   input: Readonly<{
     request: Request;
     environment: ErasureOperatorEnvironment;
+    storeIds: ReadonlyArray<string>;
   }>
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {

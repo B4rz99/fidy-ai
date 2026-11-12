@@ -5,7 +5,7 @@ import { makeErasureStore } from "../erasure-store/runtime";
 import { withPublicationWake } from "./internal/publication-wake";
 import type { ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Effect, Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import type {
   ForwardedEmailEnvironment,
@@ -57,6 +57,36 @@ export const dispatchUserStatementExtraction = (
   input: StatementDispatchBindings & Readonly<{ userId: UserId }>
 ): Effect.Effect<void, StatementDeliveryUnavailable> =>
   dispatchStatements({ ...input, userId: Option.some(input.userId) });
+
+/** Recover one bound User's unfinished work; either ordinary phase failure still permits the other phase. */
+export const recoverUserStatementExtraction = (
+  input: StatementDispatchBindings &
+    Readonly<{
+      userId: UserId;
+      USER_TRANSACTION_COORDINATOR: Parameters<
+        typeof reconcileStatements
+      >[0]["USER_TRANSACTION_COORDINATOR"];
+    }>
+): Effect.Effect<void, StatementDeliveryUnavailable> =>
+  Effect.gen(function* () {
+    const reconciliation = yield* Effect.exit(
+      Option.match(input.STATEMENT_EXTRACTION_WORKFLOW, {
+        onNone: () => Effect.void,
+        onSome: (workflow) =>
+          reconcileStatements({
+            ...input,
+            userId: Option.some(input.userId),
+            STATEMENT_EXTRACTION_WORKFLOW: workflow,
+          }),
+      })
+    );
+    if (Exit.isFailure(reconciliation) && Cause.hasInterrupts(reconciliation.cause)) {
+      return yield* Effect.failCause(reconciliation.cause);
+    }
+    const dispatch = yield* Effect.exit(dispatchUserStatementExtraction(input));
+    if (Exit.isFailure(dispatch)) return yield* Effect.failCause(dispatch.cause);
+    if (Exit.isFailure(reconciliation)) return yield* Effect.failCause(reconciliation.cause);
+  });
 
 /** Supply a coordinator-owned durable wake-up; absent or failed wake-ups retain cron recovery. */
 export const withStatementPublicationWake: typeof withPublicationWake = (schedule) =>

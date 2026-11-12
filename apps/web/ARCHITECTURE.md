@@ -12,8 +12,12 @@ production topology, and browser-to-server ownership.
 It owns product browser routing, providers and styles. Public marketing and policy copy belong to
 `apps/site`, which renders the public website with Astro. Its server imports use the
 browser-safe `@fidy/server/client` declaration seam and the narrow `browser-bootstrap`, `money`,
-`dashboard-contract`, `hosted-turn-api`, `browser-http` and dependency-free `browser-transport` declarations; it never imports server implementations. The API
-Workers do not serve web routes or static assets.
+`dashboard-contract`, `hosted-turn-api`, `browser-http` and dependency-free `browser-transport`
+declarations. The named `transport/browser-http-policy.ts` composition and
+`transport/client.test.ts` resource seam also consume the browser-safe `@fidy/server/native-http`
+response lifetime runtime. Private server internals remain inaccessible; browser byte limits,
+deadlines and outcome interpretation stay with the browser transport. The API Workers do not serve
+web routes or static assets.
 
 `transport/session-entry.ts` owns the initial session observation and its bootstrap response codecs.
 `transport/session-binding.ts` owns immutable request binding, cancellation and shared transfer
@@ -28,11 +32,11 @@ Effect Atom derives browser transport from the assembled `FidyApi` with
 `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. A shared browser HTTP policy
 layer bounds and sanitizes that transport beneath each generated client; the web application does not
 hand-wrap endpoints or declare a second canonical surface. Each canonical API client permits two
-active transfers through complete response materialization. Waiting uses the original request deadline;
+active transfers through complete response materialization. Preparation and waiting use the original request deadline;
 interruption removes queued work, and retry pacing releases capacity. This volatile browser budget
 does not replace server admission across tabs and clients. Only GET/HEAD transport failures retry
-once. Canonical requests and safe web-auth reads may additionally retry a decoded `ResourceLimited` refusal with bounded
-`Retry-After` pacing (six retries, delays of one to five seconds) inside the original boundary deadline (15 seconds for canonical requests, 10 seconds for ordinary web-auth reads). This proves non-admission; commercial exhaustion, uncertain mutations, authentication,
+once per resource round. Canonical requests and safe web-auth reads may additionally retry a decoded `ResourceLimited` refusal with bounded
+`Retry-After` pacing (six retries, seven rounds, up to fourteen safe-read transfers; delays of one to five seconds) inside the original boundary deadline (15 seconds for canonical requests, 10 seconds for ordinary web-auth reads). This proves non-admission; commercial exhaustion, uncertain mutations, authentication,
 and enrollment refusals never gain automatic replay. Cancellation interrupts pacing as well as
 in-flight transport. Shared and server state belongs to Effect
 Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
@@ -228,6 +232,12 @@ form; pending or successful payment and live DaviPlata authorization keep that a
 feedback separates source availability from verified settlement, and paid access/history use canonical
 SubscriptionStatus rather than invented renewal or payment-source metadata.
 Paid Users can review and cancel future renewals through the existing canonical cancellation operation.
+The mounted management owner consumes the current review synchronously before dispatch, serializes
+cancellation and explicit status recovery, and retires callbacks on unmount or authentication replacement.
+A review captures the displayed paid-through period and status observation; a changed observation
+requires a new review. Acknowledged cancellation evidence takes precedence over older status reads.
+Unknown cancellation remains locked across passive query updates and failed recovery; only a fresh
+explicit status result can admit a new review. Review and confirmation authority never enter storage.
 Cancellation results distinguish the Fidy renewal fence from pending or verified provider source
 annulment. The canonical SubscriptionStatus includes retained cancellation evidence so reload can
 recover the paid-through date and detachment outcome. A failed or uncertain mutation blocks another
@@ -250,20 +260,24 @@ across explicit checks and visibility changes; exhaustion remains unresolved and
 check of the same BillingAttempt. A final observation of another attempt cannot settle this task.
 Only settled eligible DaviPlata submission uncertainty grants an approved same-request retry;
 busy approval does not grant another action.
-Cancellation is admitted only while the mounted OTP task is idle; an in-flight provider mutation
-or approved submission retains its lock. Child uncertainty exposes the parent's same-enrollment
-recovery without restoring OTP authority, and expired approved retry authority cannot establish
-that an uncertain payment failed.
+The mounted DaviPlata task synchronously admits commands and derives the selection lock from its
+private phase. Cancellation revokes authority during setup, OTP mutation and approved submission;
+cancelling admitted work preserves uncertainty and the parent's same-enrollment recovery lock.
+Idle OTP cancellation may safely refuse. An expired approved retry cannot establish that an uncertain
+payment failed.
 
 The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
 OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, page URLs,
-or shared atoms. The form retains its opaque challenge in a mounted ref; the gateway and transport
+or shared atoms. The mounted task retains its opaque challenge; the gateway and transport
 closures enclose rotating, one-use bearer authority and the approved token. Only safe interaction
 state and selection locks can enter shared view state. The transport independently verifies the
 exact operator-reviewed destinations against the prepared merchant environment, bounds requests,
 responses, attempts and the absolute authorization lifetime, and serializes actions. Unmount,
 explicit cancellation or authentication-lifetime revocation abort pending requests/readers and
-clear retained secrets and authority; authorization expiry also revokes the provider closure.
+clear retained secrets and authority. The original deadline retires the challenge and notifies the
+task synchronously, clearing visible OTP drafts and removing OTP actions. Idle expiry is refusal;
+expiry during admitted work preserves uncertainty. Known provider refusal and confirmed submission
+carry distinct retirement evidence so retirement cannot overwrite their conclusive outcomes.
 
 An uncertain authorization stops rather than blindly replaying an OTP mutation. Only an explicitly
 eligible uncertain Fidy submission can use `retrySubmission`, while its approved token remains in
@@ -550,6 +564,18 @@ underfills it; filters and authoritative record revisions render immediately.
 
 Collapsed Recurring transaction-source and link controls mount their read owners on first expansion
 and retain them on close, so opening a blank editor performs only its needed work.
+
+Nequi authorization owns one scoped operation from phone submission through approved-token
+consumption. Its original five-minute authorization deadline includes the token POST, with
+three-second polling spacing, fifteen-second request bounds and 16 KiB streamed response bounds.
+Every permitted lookup is evaluated before attempt exhaustion; the original deadline still wins
+at equality. Only Pending exposes awaiting feedback. Phone drafts clear on preflight refusal and
+all exits, and the borrowed token is wiped when the consumer exits. Declined, Unavailable and Expired
+are closed authorization refusals, never proof of collection failure. Once admitted, the existing
+submission owner retains its own bounds and uncertainty; authorization expiry cannot time out a
+charge. Disposal aborts local work and fences later consumer admission without promising rollback.
+No phone or token enters browser persistence, shared observations or diagnostics. Existing browser
+submission diagnostics retain their owner; this private provider bracket adds no sensitive telemetry.
 
 ## 4. Static production artifact
 
@@ -911,6 +937,9 @@ equal new facts qualify. Failure, supersession, runtime failure and registry ret
 unsuccessful recovery. History still owns pagination/reset, and Category recovery rereads the metadata
 projection and its canonical fallback before admission can resume. Ordinary route preparation and
 Budget/Recurring refresh policies keep their existing contracts and retention.
+Authentication replacement synchronously retires strict query waiters and Dashboard completion
+evidence through the registry-owned query lifetime, before the React provider’s delayed physical
+disposal. Retired registries cannot start new strict recovery reads.
 
 RecurringPlan standing is observed at the effective plan zone's local calendar date. Future pauses,
 stops and settings do not change earlier standing; Scheduled marks a future start, and endDate only

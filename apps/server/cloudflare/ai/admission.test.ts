@@ -168,3 +168,71 @@ it("retains spend until its window expires and sweeps only expired grants", () =
       expect(yield* fromTestPromise(count)).toBe(0);
     })
   ));
+
+it.each([
+  { phase: "attempt", failedBatch: 1, retainedClaims: 2 },
+  { phase: "work", failedBatch: 2, retainedClaims: 4 },
+])(
+  "does not call the provider or compensate when committed $phase admission loses its response",
+  ({ failedBatch, retainedClaims }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const database = yield* fromTestPromise(prepareDatabase);
+        yield* fromTestPromise(() => seedModelConsent(database));
+        let batches = 0;
+        let providerCalls = 0;
+        const uncertainDatabase = new Proxy(database, {
+          get: (target, key): unknown =>
+            key === "batch"
+              ? (statements: ReadonlyArray<D1PreparedStatement>): Promise<unknown> => {
+                  batches += 1;
+                  return target
+                    .batch([...statements])
+                    .then((result) =>
+                      batches === failedBatch
+                        ? Promise.reject(new Error("Response lost after commit"))
+                        : result
+                    );
+                }
+              : Reflect.get(target, key, target),
+        });
+        const run = makeAdmittedOpenAiRun({
+          db: uncertainDatabase,
+          userId: modelUserId,
+          admittedTurnId: Option.none,
+          nowEpochMs: () => 10_000,
+          run: () => {
+            providerCalls += 1;
+            return Promise.resolve(Response.json({}));
+          },
+        });
+        const outcome = yield* Effect.exit(
+          Effect.tryPromise(() =>
+            run(
+              approvedOpenAiModel,
+              {
+                messages: [{ role: "user", content: "Hola" }],
+                max_completion_tokens: 16_000,
+                temperature: 0,
+                stream: false,
+                reasoning_effort: "none",
+                store: false,
+              },
+              { signal: new AbortController().signal }
+            )
+          )
+        );
+        expect(Exit.isFailure(outcome)).toBe(true);
+        expect(providerCalls).toBe(0);
+        expect(batches).toBe(failedBatch);
+        const retained = yield* fromTestPromise(() =>
+          database
+            .prepare(
+              "SELECT count(*) AS total FROM resource_admission_events WHERE released_at_epoch_ms IS NULL"
+            )
+            .first<{ readonly total: number }>()
+        );
+        expect(retained?.total).toBe(retainedClaims);
+      })
+    )
+);

@@ -80,7 +80,11 @@ suite and real-public/Core/browser journey. Cloudflare remains the sole server r
   children and reuses the fixed-origin bounded HTTP policy. The command runs before home/native
   store construction, has no local recovery authority, accepts no raw proof flags and never retries.
 
-The CLI consumes only `@fidy/server/client`, never private server/native implementation.
+The CLI derives canonical declarations from `@fidy/server/client`. Its named
+`direct-client/runtime.ts` transport composition and `direct-client/resources.test.ts` resource
+seam also consume the browser-safe `@fidy/server/native-http` response lifetime runtime. Private
+server internals remain inaccessible; byte limits, deadlines and outcome interpretation stay with
+the CLI transport.
 Expected transport/storage rejections become closed local failures. Neither raw causes nor HTTP
 objects are diagnostic values. Existing server Work observation plus closed local progress/failure
 output suffices for this short workflow; no client tracing exporter, URL tracing, content telemetry

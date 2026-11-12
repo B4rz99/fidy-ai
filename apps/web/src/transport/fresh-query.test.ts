@@ -3,6 +3,7 @@ import { Atom, AtomRegistry } from "effect/reactivity";
 import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
 import { makeFreshQuery, readFreshQuery } from "./fresh-query";
+import { retireQueryLifetime } from "./query-lifetime";
 
 it.live(
   "strict recovery starts a new loader and accepts equal fresh facts instead of an older pending read",
@@ -130,4 +131,56 @@ it.live(
         registry.dispose();
       }
     })
+);
+
+it.live("logical retirement settles pending strict reads before registry disposal", () =>
+  Effect.gen(function* () {
+    const held = yield* Deferred.make<void>();
+    let reads = 0;
+    const query = makeFreshQuery({
+      runtime: Atom.runtime(Layer.empty),
+      load: Effect.gen(function* () {
+        reads += 1;
+        yield* Deferred.await(held);
+        return "facts";
+      }),
+    });
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(query);
+    try {
+      yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
+      const pending = yield* readFreshQuery({ registry, query }).pipe(Effect.forkChild);
+      yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(2)));
+      retireQueryLifetime(registry);
+      yield* Deferred.succeed(held, undefined);
+      expect(yield* Fiber.join(pending)).toBe(false);
+      expect(yield* readFreshQuery({ registry, query })).toBe(false);
+      expect(reads).toBe(2);
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  })
+);
+
+it.live("an interrupted fresh loader cannot certify recovery from retained successful data", () =>
+  Effect.gen(function* () {
+    let interrupted = false;
+    const query = makeFreshQuery({
+      runtime: Atom.runtime(Layer.empty),
+      load: Effect.suspend(() =>
+        interrupted ? Effect.interrupt : Effect.succeed("retained facts")
+      ),
+    });
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(query);
+    try {
+      expect(yield* readFreshQuery({ registry, query })).toBe(true);
+      interrupted = true;
+      expect(yield* readFreshQuery({ registry, query })).toBe(false);
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  })
 );

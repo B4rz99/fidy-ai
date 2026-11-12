@@ -26,12 +26,7 @@ import {
   withErasureRegistry,
 } from "../erasure/runtime";
 import { type ErasureStore, ErasureUnavailable } from "../erasure-store/contract";
-import {
-  executeErasureAdmission,
-  executeErasureContinuation,
-  executeErasureControl,
-  executeErasureRestore,
-} from "../erasure/operations";
+import { executeErasureRestore, makeErasureOwner } from "../erasure/operations";
 import { makeAuditErasureStores } from "../audit/runtime";
 import { makeBrowserLoginErasureStores } from "../browser-login/runtime";
 import { makeBudgetsErasureStores } from "../budgets/runtime";
@@ -43,8 +38,8 @@ import { makeDashboardErasureStores } from "../dashboard/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { makeIdentityErasureStores } from "../identity/runtime";
 import {
-  dispatchUserStatementExtraction,
   makeIngestionErasureStores,
+  recoverUserStatementExtraction,
   withStatementPublicationWake,
 } from "../ingestion/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
@@ -94,7 +89,18 @@ import { executeOAuthRefresh, executeOAuthRevocation } from "../oauth-agents/ope
 import type { HostedCommitFence } from "../agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 
-import { Clock, Data, DateTime, Effect, Exit, Option, Redacted, Schema, type Scope } from "effect";
+import {
+  Cause,
+  Clock,
+  Data,
+  DateTime,
+  Effect,
+  Exit,
+  Option,
+  Redacted,
+  Schema,
+  type Scope,
+} from "effect";
 
 import { optionalHostedInference } from "../ai/runtime";
 import type { OpenAiEnvironment } from "../ai/contract";
@@ -103,6 +109,7 @@ import {
   ForwardedEmailWork,
   StatementCoordinatorActivity,
   type StatementQueue,
+  type StatementWorkflow,
 } from "../ingestion/contract";
 import { advanceStatementExtraction, processForwardedEmail } from "../ingestion/operations";
 
@@ -149,7 +156,7 @@ type CoordinatorEnvironment = Readonly<{
       ERASURE_REQUIRED: string;
       STATEMENT_STAGING_BUCKET: R2Bucket;
       STATEMENT_EXTRACTION_QUEUE: StatementQueue;
-      STATEMENT_EXTRACTION_WORKFLOW: Workflow;
+      STATEMENT_EXTRACTION_WORKFLOW: StatementWorkflow;
       EMAIL_BUCKET: R2Bucket;
       KAPSO_API_KEY: string;
       WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
@@ -451,48 +458,35 @@ const privateErasureActivity = (
   const restore = privateErasureRestore(input);
   if (Option.isSome(restore)) return restore;
   const erasurePath = new URL(input.request.url).pathname;
+  if (
+    ![
+      "/erasure-admit",
+      "/erasure-continue",
+      "/erasure-receipt",
+      "/erasure-custody-evidence",
+    ].includes(erasurePath)
+  ) {
+    return Option.none();
+  }
+  const owner = makeErasureOwner({
+    db: input.environment.DB,
+    userId: input.userId,
+    stores: erasureStores(input.environment.DB),
+    originals: makeErasureOriginals({
+      db: input.environment.DB,
+      email: Option.fromUndefinedOr(input.environment.EMAIL_BUCKET),
+      statement: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
+      registry: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+    }),
+    recovery: erasureRecovery(input.environment),
+    clearCoordinator: input.clearCoordinator,
+  });
   if (erasurePath === "/erasure-admit") {
-    return Option.some(
-      executeErasureAdmission({
-        db: input.environment.DB,
-        userId: input.userId,
-        candidate: input.candidate,
-        signal: input.request.signal,
-        stores: erasureStores(input.environment.DB),
-        recovery: erasureRecovery(input.environment),
-      })
-    );
+    return Option.some(owner.admit(input.candidate, input.request.signal));
   }
-  if (erasurePath === "/erasure-continue") {
-    return Option.some(
-      executeErasureContinuation({
-        db: input.environment.DB,
-        userId: input.userId,
-        candidate: input.candidate,
-        stores: erasureStores(input.environment.DB),
-        originals: makeErasureOriginals({
-          db: input.environment.DB,
-          email: Option.fromUndefinedOr(input.environment.EMAIL_BUCKET),
-          statement: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
-          registry: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
-        }),
-        recovery: erasureRecovery(input.environment),
-        clearCoordinator: input.clearCoordinator,
-      })
-    );
-  }
-  if (["/erasure-receipt", "/erasure-custody-evidence"].includes(erasurePath)) {
-    return Option.some(
-      executeErasureControl({
-        db: input.environment.DB,
-        userId: input.userId,
-        candidate: input.candidate,
-        operation: erasurePath === "/erasure-receipt" ? "Receipt" : "CustodyEvidence",
-        stores: erasureStores(input.environment.DB),
-      })
-    );
-  }
-  return Option.none();
+  if (erasurePath === "/erasure-continue") return Option.some(owner.continue(input.candidate));
+  if (erasurePath === "/erasure-receipt") return Option.some(owner.receipt(input.candidate));
+  return Option.some(owner.custody(input.candidate));
 };
 const privateErasureRestore = (
   input: Parameters<typeof privateProactivityActivity>[0]
@@ -504,6 +498,7 @@ const privateErasureRestore = (
         db: input.environment.DB,
         userId: input.userId,
         candidate: input.candidate,
+        signal: input.request.signal,
         stores: erasureStores(input.environment.DB),
         recovery: erasureRecovery(input.environment),
       })
@@ -832,10 +827,11 @@ export class UserTransactionCoordinator {
     return Effect.gen(function* () {
       yield* mcp.retireConnections(Option.none());
       if (!(yield* mcp.erasureSettled())) return false;
-      return yield* Effect.tryPromise({
-        try: alarm.clear,
+      const clearance = yield* Effect.tryPromise({
+        try: alarm.retireAndClear,
         catch: () => new ErasureUnavailable(),
       });
+      return clearance._tag === "AlarmAbsent";
     });
   }
 
@@ -931,8 +927,20 @@ export class UserTransactionCoordinator {
   private recoverAbandonedWork(): Promise<void> {
     const queue = Option.fromUndefinedOr(this.env.STATEMENT_EXTRACTION_QUEUE);
     const statement = Option.isSome(queue)
-      ? dispatchUserStatementExtraction({
+      ? recoverUserStatementExtraction({
           DB: this.env.DB,
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: (name) => ({
+              fetch: (request): Promise<Response> =>
+                name === this.state.id.name
+                  ? this.runCoordinatedRequest({
+                      request: request instanceof Request ? request : new Request(request),
+                      userId: name,
+                      queuedAt: performance.now(),
+                    })
+                  : Promise.resolve(transactionUnavailable()),
+            }),
+          },
           userId: UserId.make(this.state.id.name),
           STATEMENT_EXTRACTION_QUEUE: queue.value,
           STATEMENT_EXTRACTION_WORKFLOW: Option.fromUndefinedOr(
@@ -952,9 +960,22 @@ export class UserTransactionCoordinator {
     });
     return Effect.runPromise(
       Effect.gen(function* () {
-        const results = yield* Effect.all([Effect.exit(statement), Effect.exit(agent)], {
-          concurrency: "unbounded",
-        });
+        const results = yield* Effect.all(
+          [
+            Effect.exit(
+              statement.pipe(Effect.mapError(() => new CoordinatorRecoveryUnavailable()))
+            ),
+            Effect.exit(agent),
+          ],
+          {
+            concurrency: "unbounded",
+          }
+        );
+        for (const result of results) {
+          if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
+            return yield* Effect.failCause(result.cause);
+          }
+        }
         if (results.some((result) => result._tag === "Failure")) {
           return yield* new CoordinatorRecoveryUnavailable();
         }
@@ -968,6 +989,10 @@ class CoordinatorRecoveryUnavailable extends Data.TaggedError("CoordinatorRecove
 /** Advance at most four incomplete Users once per private scheduled tick. */
 export const repairDashboardProjections: typeof ownerRepairDashboardProjections = (...args) =>
   ownerRepairDashboardProjections(...args);
+
+/** Current local deletion inventory used by guarded restoration release. */
+export const coordinatorErasureStoreIds = (db: D1Database): ReadonlyArray<string> =>
+  erasureStores(db).map((store) => store.id);
 
 const erasureStores = (db: D1Database): ReadonlyArray<ErasureStore> => [
   ...makeAgentErasureStores(db),

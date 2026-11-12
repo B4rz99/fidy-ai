@@ -77,17 +77,27 @@ export const prepareSubscriptionStatus = (
     current: number;
   }> &
     (Readonly<{ userId: UserId }> | Readonly<{ users: OwnedStatement }>)
-): PreparedSubscriptionRead => ({
-  statements: [
-    subscriptionStandingQuery({ ...input, authority: Option.some(input.authority) }),
-    subscriptionAttemptsQuery({ ...input, authority: Option.some(input.authority) }),
-  ],
-  decode: (rows) =>
-    Schema.encodeSync(Schema.toCodecJson(SubscriptionStatus))(
-      projectSubscriptionStatus({
-        standingRow: rows[0]?.[0],
-        attemptRows: rows[1] ?? [],
-        now: input.current,
-      })
-    ),
-});
+): PreparedSubscriptionRead => {
+  Schema.decodeSync(Schema.Finite)(input.current);
+  const users =
+    "users" in input ? input.users : { sql: "SELECT ? AS userId", params: [input.userId] };
+  const owner: OwnedStatement = {
+    sql: `WITH candidates(userId) AS MATERIALIZED (SELECT DISTINCT userId FROM (${users.sql}))
+      SELECT userId FROM candidates WHERE (SELECT COUNT(*) FROM candidates)=1`,
+    params: users.params,
+  };
+  return {
+    statements: [
+      subscriptionStandingQuery({ users: owner, authority: Option.some(input.authority) }),
+      subscriptionAttemptsQuery({ users: owner, authority: Option.some(input.authority) }),
+    ],
+    decode: (rows) =>
+      Schema.encodeSync(Schema.toCodecJson(SubscriptionStatus))(
+        projectSubscriptionStatus({
+          standingRow: rows[0]?.[0],
+          attemptRows: rows[1] ?? [],
+          now: input.current,
+        })
+      ),
+  };
+};

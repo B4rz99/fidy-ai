@@ -82,11 +82,7 @@ export const renewalPeriod = (
   return Effect.succeed({ startsAt: input.previousEndsAt, endsAt, renewalAnchor: endsAt });
 };
 
-/**
- * Persisted enrollment lifecycle: prepared waits for submission; creating has been claimed;
- * available has a reusable payment source; refused is a definitive provider rejection; expired
- * exceeded its preparation window; verifying awaits operator resolution of an uncertain outcome.
- */
+/** Portable input to enrollment decisions; it does not describe the native durable schema. */
 export type EnrollmentCheckpoint =
   | Readonly<{ status: "prepared"; priceId: PriceId; expiresAt: DateTime.Utc }>
   | Readonly<{

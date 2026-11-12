@@ -161,6 +161,13 @@
   },
   "overrides": [
     {
+      "files": ["apps/docs/src/components/docs-search.astro"],
+      "rules": {
+        "complexity": "off",
+        "max-lines-per-function": "off"
+      }
+    },
+    {
       "files": ["apps/{site,docs}/src/**/*.{astro,ts,tsx}"],
       "rules": {
         "no-restricted-imports": [

@@ -192,6 +192,61 @@ const verifyPersistedRestart = Effect.gen(function* () {
   }
 });
 
+const makeConcurrentWorkers = Effect.gen(function* () {
+  const bundle = yield* fromTestPromise(() =>
+    rolldown({
+      input: workerFixtureUrl.pathname,
+      platform: "browser",
+      resolve: { conditionNames: ["workerd", "worker", "browser"] },
+    })
+  );
+  const build = yield* fromTestPromise(() => bundle.generate({ format: "esm" }));
+  yield* fromTestPromise(() => bundle.close());
+  const output = build.output.find((candidate) => candidate.type === "chunk");
+  if (output === undefined) throw new Error("Worker fixture build produced no output");
+  const script = output.code;
+  const miniflare = new Miniflare({
+    workers: [
+      {
+        config: {
+          compatibilityDate: "2026-09-08",
+          env: { DB: { id: "resource-admission-test", type: "d1" } },
+          manifest: {
+            mainModule: "index.mjs",
+            modules: { "index.mjs": { contents: script, type: "esm" } },
+          },
+          name: "admission-instance-one",
+          type: "worker",
+        },
+      },
+      {
+        config: {
+          compatibilityDate: "2026-09-08",
+          env: { DB: { id: "resource-admission-test", type: "d1" } },
+          manifest: {
+            mainModule: "index.mjs",
+            modules: { "index.mjs": { contents: script, type: "esm" } },
+          },
+          name: "admission-instance-two",
+          type: "worker",
+        },
+      },
+    ],
+  });
+  activeMiniflare.add(miniflare);
+  yield* fromTestPromise(() => miniflare.ready);
+  const bindings = yield* fromTestPromise(() =>
+    miniflare.getBindings<{ readonly DB: D1Database }>("admission-instance-one")
+  );
+  yield* fromTestPromise(() => migrateDatabase(bindings.DB));
+  const workers = [
+    yield* fromTestPromise(() => miniflare.getWorker("admission-instance-one")),
+    yield* fromTestPromise(() => miniflare.getWorker("admission-instance-two")),
+  ] as const;
+
+  return workers;
+});
+
 describe("Cloudflare resource admission", () => {
   it("returns only committed caller results in order without exposing admission internals", () =>
     Effect.runPromise(
@@ -219,56 +274,7 @@ describe("Cloudflare resource admission", () => {
     () =>
       Effect.runPromise(
         Effect.gen(function* () {
-          const bundle = yield* fromTestPromise(() =>
-            rolldown({
-              input: workerFixtureUrl.pathname,
-              platform: "browser",
-              resolve: { conditionNames: ["workerd", "worker", "browser"] },
-            })
-          );
-          const build = yield* fromTestPromise(() => bundle.generate({ format: "esm" }));
-          yield* fromTestPromise(() => bundle.close());
-          const output = build.output.find((candidate) => candidate.type === "chunk");
-          if (output === undefined) throw new Error("Worker fixture build produced no output");
-          const script = output.code;
-          const miniflare = new Miniflare({
-            workers: [
-              {
-                config: {
-                  compatibilityDate: "2026-09-08",
-                  env: { DB: { id: "resource-admission-test", type: "d1" } },
-                  manifest: {
-                    mainModule: "index.mjs",
-                    modules: { "index.mjs": { contents: script, type: "esm" } },
-                  },
-                  name: "admission-instance-one",
-                  type: "worker",
-                },
-              },
-              {
-                config: {
-                  compatibilityDate: "2026-09-08",
-                  env: { DB: { id: "resource-admission-test", type: "d1" } },
-                  manifest: {
-                    mainModule: "index.mjs",
-                    modules: { "index.mjs": { contents: script, type: "esm" } },
-                  },
-                  name: "admission-instance-two",
-                  type: "worker",
-                },
-              },
-            ],
-          });
-          activeMiniflare.add(miniflare);
-          yield* fromTestPromise(() => miniflare.ready);
-          const bindings = yield* fromTestPromise(() =>
-            miniflare.getBindings<{ readonly DB: D1Database }>("admission-instance-one")
-          );
-          yield* fromTestPromise(() => migrateDatabase(bindings.DB));
-          const workers = [
-            yield* fromTestPromise(() => miniflare.getWorker("admission-instance-one")),
-            yield* fromTestPromise(() => miniflare.getWorker("admission-instance-two")),
-          ] as const;
+          const workers = yield* makeConcurrentWorkers;
 
           const requests = Array.from({ length: 40 }, (_, index) =>
             workers[index % 2 === 0 ? 0 : 1].fetch(`https://admission.test/?id=burst-${index}`)
@@ -281,6 +287,73 @@ describe("Cloudflare resource admission", () => {
       ),
     15_000
   );
+
+  it("excludes original expiry across Workers without cleanup and isolates late release", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const workers = yield* makeConcurrentWorkers;
+        const request = (
+          worker: 0 | 1,
+          action: string,
+          input: Readonly<{ id: string; now: number }>
+        ): Effect.Effect<Readonly<{ status: number }>> =>
+          fromTestPromise(() =>
+            workers[worker].fetch(
+              `https://admission.test/lifecycle?action=${action}&id=${input.id}&now=${input.now}`
+            )
+          );
+        const original = yield* request(0, "composite", { id: "original", now: 10_000 });
+        expect(original.status).toBe(201);
+        const beforeExpiry = yield* request(1, "occupancy", { id: "before-expiry", now: 10_999 });
+        expect(beforeExpiry.status).toBe(429);
+
+        const contenders = yield* Effect.all(
+          Array.from({ length: 10 }, (_, index) =>
+            request(index % 2 === 0 ? 0 : 1, "occupancy", {
+              id: `replacement-${index}`,
+              now: 11_000,
+            })
+          ),
+          { concurrency: "unbounded" }
+        );
+        expect(contenders.filter(({ status }) => status === 201)).toHaveLength(1);
+        expect(contenders.filter(({ status }) => status === 429)).toHaveLength(9);
+        const replacementIndex = contenders.findIndex(({ status }) => status === 201);
+
+        const lateRelease = yield* request(0, "release", { id: "original", now: 11_001 });
+        const duplicateRelease = yield* request(1, "release", { id: "original", now: 11_002 });
+        expect(lateRelease.status).toBe(201);
+        expect(duplicateRelease.status).toBe(201);
+        const replacementStillHeld = yield* request(0, "occupancy", {
+          id: "after-late-release",
+          now: 11_003,
+        });
+        const spendStillCharged = yield* request(1, "spend", {
+          id: "after-late-release-spend",
+          now: 11_003,
+        });
+        expect(replacementStillHeld.status).toBe(429);
+        expect(spendStillCharged.status).toBe(429);
+
+        const releaseReplacement = yield* request(1, "release", {
+          id: `replacement-${replacementIndex}`,
+          now: 11_004,
+        });
+        expect(releaseReplacement.status).toBe(201);
+        const next = yield* request(0, "occupancy", {
+          id: "after-replacement-release",
+          now: 11_005,
+        });
+        expect(next.status).toBe(201);
+        const spendBeforeExpiry = yield* request(0, "spend", {
+          id: "spend-before-expiry",
+          now: 19_999,
+        });
+        const spendAtExpiry = yield* request(1, "spend", { id: "spend-at-expiry", now: 20_000 });
+        expect(spendBeforeExpiry.status).toBe(429);
+        expect(spendAtExpiry.status).toBe(201);
+      })
+    ));
 
   it("waits for an uncancellable D1 batch to settle before interruption completes", () =>
     Effect.runPromise(
@@ -726,6 +799,31 @@ describe("Cloudflare resource admission", () => {
           id: "release-outstanding-reused",
           charges: [charge("model-work:outstanding:v1", "user:f1d1a002:model-work")],
         });
+
+        now = epochMs(30_002);
+        yield* releaseOutstandingResource(authority, {
+          grantId: grantId("release-first"),
+          statements: [],
+        });
+        const replacementStillOccupied = yield* Effect.result(
+          admit(authority, {
+            id: "duplicate-release-cannot-free-replacement",
+            charges: [charge("model-work:outstanding:v1", "user:f1d1a002:model-work")],
+          })
+        );
+        const originalRelease = yield* fromTestPromise(() =>
+          database
+            .prepare(
+              `SELECT released_at_epoch_ms FROM resource_admission_events
+               WHERE grant_id = 'release-first' AND dimension = 'outstanding_work'`
+            )
+            .first<{ readonly released_at_epoch_ms: number }>()
+        );
+        expect(originalRelease?.released_at_epoch_ms).toBe(30_001);
+        expect(
+          Result.isFailure(replacementStillOccupied) &&
+            replacementStillOccupied.failure instanceof ResourceAdmissionRefused
+        ).toBe(true);
 
         const spendAgain = yield* Effect.result(
           admit(authority, {

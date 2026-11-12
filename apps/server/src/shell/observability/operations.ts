@@ -29,7 +29,7 @@ import {
   TelemetryStrictDecoding,
   type TelemetryTransportOutcome,
   type TelemetryWorkOptions,
-  type TelemetryWorkRecord,
+  TelemetryWorkRecord,
   boundedTelemetryDuration,
 } from "./contract";
 
@@ -210,11 +210,14 @@ const exportCompletedWork = <A, E>(input: {
   span: Option.Option<TelemetrySpan>;
 }): Effect.Effect<void> =>
   Effect.ignoreCause(
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const success = Exit.isSuccess(input.exit)
         ? input.options.projectSuccess(input.exit.value)
         : { outcome: workOutcome(input.exit.cause), statusClass: Option.none() };
-      input.adapter.exportWork({
+      const record = yield* Schema.decodeEffect(
+        TelemetryWorkRecord,
+        TelemetryStrictDecoding
+      )({
         ...Option.match(input.span, {
           onNone: () => ({}),
           onSome: (span) => ({ traceId: span.traceId, spanId: span.spanId }),
@@ -233,6 +236,7 @@ const exportCompletedWork = <A, E>(input: {
         attempt: input.options.descriptor.attempt,
         latencyMilliseconds: boundedTelemetryDuration(input.finishedAt - input.startedAt),
       });
+      yield* Effect.sync(() => input.adapter.exportWork(record));
     })
   );
 

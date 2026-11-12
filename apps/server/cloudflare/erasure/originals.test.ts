@@ -1,4 +1,4 @@
-import { executeErasureContinuation } from "./operations";
+import { makeErasureOwner } from "./operations";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Option } from "effect";
 import { installRetentionTestSchema, isolatedTestStorage } from "../d1-test-fixture";
@@ -91,22 +91,21 @@ it("resumes bounded original-byte erasure and refuses a mismatched User without 
       expect(refused._tag).toBe("Failure");
       const admittedAt = yield* Clock.currentTimeMillis;
       expect(
-        (yield* executeErasureContinuation({
+        (yield* makeErasureOwner({
           db,
           userId,
           stores: [],
           originals: make(),
           recovery: { db, bucket: Option.some(retainedBucket) },
           clearCoordinator: () => Effect.succeed(true),
-          candidate: {
-            userId,
-            reference,
-            deadlineMs: admittedAt + 5000,
-            authority: {
-              permission: "titular.erase",
-              operatorRef: "fixture",
-              expiresAtMs: admittedAt + 60000,
-            },
+        }).continue({
+          userId,
+          reference,
+          deadlineMs: admittedAt + 5000,
+          authority: {
+            permission: "titular.erase",
+            operatorRef: "fixture",
+            expiresAtMs: admittedAt + 60000,
           },
         })).status
       ).toBe(202);

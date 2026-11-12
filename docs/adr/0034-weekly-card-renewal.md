@@ -28,7 +28,10 @@ The User approved three-day grace for every method and billing period, with at m
 24 and 48 hours after the original renewal boundary. Each retry is a new immutable BillingAttempt
 with the first renewal attempt's Money, Price, source and calendar. A later published Price applies
 to the next ordinary renewal, never to retry. Pending or ambiguous submissions prohibit another
-collection; definitive renewal failure permits retry. No retry is admitted or submitted after grace.
+collection; definitive renewal failure permits retry. No attempt, including the first renewal, is admitted or submitted at or after the original
+boundary plus 72 hours. Admission and the atomic dispatch claim recheck database time so delayed
+work cannot extend that window; discovery is advisory. Already-sent collections remain reconcilable
+after grace and cancellation.
 Verified success grants one period per renewal boundary, even when an earlier approval arrives late,
 and fences any unsubmitted sibling retry. Already-submitted uncertainty still requires reconciliation.
 

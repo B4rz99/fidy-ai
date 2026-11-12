@@ -9,6 +9,7 @@ import { RecoveryCase } from "./recovery-case";
 import { expectedGeneration } from "./generation";
 
 const maximumCaseBytes = 512;
+const canceled = (signal: AbortSignal): boolean => signal.aborted;
 const admissionLifetimeMs = 5000;
 const io = <A>(run: () => Promise<A>): Effect.Effect<A, ErasureUnavailable> =>
   Effect.tryPromise({ try: run, catch: () => new ErasureUnavailable() });
@@ -24,12 +25,24 @@ const readMarker = (
     }
     return yield* io(() => object.text());
   });
+const validRestoreAdmission = (
+  input: Readonly<{
+    admission: typeof ErasureRestoreAdmission.Type;
+    current: number;
+    userId: string;
+  }>
+): boolean =>
+  input.admission.userId === input.userId &&
+  input.admission.deadlineMs > input.current &&
+  input.admission.deadlineMs <= input.current + admissionLifetimeMs &&
+  input.admission.deadlineMs <= input.admission.authority.expiresAtMs;
 export const restoreCase = (
   input: Readonly<{
     configuration: ErasureRecoveryConfiguration;
     stores: ReadonlyArray<ErasureStore>;
     userId: string;
     candidate: unknown;
+    signal: AbortSignal;
   }>
 ): Effect.Effect<void, ErasureUnavailable> =>
   Effect.gen(function* () {
@@ -38,10 +51,8 @@ export const restoreCase = (
     })(input.candidate);
     const current = yield* Clock.currentTimeMillis;
     if (
-      admission.userId !== input.userId ||
-      admission.deadlineMs <= current ||
-      admission.deadlineMs > current + admissionLifetimeMs ||
-      admission.authority.expiresAtMs <= current
+      canceled(input.signal) ||
+      !validRestoreAdmission({ admission, current, userId: input.userId })
     ) {
       return yield* new ErasureUnavailable();
     }
@@ -52,6 +63,13 @@ export const restoreCase = (
     const inventory = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
       input.stores.map(({ id }) => id)
     );
+    const committedAt = yield* Clock.currentTimeMillis;
+    if (
+      canceled(input.signal) ||
+      committedAt >= Math.min(admission.deadlineMs, admission.authority.expiresAtMs)
+    ) {
+      return yield* new ErasureUnavailable();
+    }
     yield* importCase({ ...input, admission, record, inventory });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 const reviewedCase = (
@@ -94,6 +112,16 @@ const importCase = (input: CaseImport): Effect.Effect<void, ErasureUnavailable> 
     yield* io(() =>
       db.batch([
         restoredCaseStatement(input),
+        db
+          .prepare(`SELECT json(CASE WHEN EXISTS(SELECT 1 FROM erasure_requests
+          WHERE id=? AND user_id=? AND requested_at_ms=? AND restore_generation=?)
+          THEN 'true' ELSE '' END) AS accepted`)
+          .bind(
+            admission.reference,
+            admission.userId,
+            input.record.requestedAtMs,
+            admission.generation
+          ),
         // The independently read, same-User sealed marker proves these restored
         // attempts had settled before deletion. An unsealed case never clears them.
         db
@@ -121,7 +149,7 @@ const importCase = (input: CaseImport): Effect.Effect<void, ErasureUnavailable> 
           .bind(admission.reference, admission.userId, admission.generation),
         db
           .prepare(
-            "UPDATE erasure_custody_records SET state='Pending',current_event_id=NULL WHERE record_type='current' AND request_id=? AND custodian='Cloudflare' AND EXISTS(SELECT 1 FROM erasure_requests WHERE id=? AND user_id=? AND state='Sealing' AND restore_generation=?)"
+            "UPDATE erasure_custody_records SET state='Pending',current_event_id=NULL WHERE record_type='current' AND request_id=? AND custodian='Cloudflare' AND EXISTS(SELECT 1 FROM erasure_requests WHERE id=? AND user_id=? AND state IN('Draining','Sealing') AND restore_generation=?)"
           )
           .bind(admission.reference, admission.reference, admission.userId, admission.generation),
         db

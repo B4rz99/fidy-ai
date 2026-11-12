@@ -28,7 +28,7 @@ const executeBatch =
         // first in the same atomic unit, including when that unit is refused by an Audit trigger.
         const run = (): Promise<D1Result<Row>[]> =>
           input.source.batch<Row>([
-            generationAssertion({ db: input.configuration.db, generation: expected.generation }),
+            generationAssertion({ db: input.source, generation: expected.generation }),
             ...statements.map((statement) => input.originals.get(statement) ?? statement),
           ]);
         return Option.isSome(input.measurement) ? input.measurement.value.database(run) : run();

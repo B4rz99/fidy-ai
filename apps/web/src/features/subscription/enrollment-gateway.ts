@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   BillingEmail,
@@ -13,13 +13,21 @@ import {
   type SubscriptionEnrollmentClient,
 } from "@/transport/client";
 import { type CardFields, tokenizeCardWithWompi } from "@/transport/wompi-tokenization";
-import { authorizeNequiWithWompi } from "@/transport/wompi-nequi";
-import { type DaviplataFields, startDaviplataWithWompi } from "@/transport/wompi-daviplata";
+import { withApprovedNequiWithWompi } from "@/transport/wompi-nequi";
+import {
+  type DaviplataAuthorizationFailed,
+  type DaviplataFields,
+  startDaviplataWithWompi,
+} from "@/transport/wompi-daviplata";
 import { type DaviplataChallenge, makeDaviplataChallenge } from "./daviplata-challenge";
 import { paymentSubmissionIsTerminal } from "./payment-status";
 
 export type Enrollment = PaymentEnrollmentType;
 export type PaymentSubmission = PaymentSubmissionType;
+
+export class DaviplataSetupFailed extends Data.TaggedError("DaviplataSetupFailed")<{
+  readonly status: "refused" | "uncertain";
+}> {}
 
 class EnrollmentSubmissionFailed extends Data.TaggedError("EnrollmentSubmissionFailed")<{}> {}
 
@@ -54,10 +62,21 @@ type PendingPayment = Extract<PaymentSubmission, { status: "payment-pending" }>;
 export type NequiFields = Readonly<{
   method: "nequi";
   phoneNumber: Redacted.Redacted<string>;
+  clearPhone: () => void;
   onAwaiting: () => void;
   signal: AbortSignal;
 }>;
-export type PaymentFields = CardFields | NequiFields;
+export type PaymentFields =
+  | (CardFields & Readonly<{ signal: Option.Option<AbortSignal> }>)
+  | NequiFields;
+
+export const clearNequiPhone = (fields?: PaymentFields): void => {
+  if (fields === undefined || !("method" in fields)) return;
+  Redacted.wipeUnsafe(fields.phoneNumber);
+  try {
+    fields.clearPhone();
+  } catch {}
+};
 
 type SubmissionOptions = Readonly<{
   fields: Option.Option<PaymentFields>;
@@ -186,35 +205,51 @@ const submitNequiSource = ({
   fields,
   signal,
 }: Omit<NewSourceInput, "fields"> &
-  Readonly<{ fields: NequiFields }>): Promise<PaymentSubmission> =>
-  client.execute(
-    (transport) =>
-      authorizeNequiWithWompi({
-        publicKey: enrollment.wompiPublicKey,
-        phoneNumber: fields.phoneNumber,
-        fetchImplementation: globalThis.fetch.bind(globalThis),
-        onAwaiting: fields.onAwaiting,
-      }).pipe(
-        Effect.flatMap((nequiToken) =>
-          transport.subscriptionEnrollment
-            .submit({
-              payload: {
-                paymentSourceMode: "create",
-                method: "nequi",
-                ...facts,
-                nequiToken,
-              },
-            })
-            .pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(nequiToken))))
-        )
-      ),
-    {
-      signal: Option.match(signal, {
-        onNone: () => fields.signal,
-        onSome: (signal) => AbortSignal.any([fields.signal, signal]),
-      }),
-    }
-  );
+  Readonly<{ fields: NequiFields }>): Promise<PaymentSubmission> => {
+  const authorizationSignal = Option.match(signal, {
+    onNone: () => fields.signal,
+    onSome: (signal) => AbortSignal.any([fields.signal, signal]),
+  });
+  let phoneCleared = false;
+  const clearPhone = (): void => {
+    Redacted.wipeUnsafe(fields.phoneNumber);
+    if (phoneCleared) return;
+    phoneCleared = true;
+    try {
+      fields.clearPhone();
+    } catch {}
+  };
+  return client
+    .execute(
+      (transport) =>
+        Effect.suspend(() =>
+          authorizationSignal.aborted
+            ? Effect.interrupt
+            : withApprovedNequiWithWompi(
+                {
+                  publicKey: enrollment.wompiPublicKey,
+                  phoneNumber: fields.phoneNumber,
+                  fetchImplementation: globalThis.fetch.bind(globalThis),
+                  clearPhone,
+                  onAwaiting: fields.onAwaiting,
+                },
+                (nequiToken) =>
+                  authorizationSignal.aborted
+                    ? Effect.interrupt
+                    : transport.subscriptionEnrollment.submit({
+                        payload: {
+                          paymentSourceMode: "create",
+                          method: "nequi",
+                          ...facts,
+                          nequiToken,
+                        },
+                      })
+              )
+        ),
+      { signal: authorizationSignal }
+    )
+    .finally(clearPhone);
+};
 
 const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
   const { client, enrollment, facts, fields, signal } = input;
@@ -224,70 +259,115 @@ const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
       : Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
   }
   if (enrollment.method !== "card" || "method" in fields) {
+    clearNequiPhone(fields);
     return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
   }
+  const publicKey = enrollment.wompiPublicKey;
+  const expiresAt = enrollment.expiresAt.epochMilliseconds;
+  const enrollmentId = enrollment.enrollmentId;
   return client.execute(
     (transport) =>
-      tokenizeCardWithWompi(
-        enrollment.wompiPublicKey,
-        fields,
-        globalThis.fetch.bind(globalThis)
-      ).pipe(
+      tokenizeCardWithWompi(publicKey, fields, globalThis.fetch.bind(globalThis)).pipe(
         Effect.map(Redacted.make),
         Effect.flatMap((cardToken) =>
-          transport.subscriptionEnrollment
-            .submit({
+          Effect.gen(function* () {
+            if (
+              (yield* Clock.currentTimeMillis) >= expiresAt ||
+              enrollment.wompiPublicKey !== publicKey ||
+              enrollment.enrollmentId !== enrollmentId
+            ) {
+              return yield* new EnrollmentSubmissionFailed();
+            }
+            return yield* transport.subscriptionEnrollment.submit({
               payload: {
                 paymentSourceMode: "create",
                 method: "card",
                 ...facts,
                 cardToken,
               },
-            })
-            .pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(cardToken))))
+            });
+          }).pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(cardToken))))
         )
       ),
-    executionOptions(Option.getOrUndefined(signal))
+    executionOptions(
+      Option.getOrUndefined(
+        Option.map(
+          Option.orElse(fields.signal, () => signal),
+          (fieldSignal) => AbortSignal.any([fieldSignal, ...Option.toArray(signal)])
+        )
+      )
+    )
   );
 };
 
-const makeSubmit =
-  (
-    clientService: SubscriptionEnrollmentClient,
-    paymentRequests: PaymentRequestStore
-  ): EnrollmentGateway["submit"] =>
-  (enrollment, billingEmail, options = { fields: Option.none(), signal: Option.none() }) => {
+const reserveCard = (
+  authorizedCards: Set<string>,
+  enrollment: PreparedEnrollment,
+  fields: Option.Option<PaymentFields>
+): boolean => {
+  if (enrollment.method !== "card" || enrollment.paymentSourceMode !== "create") {
+    return true;
+  }
+  if (
+    authorizedCards.has(enrollment.enrollmentId) ||
+    DateTime.nowUnsafe().epochMilliseconds >= enrollment.expiresAt.epochMilliseconds ||
+    Option.isNone(fields) ||
+    "method" in fields.value
+  ) {
+    return false;
+  }
+  authorizedCards.add(enrollment.enrollmentId);
+  return true;
+};
+
+const makeSubmit = (
+  clientService: SubscriptionEnrollmentClient,
+  paymentRequests: PaymentRequestStore
+): EnrollmentGateway["submit"] => {
+  const authorizedCards = new Set<string>();
+  return (enrollment, billingEmail, options = { fields: Option.none(), signal: Option.none() }) => {
     const { fields, signal } = options;
-    globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
-    const common = submissionFacts(paymentRequests, enrollment, billingEmail);
-    if (enrollment.paymentSourceMode === "reuse") {
+    try {
+      if (!reserveCard(authorizedCards, enrollment, fields)) {
+        clearNequiPhone(Option.getOrUndefined(fields));
+        return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+      }
+      globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
+      const common = submissionFacts(paymentRequests, enrollment, billingEmail);
+      if (enrollment.paymentSourceMode === "reuse") {
+        clearNequiPhone(Option.getOrUndefined(fields));
+        return completed(
+          paymentRequests,
+          enrollment,
+          clientService.execute(
+            (client) =>
+              client.subscriptionEnrollment.submit({
+                payload: { paymentSourceMode: "reuse", ...common },
+              }),
+            executionOptions(Option.getOrUndefined(signal))
+          )
+        );
+      }
+      if (Option.isNone(fields)) {
+        return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+      }
       return completed(
         paymentRequests,
         enrollment,
-        clientService.execute(
-          (client) =>
-            client.subscriptionEnrollment.submit({
-              payload: { paymentSourceMode: "reuse", ...common },
-            }),
-          executionOptions(Option.getOrUndefined(signal))
-        )
+        submitNewSource({
+          client: clientService,
+          enrollment,
+          facts: common,
+          fields: fields.value,
+          signal,
+        })
       );
+    } catch (error) {
+      clearNequiPhone(Option.getOrUndefined(fields));
+      throw error;
     }
-    if (Option.isNone(fields)) {
-      return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
-    }
-    return completed(
-      paymentRequests,
-      enrollment,
-      submitNewSource({
-        client: clientService,
-        enrollment,
-        facts: common,
-        fields: fields.value,
-        signal,
-      })
-    );
   };
+};
 
 const makeContinue =
   (
@@ -319,26 +399,63 @@ const makeContinue =
     );
   };
 
+const daviplataSetupFailure = (
+  error: EnrollmentSubmissionFailed | DaviplataAuthorizationFailed
+): DaviplataSetupFailed =>
+  new DaviplataSetupFailed({
+    status: error instanceof EnrollmentSubmissionFailed ? "refused" : error.status,
+  });
+
+const submitDaviplata =
+  (
+    client: SubscriptionEnrollmentClient,
+    paymentRequests: PaymentRequestStore,
+    context: Readonly<{ enrollment: PreparedEnrollment; facts: SubmissionFacts }>
+  ): Parameters<typeof makeDaviplataChallenge>[0]["submitApproved"] =>
+  (daviplataToken, signal) =>
+    completed(
+      paymentRequests,
+      context.enrollment,
+      client.execute(
+        (transport) =>
+          transport.subscriptionEnrollment.submit({
+            payload: {
+              ...context.facts,
+              paymentSourceMode: "create",
+              method: "daviplata",
+              daviplataToken,
+            },
+          }),
+        { signal }
+      )
+    );
+
+const admitDaviplata = (started: Set<string>, enrollment: PreparedEnrollment): boolean => {
+  if (
+    enrollment.method !== "daviplata" ||
+    enrollment.paymentSourceMode !== "create" ||
+    started.has(enrollment.enrollmentId)
+  ) {
+    return false;
+  }
+  started.add(enrollment.enrollmentId);
+  return true;
+};
+
 const makeStartDaviplata = (
   client: SubscriptionEnrollmentClient,
   paymentRequests: PaymentRequestStore
 ): EnrollmentGateway["startDaviplata"] => {
   const started = new Set<string>();
-  return (enrollment, billingEmail, fields) =>
-    client
+  return (enrollment, billingEmail, fields) => {
+    const admitted = admitDaviplata(started, enrollment);
+    return client
       .execute(
         () =>
           Effect.gen(function* () {
-            if (
-              enrollment.method !== "daviplata" ||
-              enrollment.paymentSourceMode !== "create" ||
-              started.has(enrollment.enrollmentId)
-            ) {
-              Redacted.wipeUnsafe(fields.documentNumber);
-              Redacted.wipeUnsafe(fields.productNumber);
+            if (!admitted || enrollment.method !== "daviplata") {
               return yield* new EnrollmentSubmissionFailed();
             }
-            started.add(enrollment.enrollmentId);
             const facts = submissionFacts(paymentRequests, enrollment, billingEmail);
             const signal = AbortSignal.any([fields.signal, client.signal]);
             const provider = yield* startDaviplataWithWompi({
@@ -353,31 +470,20 @@ const makeStartDaviplata = (
             return makeDaviplataChallenge({
               provider,
               client,
-              submitApproved: (daviplataToken) =>
-                completed(
-                  paymentRequests,
-                  enrollment,
-                  client.execute(
-                    (transport) =>
-                      transport.subscriptionEnrollment.submit({
-                        payload: {
-                          ...facts,
-                          paymentSourceMode: "create",
-                          method: "daviplata",
-                          daviplataToken,
-                        },
-                      }),
-                    { signal }
-                  )
-                ),
+              submitApproved: submitDaviplata(client, paymentRequests, { enrollment, facts }),
             });
-          }),
+          }).pipe(Effect.catch((error) => Effect.succeed(daviplataSetupFailure(error)))),
         { signal: fields.signal }
       )
+      .then((result) => {
+        if (result instanceof DaviplataSetupFailed) throw result;
+        return result;
+      })
       .finally(() => {
         Redacted.wipeUnsafe(fields.documentNumber);
         Redacted.wipeUnsafe(fields.productNumber);
       });
+  };
 };
 
 const makePrepare =

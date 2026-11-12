@@ -1,11 +1,12 @@
+import { queryLifetime } from "@/transport/query-lifetime";
 import {
   announceAuthenticationTransition,
   authenticationEndedEvent,
   observeAuthenticationTransitions,
 } from "./authentication-events";
-import { RegistryProvider } from "@effect/atom-react";
+import { RegistryContext, RegistryProvider } from "@effect/atom-react";
 import { Option } from "effect";
-import { useCallback, useState } from "react";
+import { useCallback, useContext, useState } from "react";
 import type { ReactNode } from "react";
 import { type BrowserAuthentication, SessionContext } from "./session-context";
 
@@ -16,6 +17,17 @@ type SessionRegistryProviderProps = Readonly<{
   readonly children: ReactNode;
 }>;
 
+const QueryLifetime = (): React.JSX.Element => {
+  const registry = useContext(RegistryContext);
+  const initialize = useCallback(
+    (_node: HTMLSpanElement): void => {
+      queryLifetime(registry);
+    },
+    [registry]
+  );
+  return <span ref={initialize} hidden />;
+};
+
 /** Replacing the authentication lifetime makes prior cached server state unavailable. */
 export const SessionRegistryProvider = ({
   children,
@@ -23,6 +35,7 @@ export const SessionRegistryProvider = ({
   const [authenticationEpoch, setAuthenticationEpoch] = useState<AuthenticationLifetime>(0);
   const [authentication, setAuthentication] = useState<BrowserAuthentication>("signed-out");
   const replaceAuthenticationLifetime = (): void => {
+    window.dispatchEvent(new Event(authenticationEndedEvent));
     setAuthenticationEpoch((currentEpoch) => currentEpoch + 1);
   };
   const transitionAuthentication = (next: typeof authentication): void => {
@@ -57,7 +70,10 @@ export const SessionRegistryProvider = ({
       })}
     >
       <span ref={observe} hidden />
-      <RegistryProvider key={authenticationEpoch}>{children}</RegistryProvider>
+      <RegistryProvider key={authenticationEpoch}>
+        <QueryLifetime />
+        {children}
+      </RegistryProvider>
     </SessionContext.Provider>
   );
 };

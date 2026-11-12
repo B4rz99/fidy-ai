@@ -1,3 +1,4 @@
+import { queryLifetime } from "./query-lifetime";
 import { Deferred, Effect, Exit, Option } from "effect";
 import { type AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 
@@ -20,21 +21,23 @@ const observeFreshRead =
     runtime,
     query,
     requested,
-    lifetime,
   }: Readonly<{
     runtime: Atom.AtomRuntime<R, ER>;
     query: Query<A, E>;
     requested: Atom.Writable<Option.Option<Request>, Option.Option<Request>>;
-    lifetime: Atom.Atom<Set<Deferred.Deferred<boolean>>>;
   }>): FreshRead =>
   (registry) =>
     Effect.gen(function* () {
+      const lifetime = queryLifetime(registry);
+      if (!lifetime.active()) return false;
       const completion = yield* Deferred.make<boolean>();
-      const releaseLifetime = registry.mount(lifetime);
-      const pending = registry.get(lifetime);
-      pending.add(completion);
+      const releaseLifetime = lifetime.observe(() =>
+        Deferred.doneUnsafe(completion, Effect.succeed(false))
+      );
       const previous = registry.get(requested);
-      if (Option.isSome(previous)) yield* Deferred.succeed(previous.value.completion, false);
+      if (Option.isSome(previous)) {
+        Deferred.doneUnsafe(previous.value.completion, Effect.succeed(false));
+      }
       const request = { claimed: false, retired: false, completion };
       registry.set(requested, Option.some(request));
       const unmount = registry.mount(query);
@@ -52,13 +55,15 @@ const observeFreshRead =
           success
             ? AtomRegistry.getResult(registry, query, { suspendOnWaiting: true }).pipe(
                 Effect.exit,
-                Effect.map((result) => Exit.isSuccess(result) && !request.retired)
+                Effect.map(
+                  (result) => Exit.isSuccess(result) && !request.retired && lifetime.active()
+                )
               )
             : Effect.succeed(false)
         ),
         Effect.ensuring(
           Effect.sync(() => {
-            pending.delete(completion);
+            request.retired = true;
             unsubscribe();
             unmount();
             releaseLifetime();
@@ -71,15 +76,9 @@ export const makeFreshQuery = <R, ER, A, E>(
   options: FreshOptions<R, ER, A, E>
 ): Query<A, E | ER> => {
   const { runtime, load } = options;
-  const lifetime = Atom.make((get) => {
-    const pending = new Set<Deferred.Deferred<boolean>>();
-    get.addFinalizer(() => {
-      for (const completion of pending) Deferred.doneUnsafe(completion, Effect.succeed(false));
-    });
-    return pending;
-  });
   const requested = Atom.make<Option.Option<Request>>(Option.none());
   const source = runtime.atom((get) => {
+    queryLifetime(get.registry);
     const request = get(requested);
     get.addFinalizer(() => {
       if (Option.isSome(request)) {
@@ -98,7 +97,7 @@ export const makeFreshQuery = <R, ER, A, E>(
     });
   });
   const query = "decorate" in options ? options.decorate(source) : source;
-  freshReads.set(query, observeFreshRead({ runtime, query, requested, lifetime }));
+  freshReads.set(query, observeFreshRead({ runtime, query, requested }));
   return query;
 };
 
@@ -132,4 +131,8 @@ export const readFreshQuery = <A, E>({
   registry: AtomRegistry.AtomRegistry;
   query: Query<A, E>;
 }>): Effect.Effect<boolean> =>
-  Effect.suspend(() => freshReads.get(query)?.(registry) ?? Effect.succeed(false));
+  Effect.suspend(() =>
+    queryLifetime(registry).active()
+      ? (freshReads.get(query)?.(registry) ?? Effect.succeed(false))
+      : Effect.succeed(false)
+  );

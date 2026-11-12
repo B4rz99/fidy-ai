@@ -131,3 +131,58 @@ it.live(
       }
     })
 );
+
+it.live("authentication replacement retires pending strict reads before registry disposal", () =>
+  Effect.gen(function* () {
+    const events = new EventTarget();
+    vi.stubGlobal("window", events);
+    const held = yield* Deferred.make<void>();
+    let reads = 0;
+    const query = makeFreshQuery({
+      runtime: Atom.runtime(Layer.empty),
+      load: Effect.gen(function* () {
+        reads += 1;
+        yield* Deferred.await(held);
+        return "facts";
+      }),
+    });
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(query);
+    try {
+      yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(1)));
+      const pending = yield* readFreshQuery({ registry, query }).pipe(Effect.forkChild);
+      yield* Effect.tryPromise(() => vi.waitFor(() => expect(reads).toBe(2)));
+      events.dispatchEvent(new Event("fidy:authentication-ended"));
+      yield* Deferred.succeed(held, undefined);
+      expect(yield* Fiber.join(pending)).toBe(false);
+      expect(yield* readFreshQuery({ registry, query })).toBe(false);
+      expect(reads).toBe(2);
+    } finally {
+      unmount();
+      registry.dispose();
+      vi.unstubAllGlobals();
+    }
+  })
+);
+
+it.live("an interrupted fresh loader cannot certify recovery from retained successful data", () =>
+  Effect.gen(function* () {
+    let interrupted = false;
+    const query = makeFreshQuery({
+      runtime: Atom.runtime(Layer.empty),
+      load: Effect.suspend(() =>
+        interrupted ? Effect.interrupt : Effect.succeed("retained facts")
+      ),
+    });
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(query);
+    try {
+      expect(yield* readFreshQuery({ registry, query })).toBe(true);
+      interrupted = true;
+      expect(yield* readFreshQuery({ registry, query })).toBe(false);
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  })
+);

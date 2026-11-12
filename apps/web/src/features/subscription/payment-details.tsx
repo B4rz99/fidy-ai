@@ -342,6 +342,34 @@ const NequiFormContents = ({
     </Button>
   </form>
 );
+const useCardAuthorizationLifetime = (
+  clear: () => void
+): Readonly<{
+  admit: () => Option.Option<AbortSignal>;
+  formLifetimeRef: RefCallback<HTMLFormElement>;
+}> => {
+  const authorization = useRef(noPendingAuthorization);
+  const mounted = useRef(false);
+  const [formLifetimeRef] = useState<RefCallback<HTMLFormElement>>(() => () => {
+    mounted.current = true;
+    return (): void => {
+      mounted.current = false;
+      Option.map(authorization.current, (controller) => controller.abort());
+      clear();
+    };
+  });
+  return {
+    formLifetimeRef,
+    admit: () => {
+      if (!mounted.current || Option.isSome(authorization.current)) {
+        return Option.none();
+      }
+      const controller = new AbortController();
+      authorization.current = Option.some(controller);
+      return Option.some(controller.signal);
+    },
+  };
+};
 const PreparedCardEnrollmentForm = ({
   enrollment,
   offer,
@@ -351,19 +379,30 @@ const PreparedCardEnrollmentForm = ({
   const [billingEmail, setBillingEmail] = useState<string>(enrollment.billingEmail);
   const [fields, setFields] = useState<CardFields>(emptyCardFields);
   const [decisions, setDecisions] = useState<EnrollmentDecisions>(emptyDecisions);
+  const { admit, formLifetimeRef } = useCardAuthorizationLifetime(() => setFields(emptyCardFields));
   const allAccepted = allDecisionsAccepted(decisions);
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (!allAccepted || busy || !event.currentTarget.checkValidity()) return;
+    if (
+      !allAccepted ||
+      busy ||
+      !event.currentTarget.checkValidity() ||
+      Date.now() >= enrollment.expiresAt.epochMilliseconds
+    ) {
+      return;
+    }
+    const signal = admit();
+    if (Option.isNone(signal)) {
+      return;
+    }
     setFields(emptyCardFields);
     submit(
       billingEmail.trim().toLowerCase(),
-      enrollment.paymentSourceMode === "create" ? fields : undefined
+      enrollment.paymentSourceMode === "create" ? { ...fields, signal } : undefined
     );
   };
-  const submitLabel = enrollmentSubmitLabel(busy);
   return (
-    <form className="subscription-form" onSubmit={onSubmit}>
+    <form ref={formLifetimeRef} className="subscription-form" onSubmit={onSubmit}>
       {enrollment.paymentSourceMode === "create" ? (
         <CardFieldsForm disabled={busy} fields={fields} setFields={setFields} />
       ) : (
@@ -382,7 +421,7 @@ const PreparedCardEnrollmentForm = ({
         Se cobrará {offer.moneyText} y se renovará cada {offer.billingUnit}.
       </p>
       <Button disabled={!allAccepted || busy} type="submit">
-        {submitLabel}
+        {enrollmentSubmitLabel(busy)}
       </Button>
     </form>
   );
@@ -640,7 +679,9 @@ const EnrollmentFeedback = ({
       </Button>
     ) : null}
     {failed ? (
-      <p role="alert">No pudimos continuar. Revisa los datos o intenta más tarde.</p>
+      <p role="alert">
+        No pudimos confirmar el resultado. Consulta el estado antes de volver a intentarlo.
+      </p>
     ) : null}
     {awaitingObservation ? (
       <output>

@@ -20,6 +20,10 @@ import {
   makeSubscriptionEnrollmentClient,
 } from "@/transport/client";
 import { type WompiFetch } from "@/transport/wompi-tokenization";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { PaymentDetails } from "./payment-details";
+import { presentSubscriptionOffer } from "./presentation";
 import { UnknownJsonString } from "@/schema-compatibility";
 import { type DaviplataChallenge } from "./daviplata-challenge";
 import { type PreparedEnrollment, makeEnrollmentGateway } from "./enrollment-gateway";
@@ -538,59 +542,227 @@ it("submits only approved authority and reuses one PaymentRequestId after an amb
     })
   ));
 
-it("aborts card tokenization and prevents Fidy submission when its caller cancels", () => {
+it.each(["caller", "form"] as const)(
+  "aborts card tokenization and prevents Fidy submission when its %s cancels",
+  (owner) => {
+    const controller = new AbortController();
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const started = Promise.withResolvers<void>();
+        const pending = Promise.withResolvers<Response>();
+        let nativeSignal = Option.none<AbortSignal>();
+        let submissions = 0;
+        vi.stubGlobal("fetch", (_url: RequestInfo | URL, options?: RequestInit) => {
+          nativeSignal = Option.fromNullishOr(options?.signal);
+          started.resolve();
+          return pending.promise;
+        });
+        const client = makeSubscriptionEnrollmentClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(
+            HttpClient.HttpClient,
+            HttpClient.make(() => {
+              submissions += 1;
+              return Effect.never;
+            })
+          ),
+        });
+        const request = makeEnrollmentGateway(client).submit(
+          { ...prepared(yield* Clock.currentTimeMillis), method: "card" },
+          "synthetic@example.invalid",
+          {
+            fields: Option.some({
+              number: "4242424242424242",
+              cvc: "123",
+              expirationMonth: "12",
+              expirationYear: "2030",
+              cardholderName: "Synthetic",
+              signal: owner === "form" ? Option.some(controller.signal) : Option.none(),
+            }),
+            signal: owner === "caller" ? Option.some(controller.signal) : Option.none(),
+          }
+        );
+        const outcome = request.then(
+          () => "submitted",
+          () => "interrupted"
+        );
+        try {
+          yield* Effect.tryPromise(() => started.promise);
+          controller.abort();
+          yield* Effect.yieldNow;
+          expect(Option.exists(nativeSignal, (signal) => signal.aborted)).toBe(true);
+          expect(yield* Effect.tryPromise(() => outcome)).toBe("interrupted");
+          pending.resolve(Response.json({ data: { id: "tok_test_synthetic", brand: "VISA" } }));
+          yield* Effect.yieldNow;
+          expect(submissions).toBe(0);
+        } finally {
+          yield* Effect.tryPromise(() => client.dispose());
+        }
+      })
+    );
+  }
+);
+
+it("admits card authorization only once even before the first provider response", async () => {
+  const pending = Promise.withResolvers<Response>();
+  const started = Promise.withResolvers<void>();
+  const provider = vi.fn(() => {
+    started.resolve();
+    return pending.promise;
+  });
+  vi.stubGlobal("fetch", provider);
+  const client = makeSubscriptionEnrollmentClient({ apiOrigin: "https://api.test.fidyapp.com" });
   const controller = new AbortController();
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const started = Promise.withResolvers<void>();
-      const pending = Promise.withResolvers<Response>();
-      let nativeSignal = Option.none<AbortSignal>();
-      let submissions = 0;
-      vi.stubGlobal("fetch", (_url: RequestInfo | URL, options?: RequestInit) => {
-        nativeSignal = Option.fromNullishOr(options?.signal);
-        started.resolve();
-        return pending.promise;
-      });
-      const client = makeSubscriptionEnrollmentClient({
-        apiOrigin: "https://api.test.fidyapp.com",
-        httpClient: Layer.succeed(
-          HttpClient.HttpClient,
-          HttpClient.make(() => {
-            submissions += 1;
-            return Effect.never;
+  const gateway = makeEnrollmentGateway(client);
+  const enrollment = { ...prepared(Date.now()), method: "card" as const };
+  const options = {
+    fields: Option.some({
+      number: "4242424242424242",
+      cvc: "123",
+      expirationMonth: "12",
+      expirationYear: "2030",
+      cardholderName: "Synthetic",
+      signal: Option.none(),
+    }),
+    signal: Option.some(controller.signal),
+  };
+  const first = gateway.submit(enrollment, enrollment.billingEmail, options).catch(() => undefined);
+  try {
+    await started.promise;
+    const second = gateway
+      .submit(enrollment, enrollment.billingEmail, options)
+      .catch(() => undefined);
+    await Promise.resolve();
+    expect(provider).toHaveBeenCalledTimes(1);
+    controller.abort();
+    await Promise.all([first, second]);
+  } finally {
+    controller.abort();
+    await client.dispose();
+  }
+});
+
+it.each(["expiry", "environment"] as const)(
+  "discards card authorization after %s changes during provider work",
+  async (change) => {
+    const pending = Promise.withResolvers<Response>();
+    const started = Promise.withResolvers<void>();
+    vi.stubGlobal("fetch", () => {
+      started.resolve();
+      return pending.promise;
+    });
+    let sends = 0;
+    const client = makeSubscriptionEnrollmentClient({
+      apiOrigin: "https://api.test.fidyapp.com",
+      httpClient: Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make(() => {
+          sends += 1;
+          return Effect.die(new Error("Unexpected send"));
+        })
+      ),
+    });
+    const enrollment = { ...prepared(Date.now()), method: "card" as const };
+    const request = makeEnrollmentGateway(client)
+      .submit(enrollment, enrollment.billingEmail, {
+        fields: Option.some({
+          number: "4242424242424242",
+          cvc: "123",
+          expirationMonth: "12",
+          expirationYear: "2030",
+          cardholderName: "Synthetic",
+          signal: Option.none(),
+        }),
+        signal: Option.none(),
+      })
+      .catch(() => undefined);
+    try {
+      await started.promise;
+      if (change === "expiry") {
+        vi.spyOn(Date, "now").mockReturnValue(enrollment.expiresAt.epochMilliseconds);
+      } else {
+        enrollment.wompiPublicKey = "pub_prod_synthetic";
+      }
+      pending.resolve(Response.json({ data: { id: "opaque-provider-id", brand: "VISA" } }));
+      await request;
+      expect(sends).toBe(0);
+    } finally {
+      vi.restoreAllMocks();
+      await client.dispose();
+    }
+  }
+);
+
+const fillCardInput = async (container: HTMLElement, id: string, value: string): Promise<void> => {
+  const input = container.querySelector(`#${id}`);
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error("Missing card input");
+  }
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+
+it("clears the mounted card draft, admits one same-tick submit and revokes its authorization on departure", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const enrollment = { ...prepared(Date.now()), method: "card" as const };
+  const submit = vi.fn();
+  try {
+    await act(async () =>
+      root.render(
+        createElement(PaymentDetails, {
+          offer: presentSubscriptionOffer(enrollment.price),
+          gateway: Option.none(),
+          onDaviplataSubmitted: () => undefined,
+          onDaviplataUncertain: () => undefined,
+          enrollment: Option.some({ _tag: "Enrollment", value: enrollment }),
+          busy: false,
+          failed: false,
+          needsRecovery: false,
+          awaitingObservation: false,
+          prepare: () => undefined,
+          submit,
+          refresh: () => undefined,
+          method: "card",
+        })
+      )
+    );
+    await fillCardInput(container, "card-number", "4242424242424242");
+    await fillCardInput(container, "card-expiration", "122030");
+    await fillCardInput(container, "card-cvc", "123");
+    await fillCardInput(container, "cardholder-name", "Synthetic Person");
+    await Array.from(container.querySelectorAll('[role="checkbox"]')).reduce(
+      (previous, checkbox) =>
+        previous.then(() =>
+          act(async () => {
+            if (checkbox instanceof HTMLElement) {
+              checkbox.click();
+            }
           })
         ),
-      });
-      const request = makeEnrollmentGateway(client).submit(
-        { ...prepared(yield* Clock.currentTimeMillis), method: "card" },
-        "synthetic@example.invalid",
-        {
-          fields: Option.some({
-            number: "4242424242424242",
-            cvc: "123",
-            expirationMonth: "12",
-            expirationYear: "2030",
-            cardholderName: "Synthetic",
-          }),
-          signal: Option.some(controller.signal),
-        }
-      );
-      const outcome = request.then(
-        () => "submitted",
-        () => "interrupted"
-      );
-      try {
-        yield* Effect.tryPromise(() => started.promise);
-        controller.abort();
-        yield* Effect.yieldNow;
-        expect(Option.exists(nativeSignal, (signal) => signal.aborted)).toBe(true);
-        expect(yield* Effect.tryPromise(() => outcome)).toBe("interrupted");
-        pending.resolve(Response.json({ data: { id: "tok_test_synthetic", brand: "VISA" } }));
-        yield* Effect.yieldNow;
-        expect(submissions).toBe(0);
-      } finally {
-        yield* Effect.tryPromise(() => client.dispose());
-      }
-    })
-  );
+      Promise.resolve()
+    );
+    const form = container.querySelector("form");
+    if (form === null) {
+      throw new Error("Missing form");
+    }
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(submit).toHaveBeenCalledTimes(1);
+    const fields = submit.mock.calls[0]?.[1];
+    expect(Option.getOrThrow(fields.signal).aborted).toBe(false);
+    expect(container.querySelector<HTMLInputElement>("#card-number")?.value).toBe("");
+    expect(container.querySelector<HTMLInputElement>("#card-cvc")?.value).toBe("");
+    await act(async () => root.unmount());
+    expect(Option.getOrThrow(fields.signal).aborted).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
 });

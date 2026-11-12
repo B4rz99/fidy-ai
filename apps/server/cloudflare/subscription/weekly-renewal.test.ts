@@ -13,7 +13,11 @@ import { TestClock } from "effect/testing";
 import { UserId } from "../../src/core/identity/contract";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import { consentHistoryTestSchema, installCurrentTestObjects } from "../d1-test-fixture";
+import {
+  consentHistoryTestSchema,
+  installCurrentTestObjects,
+  withTestDatabaseClock,
+} from "../d1-test-fixture";
 import coreWorker, { UserTransactionCoordinator } from "../core-worker";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
@@ -177,7 +181,9 @@ const fixture = (
             .bind(attemptId, Date.parse(calendar.endsAt)),
         ])
       );
-      return db;
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(Date.parse(calendar.endsAt));
+      return yield* withTestDatabaseClock({ db, initialTime: calendar.endsAt });
     })
   );
 
@@ -256,6 +262,27 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
       ).toHaveLength(1);
     })
   ));
+
+it.each([
+  [259199999, 1],
+  [259200000, 0],
+  [345600000, 0],
+])("admits a first renewal at boundary +%i milliseconds only inside grace", (offset, count) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      const response = yield* admission(db, dueAt + offset);
+      expect(response.status).toBe(202);
+      const rows = yield* fromPromise(() =>
+        db
+          .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
+          .bind(attemptId)
+          .all()
+      );
+      expect(rows.results).toHaveLength(count);
+    })
+  )
+);
 
 it("settles a late renewal once into the frozen adjacent week and schedules the following boundary", () =>
   Effect.runPromise(
@@ -908,7 +935,7 @@ it("freezes one March 31 monthly renewal across duplicate delayed scheduler clai
           endsAt: "2026-02-28T23:30:00Z",
         })
       );
-      const now = Date.parse("2026-03-04T10:00:00Z");
+      const now = Date.parse("2026-03-03T10:00:00Z");
       yield* Effect.all([admission(db, now), admission(db, now)], { concurrency: 2 });
       expect(
         (yield* fromPromise(() =>
@@ -1139,7 +1166,7 @@ it.each(
 );
 
 effectIt.effect.each(renewalCalendars)(
-  "discovers a $method $billingPeriod renewal at its captured boundary and preserves it after scheduler delay",
+  "discovers a $method $billingPeriod renewal only inside its original grace window",
   (calendar) =>
     Effect.gen(function* () {
       const db = yield* fromPromise(() => fixture(calendar.method, calendar));
@@ -1173,6 +1200,12 @@ effectIt.effect.each(renewalCalendars)(
         userId,
         previousPaidAttemptId: attemptId,
       });
+      yield* TestClock.setTime(boundary + 259199999);
+      yield* dispatch();
+      expect(requests).toHaveLength(2);
+      yield* TestClock.setTime(boundary + 259200000);
+      yield* dispatch();
+      expect(requests).toHaveLength(2);
       yield* TestClock.setTime(boundary + 4 * 86400000);
       yield* dispatch();
       expect(requests).toHaveLength(2);
@@ -2087,6 +2120,102 @@ it("reconciles an ambiguous DaviPlata void without repeating PUT or trusting for
       });
     })
   ));
+it.each([
+  [259199999, 259199999, 1],
+  [259200000, 259200000, 0],
+  [259199999, 259200000, 0],
+])(
+  "dispatches an armed first renewal at runtime +%i / database +%i only inside grace",
+  (runtimeOffset, databaseOffset, posts) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture());
+        yield* admission(db);
+        const queued = yield* latestRenewal(db);
+        yield* fromPromise(() =>
+          db
+            .prepare("UPDATE test_database_clock SET instant=?")
+            .bind(DateTime.formatIso(DateTime.makeUnsafe(dueAt + databaseOffset)))
+            .run()
+        );
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(dueAt + runtimeOffset);
+        const provider = vi.fn(() => Promise.reject(new Error("Unknown provider outcome")));
+        vi.stubGlobal("fetch", withOpenAiFetch(provider));
+        yield* fromPromise(() =>
+          runBillingCollectionWorkflow({
+            environment: {
+              DB: db,
+              WOMPI_ENVIRONMENT: "sandbox",
+              WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+              WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+              WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+            },
+            payload: { version: 1, attemptId: queued },
+            sleep: (_name, _duration) => Promise.resolve(),
+            activity: (_name, _options, work) => work(),
+          })
+        );
+        expect(provider).toHaveBeenCalledTimes(posts);
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare("SELECT status,collection_state FROM billing_attempt_context WHERE id=?")
+              .bind(queued)
+              .first()
+          )
+        ).toEqual({ status: "pending", collection_state: posts === 1 ? "sent" : "armed" });
+      })
+    )
+);
+
+it("refuses first admission when database time crosses grace after coordinator evaluation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* fromPromise(() =>
+        db.prepare("UPDATE test_database_clock SET instant='2026-10-16T15:00:00Z'").run()
+      );
+      expect((yield* admission(db, dueAt + 259199999)).status).toBe(202);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toHaveLength(0);
+    })
+  ));
+
+it("refuses retry admission when database time crosses the original grace boundary", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* admission(db);
+      const first = yield* latestRenewal(db);
+      yield* runObservedRenewal({
+        db,
+        id: first,
+        status: "DECLINED",
+        now: dueAt,
+        amountInCents: 990000,
+      });
+      yield* fromPromise(() =>
+        db.prepare("UPDATE test_database_clock SET instant='2026-10-16T15:00:00Z'").run()
+      );
+      expect((yield* admission(db, dueAt + 172800000)).status).toBe(202);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM billing_attempt_context WHERE previous_paid_attempt_id=?")
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toHaveLength(1);
+    })
+  ));
+
 it("does not submit a queued retry after its grace boundary", () =>
   Effect.runPromise(
     Effect.gen(function* () {

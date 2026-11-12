@@ -256,7 +256,7 @@ const claimCollection = (
             AND EXISTS (SELECT 1 FROM subscription_standing WHERE user_id = ? AND attempt_id = ?)
             AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences WHERE user_id = ?)
             AND EXISTS (SELECT 1 FROM billing_attempt_context due WHERE due.id=? AND
-              (due.renewal_attempt_number=1 OR due.period_starts_at_ms + ${renewalGraceMs} > ?))`,
+              due.period_starts_at_ms + ${renewalGraceMs} > MAX(?, CAST(unixepoch('now', 'subsec') * 1000 AS INTEGER)))`,
           params: [
             ...collectionClaim.params,
             captured.user_id,

@@ -20,7 +20,7 @@ import {
   makeSubscriptionEnrollmentClient,
 } from "@/transport/client";
 import { type WompiFetch } from "@/transport/wompi-tokenization";
-import { act, createElement } from "react";
+import { type ComponentProps, act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { PaymentDetails } from "./payment-details";
 import { presentSubscriptionOffer } from "./presentation";
@@ -710,7 +710,7 @@ it("clears the mounted card draft, admits one same-tick submit and revokes its a
   document.body.append(container);
   const root = createRoot(container);
   const enrollment = { ...prepared(Date.now()), method: "card" as const };
-  const submit = vi.fn();
+  const submit = vi.fn<ComponentProps<typeof PaymentDetails>["submit"]>();
   try {
     await act(async () =>
       root.render(
@@ -756,6 +756,9 @@ it("clears the mounted card draft, admits one same-tick submit and revokes its a
     });
     expect(submit).toHaveBeenCalledTimes(1);
     const fields = submit.mock.calls[0]?.[1];
+    if (fields === undefined || "method" in fields) {
+      throw new Error("Expected a card authorization submission");
+    }
     expect(Option.getOrThrow(fields.signal).aborted).toBe(false);
     expect(container.querySelector<HTMLInputElement>("#card-number")?.value).toBe("");
     expect(container.querySelector<HTMLInputElement>("#card-cvc")?.value).toBe("");

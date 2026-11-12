@@ -6,6 +6,11 @@ const sharedKernel = /^src\/core\/_shared\/(?:money|context|time)\.ts$/u;
 const testSource = /(?:\.(?:test|spec|fixture)|\.test-fixture)\.[cm]?[jt]sx?$/u;
 
 const compositionRoots = new Set([
+  // Browser and CLI transports compose the published native HTTP response lifetime.
+  "../cli/src/direct-client/runtime.ts",
+  "../cli/src/direct-client/resources.test.ts",
+  "../web/src/transport/browser-http-policy.ts",
+  "../web/src/transport/client.test.ts",
   "../../scripts/pro/runtime.ts",
   "src/client.ts",
   "src/browser-bootstrap.ts",

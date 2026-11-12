@@ -47,7 +47,9 @@ afterEach(() => {
     .forEach((dispose) => dispose());
   vi.useRealTimers();
 });
-const flush = (): Promise<void> => vi.advanceTimersByTimeAsync(0).then(() => undefined);
+const advance = (milliseconds: number): Promise<void> =>
+  vi.advanceTimersByTimeAsync(milliseconds).then(() => undefined);
+const flush = (): Promise<void> => advance(0);
 type Fixture = Readonly<{
   requests: Array<string>;
   view: () => CancellationManagement;
@@ -270,12 +272,19 @@ it.effect("keeps mounted review admission and keyboard focus through React updat
     act(() => button("Conservar renovaciones").click());
     expect(document.activeElement?.textContent).toBe("Cancelar renovaciones futuras");
     act(() => button("Cancelar renovaciones futuras").click());
+    harness.behavior.postDelay = 100;
     yield* Effect.tryPromise(() =>
       act(() => {
         button("Confirmar cancelación").click();
         return flush();
       })
     );
+    expect(container.textContent).toContain("Cancelando renovaciones…");
+    expect(container.textContent).toContain("25 de noviembre de 2026");
+    expect(document.activeElement?.textContent).toBe("Cancelando renovaciones…");
+    expect(button("Confirmar cancelación").disabled).toBe(true);
+    expect(button("Consultar cancelación").disabled).toBe(true);
+    yield* Effect.tryPromise(() => act(() => advance(100)));
     expect(container.textContent).toContain("Renovaciones canceladas");
     expect(container.textContent).toContain("25 de noviembre de 2026");
     expect(harness.requests.filter((method) => method === "POST")).toHaveLength(1);

@@ -25,13 +25,15 @@ type Observation = AsyncResult.AsyncResult<
 >;
 type Paid = Option.Option.Value<SubscriptionStatus["paidSubscription"]>;
 type Phase =
-  | Readonly<{ _tag: "Ready" | "Confirmed" | "Unknown" | "Cancelling" | "Disposed" }>
+  | Readonly<{ _tag: "Ready" | "Confirmed" | "Unknown" | "Disposed" }>
   | Readonly<{ _tag: "Reviewing"; paid: Paid; observation: Observation }>
+  | Readonly<{ _tag: "Cancelling"; paid: Paid }>
   | Readonly<{ _tag: "Refreshing"; uncertain: boolean }>;
 export type CancellationManagement = Readonly<{
   cancellation: Option.Option<Cancellation>;
   paid: SubscriptionStatus["paidSubscription"];
   reviewing: boolean;
+  cancelling: boolean;
   unavailable: boolean;
   loading: boolean;
   uncertain: boolean;
@@ -164,7 +166,7 @@ const confirm = (owner: Owner, snapshot: Snapshot): void => {
   }
   execute(
     owner,
-    { _tag: "Cancelling" },
+    { _tag: "Cancelling", paid: phase.paid },
     owner.client.pipe(
       Effect.flatMap((api) => api.subscription.cancelSubscription({})),
       Effect.map((response) => Option.some(response.data))
@@ -208,6 +210,8 @@ const actions = (
 });
 const unavailable = (status: ReturnType<typeof observe>): boolean =>
   status._tag === "Failure" || (status._tag === "Ready" && Option.isSome(status.refreshFailure));
+const reviewed = (phase: Phase): phase is Extract<Phase, { _tag: "Reviewing" | "Cancelling" }> =>
+  phase._tag === "Reviewing" || phase._tag === "Cancelling";
 const present = (owner: Owner): CancellationManagement => {
   const phase = owner.phase;
   const observation = owner.get.once(subscriptionStatusQuery(owner.client));
@@ -219,11 +223,11 @@ const present = (owner: Owner): CancellationManagement => {
   );
   return {
     cancellation,
-    paid:
-      phase._tag === "Reviewing"
-        ? Option.some(phase.paid)
-        : Option.flatMap(standing, (value) => value.paidSubscription),
-    reviewing: phase._tag === "Reviewing",
+    paid: reviewed(phase)
+      ? Option.some(phase.paid)
+      : Option.flatMap(standing, (value) => value.paidSubscription),
+    reviewing: reviewed(phase),
+    cancelling: phase._tag === "Cancelling",
     unavailable: unavailable(status),
     loading: status._tag === "Initial",
     uncertain: phase._tag === "Unknown" || (phase._tag === "Refreshing" && phase.uncertain),

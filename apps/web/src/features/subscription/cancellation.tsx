@@ -51,11 +51,13 @@ const focusElement: RefCallback<HTMLElement> = (node) => {
 const CancellationReview = ({
   paid,
   busy,
+  cancelling,
   confirm,
   back,
 }: Readonly<{
   paid: Option.Option.Value<SubscriptionStatus["paidSubscription"]>;
   busy: boolean;
+  cancelling: boolean;
   confirm: () => void;
   back: () => void;
 }>): JSX.Element => (
@@ -89,7 +91,11 @@ const CancellationReview = ({
         Confirmar cancelación
       </Button>
     </div>
-    {busy ? <output aria-live="polite">Cancelando renovaciones…</output> : null}
+    {busy ? (
+      <output aria-live="polite" tabIndex={-1} ref={cancelling ? focusElement : undefined}>
+        {cancelling ? "Cancelando renovaciones…" : "Actualizando estado…"}
+      </output>
+    ) : null}
   </section>
 );
 
@@ -107,7 +113,7 @@ const CancellationActions = ({
   review: () => void;
   back: () => void;
 }>): JSX.Element => {
-  if (current.unavailable) {
+  if (current.unavailable && !current.cancelling) {
     return (
       <PaymentFeedback tone="unavailable" title="Renovaciones no disponibles">
         <p>
@@ -120,7 +126,13 @@ const CancellationActions = ({
     onNone: () => <p>No tienes una suscripción pagada con renovaciones para cancelar.</p>,
     onSome: (paid) =>
       reviewing && !current.uncertain ? (
-        <CancellationReview paid={paid} busy={current.busy} back={back} confirm={current.confirm} />
+        <CancellationReview
+          paid={paid}
+          busy={current.busy}
+          cancelling={current.cancelling}
+          back={back}
+          confirm={current.confirm}
+        />
       ) : (
         <Button
           contentLayout="wrap"

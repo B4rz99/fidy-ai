@@ -165,15 +165,15 @@ export default {
       name: "web-imports-server-internal",
       severity: "error",
       comment:
-        "Web source reached server code outside the browser declaration seam. Depend on " +
-        "the published browser SDK entries through transport only; native contracts are not browser APIs.",
+        "Web source reached server code outside the browser publication seam. Depend on " +
+        "the published browser SDK and native response lifetime entries through transport only.",
       from: { path: "^src/" },
       to: {
         path: "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/",
         pathNot:
           "(^|.*/)(?:server|apps/server|node_modules/@fidy/server)/src/(?:" +
           "(?:client|browser-bootstrap|browser-transport|browser-http)\\.ts|" +
-          "core/(?:dashboard/contract|_shared/(?:money|context))\\.ts|shell/agent/contract\\.ts)$",
+          "core/(?:dashboard/contract|_shared/(?:money|context))\\.ts|shell/(?:agent/contract|native-http/runtime)\\.ts)$",
       },
     },
     {

@@ -19,9 +19,12 @@ export default {
       name: "cli-consumes-server-publication",
       severity: "error",
       comment:
-        "The CLI derives from the outward declaration seam, never foreign server implementation.",
+        "The CLI derives from outward declarations and the published native HTTP lifetime owner, never private server implementation.",
       from: { path: "^(src|test)/" },
-      to: { path: "^\\.\\./server/", pathNot: "^\\.\\./server/src/client\\.ts$" },
+      to: {
+        path: "^\\.\\./server/",
+        pathNot: "^\\.\\./server/src/(?:client\\.ts|shell/native-http/runtime\\.ts)$",
+      },
     },
     {
       name: "owner-private",

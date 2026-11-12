@@ -262,6 +262,7 @@ const findForbiddenServerImport = (
             "@fidy/server/client",
             "@fidy/server/browser-bootstrap",
             "@fidy/server/browser-http",
+            "@fidy/server/native-http",
             "@fidy/server/browser-transport",
             "@fidy/server/dashboard-contract",
             "@fidy/server/hosted-turn-api",

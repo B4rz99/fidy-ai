@@ -563,3 +563,12 @@ An unknown receipt-publication response requires a same-User receipt readback be
 cleanup. A failed or malformed readback retains both private bytes and the original writer's
 unresolved custody; only authoritative queued state can recover successful publication. Retries
 reuse the original receipt and deadline rather than rewriting material or extending retention.
+
+## Native HTTP response lifetime
+
+`@fidy/server/native-http` publishes the browser-safe native response owner from
+`src/shell/native-http/runtime.ts`. Browser and CLI Fetch integrations transfer one response and
+the resolved Request/init signal to this owner. It terminalizes before best-effort cancellation,
+releases the native reader without waiting for cancellation, and fails pending reads with a fixed
+abort error. Byte limits, deadlines, status policy and remote outcome interpretation remain with
+the calling transport. This local resource boundary adds no telemetry or provider authority.

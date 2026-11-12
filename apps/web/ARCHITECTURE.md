@@ -12,8 +12,12 @@ production topology, and browser-to-server ownership.
 It owns product browser routing, providers and styles. Public marketing and policy copy belong to
 `apps/site`, which renders the public website with Astro. Its server imports use the
 browser-safe `@fidy/server/client` declaration seam and the narrow `browser-bootstrap`, `money`,
-`dashboard-contract`, `hosted-turn-api`, `browser-http` and dependency-free `browser-transport` declarations; it never imports server implementations. The API
-Workers do not serve web routes or static assets.
+`dashboard-contract`, `hosted-turn-api`, `browser-http` and dependency-free `browser-transport`
+declarations. The named `transport/browser-http-policy.ts` composition and
+`transport/client.test.ts` resource seam also consume the browser-safe `@fidy/server/native-http`
+response lifetime runtime. Private server internals remain inaccessible; browser byte limits,
+deadlines and outcome interpretation stay with the browser transport. The API Workers do not serve
+web routes or static assets.
 
 `transport/session-entry.ts` owns the initial session observation and its bootstrap response codecs.
 `transport/session-binding.ts` owns immutable request binding, cancellation and shared transfer

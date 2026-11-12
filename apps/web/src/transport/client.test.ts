@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import { ownNativeResponse } from "@fidy/server/native-http";
+
 import {
   Cause,
   Context,
@@ -1714,3 +1716,107 @@ describe("native browser response lifetime", () => {
     );
   }
 });
+
+it.effect("fails an outstanding response read on abort even when native cancel throws", () => {
+  const abort = new AbortController();
+  return Effect.gen(function* () {
+    const body = new ReadableStream<Uint8Array>();
+    const getReader = body.getReader.bind(body);
+    let cancellations = 0;
+    Object.defineProperty(body, "getReader", {
+      value: (): ReturnType<typeof getReader> => {
+        const reader = getReader();
+        reader.cancel = (): Promise<void> => {
+          cancellations++;
+          throw new Error("private cleanup reason");
+        };
+        return reader;
+      },
+    });
+    const response = ownNativeResponse({
+      response: new Response(body),
+      signal: Option.some(abort.signal),
+    });
+    const read = Option.getOrThrow(Option.fromNullishOr(response.body)).getReader().read();
+    const failed = expect(read).rejects.toThrow("Response body aborted");
+    abort.abort("private abort reason");
+    yield* Effect.tryPromise({
+      try: () => failed,
+      catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+    });
+    expect(body.locked).toBe(false);
+    expect(cancellations).toBe(1);
+  });
+});
+
+for (const cleanup of ["throw", "reject", "pending"] as const) {
+  for (const late of ["chunk", "eof", "error"] as const) {
+    it.effect(`keeps abort final after late ${late} with ${cleanup} cleanup`, () => {
+      const abort = new AbortController();
+      return Effect.gen(function* () {
+        const end = { done: true as const, value: undefined };
+        const nativeRead = Promise.withResolvers<typeof end | { done: false; value: Uint8Array }>();
+        const started = Promise.withResolvers<void>();
+        let cancellations = 0;
+        let releases = 0;
+        const body = new ReadableStream<Uint8Array>();
+        const acquire = body.getReader.bind(body);
+        Object.defineProperty(body, "getReader", {
+          value: (): ReturnType<typeof acquire> => {
+            const reader = acquire();
+            reader.read = (): typeof nativeRead.promise => {
+              started.resolve();
+              return nativeRead.promise;
+            };
+            reader.cancel = (): Promise<void> => {
+              cancellations++;
+              // Reentrant abort cannot restart cleanup.
+              abort.abort();
+              if (cleanup === "throw") throw new Error("private cancel failure");
+              return cleanup === "reject"
+                ? Promise.reject(new Error("private cancel failure"))
+                : Promise.withResolvers<void>().promise;
+            };
+            const release = reader.releaseLock.bind(reader);
+            reader.releaseLock = (): void => {
+              releases++;
+              release();
+            };
+            return reader;
+          },
+        });
+        const response = ownNativeResponse({
+          response: new Response(body),
+          signal: Option.some(abort.signal),
+        });
+        const reader = Option.getOrThrow(Option.fromNullishOr(response.body)).getReader();
+        const pending = reader.read();
+        const failed = expect(pending).rejects.toThrow("Response body aborted");
+        yield* Effect.tryPromise({
+          try: () => started.promise,
+          catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+        });
+        abort.abort("private abort reason");
+        yield* Effect.tryPromise({
+          try: () => failed,
+          catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+        });
+        if (late === "error") nativeRead.reject(new Error("private late error"));
+        else {
+          nativeRead.resolve(
+            late === "eof"
+              ? { done: true, value: undefined }
+              : { done: false, value: new Uint8Array([1]) }
+          );
+        }
+        yield* Effect.tryPromise({
+          try: () => expect(reader.read()).rejects.toThrow("Response body aborted"),
+          catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
+        });
+        expect(body.locked).toBe(false);
+        expect(cancellations).toBe(1);
+        expect(releases).toBe(1);
+      });
+    });
+  }
+}

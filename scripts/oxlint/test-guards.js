@@ -178,10 +178,10 @@ const noModuleMocks = {
 const noTsxTests = {
   meta: {
     type: "problem",
-    docs: { description: "Cover UI workflows in browser acceptance tests" },
+    docs: { description: "Keep tests independent of React rendering" },
     messages: {
       tsxTest:
-        ".test.tsx files are banned. Cover UI workflows in Playwright browser acceptance tests; test independently meaningful pure logic and Effect programs in .test.ts files.",
+        ".test.tsx files are banned. Test independently meaningful pure logic and Effect programs in .test.ts files.",
     },
     schema: [],
   },
@@ -210,7 +210,7 @@ const noReactTestTools = {
     docs: { description: "Use Playwright for UI workflows instead of component unit-test tooling" },
     messages: {
       reactTestTool:
-        "React unit-test tooling is banned. Exercise meaningful UI workflows through Playwright browser acceptance; keep pure logic and Effect tests independent of rendering.",
+        "React unit-test tooling is banned. Keep pure logic and Effect tests independent of rendering.",
     },
     schema: [],
   },

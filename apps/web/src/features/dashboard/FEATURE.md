@@ -125,9 +125,6 @@ Production revision `52f83b8d096eb86d79769ea47370f68c1148d1c8` (the same runtime
 ```sh
 bun run --cwd apps/web test src/features/dashboard
 bun run --cwd apps/server test:core src/core/dashboard --coverage.enabled=false
-bun run --cwd apps/web test:browser dashboard-queries.spec.ts --workers=1
-bun run --cwd apps/web test:browser dashboard-editing.spec.ts --workers=1
-BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser dashboard-live-customization.spec.ts --workers=1 --timeout=120000
 bun run --cwd apps/server test:cloudflare cloudflare/dashboard --maxWorkers=1
 ```
 

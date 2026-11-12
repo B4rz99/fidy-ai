@@ -1,6 +1,9 @@
 # Fresh reads determine performance acceptance
 
 - **Status:** Accepted performance direction, ordinary-read budgets and initial workload envelope.
+- **Storage migration:** [ADR 0041](0041-per-user-durable-object-storage-direction.md) replaces the
+  initial D1 platform restriction and defines a separate migration adoption gate. The performance
+  targets and measurement definitions below remain follow-on objectives for that migration.
 
 The web application takes seconds to reveal information. Backend redesign will focus on actual
 access patterns, bounded set-based work, compact projections and reducing data movement and

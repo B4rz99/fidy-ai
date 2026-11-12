@@ -47,6 +47,10 @@ across database restoration. External providers supply inference, messaging, aut
 payments through server-owned adapters. Local development uses the same Worker entrypoints and
 binding graph. See [the runtime decision](docs/adr/0026-cloudflare-native-production-replatform.md).
 
+The accepted [storage migration direction](docs/adr/0041-per-user-durable-object-storage-direction.md)
+will move application state and atomic execution into per-User SQLite Durable Objects. Its detailed
+design remains open; the topology above describes the current implementation.
+
 ## Cross-application contract
 
 The server declares canonical operations once. HTTP clients, MCP and hosted tools derive from those

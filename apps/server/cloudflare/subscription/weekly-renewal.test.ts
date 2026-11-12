@@ -1573,11 +1573,13 @@ it.each(["card", "nequi", "daviplata"] as const)(
         const db = yield* cancellationFixture(method);
         yield* cancel(db, dueAt - 1000);
         let puts = 0;
+        let gets = 0;
         vi.stubGlobal(
           "fetch",
           withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
             const request = new Request(input, init);
             if (request.method === "PUT") puts++;
+            else gets++;
             expect(new URL(request.url).pathname).toBe(
               request.method === "PUT"
                 ? "/v1/payment_sources/3891/void"
@@ -1603,7 +1605,10 @@ it.each(["card", "nequi", "daviplata"] as const)(
           });
         yield* fromPromise(run);
         yield* fromPromise(run);
-        expect(puts).toBe(method === "daviplata" ? 1 : 0);
+        expect({ puts, gets }).toEqual({
+          puts: method === "daviplata" ? 1 : 0,
+          gets: method === "daviplata" ? 1 : 0,
+        });
         const response = yield* cancel(db, dueAt);
         expect(yield* fromPromise(() => response.json())).toMatchObject({
           data: { sourceCancellation: method === "daviplata" ? "voided" : "detached" },
@@ -1611,6 +1616,296 @@ it.each(["card", "nequi", "daviplata"] as const)(
       })
     )
 );
+const observeCancellation = (
+  db: D1Database,
+  wompiEnvironment: "sandbox" | "production" = "sandbox"
+): Promise<void> =>
+  runBillingCollectionWorkflow({
+    environment: {
+      DB: db,
+      WOMPI_ENVIRONMENT: wompiEnvironment,
+      WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+      WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+      WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+    },
+    payload: { version: 1, kind: "source-cancellation", userId },
+    sleep: (_name, _duration) => Promise.resolve(),
+    activity: (_name, _options, work) => work(),
+  });
+
+it("does not settle an obsolete cancellation after provider verification", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      // Deliberately permit replacement of retained evidence to exercise the I/O snapshot fence,
+      // independently of today's immutable storage facts.
+      yield* fromPromise(() => db.exec("DROP TRIGGER subscription_cancellation_immutable"));
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          const response = Response.json({
+            data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" },
+          });
+          if (request.method === "GET") {
+            gets++;
+            return db
+              .prepare("UPDATE subscription_cancellations SET cancelled_at_ms=cancelled_at_ms+1")
+              .run()
+              .then(() => response);
+          }
+          return Promise.resolve(response);
+        })
+      );
+      yield* fromPromise(() => observeCancellation(db));
+      expect(gets).toBe(1);
+      const standing = yield* cancel(db, dueAt);
+      expect(yield* fromPromise(() => standing.json())).toMatchObject({
+        data: { sourceCancellation: "void-pending", paidThrough: "2026-10-13T15:00:00.000Z" },
+      });
+    })
+  ));
+
+it("does not spend a verification on a cancellation replaced during annulment", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      yield* fromPromise(() => db.exec("DROP TRIGGER subscription_cancellation_immutable"));
+      let puts = 0;
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          const response = Response.json({
+            data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" },
+          });
+          if (request.method === "PUT") {
+            puts++;
+            return db
+              .prepare("UPDATE subscription_cancellations SET paid_through_ms=paid_through_ms-1")
+              .run()
+              .then(() => response);
+          }
+          gets++;
+          return Promise.resolve(response);
+        })
+      );
+      yield* fromPromise(() => observeCancellation(db));
+      expect({ puts, gets }).toEqual({ puts: 1, gets: 0 });
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT verification_count,source_cancellation_state FROM subscription_cancellations"
+            )
+            .first()
+        )
+      ).toEqual({
+        verification_count: 0,
+        source_cancellation_state: "void-pending",
+      });
+    })
+  ));
+
+it.each([
+  {
+    name: "foreign source ID",
+    body: { data: { id: 3892, type: "DAVIPLATA", status: "VOIDED" } },
+    status: 200,
+  },
+  {
+    name: "foreign source type",
+    body: { data: { id: 3891, type: "CARD", status: "VOIDED" } },
+    status: 200,
+  },
+  {
+    name: "unrecognized status",
+    body: { data: { id: 3891, type: "DAVIPLATA", status: "UNKNOWN" } },
+    status: 200,
+  },
+  {
+    name: "available source",
+    body: { data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } },
+    status: 200,
+  },
+  {
+    name: "rejected lookup",
+    body: { data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" } },
+    status: 500,
+  },
+  {
+    name: "lost lookup",
+    body: { data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" } },
+    status: 200,
+  },
+])(
+  "exhausts the original eight reservations without claiming revocation for $name",
+  ({ name, body, status }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* cancellationFixture("daviplata");
+        yield* cancel(db, dueAt - 1000);
+        let puts = 0;
+        let gets = 0;
+        vi.stubGlobal(
+          "fetch",
+          withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+            const request = new Request(input, init);
+            if (request.method === "PUT") {
+              puts++;
+              return Promise.resolve(new Response(null, { status: 400 }));
+            }
+            gets++;
+            if (name === "lost lookup") return Promise.reject(new Error("lost lookup response"));
+            return Promise.resolve(Response.json(body, { status }));
+          })
+        );
+        for (let index = 0; index < 10; index++) {
+          yield* Effect.exit(fromPromise(() => observeCancellation(db)));
+        }
+        expect({ puts, gets }).toEqual({ puts: 1, gets: 8 });
+        const offers: unknown[] = [];
+        yield* dispatchSubscriptionCancellations({
+          DB: db,
+          BILLING_COLLECTION_QUEUE: {
+            send: (work) => {
+              offers.push(work);
+              return Promise.resolve();
+            },
+          },
+        });
+        expect(offers).toHaveLength(0);
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT verification_count,void_verified_at_ms FROM subscription_cancellations"
+              )
+              .first()
+          )
+        ).toEqual({
+          verification_count: 8,
+          void_verified_at_ms: null,
+        });
+        const standing = yield* cancel(db, dueAt);
+        expect(yield* fromPromise(() => standing.json())).toMatchObject({
+          data: { sourceCancellation: "void-pending", paidThrough: "2026-10-13T15:00:00.000Z" },
+        });
+      })
+    )
+);
+
+it("recovers a committed claim without a PUT after a crash before submission", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      // This is the retained native state of an execution lost between claim commit and PUT.
+      yield* fromPromise(() =>
+        db
+          .prepare("UPDATE subscription_cancellations SET void_started_at_ms=?")
+          .bind(dueAt - 500)
+          .run()
+      );
+      let puts = 0;
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          if (request.method === "PUT") puts++;
+          else gets++;
+          return Promise.resolve(
+            Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } })
+          );
+        })
+      );
+      yield* fromPromise(() => observeCancellation(db));
+      yield* fromPromise(() => observeCancellation(db));
+      expect({ puts, gets }).toEqual({ puts: 0, gets: 2 });
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT void_started_at_ms,verification_count FROM subscription_cancellations")
+            .first()
+        )
+      ).toEqual({
+        void_started_at_ms: dueAt - 500,
+        verification_count: 2,
+      });
+      const standing = yield* cancel(db, dueAt);
+      expect(yield* fromPromise(() => standing.json())).toMatchObject({
+        data: { sourceCancellation: "void-pending" },
+      });
+    })
+  ));
+
+it("refuses a mismatching runtime environment before consuming provider opportunities", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      const provider = vi.fn(() => Promise.reject(new Error("unexpected provider call")));
+      vi.stubGlobal("fetch", withOpenAiFetch(provider));
+      expect(
+        (yield* Effect.exit(fromPromise(() => observeCancellation(db, "production"))))._tag
+      ).toBe("Failure");
+      expect(provider).not.toHaveBeenCalled();
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT void_started_at_ms,verification_count FROM subscription_cancellations")
+            .first()
+        )
+      ).toEqual({
+        void_started_at_ms: null,
+        verification_count: 0,
+      });
+    })
+  ));
+
+it("shares one submission and eight reservations across concurrent cancellation deliveries", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      let puts = 0;
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          if (request.method === "PUT") puts++;
+          else gets++;
+          return Promise.resolve(
+            Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "AVAILABLE" } })
+          );
+        })
+      );
+      yield* fromPromise(() =>
+        Promise.all(Array.from({ length: 12 }, () => observeCancellation(db)))
+      );
+      yield* fromPromise(() => observeCancellation(db));
+      expect({ puts, gets }).toEqual({ puts: 1, gets: 8 });
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT verification_count,source_cancellation_state FROM subscription_cancellations"
+            )
+            .first()
+        )
+      ).toEqual({
+        verification_count: 8,
+        source_cancellation_state: "void-pending",
+      });
+    })
+  ));
+
 it("recovers one cancellation execution after an engine interruption and preserves the eight-check budget and ambiguous void claim", () =>
   Effect.runPromise(
     Effect.gen(function* () {

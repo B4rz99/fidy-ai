@@ -1629,9 +1629,9 @@ describe("native browser response lifetime", () => {
   }
 });
 
-it.effect("fails an outstanding response read on abort even when native cancel throws", () =>
-  Effect.gen(function* () {
-    const abort = new AbortController();
+it.effect("fails an outstanding response read on abort even when native cancel throws", () => {
+  const abort = new AbortController();
+  return Effect.gen(function* () {
     const body = new ReadableStream<Uint8Array>();
     const getReader = body.getReader.bind(body);
     let cancellations = 0;
@@ -1658,15 +1658,14 @@ it.effect("fails an outstanding response read on abort even when native cancel t
     });
     expect(body.locked).toBe(false);
     expect(cancellations).toBe(1);
-  })
-);
+  });
+});
 
 for (const cleanup of ["throw", "reject", "pending"] as const) {
   for (const late of ["chunk", "eof", "error"] as const) {
-    it.effect(`keeps abort final after late ${late} with ${cleanup} cleanup`, () =>
-      Effect.gen(function* () {
-        const abort = new AbortController();
-
+    it.effect(`keeps abort final after late ${late} with ${cleanup} cleanup`, () => {
+      const abort = new AbortController();
+      return Effect.gen(function* () {
         const end = { done: true as const, value: undefined };
         const nativeRead = Promise.withResolvers<typeof end | { done: false; value: Uint8Array }>();
         const started = Promise.withResolvers<void>();
@@ -1729,7 +1728,7 @@ for (const cleanup of ["throw", "reject", "pending"] as const) {
         expect(body.locked).toBe(false);
         expect(cancellations).toBe(1);
         expect(releases).toBe(1);
-      })
-    );
+      });
+    });
   }
 }

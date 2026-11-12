@@ -219,10 +219,10 @@ it.effect(
 );
 
 for (const mode of ["inherited", "undefined", "null", "replacement"] as const) {
-  it.effect(`honors ${mode} Fetch signal precedence`, () =>
-    Effect.gen(function* () {
-      const original = new AbortController();
-      const replacement = new AbortController();
+  it.effect(`honors ${mode} Fetch signal precedence`, () => {
+    const original = new AbortController();
+    const replacement = new AbortController();
+    return Effect.gen(function* () {
       const body = new ReadableStream<Uint8Array>();
       const native = Object.assign(() => Promise.resolve(new Response(body)), {
         preconnect: fetch.preconnect,
@@ -259,8 +259,8 @@ for (const mode of ["inherited", "undefined", "null", "replacement"] as const) {
         catch: (error: unknown) => ({ _tag: "NativeLifetimeTestFailed" as const, cause: error }),
       });
       expect(body.locked).toBe(false);
-    })
-  );
+    });
+  });
 }
 
 for (const status of [204, 205, 304]) {

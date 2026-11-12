@@ -22,6 +22,7 @@ import {
 import { type WompiFetch } from "@/transport/wompi-tokenization";
 import { UnknownJsonString } from "@/schema-compatibility";
 import { type DaviplataChallenge } from "./daviplata-challenge";
+import { makeMountedDaviplata } from "./daviplata-task";
 import { type PreparedEnrollment, makeEnrollmentGateway } from "./enrollment-gateway";
 
 const policy = {
@@ -594,3 +595,59 @@ it("aborts card tokenization and prevents Fidy submission when its caller cancel
     })
   );
 });
+
+it("cancels an approved mounted authorization and fences its late submission and retained actions", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const enrollment = prepared(yield* Clock.currentTimeMillis);
+      const submitting = Promise.withResolvers<void>();
+      const pending = Promise.withResolvers<Response>();
+      const input = challengeFixture(enrollment, () => {
+        submitting.resolve();
+        return Effect.tryPromise(() => pending.promise).pipe(Effect.orDie);
+      });
+      const awaiting = Promise.withResolvers<void>();
+      const stages: Array<string> = [];
+      const submitted = vi.fn();
+      const uncertain = vi.fn();
+      const lock = vi.fn();
+      const task = makeMountedDaviplata({
+        enrollment,
+        start: makeEnrollmentGateway(input.client).startDaviplata,
+        publish: (stage) => {
+          stages.push(stage);
+          if (stage === "otp") awaiting.resolve();
+        },
+        lock,
+        onSubmitted: submitted,
+        onUncertain: uncertain,
+      });
+      const unmount = task.mount();
+      task.begin({
+        email: " SYNTHETIC@example.invalid ",
+        decisions: { endUserPolicy: true, personalData: true },
+        documentNumber: Redacted.make("1122233"),
+        productNumber: Redacted.make("3991111111"),
+      });
+      yield* Effect.tryPromise(() => awaiting.promise);
+      task.confirm(Redacted.make("574829"));
+      yield* Effect.tryPromise(() => submitting.promise);
+      expect(task.cancel()).toBe(true);
+      const staleOtp = Redacted.make("574829");
+      task.confirm(staleOtp);
+      task.resend();
+      task.retry();
+      expect(() => Redacted.value(staleOtp)).toThrow();
+      pending.resolve(
+        Response.json({ status: "source-verifying", enrollmentId: enrollment.enrollmentId })
+      );
+      yield* Effect.yieldNow;
+      expect(stages).toEqual(["sending", "otp", "confirming", "refused"]);
+      expect(submitted).not.toHaveBeenCalled();
+      expect(uncertain).not.toHaveBeenCalled();
+      expect(lock).toHaveBeenLastCalledWith(false);
+      expect(input.provider).toHaveBeenCalledTimes(3);
+      expect(input.payloads).toHaveLength(1);
+      unmount();
+    })
+  ));

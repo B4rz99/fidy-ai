@@ -2,18 +2,11 @@ import { SubscriptionIntroduction } from "@/ui/components/subscription-introduct
 import { useAtomSet } from "@effect/atom-react";
 import { InformationCircleIcon, SquareLock02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Option, Redacted } from "effect";
-import {
-  type FormEvent,
-  type JSX,
-  type RefCallback,
-  type RefObject,
-  useRef,
-  useState,
-} from "react";
+import { Redacted } from "effect";
+import { type FormEvent, type JSX, type RefCallback, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
-import { type DaviplataChallenge, type DaviplataConfirmation } from "./daviplata-challenge";
+import { type DaviplataStage, makeMountedDaviplata } from "./daviplata-task";
 import {
   type EnrollmentGateway,
   type PaymentSubmission,
@@ -28,15 +21,7 @@ import {
 import { DaviplataAuthorizationLock } from "./daviplata-activity";
 import { PaymentFeedback } from "./workspace";
 
-type Stage =
-  | "fields"
-  | "sending"
-  | "otp"
-  | "confirming"
-  | "refused"
-  | "uncertain"
-  | "submission-retry"
-  | "retrying-submission";
+type Stage = DaviplataStage;
 type FormProps = Readonly<{
   enrollment: PreparedEnrollment;
   start: EnrollmentGateway["startDaviplata"];
@@ -45,7 +30,6 @@ type FormProps = Readonly<{
 }>;
 type DocumentFields = Readonly<{ documentNumber: string; productNumber: string }>;
 const emptyFields: DocumentFields = { documentNumber: "", productNumber: "" };
-const absentAuthorization = Option.none<never>();
 const digitsOnly = (value: string): string => value.replace(/\D/gu, "");
 
 const DocumentForm = ({
@@ -162,97 +146,7 @@ const OutcomeMessage = ({
   </>
 );
 
-type ChallengeLifetime = Readonly<{
-  lifetimeRef: RefCallback<HTMLFormElement>;
-  begin: () => Option.Option<AbortSignal>;
-  cancel: () => void;
-  tryCancel: () => boolean;
-  install: (challenge: DaviplataChallenge, signal: AbortSignal) => void;
-  runAction: (
-    action: (challenge: DaviplataChallenge) => Promise<DaviplataConfirmation>,
-    apply: (outcome: DaviplataConfirmation) => void,
-    failed: () => void
-  ) => void;
-  active: () => boolean;
-}>;
-const useFormLifetime = (
-  cancel: () => void
-): Readonly<{ lifetimeRef: RefCallback<HTMLFormElement>; mounted: RefObject<boolean> }> => {
-  const mounted = useRef(false);
-  const [lifetimeRef] = useState<RefCallback<HTMLFormElement>>(
-    () =>
-      (
-        node: Parameters<RefCallback<HTMLFormElement>>[0]
-      ): ReturnType<RefCallback<HTMLFormElement>> => {
-        if (node === null) return;
-        mounted.current = true;
-        return () => {
-          mounted.current = false;
-          cancel();
-        };
-      }
-  );
-  return { lifetimeRef, mounted };
-};
-const useChallengeLifetime = (unlock: () => void): ChallengeLifetime => {
-  const challenge = useRef<Option.Option<DaviplataChallenge>>(absentAuthorization);
-  const controller = useRef<Option.Option<AbortController>>(absentAuthorization);
-  const started = useRef(false);
-  const running = useRef(false);
-  const cancellable = useRef(false);
-  const [cancel] = useState<() => void>(() => (): void => {
-    Option.map(controller.current, (pending) => pending.abort());
-    Option.map(challenge.current, (current) => current.dispose());
-    cancellable.current = false;
-    controller.current = Option.none();
-    challenge.current = Option.none();
-    unlock();
-  });
-  const { lifetimeRef, mounted } = useFormLifetime(cancel);
-  return {
-    lifetimeRef,
-    cancel,
-    tryCancel: () => {
-      if (!cancellable.current || running.current || !mounted.current) return false;
-      cancel();
-      return true;
-    },
-    runAction: (action, apply, failed) => {
-      if (running.current || !mounted.current) return;
-      running.current = true;
-      cancellable.current = false;
-      Option.map(challenge.current, (live) =>
-        action(live)
-          .then((outcome) => {
-            cancellable.current = outcome.status === "retry-allowed";
-            apply(outcome);
-          }, failed)
-          .finally(() => {
-            running.current = false;
-          })
-      );
-    },
-    active: () =>
-      mounted.current && Option.exists(controller.current, (pending) => !pending.signal.aborted),
-    begin: () => {
-      if (started.current || !mounted.current) return Option.none();
-      started.current = true;
-      const pending = new AbortController();
-      controller.current = Option.some(pending);
-      return Option.some(pending.signal);
-    },
-    install: (current, signal) => {
-      if (signal.aborted) current.dispose();
-      else {
-        challenge.current = Option.some(current);
-        cancellable.current = true;
-      }
-    },
-  };
-};
 type Draft = Readonly<{
-  stage: Stage;
-  setStage: (stage: Stage) => void;
   fields: DocumentFields;
   setFields: (fields: DocumentFields) => void;
   email: string;
@@ -263,14 +157,11 @@ type Draft = Readonly<{
   setDecisions: (decisions: EnrollmentDecisions) => void;
 }>;
 const useDraft = (emailValue: string): Draft => {
-  const [stage, setStage] = useState<Stage>("fields");
   const [fields, setFields] = useState(emptyFields);
   const [email, setEmail] = useState(emailValue);
   const [otp, setOtp] = useState("");
   const [decisions, setDecisions] = useState(emptyDecisions);
   return {
-    stage,
-    setStage,
     fields,
     setFields,
     email,
@@ -281,114 +172,67 @@ const useDraft = (emailValue: string): Draft => {
     setDecisions,
   };
 };
-const beginAuthorization = (
-  props: FormProps,
-  draft: Draft,
-  control: Readonly<{ lifetime: ChallengeLifetime; lock: (locked: boolean) => void }>
-): void => {
-  if (!allDecisionsAccepted(draft.decisions)) return;
-  const started = control.lifetime.begin();
-  if (Option.isNone(started)) return;
-  const signal = started.value;
-  const setStage = draft.setStage;
-  control.lock(true);
-  draft.setStage("sending");
-  draft.setFields(emptyFields);
-  props
-    .start(props.enrollment, draft.email.trim().toLowerCase(), {
-      documentNumber: Redacted.make(draft.fields.documentNumber),
-      productNumber: Redacted.make(draft.fields.productNumber),
-      signal,
-    })
-    .then(
-      (challenge) => {
-        control.lifetime.install(challenge, signal);
-        if (!signal.aborted) setStage("otp");
-      },
-      () => {
-        if (!signal.aborted) {
-          props.onUncertain();
-          setStage("uncertain");
-        }
-      }
-    );
-};
 type Commands = Readonly<{
+  stage: Stage;
   lifetimeRef: RefCallback<HTMLFormElement>;
   submit: (event: FormEvent) => void;
   resend: () => void;
   retry: () => void;
   cancel: () => void;
 }>;
-const cancelDraft = (lifetime: ChallengeLifetime, draft: Draft): void => {
-  if (!lifetime.tryCancel()) return;
-  draft.setOtp("");
-  draft.setFields(emptyFields);
-  draft.setStage("refused");
-};
-const useDaviplataInteraction = (props: FormProps): Draft & Commands => {
+const useMountedDaviplata = (props: FormProps): Draft & Commands => {
   const draft = useDraft(props.enrollment.billingEmail);
+  const [stage, setStage] = useState<Stage>("fields");
   const lock = useAtomSet(DaviplataAuthorizationLock.use());
-  const lifetime = useChallengeLifetime(() => lock(false));
-  const { setStage, email } = draft;
-  const apply = (outcome: DaviplataConfirmation): void => {
-    if (!lifetime.active() || outcome.status === "busy") return;
-    if (outcome.status === "submitted") {
-      props.onSubmitted(email.trim().toLowerCase(), outcome.submission);
-      return;
-    }
-    if (outcome.status === "retry-allowed") {
-      setStage("otp");
-      return;
-    }
-    if (outcome.status === "refused") {
-      lifetime.cancel();
-      setStage("refused");
-      return;
-    }
-    props.onUncertain();
-    setStage(outcome.retrySubmission ? "submission-retry" : "uncertain");
-  };
-  const run = (
-    action: (challenge: DaviplataChallenge) => Promise<DaviplataConfirmation>,
-    pendingStage: Stage = "confirming"
-  ): void => {
-    if (draft.stage !== "otp" && draft.stage !== "submission-retry") return;
-    setStage(pendingStage);
-    draft.setOtp("");
-    lifetime.runAction(action, apply, () => {
-      if (lifetime.active()) {
-        props.onUncertain();
-        setStage("uncertain");
+  const [task] = useState(() => makeMountedDaviplata({ ...props, publish: setStage, lock }));
+  const [lifetimeRef] = useState<RefCallback<HTMLFormElement>>(
+    () =>
+      (node): ReturnType<RefCallback<HTMLFormElement>> => {
+        if (node === null) return;
+        return task.mount();
       }
-    });
-  };
+  );
   return {
     ...draft,
-    lifetimeRef: lifetime.lifetimeRef,
+    stage,
+    lifetimeRef,
     submit: (event) => {
       event.preventDefault();
-      if (draft.stage === "fields") beginAuthorization(props, draft, { lifetime, lock });
-      else if (draft.stage === "otp") {
-        run((challenge) => challenge.confirm(Redacted.make(draft.otp)));
+      if (stage === "fields") {
+        if (!allDecisionsAccepted(draft.decisions)) return;
+        const fields = {
+          email: draft.email,
+          decisions: draft.decisions,
+          documentNumber: Redacted.make(draft.fields.documentNumber),
+          productNumber: Redacted.make(draft.fields.productNumber),
+        };
+        draft.setFields(emptyFields);
+        task.begin(fields);
+      } else {
+        const otp = Redacted.make(draft.otp);
+        draft.setOtp("");
+        task.confirm(otp);
       }
     },
     resend: () => {
-      if (draft.stage === "otp") run((challenge) => challenge.resend());
+      draft.setOtp("");
+      task.resend();
     },
-    retry: () => {
-      if (draft.stage === "submission-retry") {
-        run((challenge) => challenge.retrySubmission(), "retrying-submission");
+    retry: task.retry,
+    cancel: () => {
+      if (task.cancel()) {
+        draft.setOtp("");
+        draft.setFields(emptyFields);
       }
     },
-    cancel: () => cancelDraft(lifetime, draft),
   };
 };
 
 const authorizationBusy = (stage: Stage): boolean =>
   stage === "sending" || stage === "confirming" || stage === "retrying-submission";
 const awaitingOtp = (stage: Stage): boolean => stage === "otp" || stage === "confirming";
-const cancellableStage = (stage: Stage): boolean => stage === "otp";
+const cancellableStage = (stage: Stage): boolean =>
+  stage === "otp" || stage === "submission-retry" || authorizationBusy(stage);
 const AuthorizationProgress = ({ stage }: Readonly<{ stage: Stage }>): JSX.Element => (
   <>
     {stage === "sending" ? <output>Solicitando código a Wompi…</output> : null}
@@ -419,7 +263,7 @@ const AuthorizationNotes = (): JSX.Element => (
 );
 
 export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
-  const interaction = useDaviplataInteraction(props);
+  const interaction = useMountedDaviplata(props);
   const [mountForm] = useState<RefCallback<HTMLFormElement>>(
     () =>
       (

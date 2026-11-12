@@ -444,55 +444,66 @@ const canRetryResourceRefusal = (
   continuation ||
   (boundary === "web-auth" && isSafeRetryRequest(request));
 
+const requestDestination = (
+  request: HttpClientRequest.HttpClientRequest
+): Effect.Effect<URL, HttpClientError.HttpClientError> =>
+  Effect.try({
+    try: () => new URL(request.url),
+    catch: () => requestFailure(request, "request destination invalid"),
+  });
+
+const isConnectionContinuation = (boundary: BrowserHttpBoundary, destination: URL): boolean =>
+  boundary === "web-auth" &&
+  Object.values(connectionBrowserPaths).some((path) => path === destination.pathname);
+
+const deadlineExceeded = (
+  request: HttpClientRequest.HttpClientRequest,
+  observation: TransportObservation
+): Effect.Effect<never, HttpClientError.HttpClientError> =>
+  Effect.suspend(() => {
+    observation.deadlineExceeded = true;
+    return Effect.fail(requestFailure(request, "browser request deadline exceeded"));
+  });
+
 const executePreparedPolicyRequest = (
   request: HttpClientRequest.HttpClientRequest,
   execution: PolicyExecution
-): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> => {
-  let destination: URL;
-  try {
-    destination = new URL(request.url);
-  } catch {
-    return Effect.fail(requestFailure(request, "request destination invalid"));
-  }
-  if (destination.origin !== execution.apiOrigin) {
-    return Effect.fail(requestFailure(request, "request destination origin refused"));
-  }
-  const continuation =
-    execution.boundary === "web-auth" &&
-    Object.values(connectionBrowserPaths).some((path) => path === destination.pathname);
-  const policy = browserHttpPolicies[execution.boundary];
-  const deadlineFailure = (): Effect.Effect<never, HttpClientError.HttpClientError> => {
-    execution.observation.deadlineExceeded = true;
-    return Effect.fail(requestFailure(request, "browser request deadline exceeded"));
-  };
-  const attempt = Effect.gen(function* () {
-    if ((yield* Clock.currentTimeMillis) >= execution.expiresAt) {
-      return yield* deadlineFailure();
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> =>
+  Effect.gen(function* () {
+    const destination = yield* requestDestination(request);
+    if (destination.origin !== execution.apiOrigin) {
+      return yield* requestFailure(request, "request destination origin refused");
     }
-    execution.observation.attempts++;
-    return yield* execution.client.postprocess(Effect.succeed(request));
-  }).pipe(
-    Effect.tap((response) => Effect.sync(() => observeResponse(execution.observation, response))),
-    Effect.mapError(sanitizeHttpClientError),
-    Effect.flatMap((response) =>
-      materializeResponse(request, response, policy.maximumResponseBytes)
-    ),
-    Effect.scoped,
-    execution.boundary === "canonical"
-      ? execution.canonicalTransfers.withPermits(1)
-      : Function.identity
-  );
-  const boundedRetries = isSafeRetryRequest(request)
-    ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
-    : attempt;
-  const admittedResponse = canRetryResourceRefusal(execution.boundary, request, continuation)
-    ? retryResourceRefusals(boundedRetries)
-    : boundedRetries;
-  return admittedResponse.pipe(
-    Effect.provideService(HttpClient.TracerDisabledWhen, disableAutomaticHttpSpan),
-    Effect.provideService(HttpClient.TracerPropagationEnabled, false)
-  );
-};
+    const continuation = isConnectionContinuation(execution.boundary, destination);
+    const policy = browserHttpPolicies[execution.boundary];
+    const attempt = Effect.gen(function* () {
+      if ((yield* Clock.currentTimeMillis) >= execution.expiresAt) {
+        return yield* deadlineExceeded(request, execution.observation);
+      }
+      execution.observation.attempts++;
+      return yield* execution.client.postprocess(Effect.succeed(request));
+    }).pipe(
+      Effect.tap((response) => Effect.sync(() => observeResponse(execution.observation, response))),
+      Effect.mapError(sanitizeHttpClientError),
+      Effect.flatMap((response) =>
+        materializeResponse(request, response, policy.maximumResponseBytes)
+      ),
+      Effect.scoped,
+      execution.boundary === "canonical"
+        ? execution.canonicalTransfers.withPermits(1)
+        : Function.identity
+    );
+    const boundedRetries = isSafeRetryRequest(request)
+      ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
+      : attempt;
+    const admittedResponse = canRetryResourceRefusal(execution.boundary, request, continuation)
+      ? retryResourceRefusals(boundedRetries)
+      : boundedRetries;
+    return yield* admittedResponse.pipe(
+      Effect.provideService(HttpClient.TracerDisabledWhen, disableAutomaticHttpSpan),
+      Effect.provideService(HttpClient.TracerPropagationEnabled, false)
+    );
+  });
 
 const finishDiagnostic =
   (
@@ -517,25 +528,15 @@ const finishDiagnostic =
 const preparePolicyRequest = (
   request: HttpClientRequest.HttpClientRequest,
   execution: Omit<PolicyExecution, "expiresAt"> & Readonly<{ startedAt: number }>
-): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> => {
-  let destination: URL;
-  try {
-    destination = new URL(request.url);
-  } catch {
-    return Effect.fail(requestFailure(request, "request destination invalid"));
-  }
-  const continuation =
-    execution.boundary === "web-auth" &&
-    Object.values(connectionBrowserPaths).some((path) => path === destination.pathname);
-  const deadline = continuation ? "35 seconds" : browserHttpPolicies[execution.boundary].deadline;
-  const expiresAt = execution.startedAt + Duration.toMillis(deadline);
-  return Effect.gen(function* () {
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> =>
+  Effect.gen(function* () {
+    const destination = yield* requestDestination(request);
+    const continuation = isConnectionContinuation(execution.boundary, destination);
+    const deadline = continuation ? "35 seconds" : browserHttpPolicies[execution.boundary].deadline;
+    const expiresAt = execution.startedAt + Duration.toMillis(deadline);
     const remaining = expiresAt - (yield* Clock.currentTimeMillis);
-    const deadlineFailure = (): Effect.Effect<never, HttpClientError.HttpClientError> => {
-      execution.observation.deadlineExceeded = true;
-      return Effect.fail(requestFailure(request, "browser request deadline exceeded"));
-    };
-    if (remaining <= 0) return yield* deadlineFailure();
+    const expired = deadlineExceeded(request, execution.observation);
+    if (remaining <= 0) return yield* expired;
     return yield* execution.client.preprocess(request).pipe(
       Effect.mapError(sanitizeHttpClientError),
       Effect.flatMap((prepared) =>
@@ -548,11 +549,10 @@ const preparePolicyRequest = (
           expiresAt,
         })
       ),
-      Effect.timeoutOrElse({ duration: remaining, orElse: deadlineFailure }),
+      Effect.timeoutOrElse({ duration: remaining, orElse: () => expired }),
       Effect.scoped
     );
   });
-};
 
 const makePolicyClient = (
   client: HttpClient.HttpClient,

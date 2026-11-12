@@ -2219,6 +2219,42 @@ it.each(["card", "nequi", "daviplata"] as const)(
           (yield* fromPromise(() =>
             db
               .prepare(
+                "SELECT renewal_attempt_number,status,finalized_at_ms IS NOT NULL AS finalized FROM billing_attempt_context WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
+              )
+              .bind(attemptId)
+              .all()
+          )).results
+        ).toEqual([
+          { renewal_attempt_number: 1, status: "succeeded", finalized: 1 },
+          { renewal_attempt_number: 2, status: "succeeded", finalized: 1 },
+        ]);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT t.status,t.finalized_at_ms IS NOT NULL AS finalized FROM billing_provider_transactions t JOIN billing_attempt_context a ON a.id=t.attempt_id WHERE a.previous_paid_attempt_id=? ORDER BY a.renewal_attempt_number"
+              )
+              .bind(attemptId)
+              .all()
+          )).results
+        ).toEqual([
+          { status: "APPROVED", finalized: 1 },
+          { status: "APPROVED", finalized: 1 },
+        ]);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT audit.attempt_id FROM audit_entries audit JOIN billing_attempt_context a ON a.id=audit.attempt_id WHERE audit.record_type='billing_transition' AND audit.transition='succeeded' AND a.previous_paid_attempt_id=?"
+              )
+              .bind(attemptId)
+              .all()
+          )).results
+        ).toHaveLength(2);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare(
                 "SELECT starts_at_ms,ends_at_ms FROM (SELECT rowid,id AS attempt_id,paid_starts_at_ms AS starts_at_ms,paid_ends_at_ms AS ends_at_ms,paid_renewal_anchor_ms AS renewal_anchor_ms FROM billing_attempt_context WHERE paid_starts_at_ms IS NOT NULL) AS billing_paid_periods ORDER BY starts_at_ms"
               )
               .all()

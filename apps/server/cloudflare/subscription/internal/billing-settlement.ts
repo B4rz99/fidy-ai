@@ -35,13 +35,12 @@ const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatemen
       ON CONFLICT(transaction_id) DO UPDATE SET
         attempt_id=excluded.attempt_id,
         first_observed_at_ms=COALESCE(first_observed_at_ms,excluded.first_observed_at_ms),
-        status = CASE WHEN status = 'APPROVED' THEN status ELSE excluded.status END,
-        negative_observed_at_ms = CASE
-          WHEN status = 'APPROVED' THEN negative_observed_at_ms
-          WHEN excluded.status = 'PENDING' THEN NULL
-          WHEN status = 'PENDING' THEN excluded.negative_observed_at_ms
-          ELSE COALESCE(negative_observed_at_ms, excluded.negative_observed_at_ms) END,
+        status = CASE WHEN excluded.status = 'APPROVED' THEN excluded.status
+          WHEN status IN ('APPROVED','DECLINED','VOIDED','ERROR') THEN status ELSE excluded.status END,
+        negative_observed_at_ms = COALESCE(negative_observed_at_ms, excluded.negative_observed_at_ms),
         finalized_at_ms = CASE WHEN status = 'APPROVED' THEN finalized_at_ms
+          WHEN excluded.status = 'APPROVED' THEN excluded.finalized_at_ms
+          WHEN status IN ('DECLINED','VOIDED','ERROR') THEN finalized_at_ms
           ELSE excluded.finalized_at_ms END
       WHERE attempt_id IS NULL OR attempt_id = excluded.attempt_id`)
       .bind(
@@ -66,7 +65,7 @@ const evidenceAndOutcome = (input: Settlement): ReadonlyArray<D1PreparedStatemen
       WHERE id = ? AND status = 'pending' AND EXISTS
         (SELECT 1 FROM billing_provider_transactions WHERE attempt_id = ? AND status IS NOT NULL)
       AND NOT EXISTS (SELECT 1 FROM billing_provider_transactions WHERE attempt_id = ?
-        AND status IN ('PENDING','APPROVED'))
+        AND (status IS NULL OR status IN ('PENDING','APPROVED')))
       AND (SELECT MIN(negative_observed_at_ms) FROM billing_provider_transactions WHERE attempt_id = ?) <= ?`)
       .bind(
         observedAtMs,

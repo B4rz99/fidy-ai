@@ -332,15 +332,19 @@ const findSubmissionByKey = (
 
 /** Marks one abandoned upload's row deleting before any object delete, so the bounded sweep can
  * always find the object again from durable state. */
-const markStagingDeleting = (database: D1Database, stagingId: string): Effect.Effect<void> =>
+const markStagingDeleting = (
+  database: D1Database,
+  input: Readonly<{ stagingId: string; userId: string; objectKey: string }>
+): Effect.Effect<void, StatementStagingUnavailable> =>
   settleStatement(
     database
       .prepare(
         `UPDATE statement_staging_objects SET status = 'deleting'
-         WHERE id = ? AND status IN ('pending', 'available') AND object_deleted_at_ms IS NULL`
+         WHERE id = ? AND user_id = ? AND object_key = ?
+           AND status IN ('pending', 'available', 'deleting') AND object_deleted_at_ms IS NULL`
       )
-      .bind(stagingId)
-  ).pipe(Effect.ignore);
+      .bind(input.stagingId, input.userId, input.objectKey)
+  ).pipe(Effect.flatMap((result) => (result.meta.changes === 1 ? Effect.void : unavailable())));
 
 /** Removes one sweepable staging row only after its object is gone. */
 const removeDeletingStagingRow = (database: D1Database, stagingId: string): Effect.Effect<void> =>
@@ -490,7 +494,7 @@ const discardStagedUpload = (
   input: Readonly<{ stagingId: string; objectKey: string; userId: string }>
 ): Effect.Effect<void, StatementStagingUnavailable> =>
   Effect.gen(function* () {
-    yield* markStagingDeleting(config.database, input.stagingId);
+    yield* markStagingDeleting(config.database, input);
     yield* removeObject(config.bucket, input.userId, input.objectKey);
     yield* removeDeletingStagingRow(config.database, input.stagingId);
   });

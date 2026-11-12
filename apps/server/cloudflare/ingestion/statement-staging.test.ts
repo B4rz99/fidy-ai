@@ -1,3 +1,6 @@
+import { writePrivateObject } from "../private-objects/operations";
+import { PrivateObjectUnavailable } from "../private-objects/contract";
+import { sweepErasureControlObjects } from "../erasure/operations";
 import "../../src/shell/api";
 import {
   type StagedStatementBytes,
@@ -7,6 +10,7 @@ import {
   StatementSubmissionId,
 } from "../../src/shell/ingestion/contract";
 import {
+  Clock,
   DateTime,
   Effect,
   Exit,
@@ -1174,13 +1178,12 @@ it("rechecks original staging expiry after placeholder acknowledgment without wr
         bucket,
         nowEpochMs: currentNowEpochMs,
       });
-      expect(
-        Result.isFailure(
-          yield* Effect.result(
-            staging.stageStatementBytes({ userId: userA, request: request(statementBytes) })
-          )
-        )
-      ).toBe(true);
+      assert.deepStrictEqual(
+        yield* Effect.exit(
+          staging.stageStatementBytes({ userId: userA, request: request(statementBytes) })
+        ),
+        Exit.fail(new StatementStagingUnavailable({ reason: "authority_unavailable" }))
+      );
       expect(payloads).toBe(0);
       expect(
         yield* fromTestPromise(() => count(runtime.database, "statement_staging_objects"))
@@ -1190,5 +1193,129 @@ it("rechecks original staging expiry after placeholder acknowledgment without wr
           runtime.database.prepare("SELECT user_id,bucket FROM erasure_writers").all()
         )
       ).toMatchObject({ results: [{ user_id: userA, bucket: "statement" }] });
+    })
+  ));
+
+it("an acknowledged sweep fence prevents a delayed payload from restoring deleted bytes", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { database: db, bucket } = yield* fromTestPromise(() => makeRuntime());
+        const key = `users/${userA}/delayed`;
+        const delayed = delayedUpload({ bucket, outcome: "success" });
+        const publication = yield* Effect.forkChild(
+          Effect.exit(
+            writePrivateObject({
+              bucket: delayed.bucket,
+              userId: userA,
+              key,
+              bytes: new TextEncoder().encode("private payload"),
+              metadata: { purpose: "statement-original" },
+              digest: Option.none(),
+              predecessor: Option.none(),
+              authorise: Effect.succeed(true),
+            })
+          )
+        );
+        yield* Effect.gen(function* () {
+          yield* Effect.tryPromise(() => delayed.entered);
+          const placeholder = yield* Effect.tryPromise(() => bucket.head(key));
+          const expiry = Number(placeholder?.customMetadata?.["expiresAtMs"]);
+          yield* Clock.clockWith((clock) =>
+            sweepErasureControlObjects({
+              db,
+              buckets: [{ id: "statement", bucket: Option.some(bucket) }],
+            }).pipe(
+              Effect.provideService(Clock.Clock, {
+                currentTimeMillisUnsafe: () => expiry,
+                currentTimeMillis: Effect.succeed(expiry),
+                currentTimeNanosUnsafe: () => BigInt(expiry) * 1_000_000n,
+                currentTimeNanos: Effect.succeed(BigInt(expiry) * 1_000_000n),
+                monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+                monotonicTimeNanos: clock.monotonicTimeNanos,
+                sleep: (duration) => clock.sleep(duration),
+              })
+            )
+          );
+          expect(yield* Effect.tryPromise(() => bucket.head(key))).toBeNull();
+          delayed.release();
+          yield* Effect.tryPromise(() => delayed.settled);
+          assert.deepStrictEqual(
+            yield* Fiber.join(publication),
+            Exit.fail(new PrivateObjectUnavailable())
+          );
+          expect(yield* Effect.tryPromise(() => bucket.head(key))).toBeNull();
+        }).pipe(Effect.ensuring(Effect.sync(delayed.release)));
+      })
+    )
+  ));
+
+it("retains the pending object and unresolved writer when deleting disposition cannot commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => makeRuntime());
+      let deletes = 0;
+      const bucket = new Proxy(runtime.bucket, {
+        get(target, property): unknown {
+          if (property === "put") {
+            return (...args: Parameters<R2Bucket["put"]>): ReturnType<R2Bucket["put"]> =>
+              target.put(...args).then((stored) => {
+                nowEpochMs = (): number => startedAtEpochMs + statementStagingLifetime;
+                return stored;
+              });
+          }
+          if (property === "delete") {
+            return (key: string): Promise<void> => {
+              deletes++;
+              return target.delete(key);
+            };
+          }
+          return Reflect.get(target, property, target);
+        },
+      });
+      const failedStatement = (statement: D1PreparedStatement): D1PreparedStatement =>
+        new Proxy(statement, {
+          get(target, property): unknown {
+            if (property === "bind") {
+              return (...values: unknown[]) => failedStatement(target.bind(...values));
+            }
+            if (property === "run") {
+              return () => Promise.reject(new Error("synthetic disposition commit failure"));
+            }
+            return Reflect.get(target, property, target);
+          },
+        });
+      const database = new Proxy(runtime.database, {
+        get(target, property): unknown {
+          if (property === "prepare") {
+            return (sql: string): D1PreparedStatement =>
+              sql.includes("UPDATE statement_staging_objects SET status = 'deleting'")
+                ? failedStatement(target.prepare(sql))
+                : target.prepare(sql);
+          }
+          return Reflect.get(target, property, target);
+        },
+      });
+      const staging = StatementStaging.make({ database, bucket, nowEpochMs: currentNowEpochMs });
+      assert.deepStrictEqual(
+        yield* Effect.exit(
+          staging.stageStatementBytes({ userId: userA, request: request(statementBytes) })
+        ),
+        Exit.fail(new StatementStagingUnavailable({ reason: "authority_unavailable" }))
+      );
+      const row = required(yield* fromTestPromise(() => onlyStagingRow(runtime.database)));
+      expect(row.status).toBe("pending");
+      expect(deletes).toBe(0);
+      expect(
+        (yield* fromTestPromise(() => runtime.bucket.head(row.object_key)))?.customMetadata?.purpose
+      ).toBe("private-object-placeholder");
+      expect(
+        yield* fromTestPromise(() =>
+          runtime.database
+            .prepare("SELECT user_id,bucket,object_key FROM erasure_writers WHERE id=?")
+            .bind(row.id)
+            .first()
+        )
+      ).toEqual({ user_id: userA, bucket: "statement", object_key: row.object_key });
     })
   ));

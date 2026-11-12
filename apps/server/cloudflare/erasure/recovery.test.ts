@@ -1,10 +1,12 @@
+import assert from "node:assert/strict";
+import { PrivateObjectUnavailable } from "../private-objects/contract";
 import {
   prepareLocalErasureRegistry,
   resumeErasureCases,
   sweepErasureControlObjects,
 } from "./operations";
 import { afterAll, expect, it } from "vitest";
-import { Clock, Effect, Fiber, Option, Schema } from "effect";
+import { Clock, Effect, Exit, Option, Schema } from "effect";
 import {
   installRetentionTestSchema,
   isolatedTestStorage,
@@ -13,7 +15,6 @@ import {
 import { ErasureUnavailable } from "../erasure-store/contract";
 import { withErasureRecovery } from "./runtime";
 import { erasePrivateObject, writePrivateObject } from "../private-objects/operations";
-import { delayedUpload } from "../ingestion/statement-upload-race.test-fixture";
 import { generationAssertion } from "./internal/generation";
 
 const storage = isolatedTestStorage();
@@ -563,8 +564,8 @@ it("refuses another User's retained object target before publication or owner de
         },
       };
       yield* Effect.tryPromise(() => bucket.put(key, "another User's bytes"));
-      expect(
-        (yield* Effect.result(
+      assert.deepStrictEqual(
+        yield* Effect.exit(
           writePrivateObject({
             bucket: guarded,
             userId,
@@ -575,11 +576,13 @@ it("refuses another User's retained object target before publication or owner de
             predecessor: Option.none(),
             authorise: Effect.succeed(true),
           })
-        ))._tag
-      ).toBe("Failure");
-      expect(
-        (yield* Effect.result(erasePrivateObject({ bucket: guarded, userId, key })))._tag
-      ).toBe("Failure");
+        ),
+        Exit.fail(new PrivateObjectUnavailable())
+      );
+      assert.deepStrictEqual(
+        yield* Effect.exit(erasePrivateObject({ bucket: guarded, userId, key })),
+        Exit.fail(new PrivateObjectUnavailable())
+      );
       expect({ puts, deletes }).toEqual({ puts: 0, deletes: 0 });
       expect(yield* Effect.tryPromise(() => bucket.get(key).then((object) => object?.text()))).toBe(
         "another User's bytes"
@@ -605,7 +608,7 @@ it.each(["private-object-placeholder", "private-object-erased"])(
           },
           delete: (key: string): Promise<unknown> => bucket.delete(key),
         };
-        const result = yield* Effect.result(
+        const result = yield* Effect.exit(
           writePrivateObject({
             bucket: guarded,
             userId,
@@ -617,7 +620,7 @@ it.each(["private-object-placeholder", "private-object-erased"])(
             authorise: Effect.succeed(true),
           })
         );
-        expect(result._tag).toBe("Failure");
+        assert.deepStrictEqual(result, Exit.fail(new PrivateObjectUnavailable()));
         expect(puts).toBe(0);
         expect(
           yield* Effect.tryPromise(() => bucket.get(key).then((object) => object?.text()))
@@ -646,7 +649,10 @@ it("publishes against an exact owner-established payload predecessor without dis
         authorise: Effect.succeed(true),
       });
       yield* publication;
-      expect((yield* Effect.result(publication))._tag).toBe("Failure");
+      assert.deepStrictEqual(
+        yield* Effect.exit(publication),
+        Exit.fail(new PrivateObjectUnavailable())
+      );
       expect(yield* Effect.tryPromise(() => bucket.get(key).then((object) => object?.text()))).toBe(
         "new payload"
       );
@@ -688,14 +694,15 @@ it.each(["lost", "empty-etag", "oversized-etag"])(
             return typeof value === "function" ? value.bind(target) : value;
           },
         });
-        expect(
-          (yield* Effect.result(
+        assert.deepStrictEqual(
+          yield* Effect.exit(
             sweepErasureControlObjects({
               db,
               buckets: [{ id: "erasure", bucket: Option.some(guarded) }],
             })
-          ))._tag
-        ).toBe("Failure");
+          ),
+          Exit.fail(new ErasureUnavailable())
+        );
         expect(deletes).toBe(0);
         expect((yield* Effect.tryPromise(() => bucket.head(key)))?.customMetadata?.purpose).toBe(
           "private-object-erased"
@@ -728,8 +735,8 @@ it.each(["placeholder", "payload"])(
           },
           delete: (key: string): Promise<unknown> => bucket.delete(key),
         };
-        expect(
-          (yield* Effect.result(
+        assert.deepStrictEqual(
+          yield* Effect.exit(
             writePrivateObject({
               bucket: guarded,
               userId,
@@ -740,8 +747,9 @@ it.each(["placeholder", "payload"])(
               predecessor: Option.none(),
               authorise: Effect.succeed(true),
             })
-          ))._tag
-        ).toBe("Failure");
+          ),
+          Exit.fail(new PrivateObjectUnavailable())
+        );
         expect(puts).toBe(stage === "placeholder" ? 1 : 2);
         expect((yield* Effect.tryPromise(() => bucket.head(key)))?.customMetadata?.purpose).toBe(
           stage === "placeholder" ? "private-object-placeholder" : "statement-original"
@@ -749,55 +757,3 @@ it.each(["placeholder", "payload"])(
       })
     )
 );
-
-it("an acknowledged sweep fence prevents a delayed payload from restoring deleted bytes", () =>
-  Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
-        yield* Effect.tryPromise(() => installRetentionTestSchema(db));
-        const key = `users/${userId}/delayed`;
-        const delayed = delayedUpload({ bucket, outcome: "success" });
-        const publication = yield* Effect.forkChild(
-          Effect.result(
-            writePrivateObject({
-              bucket: delayed.bucket,
-              userId,
-              key,
-              bytes: new TextEncoder().encode("private payload"),
-              metadata: { purpose: "statement-original" },
-              digest: Option.none(),
-              predecessor: Option.none(),
-              authorise: Effect.succeed(true),
-            })
-          )
-        );
-        yield* Effect.gen(function* () {
-          yield* Effect.tryPromise(() => delayed.entered);
-          const placeholder = yield* Effect.tryPromise(() => bucket.head(key));
-          const expiry = Number(placeholder?.customMetadata?.["expiresAtMs"]);
-          yield* Clock.clockWith((clock) =>
-            sweepErasureControlObjects({
-              db,
-              buckets: [{ id: "statement", bucket: Option.some(bucket) }],
-            }).pipe(
-              Effect.provideService(Clock.Clock, {
-                currentTimeMillisUnsafe: () => expiry,
-                currentTimeMillis: Effect.succeed(expiry),
-                currentTimeNanosUnsafe: () => BigInt(expiry) * 1_000_000n,
-                currentTimeNanos: Effect.succeed(BigInt(expiry) * 1_000_000n),
-                monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
-                monotonicTimeNanos: clock.monotonicTimeNanos,
-                sleep: (duration) => clock.sleep(duration),
-              })
-            )
-          );
-          expect(yield* Effect.tryPromise(() => bucket.head(key))).toBeNull();
-          delayed.release();
-          yield* Effect.tryPromise(() => delayed.settled);
-          expect((yield* Fiber.join(publication))._tag).toBe("Failure");
-          expect(yield* Effect.tryPromise(() => bucket.head(key))).toBeNull();
-        }).pipe(Effect.ensuring(Effect.sync(delayed.release)));
-      })
-    )
-  ));

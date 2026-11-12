@@ -109,7 +109,7 @@ const execute = (
       Effect.exit,
       Effect.flatMap((outcome) =>
         Effect.sync(() => {
-          if (!owner.active || owner.generation !== generation || owner.phase !== phase) return;
+          if (!current(owner, { generation, phase })) return;
           if (outcome._tag === "Failure") {
             owner.phase = { _tag: "Unknown" };
           } else {
@@ -117,6 +117,9 @@ const execute = (
             owner.phase = { _tag: Option.isSome(owner.evidence) ? "Confirmed" : "Ready" };
           }
           notify(owner);
+          if (outcome._tag === "Success" && phase._tag === "Cancelling" && owner.active) {
+            owner.get.refresh(subscriptionStatusQuery(owner.client));
+          }
         })
       )
     )

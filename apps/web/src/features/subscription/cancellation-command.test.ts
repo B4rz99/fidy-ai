@@ -139,6 +139,7 @@ it.effect(
       yield* Effect.tryPromise(flush);
       expect(harness.requests.filter((method) => method === "POST")).toHaveLength(1);
       expect(Option.getOrThrow(harness.view().cancellation).sourceCancellation).toBe("detached");
+      expect(harness.requests.filter((method) => method === "GET")).toHaveLength(2);
     })
 );
 

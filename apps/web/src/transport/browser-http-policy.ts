@@ -432,7 +432,7 @@ type PolicyExecution = Readonly<{
   boundary: BrowserHttpBoundary;
   observation: TransportObservation;
   canonicalTransfers: Semaphore.Semaphore;
-  startedAt: number;
+  expiresAt: number;
 }>;
 
 const canRetryResourceRefusal = (
@@ -444,7 +444,7 @@ const canRetryResourceRefusal = (
   continuation ||
   (boundary === "web-auth" && isSafeRetryRequest(request));
 
-const executePolicyRequest = (
+const executePreparedPolicyRequest = (
   request: HttpClientRequest.HttpClientRequest,
   execution: PolicyExecution
 ): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> => {
@@ -461,13 +461,12 @@ const executePolicyRequest = (
     execution.boundary === "web-auth" &&
     Object.values(connectionBrowserPaths).some((path) => path === destination.pathname);
   const policy = browserHttpPolicies[execution.boundary];
-  const deadline = continuation ? "35 seconds" : policy.deadline;
   const deadlineFailure = (): Effect.Effect<never, HttpClientError.HttpClientError> => {
     execution.observation.deadlineExceeded = true;
     return Effect.fail(requestFailure(request, "browser request deadline exceeded"));
   };
   const attempt = Effect.gen(function* () {
-    if ((yield* Clock.currentTimeMillis) - execution.startedAt >= Duration.toMillis(deadline)) {
+    if ((yield* Clock.currentTimeMillis) >= execution.expiresAt) {
       return yield* deadlineFailure();
     }
     execution.observation.attempts++;
@@ -490,10 +489,6 @@ const executePolicyRequest = (
     ? retryResourceRefusals(boundedRetries)
     : boundedRetries;
   return admittedResponse.pipe(
-    Effect.timeoutOrElse({
-      duration: deadline,
-      orElse: deadlineFailure,
-    }),
     Effect.provideService(HttpClient.TracerDisabledWhen, disableAutomaticHttpSpan),
     Effect.provideService(HttpClient.TracerPropagationEnabled, false)
   );
@@ -518,6 +513,45 @@ const finishDiagnostic =
         })
       )
     );
+
+const preparePolicyRequest = (
+  request: HttpClientRequest.HttpClientRequest,
+  execution: Omit<PolicyExecution, "expiresAt"> & Readonly<{ startedAt: number }>
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> => {
+  let destination: URL;
+  try {
+    destination = new URL(request.url);
+  } catch {
+    return Effect.fail(requestFailure(request, "request destination invalid"));
+  }
+  const continuation =
+    execution.boundary === "web-auth" &&
+    Object.values(connectionBrowserPaths).some((path) => path === destination.pathname);
+  const deadline = continuation ? "35 seconds" : browserHttpPolicies[execution.boundary].deadline;
+  const expiresAt = execution.startedAt + Duration.toMillis(deadline);
+  return Effect.gen(function* () {
+    const remaining = expiresAt - (yield* Clock.currentTimeMillis);
+    const deadlineFailure = (): Effect.Effect<never, HttpClientError.HttpClientError> => {
+      execution.observation.deadlineExceeded = true;
+      return Effect.fail(requestFailure(request, "browser request deadline exceeded"));
+    };
+    if (remaining <= 0) return yield* deadlineFailure();
+    return yield* execution.client.preprocess(request).pipe(
+      Effect.mapError(sanitizeHttpClientError),
+      Effect.flatMap((prepared) =>
+        executePreparedPolicyRequest(prepared, {
+          client: execution.client,
+          apiOrigin: execution.apiOrigin,
+          boundary: execution.boundary,
+          observation: execution.observation,
+          canonicalTransfers: execution.canonicalTransfers,
+          expiresAt,
+        })
+      ),
+      Effect.timeoutOrElse({ duration: remaining, orElse: deadlineFailure })
+    );
+  });
+};
 
 const makePolicyClient = (
   client: HttpClient.HttpClient,
@@ -545,10 +579,10 @@ const makePolicyClient = (
           startedAt,
         };
         return yield* Effect.flatMap(requestEffect, (request) =>
-          executePolicyRequest(request, execution)
+          preparePolicyRequest(request, execution)
         ).pipe(Effect.onExit(finishDiagnostic({ startedAt, boundary, observation })));
       }),
-    client.preprocess
+    Effect.succeed
   );
 };
 
@@ -558,10 +592,10 @@ const makePolicyClient = (
  * the only destination the resulting client will send to. `httpClient` supplies the underlying
  * browser or test transport. Requests include browser credentials, disable caching and automatic
  * redirects, and expose only sanitized transport failures; only GET and HEAD transport failures
- * retry, once. Canonical requests and safe web-auth reads can additionally retry a declared, unadmitted resource refusal
+ * retry once per resource round. Canonical requests and safe web-auth reads can additionally retry a declared, unadmitted resource refusal
  * with bounded Retry-After pacing inside the same absolute deadline. Uncertain mutations and
  * enrollment/authentication refusals are never automatically replayed.
- * Canonical requests share two active transfers per API client; queue time uses the original
+ * Canonical requests share two active transfers per API client; preparation and queue time use the original
  * deadline, cancellation removes queued work, and retry pacing leaves transfer capacity available.
  */
 export const browserHttpClientLayer: {

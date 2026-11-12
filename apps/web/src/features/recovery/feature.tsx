@@ -13,7 +13,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { type SensitiveClipboard, sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
+import {
+  type CopyRelease,
+  type SensitiveClipboard,
+  sensitiveClipboardLifetime,
+} from "@/browser/sensitive-clipboard";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { authenticationEndedEvent } from "@/session/authentication-channel";
 import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
@@ -45,6 +49,7 @@ const RecoveryDisclosure = ({
 
 type RecoveryOwner = {
   current: DisclosureState;
+  copyRelease: Option.Option<CopyRelease>;
   active: boolean;
   setState: Dispatch<SetStateAction<DisclosureState>>;
 };
@@ -89,11 +94,7 @@ const confirmRotation = (
 };
 
 const mountRecoveryTask =
-  (
-    owner: RecoveryOwner,
-    clipboard: SensitiveClipboard,
-    requiresObservation: boolean
-  ): RefCallback<HTMLDivElement> =>
+  (owner: RecoveryOwner, requiresObservation: boolean): RefCallback<HTMLDivElement> =>
   (node) => {
     if (node === null) return;
     owner.active = true;
@@ -105,10 +106,12 @@ const mountRecoveryTask =
       owner.active = false;
       const previous = owner.current;
       owner.current = { _tag: "Disposed" };
+      const copyRelease = owner.copyRelease;
+      owner.copyRelease = Option.none();
       if (previous._tag === "Disclosed") {
-        clipboard.clear(Redacted.value(previous.code));
         Redacted.wipeUnsafe(previous.code);
       }
+      if (Option.isSome(copyRelease)) copyRelease.value.release();
     };
     const hide = (): void => {
       dispose();
@@ -129,10 +132,15 @@ const MountedRecoveryTask = ({ apiClient, clipboard }: RotationViewProps): JSX.E
   const [state, setState] = useState<DisclosureState>(() =>
     registry.get(rotationUnresolved) ? { _tag: "Uncertain" } : { _tag: "Idle" }
   );
-  const owner = useRef<RecoveryOwner>({ current: state, active: false, setState }).current;
+  const owner = useRef<RecoveryOwner>({
+    current: state,
+    copyRelease: Option.none(),
+    active: false,
+    setState,
+  }).current;
   const lifecycleRef = useCallback<RefCallback<HTMLDivElement>>(
-    (node) => mountRecoveryTask(owner, clipboard, registry.get(rotationUnresolved))(node),
-    [owner, clipboard, registry]
+    (node) => mountRecoveryTask(owner, registry.get(rotationUnresolved))(node),
+    [owner, registry]
   );
   const [rotateAtom] = useState(() => makeRotateCommand({ apiClient }));
   const rotate = useAtomSet(rotateAtom);
@@ -147,9 +155,11 @@ const MountedRecoveryTask = ({ apiClient, clipboard }: RotationViewProps): JSX.E
   const confirm = (): void => confirmRotation(owner, state, { registry, rotate });
   const copyCode = (): void => {
     if (!owner.active || state._tag !== "Disclosed" || owner.current !== state) return;
-    clipboard.copy(Redacted.value(state.code), () => {
-      if (owner.active && owner.current === state) publish(owner, { ...state, copied: true });
-    });
+    owner.copyRelease = Option.some(
+      clipboard.copy(Redacted.value(state.code), () => {
+        if (owner.active && owner.current === state) publish(owner, { ...state, copied: true });
+      })
+    );
   };
   const view: RotationState =
     state._tag === "Disclosed" ? { _tag: "Disclosed", copied: state.copied } : state;

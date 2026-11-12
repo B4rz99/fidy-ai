@@ -3,7 +3,7 @@ import { DateTime, Duration, Effect, type Exit, Option, Redacted, Schema } from 
 import { type Atom, Reactivity } from "effect/reactivity";
 import { type Dispatch, type RefCallback, type SetStateAction, useCallback, useState } from "react";
 import { browserSecureRandom } from "@/browser/crypto";
-import type { SensitiveClipboard } from "@/browser/sensitive-clipboard";
+import type { CopyRelease, SensitiveClipboard } from "@/browser/sensitive-clipboard";
 import {
   type FidyClient,
   type IssuedPAT,
@@ -193,7 +193,7 @@ const display = (state: ManualPATCreationState): PATCreationDisplay => {
 };
 
 type IssuanceOwner = Readonly<{
-  current: { value: ManualPATCreationState };
+  current: { value: ManualPATCreationState; copyRelease: Option.Option<CopyRelease> };
   lifetime: { active: boolean; generation: number; initialized: boolean };
   change: (next: ManualPATCreationState) => void;
   forget: () => void;
@@ -328,11 +328,13 @@ const creationActions = (
     copy: (onCopied) => {
       if (!live()) return;
       if (state._tag === "Issued") {
-        clipboard.copy(
-          Redacted.value(state.issued.bearer),
-          acknowledgeCopy(
-            { owner, generation: lifetime.generation, patId: state.issued.pat.id },
-            onCopied
+        owner.current.copyRelease = Option.some(
+          clipboard.copy(
+            Redacted.value(state.issued.bearer),
+            acknowledgeCopy(
+              { owner, generation: lifetime.generation, patId: state.issued.pat.id },
+              onCopied
+            )
           )
         );
       }
@@ -340,10 +342,9 @@ const creationActions = (
   };
 };
 const makeIssuanceOwner = (
-  setState: Dispatch<SetStateAction<ManualPATCreationState>>,
-  clipboard: SensitiveClipboard
+  setState: Dispatch<SetStateAction<ManualPATCreationState>>
 ): IssuanceOwner => {
-  const current: IssuanceOwner["current"] = { value: initialState };
+  const current: IssuanceOwner["current"] = { value: initialState, copyRelease: Option.none() };
   const lifetime = { active: false, generation: 0, initialized: false };
   const change = (next: ManualPATCreationState): void => {
     current.value = next;
@@ -351,13 +352,12 @@ const makeIssuanceOwner = (
   };
   const forget = (): void => {
     lifetime.generation += 1;
+    const release = current.copyRelease;
+    current.copyRelease = Option.none();
     change({ ...initialState });
+    if (Option.isSome(release)) release.value.release();
   };
-  const clear = (): void => {
-    const previous = current.value;
-    forget();
-    if (previous._tag === "Issued") clipboard.clear(Redacted.value(previous.issued.bearer));
-  };
+  const clear = forget;
   return { current, lifetime, change, forget, clear };
 };
 const mountIssuance =
@@ -401,7 +401,7 @@ export const usePATIssuance = ({
   lifecycleRef: RefCallback<HTMLElement>;
 }> => {
   const [state, setState] = useState<ManualPATCreationState>(initialState);
-  const [owner] = useState(() => makeIssuanceOwner(setState, clipboard));
+  const [owner] = useState(() => makeIssuanceOwner(setState));
   const [command] = useState(() => issueCommand(apiClient));
   const issue = useAtomSet(command, { mode: "promiseExit" });
   const lifecycleRef = useCallback<RefCallback<HTMLElement>>(

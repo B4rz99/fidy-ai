@@ -51,10 +51,10 @@ it("joins an in-flight write and fences queued or late callbacks before clearing
       const scheduling = owner.schedule(10);
       yield* fromTestPromise(() => entered.promise);
       const queued = owner.schedule(5);
-      const clearing = owner.clear();
+      const clearing = owner.retireAndClear();
       release.resolve();
       yield* fromTestPromise(() => Promise.all([scheduling, queued]));
-      expect(yield* fromTestPromise(() => clearing)).toBe(true);
+      expect(yield* fromTestPromise(() => clearing)).toEqual({ _tag: "AlarmAbsent" });
       yield* fromTestPromise(() => owner.schedule(1));
       expect(Option.isNone(alarm)).toBe(true);
     })
@@ -86,7 +86,7 @@ it("does not poison future alarm work after a rejected native write", () =>
       );
       yield* fromTestPromise(() => owner.schedule(20));
       expect(Option.getOrNull(alarm)).toBe(20);
-      expect(yield* fromTestPromise(() => owner.clear())).toBe(true);
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
     })
   ));
 
@@ -119,14 +119,14 @@ it("retires a schedule waiting for its native read before it can write an alarm"
       });
       const scheduling = owner.schedule(10);
       yield* fromTestPromise(() => entered.promise);
-      const clearing = owner.clear();
+      const clearing = owner.retireAndClear();
       const late = owner.schedule(1);
       expect(effects).toEqual([]);
       release.resolve(null);
       yield* fromTestPromise(() => scheduling);
-      expect(yield* fromTestPromise(() => clearing)).toBe(true);
+      expect(yield* fromTestPromise(() => clearing)).toEqual({ _tag: "AlarmAbsent" });
       yield* fromTestPromise(() => late);
-      expect(yield* fromTestPromise(() => owner.clear())).toBe(true);
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
       yield* fromTestPromise(() => owner.schedule(1));
       expect(effects).toEqual(["delete", "verify", "delete", "verify"]);
       expect(reads).toBe(3);
@@ -152,14 +152,78 @@ it("distinguishes a remaining alarm from native clearance failure and stays reti
             : Promise.resolve();
         },
       });
-      expect(yield* fromTestPromise(() => owner.clear())).toBe(false);
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({
+        _tag: "ClearUnconfirmed",
+      });
       yield* fromTestPromise(() =>
-        expect(owner.clear()).rejects.toMatchObject({ _tag: "RecoveryAlarmUnavailable" })
+        expect(owner.retireAndClear()).rejects.toMatchObject({ _tag: "RecoveryAlarmUnavailable" })
       );
       yield* fromTestPromise(() => owner.schedule(1));
-      expect(yield* fromTestPromise(() => owner.clear())).toBe(true);
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
       yield* fromTestPromise(() => owner.schedule(1));
       expect(deletes).toBe(3);
       expect(writes).toBe(0);
+    })
+  ));
+
+it("rejects unavailable absence verification and permits cleanup retry without reopening scheduling", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let reads = 0;
+      let deletes = 0;
+      let writes = 0;
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => {
+          reads += 1;
+          return reads === 1
+            ? Promise.reject(new Error("Native verification unavailable"))
+            : Promise.resolve(null);
+        },
+        setAlarm: (): Promise<void> => {
+          writes += 1;
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => {
+          deletes += 1;
+          return Promise.resolve();
+        },
+      });
+      yield* fromTestPromise(() =>
+        expect(owner.retireAndClear()).rejects.toMatchObject({ _tag: "RecoveryAlarmUnavailable" })
+      );
+      yield* fromTestPromise(() => owner.schedule(1));
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
+      expect(reads).toBe(2);
+      expect(deletes).toBe(2);
+      expect(writes).toBe(0);
+    })
+  ));
+
+it("advances installed alarms for decreasing deadlines without allowing equal or later postponement", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let alarm = Option.none<number>();
+      const writes: Array<number | Date> = [];
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+          Promise.resolve(Option.getOrNull(alarm)),
+        setAlarm: (due): Promise<void> => {
+          writes.push(due);
+          alarm = Option.some(Number(due));
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => Promise.resolve(),
+      });
+      yield* fromTestPromise(() =>
+        Promise.all([
+          owner.schedule(30),
+          owner.schedule(20),
+          owner.schedule(10),
+          owner.schedule(10),
+        ])
+      );
+      yield* fromTestPromise(() => owner.schedule(40));
+      expect(Option.getOrNull(alarm)).toBe(10);
+      expect(writes).toEqual([30, 20, 10]);
     })
   ));

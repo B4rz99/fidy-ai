@@ -422,8 +422,10 @@ recovery path when both offers fail. Neither handoff means extraction has comple
 Committed queued statement readback can wake the owning User coordinator's durable alarm.
 Its dispatcher selects only that User's published intents. One coalesced alarm preserves the
 earliest statement or hosted recovery deadline; the alarm attempts both recovery owners and
-hosted recovery restores any later deadline. Erasure retires the resident alarm scheduler before
-joining pending native writes and clearing the alarm, so late callbacks cannot recreate custody.
+hosted recovery restores any later deadline. Erasure calls the resident alarm scheduler's `retireAndClear` after MCP settlement. It retires
+admission before joining pending native writes and clearing the alarm, so late callbacks cannot
+recreate custody. Only verified `AlarmAbsent` permits coordinator clearance; `ClearUnconfirmed`
+and native failures keep erasure blocked without reopening scheduling.
 Publication succeeds when a best-effort wake fails; D1 intent and independent cron discovery
 remain authoritative recovery.
 

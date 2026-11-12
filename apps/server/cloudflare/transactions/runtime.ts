@@ -814,10 +814,11 @@ export class UserTransactionCoordinator {
     return Effect.gen(function* () {
       yield* mcp.retireConnections(Option.none());
       if (!(yield* mcp.erasureSettled())) return false;
-      return yield* Effect.tryPromise({
-        try: alarm.clear,
+      const clearance = yield* Effect.tryPromise({
+        try: alarm.retireAndClear,
         catch: () => new ErasureUnavailable(),
       });
+      return clearance._tag === "AlarmAbsent";
     });
   }
 

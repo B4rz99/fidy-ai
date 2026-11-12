@@ -4,8 +4,10 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { handleErasureRequest, withErasureRecovery } from "./runtime";
-import { executeErasureAdmission, executeErasureRestore } from "./operations";
+import { executeErasureRestore, makeErasureOwner } from "./operations";
 import { nativeErasurePlatform } from "./native.test-fixture";
+import { ErasureUnavailable } from "../erasure-store/contract";
+import { makeErasureOriginals } from "../erasure-store/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
 
 afterEach(() => vi.useRealTimers());
@@ -141,15 +143,20 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           deadlineMs: current + 5000,
         };
         const signal = yield* Effect.abortSignal;
-        const act = (value: unknown): Effect.Effect<Response> =>
-          executeErasureAdmission({
+        const owner = makeErasureOwner({
+          db,
+          userId,
+          stores: makeMemoryErasureStores(db),
+          recovery: { db, bucket: Option.some(bucket) },
+          originals: makeErasureOriginals({
             db,
-            userId,
-            candidate: value,
-            signal,
-            stores: makeMemoryErasureStores(db),
-            recovery: { db, bucket: Option.some(bucket) },
-          });
+            email: Option.none(),
+            statement: Option.none(),
+            registry: Option.none(),
+          }),
+          clearCoordinator: () => Effect.succeed(false),
+        });
+        const act = (value: unknown): Effect.Effect<Response> => owner.admit(value, signal);
         for (const refused of [
           { ...candidate, userId: foreignUser },
           {
@@ -158,6 +165,8 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
             digest: Array.from(new Uint8Array(32).fill(9)),
           },
           { ...candidate, deadlineMs: current },
+          { ...candidate, deadlineMs: current + 60000 },
+          { ...candidate, phase: "Complete" },
           { ...candidate, digest: Array.from(new Uint8Array(32).fill(7)) },
         ]) {
           expect((yield* act(refused)).status).toBe(409);
@@ -186,6 +195,120 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
   );
 
   it.effect(
+    "rechecks every bound operation and waits for coordinator clearance before deleting",
+    () =>
+      Effect.gen(function* () {
+        const { db, bucket, digest } = yield* setup;
+        const current = yield* Clock.currentTimeMillis;
+        yield* Effect.tryPromise(() =>
+          db.prepare("INSERT INTO memories VALUES('retained',?,'Privado',1,1)").bind(userId).run()
+        );
+        let clearanceAttempts = 0;
+        let clearance: "Blocked" | "Unknown" | "Cleared" = "Blocked";
+        const configuration = {
+          db,
+          userId,
+          stores: makeMemoryErasureStores(db),
+          originals: makeErasureOriginals({
+            db,
+            email: Option.none(),
+            statement: Option.none(),
+            registry: Option.none(),
+          }),
+          recovery: { db, bucket: Option.some(bucket) },
+          clearCoordinator: (): Effect.Effect<boolean, ErasureUnavailable> =>
+            Effect.gen(function* () {
+              clearanceAttempts += 1;
+              if (clearance === "Unknown") return yield* new ErasureUnavailable();
+              return clearance === "Cleared";
+            }),
+        };
+        const owner = makeErasureOwner(configuration);
+        const admission = yield* owner.admit(
+          { userId, sessionId, digest: Array.from(digest), deadlineMs: current + 5000 },
+          yield* Effect.abortSignal
+        );
+        expect(admission.status).toBe(202);
+        const admitted = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ reference: Schema.String })
+        )(yield* Effect.tryPromise(() => admission.json()));
+        const candidate = {
+          userId,
+          reference: admitted.reference,
+          deadlineMs: (yield* Clock.currentTimeMillis) + 5000,
+          authority: {
+            permission: "titular.erase",
+            operatorRef: "operator",
+            expiresAtMs: current + 300000,
+          },
+        };
+        const evidence = {
+          reference: admitted.reference,
+          custodian: "Cloudflare",
+          evidenceRef: reference,
+          outcome: { status: "Accepted" },
+        };
+        for (const refused of [
+          { ...candidate, userId: foreignUser },
+          { ...candidate, deadlineMs: current },
+          { ...candidate, authority: { ...candidate.authority, expiresAtMs: current } },
+          { ...candidate, phase: "Erasing" },
+        ]) {
+          expect((yield* owner.continue(refused)).status).toBe(409);
+          expect((yield* owner.receipt(refused)).status).toBe(409);
+          expect((yield* owner.custody({ ...refused, evidence })).status).toBe(409);
+        }
+        expect(clearanceAttempts).toBe(0);
+        // One continuation only drains. It does not clear or delete in the same call.
+        expect((yield* owner.continue(candidate)).status).toBe(202);
+        expect(clearanceAttempts).toBe(0);
+        expect((yield* owner.continue(candidate)).status).toBe(202);
+        expect(clearanceAttempts).toBe(1);
+        clearance = "Unknown";
+        expect((yield* owner.continue(candidate)).status).toBe(503);
+        const observed = yield* owner.receipt(candidate);
+        expect(yield* Effect.tryPromise(() => observed.json())).toMatchObject({
+          state: "Sealing",
+          completed: [],
+          next: "continue",
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT count(*) FROM memories WHERE user_id=?")
+              .bind(userId)
+              .first("count(*)")
+          )
+        ).toBe(1);
+        // A different configured inventory cannot clear the coordinator or authorize deletion.
+        expect(
+          (yield* makeErasureOwner({ ...configuration, stores: [] }).continue(candidate)).status
+        ).toBe(503);
+        expect(clearanceAttempts).toBe(2);
+        clearance = "Cleared";
+        expect((yield* owner.continue(candidate)).status).toBe(202);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT count(*) FROM memories WHERE user_id=?")
+              .bind(userId)
+              .first("count(*)")
+          )
+        ).toBe(1);
+        const sealed = yield* owner.receipt(candidate);
+        expect(yield* Effect.tryPromise(() => sealed.json())).toMatchObject({
+          state: "Erasing",
+          completed: [],
+        });
+        vi.useFakeTimers({ toFake: ["Date"], now: current + 300001 });
+        expect((yield* owner.continue(candidate)).status).toBe(409);
+        expect((yield* owner.receipt(candidate)).status).toBe(409);
+        expect((yield* owner.custody({ ...candidate, evidence })).status).toBe(409);
+        expect(clearanceAttempts).toBe(3);
+      })
+  );
+
+  it.effect(
     "keeps recovery fenced when a deletion marker may still be published after a failed admission",
     () =>
       Effect.gen(function* () {
@@ -207,19 +330,22 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         });
         const recovery = { db, bucket: Option.some(publicationBucket) };
         expect(
-          (yield* executeErasureAdmission({
+          (yield* makeErasureOwner({
             db,
             userId,
-            candidate: {
-              userId,
-              sessionId,
-              digest: Array.from(digest),
-              deadlineMs: current + 5000,
-            },
-            signal: yield* Effect.abortSignal,
             stores: makeMemoryErasureStores(db),
             recovery,
-          })).status
+            originals: makeErasureOriginals({
+              db,
+              email: Option.none(),
+              statement: Option.none(),
+              registry: Option.none(),
+            }),
+            clearCoordinator: () => Effect.succeed(false),
+          }).admit(
+            { userId, sessionId, digest: Array.from(digest), deadlineMs: current + 5000 },
+            yield* Effect.abortSignal
+          )).status
         ).toBe(503);
         const guarded = withErasureRecovery({ DB: db, ERASURE_BUCKET: bucket }).DB;
         const observe = Effect.tryPromise(() => guarded.prepare("SELECT id FROM users").all());

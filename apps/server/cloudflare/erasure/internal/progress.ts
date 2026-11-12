@@ -1,3 +1,4 @@
+import type { ErasureReceipt } from "../../../src/core/erasure/contract";
 import { sealRecoveryCase } from "./sealed-case";
 import { requireInventory } from "./inventory";
 import { settleExternal } from "./external";
@@ -46,7 +47,8 @@ const prepareDeletion = (
     } else yield* checkpoint({ configuration: input.recovery, scope: input.scope });
   });
 export const progress = (
-  input: ErasureExecution & Readonly<{ scope: ErasureScope; phase: string }>
+  input: ErasureExecution &
+    Readonly<{ scope: ErasureScope; phase: typeof ErasureReceipt.Type.state }>
 ): Effect.Effect<void, ErasureUnavailable> =>
   Effect.gen(function* () {
     yield* requireInventory(input);

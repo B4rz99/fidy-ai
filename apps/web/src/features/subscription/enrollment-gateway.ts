@@ -13,7 +13,7 @@ import {
   type SubscriptionEnrollmentClient,
 } from "@/transport/client";
 import { type CardFields, tokenizeCardWithWompi } from "@/transport/wompi-tokenization";
-import { authorizeNequiWithWompi } from "@/transport/wompi-nequi";
+import { withApprovedNequiWithWompi } from "@/transport/wompi-nequi";
 import {
   type DaviplataAuthorizationFailed,
   type DaviplataFields,
@@ -62,12 +62,21 @@ type PendingPayment = Extract<PaymentSubmission, { status: "payment-pending" }>;
 export type NequiFields = Readonly<{
   method: "nequi";
   phoneNumber: Redacted.Redacted<string>;
+  clearPhone: () => void;
   onAwaiting: () => void;
   signal: AbortSignal;
 }>;
 export type PaymentFields =
   | (CardFields & Readonly<{ signal: Option.Option<AbortSignal> }>)
   | NequiFields;
+
+export const clearNequiPhone = (fields?: PaymentFields): void => {
+  if (fields === undefined || !("method" in fields)) return;
+  Redacted.wipeUnsafe(fields.phoneNumber);
+  try {
+    fields.clearPhone();
+  } catch {}
+};
 
 type SubmissionOptions = Readonly<{
   fields: Option.Option<PaymentFields>;
@@ -196,35 +205,51 @@ const submitNequiSource = ({
   fields,
   signal,
 }: Omit<NewSourceInput, "fields"> &
-  Readonly<{ fields: NequiFields }>): Promise<PaymentSubmission> =>
-  client.execute(
-    (transport) =>
-      authorizeNequiWithWompi({
-        publicKey: enrollment.wompiPublicKey,
-        phoneNumber: fields.phoneNumber,
-        fetchImplementation: globalThis.fetch.bind(globalThis),
-        onAwaiting: fields.onAwaiting,
-      }).pipe(
-        Effect.flatMap((nequiToken) =>
-          transport.subscriptionEnrollment
-            .submit({
-              payload: {
-                paymentSourceMode: "create",
-                method: "nequi",
-                ...facts,
-                nequiToken,
-              },
-            })
-            .pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(nequiToken))))
-        )
-      ),
-    {
-      signal: Option.match(signal, {
-        onNone: () => fields.signal,
-        onSome: (signal) => AbortSignal.any([fields.signal, signal]),
-      }),
-    }
-  );
+  Readonly<{ fields: NequiFields }>): Promise<PaymentSubmission> => {
+  const authorizationSignal = Option.match(signal, {
+    onNone: () => fields.signal,
+    onSome: (signal) => AbortSignal.any([fields.signal, signal]),
+  });
+  let phoneCleared = false;
+  const clearPhone = (): void => {
+    Redacted.wipeUnsafe(fields.phoneNumber);
+    if (phoneCleared) return;
+    phoneCleared = true;
+    try {
+      fields.clearPhone();
+    } catch {}
+  };
+  return client
+    .execute(
+      (transport) =>
+        Effect.suspend(() =>
+          authorizationSignal.aborted
+            ? Effect.interrupt
+            : withApprovedNequiWithWompi(
+                {
+                  publicKey: enrollment.wompiPublicKey,
+                  phoneNumber: fields.phoneNumber,
+                  fetchImplementation: globalThis.fetch.bind(globalThis),
+                  clearPhone,
+                  onAwaiting: fields.onAwaiting,
+                },
+                (nequiToken) =>
+                  authorizationSignal.aborted
+                    ? Effect.interrupt
+                    : transport.subscriptionEnrollment.submit({
+                        payload: {
+                          paymentSourceMode: "create",
+                          method: "nequi",
+                          ...facts,
+                          nequiToken,
+                        },
+                      })
+              )
+        ),
+      { signal: authorizationSignal }
+    )
+    .finally(clearPhone);
+};
 
 const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
   const { client, enrollment, facts, fields, signal } = input;
@@ -234,6 +259,7 @@ const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
       : Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
   }
   if (enrollment.method !== "card" || "method" in fields) {
+    clearNequiPhone(fields);
     return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
   }
   const publicKey = enrollment.wompiPublicKey;
@@ -301,38 +327,45 @@ const makeSubmit = (
   const authorizedCards = new Set<string>();
   return (enrollment, billingEmail, options = { fields: Option.none(), signal: Option.none() }) => {
     const { fields, signal } = options;
-    if (!reserveCard(authorizedCards, enrollment, fields)) {
-      return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
-    }
-    globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
-    const common = submissionFacts(paymentRequests, enrollment, billingEmail);
-    if (enrollment.paymentSourceMode === "reuse") {
+    try {
+      if (!reserveCard(authorizedCards, enrollment, fields)) {
+        clearNequiPhone(Option.getOrUndefined(fields));
+        return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+      }
+      globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
+      const common = submissionFacts(paymentRequests, enrollment, billingEmail);
+      if (enrollment.paymentSourceMode === "reuse") {
+        clearNequiPhone(Option.getOrUndefined(fields));
+        return completed(
+          paymentRequests,
+          enrollment,
+          clientService.execute(
+            (client) =>
+              client.subscriptionEnrollment.submit({
+                payload: { paymentSourceMode: "reuse", ...common },
+              }),
+            executionOptions(Option.getOrUndefined(signal))
+          )
+        );
+      }
+      if (Option.isNone(fields)) {
+        return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+      }
       return completed(
         paymentRequests,
         enrollment,
-        clientService.execute(
-          (client) =>
-            client.subscriptionEnrollment.submit({
-              payload: { paymentSourceMode: "reuse", ...common },
-            }),
-          executionOptions(Option.getOrUndefined(signal))
-        )
+        submitNewSource({
+          client: clientService,
+          enrollment,
+          facts: common,
+          fields: fields.value,
+          signal,
+        })
       );
+    } catch (error) {
+      clearNequiPhone(Option.getOrUndefined(fields));
+      throw error;
     }
-    if (Option.isNone(fields)) {
-      return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
-    }
-    return completed(
-      paymentRequests,
-      enrollment,
-      submitNewSource({
-        client: clientService,
-        enrollment,
-        facts: common,
-        fields: fields.value,
-        signal,
-      })
-    );
   };
 };
 

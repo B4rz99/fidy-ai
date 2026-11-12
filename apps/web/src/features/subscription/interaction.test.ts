@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { BigDecimal, DateTime, Deferred, Effect, Layer, Option, Schema } from "effect";
+import { BigDecimal, DateTime, Deferred, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { Atom, AtomRegistry } from "effect/reactivity";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { UnknownJsonString } from "@/schema-compatibility";
@@ -726,3 +726,34 @@ it.effect(
       expect(input.gateway.submit).not.toHaveBeenCalled();
     })
 );
+
+for (const rejection of ["invalid-email", "expired", "busy", "disposed", "unprepared"] as const) {
+  it.effect(`clears rejected Nequi phone material when submission is ${rejection}`, () =>
+    Effect.gen(function* () {
+      const input = fixture();
+      if (rejection !== "unprepared") yield* prepareFixture(input);
+      if (rejection === "expired") yield* advance(60_001);
+      if (rejection === "busy") {
+        input.view().submit("synthetic@example.invalid");
+      }
+      if (rejection === "disposed") input.dispose();
+      const fields = {
+        method: "nequi" as const,
+        phoneNumber: Redacted.make("3991111111"),
+        clearPhone: vi.fn(),
+        onAwaiting: vi.fn(),
+        signal: AbortSignal.abort(),
+      };
+      const admitted = input.gateway.submit.mock.calls.length;
+      input
+        .view()
+        .submit(
+          rejection === "invalid-email" ? "invalid-email" : "synthetic@example.invalid",
+          fields
+        );
+      expect(input.gateway.submit).toHaveBeenCalledTimes(admitted);
+      expect(fields.clearPhone).toHaveBeenCalledTimes(1);
+      expect(() => Redacted.value(fields.phoneNumber)).toThrow();
+    })
+  );
+}

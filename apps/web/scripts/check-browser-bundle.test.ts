@@ -34,6 +34,12 @@ it.effect.each(["dynamic", "static"] as const)(
               'export { LineChart } from "recharts";\n'
             )
           );
+          yield* Effect.tryPromise(() =>
+            Bun.write(
+              join(fixtureRoot, "src/features/dashboard/fixture.test.ts"),
+              'import { deepStrictEqual } from "node:assert";\nexport const compare = deepStrictEqual;\n'
+            )
+          );
           const checked = checkBrowserBundle({
             entrypoint: "src/main.tsx",
             outdir: join(fixtureRoot, "bundle"),
@@ -84,39 +90,41 @@ it.effect("rejects Effect SQL runtime modules from the current published distrib
   )
 );
 
-it.effect("rejects a forbidden runtime dependency reachable from the web entrypoint", () =>
-  Effect.acquireUseRelease(
-    Effect.tryPromise(() => mkdtemp(join(webRoot, ".bundle-test-"))),
-    (fixtureRoot) =>
-      Effect.gen(function* () {
-        yield* Effect.tryPromise(() =>
-          mkdir(join(fixtureRoot, "src/features/public-site"), { recursive: true })
-        );
-        yield* Effect.tryPromise(() =>
-          Bun.write(
-            join(fixtureRoot, "src/main.tsx"),
-            'import { PublicSiteFeature } from "@/features/public-site/feature";\n\nexport const Root = PublicSiteFeature;\n'
-          )
-        );
-        yield* Effect.tryPromise(() =>
-          Bun.write(
-            join(fixtureRoot, "src/features/public-site/feature.tsx"),
-            'import { readFileSync } from "node:fs";\n\nexport const PublicSiteFeature = readFileSync;\n'
-          )
-        );
-        yield* Effect.tryPromise(() =>
-          expect(
-            checkBrowserBundle({
-              entrypoint: "src/main.tsx",
-              outdir: join(fixtureRoot, "bundle"),
-              webRoot: fixtureRoot,
-              workspaceRoot,
-            })
-          ).rejects.toThrow(/Browser-incompatible runtime modules[\s\S]*node:fs/u)
-        );
-      }),
-    (fixtureRoot) => Effect.tryPromise(() => rm(fixtureRoot, { recursive: true, force: true }))
-  )
+it.effect.each(["feature.tsx", "feature.test.ts"])(
+  "rejects a forbidden runtime dependency reachable through %s from the web entrypoint",
+  (featureFile) =>
+    Effect.acquireUseRelease(
+      Effect.tryPromise(() => mkdtemp(join(webRoot, ".bundle-test-"))),
+      (fixtureRoot) =>
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() =>
+            mkdir(join(fixtureRoot, "src/features/public-site"), { recursive: true })
+          );
+          yield* Effect.tryPromise(() =>
+            Bun.write(
+              join(fixtureRoot, "src/main.tsx"),
+              `import { PublicSiteFeature } from "@/features/public-site/${featureFile}";\n\nexport const Root = PublicSiteFeature;\n`
+            )
+          );
+          yield* Effect.tryPromise(() =>
+            Bun.write(
+              join(fixtureRoot, `src/features/public-site/${featureFile}`),
+              'import { readFileSync } from "node:fs";\n\nexport const PublicSiteFeature = readFileSync;\n'
+            )
+          );
+          yield* Effect.tryPromise(() =>
+            expect(
+              checkBrowserBundle({
+                entrypoint: "src/main.tsx",
+                outdir: join(fixtureRoot, "bundle"),
+                webRoot: fixtureRoot,
+                workspaceRoot,
+              })
+            ).rejects.toThrow(/Browser-incompatible runtime modules[\s\S]*node:fs/u)
+          );
+        }),
+      (fixtureRoot) => Effect.tryPromise(() => rm(fixtureRoot, { recursive: true, force: true }))
+    )
 );
 
 it.effect.each([

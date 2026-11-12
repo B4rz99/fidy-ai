@@ -199,6 +199,7 @@ it.each(["missing-fields", "nequi-fields"] as const)(
                         method: "nequi",
                         phoneNumber: Redacted.make("3991111111"),
                         signal: mountedSignal(),
+                        clearPhone: (): void => {},
                         onAwaiting: (): void => {},
                       }),
                 signal: Option.none(),
@@ -1118,3 +1119,154 @@ for (const step of ["tokenization", "first-send"] as const) {
     })
   );
 }
+
+it("submits one borrowed Nequi approval and keeps source verification separate from settlement", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const enrollment: PreparedEnrollment = {
+        ...prepared(yield* Clock.currentTimeMillis),
+        method: "nequi",
+      };
+      const payloads: Array<unknown> = [];
+      const client = makeSubscriptionEnrollmentClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(
+          HttpClient.HttpClient,
+          submissionBoundary(enrollment, payloads, () =>
+            Effect.succeed(
+              Response.json({ status: "source-verifying", enrollmentId: enrollment.enrollmentId })
+            )
+          )
+        ),
+      });
+      clients.push(client);
+      const provider = vi.fn(() =>
+        Promise.resolve(Response.json({ data: { id: "nequi_test_synthetic", status: "APPROVED" } }))
+      );
+      vi.stubGlobal("fetch", provider);
+      const phoneNumber = Redacted.make("3991111111");
+      const clearPhone = vi.fn();
+      const awaiting = vi.fn();
+      const result = yield* Effect.tryPromise(() =>
+        makeEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
+          fields: Option.some({
+            method: "nequi",
+            phoneNumber,
+            clearPhone,
+            onAwaiting: awaiting,
+            signal: mountedSignal(),
+          }),
+          signal: Option.none(),
+        })
+      );
+      expect(result.status).toBe("source-verifying");
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0]).toMatchObject({
+        method: "nequi",
+        nequiToken: "nequi_test_synthetic",
+        paymentSourceMode: "create",
+      });
+      expect(clearPhone).toHaveBeenCalledTimes(1);
+      expect(awaiting).not.toHaveBeenCalled();
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect(() => Redacted.value(phoneNumber)).toThrow();
+    })
+  ));
+
+it("wipes Nequi fields even when cancellation prevents the client from starting authorization", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const enrollment: PreparedEnrollment = {
+        ...prepared(yield* Clock.currentTimeMillis),
+        method: "nequi",
+      };
+      const payloads: Array<unknown> = [];
+      const client = makeSubscriptionEnrollmentClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(HttpClient.HttpClient, submissionBoundary(enrollment, payloads)),
+      });
+      clients.push(client);
+      const provider = vi.fn();
+      vi.stubGlobal("fetch", provider);
+      const phoneNumber = Redacted.make("3991111111");
+      const clearPhone = vi.fn();
+      const signal = AbortSignal.abort();
+      yield* Effect.exit(
+        Effect.tryPromise(() =>
+          makeEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
+            fields: Option.some({
+              method: "nequi",
+              phoneNumber,
+              clearPhone,
+              onAwaiting: () => undefined,
+              signal,
+            }),
+            signal: Option.none(),
+          })
+        )
+      );
+      expect(payloads).toEqual([]);
+      expect(provider).not.toHaveBeenCalled();
+      expect(clearPhone).toHaveBeenCalledTimes(1);
+      expect(() => Redacted.value(phoneNumber)).toThrow();
+    })
+  ));
+
+it.each(["storage", "billing-email"] as const)(
+  "clears Nequi fields when %s preflight fails before provider admission",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const enrollment: PreparedEnrollment = {
+          ...prepared(yield* Clock.currentTimeMillis),
+          method: "nequi",
+        };
+        const payloads: Array<unknown> = [];
+        const client = makeSubscriptionEnrollmentClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(
+            HttpClient.HttpClient,
+            submissionBoundary(enrollment, payloads)
+          ),
+        });
+        clients.push(client);
+        const provider = vi.fn();
+        vi.stubGlobal("fetch", provider);
+        const phoneNumber = Redacted.make("3991111111");
+        const clearPhone = vi.fn();
+        const storage = vi.spyOn(Storage.prototype, "setItem");
+        if (failure === "storage") {
+          storage.mockImplementation(() => {
+            throw new Error("storage unavailable");
+          });
+        }
+        try {
+          const result = yield* Effect.exit(
+            Effect.tryPromise(() =>
+              makeEnrollmentGateway(client).submit(
+                enrollment,
+                failure === "billing-email" ? "invalid-email" : "synthetic@example.invalid",
+                {
+                  fields: Option.some({
+                    method: "nequi",
+                    phoneNumber,
+                    clearPhone,
+                    onAwaiting: () => undefined,
+                    signal: mountedSignal(),
+                  }),
+                  signal: Option.none(),
+                }
+              )
+            )
+          );
+          expect(result._tag).toBe("Failure");
+          expect(payloads).toEqual([]);
+          expect(provider).not.toHaveBeenCalled();
+          expect(clearPhone).toHaveBeenCalledTimes(1);
+          expect(() => Redacted.value(phoneNumber)).toThrow();
+        } finally {
+          storage.mockRestore();
+        }
+      })
+    )
+);

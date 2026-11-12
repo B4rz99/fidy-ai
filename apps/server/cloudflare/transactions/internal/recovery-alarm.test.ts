@@ -89,3 +89,77 @@ it("does not poison future alarm work after a rejected native write", () =>
       expect(yield* fromTestPromise(() => owner.clear())).toBe(true);
     })
   ));
+
+it("retires a schedule waiting for its native read before it can write an alarm", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entered = Promise.withResolvers<void>();
+      const release =
+        Promise.withResolvers<Awaited<ReturnType<DurableObjectStorage["getAlarm"]>>>();
+      const effects: string[] = [];
+      let reads = 0;
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => {
+          reads += 1;
+          if (reads === 1) {
+            entered.resolve();
+            return release.promise;
+          }
+          effects.push("verify");
+          return Promise.resolve(null);
+        },
+        setAlarm: (): Promise<void> => {
+          effects.push("write");
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => {
+          effects.push("delete");
+          return Promise.resolve();
+        },
+      });
+      const scheduling = owner.schedule(10);
+      yield* fromTestPromise(() => entered.promise);
+      const clearing = owner.clear();
+      const late = owner.schedule(1);
+      expect(effects).toEqual([]);
+      release.resolve(null);
+      yield* fromTestPromise(() => scheduling);
+      expect(yield* fromTestPromise(() => clearing)).toBe(true);
+      yield* fromTestPromise(() => late);
+      expect(yield* fromTestPromise(() => owner.clear())).toBe(true);
+      yield* fromTestPromise(() => owner.schedule(1));
+      expect(effects).toEqual(["delete", "verify", "delete", "verify"]);
+      expect(reads).toBe(3);
+    })
+  ));
+
+it("distinguishes a remaining alarm from native clearance failure and stays retired on retry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let deletes = 0;
+      let writes = 0;
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+          Promise.resolve(deletes === 1 ? 10 : null),
+        setAlarm: (): Promise<void> => {
+          writes += 1;
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => {
+          deletes += 1;
+          return deletes === 2
+            ? Promise.reject(new Error("Native deletion unavailable"))
+            : Promise.resolve();
+        },
+      });
+      expect(yield* fromTestPromise(() => owner.clear())).toBe(false);
+      yield* fromTestPromise(() =>
+        expect(owner.clear()).rejects.toMatchObject({ _tag: "RecoveryAlarmUnavailable" })
+      );
+      yield* fromTestPromise(() => owner.schedule(1));
+      expect(yield* fromTestPromise(() => owner.clear())).toBe(true);
+      yield* fromTestPromise(() => owner.schedule(1));
+      expect(deletes).toBe(3);
+      expect(writes).toBe(0);
+    })
+  ));

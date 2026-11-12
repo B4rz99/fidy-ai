@@ -3,7 +3,7 @@ import { SubscriptionIntroduction } from "@/ui/components/subscription-introduct
 import { SubscriptionInputDecoration } from "@/ui/components/subscription-input-decoration";
 import { Input } from "@/ui/components/input";
 import { Button } from "@/ui/components/button";
-import { Option, Redacted } from "effect";
+import { DateTime, Option, Redacted, Schema } from "effect";
 import { type PaymentFlowView, type PaymentSubmissionView } from "./interaction";
 import { DaviplataEnrollmentForm } from "./daviplata-form";
 import { BillingEmailField, EnrollmentConsent } from "./enrollment-controls";
@@ -20,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { type EnrollmentMethod } from "@/transport/client";
+import { BillingEmail, type EnrollmentMethod } from "@/transport/client";
 import { type SubscriptionOfferPresentation, paymentMethodCopy } from "./presentation";
 import { type CardFields } from "@/transport/wompi-tokenization";
 import {
@@ -328,7 +328,12 @@ const NequiFormContents = ({
           value={phoneNumber}
           change={changePhone}
         />
-        <BillingEmailField email={billingEmail} disabled={busy} setEmail={setBillingEmail} />
+        <BillingEmailField
+          email={billingEmail}
+          invalid={false}
+          disabled={busy}
+          setEmail={setBillingEmail}
+        />
         <EnrollmentConsent
           enrollment={enrollment}
           disabled={busy}
@@ -342,28 +347,94 @@ const NequiFormContents = ({
     </Button>
   </form>
 );
+const useCardAuthorizationLifetime = (
+  clear: () => void
+): Readonly<{
+  admit: () => Option.Option<AbortSignal>;
+  formLifetimeRef: RefCallback<HTMLFormElement>;
+}> => {
+  const authorization = useRef(noPendingAuthorization);
+  const mounted = useRef(false);
+  const [formLifetimeRef] = useState<RefCallback<HTMLFormElement>>(() => () => {
+    mounted.current = true;
+    return (): void => {
+      mounted.current = false;
+      Option.map(authorization.current, (controller) => controller.abort());
+      clear();
+    };
+  });
+  return {
+    formLifetimeRef,
+    admit: () => {
+      if (!mounted.current || Option.isSome(authorization.current)) {
+        return Option.none();
+      }
+      const controller = new AbortController();
+      authorization.current = Option.some(controller);
+      return Option.some(controller.signal);
+    },
+  };
+};
+const useBillingEmailDraft = (
+  initial: string
+): Readonly<{
+  binding: Pick<ComponentProps<typeof BillingEmailField>, "email" | "invalid" | "setEmail">;
+  validate: () => Option.Option<string>;
+}> => {
+  const [email, setEmail] = useState(initial);
+  const [attempted, setAttempted] = useState(false);
+  const normalized = email.trim().toLowerCase();
+  const valid = Schema.is(BillingEmail)(normalized);
+  return {
+    binding: {
+      email,
+      invalid: attempted && !valid,
+      setEmail: (value) => {
+        setEmail(value);
+        setAttempted(false);
+      },
+    },
+    validate: () => {
+      setAttempted(true);
+      return valid ? Option.some(normalized) : Option.none();
+    },
+  };
+};
 const PreparedCardEnrollmentForm = ({
   enrollment,
   offer,
   busy,
   submit,
 }: EnrollmentFormProps): JSX.Element => {
-  const [billingEmail, setBillingEmail] = useState<string>(enrollment.billingEmail);
+  const billingEmail = useBillingEmailDraft(enrollment.billingEmail);
   const [fields, setFields] = useState<CardFields>(emptyCardFields);
   const [decisions, setDecisions] = useState<EnrollmentDecisions>(emptyDecisions);
+  const { admit, formLifetimeRef } = useCardAuthorizationLifetime(() => setFields(emptyCardFields));
   const allAccepted = allDecisionsAccepted(decisions);
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (!allAccepted || busy || !event.currentTarget.checkValidity()) return;
+    const email = billingEmail.validate();
+    if (
+      Option.isNone(email) ||
+      !allAccepted ||
+      busy ||
+      !event.currentTarget.checkValidity() ||
+      DateTime.nowUnsafe().epochMilliseconds >= enrollment.expiresAt.epochMilliseconds
+    ) {
+      return;
+    }
+    const signal = admit();
+    if (Option.isNone(signal)) {
+      return;
+    }
     setFields(emptyCardFields);
     submit(
-      billingEmail.trim().toLowerCase(),
-      enrollment.paymentSourceMode === "create" ? fields : undefined
+      email.value,
+      enrollment.paymentSourceMode === "create" ? { ...fields, signal } : undefined
     );
   };
-  const submitLabel = enrollmentSubmitLabel(busy);
   return (
-    <form className="subscription-form" onSubmit={onSubmit}>
+    <form ref={formLifetimeRef} className="subscription-form" onSubmit={onSubmit}>
       {enrollment.paymentSourceMode === "create" ? (
         <CardFieldsForm disabled={busy} fields={fields} setFields={setFields} />
       ) : (
@@ -371,7 +442,7 @@ const PreparedCardEnrollmentForm = ({
           Usaremos de nuevo tu fuente de pago guardada. No necesitas ingresar los datos de nuevo.
         </p>
       )}
-      <BillingEmailField email={billingEmail} disabled={busy} setEmail={setBillingEmail} />
+      <BillingEmailField {...billingEmail.binding} disabled={busy} />
       <EnrollmentConsent
         decisions={decisions}
         disabled={busy}
@@ -382,7 +453,7 @@ const PreparedCardEnrollmentForm = ({
         Se cobrará {offer.moneyText} y se renovará cada {offer.billingUnit}.
       </p>
       <Button disabled={!allAccepted || busy} type="submit">
-        {submitLabel}
+        {enrollmentSubmitLabel(busy)}
       </Button>
     </form>
   );
@@ -621,6 +692,18 @@ const EnrollmentContent = ({
 const focusPaymentHeading: RefCallback<HTMLHeadingElement> = (node) => {
   node?.focus();
 };
+const enrollmentFailureCopy = (
+  needsRecovery: boolean,
+  enrollment: Option.Option<PaymentFlowView>
+): string => {
+  if (needsRecovery) {
+    return "No pudimos confirmar el resultado. Consulta el estado antes de volver a intentarlo.";
+  }
+  if (Option.isNone(enrollment)) {
+    return "No pudimos preparar el formulario. Intenta de nuevo.";
+  }
+  return "Revisa los datos para continuar.";
+};
 const EnrollmentFeedback = ({
   failed,
   enrollment,
@@ -639,9 +722,7 @@ const EnrollmentFeedback = ({
         Reintentar preparación
       </Button>
     ) : null}
-    {failed ? (
-      <p role="alert">No pudimos continuar. Revisa los datos o intenta más tarde.</p>
-    ) : null}
+    {failed ? <p role="alert">{enrollmentFailureCopy(needsRecovery, enrollment)}</p> : null}
     {awaitingObservation ? (
       <output>
         La verificación automática terminó sin confirmar el pago. Consulta el estado para verificar

@@ -437,6 +437,7 @@ for (const status of ["available", "verifying"] as const) {
           expirationMonth: "12",
           expirationYear: "2030",
           cardholderName: "Synthetic Person",
+          signal: Option.none(),
         });
         yield* advance(0);
         expect(view().needsRecovery).toBe(true);

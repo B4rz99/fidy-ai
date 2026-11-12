@@ -439,6 +439,7 @@ export const DaviplataEnrollmentForm = (props: FormProps): JSX.Element => {
             disabled={busy}
           />
           <BillingEmailField
+            invalid={false}
             email={interaction.email}
             disabled={busy}
             setEmail={interaction.setEmail}

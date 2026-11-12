@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   BillingEmail,
@@ -57,7 +57,9 @@ export type NequiFields = Readonly<{
   onAwaiting: () => void;
   signal: AbortSignal;
 }>;
-export type PaymentFields = CardFields | NequiFields;
+export type PaymentFields =
+  | (CardFields & Readonly<{ signal: Option.Option<AbortSignal> }>)
+  | NequiFields;
 
 type SubmissionOptions = Readonly<{
   fields: Option.Option<PaymentFields>;
@@ -226,38 +228,74 @@ const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
   if (enrollment.method !== "card" || "method" in fields) {
     return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
   }
+  const publicKey = enrollment.wompiPublicKey;
+  const expiresAt = enrollment.expiresAt.epochMilliseconds;
+  const enrollmentId = enrollment.enrollmentId;
   return client.execute(
     (transport) =>
-      tokenizeCardWithWompi(
-        enrollment.wompiPublicKey,
-        fields,
-        globalThis.fetch.bind(globalThis)
-      ).pipe(
+      tokenizeCardWithWompi(publicKey, fields, globalThis.fetch.bind(globalThis)).pipe(
         Effect.map(Redacted.make),
         Effect.flatMap((cardToken) =>
-          transport.subscriptionEnrollment
-            .submit({
+          Effect.gen(function* () {
+            if (
+              (yield* Clock.currentTimeMillis) >= expiresAt ||
+              enrollment.wompiPublicKey !== publicKey ||
+              enrollment.enrollmentId !== enrollmentId
+            ) {
+              return yield* new EnrollmentSubmissionFailed();
+            }
+            return yield* transport.subscriptionEnrollment.submit({
               payload: {
                 paymentSourceMode: "create",
                 method: "card",
                 ...facts,
                 cardToken,
               },
-            })
-            .pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(cardToken))))
+            });
+          }).pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(cardToken))))
         )
       ),
-    executionOptions(Option.getOrUndefined(signal))
+    executionOptions(
+      Option.getOrUndefined(
+        Option.map(
+          Option.orElse(fields.signal, () => signal),
+          (fieldSignal) => AbortSignal.any([fieldSignal, ...Option.toArray(signal)])
+        )
+      )
+    )
   );
 };
 
-const makeSubmit =
-  (
-    clientService: SubscriptionEnrollmentClient,
-    paymentRequests: PaymentRequestStore
-  ): EnrollmentGateway["submit"] =>
-  (enrollment, billingEmail, options = { fields: Option.none(), signal: Option.none() }) => {
+const reserveCard = (
+  authorizedCards: Set<string>,
+  enrollment: PreparedEnrollment,
+  fields: Option.Option<PaymentFields>
+): boolean => {
+  if (enrollment.method !== "card" || enrollment.paymentSourceMode !== "create") {
+    return true;
+  }
+  if (
+    authorizedCards.has(enrollment.enrollmentId) ||
+    DateTime.nowUnsafe().epochMilliseconds >= enrollment.expiresAt.epochMilliseconds ||
+    Option.isNone(fields) ||
+    "method" in fields.value
+  ) {
+    return false;
+  }
+  authorizedCards.add(enrollment.enrollmentId);
+  return true;
+};
+
+const makeSubmit = (
+  clientService: SubscriptionEnrollmentClient,
+  paymentRequests: PaymentRequestStore
+): EnrollmentGateway["submit"] => {
+  const authorizedCards = new Set<string>();
+  return (enrollment, billingEmail, options = { fields: Option.none(), signal: Option.none() }) => {
     const { fields, signal } = options;
+    if (!reserveCard(authorizedCards, enrollment, fields)) {
+      return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+    }
     globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
     const common = submissionFacts(paymentRequests, enrollment, billingEmail);
     if (enrollment.paymentSourceMode === "reuse") {
@@ -288,6 +326,7 @@ const makeSubmit =
       })
     );
   };
+};
 
 const makeContinue =
   (

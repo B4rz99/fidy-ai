@@ -139,6 +139,9 @@ it("consumes supplied OTP immediately and fences a submitted result after dispos
   expect(() => Redacted.value(otp)).toThrow();
   await new Promise<void>((resolve) => queueMicrotask(resolve));
   challenge.dispose();
+  const ownedOtp = vi.mocked(input.provider.confirm).mock.calls[0]?.[0];
+  expect(ownedOtp).toBeDefined();
+  if (ownedOtp !== undefined) expect(() => Redacted.value(ownedOtp)).toThrow();
   pending.resolve(submission);
   expect(await confirming).toEqual({ status: "refused" });
   expect(await challenge.retrySubmission()).toEqual({ status: "refused" });

@@ -323,6 +323,15 @@ captured ETag, publishes the SQLite authority durably, then attempts one conditi
 The native journal grants that final attempt once; a retry only observes an already published result.
 Uncertain or restored checkpoints require existing restore/release reconciliation. The retained R2
 transfer witness prevents first-release initialization after complete independent metadata loss.
+Erasure binds its execution configuration to the exact User inside the serialized coordinator.
+Its private `admit`, `continue`, `receipt` and `custody` operations decode and authorize each
+invocation independently; binding retains no credential, receipt or lifecycle observation.
+Continuation reads and decodes the durable phase and offers one bounded opportunity.
+Per-store acknowledgments survive credential deletion and coordinator restart. Original bytes must
+be confirmed absent before `ExternalPending`; that guarded handoff records the last erasure instant
+and resets Cloudflare custody. Completion requires every configured store and all five custodians,
+terminal evidence and the 30-day recovery horizon. Accepted custody and elapsed time alone never
+prove completion. The browser reports acceptance as unfinished and provides support without login.
 Fresh authenticated account deletion fences new activity and waits for confirmed upload settlement
 before removing owner records and User file prefixes. Minimal independent markers protect restoration;
 external acknowledgments remain distinct from verified cleanup. Metadata outlives supported backups,
@@ -424,8 +433,10 @@ recovery path when both offers fail. Neither handoff means extraction has comple
 Committed queued statement readback can wake the owning User coordinator's durable alarm.
 Its dispatcher selects only that User's published intents. One coalesced alarm preserves the
 earliest statement or hosted recovery deadline; the alarm attempts both recovery owners and
-hosted recovery restores any later deadline. Erasure retires the resident alarm scheduler before
-joining pending native writes and clearing the alarm, so late callbacks cannot recreate custody.
+hosted recovery restores any later deadline. Erasure calls the resident alarm scheduler's `retireAndClear` after MCP settlement. It retires
+admission before joining pending native writes and clearing the alarm, so late callbacks cannot
+recreate custody. Only verified `AlarmAbsent` permits coordinator clearance; `ClearUnconfirmed`
+and native failures keep erasure blocked without reopening scheduling.
 Publication succeeds when a best-effort wake fails; D1 intent and independent cron discovery
 remain authoritative recovery.
 

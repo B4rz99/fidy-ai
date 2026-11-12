@@ -255,3 +255,112 @@ it("serializes repeated retirement attempts while native deletion is pending", (
       expect(calls).toEqual(["delete", "read", "delete", "read"]);
     })
   ));
+
+it("retires a schedule waiting for its native read before it can write an alarm", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const entered = Promise.withResolvers<void>();
+      const release =
+        Promise.withResolvers<Awaited<ReturnType<DurableObjectStorage["getAlarm"]>>>();
+      const effects: string[] = [];
+      let reads = 0;
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => {
+          reads += 1;
+          if (reads === 1) {
+            entered.resolve();
+            return release.promise;
+          }
+          effects.push("verify");
+          return Promise.resolve(null);
+        },
+        setAlarm: (): Promise<void> => {
+          effects.push("write");
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => {
+          effects.push("delete");
+          return Promise.resolve();
+        },
+      });
+      const scheduling = owner.schedule(10);
+      yield* fromTestPromise(() => entered.promise);
+      const clearing = owner.retireAndClear();
+      const late = owner.schedule(1);
+      expect(effects).toEqual([]);
+      release.resolve(null);
+      yield* fromTestPromise(() => scheduling);
+      expect(yield* fromTestPromise(() => clearing)).toEqual({ _tag: "AlarmAbsent" });
+      yield* fromTestPromise(() => late);
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
+      yield* fromTestPromise(() => owner.schedule(1));
+      expect(effects).toEqual(["delete", "verify", "delete", "verify"]);
+      expect(reads).toBe(3);
+    })
+  ));
+
+it("distinguishes a remaining alarm from native clearance failure and stays retired on retry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let deletes = 0;
+      let writes = 0;
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> =>
+          Promise.resolve(deletes === 1 ? 10 : null),
+        setAlarm: (): Promise<void> => {
+          writes += 1;
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => {
+          deletes += 1;
+          return deletes === 2
+            ? Promise.reject(new Error("Native deletion unavailable"))
+            : Promise.resolve();
+        },
+      });
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({
+        _tag: "ClearUnconfirmed",
+      });
+      yield* fromTestPromise(() =>
+        expect(owner.retireAndClear()).rejects.toMatchObject({ _tag: "RecoveryAlarmUnavailable" })
+      );
+      yield* fromTestPromise(() => owner.schedule(1));
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
+      yield* fromTestPromise(() => owner.schedule(1));
+      expect(deletes).toBe(3);
+      expect(writes).toBe(0);
+    })
+  ));
+
+it("rejects unavailable absence verification and permits cleanup retry without reopening scheduling", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let reads = 0;
+      let deletes = 0;
+      let writes = 0;
+      const owner = makeUserRecoveryAlarm({
+        getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => {
+          reads += 1;
+          return reads === 1
+            ? Promise.reject(new Error("Native verification unavailable"))
+            : Promise.resolve(null);
+        },
+        setAlarm: (): Promise<void> => {
+          writes += 1;
+          return Promise.resolve();
+        },
+        deleteAlarm: (): Promise<void> => {
+          deletes += 1;
+          return Promise.resolve();
+        },
+      });
+      yield* fromTestPromise(() =>
+        expect(owner.retireAndClear()).rejects.toMatchObject({ _tag: "RecoveryAlarmUnavailable" })
+      );
+      yield* fromTestPromise(() => owner.schedule(1));
+      expect(yield* fromTestPromise(() => owner.retireAndClear())).toEqual({ _tag: "AlarmAbsent" });
+      expect(reads).toBe(2);
+      expect(deletes).toBe(2);
+      expect(writes).toBe(0);
+    })
+  ));

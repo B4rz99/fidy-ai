@@ -26,12 +26,7 @@ import {
   withErasureRegistry,
 } from "../erasure/runtime";
 import { type ErasureStore, ErasureUnavailable } from "../erasure-store/contract";
-import {
-  executeErasureAdmission,
-  executeErasureContinuation,
-  executeErasureControl,
-  executeErasureRestore,
-} from "../erasure/operations";
+import { executeErasureRestore, makeErasureOwner } from "../erasure/operations";
 import { makeAuditErasureStores } from "../audit/runtime";
 import { makeBrowserLoginErasureStores } from "../browser-login/runtime";
 import { makeBudgetsErasureStores } from "../budgets/runtime";
@@ -451,48 +446,35 @@ const privateErasureActivity = (
   const restore = privateErasureRestore(input);
   if (Option.isSome(restore)) return restore;
   const erasurePath = new URL(input.request.url).pathname;
+  if (
+    ![
+      "/erasure-admit",
+      "/erasure-continue",
+      "/erasure-receipt",
+      "/erasure-custody-evidence",
+    ].includes(erasurePath)
+  ) {
+    return Option.none();
+  }
+  const owner = makeErasureOwner({
+    db: input.environment.DB,
+    userId: input.userId,
+    stores: erasureStores(input.environment.DB),
+    originals: makeErasureOriginals({
+      db: input.environment.DB,
+      email: Option.fromUndefinedOr(input.environment.EMAIL_BUCKET),
+      statement: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
+      registry: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
+    }),
+    recovery: erasureRecovery(input.environment),
+    clearCoordinator: input.clearCoordinator,
+  });
   if (erasurePath === "/erasure-admit") {
-    return Option.some(
-      executeErasureAdmission({
-        db: input.environment.DB,
-        userId: input.userId,
-        candidate: input.candidate,
-        signal: input.request.signal,
-        stores: erasureStores(input.environment.DB),
-        recovery: erasureRecovery(input.environment),
-      })
-    );
+    return Option.some(owner.admit(input.candidate, input.request.signal));
   }
-  if (erasurePath === "/erasure-continue") {
-    return Option.some(
-      executeErasureContinuation({
-        db: input.environment.DB,
-        userId: input.userId,
-        candidate: input.candidate,
-        stores: erasureStores(input.environment.DB),
-        originals: makeErasureOriginals({
-          db: input.environment.DB,
-          email: Option.fromUndefinedOr(input.environment.EMAIL_BUCKET),
-          statement: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
-          registry: Option.fromUndefinedOr(input.environment.ERASURE_BUCKET),
-        }),
-        recovery: erasureRecovery(input.environment),
-        clearCoordinator: input.clearCoordinator,
-      })
-    );
-  }
-  if (["/erasure-receipt", "/erasure-custody-evidence"].includes(erasurePath)) {
-    return Option.some(
-      executeErasureControl({
-        db: input.environment.DB,
-        userId: input.userId,
-        candidate: input.candidate,
-        operation: erasurePath === "/erasure-receipt" ? "Receipt" : "CustodyEvidence",
-        stores: erasureStores(input.environment.DB),
-      })
-    );
-  }
-  return Option.none();
+  if (erasurePath === "/erasure-continue") return Option.some(owner.continue(input.candidate));
+  if (erasurePath === "/erasure-receipt") return Option.some(owner.receipt(input.candidate));
+  return Option.some(owner.custody(input.candidate));
 };
 const privateErasureRestore = (
   input: Parameters<typeof privateProactivityActivity>[0]

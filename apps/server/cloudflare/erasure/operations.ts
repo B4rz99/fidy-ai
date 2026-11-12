@@ -13,6 +13,7 @@ import {
   ErasureContinuation,
   ErasureCustodyAdmission,
   type ErasureExecution,
+  type ErasureOwner,
   type ErasureRecoveryConfiguration,
   type ErasureRegistryInitialization,
 } from "./contract";
@@ -20,13 +21,30 @@ import { progress } from "./internal/progress";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import type { ErasureStore } from "../erasure-store/contract";
 import { admitDeletion } from "./internal/admission";
+import { ErasureReceipt } from "../../src/core/erasure/contract";
+
+/** Composition inside the serialized User coordinator. Binding supplies no authority:
+ * each call decodes its own admission and retains the original credentials and deadline.
+ * No receipt, credential or lifecycle observation is retained across invocations. */
+export const makeErasureOwner = (
+  configuration: ErasureExecution & Readonly<{ userId: string }>
+): ErasureOwner => ({
+  admit: (candidate: unknown, signal: AbortSignal): Effect.Effect<Response> =>
+    executeErasureAdmission({ ...configuration, candidate, signal }),
+  continue: (candidate: unknown): Effect.Effect<Response> =>
+    executeErasureContinuation({ ...configuration, candidate }),
+  receipt: (candidate: unknown): Effect.Effect<Response> =>
+    executeErasureControl({ ...configuration, candidate, operation: "Receipt" }),
+  custody: (candidate: unknown): Effect.Effect<Response> =>
+    executeErasureControl({ ...configuration, candidate, operation: "CustodyEvidence" }),
+});
 
 const conflictStatus = 409;
 const admissionLifetimeMs = 5000;
 const acceptedStatus = 202;
 const unavailableStatus = 503;
 /** Accepts only private Core admissions, rechecked under the named User's existing coordinator. */
-export const executeErasureAdmission = (
+const executeErasureAdmission = (
   input: Readonly<{
     db: D1Database;
     userId: string;
@@ -64,7 +82,7 @@ export const executeErasureAdmission = (
   }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
 
 /** A continuation is bound to the reviewed User and inventory; unresolved independent stores refuse progression. */
-export const executeErasureContinuation = (
+const executeErasureContinuation = (
   input: Readonly<{
     db: D1Database;
     userId: string;
@@ -91,7 +109,7 @@ export const executeErasureContinuation = (
     return new Response(null, { status: acceptedStatus });
   }).pipe(Effect.orElseSucceed(() => new Response(null, { status: unavailableStatus })));
 
-export const executeErasureControl = (
+const executeErasureControl = (
   input: Readonly<{
     db: D1Database;
     userId: string;
@@ -263,7 +281,9 @@ const continueDisposition = (
           .first(),
       catch: () => new ErasureUnavailable(),
     });
-    const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ state: Schema.String }))(raw);
+    const row = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ state: ErasureReceipt.fields.state })
+    )(raw);
     yield* progress({ ...input, scope, phase: row.state });
   }).pipe(Effect.mapError(() => new ErasureUnavailable()));
 

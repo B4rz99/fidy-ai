@@ -133,6 +133,14 @@ export type ErasureOperatorEnvironment = Readonly<{
     }>
   >;
 
+/** Private same-User operations; every call requires a fresh validated admission. */
+export type ErasureOwner = Readonly<{
+  admit: (candidate: unknown, signal: AbortSignal) => Effect.Effect<Response>;
+  continue: (candidate: unknown) => Effect.Effect<Response>;
+  receipt: (candidate: unknown) => Effect.Effect<Response>;
+  custody: (candidate: unknown) => Effect.Effect<Response>;
+}>;
+
 export type ErasureExecution = Readonly<{
   db: D1Database;
   stores: ReadonlyArray<ErasureStore>;

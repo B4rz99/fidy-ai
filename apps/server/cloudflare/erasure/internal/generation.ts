@@ -41,7 +41,7 @@ export const expectedGeneration = (
   });
 
 export const generationAssertion = (
-  input: Readonly<{ db: D1Database; generation: typeof ErasureGeneration.Type }>
+  input: Readonly<{ db: Pick<D1Database, "prepare">; generation: typeof ErasureGeneration.Type }>
 ): D1PreparedStatement =>
   input.db
     // Invalid JSON raises a native SQL error on mismatch, rolling back the enclosing batch.

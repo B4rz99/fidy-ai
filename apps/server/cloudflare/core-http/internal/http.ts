@@ -1,3 +1,4 @@
+import { coordinatorErasureStoreIds } from "../../transactions/runtime";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { prepareBoundRecurringWorkspace } from "../../recurring-plans/operations";
 import {
@@ -1927,7 +1928,13 @@ const supportCoreResponse = (
   path: string
 ): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
   if (path === "/internal/titular-erasure") {
-    return Option.some(handleErasureOperator({ request, environment }));
+    return Option.some(
+      handleErasureOperator({
+        request,
+        environment,
+        storeIds: coordinatorErasureStoreIds(environment.DB),
+      })
+    );
   }
   if (refundSupportRoute(path)) {
     return Option.some(

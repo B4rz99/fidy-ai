@@ -324,6 +324,10 @@ in its independent SQLite storage after the authenticated handoff; it never cons
 With the shared-read binding enabled, existing query declarations and browser data GET transports execute canonical HTTP in that same
 object; commands, User coordination and admission policies retain their existing owners. Each
 protected D1 unit reads the current registry generation and asserts it inside its native transaction.
+Sessions prepare that assertion through the same Session executing the owner statements; retained
+Sessions and prepared statements revalidate on every execution. Missing, malformed or unavailable
+independent proof refuses the unit without initializing replacement evidence. Native row methods
+remain protected, while `exec`, `dump` and raw tuple access remain unavailable.
 Other executors reach the same metadata through a bounded private binding. ForwardedEmail receives
 only the named metadata transport entrypoint, without the coordinator namespace. No generation or response
 cache grants authority. Private original bytes remain in R2.
@@ -345,7 +349,11 @@ terminal evidence and the 30-day recovery horizon. Accepted custody and elapsed 
 prove completion. The browser reports acceptance as unfinished and provides support without login.
 Fresh authenticated account deletion fences new activity and waits for confirmed upload settlement
 before removing owner records and User file prefixes. Minimal independent markers protect restoration;
-external acknowledgments remain distinct from verified cleanup. Metadata outlives supported backups,
+external acknowledgments remain distinct from verified cleanup. Restoration replay rechecks original operator
+expiry and cancellation before scan writes, and case import rechecks its short admission after independent
+evidence reads. Same-generation retries retain exact original request identity and time. Guarded release
+compares completed local steps against the current coordinator-composed inventory in its publication unit;
+ExternalPending remains separate from external completion. Metadata outlives supported backups,
 then expires after external completion. Migration and release checks follow the
 [release procedure](../../docs/operations/production-releases.md).
 

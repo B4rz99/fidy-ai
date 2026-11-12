@@ -3,13 +3,14 @@ import { openAiTestKey } from "../openai.test-fixture";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { afterEach, expect, vi } from "vitest";
 import { it as effectIt } from "@effect/vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import { installRetentionTestSchema } from "../d1-test-fixture";
 import { handleErasureRequest, withErasureRecovery } from "./runtime";
 import { executeErasureRestore, makeErasureOwner } from "./operations";
 import { UserId } from "../../src/core/identity/contract";
 import type { ErasureContinuation } from "./contract";
+import { ErasureRestoreAdmission } from "./contract";
 import { nativeErasurePlatform } from "./native.test-fixture";
 import { ErasureOperatorReceipt, ErasureProvider } from "../../src/core/erasure/contract";
 import { ErasureUnavailable } from "../erasure-store/contract";
@@ -17,6 +18,12 @@ import { makeErasureOriginals } from "../erasure-store/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
 
 afterEach(() => vi.useRealTimers());
+const json = Schema.fromJsonString(Schema.Unknown);
+const cancellationController = (): AbortController => new AbortController();
+const publishCase = Effect.fn(function* (bucket: R2Bucket, record: unknown) {
+  const body = yield* Schema.encodeEffect(json)(record);
+  yield* Effect.tryPromise(() => bucket.put(`recovery/cases/${reference}`, body));
+});
 const userId = "12740000-0000-4000-8000-000000000001";
 const foreignUser = "12740000-0000-4000-8000-000000000099";
 const sessionId = "12740000-0000-4000-8000-000000000002";
@@ -68,6 +75,38 @@ const setup = Effect.gen(function* () {
     );
   }
   return { db, bucket, originals: native.originals, coordinator: native.coordinator, digest };
+});
+const restoreAdmission = (
+  current: number,
+  overrides: Partial<typeof ErasureRestoreAdmission.Type> = {}
+): typeof ErasureRestoreAdmission.Type =>
+  Schema.decodeSync(ErasureRestoreAdmission)({
+    userId,
+    reference,
+    generation: "initial",
+    deadlineMs: current + 5000,
+    authority: {
+      permission: "titular.erase",
+      operatorRef: "operator",
+      expiresAtMs: current + 300000,
+    },
+    ...overrides,
+  });
+const restoreFixture = Effect.fn(function* (
+  native: Effect.Success<typeof setup>,
+  current: number,
+  overrides: Partial<Parameters<typeof executeErasureRestore>[0]> = {}
+) {
+  const input: Parameters<typeof executeErasureRestore>[0] = {
+    db: native.db,
+    userId,
+    signal: yield* Effect.abortSignal,
+    stores: makeMemoryErasureStores(native.db),
+    recovery: { db: native.db, bucket: Option.some(native.bucket) },
+    candidate: restoreAdmission(current),
+    ...overrides,
+  };
+  return input;
 });
 const submit = (
   input: Effect.Success<typeof setup>,
@@ -414,6 +453,204 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
       })
   );
 
+  it.effect("clears restored Cloudflare verification when an unsealed case reopens", () =>
+    Effect.gen(function* () {
+      const native = yield* setup;
+      const current = yield* Clock.currentTimeMillis;
+      yield* Effect.tryPromise(() =>
+        native.db.batch([
+          native.db
+            .prepare(
+              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,?,'Complete')"
+            )
+            .bind(reference, userId, current),
+          native.db
+            .prepare(
+              "INSERT INTO erasure_custody_records(record_type,request_id,custodian,state) VALUES('current',?,'Cloudflare','Verified')"
+            )
+            .bind(reference),
+          native.db
+            .prepare(
+              "INSERT INTO erasure_custody_records(record_type,request_id,custodian,state) VALUES('current',?,'Kapso','Verified')"
+            )
+            .bind(reference),
+        ])
+      );
+      yield* publishCase(native.bucket, {
+        reference,
+        userId,
+        requestedAtMs: current,
+        sealed: false,
+      });
+      expect((yield* executeErasureRestore(yield* restoreFixture(native, current))).status).toBe(
+        202
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          native.db
+            .prepare(
+              "SELECT custodian,state FROM erasure_custody_records WHERE record_type='current' AND request_id=? AND custodian IN('Cloudflare','Kapso') ORDER BY custodian"
+            )
+            .bind(reference)
+            .all()
+        )).results
+      ).toEqual([
+        { custodian: "Cloudflare", state: "Pending" },
+        { custodian: "Kapso", state: "Verified" },
+      ]);
+    })
+  );
+
+  it.effect("refuses restore import canceled while reading independent evidence", () =>
+    Effect.gen(function* () {
+      const native = yield* setup;
+      const current = yield* Clock.currentTimeMillis;
+      const cancellation = cancellationController();
+      yield* publishCase(native.bucket, {
+        reference,
+        userId,
+        requestedAtMs: current,
+        sealed: true,
+      });
+      const registry = new Proxy(native.bucket, {
+        get: (target, property): unknown =>
+          property === "get"
+            ? (key: string) =>
+                target.get(key).then((object) => {
+                  if (key.startsWith("recovery/cases/")) cancellation.abort();
+                  return object;
+                })
+            : Reflect.get(target, property, target),
+      });
+      expect(
+        (yield* executeErasureRestore(
+          yield* restoreFixture(native, current, {
+            signal: cancellation.signal,
+            recovery: { db: native.db, bucket: Option.some(registry) },
+          })
+        )).status
+      ).toBe(503);
+      expect(
+        yield* Effect.tryPromise(() =>
+          native.db.prepare("SELECT count(*) FROM erasure_requests").first("count(*)")
+        )
+      ).toBe(0);
+    })
+  );
+
+  it.effect("refuses missing, malformed, oversized and mismatched independent restore cases", () =>
+    Effect.gen(function* () {
+      const native = yield* setup;
+      const current = yield* Clock.currentTimeMillis;
+      const restore = executeErasureRestore(yield* restoreFixture(native, current));
+      expect((yield* restore).status).toBe(503);
+      for (const value of [
+        "invalid JSON",
+        "x".repeat(513),
+        yield* Schema.encodeEffect(json)({
+          reference,
+          userId: foreignUser,
+          requestedAtMs: current,
+          sealed: true,
+        }),
+        yield* Schema.encodeEffect(json)({
+          reference: foreignSession,
+          userId,
+          requestedAtMs: current,
+          sealed: true,
+        }),
+      ]) {
+        yield* Effect.tryPromise(() => native.bucket.put(`recovery/cases/${reference}`, value));
+        expect((yield* restore).status).toBe(503);
+      }
+      expect(
+        yield* Effect.tryPromise(() =>
+          native.db.prepare("SELECT count(*) FROM erasure_requests").first("count(*)")
+        )
+      ).toBe(0);
+      const generation = yield* Effect.tryPromise(() => native.bucket.get("recovery/generation"));
+      if (generation === null) return yield* Effect.die("Missing independent generation");
+      expect(yield* Effect.tryPromise(() => generation.text())).toBe("initial");
+    })
+  );
+
+  it.effect("rejects changed original request time on a same-generation restore retry", () =>
+    Effect.gen(function* () {
+      const native = yield* setup;
+      const current = yield* Clock.currentTimeMillis;
+      const publish = (
+        requestedAtMs: number
+      ): Effect.Effect<void, Schema.SchemaError | Cause.UnknownError> =>
+        publishCase(native.bucket, { reference, userId, requestedAtMs, sealed: true });
+      const restore = executeErasureRestore(yield* restoreFixture(native, current));
+      yield* publish(current);
+      expect((yield* restore).status).toBe(202);
+      expect((yield* restore).status).toBe(202);
+      yield* Effect.tryPromise(() =>
+        native.db
+          .prepare("UPDATE erasure_steps SET delete_done=1 WHERE request_id=?")
+          .bind(reference)
+          .run()
+      );
+      yield* publish(current + 1);
+      expect((yield* restore).status).toBe(503);
+      expect(
+        yield* Effect.tryPromise(() =>
+          native.db
+            .prepare("SELECT requested_at_ms FROM erasure_requests WHERE id=?")
+            .bind(reference)
+            .first("requested_at_ms")
+        )
+      ).toBe(current);
+      expect(
+        yield* Effect.tryPromise(() =>
+          native.db
+            .prepare("SELECT delete_done FROM erasure_steps WHERE request_id=? LIMIT 1")
+            .bind(reference)
+            .first("delete_done")
+        )
+      ).toBe(1);
+    })
+  );
+
+  it.effect("refuses restore import when independent evidence outlives its admission", () =>
+    Effect.gen(function* () {
+      const native = yield* setup;
+      const current = yield* Clock.currentTimeMillis;
+      const marker = yield* Schema.encodeEffect(json)({
+        reference,
+        userId,
+        requestedAtMs: current,
+        sealed: true,
+      });
+      yield* Effect.tryPromise(() => native.bucket.put(`recovery/cases/${reference}`, marker));
+      const registry = new Proxy(native.bucket, {
+        get: (target, property): unknown =>
+          property === "get"
+            ? (key: string) =>
+                target.get(key).then((object) => {
+                  if (key.startsWith("recovery/cases/")) {
+                    vi.useFakeTimers({ toFake: ["Date"], now: current + 5001 });
+                  }
+                  return object;
+                })
+            : Reflect.get(target, property, target),
+      });
+      expect(
+        (yield* executeErasureRestore(
+          yield* restoreFixture(native, current, {
+            recovery: { db: native.db, bucket: Option.some(registry) },
+          })
+        )).status
+      ).toBe(503);
+      expect(
+        yield* Effect.tryPromise(() =>
+          native.db.prepare("SELECT count(*) FROM erasure_requests").first("count(*)")
+        )
+      ).toBe(0);
+    })
+  );
+
   it.effect(
     "rechecks every bound operation and waits for coordinator clearance before deleting",
     () =>
@@ -575,21 +812,12 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         expect((yield* Effect.result(observe))._tag).toBe("Failure");
         expect(
           (yield* executeErasureRestore({
+            signal: yield* Effect.abortSignal,
             db,
             userId,
             recovery,
             stores: [],
-            candidate: {
-              userId,
-              reference,
-              authority: {
-                permission: "titular.erase",
-                operatorRef: "operator",
-                expiresAtMs: current + 300000,
-              },
-              deadlineMs: current + 5000,
-              generation: "initial",
-            },
+            candidate: restoreAdmission(current),
           })).status
         ).toBe(503);
         yield* Effect.tryPromise(Option.getOrThrow(latePublication));

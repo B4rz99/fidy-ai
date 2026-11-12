@@ -714,6 +714,77 @@ it("derives the whole card void Money and reconciles a lost response by transact
     })
   ));
 
+it("bounds scheduled void ordinals while duplicate lookup delivery retains unresolved Money and access", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund({
+        ...call(db),
+        input: { ...call(db).input, intent: { kind: "card-void" } },
+      });
+      let posts = 0;
+      let gets = 0;
+      vi.stubGlobal(
+        "fetch",
+        withOpenAiFetch((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+          const request = new Request(input, init);
+          if (request.method === "POST") posts++;
+          else gets++;
+          return Promise.resolve(Response.json({ data: { status: "PENDING" } }));
+        })
+      );
+      yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+      const clock = yield* Clock.Clock;
+      const initial = yield* Clock.currentTimeMillis;
+      const publications: unknown[] = [];
+      const dispatch = {
+        DB: db,
+        BILLING_COLLECTION_QUEUE: {
+          send: (body: unknown): Promise<void> => {
+            publications.push(body);
+            return Promise.resolve();
+          },
+        },
+      };
+      for (let ordinal = 1; ordinal <= 9; ordinal++) {
+        const now = initial + ordinal * 60_000;
+        yield* dispatchVoidVerification(dispatch).pipe(
+          Effect.provideService(Clock.Clock, {
+            ...clock,
+            currentTimeMillis: Effect.succeed(now),
+            currentTimeMillisUnsafe: () => now,
+          })
+        );
+        expect(publications).toHaveLength(Math.min(ordinal, 8));
+        if (ordinal === 9) continue;
+        const payload = publications[ordinal - 1];
+        expect(payload).toEqual({
+          version: 1,
+          kind: "refund-void-verification",
+          refundAttemptId: accepted.id,
+          verification: ordinal,
+        });
+        yield* Effect.tryPromise(() =>
+          runRefundWorkflow({ ...workflowFor(db, accepted.id), payload })
+        );
+        yield* Effect.tryPromise(() =>
+          runRefundWorkflow({ ...workflowFor(db, accepted.id), payload })
+        );
+      }
+      expect(posts).toBe(1);
+      expect(gets).toBe(16);
+      yield* assertPendingIntegrity(db, accepted.id, 990000);
+      expect(
+        yield* getRefund({
+          db,
+          authority: call(db).authority,
+          userId,
+          refundAttemptId: accepted.id,
+        })
+      ).toMatchObject({ status: "pending", progress: "outcome-unknown" });
+    })
+  ));
+
 it.each([
   { field: "transaction identity", patch: { id: "unrelated-charge" } },
   { field: "charge reference", patch: { reference: "unrelated-reference" } },
@@ -789,6 +860,14 @@ it("keeps the mutation claim and reservation after provider approval but failed 
       );
       expect(Exit.isFailure(failed)).toBe(true);
       expect(posts).toBe(1);
+      expect(
+        yield* getRefund({
+          db,
+          authority: call(db).authority,
+          userId,
+          refundAttemptId: accepted.id,
+        })
+      ).toMatchObject({ status: "pending", progress: "outcome-unknown" });
       yield* assertPendingIntegrity(db, accepted.id);
       yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER injected_settlement_failure").run());
       yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));

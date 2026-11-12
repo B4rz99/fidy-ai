@@ -193,6 +193,7 @@ export const SubscriptionCancellationManagement = ({
         />
       )}
       {current.uncertain ? <UncertainCancellation /> : null}
+      {current.busy && !reviewing ? <output aria-live="polite">Actualizando estado…</output> : null}
       <div>
         <Button
           contentLayout="wrap"

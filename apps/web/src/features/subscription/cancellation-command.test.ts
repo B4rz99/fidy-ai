@@ -279,6 +279,9 @@ it.effect(
       act(harness.passiveRefresh);
       expect(container.textContent).not.toContain("¿Cancelar renovaciones futuras?");
       expect(button("Cancelar renovaciones futuras").disabled).toBe(true);
+      expect(container.querySelector('output[aria-live="polite"]')?.textContent).toBe(
+        "Actualizando estado…"
+      );
       staleConfirm();
       yield* Effect.tryPromise(() => act(() => advance(100)));
       expect(document.activeElement?.textContent).toBe("Cancelar renovaciones futuras");

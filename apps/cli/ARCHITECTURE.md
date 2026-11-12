@@ -1,305 +1,50 @@
 # CLI architecture
 
-`@fidy/cli` is a Bun-only User-facing presentation application, not a domain or authorization
-implementation. Its surface is `login`, `status`, local `logout`, and server-derived canonical
-queries, mutations and ordered atomic batches, in Spanish. It owns one saved login, with no
-profiles, pasted PATs, passwords or headless credential provisioning. Friendly scalar flags derive
-from the canonical encoded input schema; structured file/stdin input remains the complete contract.
+`apps/cli` is Fidy's Bun terminal client. It presents browser-approved login, local credential
+management and server-derived canonical operations in human-readable or machine-readable form.
+Read the repository [architecture](../../ARCHITECTURE.md) for cross-application boundaries.
 
-`support-recovery` is a separate private operator command, outside canonical discovery and saved PAT
-authority. It collects no User identity or browser-private verifier. Cloudflare Access authenticates
-the operator; the existing Worker resolves the stable User, consumes proof and approves the pairing.
-Only Browser Login creates a WebSession. See [operator evidence](src/support-recovery/FEATURE.md).
+## Ownership and execution
 
-## Runtime and execution
+| Area                 | Responsibility                                            |
+| -------------------- | --------------------------------------------------------- |
+| Command presentation | Arguments, discovery, help and terminal-safe output       |
+| Login                | Browser-approved pairing and local grant installation     |
+| Canonical client     | Schema-derived input, invocation and result presentation  |
+| Credential storage   | Native bearer custody and safe local grant metadata       |
+| Runtime composition  | Process lifetime, transport and operating-system adapters |
 
-The reviewed runtime is Bun `1.4.4`, full revision
-`38afee6c84fcf48c0edb2466aa4b27d287a59c30`. Run `bash scripts/install-bun.sh`, then put the reported
-directory first on PATH. `bun run cli login` prompts for the exact recipient, non-empty unique
-scope set and fixed lifetime. Explicit non-secret arguments are also supported:
+The CLI consumes the server's public client declarations and browser-safe transport resources. Operation schemas and policy drive its
+command surface; domain behavior and authorization remain server-owned. Structured input represents
+the complete operation contract, with generated flags for supported scalar inputs.
 
-```sh
-# Opens the dedicated browser approval page; add --no-browser for SSH/containers.
-bun run cli login --recipient 'Mi agente' --scopes read --lifetime 7
-bun run cli status --json
-bun run cli logout
-bun run cli commands --json
-bun run cli categories listCategories --json
-bun run cli transactions listTransactions --help
-bun run cli transactions listTransactions --currency COP --json
-bun run cli transactions createTransaction --amount 25000 --currency COP --direction outflow \
-  --occurred-at 2026-01-01T12:00:00.000Z --json
-bun run cli transactions listTransactions --input request.json --json
-# request.json: {"query":{"currency":"COP"}}
-# --input - reads stdin instead; it cannot be combined with a file.
-bun run cli transactions createTransaction --input transaction.json --json
-bun run cli dashboard initializeDashboard --json
-bun run cli dashboard applyDashboardEdit --input edit.json --json
-bun run cli operations executeAtomicBatch --input batch.json --json
-# edit.json: {"payload":{"op":"set-title","title":"Mi tablero"}}
-# batch.json: {"payload":{"calls":[{"callId":"01900000-0000-4000-8000-000000000001",
-#   "operation":"dashboard.applyDashboardEdit","input":{"payload":{"op":"set-title","title":"Mi tablero"}}}]}}
-```
-
-The CLI refuses another runtime revision before accessing credentials. The installer uses the
-versioned upstream stable release and reviewed SHA-256 digests for every platform; it never trusts
-a moving canary or latest URL. Missing assets fail closed. Supported targets are macOS, glibc
-Linux and Windows (Git Bash), x64 and arm64. The x64 build requires AVX2. Runtime upgrades update
-all six digests, exact revision, installer/CI paths, notices and recovery guidance, then rerun
-native credential conformance and the full CI gate. Bun 1.4.4 retains the explicit local-only
-Windows persistence option and fixes the VM context identity needed by jsdom 30.1.
-The workspace builds server declarations before CLI/web and bundles the executable for Bun.
-Repository ownership/dependency checks include CLI files, and CI runs its build, focused behavior
-suite and real-public/Core/browser journey. Cloudflare remains the sole server runtime authority.
-
-## Owners and publication
-
-- `command/contract.ts` declares safe output; `operations.ts` interprets local commands and
-  its private presentation vocabulary supports Spanish human/JSON output. Recipient metadata is
-  JSON-escaped, including C1 and bidirectional controls, even in human output. JSON mode emits
-  one safe event per stdout line; interactive prompts use stderr.
-- `login/operations.ts` owns a single non-resumable pairing, with only public progress and safe
-  persisted grant facts escaping. Grant input and output derive from server schemas.
-- `direct-client/runtime.ts` constructs `HttpApiClient` from the server-published `PATPairingApi`.
-  It also owns the fixed-origin bounded transport seam handed to #970. It does not copy routes,
-  protocol schemas or canonical policy. The direct API remains outside stable-User canonical work.
-- `canonical/operations.ts` owns policy-derived discovery, whole-input decoding, generic invocation,
-  canonical result encoding and terminal-safe presentation. `canonical/runtime.ts` constructs one
-  credential-bound generated client per invocation and owns bounded file/stdin consumption.
-  Runtime dispatch uses checked, value-erased endpoint declarations to derive generated group
-  clients. The selected canonical input codec checks the complete request, a schema projects its
-  transport fields, and the original endpoint encoders validate those fields before HTTP execution.
-  Its result/failure codec encodes the output. No type assertion bridges the generated client.
-  The catalog includes middleware failures, so expired/revoked authority and Consent refusal use
-  the same canonical envelopes as ordinary declared failures. No suggestion is executed.
-- `credential/contract.ts` declares `load`, `save`, `clear`, `Option` absence and redacted bearer
-  values. `runtime.ts` owns native/file persistence. `main.ts` alone composes production adapters,
-  process arguments, OS home and interruption handling.
-- `support-recovery` owns argument-free interactive presentation, hidden bounded key input and
-  one-decision certainty. Its runtime captures a bounded Access assertion from scoped `cloudflared`
-  children and reuses the fixed-origin bounded HTTP policy. The command runs before home/native
-  store construction, has no local recovery authority, accepts no raw proof flags and never retries.
-
-The CLI derives canonical declarations from `@fidy/server/client`. Its named
-`direct-client/runtime.ts` transport composition and `direct-client/resources.test.ts` resource
-seam also consume the browser-safe `@fidy/server/native-http` response lifetime runtime. Private
-server internals remain inaccessible; byte limits, deadlines and outcome interpretation stay with
-the CLI transport.
-Expected transport/storage rejections become closed local failures. Neither raw causes nor HTTP
-objects are diagnostic values. Existing server Work observation plus closed local progress/failure
-output suffices for this short workflow; no client tracing exporter, URL tracing, content telemetry
-or automatic trace propagation is enabled.
+Support recovery is a separate operator surface using Cloudflare Access authority. It cannot derive
+recovery privileges from the saved User credential. See [its feature](src/support-recovery/FEATURE.md).
 
 ## Credential exception and local persistence
 
-The **local native credential store is an intentional recoverable-bearer exception**. The server
-continues to persist digests only. Bun.secrets is the only raw-bearer persistence adapter. Application
-values remain Redacted until native storage or the narrow HTTP authorization adapter needs plaintext.
-There is no file/environment fallback. macOS uses Keychain, Linux requires a running Secret Service,
-and Windows uses Credential Manager with explicit `persist: "local"`.
+The CLI owns one saved login bound to the production API origin. Its native credential store is an
+intentional recoverable-bearer exception; server storage remains digest-only. macOS Keychain, Linux
+Secret Service and Windows Credential Manager provide custody, with no file or environment fallback.
+Safe grant metadata is stored separately. The reviewed Bun runtime is pinned because native storage
+behavior is part of this boundary.
 
-Bun 1.4.1 and 1.4.2 hardcode Windows roaming-capable persistence. The pinned build includes upstream
-[1016a7a](https://github.com/oven-sh/bun/commit/1016a7afb04a24098e9530d9a95b91d482d17f20), which adds the
-local-only option. See the [official API](https://bun.sh/docs/runtime/secrets) and the pinned
-[Windows implementation](https://github.com/oven-sh/bun/blob/38afee6c84fcf48c0edb2466aa4b27d287a59c30/src/jsc/bindings/SecretsWindows.cpp).
-This API is experimental; native-provider evidence is distinct from deterministic adapter fixtures.
+The browser approves the grant and the CLI claims it. Status reports local availability; logout
+removes local access. Remote revocation and grant management remain server operations. Credential
+material stays outside command arguments, URLs and diagnostic output.
 
-One fixed native service is qualified by `https://api.fidyapp.com`. Safe schema-validated grant
-metadata lives in the OS User's home under `.fidy/cli/grant.json`. A lock directory serializes local
-load/save/clear and usability probes. UNIX directories/files are private. Metadata and bearer must
-both exist and have matching short id; partial persistence is inconsistent, not a usable login.
-Logout can clear inconsistent access. A crash may leave `login.lock`; remove it only after ensuring
-no other instance is active. The CLI does not automatically steal a lock or overwrite a saved login.
+## Failure and distribution boundaries
 
-Native operations have no cancellation API. Once begun they settle under an uninterruptible owned
-persistence section, so an interrupted caller does not abandon a pending save or release its lock
-prematurely. Preflight verifies native set/get/delete and metadata write usability before starting a
-pairing, but a later failure remains possible and never reports login success. Native credentials and
-metadata are serialized observations, not one atomic OS transaction. Login keeps interruption certainty
-private to the invocation: once a claim is dispatched, cancellation can leave server consumption
-committed; once saving starts, the owned section settles before interruption returns. A saved login
-may therefore exist without `LoggedIn` output. The closed interruption failure advises `fidy status`
-inspection and never undoes a saved credential. Main preserves this phase-specific guidance while
-retaining the interrupted process exit status.
+The transport owns bounded requests and safe result decoding. An uncertain mutation or one-time
+credential claim cannot be replayed automatically. Local cancellation does not imply server rollback,
+and accepted background work does not imply completion.
 
-## Transport, claim certainty and lifetime
+Standalone releases bundle the same client and native credential adapters. CI owns platform packaging
+and release verification; the web hosts installers and the API supplies release discovery.
 
-Operation help and `commands --json` reflect identities, descriptions and JSON schemas from the
-assembled server catalog, including access, kind and confirmation metadata. Saved scopes select
-eligible presentation only. `write` and `dashboard` remain independent; a `read`-only grant exposes
-no mutations or batches. Account-security operations that exclude PATs are unavailable even through
-direct selection or raw batch input. The server independently checks every call.
-Queries with no input require no file or invented payload; other queries take their canonical
-nested `{params, query, payload, headers}` shape from one explicit file/stdin source or generated
-scalar flags. `--help` and machine discovery include each flag's canonical path, required status,
-encoded constraints (including descriptions and literal choices), structured-only fields and naming
-policy. Omission lets the canonical decoder apply defaults; the CLI never invents them.
+## Further reading
 
-Flag names use unique leaf names in kebab-case. All colliding suffixes grow together using the
-nearest meaningful parent; top-level transport prefixes are a last resort. `input`, `help` and
-`json` are reserved. If full paths still collide, the operation falls back to structured input.
-Derivation traverses ordinary objects and local schema references to depth eight and exposes at
-most 24 scalars. Numeric/boolean encoded types and strings with enum, format or a pattern without
-whitespace character classes are eligible; a scalar-or-null union is eligible for its scalar
-representation. Other unions, arrays, unconstrained/free-text strings and deeper shapes remain
-structured-only. This is a deterministic encoded-shape policy, not semantic prose classification.
-Required structured-only fields mean the whole invocation needs file/stdin; optional ones can be
-omitted but cannot be overridden with flags. Potentially sensitive/free-text input belongs in
-file/stdin to avoid shell-history disclosure. Typed credential bootstrap is never a canonical flag.
-
-Field flags require separate `--name value` pairs, including `true`/`false` for booleans; there are
-no implicit booleans, aliases, positional values or `--name=value` syntax. Unknown, duplicate or
-ambiguous names and mixing operation flags with `--input` fail before any file read or remote
-execution. Empty strings, false and zero remain explicit values; omitted fields stay omitted.
-The CLI assembles required containers and supplied nested fields, then crosses the same complete
-canonical decoder and generated-client path as JSON. Money and branded/date text remain encoded
-strings until that decoder. Input-free commands stay input-free; optional query filters can all be
-omitted. Parser work is bounded to 50 arguments of 256 characters each.
-Input is limited to 64 KiB, responses to 1 MiB, and both have 15-second deadlines. Money remains
-exact decimal text; DateTime and Option values cross the selected canonical JSON codec rather
-than being stringified as runtime objects. Machine stdout contains one canonical envelope;
-human stdout adds Spanish result/failure labels. Retry-After and guidance use stderr. Declared
-failure codes/messages and partial SuggestedOperation arguments remain in the envelope. Only
-eligible operations receive executable next-call guidance; no suggestion bypasses input decoding.
-Failures exit nonzero without silent login, retries or commercial-allowance inference.
-Existing server metadata-only Work observation suffices for these synchronous canonical workflows;
-no client content tracing is added. Transport captures bounded Retry-After metadata before success/error decoding and
-retains no raw response or cause for diagnostics. The same bounded transport decodes only the
-server-issued `Fidy-Trace-Id` diagnostic receipt. Failed canonical calls and malformed responses
-print a validated opaque receipt on stderr when available; successful calls add no trace output.
-Canonical JSON stdout remains the unchanged server envelope. Client-supplied correlation never
-grants authority, and no trace headers are sent by the CLI.
-
-Canonical allowance display consumes the server-published `CanonicalAllowance` codec and
-`canonicalAllowanceHeaders` names. Transport projects only `Fidy-Canonical-Allowance`,
-`Fidy-Canonical-Limit`, `Fidy-Canonical-Remaining` and `Fidy-Canonical-Reset`, with bounded header
-text and runtime decoding before presentation. Projection precedes typed success/error decoding:
-Effect's `decoded-and-response` mode returns only after successful decoding and cannot preserve
-metadata on its own for declared failures. Valid Free standing displays remaining/limit, shared-PAT
-meaning and an exact ISO UTC reset on stderr; `uncapped` displays no monthly counter or reset,
-while explicitly retaining security protections. Missing, malformed or unpublished standing is
-unavailable, never zero. `quota_exhausted`, `rate_limited` and `paywall_required` receive distinct
-guidance, and only Retry-After supplies a request delay. Canonical JSON stdout remains one unchanged
-envelope: there is no extra metadata JSON mode or appended domain field. There is no local balance,
-automatic quota query, retry or telemetry. Explicit `quota getQuota` derives from the ordinary
-canonical declaration and retains the server's unmetered, security-protected semantics.
-
-Atomic input uses the server-owned non-empty ordered child union and declared maximum of twelve
-calls, with caller-chosen UUID `callId` correlation. Each child's schema, eligibility and scope are
-checked locally, then current server authority, tier, Consent, domain policy and atomicity are
-rechecked authoritatively. The envelope is not a grant. Queries, recursive batches, standalone
-mutations and browser-only children cannot gain authority through it. The broad canonical child
-schema remains the decoding contract; batch help projects eligible child input/result alternatives
-through the server owner's same schema builder and limits, without rebinding the canonical codecs
-or introducing an independent CLI child-policy map. Children cannot read earlier
-children's writes. Retained-owner collision and statement/Dashboard-child restrictions remain
-server decisions, not CLI sequencing promises. Child-addressed failures retain `failedCallIndex`,
-operation and field issues, and explain whole-domain rollback without denying rejected-call Audit.
-
-Canonical requests are bounded to 64 KiB locally; server per-child and whole-batch limits still
-apply. Mutation transport loss, malformed/unexpected responses, deadlines and interruption can
-follow a commit. They report uncertainty, never a no-effect claim or an automatic replay. Locally
-owned work is cancelled on interruption, without claiming server rollback. Recovery directs the
-User to inspect current state or use only the operation's explicitly retry-safe protocol, preserving
-caller-supplied retry identities without generating or replaying them. Unindexed server failures
-do not imply rollback. A successful envelope means only its declared result: durable acceptance
-is not necessarily completed asynchronous work. Hosted confirmation metadata never grants the CLI
-browser or hosted-session authority.
-
-Both fresh and saved access are bound to the fixed production API origin. There is no API-origin
-argument or environment override. Approval uses `https://app.fidyapp.com/connect/cli?cliCode=PUBLIC-CODE`.
-Only the server-decoded public request identity enters this fixed-origin URL; proof and PAT never
-enter URLs, browser state or arguments. Human login attempts to open the system browser once with
-an argument-vector child (no shell), a five-second deadline and scoped process cleanup. Failure
-leaves the printed link/code usable. `--no-browser` and JSON mode never open a browser. The dedicated
-page inspects the request, retains it through sign-in, displays the terminal code for comparison and
-requires explicit permission/lifetime approval. Ordinary PAT settings contain no pairing form.
-
-The transport refuses redirects, omits ambient cookies, bounds requests and streamed response bytes,
-and owns a 15-second deadline. Login sleeps on advertised cadence, honors `PollingDelayed` without
-implying reduced scopes, never lowers the advertised cadence for a shorter retry hint, and stops
-at the pairing deadline. A second, local work budget derives from the server's ten-minute pairing
-lifetime plus a single request deadline; hostile expiry/cadence cannot cause an unbounded loop or
-an overflowing native timer. SIGINT/SIGTERM interrupts Effect work;
-HTTP request/reader ownership cancels the underlying work. Proof remains in memory and is never
-resumed after restart. No transport or claim retry is automatic.
-
-A lost claim response is ambiguous because the server may have consumed its one-time disclosure.
-Post-claim storage failure is similarly non-recoverable. Both direct the User to review/revoke the
-grant in the authenticated web app and begin a new pairing; neither rediscloses a bearer or silently
-replays a claim. Approval fixes expiration. Claim and use never renew it.
-
-Status reports only local availability, safe grant facts and local expiry, explicitly without fresh
-remote verification. Logout removes local access; it never invokes PAT management or claims server
-revocation. PAT callers still have no PAT-management authority.
-
-## Test seams
-
-Focused tests exercise public login orchestration with TestClock, native/file store construction,
-derived-client transport, and command output. Real-filesystem adapter tests cover metadata mismatch,
-origin substitution and partial persistence. Cancellation/overflow tests assert owned reader cleanup,
-not only fiber termination. Test-only process ownership in `test/process.test-fixture.ts` also
-settles each real child and closes its reader on interruption. `bun run --cwd apps/cli test:native`
-checks actual cross-process native persistence. The existing Linux packaging job runs conformance
-inside an unlocked D-Bus/Secret Service session; macOS and Windows checks use their native stores.
-A dedicated Linux packaging job runs
-`bun run --cwd apps/cli build:native` to bundle that same native probe and real credential adapter,
-with its Windows persistence script beside the bundle. The macOS/Windows jobs download only this
-same-run artifact and install the pinned Bun runtime, not workspace dependencies; packaging and
-native jobs all participate in the fail-closed merge gate. The one-minute conformance-step deadline
-remains independent of setup. Windows additionally reads the native credential's persistence enum
-(never its blob) and requires local-machine storage.
-
-`test/allowance-entry.ts` is a separate test-only process composition. The server's Canonical Admission
-integration tests feed actual D1-backed response bodies and allowlisted headers into this process;
-its synthetic credential and replaced transport invoke the same generated client, decoding and
-stderr/stdout presentation as production. It proves Free success, exhausted and declared-failure
-metadata, shared-PAT replay standing, Trial uncapped standing and security refusal. This is local
-server-adapter-to-CLI evidence, not a live ingress/provider or Production test.
-
-## Standalone CLI distribution
-
-`command/installation.ts` publishes version and basic help before credential-store startup;
-canonical operation discovery still uses the saved grant. `scripts/cli-release/build.sh` compiles
-natively with the pinned Bun bytes and embeds the assigned release version. The candidate and
-publication workflows validate Linux x64, macOS arm64 and Windows x64, including same-source
-repeat builds and installer checks. The publication workflow runs after successful trunk checks.
-Its resolved CLI input fingerprint includes consumed contracts, bundled dependency code and metadata,
-runtime pin, packaging and emitted bundle bytes; compiler configuration that changes the bundle
-triggers a release, while unrelated edits do not allocate a new version. Publication freezes a
-complete GitHub release before anonymous verification and advancing GitHub's latest marker.
-The web artifact serves canonical installer bytes; the API exposes the bounded anonymous latest
-version manifest. Installers configure user PATH idempotently and upgrades run on demand.
-See [installation and automated releases](https://github.com/B4rz99/fidy-ai/blob/8ddab8fedb4f8e62837017f99f0484ca065bd80a/docs/guides/cli-installation.md). Runtime guards,
-credential storage and server authorization remain the same.
-
-## Packaged credential verification
-
-Candidate and publication gates extract the checksummed native archive and execute that exact
-binary. On disposable GitHub-hosted runners, a synthetic PAT is seeded directly into the real
-OS credential store, paired with private grant metadata in a temporary home (the initialized
-disposable runner home on macOS). The executable must
-load it through `status`, exclude the bearer from both human and JSON output, refuse malformed
-metadata safely, and remove both native access and metadata on `logout`. The harness refuses an
-occupied native login slot and local credential-test execution; it never overwrites an existing
-login. Child executables receive only required OS environment values, without CI tokens.
-
-The same gate downloads the current immutable published release, verifies GitHub asset digests,
-the archive checksum and entry, executable version, and agreement between its manifest source
-revision and Git tag. These checks authenticate the recorded release identity; they are not a
-cryptographic attestation that arbitrary source compiled into a particular executable.
-
-`python3 scripts/cli-release/verify-published.py --tag cli-v<VERSION>` performs read-only
-platform/archive/executable checks locally. Native credential verification adds `--credentials`
-and requires an isolated GitHub-hosted runner, with a real unlocked Secret Service on Linux.
-Both candidate and published checks run for Linux x64, macOS arm64 and Windows x64.
-This synthetic seeding proves packaged loading, safe failure, redaction and cleanup, not a live
-production login or server-side revocation. The existing real public/Core/browser CLI journey
-separately verifies pairing, issuance, canonical calls and revocation with synthetic identities.
-
-The synthetic macOS item is created through the OS `security` utility, with its password on stdin
-and an explicit access list for Bun and the exact extracted executable. The runner uses a dedicated
-unlocked test keychain; its synthetic item permits unsigned test processes through the macOS
-partition list. Production credential writes do not use this fixture permission. This
-verifies native retrieval and redaction, not the production item's application access-control list
-or interactive first-use Keychain approval. Linux and Windows seed through `Bun.secrets`.
+- [CLI guide](../docs/src/content/docs/conectar/cli.md): installation and User workflows.
+- [Runtime evidence](../../docs/research/bun-1-4-4-runtime-compatibility-2026-10-31.md): reviewed native behavior.
+- [Security standards](../../SECURITY_STANDARDS.md): credential and transport invariants.
+- [Release tooling](../../scripts/cli-release/): packaging and verification implementation.

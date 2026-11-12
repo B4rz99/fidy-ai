@@ -32,5 +32,4 @@ Production replacement remains untested. Do not rotate the User's real mailbox a
 
 ```sh
 bun run --cwd apps/web test src/features/email-replacement/commands.test.ts
-BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser 01-real-core-journeys.spec.ts --grep 'replaces a verified EmailCredential' --workers=1 --timeout=120000
 ```

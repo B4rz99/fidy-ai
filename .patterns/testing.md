@@ -1,7 +1,7 @@
 # Effect v4 testing seams
 
 Use `@effect/vitest` and the repository's verification groups. For a single file, see
-[Focused tests](#focused-tests); for Playwright, see [Browser acceptance](#browser-acceptance).
+[Focused tests](#focused-tests).
 Selected sources are
 `node_modules/@effect/vitest/src/index.ts` and `src/internal/internal.ts` in that package, plus
 `node_modules/effect/src/testing/TestClock.ts`. Tests prove the smallest stable seam; they do not
@@ -39,40 +39,6 @@ config's `include`/`exclude` and path, not changing the suite or claiming succes
 Core and general server configs enable whole-scope coverage. Disable it only for focused iteration;
 then run the relevant unfiltered gate with normal coverage. A focused pass is not full verification.
 
-## Browser acceptance
-
-[`playwright.config.ts`](../apps/web/playwright.config.ts) builds the static shell and starts the
-public/Core harness. It is separate from Vite development and web Vitest. Before running:
-
-- Use the reviewed Bun runtime required by the CLI and have `openssl` for loopback TLS.
-- Install the pinned browser with `bunx --no-install --bun playwright install --only-shell chromium`.
-  Linux also requires `bunx --no-install --bun playwright install-deps chromium`.
-- Run `bun run --cwd apps/cli test:native` in the same OS session: the full browser suite includes
-  a real native-credential CLI journey. Linux requires a running, unlocked DBus/Secret Service;
-  macOS uses Keychain and Windows uses Credential Manager. The existing
-  [browser CI job](../.github/workflows/ci.yml) shows Linux provisioning. A mock store is not a substitute.
-- Check HTTPS web **4173**, API **4174**, and operator fixture **4175**. On macOS/Linux use
-  `lsof -nP -iTCP:4173 -iTCP:4174 -iTCP:4175 -sTCP:LISTEN`. Local Playwright can reuse existing
-  web/API servers: verify process and worktree ownership, not just a healthy URL. Stop only your
-  own stale servers. Do not borrow another session's topology or edit origins/CSP to evade collisions.
-
-```sh
-# Full browser gate; the harness builds its own production-mode artifact.
-bun run verify -- --group browser
-
-# One spec on the shared topology, with the same prerequisites.
-bun run --cwd apps/web test:browser e2e/cli-login.spec.ts
-
-# CLI journey only, on the existing isolated 4183 / 4184 / 4185 topology.
-(cd apps/web && CLI_ACCEPTANCE_MODE=cli bun --bun playwright test --config playwright.cli.config.ts)
-```
-
-For the isolated command, check ports 4183–4185 instead. Keep `CLI_ACCEPTANCE_MODE=cli` on the
-parent so tests, subprocesses, and servers select the same topology. The
-[dedicated config](../apps/web/playwright.cli.config.ts) runs only `cli-login.spec.ts`, not the full
-gate. If the topology or native service is unavailable, record the limitation. `--list` checks
-discovery only; it neither starts servers nor proves browser readiness.
-
 ## Test styles
 
 - `it.effect` is the default for Effect programs and receives deterministic TestClock and TestConsole
@@ -97,7 +63,6 @@ when proving forbidden effects; these are different evidence from a successful i
 Core tests prove domain transitions, authorization, retention, redaction, and validation. Contract
 tests prove reflected operation ids, access metadata, OpenAPI, browser declarations, and compatibility
 artifacts. Provider tests use the published transport contract and deterministic bounded responses.
-Browser tests use explicit HTTP fixtures and the built static shell.
 
 Cloudflare adapter tests are the only evidence for D1 atomicity, Durable Object coordination, Queue
 redelivery, Workflow suspension/retry, R2 retrieval, Email Worker admission, Workers AI behavior,

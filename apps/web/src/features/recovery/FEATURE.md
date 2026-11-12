@@ -54,6 +54,5 @@ recovery. Never rotate a production User's recovery proof as a test fixture.
 
 ```sh
 bun run --cwd apps/web test src/browser/clipboard.test.ts
-BROWSER_COST_MEASUREMENT=1 bun run --cwd apps/web test:browser recovery-live-disclosure.spec.ts --workers=1 --timeout=120000
 bun run --cwd apps/server test:cloudflare cloudflare/onboarding/browser-authentication.test.ts cloudflare/recovery/support-recovery.test.ts --maxWorkers=1
 ```

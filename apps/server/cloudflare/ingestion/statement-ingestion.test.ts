@@ -29,7 +29,7 @@ import {
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { StatementWork } from "./contract";
 import { DurableTraceContext } from "../../src/shell/observability/contract";
-import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Cause, Clock, Data, DateTime, Effect, Fiber, Option, Result, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 
@@ -77,6 +77,7 @@ import {
   receiveForwardedEmail,
   receiveStatementExtraction,
   reconcileStatementExtraction,
+  recoverUserStatementExtraction,
   sweepExpiredUploadAdmission,
 } from "./runtime";
 import { publishOwnedStatement, stageOwnedStatement } from "./statement-publication.test-fixture";
@@ -1315,69 +1316,207 @@ it.each(["created", "existing", "unavailable", "expired"] as const)(
     )
 );
 
-it("a User coordinator alarm dispatches only its own published statements", () =>
+it.each(["unavailable", "complete"] as const)(
+  "a User coordinator alarm recovers only its own published statements when Workflow is %s",
+  (workflowState) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const submissions: Array<string> = [];
+        for (const index of [0, 1]) {
+          const stagedResponse = yield* fromTestPromise(() =>
+            stageFixture(runtime, { index, body: statementBytes() })
+          );
+          const { data: staged } = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({
+              data: Schema.Struct({
+                stagingId: Schema.String,
+                byteLength: Schema.Finite,
+                sha256: Schema.String,
+              }),
+            })
+          )(yield* fromTestPromise(() => stagedResponse.json()));
+          const submitted = yield* fromTestPromise(() =>
+            publishFixture(runtime, {
+              index,
+              reference: staged,
+              idempotencyKey: `20000000-0000-4000-8000-00000000098${index}`,
+            })
+          );
+          submissions.push((yield* fromTestPromise(() => submissionOf(submitted))).id);
+        }
+        const queued: Array<unknown> = [];
+        const inspected: Array<string> = [];
+        const coordinator = new UserTransactionCoordinator(
+          {
+            id: { name: userA },
+            storage: {
+              getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
+              deleteAlarm: (): Promise<void> => Promise.resolve(),
+              setAlarm: (): Promise<void> => Promise.resolve(),
+            },
+          },
+          {
+            DB: runtime.db,
+            STATEMENT_STAGING_BUCKET: runtime.bucket,
+            STATEMENT_EXTRACTION_WORKFLOW: {
+              create: (): Promise<never> => Promise.reject(new Error("direct unavailable")),
+              get: (id: string): Promise<unknown> => {
+                inspected.push(id);
+                return workflowState === "complete"
+                  ? Promise.resolve({ status: () => Promise.resolve({ status: "complete" }) })
+                  : Promise.reject(new Error("workflow unavailable"));
+              },
+            },
+            OPENAI_API_KEY: openAiTestKey({
+              run: (): Promise<never> => Promise.reject(new Error("unused")),
+            }),
+            HOSTED_AI_MODEL: approvedOpenAiModel,
+            STATEMENT_EXTRACTION_QUEUE: {
+              send: (body: unknown): Promise<void> => {
+                queued.push(body);
+                return Promise.resolve();
+              },
+            },
+          }
+        );
+        yield* fromTestPromise(() => coordinator.alarm());
+        expect(inspected).toEqual(
+          workflowState === "complete" ? [submissions[0]] : [submissions[0], submissions[0]]
+        );
+        expect(queued).toEqual(
+          workflowState === "complete"
+            ? []
+            : [{ version: 1, userId: userA, submissionId: submissions[0] }]
+        );
+        const state = yield* fromTestPromise(() =>
+          runtime.db
+            .prepare("SELECT status FROM statement_submissions WHERE user_id = ?")
+            .bind(userA)
+            .first("status")
+        );
+        expect(state).toBe(workflowState === "complete" ? "failed" : "queued");
+        const unclaimed = yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(
+              "SELECT work_last_attempt_at_ms, work_last_reconciled_at_ms FROM statement_submissions WHERE user_id = ?"
+            )
+            .bind(userB)
+            .first()
+        );
+        const decoded = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            work_last_attempt_at_ms: Schema.OptionFromNullOr(Schema.Int),
+            work_last_reconciled_at_ms: Schema.OptionFromNullOr(Schema.Int),
+          })
+        )(unclaimed);
+        expect(Option.isNone(decoded.work_last_attempt_at_ms)).toBe(true);
+        expect(Option.isNone(decoded.work_last_reconciled_at_ms)).toBe(true);
+      })
+    )
+);
+
+it.each(["reconciliation", "dispatch"] as const)(
+  "reports unavailable only after attempting both recovery phases when %s fails",
+  (failedPhase) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+        const accepted = yield* fromTestPromise(() =>
+          publishFixture(runtime, {
+            index: 0,
+            reference: staged,
+            idempotencyKey: "20000000-0000-4000-8000-000000000987",
+          })
+        );
+        const submission = yield* fromTestPromise(() => submissionOf(accepted));
+        const settled: Array<string> = [];
+        const offered: Array<unknown> = [];
+        let lookups = 0;
+        const result = yield* Effect.exit(
+          recoverUserStatementExtraction({
+            DB: runtime.db,
+            userId: UserId.make(userA),
+            STATEMENT_EXTRACTION_WORKFLOW: Option.some({
+              get: () =>
+                ++lookups === 1
+                  ? Promise.resolve({ status: () => Promise.resolve({ status: "complete" }) })
+                  : Promise.reject(new Error("lookup unavailable")),
+              create: (): Promise<never> => Promise.reject(new Error("direct unavailable")),
+            }),
+            STATEMENT_EXTRACTION_QUEUE: {
+              send: (body) => {
+                offered.push(body);
+                return failedPhase === "dispatch"
+                  ? Promise.reject(new Error("queue unavailable"))
+                  : Promise.resolve();
+              },
+            },
+            USER_TRANSACTION_COORDINATOR: {
+              getByName: (name) => ({
+                fetch: (): Promise<Response> => {
+                  settled.push(name);
+                  return Promise.resolve(
+                    new Response(null, { status: failedPhase === "reconciliation" ? 503 : 200 })
+                  );
+                },
+              }),
+            },
+          })
+        );
+        expect(result._tag).toBe("Failure");
+        expect(settled).toEqual([userA]);
+        expect(offered).toEqual([{ version: 1, userId: userA, submissionId: submission.id }]);
+      })
+    )
+);
+
+it("interrupts scoped recovery without dispatching after an interrupted reconciliation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const runtime = yield* fromTestPromise(() => setup());
-      const submissions: Array<string> = [];
-      for (const index of [0, 1]) {
-        const stagedResponse = yield* fromTestPromise(() =>
-          stageFixture(runtime, { index, body: statementBytes() })
-        );
-        const { data: staged } = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({
-            data: Schema.Struct({
-              stagingId: Schema.String,
-              byteLength: Schema.Finite,
-              sha256: Schema.String,
-            }),
-          })
-        )(yield* fromTestPromise(() => stagedResponse.json()));
-        const submitted = yield* fromTestPromise(() =>
-          publishFixture(runtime, {
-            index,
-            reference: staged,
-            idempotencyKey: `20000000-0000-4000-8000-00000000098${index}`,
-          })
-        );
-        submissions.push((yield* fromTestPromise(() => submissionOf(submitted))).id);
-      }
-      const queued: Array<unknown> = [];
-      const coordinator = new UserTransactionCoordinator(
-        {
-          id: { name: userA },
-          storage: {
-            getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
-            deleteAlarm: (): Promise<void> => Promise.resolve(),
-            setAlarm: (): Promise<void> => Promise.resolve(),
-          },
-        },
-        {
+      const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+      yield* fromTestPromise(() =>
+        publishFixture(runtime, {
+          index: 0,
+          reference: staged,
+          idempotencyKey: "20000000-0000-4000-8000-000000000986",
+        })
+      );
+      const started = Promise.withResolvers<void>();
+      const pending = Promise.withResolvers<never>();
+      const offered: Array<unknown> = [];
+      const fiber = yield* Effect.forkChild(
+        recoverUserStatementExtraction({
           DB: runtime.db,
-          OPENAI_API_KEY: openAiTestKey({
-            run: (): Promise<never> => Promise.reject(new Error("unused")),
+          userId: UserId.make(userA),
+          STATEMENT_EXTRACTION_WORKFLOW: Option.some({
+            get: () => {
+              started.resolve();
+              return pending.promise;
+            },
+            create: () => Promise.reject(new Error("unused")),
           }),
-          HOSTED_AI_MODEL: approvedOpenAiModel,
           STATEMENT_EXTRACTION_QUEUE: {
-            send: (body: unknown): Promise<void> => {
-              queued.push(body);
+            send: (body) => {
+              offered.push(body);
               return Promise.resolve();
             },
           },
-        }
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: () => ({
+              fetch: (): Promise<Response> => Promise.resolve(new Response(null, { status: 200 })),
+            }),
+          },
+        })
       );
-      yield* fromTestPromise(() => coordinator.alarm());
-      expect(queued).toEqual([{ version: 1, userId: userA, submissionId: submissions[0] }]);
-      const unclaimed = yield* fromTestPromise(() =>
-        runtime.db
-          .prepare("SELECT work_last_attempt_at_ms FROM statement_submissions WHERE user_id = ?")
-          .bind(userB)
-          .first()
-      );
-      const decoded = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ work_last_attempt_at_ms: Schema.OptionFromNullOr(Schema.Int) })
-      )(unclaimed);
-      expect(Option.isNone(decoded.work_last_attempt_at_ms)).toBe(true);
+      yield* fromTestPromise(() => started.promise);
+      yield* Fiber.interrupt(fiber);
+      const result = yield* Fiber.await(fiber);
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") expect(Cause.hasInterrupts(result.cause)).toBe(true);
+      expect(offered).toEqual([]);
     })
   ));
 
@@ -3151,6 +3290,7 @@ it("settles an errored Workflow when its final failure-report activity also exha
         }
       );
       yield* reconcileStatementExtraction({
+        userId: Option.none(),
         DB: runtime.db,
         STATEMENT_EXTRACTION_WORKFLOW: {
           get: () => Promise.resolve({ status: () => Promise.resolve({ status: "errored" }) }),

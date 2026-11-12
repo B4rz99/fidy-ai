@@ -79,6 +79,18 @@ const verifyProcessorEvidence = (
         userId,
         evidence: {
           reference,
+          custodian: "Cloudflare",
+          evidenceRef: "12740000-0000-4000-8000-000000000071",
+          outcome: { status: "Accepted" },
+        },
+      })).status
+    ).toBe(202);
+    expect(
+      (yield* send({
+        action: "CustodyEvidence",
+        userId,
+        evidence: {
+          reference,
           custodian: "Kapso",
           evidenceRef: "12740000-0000-4000-8000-000000000072",
           outcome: { status: "Accepted" },

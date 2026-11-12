@@ -316,6 +316,11 @@ Erasure binds its execution configuration to the exact User inside the serialize
 Its private `admit`, `continue`, `receipt` and `custody` operations decode and authorize each
 invocation independently; binding retains no credential, receipt or lifecycle observation.
 Continuation reads and decodes the durable phase and offers one bounded opportunity.
+Per-store acknowledgments survive credential deletion and coordinator restart. Original bytes must
+be confirmed absent before `ExternalPending`; that guarded handoff records the last erasure instant
+and resets Cloudflare custody. Completion requires every configured store and all five custodians,
+terminal evidence and the 30-day recovery horizon. Accepted custody and elapsed time alone never
+prove completion. The browser reports acceptance as unfinished and provides support without login.
 Fresh authenticated account deletion fences new activity and waits for confirmed upload settlement
 before removing owner records and User file prefixes. Minimal independent markers protect restoration;
 external acknowledgments remain distinct from verified cleanup. Metadata outlives supported backups,

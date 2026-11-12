@@ -6,6 +6,7 @@ import { installRetentionTestSchema } from "../d1-test-fixture";
 import { handleErasureRequest, withErasureRecovery } from "./runtime";
 import { executeErasureRestore, makeErasureOwner } from "./operations";
 import { nativeErasurePlatform } from "./native.test-fixture";
+import { ErasureOperatorReceipt, ErasureProvider } from "../../src/core/erasure/contract";
 import { ErasureUnavailable } from "../erasure-store/contract";
 import { makeErasureOriginals } from "../erasure-store/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
@@ -61,7 +62,7 @@ const setup = Effect.gen(function* () {
       ])
     );
   }
-  return { db, bucket, coordinator: native.coordinator, digest };
+  return { db, bucket, originals: native.originals, coordinator: native.coordinator, digest };
 });
 const submit = (
   input: Effect.Success<typeof setup>,
@@ -84,6 +85,129 @@ const submit = (
     });
   });
 
+const verifyExternalCustody = Effect.gen(function* () {
+  const { db, bucket, originals, digest } = yield* setup;
+  const current = yield* Clock.currentTimeMillis;
+  const key = `users/${userId}/unindexed-original`;
+  yield* Effect.tryPromise(() => originals.put(key, "Private original"));
+  yield* Effect.tryPromise(() =>
+    db.prepare("INSERT INTO memories VALUES('retained',?,'Privado',1,1)").bind(userId).run()
+  );
+  const owner = makeErasureOwner({
+    db,
+    userId,
+    stores: makeMemoryErasureStores(db),
+    recovery: { db, bucket: Option.some(bucket) },
+    originals: makeErasureOriginals({
+      db,
+      email: Option.some(originals),
+      statement: Option.some(originals),
+      registry: Option.some(bucket),
+    }),
+    clearCoordinator: () => Effect.succeed(true),
+  });
+  const accepted = yield* owner.admit(
+    { userId, sessionId, digest: Array.from(digest), deadlineMs: current + 5000 },
+    yield* Effect.abortSignal
+  );
+  expect(accepted.status).toBe(202);
+  const admitted = yield* Schema.decodeUnknownEffect(Schema.Struct({ reference: Schema.String }))(
+    yield* Effect.tryPromise(() => accepted.json())
+  );
+  const candidate = (now: number): unknown => ({
+    userId,
+    reference: admitted.reference,
+    deadlineMs: now + 5000,
+    authority: {
+      permission: "titular.erase",
+      operatorRef: "operator",
+      expiresAtMs: now + 60000,
+    },
+  });
+  const observe = Effect.gen(function* () {
+    const response = yield* owner.receipt(candidate(yield* Clock.currentTimeMillis));
+    expect(response.status).toBe(200);
+    return yield* Schema.decodeUnknownEffect(ErasureOperatorReceipt)(
+      yield* Effect.tryPromise(() => response.json())
+    );
+  });
+  for (let opportunity = 0; opportunity < 8; opportunity += 1) {
+    expect((yield* owner.continue(candidate(yield* Clock.currentTimeMillis))).status).toBe(202);
+    if ((yield* observe).state === "ExternalPending") break;
+  }
+  const local = yield* observe;
+  expect(local).toMatchObject({
+    state: "ExternalPending",
+    completed: ["memory"],
+    next: "provider-evidence",
+  });
+  expect(local.recoveryUntilMs).not.toBeNull();
+  expect(yield* Effect.tryPromise(() => originals.head(key))).toBeNull();
+  expect(
+    yield* Effect.tryPromise(() =>
+      db.prepare("SELECT count(*) FROM memories WHERE user_id=?").bind(userId).first("count(*)")
+    )
+  ).toBe(0);
+  const retain = (
+    custodian: ErasureProvider,
+    status: "Accepted" | "Verified",
+    suffix: number
+  ): Effect.Effect<Response> =>
+    Effect.gen(function* () {
+      const admission = {
+        userId,
+        reference: admitted.reference,
+        deadlineMs: (yield* Clock.currentTimeMillis) + 5000,
+        authority: {
+          permission: "titular.erase",
+          operatorRef: "operator",
+          expiresAtMs: (yield* Clock.currentTimeMillis) + 60000,
+        },
+      };
+      return yield* owner.custody({
+        ...admission,
+        evidence: {
+          reference: admitted.reference,
+          custodian,
+          evidenceRef: `12740000-0000-4000-8000-${String(suffix).padStart(12, "0")}`,
+          outcome: { status },
+        },
+      });
+    });
+  expect((yield* retain("Cloudflare", "Verified", 30)).status).toBe(409);
+  for (const [index, custodian] of ErasureProvider.literals.entries()) {
+    expect((yield* retain(custodian, "Accepted", 40 + index)).status).toBe(202);
+  }
+  vi.useFakeTimers({ toFake: ["Date"], now: current + 31 * 86400000 });
+  expect((yield* owner.continue(candidate(yield* Clock.currentTimeMillis))).status).toBe(202);
+  expect((yield* observe).state).toBe("ExternalPending");
+  yield* Effect.tryPromise(() =>
+    db
+      .prepare(
+        "DELETE FROM erasure_custody_records WHERE record_type='current' AND request_id=? AND custodian='Wompi'"
+      )
+      .bind(admitted.reference)
+      .run()
+  );
+  for (const [index, custodian] of ErasureProvider.literals.entries()) {
+    if (custodian !== "Wompi") {
+      expect((yield* retain(custodian, "Verified", 50 + index)).status).toBe(202);
+    }
+  }
+  expect((yield* owner.continue(candidate(yield* Clock.currentTimeMillis))).status).toBe(202);
+  expect((yield* observe).state).toBe("ExternalPending");
+  yield* Effect.tryPromise(() =>
+    db
+      .prepare(
+        "INSERT INTO erasure_custody_records(record_type,request_id,custodian,state) VALUES('current',?,'Wompi','Pending')"
+      )
+      .bind(admitted.reference)
+      .run()
+  );
+  expect((yield* retain("Wompi", "Verified", 60)).status).toBe(202);
+  expect((yield* owner.continue(candidate(yield* Clock.currentTimeMillis))).status).toBe(202);
+  expect(yield* observe).toMatchObject({ state: "Complete", next: "none" });
+});
 effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
   it.effect("refuses caller-selected subjects without creating an erasure request", () =>
     Effect.gen(function* () {
@@ -259,7 +383,6 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
           expect((yield* owner.custody({ ...refused, evidence })).status).toBe(409);
         }
         expect(clearanceAttempts).toBe(0);
-        // One continuation only drains. It does not clear or delete in the same call.
         expect((yield* owner.continue(candidate)).status).toBe(202);
         expect(clearanceAttempts).toBe(0);
         expect((yield* owner.continue(candidate)).status).toBe(202);
@@ -280,7 +403,6 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
               .first("count(*)")
           )
         ).toBe(1);
-        // A different configured inventory cannot clear the coordinator or authorize deletion.
         expect(
           (yield* makeErasureOwner({ ...configuration, stores: [] }).continue(candidate)).status
         ).toBe(503);
@@ -306,6 +428,11 @@ effectIt.layer(NodeFileSystem.layer, { excludeTestServices: true })((it) => {
         expect((yield* owner.custody({ ...candidate, evidence })).status).toBe(409);
         expect(clearanceAttempts).toBe(3);
       })
+  );
+
+  it.effect(
+    "retains external obligations beyond the horizon until every custodian supplies terminal evidence",
+    () => verifyExternalCustody
   );
 
   it.effect(

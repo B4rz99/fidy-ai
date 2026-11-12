@@ -27,9 +27,10 @@ import {
   StatementSubmissionId,
 } from "../../src/shell/ingestion/contract";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
-import { StatementWork } from "./contract";
+import { StatementDeliveryUnavailable, StatementWork } from "./contract";
+import { deepStrictEqual } from "node:assert/strict";
 import { DurableTraceContext } from "../../src/shell/observability/contract";
-import { Cause, Clock, Data, DateTime, Effect, Fiber, Option, Result, Schema } from "effect";
+import { Cause, Clock, Data, DateTime, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 
@@ -1434,6 +1435,7 @@ it.each(["reconciliation", "dispatch"] as const)(
         const settled: Array<string> = [];
         const offered: Array<unknown> = [];
         let lookups = 0;
+        // Re-fail outside the span so strict equality excludes Effect tracing annotations.
         const result = yield* Effect.exit(
           recoverUserStatementExtraction({
             DB: runtime.db,
@@ -1463,9 +1465,19 @@ it.each(["reconciliation", "dispatch"] as const)(
                 },
               }),
             },
-          })
+          }).pipe(Effect.catch((error) => Effect.fail(error)))
         );
-        expect(result._tag).toBe("Failure");
+        deepStrictEqual(
+          result,
+          Exit.fail(
+            new StatementDeliveryUnavailable({
+              cause:
+                failedPhase === "reconciliation"
+                  ? new StatementDeliveryUnavailable({ cause: "coordinator_unavailable" })
+                  : "queue_unavailable",
+            })
+          )
+        );
         expect(settled).toEqual([userA]);
         expect(offered).toEqual([{ version: 1, userId: userA, submissionId: submission.id }]);
       })

@@ -782,8 +782,13 @@ it("an acknowledged sweep fence prevents a delayed payload from restoring delete
               buckets: [{ id: "statement", bucket: Option.some(bucket) }],
             }).pipe(
               Effect.provideService(Clock.Clock, {
-                ...clock,
+                currentTimeMillisUnsafe: () => expiry,
                 currentTimeMillis: Effect.succeed(expiry),
+                currentTimeNanosUnsafe: () => BigInt(expiry) * 1_000_000n,
+                currentTimeNanos: Effect.succeed(BigInt(expiry) * 1_000_000n),
+                monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+                monotonicTimeNanos: clock.monotonicTimeNanos,
+                sleep: (duration) => clock.sleep(duration),
               })
             )
           );

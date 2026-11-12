@@ -74,6 +74,109 @@ it("rechecks separate metadata on every unit and refuses its loss without fallin
     })
   ));
 
+it("retains fresh generation checks across prepared statements, native methods and Sessions", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", "initial"));
+      const guarded = withErasureRecovery({ DB: db, ERASURE_BUCKET: bucket }).DB;
+      const statement = guarded.prepare("SELECT 7 AS value");
+      const session = guarded.withSession("first-primary");
+      const sessionStatement = session.prepare("SELECT 7 AS value");
+      const units = [
+        (): Promise<unknown> => statement.first("value"),
+        (): Promise<unknown> => statement.first(),
+        (): Promise<unknown> => statement.all(),
+        (): Promise<unknown> => statement.run(),
+        (): Promise<unknown> => guarded.batch([statement]),
+        (): Promise<unknown> => sessionStatement.first("value"),
+        (): Promise<unknown> => sessionStatement.all(),
+        (): Promise<unknown> => sessionStatement.run(),
+        (): Promise<unknown> => session.batch([sessionStatement]),
+      ];
+      for (const [index, execute] of units.entries()) {
+        const result = yield* Effect.result(Effect.tryPromise(execute));
+        expect(result._tag, `native unit ${index}`).toBe("Success");
+      }
+      // Neither prepared work nor an already used Session retains permission after restore.
+      yield* Effect.tryPromise(() => bucket.put("recovery/generation", generation));
+      for (const execute of units) {
+        expect((yield* Effect.result(Effect.tryPromise(execute)))._tag).toBe("Failure");
+      }
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE erasure_control SET generation=? WHERE kind='published'")
+          .bind(generation)
+          .run()
+      );
+      for (const [index, execute] of units.entries()) {
+        const result = yield* Effect.result(Effect.tryPromise(execute));
+        expect(result._tag, `native unit ${index}`).toBe("Success");
+      }
+      // A matching generation still does not enable unsupported bypasses.
+      for (const execute of [
+        (): Promise<unknown> => guarded.exec("SELECT 7"),
+        (): Promise<unknown> => guarded.dump(),
+        (): Promise<unknown> => statement.raw(),
+        (): Promise<unknown> => sessionStatement.raw(),
+      ]) {
+        expect((yield* Effect.result(Effect.tryPromise(execute)))._tag).toBe("Failure");
+      }
+    })
+  ));
+
+it("refuses missing, malformed, oversized and unavailable generation without owner effects", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, bucket } = yield* Effect.tryPromise(() => storage.acquire());
+      yield* Effect.tryPromise(() => installRetentionTestSchema(db));
+      const guarded = withErasureRecovery({ DB: db, ERASURE_BUCKET: bucket }).DB;
+      const insert = guarded
+        .prepare(
+          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+        )
+        .bind(userId);
+      for (const value of ["", "publishing:" + generation, "x".repeat(65), "not-a-generation"]) {
+        yield* Effect.tryPromise(() => bucket.put("recovery/generation", value));
+        expect((yield* Effect.result(Effect.tryPromise(() => insert.run())))._tag).toBe("Failure");
+      }
+      yield* Effect.tryPromise(() => bucket.delete("recovery/generation"));
+      expect((yield* Effect.result(Effect.tryPromise(() => insert.run())))._tag).toBe("Failure");
+      expect(yield* Effect.tryPromise(() => bucket.head("recovery/generation"))).toBeNull();
+      const unavailable = new Proxy(bucket, {
+        get: (target, property): unknown =>
+          property === "get"
+            ? () => Promise.reject(new Error("Registry unavailable"))
+            : Reflect.get(target, property, target),
+      });
+      const refused = withErasureRecovery({ DB: db, ERASURE_BUCKET: unavailable }).DB;
+      expect(
+        (yield* Effect.result(
+          Effect.tryPromise(() =>
+            refused.batch([
+              refused
+                .prepare(
+                  "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+                )
+                .bind(userId),
+            ])
+          )
+        ))._tag
+      ).toBe("Failure");
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT count(*) AS n FROM users").first("n"))
+      ).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT generation FROM erasure_control WHERE kind='published'")
+            .first("generation")
+        )
+      ).toBe("initial");
+    })
+  ));
+
 it("a release-pinned generation accepts restored state that a fresh external fence refuses", () =>
   Effect.runPromise(
     Effect.gen(function* () {

@@ -302,6 +302,10 @@ in its independent SQLite storage after the authenticated handoff; it never cons
 With the shared-read binding enabled, existing query declarations and browser data GET transports execute canonical HTTP in that same
 object; commands, User coordination and admission policies retain their existing owners. Each
 protected D1 unit reads the current registry generation and asserts it inside its native transaction.
+Sessions prepare that assertion through the same Session executing the owner statements; retained
+Sessions and prepared statements revalidate on every execution. Missing, malformed or unavailable
+independent proof refuses the unit without initializing replacement evidence. Native row methods
+remain protected, while `exec`, `dump` and raw tuple access remain unavailable.
 Other executors reach the same metadata through a bounded private binding. ForwardedEmail receives
 only the named metadata transport entrypoint, without the coordinator namespace. No generation or response
 cache grants authority. Private original bytes remain in R2.

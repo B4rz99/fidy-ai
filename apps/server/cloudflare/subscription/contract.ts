@@ -177,6 +177,10 @@ export const BillingPriceNoticeWork = Schema.Struct({
   userId: UserId,
   priceId: PriceId,
 });
+export type WeeklyPricePublication = Readonly<{
+  priceId: PriceId;
+  noticeOffer: "attempted" | "deferred";
+}>;
 export type BillingPriceNoticeDispatchInput = Readonly<{
   DB: D1Database;
   BILLING_COLLECTION_QUEUE: Readonly<{

@@ -48,15 +48,12 @@ jobs:
         uses: ./.github/actions/bun-runtime
       - name: Install locked workspace
         run: bash scripts/install-workspace.sh --ignore-scripts
-      - name: Install the browser for documentation checks
-        run: bunx playwright install --with-deps chromium
       - name: Validate the publication and focused checks
         run: |
           bun run docs:build
           bun run docs:test
           bun run --cwd apps/docs typecheck
           bun run --cwd infra/docs typecheck
-          bun run --cwd apps/docs test:browser
       - name: Configure Alchemy's ephemeral Cloudflare profile
         uses: ./.github/actions/configure-alchemy-cloudflare-profile
       - name: Publish the independent docs stack

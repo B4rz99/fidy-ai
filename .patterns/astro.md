@@ -29,8 +29,7 @@ packages are the selected implementation source.
 
 [SiteLayout](../apps/site/src/layouts/site-layout.astro) owns shared metadata;
 [the Astro config](../apps/site/astro.config.ts) owns integrations and CSP.
-[The browser suite](../apps/site/e2e/site.spec.ts) checks built output with and
-without JavaScript, interactive hydration, real missing-page status and discovery.
+[The artifact checker](../apps/site/scripts/check-artifact.ts) validates the built output.
 There is no client-side router or cross-application implementation import.
 The [isolated checker](../tools/astro/check.ts) uses the public `AstroCheck` API in
 `@astrojs/language-server/dist/check.js`; both it and Volar resolve TypeScript 6

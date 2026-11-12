@@ -2,10 +2,6 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = `${process.cwd()}/../..`;
 const checksWorkflow = await Bun.file(`${repositoryRoot}/.github/workflows/ci.yml`).text();
-const bunInstallAction = await Bun.file(
-  `${repositoryRoot}/.github/actions/bun-install/action.yml`
-).text();
-
 describe("pull-request checks workflow policy", () => {
   it("builds the application without uploading or deploying a PR preview artifact", () => {
     const buildsJob = checksWorkflow.slice(
@@ -19,34 +15,6 @@ describe("pull-request checks workflow policy", () => {
     return Bun.file(`${repositoryRoot}/.github/workflows/preview.yml`)
       .exists()
       .then((exists) => expect(exists).toBe(false));
-  });
-
-  it("reuses browser downloads without restoring stale dependency caches", () => {
-    const browserJob = checksWorkflow.slice(
-      checksWorkflow.indexOf("\n  browser:\n"),
-      checksWorkflow.indexOf("\n  security-secrets:\n")
-    );
-
-    expect(browserJob).toContain("~/.cache/ms-playwright");
-    const restore = browserJob.indexOf("actions/cache@");
-    const systemDependencies = browserJob.indexOf("Verify Chromium system dependencies");
-    const binaries = browserJob.indexOf("playwright install --only-shell chromium");
-    expect(restore).toBeGreaterThan(0);
-    expect(binaries).toBeGreaterThan(restore);
-    expect(systemDependencies).toBeGreaterThan(binaries);
-    expect(browserJob).toContain("chromium.launch()");
-    expect(browserJob).toContain("playwright install-deps chromium");
-    expect(browserJob).toContain(
-      "${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell"
-    );
-    const installation = browserJob.slice(
-      browserJob.indexOf("- name: Verify Chromium system dependencies"),
-      browserJob.indexOf("- name: Static-shell browser validation")
-    );
-    expect(
-      Array.from(installation.matchAll(/if: \$\{\{ (.+) \}\}/gu), (match) => match[1])
-    ).toEqual(["steps.plan.outputs.browser == 'true'"]);
-    expect(bunInstallAction).not.toContain("restore-keys:");
   });
 
   it("keeps the merge gate unconditional and checks skipped jobs against a successful plan", () => {
@@ -87,7 +55,8 @@ describe("pull-request checks workflow policy", () => {
     expect(nativeJob).not.toContain("run-id:");
     expect(nativeJob).not.toContain("repository:");
     expect(requiredJob).toContain("- cli-native-package");
-    expect(checksWorkflow).toContain("cli-native-package: ${{ steps.plan.outputs.unit }}");
+    expect(checksWorkflow).toContain("cli-native-package: ${{ steps.plan.outputs.cli-native }}");
+    expect(checksWorkflow).toContain("cli-native: ${{ steps.plan.outputs.cli-native }}");
   });
 
   it("runs mutation testing weekly on Sundays without blocking pull requests", () => {

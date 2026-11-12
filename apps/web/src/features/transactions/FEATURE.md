@@ -132,8 +132,6 @@ bun run --cwd apps/server test:core src/core/transactions --coverage.enabled=fal
 bun run --cwd apps/server test:cloudflare cloudflare/transactions --maxWorkers=1
 INFRA_PERFORMANCE_MEASURE=1 bun run --cwd apps/server test:cloudflare cloudflare/transactions/query-costs.test.ts cloudflare/transactions/performance.test.ts --maxWorkers=1
 INFRA_PERFORMANCE_GROWTH=1 bun run --cwd apps/server test:cloudflare cloudflare/transactions/transactions.test.ts --maxWorkers=1 --testNamePattern="measures sustained mixed public requests"
-bun run --cwd apps/web test:browser transaction-pagination.spec.ts financial-journeys.spec.ts --workers=1
-bun run --cwd apps/web test:browser transaction-native-pagination.spec.ts transaction-deletion.spec.ts --workers=1
 ```
 
 For live reruns, use a logged-in approved test User and only labelled synthetic records. Check summary arithmetic, save/reload individual and bulk corrections, reject a stale edit from another tab, then verify page one loads before scrolling and the next page appears at the end. Record the matching web/API revision and distinguish safe live checks from failures only simulated locally.

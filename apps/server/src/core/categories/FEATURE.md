@@ -28,7 +28,6 @@ the owning public schemas. No Category behavior changed to make these cases pass
 ```sh
 bun run --cwd apps/server test:core src/core/categories --coverage.enabled=false
 bun run --cwd apps/server test:cloudflare cloudflare/categories cloudflare/transactions/transactions.test.ts cloudflare/canonical-admission/operations.test.ts cloudflare/oauth-agents/oauth-confirmation.test.ts --maxWorkers=1
-bun run --cwd apps/web test:browser 01-real-core-journeys.spec.ts --grep 'renders a seeded Category identity' --workers=1 --timeout=120000
 ```
 
 Production checks used release `a539302ef269a3ca1b4cfc78615a917b960c7c48`. The native CLI

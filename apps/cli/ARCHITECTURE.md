@@ -235,31 +235,16 @@ Focused tests exercise public login orchestration with TestClock, native/file st
 derived-client transport, and command output. Real-filesystem adapter tests cover metadata mismatch,
 origin substitution and partial persistence. Cancellation/overflow tests assert owned reader cleanup,
 not only fiber termination. Test-only process ownership in `test/process.test-fixture.ts` also
-settles each real child and closes its reader on interruption; native conformance and browser
-acceptance share this seam rather than starting detached processes. `bun run --cwd apps/cli test:native` checks actual cross-process native
-persistence. Linux browser CI runs inside an unlocked DBus/Secret Service session. The browser gate runs the
-shared suite and then `bun run --cwd apps/web test:browser:cli` with a fresh, dedicated public/Core
-and D1 topology; the shared suite excludes the CLI mutation journey so other journeys cannot alter
-its exact query results or Audit evidence. Separate macOS and Windows native jobs are required
-whenever unit verification is selected. A dedicated Linux packaging job runs
+settles each real child and closes its reader on interruption. `bun run --cwd apps/cli test:native`
+checks actual cross-process native persistence. The existing Linux packaging job runs conformance
+inside an unlocked D-Bus/Secret Service session; macOS and Windows checks use their native stores.
+A dedicated Linux packaging job runs
 `bun run --cwd apps/cli build:native` to bundle that same native probe and real credential adapter,
 with its Windows persistence script beside the bundle. The macOS/Windows jobs download only this
 same-run artifact and install the pinned Bun runtime, not workspace dependencies; packaging and
 native jobs all participate in the fail-closed merge gate. The one-minute conformance-step deadline
 remains independent of setup. Windows additionally reads the native credential's persistence enum
 (never its blob) and requires local-machine storage.
-
-`test/journey-entry.ts` is an explicitly broad test composition. It runs the same command/login/store
-and derived-client behavior in separate Bun processes with an isolated real native service. Only its
-raw transport maps the fixed production origin onto the existing loopback public/Core topology. It
-is not bundled, exported, or reachable from production main. Browser acceptance approves the public
-code through the existing fresh web UI, then verifies second-process status and authorized query
-reuse through Category listing and Transaction browsing, exact-Money Transaction creation,
-Dashboard initialization/edit and an ordered mixed-owner batch. A loopback-only bounded metadata
-observer proves attributable accepted PAT Audit for each mutation child; it is never part of
-public ingress. Public/Core negative cases prove independent scopes, cross-User refusal and
-whole-domain rollback. No production test-only issuance route exists. Secrets are excluded from
-traces, screenshots, video and subprocess output.
 
 `test/allowance-entry.ts` is a separate test-only process composition. The server's Canonical Admission
 integration tests feed actual D1-backed response bodies and allowlisted headers into this process;

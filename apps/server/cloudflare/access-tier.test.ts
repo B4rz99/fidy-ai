@@ -3,7 +3,10 @@ import { expect, it } from "vitest";
 import { Effect } from "effect";
 import { prepareProGrant } from "../src/shell/pro-grants/operations";
 import { installCurrentTestObjects } from "./d1-test-fixture";
-import { activeProUserCondition } from "../src/shell/access-tier/operations";
+import {
+  activeProForUserSelection,
+  activeProUserCondition,
+} from "../src/shell/access-tier/operations";
 
 const userId = "10000000-0000-4000-8000-000000000001";
 
@@ -80,6 +83,34 @@ it("derives each decision from one User's original trial and current settled pai
           .then((row) => row?.active ?? -1);
       };
       expect(yield* Effect.tryPromise(() => tier(250, "contact-123"))).toBe(0);
+      const selectedTier = (
+        sql: string,
+        params: ReadonlyArray<string>,
+        at = 250
+      ): Promise<number> => {
+        const pro = activeProForUserSelection({ users: { sql, params }, nowEpochMs: at });
+        return db
+          .prepare(`SELECT ${pro.sql} AS active`)
+          .bind(...pro.params)
+          .first<{ active: number }>()
+          .then((row) => row?.active ?? -1);
+      };
+      expect(
+        yield* Effect.tryPromise(() =>
+          selectedTier("SELECT ? AS userId UNION ALL SELECT ?", [
+            userId,
+            "20000000-0000-4000-8000-000000000002",
+          ])
+        )
+      ).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() => selectedTier("SELECT ? AS userId WHERE 0", [userId]))
+      ).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          selectedTier("SELECT ? AS userId UNION ALL SELECT ?", [userId, userId])
+        )
+      ).toBe(1);
       expect(yield* Effect.tryPromise(() => tier(199))).toBe(0);
       expect(yield* Effect.tryPromise(() => tier(200))).toBe(1);
       expect(yield* Effect.tryPromise(() => tier(300))).toBe(0);
@@ -159,6 +190,17 @@ it("derives each decision from one User's original trial and current settled pai
       expect(
         yield* Effect.tryPromise(() => tier(450, "20000000-0000-4000-8000-000000000002"))
       ).toBe(0);
+      yield* Effect.tryPromise(() =>
+        db.prepare("INSERT INTO subscription_renewal_stops(user_id) VALUES (?)").bind(userId).run()
+      );
+      expect(yield* Effect.tryPromise(() => tier(499))).toBe(1);
+      expect(yield* Effect.tryPromise(() => tier(500))).toBe(0);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("INSERT INTO refund_attempts(id,billing_attempt_id) VALUES ('queued','attempt')")
+          .run()
+      );
+      expect(yield* Effect.tryPromise(() => tier(450))).toBe(1);
       yield* Effect.tryPromise(() =>
         db
           .prepare(

@@ -16,6 +16,11 @@ import {
 import coreWorker from "../core-worker";
 import { auditEntriesTestSchema, installCurrentTestObjects } from "../d1-test-fixture";
 
+import { TestClock } from "effect/testing";
+import { activeProUserCondition } from "../../src/shell/access-tier/operations";
+import { prepareSubscriptionStatus } from "../../src/shell/subscription/operations";
+import { seedPaidCardSubscription } from "./refund-charge.test-fixture";
+
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
 
@@ -426,5 +431,102 @@ effectIt.effect(
       const revoked = yield* status;
       expect(revoked.data.accessTier).toBe("free");
       expect(revoked.data.hasProGrant).toBe(false);
+    })
+);
+
+effectIt.effect("agrees with the access predicate through trial and paid grace boundaries", () =>
+  Effect.gen(function* () {
+    const db = yield* fromTestPromise(() => fixture());
+    yield* fromTestPromise(() =>
+      db
+        .prepare(
+          "UPDATE web_sessions SET idle_expires_at_ms=100000000000000,hard_expires_at_ms=100000000000000"
+        )
+        .run()
+    );
+    const observe = (
+      at: number,
+      expected: "free" | "pro"
+    ): Effect.Effect<void, Schema.SchemaError> =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(at);
+        const pro = activeProUserCondition({ userId: userA, nowEpochMs: at });
+        expect(
+          yield* fromTestPromise(() =>
+            db
+              .prepare(`SELECT ${pro.sql} AS active`)
+              .bind(...pro.params)
+              .first()
+          )
+        ).toEqual({ active: expected === "pro" ? 1 : 0 });
+        const response = yield* executeProtectedSubscriptionQuery({
+          db,
+          subject: { id: sessionA, userId: userA, digest: token },
+          operation: "subscription.getSubscriptionStatus",
+        });
+        expect(response.status).toBe(200);
+        const body = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.toCodecJson(SubscriptionStatus) })
+        )(yield* fromTestPromise(() => response.json()));
+        expect(body.data.accessTier).toBe(expected);
+      });
+    yield* observe(Date.parse("2026-09-01T12:00:00Z") - 1, "free");
+    yield* observe(Date.parse("2026-09-01T12:00:00Z"), "pro");
+    yield* observe(pastEnd - 1, "pro");
+    yield* observe(pastEnd, "free");
+    yield* seedPaidCardSubscription({ db, userId: userA });
+    yield* observe(9999999999999, "pro");
+    yield* observe(9999999999999 + 259200000 - 1, "pro");
+    yield* observe(9999999999999 + 259200000, "free");
+    const read = (
+      sql: string,
+      params: ReadonlyArray<string>
+    ): ReturnType<typeof prepareSubscriptionStatus> =>
+      prepareSubscriptionStatus({
+        users: { sql, params },
+        current: pastEnd,
+        authority: { table: "web_sessions", predicate: "id=?", bindings: [sessionA] },
+      });
+    for (const sql of [
+      "SELECT ? AS userId WHERE 0",
+      "SELECT ? AS userId UNION ALL SELECT '10000000-0000-4000-8000-000000000002'",
+    ]) {
+      const prepared = read(sql, [userA]);
+      const results = yield* fromTestPromise(() =>
+        db.batch(
+          prepared.statements.map((statement) =>
+            db.prepare(statement.sql).bind(...statement.params)
+          )
+        )
+      );
+      expect(() => prepared.decode(results.map((result) => result.results))).toThrow();
+    }
+    const prepared = read("SELECT ? AS userId UNION ALL SELECT ?", [userA, userA]);
+    const results = yield* fromTestPromise(() =>
+      db.batch(
+        prepared.statements.map((statement) => db.prepare(statement.sql).bind(...statement.params))
+      )
+    );
+    expect(prepared.decode(results.map((result) => result.results))).toMatchObject({
+      accessTier: "pro",
+    });
+  })
+);
+
+effectIt.effect(
+  "returns unavailable without a partial explanation when standing storage is missing",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => fixture());
+      yield* fromTestPromise(() => db.prepare("DROP TABLE pro_grant_events").run());
+      const response = yield* executeProtectedSubscriptionQuery({
+        db,
+        subject: { id: sessionA, userId: userA, digest: token },
+        operation: "subscription.getSubscriptionStatus",
+      });
+      expect(response.status).toBe(503);
+      expect(yield* fromTestPromise(() => response.json())).toMatchObject({
+        error: { code: "unavailable" },
+      });
     })
 );

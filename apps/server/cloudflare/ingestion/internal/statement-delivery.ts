@@ -215,6 +215,7 @@ export const reconcileStatementExtraction = (
   input: Readonly<{
     DB: D1Database;
     STATEMENT_EXTRACTION_WORKFLOW: Pick<StatementWorkflow, "get">;
+    userId: Option.Option<string>;
     USER_TRANSACTION_COORDINATOR: StatementCoordinator;
   }>
 ): Effect.Effect<void, StatementDeliveryUnavailable> =>
@@ -225,8 +226,9 @@ export const reconcileStatementExtraction = (
       FROM statement_submissions
       WHERE work_published_at_ms IS NOT NULL AND work_published_at_ms > 0
         AND status IN ('queued', 'processing') AND retention_expires_at_ms > ?
+        ${Option.isSome(input.userId) ? "AND user_id = ?" : ""}
       ORDER BY work_last_reconciled_at_ms, work_published_at_ms, id LIMIT ?`)
-        .bind(now, dispatchLimit)
+        .bind(now, ...Option.toArray(input.userId), dispatchLimit)
         .all()
     );
     const work = yield* Schema.decodeUnknownEffect(Schema.Array(OutboxRow))(selected.results).pipe(

@@ -38,8 +38,8 @@ import { makeDashboardErasureStores } from "../dashboard/runtime";
 import { makeEmailAuthenticationErasureStores } from "../email-authentication/runtime";
 import { makeIdentityErasureStores } from "../identity/runtime";
 import {
-  dispatchUserStatementExtraction,
   makeIngestionErasureStores,
+  recoverUserStatementExtraction,
   withStatementPublicationWake,
 } from "../ingestion/runtime";
 import { makeMemoryErasureStores } from "../memory/runtime";
@@ -89,7 +89,18 @@ import { executeOAuthRefresh, executeOAuthRevocation } from "../oauth-agents/ope
 import type { HostedCommitFence } from "../agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 
-import { Clock, Data, DateTime, Effect, Exit, Option, Redacted, Schema, type Scope } from "effect";
+import {
+  Cause,
+  Clock,
+  Data,
+  DateTime,
+  Effect,
+  Exit,
+  Option,
+  Redacted,
+  Schema,
+  type Scope,
+} from "effect";
 
 import { optionalHostedInference } from "../ai/runtime";
 import type { OpenAiEnvironment } from "../ai/contract";
@@ -98,6 +109,7 @@ import {
   ForwardedEmailWork,
   StatementCoordinatorActivity,
   type StatementQueue,
+  type StatementWorkflow,
 } from "../ingestion/contract";
 import { advanceStatementExtraction, processForwardedEmail } from "../ingestion/operations";
 
@@ -144,7 +156,7 @@ type CoordinatorEnvironment = Readonly<{
       ERASURE_REQUIRED: string;
       STATEMENT_STAGING_BUCKET: R2Bucket;
       STATEMENT_EXTRACTION_QUEUE: StatementQueue;
-      STATEMENT_EXTRACTION_WORKFLOW: Workflow;
+      STATEMENT_EXTRACTION_WORKFLOW: StatementWorkflow;
       EMAIL_BUCKET: R2Bucket;
       KAPSO_API_KEY: string;
       WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
@@ -914,8 +926,20 @@ export class UserTransactionCoordinator {
   private recoverAbandonedWork(): Promise<void> {
     const queue = Option.fromUndefinedOr(this.env.STATEMENT_EXTRACTION_QUEUE);
     const statement = Option.isSome(queue)
-      ? dispatchUserStatementExtraction({
+      ? recoverUserStatementExtraction({
           DB: this.env.DB,
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: (name) => ({
+              fetch: (request): Promise<Response> =>
+                name === this.state.id.name
+                  ? this.runCoordinatedRequest({
+                      request: request instanceof Request ? request : new Request(request),
+                      userId: name,
+                      queuedAt: performance.now(),
+                    })
+                  : Promise.resolve(transactionUnavailable()),
+            }),
+          },
           userId: UserId.make(this.state.id.name),
           STATEMENT_EXTRACTION_QUEUE: queue.value,
           STATEMENT_EXTRACTION_WORKFLOW: Option.fromUndefinedOr(
@@ -935,9 +959,22 @@ export class UserTransactionCoordinator {
     });
     return Effect.runPromise(
       Effect.gen(function* () {
-        const results = yield* Effect.all([Effect.exit(statement), Effect.exit(agent)], {
-          concurrency: "unbounded",
-        });
+        const results = yield* Effect.all(
+          [
+            Effect.exit(
+              statement.pipe(Effect.mapError(() => new CoordinatorRecoveryUnavailable()))
+            ),
+            Effect.exit(agent),
+          ],
+          {
+            concurrency: "unbounded",
+          }
+        );
+        for (const result of results) {
+          if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
+            return yield* Effect.failCause(result.cause);
+          }
+        }
         if (results.some((result) => result._tag === "Failure")) {
           return yield* new CoordinatorRecoveryUnavailable();
         }

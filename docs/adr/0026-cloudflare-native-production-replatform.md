@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-21
+- **Storage direction:** Superseded by [ADR 0041](0041-per-user-durable-object-storage-direction.md)
+  for the migration destination. The D1 implementation described here remains current until cutover.
 - **Supersedes:** Earlier process-runtime, relational-database, cluster, and provider-specific
   deployment decisions. Their domain, isolation, durability, provider-ambiguity, and safe-rollout
   invariants remain requirements unless this decision explicitly replaces the mechanism.

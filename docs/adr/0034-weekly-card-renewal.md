@@ -4,6 +4,11 @@
 - **Date:** 2026-10-07
 - **Issue:** #233 and #236, with the User's implementation decisions superseding conflicting historical text.
 
+[ADR 0041](0041-per-user-durable-object-storage-direction.md#shared-facts-and-ordering) supersedes
+the D1 publication/storage choreography for the planned migration. Immediate Price selection for
+new renewals and preservation of original terms for pending attempts and renewal retries remain.
+The D1 mechanics below describe the current implementation.
+
 Weekly card renewals use the existing Cloudflare D1 outbox, Queue, Workflow and User coordinator.
 Each successful period starts at its predecessor's end and advances by seven calendar days in the
 captured time zone. Provider finalization authorizes settlement but never shifts renewal dates.

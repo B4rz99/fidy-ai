@@ -72,7 +72,7 @@ const loadSchemaStatements = (): Promise<ReadonlyArray<string>> => {
 };
 const objectName = (sql: string): string =>
   /^ALTER TABLE (\w+) ADD COLUMN (\w+)/u.exec(sql.trim())?.slice(1).join(":") ??
-  /^CREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER|VIEW) "?(\w+)"?/u.exec(sql.trim())?.[1] ??
+  /^(?:CREATE|DROP) (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER|VIEW) "?(\w+)"?/u.exec(sql.trim())?.[1] ??
   "";
 const statementOwner = (sql: string): string =>
   /^(?:CREATE|ALTER|DROP) TABLE "?(\w+)"?/u.exec(sql.trim())?.[1] ??

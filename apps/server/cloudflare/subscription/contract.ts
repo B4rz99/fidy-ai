@@ -2,7 +2,6 @@ import { type WompiEnvironment } from "../../src/shell/secret-material/contract"
 import { UserId } from "../../src/core/identity/contract";
 import {
   BillingAttemptId,
-  PriceId,
   type RefundAttemptId,
   StartRefundInput,
 } from "../../src/core/subscription/contract";
@@ -126,8 +125,7 @@ export type RefundReceiveInput = Readonly<{
 export type BillingRuntime = Pick<
   BillingCollectionEnvironment,
   "DB" | "WOMPI_ENVIRONMENT" | "WOMPI_PUBLIC_KEY" | "WOMPI_PRIVATE_KEY" | "WOMPI_INTEGRITY_SECRET"
-> &
-  Partial<Readonly<{ RESEND_API_KEY: string }>>;
+>;
 
 /** Closed correction-work failure; Queue redelivery remains possible without publishing platform diagnostics. */
 export class RefundWorkFailure extends Data.TaggedError("RefundWorkFailure")<{
@@ -170,25 +168,6 @@ export type SubscriptionRenewalDispatchInput = Readonly<{
   DB: D1Database;
   WOMPI_ENVIRONMENT: string;
   USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-}>;
-
-/** Bounded notice identity only; recipient and immutable Price facts are reloaded privately. */
-export const BillingPriceNoticeWork = Schema.Struct({
-  traceContext: Schema.optionalKey(Schema.Unknown),
-  version: Schema.Literal(1),
-  kind: Schema.Literal("price-notice"),
-  userId: UserId,
-  priceId: PriceId,
-});
-export type WeeklyPricePublication = Readonly<{
-  priceId: PriceId;
-  noticeOffer: "attempted" | "deferred";
-}>;
-export type BillingPriceNoticeDispatchInput = Readonly<{
-  DB: D1Database;
-  BILLING_COLLECTION_QUEUE: Readonly<{
-    send: (work: typeof BillingPriceNoticeWork.Type) => Promise<unknown>;
-  }>;
 }>;
 
 /** Cancellation work contains only the User whose retained intent must be rechecked. */

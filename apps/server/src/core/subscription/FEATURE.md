@@ -14,7 +14,7 @@ alone does not grant Pro. Quota exhaustion is distinct from a Paywall.
 | Collection and settlement                   | D1 outbox, Queue redelivery, Workflow claims, signed callback verification, matching provider lookup, concurrency and one paid period per verified success             | Synthetic card decline preserved zero paid periods; approved weekly card created one paid period     |
 | Renewals                                    | Weekly/monthly/yearly calendar anchors, month-end/leap-day clamps, frozen Money/Price, bounded 24/48-hour retries and three-day grace                                  | Scheduled deployed collection not exercised                                                          |
 | Cancellation                                | Live write authority, atomic Audit, durable stop, queued-charge fencing, preserved paid history, bounded DaviPlata source-void reconciliation; HTTP → User coordinator | Deployed Sandbox card cancellation and identical retry passed; paid period retained, source detached |
-| Price changes                               | Immediate durable notice and frozen existing attempts; new Price applies to newly admitted work                                                                        | Live billing-email delivery not exercised                                                            |
+| Price changes                               | Manual operator announcements; existing attempts stay frozen and new admissions use the published Price                                                                | Announcements are outside Fidy                                                                       |
 | Refunds                                     | Separate support authority, exact Money, competing reservations, single financial submission, reconciliation, immutable charge history and trial preservation          | Real-money execution deliberately excluded                                                           |
 | Free allowances                             | Shared admission/replay, exhaustion and tier-aware accounting; Free remains distinct from resource protection                                                          | Quota exhaustion not deliberately induced                                                            |
 
@@ -222,7 +222,7 @@ and the approved/declined Workflow inspection files. These checks created no sou
 Remaining live checks: successful wallet browser OTP and DaviPlata source cancellation need a fresh
 session on an eligible unpaid QA account; scheduled renewal/grace needs an approved Sandbox
 Subscription left active until its real due boundary; fault recovery needs an isolated approved
-fixture/procedure; price-change email needs an isolated notice to an approved test mailbox.
+fixture/procedure.
 Global offer changes and arbitrary D1 timestamp/state edits are not substitutes for those proofs.
 
 On 2026-10-17, API health and the web artifact agreed on deployed revision
@@ -307,8 +307,8 @@ with isolated local D1/activity execution; they do not establish a deployed wall
 Queue/Workflow recovery behavior. No real money or deployed QA account was involved.
 
 Remaining deployed checks: wallet authorization through settlement and cancellation on an eligible
-account; scheduled renewal/grace at real due dates; isolated Queue/Workflow interruption/replay;
-and isolated Price-change notification. Reusing the historical Gmail card still requires genuine,
+account; scheduled renewal/grace at real due dates; isolated Queue/Workflow interruption/replay.
+Reusing the historical Gmail card still requires genuine,
 attributable Wompi no-charge confirmation under the [ambiguity runbook](../../../../../docs/runbooks/billing-ambiguity.md).
 No new sign-in is requested while that prerequisite remains unresolved.
 The [follow-up CI rerun](https://github.com/B4rz99/fidy-ai/actions/runs/39429914340/attempts/2)

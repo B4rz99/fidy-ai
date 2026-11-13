@@ -26,7 +26,6 @@ import {
 } from "../email-authentication/runtime";
 import {
   dispatchBillingCollection,
-  dispatchBillingPriceNotices,
   dispatchRefunds,
   dispatchSubscriptionCancellations,
   dispatchSubscriptionRenewals,
@@ -96,14 +95,6 @@ const billingActivities = (environment: CoreMaintenanceInput): ReadonlyArray<Sch
       onNone: () => Effect.void,
       onSome: (queue) =>
         dispatchSubscriptionCancellations({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),
-    })
-  ),
-  activity(
-    "billing.priceNotice.dispatch",
-    Option.match(environment.BILLING_COLLECTION_QUEUE, {
-      onNone: () => Effect.void,
-      onSome: (queue) =>
-        dispatchBillingPriceNotices({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),
     })
   ),
   activity(

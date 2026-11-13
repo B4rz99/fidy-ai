@@ -6,9 +6,6 @@ import { makeWompiTransport } from "./internal/wompi-runtime";
 import { type WompiBindings } from "./contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { dispatchCancellations } from "./internal/source-cancellation";
-import { dispatchPriceNotices } from "./internal/price-notice";
-import { publishWeeklyPrice } from "./operations";
-import { type Price } from "../../src/core/subscription/contract";
 import { dispatchSubscriptionRenewals as dispatchRenewals } from "./internal/subscription-renewal";
 import {
   dispatchRefunds as dispatchCorrections,
@@ -19,11 +16,9 @@ import {
 } from "./internal/refund-workflow";
 import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment";
 import type {
-  BillingPriceNoticeDispatchInput,
   EnrollmentEnvironment,
   SubscriptionCancellationDispatchInput,
   SubscriptionRenewalDispatchInput,
-  WeeklyPricePublication,
 } from "./contract";
 import {
   WorkflowEntrypoint,
@@ -246,28 +241,6 @@ export const handlePaymentEnrollment = (
 export const dispatchSubscriptionRenewals = (
   input: SubscriptionRenewalDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> => dispatchRenewals(input);
-
-/** Commit immutable weekly terms, then attempt one bounded notice page. Deferred offers recover through dispatch; interruption and publication failure still propagate. */
-export const publishWeeklyPriceAndNotify = (
-  input: BillingPriceNoticeDispatchInput & Readonly<{ price: Price }>
-): Effect.Effect<WeeklyPricePublication, BillingCollectionFailure> =>
-  publishWeeklyPrice({ db: input.DB, price: input.price }).pipe(
-    Effect.flatMap(() =>
-      dispatchPriceNotices(input).pipe(
-        Effect.as<WeeklyPricePublication>({ priceId: input.price.id, noticeOffer: "attempted" }),
-        Effect.catchTag("BillingCollectionFailure", () =>
-          Effect.succeed<WeeklyPricePublication>({
-            priceId: input.price.id,
-            noticeOffer: "deferred",
-          })
-        )
-      )
-    )
-  );
-/** Recover missed publication offers; provider ambiguity never authorizes a second notice submission. */
-export const dispatchBillingPriceNotices = (
-  input: BillingPriceNoticeDispatchInput
-): Effect.Effect<void, BillingCollectionFailure> => dispatchPriceNotices(input);
 
 /** Recover retained DaviPlata cancellation intent through bounded identity-only offers. */
 export const dispatchSubscriptionCancellations = (

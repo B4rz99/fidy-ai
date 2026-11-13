@@ -9,7 +9,6 @@ const cadenceMinutes: Partial<Record<ScheduledOperation, number>> = {
   "emailReplacement.reconcile": 5,
   "billing.renewal.dispatch": 15,
   "billing.cancellation.dispatch": 15,
-  "billing.priceNotice.dispatch": 15,
   "dashboard.projectionRepair": 15,
   "billing.refund.reconcile": 5,
   "billing.refund.dispatch": 5,

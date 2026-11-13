@@ -24,28 +24,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
   },
 
   {
-    id: "billing_price_notices",
-    dataClass: "billing",
-    dependencies: [],
-    quiescence: { _tag: "Synchronous" },
-
-    candidates: (userId) => ({
-      sql: "SELECT CAST(r.rowid AS TEXT) AS rowRef FROM billing_price_notice_context r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remaining: (userId) => ({
-      sql: "SELECT 1 FROM billing_price_notice_context r WHERE r.user_id=?",
-      params: [userId],
-    }),
-    remove: (scope) => [
-      {
-        sql: "DELETE FROM billing_price_notices AS r WHERE r.subscription_id=(SELECT id FROM subscriptions WHERE user_id=?) AND CAST(r.rowid AS TEXT) IN(SELECT value AS row_ref FROM json_each(?))",
-        params: [scope.userId, scope.rowRefsJson],
-      },
-    ],
-  },
-
-  {
     id: "billing_checkout_responses",
     dataClass: "billing",
     dependencies: [],
@@ -199,7 +177,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
     dependencies: [
       "billing_history",
       "refund_attempts",
-      "billing_price_notices",
       "card_enrollments",
       "card_payment_sources",
     ],

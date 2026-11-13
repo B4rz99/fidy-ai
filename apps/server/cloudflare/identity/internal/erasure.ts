@@ -13,7 +13,6 @@ export const projections: ReadonlyArray<ErasureProjection> = [
       "recurring_plan_documents",
       "backup_recovery_credentials",
       "billing_history",
-      "billing_price_notices",
       "browser_login_pairings",
       "browser_pairing_email_proofs",
       "browser_pairing_email_user_limits",

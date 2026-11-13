@@ -105,7 +105,7 @@ export const executeSubscriptionRenewalAdmission = (
   );
 };
 
-/** Trusted operator publication: freezes replacement terms and records affected Users' notice intent atomically. */
+/** Trusted operator publication replaces the selected offer while preserving every historical Price. */
 export const publishWeeklyPrice = (
   input: Readonly<{ db: D1Database; price: Price }>
 ): Effect.Effect<void, BillingCollectionFailure> =>

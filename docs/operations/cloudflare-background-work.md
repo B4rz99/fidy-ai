@@ -16,7 +16,7 @@ window; queues, workflows and per-User recovery alarms retain their independent 
 | Work                                                                             | Interval                |
 | -------------------------------------------------------------------------------- | ----------------------- |
 | Operational health and reminder discovery/publication                            | One minute              |
-| Subscription renewals, cancellations and price-notice recovery                   | 15 minutes              |
+| Subscription renewals and cancellations                                          | 15 minutes              |
 | Dashboard projection repair                                                      | 15 minutes              |
 | Billing collection, payment-status reconciliation, refunds and void verification | Five minutes            |
 | Email, WhatsApp, disclosure and statement-extraction recovery                    | Five minutes            |

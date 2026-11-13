@@ -1,4 +1,4 @@
-# Automatic renewal, grace, cancellation and notified Prices
+# Automatic renewal, grace, cancellation and replacement Prices
 
 - **Status:** Accepted
 - **Date:** 2026-10-07
@@ -19,13 +19,14 @@ An unstopped Subscription retains Pro for exactly three days after its paid boun
 A failure never rewrites its paid history or ends grace early; expiry of grace ends that access basis.
 Refund access adjustments and renewal stops exclude grace. TrialPeriod remains independent.
 
-The User explicitly chose immediate Price-change notification and no renewed acceptance. Trusted
-weekly Price publication changes only offer selection, retaining every old Price, and atomically
-records billing-email notices for affected card Subscriptions. Publication offers these immediately;
-minute Maintenance recovers missed offers. Resend acceptance is recorded as provider acceptance,
-not proof of human receipt. A started ambiguous send is not automatically repeated. A definite provider rejection releases
-the send claim for a later offer, preserving the same provider idempotency key. Newly admitted
-renewals snapshot the currently published Price; already-pending attempts retain their prior terms.
+Price changes apply to newly admitted renewals without renewed acceptance. Trusted weekly Price
+publication changes only offer selection and retains every old Price. Already-pending attempts and
+bounded retries retain their original terms.
+
+The [shared catalog decision](https://github.com/B4rz99/fidy-ai/issues/2207) supersedes automatic
+Price-change notification: the operator handles announcements manually outside Fidy. Publication
+creates no notice records, email work or recipient-distribution obligation, and does not wait for
+an announcement. Automatic notice storage, dispatch and delivery are removed.
 
 ## Retry and cancellation policy (#236)
 

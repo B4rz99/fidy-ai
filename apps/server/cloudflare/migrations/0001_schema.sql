@@ -180,17 +180,6 @@ CHECK((no_charge_confirmed_at_ms IS NULL AND no_charge_case_id IS NULL AND no_ch
 CHECK(late_approval_observed_at_ms IS NULL OR no_charge_confirmed_at_ms IS NOT NULL)) STRICT;
 --> statement-breakpoint
 
-CREATE TABLE billing_price_notices (
-  subscription_id TEXT NOT NULL REFERENCES subscriptions(id),
-  price_id TEXT NOT NULL REFERENCES subscription_prices(id),
-  created_at_ms INTEGER NOT NULL,
-  last_offered_at_ms INTEGER,
-  send_started_at_ms INTEGER,
-  provider_accepted_at_ms INTEGER,
-  PRIMARY KEY (subscription_id, price_id)
-) STRICT;
---> statement-breakpoint
-
 CREATE TABLE billing_provider_transactions (
  transaction_id TEXT PRIMARY KEY NOT NULL CHECK(length(transaction_id) BETWEEN 1 AND 128),
  attempt_id TEXT REFERENCES billing_attempts(id),
@@ -3618,21 +3607,6 @@ CREATE TRIGGER erasure_fence_billing_event_candidates_insert BEFORE INSERT ON bi
 CREATE TRIGGER erasure_fence_billing_event_candidates_update BEFORE UPDATE ON billing_provider_transactions WHEN (OLD.event_received_at_ms IS NOT NULL OR NEW.event_received_at_ms IS NOT NULL) AND (NEW.transaction_id IS NOT OLD.transaction_id OR NEW.event_row_ref IS NOT OLD.event_row_ref OR NEW.event_received_at_ms IS NOT OLD.event_received_at_ms OR NEW.event_signed_at IS NOT OLD.event_signed_at OR NEW.event_signed_status IS NOT OLD.event_signed_status OR NEW.event_lookup_attempts IS NOT OLD.event_lookup_attempts OR NEW.event_last_checked_at_ms IS NOT OLD.event_last_checked_at_ms OR NEW.event_resolved_at_ms IS NOT OLD.event_resolved_at_ms) AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state <>'Draining' AND ((EXISTS(SELECT 1 FROM billing_attempt_context a WHERE a.id=OLD.attempt_id AND OLD.status IS NOT NULL AND a.user_id=q.user_id)) OR (EXISTS(SELECT 1 FROM billing_attempt_context a WHERE a.id=NEW.attempt_id AND NEW.status IS NOT NULL AND a.user_id=q.user_id))) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_event_candidates')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER erasure_fence_billing_price_notices_delete BEFORE DELETE ON billing_price_notices
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state <>'Draining' AND ((SELECT user_id FROM subscriptions WHERE id=OLD.subscription_id)=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
-BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
---> statement-breakpoint
-
-CREATE TRIGGER erasure_fence_billing_price_notices_insert BEFORE INSERT ON billing_price_notices
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state <>'Draining' AND ((SELECT user_id FROM subscriptions WHERE id=NEW.subscription_id)=q.user_id) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
-BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
---> statement-breakpoint
-
-CREATE TRIGGER erasure_fence_billing_price_notices_update BEFORE UPDATE ON billing_price_notices
-WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state <>'Draining' AND (((SELECT user_id FROM subscriptions WHERE id=NEW.subscription_id)=q.user_id) OR ((SELECT user_id FROM subscriptions WHERE id=OLD.subscription_id)=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_price_notices'))
-BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
---> statement-breakpoint
-
 CREATE TRIGGER erasure_fence_billing_provider_transactions_delete BEFORE DELETE ON billing_provider_transactions
 WHEN EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state <>'Draining' AND (EXISTS(SELECT 1 FROM billing_attempt_context p WHERE p.id=OLD.attempt_id AND p.user_id=q.user_id)) AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='billing_provider_transactions'))
 BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
@@ -6534,18 +6508,6 @@ CREATE TRIGGER weekly_governor_deliveries_marker_fence BEFORE UPDATE ON insight_
 CREATE TRIGGER weekly_governor_deliveries_marker_insert_fence BEFORE INSERT ON insight_events WHEN NEW.weekly_governor_counted=1 AND EXISTS(SELECT 1 FROM erasure_requests q WHERE q.state <>'Draining' AND NEW.user_id=q.user_id AND NOT EXISTS(SELECT 1 FROM erasure_permits p WHERE p.user_id=q.user_id AND p.request_id=q.id AND p.store_id='weekly_governor_deliveries')) BEGIN SELECT RAISE(ABORT,'erasure_fenced'); END;
 --> statement-breakpoint
 
-CREATE TRIGGER weekly_price_notice AFTER UPDATE OF published_order ON subscription_prices
-WHEN NEW.published_order = 1 AND OLD.published_order IS NULL
-BEGIN
- INSERT OR IGNORE INTO billing_price_notices (subscription_id, price_id, created_at_ms)
-    SELECT a.subscription_id, NEW.id, CAST(unixepoch('subsec') * 1000 AS INTEGER) FROM (SELECT * FROM subscription_standing) s
-    JOIN billing_attempt_context a ON a.id=s.attempt_id AND a.user_id=s.user_id
-    JOIN payment_source_context source ON source.id=a.payment_source_id AND source.user_id=s.user_id
-    WHERE a.billing_period='weekly' AND source.method='card' AND a.price_id<>NEW.id
-      AND NOT EXISTS (SELECT 1 FROM (SELECT rowid,id AS refund_id,user_id AS user_id,renewal_stopped_at_ms AS stopped_at_ms FROM refund_attempts WHERE renewal_stopped_at_ms IS NOT NULL) stop WHERE stop.user_id=s.user_id);
-END;
---> statement-breakpoint
-
 CREATE TRIGGER whatsapp_delivery_kind_immutable BEFORE UPDATE OF kind ON whatsapp_deliveries WHEN NEW.kind<>OLD.kind BEGIN SELECT RAISE(ABORT,'whatsapp_delivery_kind_immutable'); END;
 --> statement-breakpoint
 
@@ -6850,18 +6812,6 @@ SELECT r.rowid,r.*,a.subscription_id,a.price_id,a.currency,a.original_cents,
  CASE WHEN r.access_ends_at_ms IS NOT NULL THEN r.billing_attempt_id END AS adjusted_attempt_id,
  CASE WHEN r.renewal_stopped_at_ms IS NOT NULL THEN r.user_id END AS renewal_stopped_user_id
 FROM refund_attempts r JOIN refund_charge_context a ON a.id=r.billing_attempt_id;
---> statement-breakpoint
-
-CREATE VIEW billing_price_notice_context AS
-SELECT n.rowid,n.*,s.user_id FROM billing_price_notices n JOIN subscriptions s ON s.id=n.subscription_id;
---> statement-breakpoint
-
-CREATE INDEX billing_price_notices_pending ON billing_price_notices(last_offered_at_ms,created_at_ms,subscription_id) WHERE send_started_at_ms IS NULL;
---> statement-breakpoint
-
-CREATE TRIGGER billing_price_notice_identity BEFORE UPDATE OF subscription_id,price_id,created_at_ms ON billing_price_notices
-WHEN NEW.subscription_id IS NOT OLD.subscription_id OR NEW.price_id IS NOT OLD.price_id OR NEW.created_at_ms IS NOT OLD.created_at_ms
-BEGIN SELECT RAISE(ABORT,'billing_price_notice_identity'); END;
 --> statement-breakpoint
 
 CREATE TRIGGER erasure_fence_statement_materializations_delete BEFORE DELETE ON statement_materializations

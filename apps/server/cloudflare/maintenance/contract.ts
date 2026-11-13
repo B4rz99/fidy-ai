@@ -19,7 +19,6 @@ export type ScheduledOperation =
   | "emailReplacement.reconcile"
   | "billing.refund.dispatch"
   | "billing.refund.reconcile"
-  | "billing.priceNotice.dispatch"
   | "billing.renewal.dispatch"
   | "billing.cancellation.dispatch"
   | "billing.collection.dispatch"

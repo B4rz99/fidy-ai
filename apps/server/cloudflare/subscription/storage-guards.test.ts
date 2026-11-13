@@ -8,7 +8,6 @@ const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const userId = "10000000-0000-4000-8000-000000000001";
 const foreign = "10000000-0000-4000-8000-000000000002";
-const priceId = "22700000-0000-4000-8000-000000000001";
 const paidThrough = 9999999999999;
 const setup = Effect.fn(function* () {
   const db = yield* Effect.tryPromise(() => databases.acquire());
@@ -73,33 +72,6 @@ it("preserves the paid period after cancellation and refuses deletion, regressed
             .all()
         )
       ).toMatchObject({ results: [{ subscription_id: userId, verification_count: 3 }] });
-    })
-  ));
-
-it("refuses reassignment of an existing Price notice without changing its original owner", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO billing_price_notices(subscription_id,price_id,created_at_ms) VALUES(?,?,1)"
-          )
-          .bind(userId, priceId)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        expect(
-          db.prepare("UPDATE billing_price_notices SET subscription_id=?").bind(foreign).run()
-        ).rejects.toThrow("billing_price_notice_identity")
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT subscription_id,price_id,created_at_ms FROM billing_price_notices")
-            .all()
-        )).results
-      ).toEqual([{ subscription_id: userId, price_id: priceId, created_at_ms: 1 }]);
     })
   ));
 

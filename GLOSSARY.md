@@ -200,10 +200,10 @@ its captured interpretation context intact until resolution. Never silently disc
 _Avoid_: Failed import, error, unparsed item.
 
 **IngestSample**:
-Retained ingestion material — raw forwarded email kept ~90 days, plus an indefinite anonymised
-structural version used to build parsers and regression fixtures. It retains the ServiceMarket,
-source format or provider, parser revision, and anonymisation revision needed to interpret it. Personal
-data under Ley 1581.
+Retained ingestion material: raw forwarded email is personal data kept for 90 days, while only a
+human-approved anonymised structural version qualifies for indefinite parser and regression-fixture
+use. It retains the ServiceMarket, source format or provider, parser revision, and anonymisation
+revision needed to interpret it.
 _Avoid_: Corpus, training data, log.
 
 ### The agent surface
@@ -470,7 +470,7 @@ _Avoid_: Membership, plan (alone), recurring charge (that is a RecurringSeries).
 **Price**:
 An immutable version of Subscription price terms: exact Money, billing period, tax treatment, and
 the ServiceMarket in which the terms were offered. A later price change never rewrites a prior
-billing period. A replacement Price is notified immediately and applies to newly started renewals
+billing period. A replacement Price applies to newly started renewals
 without renewed acceptance; pending BillingAttempts and retries of the same renewal retain their
 original Price.
 _Avoid_: Current price, price config, rate.

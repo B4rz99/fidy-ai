@@ -1,7 +1,8 @@
 # Per-User Durable Objects own application storage and atomic execution
 
-- **Status:** Accepted migration direction and User storage/execution boundary; remaining map
-  decisions and implementation are open.
+- **Status:** Accepted migration direction, User storage/execution, routing and shared-fact
+  boundaries; background discovery, recovery, operations, acceptance and migration implementation
+  remain open.
 - **Supersedes:** The D1 storage destination and coordination-only Durable Object role in
   [ADR 0026](0026-cloudflare-native-production-replatform.md), and the initial-platform restriction
   in [ADR 0039](0039-fresh-read-performance-contract.md).
@@ -13,9 +14,10 @@ database for explicit global routing, work discovery and recovery protocols. A p
 hybrid is not the destination.
 
 Live User authority checks, domain changes, accounting and Audit remain in one local transaction.
-Separate objects own global routing and independent erasure authority. Their exact partitioning
-and coordination protocols remain design decisions: a transaction in one object cannot make
-changes in another object atomic. R2, Queues and Workflows retain their existing responsibilities
+One shared directory object owns routing and pre-User bootstrap; a separate shared pricing object
+owns the Price catalog and admission ordering. Independent erasure authority remains a separate
+recovery boundary. A transaction in one object cannot make changes in another object atomic.
+R2, Queues and Workflows retain their existing responsibilities
 unless a concrete design constraint warrants changing them. Colombia versus North America is not
 a storage-placement requirement.
 
@@ -50,27 +52,82 @@ not the commercial charging policy or the meaning of an admitted refusal.
 
 ## Shared facts and ordering
 
+The [shared catalog and admission decision](https://github.com/B4rz99/fidy-ai/issues/2207) keeps
+logical domain ownership distinct from physical partitioning. Subscription owns shared Price facts
+in one pricing object, separate from the directory/login object. The directory hosts the app-wide
+login-email attempt limiter alongside pre-User authentication, with those owners retaining their
+own policies. Neither object becomes an executor or authority for User data.
+
 Published Prices require one authoritative ordering with new billing admissions. Once publication
 completes, every newly started renewal uses the new Price. Existing BillingAttempts and bounded
 retries of the same renewal retain their original terms. Publication waits for an in-flight
 admission's exact outcome; an uncertain admission can delay or make publication unavailable rather
 than permit a late old-price commit. This deliberately favors immediate global pricing correctness
 over publication availability. The shared publication protocol does not make an RPC part of the
-User's SQLite transaction. Price-change notices require durable distribution and recovery instead
-of D1's cross-User notice-insertion transaction.
+User's SQLite transaction. The user subsequently removed automatic Price-change announcements in
+the [shared catalog decision](https://github.com/B4rz99/fidy-ai/issues/2207). The operator handles
+announcements manually outside Fidy; publication has no notice-distribution or recipient-list
+coordination requirement. This supersedes the earlier automatic-notice obligation without changing
+the ordering of Prices and billing admissions.
+
+The pricing object durably registers each exact new price-sensitive admission before the User can
+commit it. Registration binds the User, operation, immutable inputs, selected Price and original
+deadline. The User commits its live checks, BillingAttempt, captured terms, accounting, Audit and
+terminal admission outcome together. Completion acknowledgements are repairable bookkeeping.
+Publication durably stops new admissions for the affected offer, resolves all earlier admissions,
+then atomically changes the published Price and reopens admission. It waits for admission outcomes,
+not provider settlement. No cross-object RPC runs inside either SQLite transaction.
+
+If a reply is lost, recovery reads the exact User-local outcome or durably cancels that admission.
+Commit and cancellation serialize locally; cancellation that wins prevents a delayed commit, while
+a committed admission retains its result. Neither a timeout nor an absent-row read proves safety.
+Persist publication progress across restarts and process one publication at a time; retrying the
+same publication recovers its status. Retain outcome/fence protection until delayed requests can
+no longer be accepted, without extending the originating billing or enrollment deadline. This is
+an owner-specific protocol, not a replacement for ordinary mutation receipts.
+
+An open enrollment form does not guarantee its displayed Price. If publication wins before the
+first BillingAttempt is admitted, the User must review and accept the new terms before that charge
+starts. An already admitted BillingAttempt retains its captured terms, and bounded retries of a
+renewal retain the original renewal terms. Publication never silently substitutes a higher Price
+into an unaccepted enrollment.
 
 The app-wide login-email cap becomes a simple shared attempt limiter, separate from the User-local
 limit. Both checks must allow the attempt before sending; an allowed attempt that later fails still
 counts. There is no distributed capacity reservation or refund protocol. This deliberately replaces
 the current atomic User/global accepted-request accounting for that limit; User commercial
-accounting and Audit remain local. Other global authentication limits retain their own policies.
+accounting and Audit remain local. Preserve five accepted requests per User per hour and a shared
+cap of 1,000 attempts per hour, with the existing independently anchored windows. Check cheap local
+eligibility first, obtain the shared allowance outside the local transaction, then recheck local
+limits and authority when accepting the exact send work. The final one-shot send claim still checks
+the live credential, pairing and expiry. A lost limiter reply permits no send; a fresh counted retry
+may waste another slot. No allowance can authorize another email. Other source/global authentication
+limits retain their pre-User owners and existing policies.
 
-Global routing and pre-User bootstrap state, the Price catalog, app-wide admission and independent
-erasure authority need explicit shared owners. Shared taxonomy and anonymized structural samples
-also need an explicit distribution/retention contract; their existence does not justify splitting
-live User authority or User-domain state into more objects. The
-[shared catalog and admission decision](https://github.com/B4rz99/fidy-ai/issues/2207) owns those
-remaining protocols; the other map tickets retain routing, discovery, recovery and acceptance.
+## Shared Category taxonomy and structural samples
+
+Categories owns immutable taxonomy revisions distributed with application releases. Each operation
+uses one complete revision. Stable CategoryIds survive label and order changes; retained references
+remain interpretable. User keyword rules, Transaction corrections and Budget choices stay local.
+This adds no runtime taxonomy publisher or shared taxonomy DO, and a taxonomy revision grants no
+User authority. Operational rollout and revision compatibility belong to the schema/operations
+decision.
+
+Ingestion owns structural-sample preparation and human approval. Raw material, pending candidates,
+approval evidence and publication intent remain User-scoped. The reviewer sees only the anonymised
+structural candidate. An unreviewed candidate expires at the original email's 90-day deadline;
+review queues never extend raw retention. Indefinite retention requires both removal of identifying
+and transaction-specific values and human approval of that exact candidate revision. A sample
+later found unsafe must be removable.
+
+Approved anonymous artifacts can be shared through R2 with independent sample identities and only
+their required ServiceMarket, source-format, parser and anonymisation metadata. They carry no User,
+receipt or raw-material locator. User-local approval and retained intent precede publication;
+external writes run outside the transaction, and recovery uses the same sample identity and
+approved contents. Background discovery owns missed handoff and bounded retry. Independent
+erasure/restore owns fencing and draining in-flight writes; approval is not permission to copy raw
+material into shared storage. The existing automatic-approval implementation does not satisfy this
+accepted migration boundary and must be replaced during implementation.
 
 ## Adoption evidence
 
@@ -90,9 +147,9 @@ alongside representative latency and load. Exact thresholds and cutover procedur
 ## Design boundary
 
 The [migration map](https://github.com/B4rz99/fidy-ai/issues/2198) owns the remaining decisions:
-global identity routing, shared-fact protocols, background discovery, independent recovery, schema
-operations, and acceptance/cutover. The resolved User storage/execution ticket owns its detailed
-decision record. The
+background discovery, independent recovery, schema operations, and acceptance/cutover. The resolved
+User storage/execution, identity routing and shared catalog tickets own their detailed decision
+records. The
 [platform constraints research](https://github.com/B4rz99/fidy-ai/issues/2199#issuecomment-6839405060)
 records source-backed findings and outstanding evidence. Dated research and decision-ticket detail
 remain on the tracker.

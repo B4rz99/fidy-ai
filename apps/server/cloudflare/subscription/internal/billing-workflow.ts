@@ -6,7 +6,6 @@ import {
   workTraceParent,
   workerRelease,
 } from "../../runtime/telemetry/operations";
-import { receivePriceNotice, sendPriceNotice } from "./price-notice";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { BillingAttemptId } from "../../../src/core/subscription/contract";
 import { verifiedWompiEventHint } from "./wompi-event";
@@ -17,7 +16,6 @@ import {
   type BillingCollectionEnvironment,
   BillingCollectionFailure,
   type BillingObservationWorkflow,
-  BillingPriceNoticeWork,
   type BillingRuntime,
   SubscriptionCancellationWork,
 } from "../contract";
@@ -38,9 +36,9 @@ type CollectionWorkflow = BillingObservationWorkflow;
 /** Identify this Queue payload without interpreting any provider data as authority. */
 export const isBillingCollectionWork = (body: unknown): boolean =>
   Option.isSome(
-    Schema.decodeUnknownOption(
-      Schema.Union([CollectionMessage, BillingPriceNoticeWork, SubscriptionCancellationWork])
-    )(body)
+    Schema.decodeUnknownOption(Schema.Union([CollectionMessage, SubscriptionCancellationWork]))(
+      body
+    )
   );
 const ArmState = Schema.Struct({ state: Schema.Literals(["armed", "sent", "rejected"]) });
 const pendingBatchSize = 32;
@@ -125,18 +123,6 @@ export const dispatchBillingCollection = (
     if (failed) return yield* failure();
   }).pipe(Effect.withSpan("billing.collection.dispatch"));
 
-const receiveAuxiliaryWork = (
-  environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: CollectionWorkflow }>,
-  work: typeof BillingPriceNoticeWork.Type | typeof SubscriptionCancellationWork.Type
-): Effect.Effect<void, BillingCollectionFailure> =>
-  work.kind === "source-cancellation"
-    ? receiveSourceCancellation({
-        db: environment.DB,
-        workflow: environment.BILLING_COLLECTION_WORKFLOW,
-        work,
-      })
-    : receivePriceNotice({ environment, work });
-
 /** Duplicated Queue messages converge on one deterministic Workflow instance. */
 export const receiveBillingCollection = (
   input: Readonly<{
@@ -147,14 +133,18 @@ export const receiveBillingCollection = (
   Effect.gen(function* () {
     for (const message of input.batch.messages) {
       const work = Schema.decodeUnknownOption(
-        Schema.Union([CollectionMessage, BillingPriceNoticeWork, SubscriptionCancellationWork])
+        Schema.Union([CollectionMessage, SubscriptionCancellationWork])
       )(message.body);
       if (Option.isNone(work)) {
         message.ack();
         continue;
       }
       if ("kind" in work.value) {
-        yield* receiveAuxiliaryWork(input.environment, work.value);
+        yield* receiveSourceCancellation({
+          db: input.environment.DB,
+          workflow: input.environment.BILLING_COLLECTION_WORKFLOW,
+          work: work.value,
+        });
         message.ack();
         continue;
       }
@@ -255,9 +245,7 @@ type BillingWorkflowExecution = Readonly<{
 /** Only a versioned identity enters Workflow state. The named Activity owns the one armed POST. */
 export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): Promise<void> => {
   const { wompiHttp } = input;
-  const work = Schema.decodeUnknownOption(
-    Schema.Union([CollectionMessage, BillingPriceNoticeWork])
-  )(input.payload);
+  const work = Schema.decodeUnknownOption(CollectionMessage)(input.payload);
   if (Option.isNone(work)) return runBillingObservation(input);
   const options = { retries: { limit: 0, delay: "1 second" } } as const;
   const runActivity = <E>(activity: Effect.Effect<void, E>): Promise<void> =>
@@ -270,12 +258,6 @@ export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): P
       }),
       Effect.runPromise
     );
-  if ("kind" in work.value) {
-    const notice = work.value;
-    return input.activity("send-billing-price-notice-v1", options, () =>
-      runActivity(sendPriceNotice({ environment: input.environment, work: notice }))
-    );
-  }
   const attemptId = work.value.attemptId;
   return input.activity("collect-wompi-billing-v1", options, () =>
     runActivity(collectBillingTransaction({ environment: input.environment, attemptId, wompiHttp }))

@@ -329,7 +329,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261104.1",
+    "@cloudflare/workers-types": "5.20261106.1",
     "@effect/platform-bun": "4.1.2",
     "@effect/platform-node": "4.1.2",
     "@effect/vitest": "4.1.2",

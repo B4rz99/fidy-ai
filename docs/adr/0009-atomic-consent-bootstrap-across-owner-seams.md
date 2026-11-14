@@ -5,6 +5,12 @@
 - **Amended:** 2026-10-24
 - **Related:** [ADR 0020 Provider authentication and recovery](./0020-mandatory-verified-email-authentication-and-recovery.md)
 
+The accepted migration in [ADR 0041](0041-per-user-durable-object-storage-direction.md#one-shared-lookup-object)
+replaces the shared-D1 bootstrap below with a permanent, single-User proof handoff and one local
+User-establishment transaction. Directory reservations do not establish authority, and uncertain
+completion cannot release an identity for a second User. The D1 mechanics below describe the
+current implementation until that migration is implemented.
+
 Provider signup composes published owner operations in one Cloudflare D1 atomic unit. Provider
 Authentication verifies the ProviderPrincipal and binds the ProviderCredential; Identity creates the
 stable User and TrialPeriod; Consent appends the exact accepted disclosure evidence; Recovery

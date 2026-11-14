@@ -7,6 +7,12 @@
 - **Historical implementation:** [Verified email authentication and backup recovery](https://github.com/B4rz99/fidy-ai/issues/14)
 - **Amends:** [ADR 0015](./0015-browser-paired-web-authentication.md) for provider approval and [ADR 0011](./0011-bsuid-authority-for-whatsapp-identity.md) for explicit initial association of an existing User; their session ownership and BSUID authority remain.
 
+The accepted [storage and routing migration](0041-per-user-durable-object-storage-direction.md#one-shared-lookup-object)
+replaces shared-D1 proof coordination with an exact permanent handoff from the shared lookup
+object to one User. Signup and recovery still consume their proofs with all User-local owner
+effects in one transaction; directory state alone cannot establish authority. The D1 mechanics
+below remain the current implementation until that migration is implemented.
+
 ## Context
 
 Mandatory mailbox codes add enrollment, delivery, resend, expiry, and uncertain-outcome handling to

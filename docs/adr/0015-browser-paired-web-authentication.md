@@ -5,6 +5,12 @@
 - **Amended:** 2026-10-08
 - **Related:** [ADR 0020 Provider authentication and recovery](./0020-mandatory-verified-email-authentication-and-recovery.md)
 
+The accepted [storage and routing migration](0041-per-user-durable-object-storage-direction.md#one-shared-lookup-object)
+places unbound attempts in one shared lookup object, then permanently hands completion to the
+destination User. Browser Login remains the sole session issuer; exact proof consumption and
+same-User ready-pairing supersession remain atomic inside that User. The current database
+mechanics below apply until migration implementation.
+
 ## Context
 
 A login link sent through WhatsApp or email is a bearer-equivalent Secret until redemption. Hiding

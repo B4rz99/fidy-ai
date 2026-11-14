@@ -50,6 +50,70 @@ continuation and reconciliation state. Replay disclosure still requires current 
 one-time Secrets never become retained response payloads. This changes transaction composition,
 not the commercial charging policy or the meaning of an admitted refusal.
 
+## One shared lookup object
+
+The [global identity lookup and User routing decision](https://github.com/B4rz99/fidy-ai/issues/2201)
+selects one shared SQLite Durable Object for identity and credential lookup, uniqueness
+reservations, pre-User bootstrap attempts and external-event routing. Existing opaque credentials
+remain unchanged. There are no hash shards, per-identity objects, embedded User locators or routing
+caches in the initial design. Simplicity takes precedence over removing a lookup hop; shared
+capacity and availability are accepted constraints that adoption measurements must exercise.
+
+Lookup records retain only the typed lookup key, destination User and necessary local record
+reference, exact reservation/operation identity, lifecycle and expiry/reconciliation metadata.
+Pre-User attempts retain their existing bounded proof digests and exact decision context; they do
+not retain recoverable Secrets or duplicate User profiles, grants, Consent or financial state.
+Identity keys remain personal data with purpose-bound cleanup. Public OAuth client registration
+shares this physical object while retaining its existing module and admission boundaries; it
+never becomes a User grant.
+
+Register an exact destination before activating a new credential, disclosing its Secret or
+starting an external effect whose callback needs that route. Reservations supply an address, not
+authorization. The destination rejects absent, incomplete, expired, revoked or mismatched local
+authority. All User effects, exact proof consumption, Consent, required accounting and Audit still
+commit together locally. No directory RPC joins that transaction.
+
+Before a User is known, the shared object owns the bounded login or pairing attempt. Handoff
+freezes its exact evidence, permanently binds it to one User and transfers completion to that
+User object. The User consumes the imported proof with its owner effects. Repeated handoff cannot
+approve another User, create another session or restart expiry. Directory-assigned creation order
+preserves existing same-User ready-pairing supersession; import order cannot replace it. Browser
+Login remains the sole session issuer. This replaces the shared-D1 bootstrap mechanics of
+[ADR 0009](0009-atomic-consent-bootstrap-across-owner-seams.md),
+[ADR 0015](0015-browser-paired-web-authentication.md) and
+[ADR 0020](0020-mandatory-verified-email-authentication-and-recovery.md), while preserving their
+proof, identity and complete User-establishment requirements.
+
+Concurrent first signups for one provider identity reserve the same destination. A lost response
+is resolved against that exact User and operation; timeout alone never releases the identity for
+another User. Release requires a conclusive local outcome, including a durable cancellation that
+prevents delayed completion when the operation did not commit. Updates and cleanup match the exact
+reservation so delayed work cannot remove a later binding. Recovery retains metadata, not a raw
+PAT, session, OAuth credential or backup code; a lost Secret response requires the existing fresh
+login or issuance flow.
+
+Replacement reserves the new identity before atomically switching the User's binding, then cleans
+up the old route. Conflicts never merge or transfer Users. Revocation takes effect at the User
+commit and need not wait for directory cleanup. Retain routes needed for security recognition:
+consumed OAuth refresh generations remain locatable while their connection is live, and session
+routing must accommodate idle extensions through the fixed hard deadline. These are routing
+retention requirements, not extensions of credential authority.
+
+An empty or deleted destination never creates a User merely because a route points to it. Only
+the exact reserved bootstrap may initialize User domain state. Erasure fences old authority and
+pending handoffs before releasing identities. Once erasure is complete and the old reservation
+has been safely released, fresh signup may create a new UserId. Independent restore fencing and
+metadata expiry belong to the erasure decision; stale cleanup cannot affect the new User.
+
+Register Wompi environment/reference and WhatsApp endpoint/delivery correlation before sending;
+register a forwarding address before disclosure without enabling disabled ingestion. Authenticated
+callbacks may wait in existing durable Queues, with acknowledgement only after durable acceptance.
+The destination still checks exact retained work and provider evidence. If neither routing nor
+durable acceptance is available, return a retryable failure. Requests needing an unavailable
+directory report temporary unavailability, not invalid credentials; already routed work retains
+its normal User-local checks. Recovery of missed handoffs and cleanup is durable work for the
+background-discovery decision, never an in-memory promise or blind provider retry.
+
 ## Shared facts and ordering
 
 The [shared catalog and admission decision](https://github.com/B4rz99/fidy-ai/issues/2207) keeps

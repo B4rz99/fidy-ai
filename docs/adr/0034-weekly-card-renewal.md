@@ -7,6 +7,10 @@
 [ADR 0041](0041-per-user-durable-object-storage-direction.md#shared-facts-and-ordering) supersedes
 the D1 publication/storage choreography for the planned migration. Immediate Price selection for
 new renewals and preservation of original terms for pending attempts and renewal retries remain.
+For the migration, exact shared registration fixes terms; an earlier registration may complete
+within its original deadline after publication without delaying other Users. The
+[background discovery decision](https://github.com/B4rz99/fidy-ai/issues/2202#issuecomment-6895944711)
+supersedes the earlier wait for outstanding User admissions.
 The D1 mechanics below describe the current implementation.
 
 Weekly card renewals use the existing Cloudflare D1 outbox, Queue, Workflow and User coordinator.

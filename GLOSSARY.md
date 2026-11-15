@@ -470,9 +470,9 @@ _Avoid_: Membership, plan (alone), recurring charge (that is a RecurringSeries).
 **Price**:
 An immutable version of Subscription price terms: exact Money, billing period, tax treatment, and
 the ServiceMarket in which the terms were offered. A later price change never rewrites a prior
-billing period. A replacement Price applies to newly started renewals
-without renewed acceptance; pending BillingAttempts and retries of the same renewal retain their
-original Price.
+billing period. A replacement Price applies when terms are first fixed for a new renewal, without
+renewed acceptance. Previously fixed terms remain available to that exact renewal within its original
+admission deadline; pending BillingAttempts and permitted retries retain their original Price.
 _Avoid_: Current price, price config, rate.
 
 **PaymentEnrollment**:

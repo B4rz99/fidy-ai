@@ -1,7 +1,7 @@
 # Per-User Durable Objects own application storage and atomic execution
 
 - **Status:** Accepted migration direction, User storage/execution, routing and shared-fact
-  boundaries; background discovery, recovery, operations, acceptance and migration implementation
+  and background-discovery boundaries; independent restore/erasure, operations, acceptance and migration implementation
   remain open.
 - **Supersedes:** The D1 storage destination and coordination-only Durable Object role in
   [ADR 0026](0026-cloudflare-native-production-replatform.md), and the initial-platform restriction
@@ -122,39 +122,30 @@ in one pricing object, separate from the directory/login object. The directory h
 login-email attempt limiter alongside pre-User authentication, with those owners retaining their
 own policies. Neither object becomes an executor or authority for User data.
 
-Published Prices require one authoritative ordering with new billing admissions. Once publication
-completes, every newly started renewal uses the new Price. Existing BillingAttempts and bounded
-retries of the same renewal retain their original terms. Publication waits for an in-flight
-admission's exact outcome; an uncertain admission can delay or make publication unavailable rather
-than permit a late old-price commit. This deliberately favors immediate global pricing correctness
-over publication availability. The shared publication protocol does not make an RPC part of the
-User's SQLite transaction. The user subsequently removed automatic Price-change announcements in
-the [shared catalog decision](https://github.com/B4rz99/fidy-ai/issues/2207). The operator handles
-announcements manually outside Fidy; publication has no notice-distribution or recipient-list
-coordination requirement. This supersedes the earlier automatic-notice obligation without changing
-the ordering of Prices and billing admissions.
+The [background discovery decision](https://github.com/B4rz99/fidy-ai/issues/2202#issuecomment-6895944711)
+supersedes the earlier publication barrier. Publication atomically changes the current Price selection
+and records its idempotent result without contacting or waiting for User objects. Every new exact
+registration after publication receives the new Price. An earlier registration may still commit its
+original terms within its original deadline. One unavailable User cannot block publication or other
+Users' registrations.
 
-The pricing object durably registers each exact new price-sensitive admission before the User can
-commit it. Registration binds the User, operation, immutable inputs, selected Price and original
-deadline. The User commits its live checks, BillingAttempt, captured terms, accounting, Audit and
-terminal admission outcome together. Completion acknowledgements are repairable bookkeeping.
-Publication durably stops new admissions for the affected offer, resolves all earlier admissions,
-then atomically changes the published Price and reopens admission. It waits for admission outcomes,
-not provider settlement. No cross-object RPC runs inside either SQLite transaction.
+The pricing object registers the exact User, operation, renewal/enrollment, immutable inputs, selected
+Price and original deadline before User-local admission. Registration supplies terms, never authority.
+Repeating the identity recovers the same registration; it cannot extend its deadline or reserve terms
+for a different renewal. The User commits live checks, BillingAttempt, captured terms, accounting,
+Audit and exact outcome together. Existing BillingAttempts and permitted retries retain their terms.
+No cross-object RPC joins either transaction.
 
-If a reply is lost, recovery reads the exact User-local outcome or durably cancels that admission.
-Commit and cancellation serialize locally; cancellation that wins prevents a delayed commit, while
-a committed admission retains its result. Neither a timeout nor an absent-row read proves safety.
-Persist publication progress across restarts and process one publication at a time; retrying the
-same publication recovers its status. Retain outcome/fence protection until delayed requests can
-no longer be accepted, without extending the originating billing or enrollment deadline. This is
-an owner-specific protocol, not a replacement for ordinary mutation receipts.
+Lost replies, completion acknowledgements and cancellation recovery remain scoped to that operation.
+Commit and cancellation serialize locally; an absent row, timeout or unreachable User does not prove
+non-commit. Retain outcome/fence protection while delayed requests could be accepted. Publication has
+no phase waiting for User outcomes. Replaying a completed publication recovers its result and cannot
+revert a newer selection.
 
-An open enrollment form does not guarantee its displayed Price. If publication wins before the
-first BillingAttempt is admitted, the User must review and accept the new terms before that charge
-starts. An already admitted BillingAttempt retains its captured terms, and bounded retries of a
-renewal retain the original renewal terms. Publication never silently substitutes a higher Price
-into an unaccepted enrollment.
+An open enrollment form does not reserve its displayed Price. Changed terms require review and
+acceptance before exact registration; an earlier registration retains its accepted terms within its
+original deadline. Never silently substitute a higher Price. Price announcements remain manual
+outside Fidy, with no recipient list, fanout or acknowledgement requirement.
 
 The app-wide login-email cap becomes a simple shared attempt limiter, separate from the User-local
 limit. Both checks must allow the attempt before sending; an allowed attempt that later fails still
@@ -193,6 +184,65 @@ erasure/restore owns fencing and draining in-flight writes; approval is not perm
 material into shared storage. The existing automatic-approval implementation does not satisfy this
 accepted migration boundary and must be replaced during implementation.
 
+## Background discovery and recovery
+
+The [background discovery decision](https://github.com/B4rz99/fidy-ai/issues/2202#issuecomment-6895944711)
+keeps scheduling with each object that owns durable state. Each User and shared owner retains its
+own due records and one alarm for its earliest required wake. The transaction changing intent also
+preserves the required alarm; the selected Effect SQL/native integration must prove atomic commit
+and rollback. External calls remain outside transactions. Cold activation must not overwrite an
+earlier required alarm.
+
+Ready work gets prompt post-commit handoff. Known future work wakes at its next eligible instant;
+recovery preserves owner cooldowns, backoff, calendars and original deadlines. Routine cleanup keeps
+existing hourly/daily batching initially. Alarm execution processes bounded owner pages, persists
+progress and rearms while obligations remain. Independent owner failures cannot starve later work.
+No remaining obligation requires no alarm; the next intent commit must arm it again.
+
+The existing maintenance object keeps a minimal durable registry of object identities and checking
+progress, not individual jobs. Register each User idempotently before first accepted work/activation,
+recover lost registration replies, and retain the entry for the owner's lifetime including idle time.
+An unused registration grants no authority or permission to initialize User domain state. Maintenance
+unavailability may delay new activation; registered Users continue locally. Directory, pricing and
+independent erasure owners are fixed watchdog targets too.
+
+The existing minute cron traverses bounded registry pages with durable progress and finite owner-call
+budgets. Under supported load, attempt a check of every registered object within five minutes,
+including idle objects and new registrations. This is an acceptance target, not completed recovery
+or outage availability. Advance past unavailable/busy Users and expose failed checks separately from
+successful observations. Checks repair local missing/overdue alarms and handoffs. Registration before
+intent closes missed-notification gaps; independent checking also covers exhausted native alarm
+retries. Correctness does not depend on namespace enumeration.
+
+Keep existing Queues, Workflows, stable identities, one-shot claims, retry/deadline rules and shared
+admission controls. Queue acknowledgement and Workflow existence do not prove domain completion.
+Reoffer only the same eligible retained identity. Unknown payments and messages reconcile exact
+provider outcomes without blindly repeating a send. Per-invocation batch/concurrency limits remain
+local limits; independent producers can multiply aggregate load, which acceptance must measure.
+Shared allowances remain shared. KISS: no priority scheduler or reserved-capacity system; change
+limits only for a demonstrated provider constraint or overload.
+
+Directory reservations, permanent proof handoffs and cleanup remain discoverable from retained owner
+state. Recover the exact committed outcome or obtain durable destination-local cancellation before
+freeing uniqueness. Missing rows, expired timers and unreachability prove neither cancellation nor
+non-commit. Only the affected identity/operation remains unresolved; other Users continue. Cleanup
+matches the original reservation/target. Authenticate callbacks before durable acceptance, acknowledge
+only after acceptance, and preserve existing bounded Queue routing and destination checks. Dead
+letters are diagnostic with finite retention; owner reconciliation and expiry remain necessary.
+
+Pricing uncertainty never blocks publication or unrelated registrations. Anonymous sample retries use
+only the exact human-approved revision, independent sample identity and approved content, outside the
+transaction. Original raw/candidate deadlines and independent erasure fences still apply. Independent
+erasure progress remains discoverable after User-local deletion. Safe registry retirement, metadata
+horizons and fencing late registration/restore belong to the independent restore/erasure decision.
+An empty User database alone never permits retirement.
+
+Reuse metadata-only owner, Queue, Workflow and retention monitoring. Add watchdog traversal age,
+coverage, overdue checks and scoped uncertainty. Unknown/unavailable is not healthy zero; complete
+coverage is not successful execution. Keep User content and identifiers out of logs/alert dimensions.
+Operational page/concurrency/budget settings belong to the operations decision; five-minute traversal,
+fault isolation and aggregate load require acceptance evidence.
+
 ## Adoption evidence
 
 Migration adoption requires measured improvement without correctness regressions. The existing
@@ -211,7 +261,7 @@ alongside representative latency and load. Exact thresholds and cutover procedur
 ## Design boundary
 
 The [migration map](https://github.com/B4rz99/fidy-ai/issues/2198) owns the remaining decisions:
-background discovery, independent recovery, schema operations, and acceptance/cutover. The resolved
+independent restore/erasure, schema operations, and acceptance/cutover. The resolved
 User storage/execution, identity routing and shared catalog tickets own their detailed decision
 records. The
 [platform constraints research](https://github.com/B4rz99/fidy-ai/issues/2199#issuecomment-6839405060)

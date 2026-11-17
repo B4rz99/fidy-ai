@@ -25,6 +25,7 @@ const compositionRoots = new Set([
   "cloudflare/ingestion/email-worker.ts",
   "cloudflare/ai/openai-conformance-worker.ts",
   "cloudflare/ai/openai-evaluation-worker.ts",
+  "cloudflare/categories/taxonomy.test-fixture.ts",
   "cloudflare/coordinator-test-harness.ts",
   "cloudflare/browser-acceptance-core-module.ts",
   "cloudflare/browser-acceptance-clock.test-fixture.ts",

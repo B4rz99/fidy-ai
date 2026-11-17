@@ -1,3 +1,5 @@
+import { CategoryTaxonomyRelease } from "../../apps/server/src/core/categories/contract";
+import { compatibleCategoryReleases } from "../../apps/server/src/core/categories/operations";
 import { ReleaseSmokeFailed } from "./smoke-exchange";
 import { verifyStableWorkerIdentity } from "./stable-worker-identity";
 import { RecoveryRequest, recoverStaged } from "./staged-recovery";
@@ -1026,6 +1028,30 @@ const readStablePair = Effect.fn(function* ({
   return { publicStable, coreStable, identity };
 });
 
+/** Read the release data from the exact attested source for each participating build. */
+const readCategoryRelease = Effect.fn(function* (revision: string) {
+  const source = yield* shell([
+    "git",
+    "-C",
+    "../..",
+    "show",
+    revision + ":apps/server/src/core/categories/internal/taxonomy-release.json",
+  ]);
+  return yield* Schema.decodeEffect(Schema.fromJsonString(CategoryTaxonomyRelease))(source);
+});
+const verifyTaxonomyOverlap = Effect.fn(function* (
+  snapshot: Readonly<{ stableRevision: string; revision: string }>
+) {
+  const serving = yield* readCategoryRelease(snapshot.stableRevision);
+  const candidate = yield* readCategoryRelease(snapshot.revision);
+  if (!compatibleCategoryReleases({ serving, candidate })) {
+    return yield* new ReleaseFailure({
+      message:
+        "Taxonomy overlap is incompatible. Ship reader support before enabling the writing revision.",
+    });
+  }
+});
+
 const capture = Effect.fn(function* (
   port: ReleasePort,
   env: Config,
@@ -1065,6 +1091,7 @@ const capture = Effect.fn(function* (
       message: "Stable Worker deployments changed during capture",
     });
   }
+  yield* verifyTaxonomyOverlap(snapshot);
   yield* writeFile(env.file, encodeJson(snapshot));
 });
 const stage = Effect.fn(function* (port: ReleasePort, env: Config, client: HttpClient.HttpClient) {
@@ -1558,6 +1585,7 @@ const rollbackCompatibility = Effect.fn(function* (
   client: HttpClient.HttpClient,
   release: typeof RollbackReceipt.Type.release
 ) {
+  yield* verifyTaxonomyOverlap(release.snapshot);
   const source = yield* rollbackSource(release.snapshot);
   const pairs = [
     {

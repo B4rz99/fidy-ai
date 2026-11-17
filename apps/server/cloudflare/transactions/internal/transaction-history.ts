@@ -281,6 +281,7 @@ export const selectedHistoryPage = ({
   typeof selectedEffectiveHistoryPage
 > =>
   selectedEffectiveHistoryPage({
+    taxonomyRevision: true,
     userSelection,
     ...listFilters({ userId: Option.none(), query, authority }),
   });

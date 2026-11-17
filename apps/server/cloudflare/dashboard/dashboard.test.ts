@@ -476,11 +476,17 @@ it(
   30_000
 );
 
-it("withholds absence on an unavailable source and refuses revoked browser admission", () =>
+it("withholds an absent Dashboard view when Audit fails and refuses a revoked session", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* recoveryDatabase(yield* setup());
-      yield* Effect.tryPromise(() => db.prepare("DROP TABLE categories").run());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_dashboard_audit BEFORE INSERT ON audit_entries BEGIN SELECT RAISE(ABORT, 'fixture'); END"
+          )
+          .run()
+      );
       const missing = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
       expect(missing.status).toBe(503);
       expect(missing.headers.get("server-timing") ?? "").not.toContain("dashboard-");

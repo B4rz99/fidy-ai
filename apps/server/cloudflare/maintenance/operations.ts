@@ -5,13 +5,14 @@ import { withStoreAdmission } from "../runtime/sqlite/operations";
 import {
   type ScheduledActivity,
   ScheduledWorkFailed,
+  UserRegistrationUnavailable,
   fenceLifetimeUrl,
   maintenanceName,
   registerLifetimeUrl,
   retireLifetimeUrl,
 } from "./contract";
 import type { StoreHistory } from "../runtime/sqlite/contract";
-import { Cause, Clock, Data, Effect, Exit, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Schema } from "effect";
 import { activityDue } from "./internal/cadence";
 
 /**
@@ -68,7 +69,6 @@ const conflictStatus = 409;
 // A delayed register can reach Maintenance only within this window. Erasure may discard the
 // retired fence after this and the other original windows have closed and retirement is acknowledged.
 const maximumRegistrationAgeMs = 60_000;
-class UserRegistrationUnavailable extends Data.TaggedError("UserRegistrationUnavailable") {}
 
 /** Register outside the User transaction, before committing activation or accepting work. */
 export const registerUserLifetime = Effect.fn(function* (

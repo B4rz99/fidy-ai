@@ -86,3 +86,4 @@ export const maintenanceName = "core-maintenance-v1";
 export const registerLifetimeUrl = "https://maintenance.invalid/lifetime/register";
 export const fenceLifetimeUrl = "https://maintenance.invalid/lifetime/fence";
 export const retireLifetimeUrl = "https://maintenance.invalid/lifetime/retire";
+export class UserRegistrationUnavailable extends Data.TaggedError("UserRegistrationUnavailable") {}

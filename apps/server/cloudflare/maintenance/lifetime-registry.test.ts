@@ -50,6 +50,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const runtime = yield* create();
       const call = yield* registry(runtime);
       expect(yield* call("register", fresh)).toBe(204);
+      const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+      const inactive = yield* native(() =>
+        users.getByName(fresh).fetch("https://user.invalid/transactions")
+      );
+      expect(inactive.status).toBe(401);
+      const local = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: fresh })
+      );
+      expect(yield* native(() => local.exec("SELECT id FROM users"))).toEqual([]);
       expect(yield* call("retire", fresh, erasure)).toBe(409);
       expect(yield* call("retire", original, other)).toBe(409);
       const store = yield* native(() =>

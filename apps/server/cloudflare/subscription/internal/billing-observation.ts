@@ -65,6 +65,11 @@ const billingWorkflowRetention = {
   successRetention: "3 days",
   errorRetention: "3 days",
 } as const;
+const activeStatuses: ReadonlySet<InstanceStatus["status"]> = new Set([
+  "queued",
+  "running",
+  "waiting",
+]);
 const terminalStatuses: ReadonlySet<InstanceStatus["status"]> = new Set([
   "errored",
   "terminated",
@@ -83,7 +88,7 @@ const offerBillingWorkflow = (
     const existing = yield* Effect.exit(attempt(() => input.workflow.get(input.id)));
     if (Exit.isSuccess(existing)) {
       const current = yield* attempt(() => existing.value.status());
-      if (!terminalStatuses.has(current.status)) return true;
+      if (!terminalStatuses.has(current.status)) return activeStatuses.has(current.status);
     }
     if (!(yield* input.reserve)) return true;
     const started = yield* Effect.exit(
@@ -100,7 +105,7 @@ const offerBillingWorkflow = (
     if (Exit.isSuccess(started)) return true;
     const recovered = yield* attempt(() => input.workflow.get(input.id));
     const status = yield* attempt(() => recovered.status());
-    return status.status === "queued" || status.status === "running" || status.status === "waiting";
+    return activeStatuses.has(status.status);
   });
 
 const workPending = 202;

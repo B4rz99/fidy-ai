@@ -224,7 +224,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     25000
   );
   test.effect(
-    "a cold User's missed cancellation handoff reaches its verified outcome through the real billing Queue and Workflow",
+    "duplicate Queue delivery restarts the failed cancellation Workflow and the User verifies one source void",
     () =>
       Effect.gen(function* () {
         const start = yield* nativeBillingPlatform;
@@ -241,19 +241,48 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           now + 3600000,
           now
         );
+        yield* exec(
+          "CREATE TRIGGER unavailable_claim BEFORE UPDATE OF verification_count ON subscription_cancellations BEGIN SELECT RAISE(ABORT,'unavailable'); END"
+        );
         const response = yield* check();
         expect(yield* native(() => response.json())).toEqual({
           attempted: 1,
           failedFamilies: 0,
           failedOffers: 0,
         });
-        yield* verified(paid);
         const bindings = yield* native(() =>
-          runtime.getBindings<{ BILLING_COLLECTION_WORKFLOW: Workflow }>("core")
+          runtime.getBindings<{
+            BILLING_COLLECTION_WORKFLOW: Workflow;
+            BILLING_COLLECTION_QUEUE: Queue;
+          }>("core")
         );
-        const instance = yield* native(() =>
-          bindings.BILLING_COLLECTION_WORKFLOW.get("source-cancel-v3-" + user + "-" + attempt)
+        const workflowId = "source-cancel-v3-" + user + "-" + attempt;
+        const instance = yield* Effect.tryPromise(() =>
+          bindings.BILLING_COLLECTION_WORKFLOW.get(workflowId)
+        ).pipe(Effect.retry(Schedule.spaced("50 millis")), Effect.timeout("5 seconds"));
+        yield* native(() => instance.status()).pipe(
+          Effect.repeat({
+            until: (state) => state.status === "errored",
+            schedule: Schedule.spaced("50 millis"),
+          }),
+          Effect.timeout("8 seconds")
         );
+        expect(
+          yield* exec(
+            "SELECT verification_count,void_started_at_ms FROM subscription_cancellations"
+          )
+        ).toEqual([{ verification_count: 0, void_started_at_ms: null }]);
+        yield* exec("DROP TRIGGER unavailable_claim");
+        const offer = {
+          version: 3,
+          kind: "source-cancellation",
+          paidAttemptId: attempt,
+          userId: user,
+        };
+        yield* native(() =>
+          bindings.BILLING_COLLECTION_QUEUE.sendBatch([{ body: offer }, { body: offer }])
+        );
+        yield* verified(paid);
         yield* native(() => instance.status()).pipe(
           Effect.repeat({
             until: (state) => state.status === "complete",

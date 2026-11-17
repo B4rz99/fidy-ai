@@ -173,6 +173,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             "source-cancel-v3-22370000-0000-4000-8000-000000000001-22370000-0000-4000-8000-000000000004",
           created: 1,
           restarted: 1,
+          retryUnknown: true,
         });
       })
   );

@@ -162,11 +162,14 @@ const exerciseQueue = Effect.gen(function* () {
       }),
     },
   };
-  yield* receiveLocalSourceCancellation({ environment, workflow, work });
-  yield* receiveLocalSourceCancellation({ environment, workflow, work });
+  const offer = receiveLocalSourceCancellation({ environment, workflow, work });
+  yield* offer;
+  yield* offer;
+  status = "unknown";
+  const uncertain = yield* Effect.result(offer);
   status = "errored";
-  yield* receiveLocalSourceCancellation({ environment, workflow, work });
-  return Response.json({ instance, created, restarted });
+  yield* offer;
+  return Response.json({ instance, created, restarted, retryUnknown: Result.isFailure(uncertain) });
 });
 const exerciseProvider = Effect.fnUntraced(function* (path: string) {
   const ticks: Readonly<Record<string, number>> = {

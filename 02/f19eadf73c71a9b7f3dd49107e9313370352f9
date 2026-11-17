@@ -1,0 +1,29 @@
+apps/web/e2e/recurring-plans.spec.ts
+  s_8fc963825a748b::t_388af34f8e94a6 146-154,161-168,170-171,191-193,284-285
+  s_8fc963825a748b::t_9d46fb2a99d799 209-211
+  s_8fc963825a748b::t_99ae8751ed1edf 258-260,263-265,268-270,276-278,281-283
+  s_8fc963825a748b::t_4287fa7219f914 96,99-101,109-145
+  s_8fc963825a748b::t_1e61dde51c042e 160,188-190
+  s_8fc963825a748b::t_cc15c42d3186c8 81-95,97-98,102-106,155-159,169,172-187,194-208,212-257,261-262,266-267,271-275,279-280
+  s_8fc963825a748b::t_3be5b103da1c84 107-108,286
+apps/web/e2e/real-core-fixture.ts
+  s_8fc963825a748b::t_cc15c42d3186c8 126
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_8fc963825a748b::t_cc15c42d3186c8 36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "02f19eadf73c71a9b7f3dd49107e9313370352f9",
+  "prompts": {},
+  "sessions": {
+    "s_8fc963825a748b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7d4-7e3a-74e0-a78d-60e465a4a290",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

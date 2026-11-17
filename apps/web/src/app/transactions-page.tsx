@@ -39,7 +39,7 @@ export const TransactionsPage = (): JSX.Element => {
   const status = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
   if (status._tag === "Failure" && sessionBinding === "none") {
-    return <AccessRefused />;
+    return <AccessRefused withdrawn={false} />;
   }
   const consent = currentConsent(status);
   if (Option.isSome(consent)) {

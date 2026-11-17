@@ -6,6 +6,7 @@ import {
   CrownIcon,
   Home01Icon,
   Logout02Icon,
+  Shield01Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
@@ -19,6 +20,7 @@ import {
   ApplicationLogoutAction,
   ApplicationWordmark,
 } from "@/ui/components/application";
+import { Badge } from "@/ui/components/badge";
 import { SettingsNavigation } from "./settings-navigation";
 import { dismissCompactNavigation } from "./dismiss-navigation";
 
@@ -46,11 +48,13 @@ const ConsentedReviewCount = ({ children }: Readonly<{ children: ReactNode }>): 
 };
 
 export const SignedInNavigation = ({
+  readOnly,
   onLogout,
   loggingOut,
   reviewPendingCount,
   prepareNavigation,
 }: Readonly<{
+  readOnly: boolean;
   onLogout: () => void;
   loggingOut: boolean;
   reviewPendingCount: ReactNode;
@@ -69,43 +73,38 @@ export const SignedInNavigation = ({
   );
   return (
     <nav aria-label="Aplicación" className="application-navigation">
-      {navigationLinks.map((link) => (
-        <Link
-          key={link.to}
-          to={link.to}
-          search={{}}
-          onPointerEnter={() => prepareNavigation(link.to)}
-          onPointerDownCapture={() => prepareNavigation(link.to)}
-          onFocus={() => prepareNavigation(link.to)}
-          onClick={dismissCompactNavigation}
-          className="application-navigation-link"
-          activeProps={{ className: "application-navigation-active" }}
-        >
-          <HugeiconsIcon icon={link.icon} size={22} strokeWidth={1.5} aria-hidden="true" />
-          {link.label}
-          {link.to === "/app/needs-review" && signedIn && !privacy ? count : null}
-        </Link>
-      ))}
-      <SettingsNavigation prepareNavigation={prepareNavigation} />
-      <Link
-        to="/upgrade"
-        onPointerEnter={() => prepareNavigation("/upgrade")}
-        onPointerDownCapture={() => prepareNavigation("/upgrade")}
-        onFocus={() => prepareNavigation("/upgrade")}
-        onClick={dismissCompactNavigation}
-        className="application-navigation-link"
-        activeProps={{ className: "application-navigation-active" }}
-      >
-        <HugeiconsIcon icon={CrownIcon} size={22} strokeWidth={1.5} aria-hidden="true" />
-        Suscripción
-      </Link>
+      {readOnly ? <ReadOnlyNotice /> : null}
+      {navigationLinks
+        .filter((link) => !readOnly || link.to === "/app/transactions")
+        .map((link) => (
+          <Link
+            key={link.to}
+            to={link.to}
+            search={{}}
+            onPointerEnter={() => prepareNavigation(link.to)}
+            onPointerDownCapture={() => prepareNavigation(link.to)}
+            onFocus={() => prepareNavigation(link.to)}
+            onClick={dismissCompactNavigation}
+            className="application-navigation-link"
+            activeProps={{ className: "application-navigation-active" }}
+          >
+            <HugeiconsIcon icon={link.icon} size={22} strokeWidth={1.5} aria-hidden="true" />
+            {link.label}
+            {link.to === "/app/needs-review" && signedIn && !privacy ? count : null}
+          </Link>
+        ))}
+      {readOnly ? <PrivacyLink /> : <ProductNavigation prepareNavigation={prepareNavigation} />}
       <NavigationFooter signedIn={signedIn} loggingOut={loggingOut} onLogout={onLogout} />
     </nav>
   );
 };
 
-export const SignedInBrand = (): JSX.Element => (
-  <Link className="application-brand" to="/app/dashboard">
+export const SignedInBrand = ({ readOnly }: Readonly<{ readOnly: boolean }>): JSX.Element => (
+  <Link
+    className="application-brand"
+    to={readOnly ? "/app/transactions" : "/app/dashboard"}
+    search={{}}
+  >
     <ApplicationWordmark />
   </Link>
 );
@@ -128,4 +127,44 @@ const NavigationFooter = ({
       </ApplicationLogoutAction>
     )}
   </div>
+);
+
+const ProductNavigation = ({
+  prepareNavigation,
+}: Readonly<{ prepareNavigation: (destination: string) => void }>): JSX.Element => (
+  <>
+    <SettingsNavigation prepareNavigation={prepareNavigation} />
+
+    <Link
+      to="/upgrade"
+      onPointerEnter={() => prepareNavigation("/upgrade")}
+      onPointerDownCapture={() => prepareNavigation("/upgrade")}
+      onFocus={() => prepareNavigation("/upgrade")}
+      onClick={dismissCompactNavigation}
+      className="application-navigation-link"
+      activeProps={{ className: "application-navigation-active" }}
+    >
+      <HugeiconsIcon icon={CrownIcon} size={22} strokeWidth={1.5} aria-hidden="true" />
+      Suscripción
+    </Link>
+  </>
+);
+
+const ReadOnlyNotice = (): JSX.Element => (
+  <div className="px-4 pb-4">
+    <Badge variant="information">Solo lectura</Badge>
+    <p className="mt-3 text-sm text-muted-foreground">Autorización de tratamiento retirada</p>
+  </div>
+);
+
+const PrivacyLink = (): JSX.Element => (
+  <Link
+    to="/settings/privacy"
+    onClick={dismissCompactNavigation}
+    className="application-navigation-link"
+    activeProps={{ className: "application-navigation-active" }}
+  >
+    <HugeiconsIcon icon={Shield01Icon} size={22} strokeWidth={1.5} aria-hidden="true" />
+    Privacidad
+  </Link>
 );

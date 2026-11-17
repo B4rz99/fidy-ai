@@ -1,6 +1,9 @@
 import { useNavigationPreparation } from "./navigation-preparation";
 import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
-import { type JSX, Suspense, lazy } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import { AsyncResult } from "effect/reactivity";
+import { transactionEntryConsent } from "@/session/transaction-entry";
+import { type JSX, Suspense, lazy, useState } from "react";
 import { AccessRefused, ApplicationShell } from "@/features/signed-in/feature";
 import { useSession } from "@/session/session-context";
 import { HostedAgentProvider } from "@/features/agent/feature";
@@ -22,9 +25,7 @@ const independentControlRoutes: ReadonlySet<string> = new Set([
 ]);
 
 export const ApplicationFrame = (): JSX.Element => {
-  const client = useRouter().options.context.hostedTurnClient;
   const { authentication } = useSession();
-  const prepareNavigation = useNavigationPreparation();
   const frame = useRouterState({
     select: (state) => {
       if (state.matches.some((match) => match.routeId === "/authenticated")) {
@@ -45,10 +46,60 @@ export const ApplicationFrame = (): JSX.Element => {
   const independentControls = useRouterState({
     select: (state) => state.matches.some((match) => independentControlRoutes.has(match.routeId)),
   });
-  if (frame === "refused") return <AccessRefused />;
   if (frame === "standalone") return <Outlet />;
+  return (
+    <ConsentApplicationFrame
+      frame={frame}
+      oauthReview={oauthReview}
+      independentControls={independentControls}
+    />
+  );
+};
+
+const ConsentApplicationFrame = ({
+  frame,
+  oauthReview,
+  independentControls,
+}: Readonly<{
+  frame: "refused" | "application";
+  oauthReview: boolean;
+  independentControls: boolean;
+}>): JSX.Element => {
+  const { webAuthClient } = useRouter().options.context;
+  const [query] = useState(() => transactionEntryConsent(webAuthClient));
+  const readOnly = useAtomValue(
+    query,
+    (state) => AsyncResult.isSuccess(state) && !state.waiting && state.value.status === "Revoked"
+  );
+  const authenticatedRoute = useRouterState({
+    select: (state) => state.matches.some((match) => match.routeId === "/authenticated"),
+  });
+  if (readOnly) {
+    return (
+      <ApplicationShell readOnly prepareNavigation={() => undefined} reviewPendingCount={null}>
+        {authenticatedRoute ? <AccessRefused withdrawn /> : <Outlet />}
+      </ApplicationShell>
+    );
+  }
+  if (frame === "refused") return <AccessRefused withdrawn={false} />;
+  return (
+    <ProductApplicationFrame oauthReview={oauthReview} independentControls={independentControls} />
+  );
+};
+
+const ProductApplicationFrame = ({
+  oauthReview,
+  independentControls,
+}: Readonly<{
+  oauthReview: boolean;
+  independentControls: boolean;
+}>): JSX.Element => {
+  const { hostedTurnClient: client } = useRouter().options.context;
+  const { authentication } = useSession();
+  const prepareNavigation = useNavigationPreparation();
   const shell = (
     <ApplicationShell
+      readOnly={false}
       prepareNavigation={(destination) => {
         prepareNavigation(destination).catch(() => undefined);
       }}
@@ -60,6 +111,7 @@ export const ApplicationFrame = (): JSX.Element => {
         )
       }
     >
+      <Outlet />
       {oauthReview ? <OAuthAgent /> : null}
       {independentControls ? null : (
         <>

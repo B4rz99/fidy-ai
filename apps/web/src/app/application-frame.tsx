@@ -2,6 +2,7 @@ import { useNavigationPreparation } from "./navigation-preparation";
 import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
+import type { ProcessingConsentStatus } from "@/transport/client";
 import { transactionEntryConsent } from "@/session/transaction-entry";
 import { type JSX, Suspense, lazy, useState } from "react";
 import { AccessRefused, ApplicationShell } from "@/features/signed-in/feature";
@@ -56,6 +57,10 @@ export const ApplicationFrame = (): JSX.Element => {
   );
 };
 
+const hasWithdrawnConsent = (
+  state: AsyncResult.AsyncResult<ProcessingConsentStatus, unknown>
+): boolean => AsyncResult.isSuccess(state) && !state.waiting && state.value.status === "Revoked";
+
 const ConsentApplicationFrame = ({
   frame,
   oauthReview,
@@ -67,10 +72,7 @@ const ConsentApplicationFrame = ({
 }>): JSX.Element => {
   const { webAuthClient } = useRouter().options.context;
   const [query] = useState(() => transactionEntryConsent(webAuthClient));
-  const readOnly = useAtomValue(
-    query,
-    (state) => AsyncResult.isSuccess(state) && !state.waiting && state.value.status === "Revoked"
-  );
+  const readOnly = useAtomValue(query, hasWithdrawnConsent);
   const authenticatedRoute = useRouterState({
     select: (state) => state.matches.some((match) => match.routeId === "/authenticated"),
   });

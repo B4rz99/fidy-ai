@@ -1,0 +1,31 @@
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_08fe6e86236d16 23-26
+apps/server/cloudflare/subscription/pricing.test.ts
+  s_a1be23a656acf0::t_933652fe0909f1 75-79
+scripts/infra-performance/reference/browser.mjs
+  s_a1be23a656acf0::t_08fe6e86236d16 6-7,47,69,106-109,114,136
+  s_a1be23a656acf0::t_933652fe0909f1 4,8-39,70,77-79,84,100-104,133,150,166,175-176,187-192
+scripts/infra-performance/reference/preview.mjs
+  s_a1be23a656acf0::t_08fe6e86236d16 17-18
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_08fe6e86236d16 14-15
+  s_a1be23a656acf0::t_933652fe0909f1 16
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_751033a4ef6f60 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fe18f261d7ca3517e149d3521ff12d7d5f3b59a8",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

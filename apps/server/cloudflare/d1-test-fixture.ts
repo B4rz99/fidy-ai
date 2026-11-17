@@ -486,6 +486,13 @@ const retentionBatch =
       );
   };
 
+type MeasuredStatement = Readonly<{ sql: string; rowsRead: number; rowsWritten: number }>;
+export type RecordMeasuredStatement = (
+  request: number,
+  query: RetentionQuery,
+  counters: Omit<MeasuredStatement, "sql">
+) => void;
+
 type RetentionCostObservation = Readonly<{
   database: D1Database;
   cost: () => Readonly<{ rowsRead: number; rowsWritten: number }>;
@@ -496,7 +503,13 @@ type RetentionCostObservation = Readonly<{
 }>;
 
 /** Count native all/first/run/batch work; discovery counts standalone all calls, excluding plans. */
-export const observeRetentionCost = (db: D1Database): RetentionCostObservation => {
+export const observeFixtureStatements = ({
+  db,
+  onMeasuredStatement,
+}: Readonly<{
+  db: D1Database;
+  onMeasuredStatement: Option.Option<RecordMeasuredStatement>;
+}>): RetentionCostObservation => {
   let rowsRead = 0;
   let rowsWritten = 0;
   let discoveryReads = 0;
@@ -504,8 +517,7 @@ export const observeRetentionCost = (db: D1Database): RetentionCostObservation =
   const onRequest = (): void => {
     requests++;
   };
-  const statementCosts: Array<Readonly<{ sql: string; rowsRead: number; rowsWritten: number }>> =
-    [];
+  const statementCosts: Array<MeasuredStatement> = [];
   const queries: Array<RetentionQuery> = [];
   const nativeStatements = new WeakMap<D1PreparedStatement, D1PreparedStatement>();
   const preparedQueries = new WeakMap<D1PreparedStatement, RetentionQuery>();
@@ -514,11 +526,9 @@ export const observeRetentionCost = (db: D1Database): RetentionCostObservation =
     discovery: boolean,
     query: RetentionQuery
   ): D1Result<Row> => {
-    statementCosts.push({
-      sql: query.sql,
-      rowsRead: result.meta.rows_read,
-      rowsWritten: result.meta.rows_written,
-    });
+    const counters = { rowsRead: result.meta.rows_read, rowsWritten: result.meta.rows_written };
+    if (Option.isSome(onMeasuredStatement)) onMeasuredStatement.value(requests, query, counters);
+    statementCosts.push({ sql: query.sql, ...counters });
     if (discovery) discoveryReads += result.meta.rows_read;
     rowsRead += result.meta.rows_read;
     rowsWritten += result.meta.rows_written;
@@ -553,6 +563,9 @@ export const observeRetentionCost = (db: D1Database): RetentionCostObservation =
     plans: () => explainRetentionPlans(db, queries),
   };
 };
+
+export const observeRetentionCost = (db: D1Database): RetentionCostObservation =>
+  observeFixtureStatements({ db, onMeasuredStatement: Option.none() });
 
 /** Uses the coordinator harness's query endpoint without replacing its database or Durable Objects. */
 export const coordinatorTestDatabase = ({

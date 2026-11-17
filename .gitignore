@@ -7,6 +7,7 @@ apps/web/preview.tar
 apps/web/playwright-dist/
 apps/web/test-results/
 apps/server/test-results/
+scripts/infra-performance/hosted/__pycache__/
 apps/web/playwright-report/
 apps/server/cloudflare/browser-acceptance-core-bundle.mjs
 apps/server/cloudflare/.browser-acceptance-core-*/

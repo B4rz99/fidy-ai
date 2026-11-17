@@ -1,4 +1,4 @@
-import { routeBrowserHistory } from "../../directory/operations";
+import { routePATRequest, routeSessionRequest } from "../../directory/operations";
 import { coordinatorErasureStoreIds } from "../../transactions/runtime";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { prepareBoundRecurringWorkspace } from "../../recurring-plans/operations";
@@ -1746,13 +1746,14 @@ const authorizedCanonicalResponse = (
   environment: CoreHttpEnvironment,
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
+  if (operation.id === "transactions.createTransaction") {
+    const route = request.headers.has("authorization") ? routePATRequest : routeSessionRequest;
+    return route({ request, environment }).pipe(observeCanonicalResponse(operation.id));
+  }
   if (!request.headers.has("authorization")) {
-    if (operation.id === "transactions.listTransactions") {
-      return routeBrowserHistory({ request, environment }).pipe(
-        observeCanonicalResponse(operation.id)
-      );
-    }
-    return browserCanonicalResponse(request, environment, operation);
+    return operation.id === "transactions.listTransactions"
+      ? routeSessionRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id))
+      : browserCanonicalResponse(request, environment, operation);
   }
   return withBrowserBinding(
     request,

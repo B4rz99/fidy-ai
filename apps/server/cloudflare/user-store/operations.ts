@@ -410,12 +410,57 @@ const sourceCancellationSchema = [
   "CREATE INDEX subscription_cancellation_due ON subscription_cancellations(next_offer_at_ms,paid_attempt_id) WHERE next_offer_at_ms IS NOT NULL",
 ] as const;
 
+const canonicalCaptureMigration = [
+  `CREATE TABLE pats (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  short_id TEXT NOT NULL UNIQUE CHECK (length(short_id) = 8),
+  bearer_digest BLOB NOT NULL CHECK (length(bearer_digest) = 32),
+  recipient_label TEXT NOT NULL,
+  scopes_json TEXT NOT NULL,
+  lifetime_days INTEGER NOT NULL CHECK (lifetime_days IN (7,30,90,365)),
+  created_at_ms INTEGER NOT NULL,
+  issued_at_ms INTEGER NOT NULL CHECK (issued_at_ms >= created_at_ms),
+  expires_at_ms INTEGER NOT NULL CHECK (expires_at_ms > created_at_ms),
+  last_used_at_ms INTEGER,
+  revoked_at_ms INTEGER,
+  pairing_id TEXT UNIQUE,
+  request_id TEXT UNIQUE,
+  CHECK ((pairing_id IS NULL) <> (request_id IS NULL)),
+  CHECK (expires_at_ms <= created_at_ms + lifetime_days * 86400000)
+) STRICT`,
+  `ALTER TABLE audit_entries RENAME TO previous_audit_entries`,
+  `CREATE TABLE audit_entries (
+    id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL REFERENCES users(id), record_type TEXT NOT NULL,
+    session_id TEXT REFERENCES web_sessions(id), pat_id TEXT REFERENCES pats(id),
+    operation TEXT NOT NULL,outcome TEXT,occurred_at_ms INTEGER NOT NULL,
+    CHECK ((record_type='session_call' AND session_id IS NOT NULL AND pat_id IS NULL AND outcome IS NOT NULL
+      AND outcome IN ('success','validation_failed','not_found')) OR
+      (record_type='credential_call' AND pat_id IS NOT NULL AND session_id IS NULL AND outcome IS NOT NULL AND outcome IN ('accepted','rejected')) OR
+      (record_type='request_admission' AND pat_id IS NOT NULL AND session_id IS NULL AND outcome IS NULL))
+  ) STRICT`,
+  `INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms)
+      SELECT record_type,id,user_id,session_id,operation,outcome,occurred_at_ms FROM previous_audit_entries`,
+  `DROP TABLE previous_audit_entries`,
+  `CREATE TRIGGER audit_entries_immutable BEFORE UPDATE ON audit_entries
+      BEGIN SELECT RAISE(ABORT,'audit_immutable'); END`,
+  `CREATE TABLE canonical_request_receipts (
+    user_id TEXT NOT NULL REFERENCES users(id),retry_key_digest TEXT NOT NULL CHECK(length(retry_key_digest)=64),
+    operation TEXT NOT NULL,input_digest TEXT NOT NULL CHECK(length(input_digest)=64),
+    accepted_at_ms INTEGER NOT NULL,status INTEGER NOT NULL CHECK(status BETWEEN 200 AND 499),
+    body TEXT, PRIMARY KEY(user_id,retry_key_digest),
+    CHECK(body IS NULL OR (operation='transactions.createTransaction' AND json_valid(body)))
+  ) STRICT`,
+  `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
+] as const;
+
 export const userStoreHistory: StoreHistory = {
   owner: "user",
   steps: [
     { version: 1, id: "initial-user-schema", statements: initialUserSchema },
     { version: 2, id: "category-taxonomy", statements: categoryTaxonomyMigration },
     { version: 3, id: "subscription-cancellation", statements: sourceCancellationSchema },
+    { version: 4, id: "canonical-capture", statements: canonicalCaptureMigration },
   ],
 };
 

@@ -3,9 +3,14 @@ import { handleSourceCancellationWork } from "../subscription/runtime";
 import type { LocalSourceCancellationWork, WompiBindings } from "../subscription/contract";
 import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
-import { Clock, Effect } from "effect";
-import { canonicalAdmissionUnavailable } from "../canonical-admission/operations";
-import { readUserHistory } from "../transactions/operations";
+import { Clock, Effect, Option } from "effect";
+import { canonicalOperation } from "../routing/operations";
+import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-admission/operations";
+import {
+  captureLocalTransaction,
+  readUserHistory,
+  transactionInput,
+} from "../transactions/operations";
 import { recoverUserWork, userStoreHistory } from "./operations";
 import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
 
@@ -56,7 +61,22 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
 
   override fetch(request: Request): Promise<Response> {
-    const command = request.method + " " + new URL(request.url).pathname;
+    const path = new URL(request.url).pathname;
+    const command = request.method + " " + path;
+    const owns = (userId: string): boolean =>
+      this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
+    const operation = canonicalOperation({ method: request.method, path });
+    if (Option.isSome(operation) && operation.value.id === "transactions.createTransaction") {
+      return this.runtime.runPromise(
+        runLocalMutation({
+          request,
+          operation: operation.value,
+          owns,
+          input: transactionInput(request),
+          work: captureLocalTransaction,
+        }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+      );
+    }
     if (
       ["POST /work/source-cancellation/pending", "POST /work/source-cancellation/observe"].includes(
         command
@@ -66,7 +86,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         handleSourceCancellationWork({
           request,
           environment: this.env,
-          owns: (userId) => this.ctx.id.equals(this.env.USER_STORE.idFromName(userId)),
+          owns,
         }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
       );
     }
@@ -81,9 +101,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
     return this.runtime.runPromise(
-      readUserHistory(request, (userId) =>
-        this.ctx.id.equals(this.env.USER_STORE.idFromName(userId))
-      ).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+      readUserHistory(request, owns).pipe(
+        Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+      )
     );
   }
 }

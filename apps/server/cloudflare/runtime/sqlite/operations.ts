@@ -289,3 +289,14 @@ export const createStoreRuntime = ({
       Layer.succeed(StoreCapacity, makeCapacity(storage, owner, ceilingBytes))
     )
   );
+
+/** Use the owner's existing native transaction. Another family's earlier scheduled alarm is preserved. */
+export const preserveStoreAlarm = Effect.fnUntraced(function* (
+  storage: DurableObjectStorage,
+  instant: number
+) {
+  const earlier = yield* Effect.tryPromise(() => storage.getAlarm());
+  if (earlier === null || instant < earlier) {
+    yield* Effect.tryPromise(() => storage.setAlarm(instant));
+  }
+});

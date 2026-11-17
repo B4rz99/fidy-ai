@@ -1747,7 +1747,10 @@ const authorizedCanonicalResponse = (
   environment: CoreHttpEnvironment,
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
-  if (isLocalTransactionOperation(operation.id)) {
+  if (
+    isLocalTransactionOperation(operation.id) ||
+    operation.id === "subscription.cancelSubscription"
+  ) {
     const route = request.headers.has("authorization") ? routePATRequest : routeSessionRequest;
     return route({ request, environment }).pipe(observeCanonicalResponse(operation.id));
   }

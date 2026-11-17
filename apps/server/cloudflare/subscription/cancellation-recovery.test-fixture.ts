@@ -1,3 +1,4 @@
+import { recoverLocalReceipts } from "../canonical-admission/operations";
 import { type BillingObservationWorkflow, type BillingWorkRouting } from "./contract";
 import { handleSourceCancellationWork } from "./runtime";
 import { receiveLocalSourceCancellation } from "./internal/billing-observation";
@@ -5,7 +6,7 @@ import { observeCancellation } from "./internal/local-cancellation";
 import { UserId } from "../../src/core/identity/contract";
 import { BillingAttemptId } from "../../src/core/subscription/contract";
 import { DurableObject } from "cloudflare:workers";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
 import { recoverUserWork, userStoreHistory } from "../user-store/operations";
@@ -15,6 +16,7 @@ const user = "22370000-0000-4000-8000-000000000001";
 const subscription = "22370000-0000-4000-8000-000000000002";
 const source = "22370000-0000-4000-8000-000000000003";
 const attempt = "22370000-0000-4000-8000-000000000004";
+const digestCharacters = 64;
 const oneSecond = 1_000;
 const cooldown = 60_000;
 const providerSource = 78001;
@@ -26,6 +28,10 @@ export class CancellationFixture extends DurableObject<unknown> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: unknown) {
     super(state, env);
+    const history =
+      state.id.name === "v4"
+        ? { ...userStoreHistory, steps: userStoreHistory.steps.slice(0, 4) }
+        : userStoreHistory;
     this.runtime = createStoreRuntime({
       storage: state.storage,
       owner: "user",
@@ -33,7 +39,7 @@ export class CancellationFixture extends DurableObject<unknown> {
     });
     state.waitUntil(
       state.blockConcurrencyWhile(() =>
-        this.runtime.runPromise(openSqliteStore(userStoreHistory, "fixture"))
+        this.runtime.runPromise(openSqliteStore(history, "fixture"))
       )
     );
   }
@@ -42,6 +48,9 @@ export class CancellationFixture extends DurableObject<unknown> {
   }
   override fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (path === "/seed-page") return this.runtime.runPromise(seedPage);
+    if (path === "/rebind") return this.runtime.runPromise(exerciseRebind);
+    if (path === "/upgrade") return this.runtime.runPromise(upgradeReceipt);
     const storage = this.ctx.storage;
     return this.runtime.runPromise(
       Effect.gen(function* () {
@@ -84,6 +93,23 @@ export class CancellationFixture extends DurableObject<unknown> {
     );
   }
 }
+
+const seedPage = Effect.gen(function* () {
+  const sql = yield* SqliteClient;
+  yield* sql`WITH RECURSIVE periods(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM periods WHERE n<34)
+    INSERT INTO billing_attempts(id,subscription_id,payment_source_id,paid_starts_at_ms,paid_ends_at_ms,wompi_environment)
+    SELECT printf('32370000-0000-4000-8000-%012d',n),${subscription},${source},n,n+1,'sandbox' FROM periods`;
+  yield* sql`INSERT INTO subscription_cancellations(paid_attempt_id,subscription_id,payment_source_id,cancelled_at_ms,paid_through_ms,source_cancellation_state,next_offer_at_ms)
+    SELECT id,subscription_id,payment_source_id,${scheduled},paid_ends_at_ms,'void-pending',${scheduled} FROM billing_attempts WHERE id<>${attempt}`;
+  return Response.json(null);
+});
+const exerciseRebind = Effect.gen(function* () {
+  const sql = yield* SqliteClient;
+  const bound = yield* Effect.result(
+    sql`UPDATE payment_sources SET wompi_source_id=78002 WHERE id=${source}`
+  );
+  return Response.json({ rebound: Result.isSuccess(bound) });
+});
 
 const exerciseQueue = Effect.gen(function* () {
   const work = {
@@ -136,11 +162,14 @@ const exerciseQueue = Effect.gen(function* () {
       }),
     },
   };
-  yield* receiveLocalSourceCancellation({ environment, workflow, work });
-  yield* receiveLocalSourceCancellation({ environment, workflow, work });
+  const offer = receiveLocalSourceCancellation({ environment, workflow, work });
+  yield* offer;
+  yield* offer;
+  status = "unknown";
+  const uncertain = yield* Effect.result(offer);
   status = "errored";
-  yield* receiveLocalSourceCancellation({ environment, workflow, work });
-  return Response.json({ instance, created, restarted });
+  yield* offer;
+  return Response.json({ instance, created, restarted, retryUnknown: Result.isFailure(uncertain) });
 });
 const exerciseProvider = Effect.fnUntraced(function* (path: string) {
   const ticks: Readonly<Record<string, number>> = {
@@ -179,6 +208,8 @@ const exerciseProvider = Effect.fnUntraced(function* (path: string) {
 });
 
 const exerciseDispatch = Effect.fnUntraced(function* (path: string, storage: DurableObjectStorage) {
+  // The platform consumes the scheduled alarm when it starts a delivery.
+  if (path !== "/dispatch") yield* Effect.tryPromise(() => storage.deleteAlarm());
   const offered: unknown[] = [];
   const result = yield* offerDueSourceCancellations({
     storage,
@@ -209,6 +240,11 @@ const exerciseRecovery = Effect.fnUntraced(function* (path: string, storage: Dur
     yield* Effect.tryPromise(() => storage.deleteAlarm());
     return Response.json(null);
   }
+  if (path === "/recover-families") {
+    yield* sql`INSERT INTO canonical_request_receipts(user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body)
+      VALUES (${user},${"0".repeat(digestCharacters)},'transactions.createTransaction',${"1".repeat(digestCharacters)},0,200,NULL)`;
+    yield* sql`CREATE TRIGGER fail_receipt BEFORE DELETE ON canonical_request_receipts BEGIN SELECT RAISE(ABORT,'unavailable'); END`;
+  }
   let recovered = "";
   const real = offerDueSourceCancellations({
     current: scheduled,
@@ -221,13 +257,25 @@ const exerciseRecovery = Effect.fnUntraced(function* (path: string, storage: Dur
     },
   });
   const result = yield* recoverUserWork(
-    path === "/recover-families"
-      ? [Effect.die(new Error("unavailable preceding family")), real]
-      : [real]
+    path === "/recover-families" ? [recoverLocalReceipts(scheduled, storage), real] : [real]
   );
   return Response.json({
     ...result,
     recovered,
     alarm: yield* Effect.tryPromise(() => storage.getAlarm()),
   });
+});
+
+const upgradeReceipt = Effect.gen(function* () {
+  const sql = yield* SqliteClient;
+  yield* sql`INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (${user},'CO','es-CO','America/Bogota',0)`;
+  yield* sql`INSERT INTO canonical_request_receipts VALUES (${user},${"a".repeat(digestCharacters)},'transactions.createTransaction',${"b".repeat(digestCharacters)},123,201,'{"data":"capture"}')`;
+  const read = sql`SELECT accepted_at_ms,status,body FROM canonical_request_receipts WHERE retry_key_digest=${"a".repeat(digestCharacters)}`;
+  const [before] = yield* read;
+  yield* openSqliteStore(userStoreHistory, "upgrade");
+  const [after] = yield* read;
+  const forbidden = yield* Effect.result(
+    sql`INSERT INTO canonical_request_receipts VALUES (${user},${"c".repeat(digestCharacters)},'tokens.createPAT',${"d".repeat(digestCharacters)},124,201,'{"data":"private"}')`
+  );
+  return Response.json({ before, after, unsafeRetained: Result.isSuccess(forbidden) });
 });

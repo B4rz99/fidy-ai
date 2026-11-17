@@ -12,6 +12,7 @@ import type { ErasureStore } from "../erasure-store/contract";
 import { makeWompiTransport } from "./internal/wompi-runtime";
 import {
   type BillingWorkRouting,
+  type BillingWorkflowActivity,
   LocalSourceCancellationWork,
   type PricingEnvironment,
   type WompiBindings,
@@ -33,12 +34,7 @@ import type {
   SubscriptionCancellationDispatchInput,
   SubscriptionRenewalDispatchInput,
 } from "./contract";
-import {
-  WorkflowEntrypoint,
-  type WorkflowEvent,
-  type WorkflowStep,
-  type WorkflowStepConfig,
-} from "cloudflare:workers";
+import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { type Cause, Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
@@ -221,6 +217,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
           payload: event.payload,
           activity: (name, options, activity) => step.do(name, options, activity),
           sleep: (name, duration) => step.sleep(name, duration),
+          observe: (name, options, activity) => step.do(name, options, activity),
         }),
       {
         environment: workerRelease(this.env),
@@ -238,13 +235,17 @@ export const runBillingCollectionWorkflow = (
     environment: BillingRuntime;
     payload: unknown;
     sleep: (name: string, duration: number) => Promise<void>;
-    activity: (
-      name: string,
-      options: WorkflowStepConfig,
-      run: () => Promise<void>
-    ) => Promise<void>;
-  }>
-): Promise<void> => runWorkflow({ ...input, wompiHttp: wompiOutboundHttp });
+  }> &
+    (
+      | Readonly<{ activity: BillingWorkflowActivity }>
+      | Readonly<{ activity: BillingWorkflowActivity; observe: BillingWorkflowActivity<boolean> }>
+    )
+): Promise<void> =>
+  runWorkflow({
+    ...input,
+    observe: "observe" in input ? Option.some(input.observe) : Option.none(),
+    wompiHttp: wompiOutboundHttp,
+  });
 
 /** Fresh-session browser enrollment; provider references and transient authorization stay private. */
 export const handlePaymentEnrollment = (

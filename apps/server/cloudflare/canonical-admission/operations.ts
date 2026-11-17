@@ -10,6 +10,7 @@ import {
 import {
   admitLocalRequest as admitLocal,
   runLocalMutation as mutateLocal,
+  sweepReceiptWork as recoverReceipts,
   sweepLocalReceipts as sweepReceipts,
 } from "./internal/local-mutation";
 import {
@@ -1270,3 +1271,6 @@ export const admitLocalRequest: typeof admitLocal = (input) => admitLocal(input)
 
 /** Visit expired ordinary receipts, independently of new captures, within a bounded User maintenance page. */
 export const sweepLocalReceipts: typeof sweepReceipts = (current) => sweepReceipts(current);
+
+export const recoverLocalReceipts: typeof recoverReceipts = (current, storage) =>
+  recoverReceipts(current, storage);

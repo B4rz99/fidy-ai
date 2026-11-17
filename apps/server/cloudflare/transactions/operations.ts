@@ -316,6 +316,7 @@ const invalidTransactionTarget = (
     ? Option.some(missingLocalTransaction())
     : Option.none();
 type LocalTransactionRequest = Readonly<{
+  storage: DurableObjectStorage;
   request: Request;
   operation: CatalogOperation;
   owns: (userId: string) => boolean;

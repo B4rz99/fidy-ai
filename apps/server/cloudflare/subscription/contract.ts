@@ -239,3 +239,10 @@ export const LocalSourceCancellationWork = Schema.Struct({
 export type BillingWorkRouting = Partial<
   Readonly<{ USER_STORE: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }> }>
 >;
+
+/** A value returned by a named billing activity is durable across Workflow reconstruction. */
+export type BillingWorkflowActivity<Value extends boolean | void = void> = (
+  name: string,
+  options: WorkflowStepConfig,
+  run: () => Promise<Value>
+) => Promise<Value>;

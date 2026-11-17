@@ -1,3 +1,7 @@
+import {
+  localPATCredential as localCredential,
+  patRouteProof as routeProof,
+} from "./internal/native-pat";
 import { prepareBoundPATList as prepareList } from "./internal/bound-pats";
 import type { CanonicalBrowserRead } from "../canonical-admission/contract";
 import { Effect } from "effect";
@@ -68,3 +72,7 @@ export const getHeldPATActivity = (input: PATActivityRead): Effect.Effect<Respon
   getHeldActivity(input);
 
 export const prepareBoundPATList: CanonicalBrowserRead = (input) => prepareList(input);
+
+/** Directory uses only the short id. The User verifies the full bearer inside the mutation. */
+export const patRouteProof: typeof routeProof = (request) => routeProof(request);
+export const localPATCredential: typeof localCredential = (input) => localCredential(input);

@@ -1,4 +1,18 @@
 import {
+  exhausted,
+  invalid,
+  rateLimited as limited,
+  scopeMissing,
+  attachStanding as standingResponse,
+  noAuthority as unauthorized,
+  canonicalAdmissionUnavailable as unavailable,
+} from "./internal/responses";
+import {
+  admitLocalRequest as admitLocal,
+  runLocalMutation as mutateLocal,
+  sweepLocalReceipts as sweepReceipts,
+} from "./internal/local-mutation";
+import {
   type AuthorizedCanonicalCaller,
   CanonicalAdmissionUnavailable,
   type CanonicalBrowserQueryFinalizer,
@@ -9,7 +23,6 @@ import {
   type PreparedCanonicalBrowserRead,
   type PreparedCanonicalReadCompletion,
   canonicalReadCompletionHeader,
-  canonicalRequestProtection,
 } from "./contract";
 
 import {
@@ -22,8 +35,8 @@ import {
 } from "./internal/response-timing";
 import { OAuthNativeReview } from "../oauth-confirmation/contract";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
-import { Clock, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
-import { canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
+import { Clock, Duration, Effect, Exit, Option, Schema } from "effect";
+
 import { UserActionRequired } from "../../src/shell/public-http/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import type { AuditAuthority } from "../../src/shell/audit/contract";
@@ -51,7 +64,7 @@ import {
   type QuotaStatus,
   canonicalRetryLifetimeMs,
 } from "../../src/core/quotas/contract";
-import { allowancePeriod } from "../../src/core/quotas/operations";
+
 import {
   bindConsumptionRetry,
   decodeQuotaStatus,
@@ -97,70 +110,9 @@ type MeteredCall<E, R> = Call<E, R> &
     inputHash: string;
     retryKey: Option.Option<string>;
   }>;
-export const canonicalAdmissionUnavailable = (): Response =>
-  Response.json(
-    {
-      error: { code: "unavailable", message: "The operation is unavailable. Retry later." },
-      next: [],
-    },
-    { status: 503 }
-  );
-const unavailable = canonicalAdmissionUnavailable;
-export const noAuthority = (): Response =>
-  Response.json(
-    {
-      error: {
-        code: "unauthenticated",
-        message: "Present a currently authorized credential and retry.",
-      },
-      next: [],
-    },
-    { status: 401 }
-  );
-const scopeMissing = (): Response =>
-  Response.json(
-    {
-      error: {
-        code: "scope_missing",
-        message: "This credential lacks the required operation scope.",
-      },
-      next: [],
-    },
-    { status: 403 }
-  );
-const invalid = (message: string): Response =>
-  Response.json(
-    { error: { code: "validation_failed", message, fields: [] }, next: [] },
-    { status: 400 }
-  );
-export const rateLimited = (): Response =>
-  Response.json(
-    {
-      error: {
-        code: "rate_limited",
-        message: "Too many concurrent or recent requests. Retry later.",
-        retryAfterSeconds: canonicalRequestProtection.retryAfterSeconds,
-      },
-      next: [],
-    },
-    {
-      status: 429,
-      headers: { "retry-after": String(canonicalRequestProtection.retryAfterSeconds) },
-    }
-  );
-const exhausted = (current: number): Response =>
-  Response.json(
-    {
-      error: {
-        code: "quota_exhausted",
-        message: "Your Free canonical-call allowance is exhausted.",
-        allowance: "canonical_call",
-        resetsAt: DateTime.formatIso(allowancePeriod(DateTime.makeUnsafe(current)).resetsAt),
-      },
-      next: [],
-    },
-    { status: 429 }
-  );
+export const canonicalAdmissionUnavailable = (): Response => unavailable();
+export const noAuthority = (): Response => unauthorized();
+export const rateLimited = (): Response => limited();
 /** Bound shared User request pressure without consuming a commercial allowance or adding canonical accounting. */
 export const protectCanonicalPressure = <A, E, R>(
   input: Readonly<{
@@ -295,24 +247,8 @@ const checkScopes = <E, R>(
     if (rows[0]?.results.length !== 1) return Option.some(noAuthority());
     return rows[1]?.results.length === 1 ? Option.none() : Option.some(scopeMissing());
   });
-const attachStanding = (response: Response, status: QuotaStatus, current: number): Response => {
-  const headers = new Headers(response.headers);
-  const meter = status.canonicalCalls;
-  headers.set(canonicalAllowanceHeaders.allowance, "canonical_call");
-  headers.set(
-    canonicalAllowanceHeaders.limit,
-    meter._tag === "Uncapped" ? "uncapped" : String(meter.limit)
-  );
-  headers.set(
-    canonicalAllowanceHeaders.remaining,
-    meter._tag === "Uncapped" ? "uncapped" : String(meter.remaining)
-  );
-  headers.set(
-    canonicalAllowanceHeaders.resetsAt,
-    DateTime.formatIso(allowancePeriod(DateTime.makeUnsafe(current)).resetsAt)
-  );
-  return new Response(response.body, { status: response.status, headers });
-};
+const attachStanding = (response: Response, status: QuotaStatus, current: number): Response =>
+  standingResponse({ response, status, current });
 /** Disclose current allowance only after the caller's atomic read and accountability succeed. */
 export const attachCanonicalStanding = ({
   response,
@@ -1326,3 +1262,10 @@ export const protectCanonicalBrowserSource = (
       Effect.map(([duration, response]) => appendCanonicalTimings({ response, duration, timings }))
     );
   });
+
+/** The User transaction owns live authority, admission, owner work, Audit and exact receipt. */
+export const runLocalMutation: typeof mutateLocal = (input) => mutateLocal(input);
+export const admitLocalRequest: typeof admitLocal = (input) => admitLocal(input);
+
+/** Visit expired ordinary receipts, independently of new captures, within a bounded User maintenance page. */
+export const sweepLocalReceipts: typeof sweepReceipts = (current) => sweepReceipts(current);

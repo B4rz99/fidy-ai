@@ -42,7 +42,11 @@ export const nativeUserPlatform = Effect.gen(function* () {
             compatibilityDate: "2026-09-08",
             compatibilityFlags: ["nodejs_compat"],
             manifest: ingress,
-            env: { BROWSER_ORIGIN: origin, CORE: { type: "worker", worker: "core" } },
+            env: {
+              BROWSER_ORIGIN: origin,
+              PAT_ADMISSION_KEY: { type: "text", value: "test-only-admission-key-with-32-bytes" },
+              CORE: { type: "worker", worker: "core" },
+            },
           },
         },
         {

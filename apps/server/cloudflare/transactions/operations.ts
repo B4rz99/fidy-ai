@@ -1,3 +1,4 @@
+import { captureLocalTransaction as captureNative } from "./internal/sqlite-capture";
 import { prepareGroupCorrection as ownerPrepareGroupCorrection } from "./internal/group-correction";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
 import { readUserHistory as readLocalHistory } from "./internal/sqlite-history";
@@ -278,3 +279,7 @@ export const prepareBrowserTransactionPage: typeof prepareInitialPage = (input) 
 /** Prepare an explicit revision-checked selection for one all-or-nothing correction. */
 export const prepareGroupCorrection: typeof ownerPrepareGroupCorrection = (input) =>
   ownerPrepareGroupCorrection(input);
+
+/** Native single or composed capture. Admission and completion belong to the enclosing User transaction. */
+export const captureLocalTransaction: typeof captureNative = (input, userId, current) =>
+  captureNative(input, userId, current);

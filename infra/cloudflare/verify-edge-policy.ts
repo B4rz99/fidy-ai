@@ -2,8 +2,35 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "0d1618204e6cd6778791e8178b0645b4a1174fa66d1df425f9b640a8a4be5127";
+const expectedEdgePolicyDigest = "c8a530bf12d1ba5e55f17be1a63bfa9fe3afc598db49261134abd314fea04fa8";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/internal/native-pat.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/transactions/internal/sqlite-capture.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/canonical-admission/internal/request-input.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/canonical-admission/internal/responses.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/canonical-admission/internal/local-mutation.ts",
+      import.meta.url
+    )
+  ).text(),
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/categories/internal/native-categorization.ts",

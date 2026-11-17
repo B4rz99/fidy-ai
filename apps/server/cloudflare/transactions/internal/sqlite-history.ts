@@ -5,12 +5,13 @@ import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { recordAuthorizedCall } from "../../../src/shell/audit/operations";
 import {
+  admitLocalRequest,
   attachCanonicalStanding,
   canonicalAdmissionUnavailable,
   noAuthority,
   rateLimited,
 } from "../../canonical-admission/operations";
-import { canonicalRequestProtection } from "../../canonical-admission/contract";
+
 import { decodeQuotaStatus, quotaStatusSelection } from "../../quotas/operations";
 import { newId } from "../../secret-material/operations";
 import {
@@ -39,20 +40,6 @@ const presentRetainedHistory = (input: Parameters<typeof presentHistory>[0]): Re
 
 class HistoryUnavailable extends Data.TaggedError("HistoryUnavailable") {}
 
-const admitBrowserRead = Effect.fn(function* ({
-  user,
-  current,
-}: Readonly<{ user: string; current: number }>) {
-  const sql = yield* SqliteClient;
-  const policy = canonicalRequestProtection;
-  yield* sql`DELETE FROM canonical_request_leases WHERE user_id=${user} AND expires_at_ms<=${current}`;
-  return yield* sql`INSERT INTO canonical_request_buckets(subject,virtual_at_ms)
-      SELECT ${"user:" + user},${current + policy.intervalMs}
-      WHERE (SELECT count(*) FROM canonical_request_leases WHERE user_id=${user}) < ${policy.concurrency}
-      ON CONFLICT(subject) DO UPDATE SET virtual_at_ms=max(virtual_at_ms,${current})+${policy.intervalMs}
-      WHERE virtual_at_ms<=${current + (policy.burst - 1) * policy.intervalMs} RETURNING 1`;
-});
-
 /** A bound browser read is unmetered. Materialize its complete response, standing and Audit together. */
 export const readUserHistory = Effect.fn(function* (
   request: Request,
@@ -79,7 +66,7 @@ export const readUserHistory = Effect.fn(function* (
     const [statusRow] = yield* sql.unsafe(standing.sql, standing.params);
     const status = decodeQuotaStatus({ row: statusRow, current });
     if (Option.isNone(status)) return yield* new HistoryUnavailable();
-    const admitted = yield* admitBrowserRead({ user, current });
+    const admitted = yield* admitLocalRequest({ user, current });
     if (admitted.length !== 1) {
       return attachCanonicalStanding({ response: rateLimited(), status: status.value, current });
     }

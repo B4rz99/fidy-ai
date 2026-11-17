@@ -1,0 +1,52 @@
+apps/server/cloudflare/maintenance/contract.ts
+  s_a1be23a656acf0::t_df71fa8e6bc64a 87-88
+  s_a1be23a656acf0::t_0e4ceb24743379 83-86
+apps/server/cloudflare/maintenance/lifetime-registry.test.ts
+  s_a1be23a656acf0::t_276ab03cdee617 1-2,4-14,31-36,50-54,64-66,68-70
+  s_a1be23a656acf0::t_bd5fc4cbaca5e4 16-18,21-25,28-30,37-40,42-49,55-59
+  s_a1be23a656acf0::t_df6448db79732a 19-20,26-27,41,60-63,67
+  s_a1be23a656acf0::t_0c706bd6fe05a4 3,15
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_bd5fc4cbaca5e4 490-495,524-538
+  s_a1be23a656acf0::t_0f5968d40cf79a 1-4,489,539-545
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_df6448db79732a 167-169
+  s_a1be23a656acf0::t_bd5fc4cbaca5e4 127-133,140-146,149
+  s_a1be23a656acf0::t_3f508568617cac 18,31,68-70
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_df6448db79732a 82-87,126
+  s_a1be23a656acf0::t_72f1ebf90f63b1 133
+apps/server/cloudflare/maintenance/operations.ts
+  s_a1be23a656acf0::t_df71fa8e6bc64a 1,91-92,95-100,116-117,121-122,129
+  s_a1be23a656acf0::t_df6448db79732a 6-7,105-107
+  s_a1be23a656acf0::t_bd5fc4cbaca5e4 5,8-12,14,50,53-63,65-90,93-94,101-104,108-115,118-120,123-128,130-133
+  s_a1be23a656acf0::t_beb32e4d0cb6a7 2-4,134
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_bd5fc4cbaca5e4 160-166,178-180
+  s_a1be23a656acf0::t_df6448db79732a 158,167-171,183
+  s_a1be23a656acf0::t_ecddf37eb6e0d3 150-157,159,172-177,181-182,184-186
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_df71fa8e6bc64a 371
+  s_a1be23a656acf0::t_bd5fc4cbaca5e4 1-6,22,372-376
+  s_a1be23a656acf0::t_d067f9f0a1309f 360,377,379
+apps/server/cloudflare/storage-bootstrap/operations.ts
+  s_a1be23a656acf0::t_9395e7bdbed3ad 2,24
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_76a2f7e519c1e8 441
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1a9ec17fb68a9ae2c7ac284a58c4cd354ab3f906",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

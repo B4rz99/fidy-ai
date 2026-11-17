@@ -1,0 +1,19 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_80485f22bd86bb::t_2f644a3bca3f5f 5,242-260
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e78b8379d8ff6288d630d67185141182c9491265",
+  "prompts": {},
+  "sessions": {
+    "s_80485f22bd86bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb36-7bac-7192-b314-9017a8cdd9c3",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

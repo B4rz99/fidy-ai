@@ -117,17 +117,26 @@ const groupPrecision = Effect.fn(function* (
   const [duplicate] =
     yield* sql`SELECT 1 FROM budgets WHERE ${members} GROUP BY category_id HAVING count(*)>1 LIMIT 1`;
   if (duplicate !== undefined) return false;
-  // All retained nominal caps, including subsequent saved months, must fit the new Currency.
-  const [bad] = yield* sql`WITH selected AS (SELECT id,cap FROM budgets WHERE ${members}), caps AS (
-      SELECT cap FROM selected UNION ALL SELECT p.cap FROM budget_month_plan_records p JOIN selected s ON s.id=p.budget_id
-      WHERE p.kind='cap' AND p.user_id=${user} AND p.month>=${month})
-      SELECT cap FROM caps ORDER BY CASE WHEN instr(cap,'.')=0 THEN 0 ELSE length(rtrim(cap,'0'))-instr(cap,'.') END DESC LIMIT 1`;
-  if (bad === undefined) return true;
-  const { cap } = yield* Schema.decodeUnknownEffect(Schema.Struct({ cap: Schema.String }))(bad);
   const fits = Schema.decodeUnknownOption(Schema.toCodecJson(Money));
-  return (
-    Option.isSome(fits({ amount: cap, currency })) && Option.isSome(fits({ amount, currency }))
-  );
+  if (Option.isNone(fits({ amount, currency }))) return false;
+  // A future month can hold a different cap. Validate every distinct nominal amount in bounded pages.
+  const caps = sql`WITH selected AS (SELECT id,cap FROM budgets WHERE ${members}), caps AS (
+    SELECT cap FROM selected UNION SELECT p.cap FROM budget_month_plan_records p JOIN selected s ON s.id=p.budget_id
+    WHERE p.kind='cap' AND p.user_id=${user} AND p.month>=${month})`;
+  let cursor = Option.none<string>();
+  for (;;) {
+    const after = Option.getOrNull(cursor);
+    const rows = yield* Schema.decodeUnknownEffect(
+      Schema.Array(Schema.Struct({ cap: Schema.String }))
+    )(
+      yield* sql`${caps} SELECT cap FROM caps WHERE ${after} IS NULL OR cap>${after} ORDER BY cap LIMIT ${maximumBudgets}`
+    );
+    for (const row of rows) {
+      if (Option.isNone(fits({ amount: row.cap, currency }))) return false;
+      cursor = Option.some(row.cap);
+    }
+    if (rows.length < maximumBudgets) return true;
+  }
 });
 const groupDenomination = Effect.fn(function* (user: UserId, name: string, month: string) {
   const sql = yield* SqliteClient;

@@ -1,10 +1,12 @@
 import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
 import { DurableObject } from "cloudflare:workers";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import type { StoreHistory, StoreReleaseEnvironment } from "../runtime/sqlite/contract";
 import { Clock, Effect, Schema } from "effect";
 import { SessionRoute, directoryName, sessionRouteUrl } from "./contract";
 
-type DirectoryEnvironment = Readonly<{ DIRECTORY: DurableObjectNamespace }>;
+type DirectoryEnvironment = StoreReleaseEnvironment &
+  Readonly<{ DIRECTORY: DurableObjectNamespace }>;
 
 const digestBytes = 32;
 
@@ -15,13 +17,18 @@ const initialDirectorySchema = [
           hard_expires_at_ms INTEGER NOT NULL) STRICT`,
 ];
 
+const directoryHistory: StoreHistory = {
+  owner: "directory",
+  steps: [{ version: 1, id: "initial-session-routes", statements: initialDirectorySchema }],
+};
+
 export class Directory extends DurableObject<DirectoryEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: DirectoryEnvironment) {
     super(state, env);
     this.runtime = createStoreRuntime(state.storage);
     state.blockConcurrencyWhile(() =>
-      this.runtime.runPromise(openSqliteStore(initialDirectorySchema))
+      this.runtime.runPromise(openSqliteStore(directoryHistory, env.CF_VERSION_METADATA.id))
     );
   }
   override fetch(request: Request): Promise<Response> {

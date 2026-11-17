@@ -55,6 +55,7 @@ const platform = Effect.gen(function* () {
             name: "pricing-test",
             compatibilityDate: "2026-09-08",
             env: {
+              CF_VERSION_METADATA: { type: "version-metadata" },
               PRICING: {
                 type: "durable-object",
                 worker: "pricing-test",
@@ -208,8 +209,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const { request, restart, publication } = yield* platform;
         const original = yield* request("offers");
-        expect((yield* request("fixture/fail-before-receipt", {})).status).toBe(204);
-        expect((yield* request("publish", publication)).status).toBe(503);
+        expect((yield* request("fixture/fail-before-receipt", publication)).status).toBe(503);
         yield* restart;
         expect(yield* request("offers")).toEqual(original);
         expect((yield* request("fixture/lose-response", publication)).status).toBe(503);

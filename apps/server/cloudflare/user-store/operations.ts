@@ -1,5 +1,7 @@
+import type { StoreHistory } from "../runtime/sqlite/contract";
+
 /** Initial User-store schema. Schema creation grants no identity, credential or Consent. */
-export const initialUserSchema = [
+const initialUserSchema = [
   `CREATE TABLE users (
   id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
   service_market TEXT NOT NULL CHECK (service_market = 'CO'),
@@ -273,3 +275,8 @@ SELECT user_id,id,amount,currency,direction,counterparty,category_id,notes,occur
  user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id)
 ) STRICT`,
 ] as const;
+
+export const userStoreHistory: StoreHistory = {
+  owner: "user",
+  steps: [{ version: 1, id: "initial-user-schema", statements: initialUserSchema }],
+};

@@ -1,5 +1,6 @@
-import * as Sqlite from "@effect/sql-sqlite-do/SqliteClient";
-import { initializePricing, pricingResponse } from "./internal/pricing-object";
+import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
+import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
+import { pricingHistory, pricingResponse } from "./internal/pricing-object";
 import { publishPrice } from "./internal/publish-price";
 import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
@@ -29,7 +30,7 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from "cloudflare:workers";
-import { type Cause, Context, Effect, Layer, ManagedRuntime, type Option, Schema } from "effect";
+import { type Cause, Context, Effect, Layer, type Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   makeAccessSigningKeysOutboundHttp,
@@ -257,12 +258,14 @@ export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<Era
 export class Pricing {
   private readonly state: DurableObjectState;
   private readonly runtime;
-  constructor(state: DurableObjectState) {
+  constructor(state: DurableObjectState, env: StoreReleaseEnvironment) {
     this.state = state;
-    this.runtime = ManagedRuntime.make(Sqlite.layer({ storage: state.storage }));
+    this.runtime = createStoreRuntime(state.storage);
     if (state.id.name === pricingName) {
       state.waitUntil(
-        state.blockConcurrencyWhile(() => this.runtime.runPromise(initializePricing))
+        state.blockConcurrencyWhile(() =>
+          this.runtime.runPromise(openSqliteStore(pricingHistory, env.CF_VERSION_METADATA.id))
+        )
       );
     }
   }

@@ -1,3 +1,4 @@
+import type { StoreHistory } from "../../runtime/sqlite/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 import { UserId } from "../../../src/core/identity/contract";
@@ -57,36 +58,36 @@ const initialOffers = Schema.decodeUnknownSync(SubscriptionOffers)(
   }))
 );
 
-export const initializePricing = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  yield* sql.withTransaction(
-    Effect.gen(function* () {
-      yield* sql`CREATE TABLE IF NOT EXISTS pricing_schema (version INTEGER PRIMARY KEY CHECK(version > 0)) STRICT`;
-      const versions = yield* sql`SELECT version FROM pricing_schema ORDER BY version LIMIT 2`;
-      if (versions.length > 0) {
-        yield* Schema.decodeUnknownEffect(
-          Schema.Tuple([Schema.Struct({ version: Schema.Literal(1) })])
-        )(versions);
-        return;
-      }
-      yield* sql`CREATE TABLE prices (id TEXT PRIMARY KEY, terms TEXT NOT NULL) STRICT`;
-      yield* sql`CREATE TABLE selected_prices (period TEXT PRIMARY KEY, price_id TEXT NOT NULL REFERENCES prices(id)) STRICT`;
-      yield* sql`CREATE TABLE price_publications (
+export const pricingHistory: StoreHistory = {
+  owner: "pricing",
+  steps: [
+    {
+      version: 1,
+      id: "initial-prices-and-registrations",
+      statements: [
+        "CREATE TABLE prices (id TEXT PRIMARY KEY, terms TEXT NOT NULL) STRICT",
+        "CREATE TABLE selected_prices (period TEXT PRIMARY KEY, price_id TEXT NOT NULL REFERENCES prices(id)) STRICT",
+        `CREATE TABLE price_publications (
       id TEXT PRIMARY KEY, price_id TEXT NOT NULL UNIQUE REFERENCES prices(id), operator_id TEXT NOT NULL, published_at_ms INTEGER NOT NULL
-    ) STRICT`;
-      yield* sql`CREATE TABLE price_registrations (
+    ) STRICT`,
+        `CREATE TABLE price_registrations (
       operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, admission_kind TEXT NOT NULL, admission_id TEXT NOT NULL,
       request TEXT NOT NULL, price_id TEXT NOT NULL REFERENCES prices(id), UNIQUE(user_id,admission_kind,admission_id)
-    ) STRICT`;
-      for (const price of initialOffers) {
-        const encoded = yield* Schema.encodeEffect(terms)(price);
-        yield* sql`INSERT INTO prices VALUES (${price.id}, ${encoded})`;
-        yield* sql`INSERT INTO selected_prices VALUES (${price.billingPeriod}, ${price.id})`;
-      }
-      yield* sql`INSERT INTO pricing_schema VALUES (1)`;
-    })
-  );
-});
+    ) STRICT`,
+        ...initialOffers.flatMap((price) => [
+          {
+            sql: "INSERT INTO prices VALUES (?,?)",
+            bindings: [price.id, Schema.encodeSync(terms)(price)],
+          },
+          {
+            sql: "INSERT INTO selected_prices VALUES (?,?)",
+            bindings: [price.billingPeriod, price.id],
+          },
+        ]),
+      ],
+    },
+  ],
+};
 
 const offers = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

@@ -1,3 +1,4 @@
+import type { StoreHistory } from "../runtime/sqlite/contract";
 import { Cause, Effect, Exit } from "effect";
 import { type ScheduledActivity, ScheduledWorkFailed } from "./contract";
 import { activityDue } from "./internal/cadence";
@@ -34,3 +35,9 @@ export const executeDueSchedule = <E>(
       activityDue({ operation, nowEpochMs: input.nowEpochMs })
     )
   );
+
+/** Reserve this owner's lifetime identity before its first domain schema. */
+export const maintenanceStoreHistory: StoreHistory = {
+  owner: "maintenance",
+  steps: [{ version: 1, id: "initial-maintenance-store", statements: [] }],
+};

@@ -58,6 +58,7 @@ export const nativeUserPlatform = Effect.gen(function* () {
             },
             env: {
               BROWSER_ORIGIN: origin,
+              CF_VERSION_METADATA: { type: "version-metadata" },
               USER_STORE: { type: "durable-object", worker: "core", exportName: "UserStore" },
               DIRECTORY: { type: "durable-object", worker: "core", exportName: "Directory" },
             },

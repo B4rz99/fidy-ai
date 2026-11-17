@@ -1,3 +1,4 @@
+import type { StoreHistory } from "../runtime/sqlite/contract";
 import { prepareChangedRowAssertion } from "../../src/shell/sql-assertions/operations";
 import { Effect } from "effect";
 import { ErasureUnavailable } from "./contract";
@@ -66,3 +67,9 @@ export const originalWriteActive = (
       catch: () => new ErasureUnavailable(),
     })
   ).pipe(Effect.map((active) => active === 1));
+
+/** Reserve this owner's lifetime identity before its first domain schema. */
+export const erasureStoreHistory: StoreHistory = {
+  owner: "erasure",
+  steps: [{ version: 1, id: "initial-erasure-store", statements: [] }],
+};

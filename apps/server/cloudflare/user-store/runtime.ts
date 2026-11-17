@@ -3,15 +3,19 @@ import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operation
 import { Effect } from "effect";
 import { canonicalAdmissionUnavailable } from "../canonical-admission/operations";
 import { readUserHistory } from "../transactions/operations";
-import { initialUserSchema } from "./initial-schema";
+import { userStoreHistory } from "./operations";
+import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
 
-type UserStoreEnvironment = Readonly<{ USER_STORE: DurableObjectNamespace }>;
+type UserStoreEnvironment = StoreReleaseEnvironment &
+  Readonly<{ USER_STORE: DurableObjectNamespace }>;
 export class UserStore extends DurableObject<UserStoreEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
     super(state, env);
     this.runtime = createStoreRuntime(state.storage);
-    state.blockConcurrencyWhile(() => this.runtime.runPromise(openSqliteStore(initialUserSchema)));
+    state.blockConcurrencyWhile(() =>
+      this.runtime.runPromise(openSqliteStore(userStoreHistory, env.CF_VERSION_METADATA.id))
+    );
   }
 
   override fetch(request: Request): Promise<Response> {

@@ -36,6 +36,31 @@ shared-path and locality runners must stop before provisioning: they cannot acco
 coordinator work, migrations, retries and cleanup. A successful preflight alone does not make them
 safe to reuse. A replacement must demonstrate runtime budget enforcement before hosted execution.
 
+## Calibrate the hosted D1 fixture
+
+Run `python3 scripts/infra-performance/hosted/run.py` from the repository with its pinned Bun
+installation. The default command runs local workerd, applies migrations read from Git revision
+`fb53d9e755c14393048dc945fc0b7f117730d872`, seeds the shared eight-Transaction production fixture,
+and prints the path to its report. The report and statement plan live under
+`apps/server/test-results/d1-calibration/`. The report records the revision, seed, fixture counts,
+plan digest, and per-run D1 read/write estimate. This measures fixture installation and count
+verification. Comparative operation, browser, and fleet timings have their own commands.
+
+To execute that fixture on the Production account, run the same command with `--execute`.
+The runner reads `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` when set, or obtains the account
+from the repository variable and the credential from the authenticated Wrangler CLI. Only a newly
+created, randomly named D1 database is eligible. The command verifies its UUID and name before
+querying and again before deletion. It confirms deletion independently with a name-filtered listing.
+
+Serialize Production experiments on the same runner. Its account lock and ledger under
+`~/.cache/fidy/d1-calibration/` survive worktrees and process restarts. The ledger carries prior
+spend into every admission on the same UTC day. An unobserved batch result fences retries until the
+next UTC day. If the process stops during provisioning or cleanup, the ledger names the report and
+resource for reconciliation. Verify that resource's custody and the retained batch counters before
+resuming. Preserve prior spend when reconciling a ledger. Run
+`PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/infra-performance/hosted` for the
+local rehearsal, accounting and cleanup checks.
+
 ## Local investigation while hosted work is unavailable
 
 Use native integration tests with the existing observer from the repository root:

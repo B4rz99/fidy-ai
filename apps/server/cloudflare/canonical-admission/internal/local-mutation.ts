@@ -227,6 +227,16 @@ const charge = Effect.fn(function* (call: Call) {
   );
   return Option.none<Response>();
 });
+const financialGrowth = new Set<string>([
+  "transactions.createTransaction",
+  "transactions.updateTransaction",
+  "transactions.linkTransactions",
+]);
+const replayableOperations = new Set<string>([
+  ...financialGrowth,
+  "subscription.cancelSubscription",
+  "transactions.unlinkTransactions",
+]);
 const complete = Effect.fn(function* (
   call: Call,
   invocation: Invocation,
@@ -243,7 +253,7 @@ const complete = Effect.fn(function* (
     // A positive allowlist keeps future one-time responses out of storage until explicitly reviewed.
     yield* oneStored(
       yield* sql`INSERT INTO canonical_request_receipts(user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body)
-      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${["transactions.createTransaction", "subscription.cancelSubscription"].includes(operation.id) ? body : null}) RETURNING status`
+      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${replayableOperations.has(operation.id) ? body : null}) RETURNING status`
     );
   }
   return attachStanding({
@@ -260,7 +270,10 @@ const deniedAccess = (call: Call): boolean =>
   })._tag !== "Allowed";
 const prepareIdentity = Effect.fn(function* (request: Request, operation: CatalogOperation) {
   const valid = yield* validatedCanonicalInput({ request, operation });
-  const key = request.headers.has("authorization") ? request.headers.get("Fidy-Retry-Key") : null;
+  const key =
+    operation.method !== "GET" && request.headers.has("authorization")
+      ? request.headers.get("Fidy-Retry-Key")
+      : null;
   const validKey = Schema.decodeUnknownOption(CanonicalRetryKey)(key);
   const digest = Option.isSome(validKey)
     ? Option.some(yield* cryptoHash(validKey.value))
@@ -300,23 +313,37 @@ const withdrawn = (): Response =>
     },
     { status: 403 }
   );
-export const runLocalMutation = Effect.fn(function* <A, E>({
-  request,
-  storage,
-  operation,
-  owns,
-  input,
-  work,
-}: Mutation<A, E>) {
+export const runLocalMutation = Effect.fn(function* <A, E>(
+  { request, storage, operation, owns, input, work }: Mutation<A, E>,
+  invalidTarget: Option.Option<LocalMutationResult> = Option.none()
+) {
   const resolve = yield* localProof(request, owns);
   const { keyValid, identity } = yield* prepareIdentity(request, operation);
   const argumentsForOwner = Option.product(yield* input, identity);
+  const invalidInput = Option.match(invalidTarget, {
+    onNone: () => ({
+      response: invalid("Invalid canonical operation input."),
+      outcome: "validation_failed" as const,
+    }),
+    onSome: (target) => ({
+      response: Response.json(target.body, {
+        status: target.status,
+        headers: { "cache-control": "no-store" },
+      }),
+      outcome: target.outcome,
+    }),
+  });
   const prepared = Option.match(argumentsForOwner, {
-    onNone: () => ({ refusal: "Invalid canonical operation input." }) as const,
+    onNone: () => ({ refusal: invalidInput }) as const,
     onSome: ([value, invocation]) =>
       keyValid
         ? ({ value, invocation } as const)
-        : ({ refusal: "Invalid canonical retry key." } as const),
+        : ({
+            refusal: {
+              response: invalid("Invalid canonical retry key."),
+              outcome: "validation_failed" as const,
+            },
+          } as const),
   });
   return yield* withStoreAdmission((admitGrowth) =>
     Effect.gen(function* () {
@@ -330,11 +357,14 @@ export const runLocalMutation = Effect.fn(function* <A, E>({
         return attachStanding({ ...call, response: rateLimited() });
       }
       if (deniedAccess(call)) return yield* reject(call, scopeMissing());
-      if (prepared.refusal !== undefined) return yield* reject(call, invalid(prepared.refusal));
+      if (prepared.refusal !== undefined) {
+        yield* audit(call, prepared.refusal.outcome);
+        return attachStanding({ ...call, response: prepared.refusal.response });
+      }
       return yield* authorizedWork({
         call,
         invocation: prepared.invocation,
-        admission: operation.id === "transactions.createTransaction" ? admitGrowth : Effect.void,
+        admission: financialGrowth.has(operation.id) ? admitGrowth : Effect.void,
         work: work.bind(null, prepared.value, subject.userId, current),
       });
     })

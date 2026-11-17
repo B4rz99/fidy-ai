@@ -82,6 +82,7 @@ import { observeCanonicalResponse } from "../../runtime/application-observation/
 import { type Cause, Clock, Duration, Effect, Exit, Option, Schema } from "effect";
 import {
   correctionInput,
+  isLocalTransactionOperation,
   transactionInput,
   transactionPairInput,
   transactionSession,
@@ -1747,15 +1748,14 @@ const authorizedCanonicalResponse = (
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
   if (
-    ["transactions.createTransaction", "subscription.cancelSubscription"].includes(operation.id)
+    isLocalTransactionOperation(operation.id) ||
+    operation.id === "subscription.cancelSubscription"
   ) {
     const route = request.headers.has("authorization") ? routePATRequest : routeSessionRequest;
     return route({ request, environment }).pipe(observeCanonicalResponse(operation.id));
   }
   if (!request.headers.has("authorization")) {
-    return operation.id === "transactions.listTransactions"
-      ? routeSessionRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id))
-      : browserCanonicalResponse(request, environment, operation);
+    return browserCanonicalResponse(request, environment, operation);
   }
   return withBrowserBinding(
     request,

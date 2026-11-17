@@ -478,6 +478,45 @@ const cancellationReceiptMigration = [
   "CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)",
 ] as const;
 
+const correctionMigration = [
+  `ALTER TABLE canonical_request_receipts RENAME TO previous_capture_receipts`,
+  `CREATE TABLE canonical_request_receipts (
+    user_id TEXT NOT NULL REFERENCES users(id),retry_key_digest TEXT NOT NULL CHECK(length(retry_key_digest)=64),
+    operation TEXT NOT NULL,input_digest TEXT NOT NULL CHECK(length(input_digest)=64),
+    accepted_at_ms INTEGER NOT NULL,status INTEGER NOT NULL CHECK(status BETWEEN 200 AND 499),
+    body TEXT, PRIMARY KEY(user_id,retry_key_digest),
+    CHECK(body IS NULL OR (operation IN ('subscription.cancelSubscription','transactions.createTransaction','transactions.updateTransaction','transactions.linkTransactions','transactions.unlinkTransactions') AND json_valid(body)))
+  ) STRICT`,
+  `INSERT INTO canonical_request_receipts SELECT * FROM previous_capture_receipts`,
+  `DROP TABLE previous_capture_receipts`,
+  `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
+  `CREATE TRIGGER transaction_correction_no_update BEFORE UPDATE ON transaction_corrections BEGIN SELECT RAISE(ABORT,'correction_append_only'); END`,
+  `CREATE TRIGGER source_attestation_no_update BEFORE UPDATE ON source_attestations BEGIN SELECT RAISE(ABORT,'attestation_immutable'); END`,
+  `CREATE TRIGGER transaction_user_decisions BEFORE UPDATE ON transactions
+WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND EXISTS (
+  SELECT 1 FROM json_each(OLD.user_decisions)
+  WHERE value = 1 AND json_extract(NEW.user_decisions, '$.' || key) IS NOT 1
+) OR (
+  NEW.revision != OLD.revision AND
+  (NEW.revision != OLD.revision + 1 OR NOT EXISTS (
+    SELECT 1 FROM transaction_corrections
+    WHERE user_id = OLD.user_id AND transaction_id = OLD.id AND previous_revision = OLD.revision
+  ))
+) OR (
+  NOT (NEW.revision = OLD.revision + 1 AND EXISTS (
+    SELECT 1 FROM transaction_corrections
+    WHERE user_id = OLD.user_id AND transaction_id = OLD.id AND previous_revision = OLD.revision
+  )) AND (
+  (json_extract(OLD.user_decisions, '$.money') = 1 AND (NEW.amount != OLD.amount OR NEW.currency != OLD.currency)) OR
+  (json_extract(OLD.user_decisions, '$.direction') = 1 AND NEW.direction != OLD.direction) OR
+  (json_extract(OLD.user_decisions, '$.occurredAt') = 1 AND NEW.occurred_at_ms != OLD.occurred_at_ms) OR
+  (json_extract(OLD.user_decisions, '$.categoryId') = 1 AND NEW.category_id != OLD.category_id) OR
+  (json_extract(OLD.user_decisions, '$.counterparty') = 1 AND NEW.counterparty IS NOT OLD.counterparty) OR
+  (json_extract(OLD.user_decisions, '$.notes') = 1 AND NEW.notes IS NOT OLD.notes)
+))
+BEGIN SELECT RAISE(ABORT, 'transaction_user_decision'); END`,
+] as const;
+
 export const userStoreHistory: StoreHistory = {
   owner: "user",
   steps: [
@@ -486,8 +525,9 @@ export const userStoreHistory: StoreHistory = {
     { version: 3, id: "subscription-cancellation", statements: sourceCancellationSchema },
     { version: 4, id: "canonical-capture", statements: canonicalCaptureMigration },
     { version: 5, id: "cancellation-receipt", statements: cancellationReceiptMigration },
+    { version: 6, id: "canonical-corrections", statements: correctionMigration },
     {
-      version: 6,
+      version: 7,
       id: "lifetime-registration-acknowledgement",
       statements: [
         "ALTER TABLE users ADD COLUMN lifetime_registered INTEGER NOT NULL DEFAULT 0 CHECK(lifetime_registered IN (0,1))",

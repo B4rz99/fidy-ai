@@ -16,6 +16,7 @@ import { RecurringQueryFailure } from "./query-failure";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription } from "@/ui/components/alert";
 import { RecurringWorkspace } from "./workspace";
+import { useRecurringWorkspaceView } from "./workspace-view";
 import {
   type LifecycleConfirmation,
   type SaveState,
@@ -150,8 +151,7 @@ export const RecurringFeature = ({
     )
   );
   const now = useAtomValue(clock);
-  const [filters, setFilters] = useState<Filters>({});
-  const [previous, setPrevious] = useState<Option.Option<string>>(() => Option.none());
+  const { filters, applyFilters, previous, earlier } = useRecurringWorkspaceView();
   if (state._tag === "Failure") {
     return (
       <Button contentLayout="wrap" focusAppearance="subtle" onClick={refresh}>
@@ -177,9 +177,9 @@ export const RecurringFeature = ({
         month={month}
         timeZone={user.timeZone}
         filters={filters}
-        applyFilters={setFilters}
+        applyFilters={applyFilters}
         previous={Option.filter(previous, (value) => value < month)}
-        earlier={(value) => setPrevious(Option.some(value))}
+        earlier={earlier}
       >
         {children}
       </Resources>

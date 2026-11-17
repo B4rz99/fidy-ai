@@ -13,6 +13,7 @@ import { expect, it, vi } from "vitest";
 import { RecurringPlanId, TransactionId } from "@/transport/client";
 import { emptyTransactionFilters } from "./transaction-filters";
 import { useRecurringNavigation } from "./navigation";
+import { useRecurringWorkspaceView } from "./workspace-view";
 
 const item = {
   planId: RecurringPlanId.make("23200000-0000-4000-8000-000000000001"),
@@ -20,7 +21,10 @@ const item = {
 };
 const transactionId = TransactionId.make("23200000-0000-4000-8000-000000000002");
 const NavigationProbe = (): ReturnType<typeof createElement> => {
-  const navigation = useRecurringNavigation("2026-11");
+  const workspace = useRecurringWorkspaceView();
+  const navigation = useRecurringNavigation(
+    `2026-11:${JSON.stringify(workspace.filters)}:${Option.getOrElse(workspace.previous, () => "")}`
+  );
   return createElement(
     "main",
     null,
@@ -29,6 +33,17 @@ const NavigationProbe = (): ReturnType<typeof createElement> => {
       null,
       Option.match(navigation.selection, { onNone: () => "monthly", onSome: (value) => value.kind })
     ),
+    createElement(
+      "output",
+      { "data-workspace": true },
+      `${workspace.filters.search ?? ""}|${Option.getOrElse(workspace.previous, () => "")}`
+    ),
+    createElement(
+      "button",
+      { onClick: () => workspace.applyFilters({ search: "Internet" }) },
+      "Filter workspace"
+    ),
+    createElement("button", { onClick: () => workspace.earlier("2026-08") }, "Earlier workspace"),
     createElement("button", { onClick: () => navigation.open(item) }, "Open occurrence"),
     createElement(
       "button",
@@ -237,5 +252,23 @@ it("applying another search during review keeps close and Back on the current pi
       yield* Effect.tryPromise(() => expectSearch(container, "Factura|Factura|unselected"));
       yield* Effect.tryPromise(() => back(router));
       yield* Effect.tryPromise(() => expectStep(container, "occurrence"));
+    })
+  ));
+
+it("reload restores a filtered earlier workspace before restoring its picker and review", () =>
+  withNavigation(({ container, reload }) =>
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => click(container, "Filter workspace"));
+      yield* Effect.tryPromise(() => click(container, "Earlier workspace"));
+      yield* openPicker(container);
+      yield* Effect.tryPromise(() => click(container, "Edit search"));
+      yield* Effect.tryPromise(() => click(container, "Apply search"));
+      yield* Effect.tryPromise(() => click(container, "Review result"));
+      yield* Effect.tryPromise(() => reload("session-a"));
+      yield* Effect.tryPromise(() => expectSearch(container, transactionId));
+      expect(container.querySelector("[data-workspace]")?.textContent).toBe("Internet|2026-08");
+      yield* Effect.tryPromise(() => reload("session-b"));
+      yield* Effect.tryPromise(() => expectStep(container, "monthly"));
+      expect(container.querySelector("[data-workspace]")?.textContent).toBe("|");
     })
   ));

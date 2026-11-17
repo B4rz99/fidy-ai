@@ -75,7 +75,8 @@ The transaction-linking workspace participates in browser history. Back closes a
 review before returning to its originating occurrence; Forward restores the search and review.
 The visible return control returns to the occurrence without adding another history entry. Search
 drafts, applied filters, pagination and selection are validated and scoped to the current browser
-session binding and recurring workspace. Reload restores the read-only step and rereads its facts;
+session binding and recurring workspace. Workspace filters and earlier-month context also survive
+reload, so the originating scope is restored before the read-only step rereads its facts;
 only explicit confirmation submits an association. The header identifies the occurrence date and
 expected Money, and the review retains the existing responsive panel and shared semantic colors.
 

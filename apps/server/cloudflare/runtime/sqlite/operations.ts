@@ -1,10 +1,26 @@
 import type * as Sql from "effect/sql/SqlClient";
 import { SqliteClient, layer } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Data, Effect, ManagedRuntime, type PlatformError, Predicate, Schema } from "effect";
-import { SqlError } from "effect/sql";
+import {
+  Clock,
+  Console,
+  Data,
+  Effect,
+  Layer,
+  ManagedRuntime,
+  type PlatformError,
+  Predicate,
+  Schema,
+} from "effect";
+import { SqlClient, SqlError } from "effect/sql";
 import { Hex } from "effect/encoding";
 import { digestBytes } from "../../secret-material/operations";
-import type { StoreHistory, StoreMigration } from "./contract";
+import {
+  StoreCapacity,
+  type StoreCapacityEvidence,
+  StoreCapacityUnavailable,
+  type StoreHistory,
+  type StoreMigration,
+} from "./contract";
 
 type Refusal =
   | "invalid_history"
@@ -147,6 +163,8 @@ export const openSqliteStore = Effect.fnUntraced(
     ) {
       return yield* refuse("invalid_history");
     }
+    const capacity = yield* StoreCapacity;
+    yield* capacity.observe;
     const digests = yield* Effect.forEach(history.steps, (step) =>
       checksum([history.owner, step.version, step.id, step.statements])
     );
@@ -156,6 +174,7 @@ export const openSqliteStore = Effect.fnUntraced(
       if (digest === undefined) return yield* refuse("invalid_history");
       yield* tryStep({ history, step, digest, release });
     }
+    yield* capacity.observe;
   },
   Effect.mapError((error) =>
     error instanceof MigrationUnavailable
@@ -163,7 +182,107 @@ export const openSqliteStore = Effect.fnUntraced(
       : new MigrationUnavailable({ reason: "metadata_unavailable" })
   )
 );
-export const createStoreRuntime = (
-  storage: DurableObjectStorage
-): ManagedRuntime.ManagedRuntime<SqliteClient | Sql.SqlClient, never> =>
-  ManagedRuntime.make(layer({ storage }));
+const largestPlatformCeiling = 10_000_000_000;
+const warningFraction = 0.7;
+const restrictedFraction = 0.8;
+const capacityBand = (bytes: number, ceiling: number): StoreCapacityEvidence["band"] => {
+  if (bytes >= ceiling * restrictedFraction) return "restricted";
+  if (bytes >= ceiling * warningFraction) return "warning";
+  return "normal";
+};
+const makeCapacity = (
+  storage: DurableObjectStorage,
+  owner: StoreHistory["owner"],
+  configured: string
+): typeof StoreCapacity.Service => {
+  const ceilingBytes = Number(configured);
+  const valid =
+    /^[1-9][0-9]*$/u.test(configured) &&
+    Number.isSafeInteger(ceilingBytes) &&
+    ceilingBytes <= largestPlatformCeiling;
+  let previous: StoreCapacityEvidence["band"] = "normal";
+  const measure = Effect.gen(function* () {
+    if (!valid) return yield* new StoreCapacityUnavailable();
+    const bytes = yield* Effect.try({
+      try: () => storage.sql.databaseSize,
+      catch: () => new StoreCapacityUnavailable(),
+    });
+    const band = capacityBand(bytes, ceilingBytes);
+    return { owner, bytes, ceilingBytes, band };
+  });
+  const observe = Effect.gen(function* () {
+    const evidence = yield* measure;
+    const { band, bytes } = evidence;
+    if (band !== previous) {
+      previous = band;
+      const log = { restricted: Console.error, warning: Console.warn, normal: Console.info }[band];
+      yield* log(
+        `fidy.sqlite_capacity owner=${owner} band=${band} bytes=${bytes} ceilingBytes=${ceilingBytes}`
+      );
+    }
+    return evidence;
+  });
+  return { measure, observe };
+};
+/** The owner resolves exact retained work and authority inside this transaction before asking to admit new growth. */
+export const withStoreAdmission = <Value, Failure, Requirements>(
+  run: (
+    admitGrowth: Effect.Effect<void, StoreCapacityUnavailable>
+  ) => Effect.Effect<Value, Failure, Requirements>
+): Effect.Effect<
+  Value,
+  Failure | SqlError.SqlError | StoreCapacityUnavailable,
+  Requirements | StoreCapacity | Sql.SqlClient
+> =>
+  Effect.gen(function* () {
+    const client = yield* SqlClient.SqlClient;
+    const capacity = yield* StoreCapacity;
+    yield* capacity.observe;
+    return yield* client
+      .withTransaction(
+        Effect.gen(function* () {
+          const before = yield* capacity.measure;
+          let growth = false;
+          const admitGrowth = Effect.gen(function* () {
+            if (before.band === "restricted") return yield* new StoreCapacityUnavailable();
+            growth = true;
+          });
+          const result = yield* run(admitGrowth);
+          const after = yield* capacity.measure;
+          if (growth && after.band === "restricted") return yield* new StoreCapacityUnavailable();
+          if (after.bytes > after.ceilingBytes && after.bytes > before.bytes) {
+            return yield* new StoreCapacityUnavailable();
+          }
+          return result;
+        })
+      )
+      .pipe(Effect.tap(() => capacity.observe.pipe(Effect.ignore)));
+  });
+/** A read's required Audit and any bounded continuation keep their existing authority at the growth threshold. */
+export const withStoreCapacity =
+  (admission: "growth" | "required") =>
+  <Value, Failure, Requirements>(
+    work: Effect.Effect<Value, Failure, Requirements>
+  ): Effect.Effect<
+    Value,
+    Failure | SqlError.SqlError | StoreCapacityUnavailable,
+    Requirements | StoreCapacity | Sql.SqlClient
+  > =>
+    withStoreAdmission((admitGrowth) =>
+      admission === "growth" ? Effect.andThen(admitGrowth, work) : work
+    );
+export const createStoreRuntime = ({
+  storage,
+  owner,
+  ceilingBytes,
+}: Readonly<{
+  storage: DurableObjectStorage;
+  owner: StoreHistory["owner"];
+  ceilingBytes: string;
+}>): ManagedRuntime.ManagedRuntime<SqliteClient | Sql.SqlClient | StoreCapacity, never> =>
+  ManagedRuntime.make(
+    Layer.merge(
+      layer({ storage }),
+      Layer.succeed(StoreCapacity, makeCapacity(storage, owner, ceilingBytes))
+    )
+  );

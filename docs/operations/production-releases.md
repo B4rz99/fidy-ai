@@ -587,3 +587,28 @@ OpenAI project with approved Zero Data Retention; standard abuse-monitoring rete
 when ZDR is unavailable. `store: false` does not establish ZDR. See
 [ADR 0038](../adr/0038-openai-hosted-inference.md) and
 [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
+
+## SQLite Durable Object capacity
+
+Set `SQLITE_STORE_CAPACITY_BYTES` to the per-object ceiling for the release. Core defaults to
+1,000,000,000 bytes. Confirm the account plan before raising it. Each owner measures its native
+SQLite allocation, emits a warning at 70% and a critical signal at 80%. The log records the owner
+class, band, bytes and ceiling. A recovery to the normal band emits an informational event.
+
+At restriction, new growth fails without committing effects. The owner can still resolve an exact
+existing operation and commit mandatory accountability, revocation, settlement, cleanup or erasure.
+The owner's transaction checks staged allocation before commit. A required write that exceeds the
+configured ceiling and increases allocation rolls back. Keep the original deadline and exact work
+identity when reconciling a refusal.
+
+Use the native capacity and owner tests to check a release's storage footprint:
+
+```sh
+bun node_modules/vitest/vitest.mjs run --root apps/server --config cloudflare/vitest.config.ts \
+  cloudflare/runtime/sqlite/capacity.test.ts cloudflare/subscription/pricing.test.ts \
+  cloudflare/transactions/user-store.test.ts
+```
+
+The fixture prints `STORE_CAPACITY` records for each owner class. Check new operation families at
+their maximum supported size and retain their measured peaks with the associated release evidence.
+See the [Cloudflare SQLite storage limits](https://developers.cloudflare.com/durable-objects/platform/limits/).

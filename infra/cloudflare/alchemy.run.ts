@@ -434,6 +434,9 @@ export default Alchemy.Stack(
           Config.withDefault("2")
         ),
         STATEMENT_EXTRACTION_WORKFLOW: statementExtractionWorkflow,
+        SQLITE_STORE_CAPACITY_BYTES: yield* Config.String("SQLITE_STORE_CAPACITY_BYTES").pipe(
+          Config.withDefault("1000000000")
+        ),
         USER_STORE: Cloudflare.DurableObject("UserStore", { className: "UserStore" }),
         DIRECTORY: Cloudflare.DurableObject("Directory", { className: "Directory" }),
         PRICING: Cloudflare.DurableObject("Pricing", { className: "Pricing" }),

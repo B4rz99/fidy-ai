@@ -22,7 +22,10 @@ import coreWorker, { UserTransactionCoordinator } from "../core-worker";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
 import { afterEach, expect, it, vi } from "vitest";
-import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
+import {
+  makePaymentEnrollmentD1,
+  replaceD1FixturePrice,
+} from "./payment-enrollment-d1.test-fixture";
 import {
   dispatchSubscriptionCancellations,
   dispatchSubscriptionRenewals,
@@ -33,7 +36,6 @@ import { Price, PriceId } from "../../src/core/subscription/contract";
 import {
   executeProtectedSubscriptionQuery,
   executeSubscriptionRenewalAdmission,
-  publishWeeklyPrice,
 } from "./operations";
 import {} from "./contract";
 
@@ -493,7 +495,7 @@ it("publishes a changed weekly Price and charges it only in newly admitted attem
         },
         paymentMethods: ["card", "nequi", "daviplata"],
       });
-      yield* publishWeeklyPrice({ db, price: newPrice });
+      yield* replaceD1FixturePrice({ db, price: newPrice });
       yield* admission(db);
       expect(
         yield* fromPromise(() =>
@@ -2729,7 +2731,7 @@ it("keeps retry Money and Price frozen after replacement publication", () =>
         },
         paymentMethods: ["card", "nequi", "daviplata"],
       });
-      yield* publishWeeklyPrice({ db, price: replacement });
+      yield* replaceD1FixturePrice({ db, price: replacement });
       yield* admission(db, dueAt + 86400000);
       const retry = yield* latestRenewal(db);
       expect(
@@ -2929,7 +2931,7 @@ it("preserves the published Price when replacement publication fails", () =>
     Effect.gen(function* () {
       const db = yield* fromPromise(() => fixture());
       const result = yield* Effect.exit(
-        publishWeeklyPrice({ db, price: { ...replacementPrice, id: PriceId.make(priceId) } })
+        replaceD1FixturePrice({ db, price: { ...replacementPrice, id: PriceId.make(priceId) } })
       );
       expect(result._tag).toBe("Failure");
       expect(
@@ -2949,7 +2951,7 @@ it("keeps the pending renewal Price when replacement terms publish", () =>
     Effect.gen(function* () {
       const db = yield* fromPromise(() => fixture());
       yield* admission(db);
-      yield* publishWeeklyPrice({ db, price: replacementPrice });
+      yield* replaceD1FixturePrice({ db, price: replacementPrice });
       yield* admission(db);
       expect(
         (yield* fromPromise(() =>

@@ -436,6 +436,10 @@ export default Alchemy.Stack(
         STATEMENT_EXTRACTION_WORKFLOW: statementExtractionWorkflow,
         USER_STORE: Cloudflare.DurableObject("UserStore", { className: "UserStore" }),
         DIRECTORY: Cloudflare.DurableObject("Directory", { className: "Directory" }),
+        PRICING: Cloudflare.DurableObject("Pricing", { className: "Pricing" }),
+        PRICING_PUBLISH_AUDIENCE: yield* Config.String("PRICING_PUBLISH_AUDIENCE").pipe(
+          Config.withDefault("")
+        ),
         USER_TRANSACTION_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
           className: "UserTransactionCoordinator",
         }),

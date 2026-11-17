@@ -12,7 +12,11 @@ import {
 import { oauthPaths } from "../src/shell/oauth-agents/contract";
 import { processingConsentTransport } from "../src/shell/processing-consent/runtime";
 import { connectionBrowserTransport } from "../src/shell/connections/runtime";
-import { refundSupportBasePath, refundSupportReadPath } from "./subscription/contract";
+import {
+  pricePublicationPath,
+  refundSupportBasePath,
+  refundSupportReadPath,
+} from "./subscription/contract";
 import { deriveAnonymousSource } from "./anonymous-admission/operations";
 import { keywordRulePath, listCategoriesPath } from "../src/shell/categories/contract";
 import { atomicBatchOperation } from "../src/shell/operations/contract";
@@ -259,6 +263,7 @@ const postPaths = new Set<string>([
   ...replacementPaths,
   supportRecoveryPath,
   erasureSupportPath,
+  pricePublicationPath,
   "/web/privacy/erasure",
   microsoftProviderPaths.start,
   microsoftProviderPaths.status,
@@ -416,7 +421,10 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
   if (path === callbackPath || path === wompiBillingEventPath) {
     return Option.some(providerHeaders(request, path));
   }
-  if ([supportRecoveryPath, erasureSupportPath].includes(path) || refundSupportPath(path)) {
+  if (
+    [supportRecoveryPath, erasureSupportPath, pricePublicationPath].includes(path) ||
+    refundSupportPath(path)
+  ) {
     return Option.some(supportHeaders(request));
   }
   return Option.none();
@@ -624,7 +632,8 @@ const isPreflight = (request: Request, path: string, origin: Option.Option<strin
   request.method === "OPTIONS" && hasPreflight(path) && Option.isSome(origin);
 
 const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
-  (path === supportRecoveryPath || path === erasureSupportPath) && Option.isSome(origin);
+  [supportRecoveryPath, erasureSupportPath, pricePublicationPath].includes(path) &&
+  Option.isSome(origin);
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);

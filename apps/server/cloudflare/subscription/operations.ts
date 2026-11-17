@@ -6,13 +6,8 @@ import type {
   CanonicalPreparationWork,
 } from "../canonical-operations/contract";
 import { claimSubscriptionRenewal } from "./internal/subscription-renewal";
+import { type RefundAttempt, type RefundStartFailure } from "../../src/core/subscription/contract";
 import {
-  Price,
-  type RefundAttempt,
-  type RefundStartFailure,
-} from "../../src/core/subscription/contract";
-import {
-  BillingCollectionFailure,
   type RefundReadCall,
   type RefundStartCall,
   RefundSupportAdmission,
@@ -104,53 +99,6 @@ export const executeSubscriptionRenewalAdmission = (
     Effect.orElseSucceed(() => new Response(null, { status: 503 }))
   );
 };
-
-/** Trusted operator publication replaces the selected offer while preserving every historical Price. */
-export const publishWeeklyPrice = (
-  input: Readonly<{ db: D1Database; price: Price }>
-): Effect.Effect<void, BillingCollectionFailure> =>
-  Effect.gen(function* () {
-    const encoded = yield* Schema.encodeEffect(Price)(input.price).pipe(
-      Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
-    );
-    if (encoded.billingPeriod !== "weekly") {
-      return yield* new BillingCollectionFailure({ cause: Option.none() });
-    }
-    const terms = yield* Schema.encodeEffect(
-      Schema.fromJsonString(
-        Schema.Struct({
-          ...Price.fields.renewalTerms.fields,
-          paymentMethods: Price.fields.paymentMethods,
-        })
-      )
-    )({ ...input.price.renewalTerms, paymentMethods: input.price.paymentMethods }).pipe(
-      Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
-    );
-    yield* Effect.tryPromise({
-      try: () =>
-        input.db.batch([
-          input.db
-            .prepare(`INSERT INTO subscription_prices
-      (id, amount, currency, billing_period, service_market, tax_treatment, terms_json, published_order)
-      VALUES (?, ?, ?, 'weekly', ?, ?, ?, NULL)`)
-            .bind(
-              encoded.id,
-              encoded.money.amount,
-              encoded.money.currency,
-              encoded.serviceMarket,
-              encoded.taxTreatment,
-              terms
-            ),
-          input.db.prepare(
-            "UPDATE subscription_prices SET published_order = NULL WHERE published_order = 1"
-          ),
-          input.db
-            .prepare("UPDATE subscription_prices SET published_order = 1 WHERE id = ?")
-            .bind(encoded.id),
-        ]),
-      catch: (cause) => new BillingCollectionFailure({ cause: Option.some(cause) }),
-    });
-  });
 
 /** Prepare an idempotent same-User cancellation with its collection fence and accountability. */
 export const prepareSubscriptionCancellation = (

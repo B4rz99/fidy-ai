@@ -1,8 +1,32 @@
+from contextlib import contextmanager
+from pathlib import Path
+import tempfile
 import unittest
-from run import BOUNDARIES, compare
+from unittest.mock import patch
+
+from run import BOUNDARIES, compare, observation
 
 
 class ReferenceReport(unittest.TestCase):
+    def test_failed_preview_releases_native_fixture_images(self):
+        images = []
+
+        @contextmanager
+        def preview(args, cwd, env, log):
+            if "TMPDIR" in env:
+                image = Path(env["TMPDIR"]) / "fixture.sqlite"
+                image.touch()
+                images.append(image)
+            yield
+
+        with tempfile.TemporaryDirectory() as destination:
+            root = Path(destination)
+            with patch("run.serve", preview), patch("run.prepare", side_effect=TimeoutError):
+                with self.assertRaises(TimeoutError):
+                    observation(root, {}, root)
+            self.assertEqual(len(images), 1)
+            self.assertFalse(images[0].parent.exists())
+
     def rows(self, samples):
         return [
             {"variant": variant, "status": "ok", "timings": {k: value for k in BOUNDARIES}}

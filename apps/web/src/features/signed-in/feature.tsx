@@ -1,10 +1,11 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Link, Outlet, useRouter } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { Cause, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ComponentProps, type JSX, type ReactNode, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { ApplicationSurface } from "@/ui/components/application";
+import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 import { SignedInBrand, SignedInNavigation } from "./navigation";
@@ -12,36 +13,62 @@ import { LogoutFailure } from "./logout-failure";
 import { CompactNavigation } from "./compact-navigation";
 import { useDesktopNavigation } from "./navigation-viewport";
 
-export const AccessRefused = (): JSX.Element => (
-  <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
-    <Alert className="max-w-md" variant="destructive">
-      <AlertTitle>Acceso no autorizado</AlertTitle>
+export const AccessRefused = ({ withdrawn }: Readonly<{ withdrawn: boolean }>): JSX.Element => (
+  <main className="mx-auto flex max-w-3xl flex-col items-start gap-6 px-5 py-12">
+    <h1 className="text-2xl font-semibold tracking-tight">
+      {withdrawn ? "Esta sección no está disponible" : "Acceso no autorizado"}
+    </h1>
+    <Alert variant={withdrawn ? "information" : "destructive"}>
+      <AlertTitle>
+        {withdrawn
+          ? "Tu autorización de tratamiento está retirada"
+          : "No pudimos autorizar esta acción"}
+      </AlertTitle>
       <AlertDescription>
-        <p>No pudimos autorizar esta acción.</p>
-        <p>
-          Si retiraste tu autorización de tratamiento, puedes consultar tus datos desde Privacidad.
-          En otro caso, intenta iniciar sesión de nuevo.
-        </p>
-        <Link to="/settings/privacy" className="underline">
-          Revisar privacidad
-        </Link>
-        <Link to="/login" reloadDocument className="underline">
-          Iniciar sesión
-        </Link>
+        {withdrawn
+          ? "Puedes consultar gratis tus transacciones guardadas en modo de solo lectura. Esta consulta no reactiva el tratamiento de tus datos."
+          : "Puedes intentar consultar tus transacciones guardadas o revisar Privacidad. Si tu sesión terminó, inicia sesión de nuevo."}
       </AlertDescription>
     </Alert>
+    <div className="flex flex-wrap gap-3">
+      <Button
+        nativeButton={false}
+        contentLayout="wrap"
+        render={<Link to="/app/transactions" search={{}} />}
+      >
+        Ver mis transacciones
+      </Button>
+      <Button
+        nativeButton={false}
+        variant="outline"
+        contentLayout="wrap"
+        render={<Link to="/settings/privacy" />}
+      >
+        Revisar privacidad
+      </Button>
+    </div>
+    <Button
+      nativeButton={false}
+      variant="link"
+      size="label"
+      render={<Link to="/login" reloadDocument />}
+    >
+      Iniciar sesión
+    </Button>
   </main>
 );
 
 /** Shared application navigation; privacy routes can retain it independently of product access. */
 type ApplicationShellProps = Readonly<
   Pick<ComponentProps<"div">, "children"> & {
+    readOnly: boolean;
     reviewPendingCount: ReactNode;
     prepareNavigation: (destination: string) => void;
   }
 >;
 export const ApplicationShell = ({
   children,
+  readOnly,
   reviewPendingCount,
   prepareNavigation,
 }: ApplicationShellProps): JSX.Element => {
@@ -71,10 +98,11 @@ export const ApplicationShell = ({
   return (
     <ApplicationSurface>
       <aside className="signed-in-sidebar application-sidebar">
-        <SignedInBrand />
+        <SignedInBrand readOnly={readOnly} />
         {desktop ? (
           <div className="application-desktop-navigation">
             <SignedInNavigation
+              readOnly={readOnly}
               loggingOut={status.waiting}
               onLogout={onLogout}
               reviewPendingCount={reviewPendingCount}
@@ -83,6 +111,7 @@ export const ApplicationShell = ({
           </div>
         ) : (
           <CompactNavigation
+            readOnly={readOnly}
             loggingOut={status.waiting}
             onLogout={onLogout}
             reviewPendingCount={reviewPendingCount}
@@ -91,10 +120,7 @@ export const ApplicationShell = ({
         )}
         {failed ? <LogoutFailure /> : null}
       </aside>
-      <div className="application-workspace">
-        <Outlet />
-        {children}
-      </div>
+      <div className="application-workspace">{children}</div>
     </ApplicationSurface>
   );
 };
@@ -104,5 +130,5 @@ export const SignedInContent = ({
   children,
 }: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
   const { authentication } = useSession();
-  return authentication === "expired" ? <AccessRefused /> : <>{children}</>;
+  return authentication === "expired" ? <AccessRefused withdrawn={false} /> : <>{children}</>;
 };

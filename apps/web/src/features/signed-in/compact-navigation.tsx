@@ -5,11 +5,13 @@ import { ApplicationMenuAction, ApplicationWordmark } from "@/ui/components/appl
 import { SignedInNavigation } from "./navigation";
 
 export const CompactNavigation = ({
+  readOnly,
   loggingOut,
   onLogout,
   reviewPendingCount,
   prepareNavigation,
 }: Readonly<{
+  readOnly: boolean;
   loggingOut: boolean;
   onLogout: () => void;
   reviewPendingCount: ReactNode;
@@ -39,6 +41,7 @@ export const CompactNavigation = ({
         <ApplicationWordmark />
       </div>
       <SignedInNavigation
+        readOnly={readOnly}
         loggingOut={loggingOut}
         onLogout={onLogout}
         reviewPendingCount={reviewPendingCount}

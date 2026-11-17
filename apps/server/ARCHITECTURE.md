@@ -78,6 +78,12 @@ receipt in the same local transaction. Budget status reads combine inherited cap
 Transaction owner's Effective Transactions in one snapshot. Only outflows in the matching Category
 and Currency count toward a cap.
 
+The Core minute Cron calls Maintenance to traverse the lifetime registry and check Directory,
+Pricing and independent Erasure. A private check inspects retained owner work and repairs the
+earliest required alarm. Owner alarms execute the continuation. Maintenance persists its cursor
+before each batch and reports interrupted or unanswered checks as unknown. A repaired alarm and
+a confirmed domain outcome have separate evidence.
+
 Unmigrated paths still use D1. Canonical mutation units commit live authority, owner
 changes, accounting and Audit together. Database guards enforce ownership and revisions alongside
 per-User coordination. Shared reads preserve the same authorization and accountability boundaries.

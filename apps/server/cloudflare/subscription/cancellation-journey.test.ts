@@ -16,7 +16,7 @@ const paidUser = Effect.fnUntraced(function* (runtime: Miniflare) {
   );
   const check = (): Effect.Effect<Awaited<ReturnType<typeof owner.fetch>>> =>
     native(() => owner.fetch("https://owner.internal/work/check", { method: "POST" }));
-  expect((yield* check()).status).toBe(200);
+  expect((yield* check()).status).toBe(204);
   const store = yield* native(() =>
     runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: user })
   );
@@ -245,11 +245,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           "CREATE TRIGGER unavailable_claim BEFORE UPDATE OF verification_count ON subscription_cancellations BEGIN SELECT RAISE(ABORT,'unavailable'); END"
         );
         const response = yield* check();
-        expect(yield* native(() => response.json())).toEqual({
-          attempted: 1,
-          failedFamilies: 0,
-          failedOffers: 0,
-        });
+        expect(response.status).toBe(204);
+        expect(response.headers.get("fidy-alarm-repaired")).toBe("1");
         const bindings = yield* native(() =>
           runtime.getBindings<{
             BILLING_COLLECTION_WORKFLOW: Workflow;

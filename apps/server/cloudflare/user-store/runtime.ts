@@ -1,15 +1,20 @@
 import { dispatchLocalBudget, isLocalBudgetOperation } from "../budgets/operations";
-import { cancelLocalSubscription, offerDueSourceCancellations } from "../subscription/operations";
+import {
+  cancelLocalSubscription,
+  offerDueSourceCancellations,
+  repairCancellationAlarm,
+} from "../subscription/operations";
 import { handleSourceCancellationWork } from "../subscription/runtime";
 import type { LocalSourceCancellationWork, WompiBindings } from "../subscription/contract";
 import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Result } from "effect";
 import { canonicalOperation } from "../routing/operations";
 import { dispatchLocalTransaction, isLocalTransactionOperation } from "../transactions/operations";
 import {
   canonicalAdmissionUnavailable,
   recoverLocalReceipts,
+  repairReceiptAlarm,
   runLocalMutation,
 } from "../canonical-admission/operations";
 import { observeUserRegistration, recoverUserWork, userStoreHistory } from "./operations";
@@ -19,7 +24,8 @@ import {
   storeReadinessUrl,
 } from "../runtime/sqlite/contract";
 
-const completedCheckStatus = 200;
+import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
+
 const uncertainCheckStatus = 503;
 type UserStoreEnvironment = WompiBindings &
   StoreReleaseEnvironment &
@@ -172,13 +178,22 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
       );
     }
-    if (command === "POST /work/check") {
-      if (!registered) {
-        return Promise.resolve(Response.json({ failedFamilies: 0, attempted: 0, failedOffers: 0 }));
-      }
-      return this.checkWork().then((summary) =>
-        Response.json(summary, {
-          status: summary.failedFamilies > 0 ? uncertainCheckStatus : completedCheckStatus,
+    if (ownerCheckRequest(request)) {
+      if (!registered) return Promise.resolve(ownerCheckResponse());
+      const storage = this.ctx.storage;
+      return this.runtime.runPromise(
+        Effect.gen(function* () {
+          const current = yield* Clock.currentTimeMillis;
+          const inspections = yield* Effect.forEach(
+            [repairReceiptAlarm(current, storage), repairCancellationAlarm(storage)],
+            Effect.result
+          );
+          if (inspections.some(Result.isFailure)) {
+            return new Response(null, { status: uncertainCheckStatus });
+          }
+          return ownerCheckResponse(
+            inspections.some((result) => Result.isSuccess(result) && result.success)
+          );
         })
       );
     }

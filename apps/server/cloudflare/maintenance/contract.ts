@@ -88,3 +88,21 @@ export const registerLifetimeUrl = "https://maintenance.invalid/lifetime/registe
 export const fenceLifetimeUrl = "https://maintenance.invalid/lifetime/fence";
 export const retireLifetimeUrl = "https://maintenance.invalid/lifetime/retire";
 export class UserRegistrationUnavailable extends Data.TaggedError("UserRegistrationUnavailable") {}
+
+export const watchdogUrl = "https://maintenance.invalid/watchdog";
+export const ownerCheckUrl = "https://owner.internal/work/check";
+const privateCheckRequest =
+  (url: string) =>
+  (request: Request): boolean =>
+    request.url === url &&
+    request.method === "POST" &&
+    (request.body === null || request.headers.get("content-length") === "0");
+export const completedCheckStatus = 204;
+export const ownerCheckResponse = (repaired = false): Response =>
+  new Response(null, {
+    status: completedCheckStatus,
+    headers: { "fidy-alarm-repaired": repaired ? "1" : "0" },
+  });
+
+export const ownerCheckRequest = privateCheckRequest(ownerCheckUrl);
+export const watchdogRequest = privateCheckRequest(watchdogUrl);

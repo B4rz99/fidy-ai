@@ -2,8 +2,11 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "bb0e7e1c790222676e292e2904c1e961476c2f5bad4a76b3e53f059653e6f036";
+const expectedEdgePolicyDigest = "42b70bd4abd3750850e24e1cdfc7f5f68477bf7892b2402e5be86bd01ee973cf";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/maintenance/internal/watchdog.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/tokens/operations.ts", import.meta.url)
   ).text(),

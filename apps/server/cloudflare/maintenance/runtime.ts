@@ -1,3 +1,5 @@
+import { reportWatchdog, runWatchdog } from "./internal/watchdog";
+import type { SharedBindings } from "../storage-bootstrap/contract";
 import {
   executeDueSchedule,
   handleLifetimeRegistration,
@@ -20,6 +22,7 @@ import {
   type ScheduledOperation,
   type ScheduledWorkFailed,
   maintenanceName,
+  watchdogRequest,
 } from "./contract";
 
 import { sweepCanonicalAdmission } from "../canonical-admission/runtime";
@@ -348,9 +351,14 @@ export const runEmailMaintenance = (
     });
   }).pipe(Effect.mapError(() => new EmailScheduleUnavailable()));
 
-export class Maintenance extends DurableObject<StoreReleaseEnvironment> {
+type MaintenanceEnvironment = StoreReleaseEnvironment &
+  SharedBindings &
+  Partial<Readonly<{ RECOVERY_ISOLATION: string }>>;
+export class Maintenance extends DurableObject<MaintenanceEnvironment> {
   private readonly runtime;
-  constructor(state: DurableObjectState, env: StoreReleaseEnvironment) {
+  private sweeping = false;
+  private readonly pending = new Set<Promise<unknown>>();
+  constructor(state: DurableObjectState, env: MaintenanceEnvironment) {
     super(state, env);
     this.runtime = createStoreRuntime({
       storage: state.storage,
@@ -367,19 +375,46 @@ export class Maintenance extends DurableObject<StoreReleaseEnvironment> {
       );
     }
   }
+  private watchdog(request: Request): Promise<Response> {
+    if (this.env.RECOVERY_ISOLATION === "isolated") {
+      return Promise.resolve(new Response(null, { status: 403 }));
+    }
+    const raw = request.headers.get("x-maintenance-scheduled-at");
+    const scheduled = Number(raw);
+    if (raw === null || !Number.isSafeInteger(scheduled) || scheduled <= 0) {
+      return Promise.resolve(new Response(null, { status: 400 }));
+    }
+    if (this.sweeping) return Promise.resolve(new Response(null, { status: 204 }));
+    if (this.pending.size > 0) return Promise.resolve(new Response(null, { status: 503 }));
+    this.sweeping = true;
+    return this.runtime
+      .runPromise(
+        runWatchdog(this.env, scheduled, this.pending).pipe(
+          Effect.tap(() => reportWatchdog()),
+          Effect.timeout("55 seconds")
+        )
+      )
+      .then(
+        () => new Response(null, { status: 204 }),
+        () => new Response(null, { status: 503 })
+      )
+      .finally(() => {
+        this.sweeping = false;
+      });
+  }
   override fetch(request: Request): Promise<Response> {
-    if (this.ctx.id.name === maintenanceName && lifetimeRequest(request)) {
+    if (this.ctx.id.name !== maintenanceName) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (watchdogRequest(request)) return this.watchdog(request);
+    if (lifetimeRequest(request)) {
       return this.runtime.runPromise(
         handleLifetimeRegistration(request).pipe(
           Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
         )
       );
     }
-    if (
-      this.ctx.id.name !== maintenanceName ||
-      request.method !== "GET" ||
-      request.url !== storeReadinessUrl
-    ) {
+    if (request.method !== "GET" || request.url !== storeReadinessUrl) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
     return this.runtime.runPromise(

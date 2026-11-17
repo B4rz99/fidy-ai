@@ -73,13 +73,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         )
       );
       const check = yield* native(() =>
-        users.getByName(fresh).fetch("https://user.invalid/work/check", { method: "POST" })
+        users.getByName(fresh).fetch("https://owner.internal/work/check", { method: "POST" })
       );
-      expect(yield* native(() => check.json())).toEqual({
-        failedFamilies: 0,
-        attempted: 0,
-        failedOffers: 0,
-      });
+      expect(check.status).toBe(204);
+      expect(check.headers.get("fidy-alarm-repaired")).toBe("0");
       expect(yield* native(() => local.exec("SELECT lifetime_registered FROM users"))).toEqual([
         { lifetime_registered: 0 },
       ]);

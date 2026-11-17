@@ -274,3 +274,44 @@ it(
     ),
   30_000
 );
+
+it("delivers the same scheduled minute to native Maintenance when the legacy executor fails and leaves isolated installations closed", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* awaitPromise(() => databases.acquire());
+      const calls: Array<Readonly<{ name: string; url: string; scheduled: string }>> = [];
+      const env = {
+        ...environment(db),
+        MAINTENANCE: {
+          getByName: (name: string): Pick<Fetcher, "fetch"> => ({
+            fetch: (input: RequestInfo | URL): Promise<Response> => {
+              const request = new Request(input);
+              calls.push({
+                name,
+                url: request.url,
+                scheduled: request.headers.get("x-maintenance-scheduled-at") ?? "",
+              });
+              return Promise.resolve(new Response(null, { status: 204 }));
+            },
+          }),
+        },
+      };
+      const controller = {
+        cron: "* * * * *",
+        scheduledTime: 60000,
+        noRetry: (): void => undefined,
+      };
+      yield* awaitPromise(() => expect(coreWorker.scheduled(controller, env)).rejects.toThrow());
+      expect(calls).toEqual([
+        {
+          name: "core-maintenance-v1",
+          url: "https://maintenance.invalid/watchdog",
+          scheduled: "60000",
+        },
+      ]);
+      yield* awaitPromise(() =>
+        coreWorker.scheduled(controller, { ...env, RECOVERY_ISOLATION: "isolated" })
+      );
+      expect(calls).toHaveLength(1);
+    })
+  ));

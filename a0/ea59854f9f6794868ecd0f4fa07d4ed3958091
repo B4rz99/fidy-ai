@@ -1,0 +1,60 @@
+docs/operations/cloudflare-background-work.md
+  s_a1be23a656acf0::t_4f474a1ca39869 178-186
+apps/server/cloudflare/subscription/cancellation-recovery.test-fixture.ts
+  s_a1be23a656acf0::t_3a7e999effedb8 52,106-112
+  s_a1be23a656acf0::t_2747e1594ca088 1,9,19,31-34,42,53,97,100,102,208-209,240-244,257,265-277
+  s_a1be23a656acf0::t_39276cd6f9ac76 51
+  s_a1be23a656acf0::t_9d9f33929f2197 98-99
+  s_a1be23a656acf0::t_42c78484c0ddc8 101
+  s_a1be23a656acf0::t_8e773c8434af6f 103-105
+  s_a1be23a656acf0::t_cf64732f769fff 113
+  s_a1be23a656acf0::t_54bbd8531b2d52 278
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_a1be23a656acf0::t_3a7e999effedb8 256
+  s_a1be23a656acf0::t_2747e1594ca088 20,255
+apps/server/cloudflare/subscription/internal/billing-observation.ts
+  s_a1be23a656acf0::t_2747e1594ca088 18,184,246,255,259,262
+  s_a1be23a656acf0::t_3a7e999effedb8 185,247,256
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_2747e1594ca088 15,37
+  s_a1be23a656acf0::t_4f474a1ca39869 220,238-248
+apps/server/cloudflare/subscription/cancellation-journey.test.ts
+  s_a1be23a656acf0::t_2747e1594ca088 56-122,124-222,229-230,247-254,256,259
+apps/server/cloudflare/subscription/cancellation-recovery.test.ts
+  s_a1be23a656acf0::t_2747e1594ca088 51,55,113-127,135,203-211
+  s_a1be23a656acf0::t_dacaf1828250be 212-214
+apps/server/cloudflare/subscription/contract.ts
+  s_a1be23a656acf0::t_2747e1594ca088 242-248
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_ede1246bca7f7a 3-7,109,126,241,246,305,328,343-366
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_a1be23a656acf0::t_04c15bd819301a 13,1273-1275
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_405a550d7d99f5 1749-1751
+apps/server/cloudflare/runtime/sqlite/operations.ts
+  s_a1be23a656acf0::t_92d85834ada429 289-299
+apps/server/cloudflare/subscription/internal/local-cancellation.ts
+  s_a1be23a656acf0::t_384461c510b69d 1,47-54,57,101
+apps/server/cloudflare/subscription/operations.ts
+  s_a1be23a656acf0::t_52c06cc2169633 1,14-18,129-153
+apps/server/cloudflare/subscription/weekly-renewal.test.ts
+  s_a1be23a656acf0::t_c05cc768d88244 1218,1292,1294
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_0c7522817a1a61 1,8-12,51,68-111,118-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a0ea59854f9f6794868ecd0f4fa07d4ed3958091",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

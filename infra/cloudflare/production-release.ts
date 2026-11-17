@@ -36,7 +36,7 @@ import {
 import { releaseCleanup } from "./release-cleanup";
 import { freeTierWorkerObservability } from "./worker-observability";
 import { type RollbackPort, RollbackReceipt, releaseRollback } from "./release-rollback";
-import { type WorkerResources, rollbackCompatible } from "./rollback-compatibility";
+import { rollbackCompatible, verifiedVersionResources } from "./rollback-compatibility";
 import {
   type Deployment,
   type ReleasePort,
@@ -59,19 +59,6 @@ const CreateResponse = Schema.Struct({ success: Schema.Literal(true), result: Ap
 const DeployableResponse = Schema.Struct({
   success: Schema.Literal(true),
   result: Schema.Struct({ items: Schema.Array(Schema.Struct({ id: VersionId })) }),
-});
-const VersionResponse = Schema.Struct({
-  success: Schema.Literal(true),
-  result: Schema.Struct({
-    id: VersionId,
-    resources: Schema.Struct({
-      bindings: Schema.Record(Schema.String, Schema.Unknown),
-      script_runtime: Schema.Struct({
-        migration_tag: Schema.optional(Schema.String),
-        exports: Schema.Record(Schema.String, Schema.Unknown),
-      }),
-    }),
-  }),
 });
 const ResourceIdentity = Schema.Struct({ logicalId: Schema.String });
 const ResourceLifecycle = Schema.Struct({
@@ -1474,7 +1461,7 @@ const promote = Effect.fn(function* (port: ReleasePort, env: Config) {
 const versionResources = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  worker: { name: string; id: string }
+  worker: { name: string; id: string; revision: string }
 ) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(worker.name)}/versions/${worker.id}`;
   const raw = yield* providerJson(
@@ -1482,15 +1469,9 @@ const versionResources = Effect.fn(function* (
       headers: { authorization: `Bearer ${env.token}` },
     })
   ).pipe(Effect.provideService(HttpClient.HttpClient, client));
-  const version = yield* Schema.decodeUnknownEffect(VersionResponse)(raw);
-  if (version.result.id !== worker.id) {
-    return yield* Effect.fail(Error("Worker version identity changed"));
-  }
-  return {
-    bindings: version.result.resources.bindings,
-    migrationTag: version.result.resources.script_runtime.migration_tag ?? "",
-    exports: version.result.resources.script_runtime.exports,
-  } satisfies WorkerResources;
+  return yield* Effect.try(() =>
+    verifiedVersionResources({ raw, versionId: worker.id, revision: worker.revision })
+  );
 });
 const retentionCompatibilityPort = (
   port: ReleasePort,
@@ -1601,8 +1582,16 @@ const rollbackCompatibility = Effect.fn(function* (
   ];
   let compatible = true;
   for (const pair of pairs) {
-    const stable = yield* versionResources(env, client, { name: pair.name, id: pair.stable });
-    const candidate = yield* versionResources(env, client, { name: pair.name, id: pair.candidate });
+    const stable = yield* versionResources(env, client, {
+      name: pair.name,
+      id: pair.stable,
+      revision: release.snapshot.stableRevision,
+    });
+    const candidate = yield* versionResources(env, client, {
+      name: pair.name,
+      id: pair.candidate,
+      revision: release.snapshot.revision,
+    });
     compatible &&= rollbackCompatible({
       stable,
       candidate,

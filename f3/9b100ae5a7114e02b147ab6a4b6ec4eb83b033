@@ -1,0 +1,24 @@
+apps/server/cloudflare/maintenance/contract.ts
+  s_a1be23a656acf0::t_f9dd97d8ffc52a 89
+apps/server/cloudflare/maintenance/operations.ts
+  s_a1be23a656acf0::t_f9dd97d8ffc52a 15
+  s_a1be23a656acf0::t_c5a19a73cdffaf 8
+apps/server/cloudflare/maintenance/lifetime-registry.test.ts
+  s_a1be23a656acf0::t_e292394dc3bcc1 53-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f39b100ae5a7114e02b147ab6a4b6ec4eb83b033",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "024ffef96094beac442e3687058d980221816180057e724d01ca733f9c84c24f";
+const expectedEdgePolicyDigest = "bb0e7e1c790222676e292e2904c1e961476c2f5bad4a76b3e53f059653e6f036";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/tokens/operations.ts", import.meta.url)
@@ -317,7 +317,13 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/erasure-store/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(
+    new URL("../../apps/server/cloudflare/maintenance/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
     new URL("../../apps/server/cloudflare/maintenance/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/maintenance/runtime.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/subscription/runtime.ts", import.meta.url)

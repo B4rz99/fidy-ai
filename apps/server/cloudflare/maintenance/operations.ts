@@ -5,10 +5,9 @@ import { withStoreAdmission } from "../runtime/sqlite/operations";
 import {
   type ScheduledActivity,
   ScheduledWorkFailed,
-  UserRegistrationUnavailable,
   fenceLifetimeUrl,
-  maintenanceName,
   registerLifetimeUrl,
+  registrationAcceptedStatus,
   retireLifetimeUrl,
 } from "./contract";
 import type { StoreHistory } from "../runtime/sqlite/contract";
@@ -64,30 +63,13 @@ export const maintenanceStoreHistory: StoreHistory = {
   ],
 };
 
-const registeredStatus = 204;
 const conflictStatus = 409;
 // A delayed register can reach Maintenance only within this window. Erasure may discard the
 // retired fence after this and the other original windows have closed and retirement is acknowledged.
 const maximumRegistrationAgeMs = 60_000;
 
-/** Register outside the User transaction, before committing activation or accepting work. */
-export const registerUserLifetime = Effect.fn(function* (
-  maintenance: Pick<DurableObjectNamespace, "getByName">,
-  userId: UserId
-) {
-  const issuedAt = yield* Clock.currentTimeMillis;
-  const response = yield* Effect.tryPromise((signal) =>
-    maintenance.getByName(maintenanceName).fetch(registerLifetimeUrl, {
-      method: "POST",
-      headers: { "fidy-user-id": userId, "fidy-registration-issued-ms": String(issuedAt) },
-      signal,
-    })
-  );
-  if (response.status !== registeredStatus) return yield* new UserRegistrationUnavailable();
-});
-
 const acknowledgement = (matched: boolean): Response =>
-  new Response(null, { status: matched ? registeredStatus : conflictStatus });
+  new Response(null, { status: matched ? registrationAcceptedStatus : conflictStatus });
 
 export const lifetimeRequest = (request: Request): boolean =>
   request.method === "POST" &&

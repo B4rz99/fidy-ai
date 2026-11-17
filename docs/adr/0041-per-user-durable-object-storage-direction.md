@@ -1,9 +1,9 @@
 # Per-User Durable Objects own application storage and atomic execution
 
-- **Status:** Accepted migration direction, User storage/execution, routing, shared facts,
-  background discovery, account erasure and operations; acceptance/cutover and migration
-  implementation remain open. Backup restoration and a new complete User-data export are outside
-  this migration.
+- **Status:** Accepted implementation-ready migration design, including User storage/execution,
+  routing, shared facts, background discovery, account erasure, operations and acceptance/cutover.
+  Implementation and measured acceptance remain subsequent work. Backup restoration and a new
+  complete User-data export are outside this migration.
 - **Supersedes:** The D1 storage destination and coordination-only Durable Object role in
   [ADR 0026](0026-cloudflare-native-production-replatform.md), and the initial-platform restriction
   in [ADR 0039](0039-fresh-read-performance-contract.md).
@@ -254,7 +254,8 @@ backup restoration, including individual and coordinated object restores, restri
 restore procedures and selective historical extraction/import. Native PITR availability is not
 a supported Fidy recovery procedure. Severe accidental data loss may have no supported recovery
 path initially. A future restoration capability requires a separate design that preserves erasure.
-This does not remove current-runtime D1 safeguards or authorize destructive cutover.
+Current-runtime D1 safeguards remain until implementation changes the runtime. The initial
+fresh-install data disposition is specified below.
 
 Keep current durable owner intent, exact external-effect records, writer tracking and bounded
 retries. A process restart does not rewind storage. Do not introduce a new always-on independent
@@ -373,7 +374,8 @@ participating. Apply the same rule to rollback. Schema migration cannot manufact
 an authorized human previews and approves the exact anonymised candidate through the private CLI.
 Publication, retry, withdrawal and erasure preserve the accepted sample identity, deadlines and
 writer guards. Implementation must replace both automatic approval and the existing unconditional
-sample deletion prohibition; cutover must explicitly define how retained samples are handled.
+sample deletion prohibition. The initial fresh installation discards all existing samples rather
+than importing or approving them; future samples follow the human-approval and withdrawal protocol.
 
 Use a private CLI with short-lived, capability-specific operator authority and attributable evidence
 for metadata inspection, exact migration retry, retained-work continuation, reconciliation, erasure
@@ -393,31 +395,90 @@ describe D1 until that implementation exists.
 
 ## Adoption evidence
 
-Migration adoption requires measured improvement without correctness regressions. The existing
-performance targets remain follow-on objectives; reaching 150 ms is not a prerequisite for this
-storage migration. Measurements distinguish backend processing, complete HTTP responses and
-click-to-fresh-usable-view latency. [ADR 0039](0039-fresh-read-performance-contract.md) retains the
-fresh-read definitions, workload envelope and separate backend/browser targets; this decision does
-not turn its 150 ms backend target into a browser-latency claim.
+The [acceptance and cutover decision](https://github.com/B4rz99/fidy-ai/issues/2205#issuecomment-6953536107)
+requires approximately 2× lower p95 latency, with 1.8× as the minimum for every comparable acceptance
+case: `D1 p95 / DO p95 >= 1.8`. Apply the gate separately to operations, supported query shapes,
+fixture sizes, isolated/loaded work, warm/cold cohorts, network profiles and timing boundaries.
+Larger workloads, mutations, cold starts and browser journeys have the same minimum; an aggregate
+improvement or a no-regression allowance cannot hide a failing case. Correctness and security
+invariants remain independent requirements.
 
-The [infrastructure prototype evidence](https://github.com/B4rz99/fidy-ai/issues/1887) motivates
-reducing remote boundaries, but does not establish full-lifetime hosted acceptance, a performance
-benefit from per-User partitioning, or complete migration guarantees. Acceptance must
-cover isolation, atomicity, revocation, retries, discovery, schema evolution and account erasure,
-alongside representative latency and load. Exact thresholds and cutover procedures remain open.
+Use a pinned, contemporaneously measured D1 baseline and equivalent domain behavior, authority,
+accountability, fixtures and complete results. Measurements distinguish backend processing,
+complete HTTP responses and click-to-fresh-usable-view latency. Start with at least 30 comparable
+observations per variant per case, report empirical nearest-rank p95 and repeat unclear results
+without selecting favorable runs. This sample floor does not establish statistical confidence.
+Record failed and partial attempts, errors, throttling and completed versus offered work; delayed
+dispatch or reduced throughput cannot manufacture a latency pass. Cold cohorts need observed
+lifecycle evidence, with unknown runtime state reported as missing evidence.
+
+Keep network and provider delays inside the timing boundary that includes them. A case that cannot
+reach 1.8× has not passed; subtracting those delays or substituting server-only gains would change
+the decision. New DO-only probes without comparable D1 behavior retain their accepted absolute
+correctness, capacity and coverage requirements, with actual measurements reported rather than an
+invented ratio. Security, expiry and provider-settlement deadlines do not shrink with this target.
+
+[ADR 0039](0039-fresh-read-performance-contract.md) retains the fresh-read definitions, supported
+query shapes, full-lifetime fixtures and 20-active-User workload. The separate 1,000-store watchdog
+benchmark preserves attempted-check coverage versus completed recovery. Existing absolute
+performance targets remain follow-on objectives; reaching 150 ms is not a prerequisite for this
+migration, nor is its backend target a browser-latency claim.
+
+The [infrastructure prototype evidence](https://github.com/B4rz99/fidy-ai/issues/1887) established
+roughly 2–2.6× complete-HTTP p95 improvement on small hosted fixtures, alongside local full-lifetime
+and query-shape evidence. Reuse that architectural justification and its valid fixtures/harnesses;
+it does not establish finished-implementation acceptance, browser or verified cold-start performance,
+hosted full-lifetime/shared-load behavior, partitioning benefit or complete migration guarantees.
+The resolution specifies the remaining measurements and owner-by-owner correctness evidence,
+including isolation, atomicity, revocation, retries, directory races, discovery, schema failures,
+account erasure and private operator authority. Missing or failed evidence remains explicit.
+
+## Fresh installation and cutover
+
+The user declared the existing application data disposable and accepted downtime. Start with a
+fresh D1-free installation and discard all existing development data and IngestSamples. No
+retained-data importer, live transfer, dual-write phase, legacy sample review or old-D1 fallback is
+required. This one-time starting-state decision does not authorize resetting future retained User
+data or weakening its erasure, retention and migration obligations.
+
+Complete the integrated runtime and local verification before provisioning through the protected
+release tooling with normal admission closed. Provision SQLite classes/namespaces and bindings,
+including independent erasure, then initialize shared schema and release seed facts. Initial schema
+does not establish User authority. An explicit first-install path handles absent stable deployments;
+ordinary release capture and compatibility guards remain effective for subsequent releases.
+Namespace lifecycle changes use the pinned deployment tool's verified native support separately
+from application SQL migrations.
+
+Stop or fence any old disposable producers so late callbacks, queued work or uploads cannot
+populate the new installation. Verify exact resource identities, exposure, schema readiness and
+DO-native synthetic work through the real ingress and background graph, then complete the hosted
+performance and correctness gates before opening intended admission. Product/provider launch
+controls remain separate. Retire only the inventoried obsolete application resources and samples;
+remove D1 runtime, binding, maintenance, smoke and operational dependencies. Temporary D1 benchmark
+resources are comparison evidence, not a runtime fallback. A D1 quota-deferral exception cannot
+satisfy DO acceptance.
+
+The first installation has no required old-D1 rollback target. After new retained state exists,
+preserve current state during incidents: isolate the affected capability, inspect bounded metadata,
+repair through guarded owner operations or a forward release, and verify the result. Code-only
+rollback requires a tested target compatible with every reachable schema, protocol and Category
+revision and with the resource lifecycle. It cannot restore deleted resources, return to stale D1,
+down-migrate storage or justify replaying an uncertain external effect. Normal releases preserve
+resource/namespace identities and account for actual Worker/object version overlap.
 
 ## Design boundary
 
-The [migration map](https://github.com/B4rz99/fidy-ai/issues/2198) owns the remaining
-acceptance/cutover and implementation-handoff decisions. The resolved User storage/execution,
-identity routing, shared catalog, background discovery, account erasure and schema/operations
-tickets own their detailed decision records. The
+The [migration map](https://github.com/B4rz99/fidy-ai/issues/2198) is a completed design handoff.
+The resolved User storage/execution, identity routing, shared catalog, background discovery,
+account erasure, schema/operations and acceptance/cutover tickets own their detailed decision records.
+The acceptance resolution assigns the owner/adaptor workstreams, implementation order, repeatable
+operational procedures and required evidence. The
 [platform constraints research](https://github.com/B4rz99/fidy-ai/issues/2199#issuecomment-6839405060)
 records source-backed findings and outstanding evidence. Dated research and decision-ticket detail
 remain on the tracker.
 
-The map produces an implementation-ready design. This ADR records the chosen boundaries; it does
-not establish that the migration is implemented or authorize a destructive data reset. Fidy is
-unreleased and needs no unnecessary backward compatibility, while any retained data still needs an
-explicit cutover disposition. Architecture documents continue to describe the current runtime
-until implementation changes it.
+This ADR records the chosen boundaries and the explicit disposable-data cutover scope; it does not
+establish that migration code exists, measurements pass or deployment has occurred. Fidy is
+unreleased and needs no unnecessary backward compatibility. Architecture documents and runtime
+runbooks continue to describe the current implementation until it changes; the implementation
+effort must publish executable procedures beside the actual commands.

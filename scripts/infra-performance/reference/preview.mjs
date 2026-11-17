@@ -14,4 +14,5 @@ const server = await preview({
     },
   },
 });
-process.on("SIGTERM", () => server.close());
+await new Promise((resolve) => process.once("SIGTERM", resolve));
+await server.close();

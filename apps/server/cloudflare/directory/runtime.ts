@@ -27,8 +27,10 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
   constructor(state: DurableObjectState, env: DirectoryEnvironment) {
     super(state, env);
     this.runtime = createStoreRuntime(state.storage);
-    state.blockConcurrencyWhile(() =>
-      this.runtime.runPromise(openSqliteStore(directoryHistory, env.CF_VERSION_METADATA.id))
+    state.waitUntil(
+      state.blockConcurrencyWhile(() =>
+        this.runtime.runPromise(openSqliteStore(directoryHistory, env.CF_VERSION_METADATA.id))
+      )
     );
   }
   override fetch(request: Request): Promise<Response> {

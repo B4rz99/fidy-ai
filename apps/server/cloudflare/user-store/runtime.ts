@@ -13,8 +13,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
     super(state, env);
     this.runtime = createStoreRuntime(state.storage);
-    state.blockConcurrencyWhile(() =>
-      this.runtime.runPromise(openSqliteStore(userStoreHistory, env.CF_VERSION_METADATA.id))
+    state.waitUntil(
+      state.blockConcurrencyWhile(() =>
+        this.runtime.runPromise(openSqliteStore(userStoreHistory, env.CF_VERSION_METADATA.id))
+      )
     );
   }
 

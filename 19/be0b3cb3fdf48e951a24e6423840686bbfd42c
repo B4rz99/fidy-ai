@@ -1,0 +1,23 @@
+apps/web/src/app/review-recovery.test.ts
+  s_153bcea5fa2b5c::t_5df34d29f86d16 178,193-196
+apps/web/src/features/needs-review/resubmission.tsx
+  s_153bcea5fa2b5c::t_26074dc98c05d3 10,19-21
+apps/web/src/features/needs-review/FEATURE.md
+  s_153bcea5fa2b5c::t_26074dc98c05d3 42-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "19be0b3cb3fdf48e951a24e6423840686bbfd42c",
+  "prompts": {},
+  "sessions": {
+    "s_153bcea5fa2b5c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9fa-1173-7e52-8aa2-aad3dd7b0a08",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

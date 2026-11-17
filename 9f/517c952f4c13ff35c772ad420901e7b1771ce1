@@ -1,0 +1,57 @@
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 220,552,565,989,993-995,997-999
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 5,10-33
+apps/server/cloudflare/dashboard/operations.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1,465-470
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 231-232
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 559-723,741
+apps/server/cloudflare/transactions/internal/sqlite-aggregate.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1-5,66-71
+apps/server/cloudflare/dashboard/internal/sqlite-dashboard.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1-170
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_9a7fafe8fd25af 81
+  s_a1be23a656acf0::t_b424e5e7bc7c3c 82-86
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1,86-89,111-112,114-118
+apps/server/cloudflare/transactions/internal/dashboard-query.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1,83,90-91,94-96,99,105-106,110-112,115-127,146-149
+apps/server/cloudflare/retained-planning.test-fixture.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1,7,66-87,100-104,111-122,124-125
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1-2,150-152,154-171,247,249,905,943,955,974,993-999,2159,2185
+apps/server/cloudflare/dashboard/internal/dashboard-view.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1-2,17,20-24,188,190-256
+apps/server/cloudflare/transactions/operations.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 2-4,34,47-48,396-418
+apps/server/cloudflare/dashboard/view.test-fixture.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1-60
+apps/server/cloudflare/financial-user-store.test-fixture.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 108,110,168
+  s_a1be23a656acf0::t_7cbc569f5265e0 169
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1,13-15,116-145,161-163,208-213,230,234,241,484-531
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 14,1750-1755,1761
+apps/server/cloudflare/dashboard/user-store.test.ts
+  s_a1be23a656acf0::t_9a7fafe8fd25af 1-1058
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9f517c952f4c13ff35c772ad420901e7b1771ce1",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

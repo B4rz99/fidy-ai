@@ -1,3 +1,8 @@
+import {
+  dispatchLocalBudget as dispatchBudget,
+  isLocalBudgetOperation as localBudget,
+} from "./internal/sqlite-dispatch";
+import { budgetUnavailable, plannedBudgets } from "./internal/sqlite-planning";
 import { prepareBoundBudgetWorkspace as prepareBrowserWorkspace } from "./internal/bound-workspace";
 import { findDashboardAggregate } from "../transactions/operations";
 import {
@@ -843,3 +848,11 @@ export const reconcileBudgetThresholds = ({
     );
     return remaining === null ? ("Drained" as const) : ("Pending" as const);
   }).pipe(Effect.orElseSucceed(() => "Unavailable" as const));
+
+export const dispatchLocalBudget: typeof dispatchBudget = (unit) => dispatchBudget(unit);
+export const isLocalBudgetOperation: typeof localBudget = (id) => localBudget(id);
+
+export const readLocalBudgetCaps = Effect.fn(function* (userId: UserId, month: string) {
+  if (!Schema.is(BudgetMonth)(month)) return yield* budgetUnavailable();
+  return (yield* plannedBudgets(userId, Option.some(month), Option.none())).budgets;
+});

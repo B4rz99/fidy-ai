@@ -1,3 +1,6 @@
+import { NodeFileSystem } from "@effect/platform-node";
+import { nativeTransactionJourney, seedNativePAT } from "../financial-user-store.test-fixture";
+import { retainedPlanningWork } from "../retained-planning.test-fixture";
 import { reconcileStatuses } from "./internal/budget-latches";
 import { recordBudgetCall } from "./internal/budget-audit";
 import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
@@ -164,6 +167,8 @@ const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactio
 const send = (db: D1Database, request: Request): Promise<Response> => {
   vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
   request.headers.set("cf-connecting-ip", "192.0.2.35");
+  const retained = retainedPlanningWork({ db, request });
+  if (Option.isSome(retained)) return retained.value;
   const coordinators =
     coordinatorByDatabase.get(db) ?? new Map<string, UserTransactionCoordinator>();
   coordinatorByDatabase.set(db, coordinators);
@@ -284,7 +289,7 @@ const seedPAT = (
   });
 
 const seedMonthlyMovements = (
-  db: D1Database,
+  execute: (query: string, ...bindings: Array<string | number>) => Promise<unknown>,
   input: Readonly<{
     categoryId: string;
     currency: string;
@@ -295,22 +300,20 @@ const seedMonthlyMovements = (
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.asVoid(
     Effect.tryPromise(() =>
-      db
-        .prepare(`INSERT INTO transactions
+      execute(
+        `INSERT INTO transactions
     (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
     WITH RECURSIVE seq(n) AS (SELECT ? + 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
     SELECT printf('30000000-0000-4000-8000-%012d', n), ?, '0.01', ?, 'outflow', ?, CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),
       CAST(unixepoch(date('2024-01-01', '+' || (n / 99) || ' days'))*1000 AS INTEGER)
-    FROM seq`)
-        .bind(
-          input.offset,
-          input.offset + input.count,
-          users[0],
-          input.currency,
-          input.categoryId,
-          input.occurredAt
-        )
-        .run()
+    FROM seq`,
+        input.offset,
+        input.offset + input.count,
+        users[0],
+        input.currency,
+        input.categoryId,
+        input.occurredAt
+      )
     )
   );
 const patRequest = (
@@ -577,13 +580,20 @@ const seedBoundaryWorkspace = Effect.fnUntraced(function* (db: D1Database) {
     now: DateTime.nowUnsafe(),
     timeZone: IanaTimeZone.make("America/Bogota"),
   });
-  yield* seedMonthlyMovements(db, {
-    categoryId: category,
-    currency: "COP",
-    occurredAt: DateTime.formatIso(period.from),
-    count: 5001,
-    offset: 90000,
-  });
+  yield* seedMonthlyMovements(
+    (query, ...bindings) =>
+      db
+        .prepare(query)
+        .bind(...bindings)
+        .run(),
+    {
+      categoryId: category,
+      currency: "COP",
+      occurredAt: DateTime.formatIso(period.from),
+      count: 5001,
+      offset: 90000,
+    }
+  );
 });
 it("keeps the single-trip Budget cap selection indexed at the workspace boundary", () =>
   Effect.runPromise(
@@ -1131,9 +1141,9 @@ it("classifies a Budget deleted between preparation and its indexed D1 write as 
 it("creates a positive User-owned Budget and never reveals it to another User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup();
+      const db = yield* nativeTransactionJourney;
       const created = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/budgets", "POST", payload()))
+        db.send(request(0, "/budgets", "POST", payload()))
       );
       expect(created.status).toBe(201);
       const body = yield* Schema.decodeUnknownEffect(Created)(
@@ -1141,18 +1151,18 @@ it("creates a positive User-owned Budget and never reveals it to another User", 
       );
       expect(encodeMoneyAmount(body.data.cap.amount)).toBe("100");
       const foreign = yield* Effect.tryPromise(() =>
-        send(db, request(1, `/budgets/${body.data.id}`))
+        db.send(request(1, `/budgets/${body.data.id}`))
       );
       expect(foreign.status).toBe(404);
-      const own = yield* Effect.tryPromise(() => send(db, request(0, `/budgets/${body.data.id}`)));
+      const own = yield* Effect.tryPromise(() => db.send(request(0, `/budgets/${body.data.id}`)));
       expect(own.status).toBe(200);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("combines Category and Currency filters without including other Budgets or Users", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup();
+      const db = yield* nativeTransactionJourney;
       const otherCategory = "10000000-0000-4000-8000-000000000001";
       for (const { categoryId, currency } of [
         { categoryId: category, currency: "COP" },
@@ -1161,8 +1171,7 @@ it("combines Category and Currency filters without including other Budgets or Us
       ]) {
         expect(
           (yield* Effect.tryPromise(() =>
-            send(
-              db,
+            db.send(
               request(0, "/budgets", "POST", {
                 categoryId,
                 cap: { amount: "100", currency },
@@ -1172,7 +1181,7 @@ it("combines Category and Currency filters without including other Budgets or Us
         ).toBe(201);
       }
       const foreign = yield* Effect.tryPromise(() =>
-        send(db, request(1, "/budgets", "POST", payload()))
+        db.send(request(1, "/budgets", "POST", payload()))
       );
       expect(foreign.status).toBe(201);
       const foreignBudget = yield* Schema.decodeUnknownEffect(Created)(
@@ -1185,7 +1194,7 @@ it("combines Category and Currency filters without including other Budgets or Us
         { query: `categoryId=${otherCategory}&currency=USD`, expected: [] },
       ]) {
         const response = yield* Effect.tryPromise(() =>
-          send(db, request(0, `/budget-status?timeZone=America%2FBogota&${selection.query}`))
+          db.send(request(0, `/budget-status?timeZone=America%2FBogota&${selection.query}`))
         );
         expect(response.status).toBe(200);
         const report = yield* Schema.decodeUnknownEffect(Report)(
@@ -1200,50 +1209,48 @@ it("combines Category and Currency filters without including other Budgets or Us
             .sort()
         ).toEqual(selection.expected.toSorted());
       }
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("revises a Budget without changing Currency and deletes only its owner's Budget", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup();
+      const db = yield* nativeTransactionJourney;
       const createResponse7 = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/budgets", "POST", payload()))
+        db.send(request(0, "/budgets", "POST", payload()))
       );
       const created = yield* Schema.decodeUnknownEffect(Created)(
         yield* Effect.tryPromise(() => createResponse7.json())
       );
       const id = created.data.id;
       const foreign = yield* Effect.tryPromise(() =>
-        send(db, request(1, `/budgets/${id}`, "PUT", payload("200")))
+        db.send(request(1, `/budgets/${id}`, "PUT", payload("200")))
       );
       expect(foreign.status).toBe(404);
       expect(
-        (yield* Effect.tryPromise(() => send(db, request(1, `/budgets/${id}`, "DELETE")))).status
+        (yield* Effect.tryPromise(() => db.send(request(1, `/budgets/${id}`, "DELETE")))).status
       ).toBe(404);
       const refused = yield* Effect.tryPromise(() =>
         db
-          .prepare(
-            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND user_id = ? ORDER BY operation"
+          .owner(users[1])
+          .exec(
+            "SELECT operation,outcome FROM audit_entries WHERE record_type='session_call' AND operation GLOB 'budgets.*' ORDER BY operation"
           )
-          .bind(users[1])
-          .all<{ operation: string; outcome: string }>()
       );
-      expect(refused.results).toEqual([
-        { operation: "budgets.deleteBudget", outcome: "rejected" },
-        { operation: "budgets.updateBudget", outcome: "rejected" },
+      expect(refused).toEqual([
+        { operation: "budgets.deleteBudget", outcome: "not_found" },
+        { operation: "budgets.updateBudget", outcome: "not_found" },
       ]);
-      expect((yield* Effect.tryPromise(() => send(db, request(0, `/budgets/${id}`)))).status).toBe(
+      expect((yield* Effect.tryPromise(() => db.send(request(0, `/budgets/${id}`)))).status).toBe(
         200
       );
       expect(
-        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets/not-a-budget", "DELETE"))))
+        (yield* Effect.tryPromise(() => db.send(request(0, "/budgets/not-a-budget", "DELETE"))))
           .status
       ).toBe(404);
       expect(
         (yield* Effect.tryPromise(() =>
-          send(
-            db,
+          db.send(
             request(0, "/budgets", "POST", {
               categoryId: category,
               cap: { amount: "-1", currency: "COP" },
@@ -1252,25 +1259,21 @@ it("revises a Budget without changing Currency and deletes only its owner's Budg
         )).status
       ).toBe(400);
       expect(
-        (yield* Effect.tryPromise(() => send(db, request(0, "/budget-status?timeZone=not-a-zone"))))
+        (yield* Effect.tryPromise(() => db.send(request(0, "/budget-status?timeZone=not-a-zone"))))
           .status
       ).toBe(400);
       const invalidAudits = yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            `SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND user_id = ? AND outcome = 'rejected' ORDER BY operation`
-          )
-          .bind(users[0])
-          .all<{ operation: string }>()
+        db.exec(
+          "SELECT operation FROM audit_entries WHERE record_type='session_call' AND operation GLOB 'budgets.*' AND outcome IN ('validation_failed','not_found') ORDER BY operation"
+        )
       );
-      expect(invalidAudits.results.map((row) => row.operation)).toEqual([
+      expect(invalidAudits.map((row) => row.operation)).toEqual([
         "budgets.createBudget",
         "budgets.deleteBudget",
         "budgets.getBudgetStatus",
       ]);
       const wrongCurrency = yield* Effect.tryPromise(() =>
-        send(
-          db,
+        db.send(
           request(0, `/budgets/${id}`, "PUT", {
             categoryId: category,
             cap: { amount: "200", currency: "USD" },
@@ -1279,11 +1282,11 @@ it("revises a Budget without changing Currency and deletes only its owner's Budg
       );
       expect(wrongCurrency.status).toBe(400);
       const duplicate = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/budgets", "POST", payload("300")))
+        db.send(request(0, "/budgets", "POST", payload("300")))
       );
       expect(duplicate.status).toBe(400);
       const updated = yield* Effect.tryPromise(() =>
-        send(db, request(0, `/budgets/${id}`, "PUT", payload("250.25")))
+        db.send(request(0, `/budgets/${id}`, "PUT", payload("250.25")))
       );
       expect(updated.status).toBe(200);
       const changed = yield* Schema.decodeUnknownEffect(Created)(
@@ -1291,15 +1294,15 @@ it("revises a Budget without changing Currency and deletes only its owner's Budg
       );
       expect(encodeMoneyAmount(changed.data.cap.amount)).toBe("250.25");
       expect(
-        (yield* Effect.tryPromise(() => send(db, request(0, `/budgets/${id}`, "DELETE")))).status
+        (yield* Effect.tryPromise(() => db.send(request(0, `/budgets/${id}`, "DELETE")))).status
       ).toBe(200);
-      expect((yield* Effect.tryPromise(() => send(db, request(0, `/budgets/${id}`)))).status).toBe(
+      expect((yield* Effect.tryPromise(() => db.send(request(0, `/budgets/${id}`)))).status).toBe(
         404
       );
       expect(
-        (yield* Effect.tryPromise(() => send(db, request(1, "/budgets", "POST", payload())))).status
+        (yield* Effect.tryPromise(() => db.send(request(1, "/budgets", "POST", payload())))).status
       ).toBe(201);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it(
@@ -1379,9 +1382,9 @@ it(
 it("reports only this User's exact same-Currency outflows in the applied half-open month", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup();
+      const db = yield* nativeTransactionJourney;
       expect(
-        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload())))).status
+        (yield* Effect.tryPromise(() => db.send(request(0, "/budgets", "POST", payload())))).status
       ).toBe(201);
       const period = deriveCurrentBudgetMonth({
         now: DateTime.nowUnsafe(),
@@ -1393,8 +1396,7 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
         ...args: [currency: string, direction: string, occurredAt: string]
       ): Promise<Response> => {
         const [currency, direction, occurredAt] = args;
-        return send(
-          db,
+        return db.send(
           request(index, "/transactions", "POST", {
             money: { amount, currency },
             categoryId: category,
@@ -1435,21 +1437,19 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
         )).status
       ).toBe(201);
       yield* Effect.tryPromise(() =>
-        db
-          .prepare(`INSERT INTO transactions
+        db.exec(
+          `INSERT INTO transactions
     (id, user_id, amount, currency, direction, category_id, occurred_at_ms, created_at_ms)
-    VALUES (?, ?, '900', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`)
-          .bind(
-            "30000000-0000-4000-8000-000000000093",
-            users[0],
-            category,
-            DateTime.formatIso(period.to),
-            DateTime.formatIso(DateTime.nowUnsafe())
-          )
-          .run()
+    VALUES (?, ?, '900', 'COP', 'outflow', ?,CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER),CAST(round(unixepoch(?,'subsec')*1000) AS INTEGER))`,
+          "30000000-0000-4000-8000-000000000093",
+          users[0],
+          category,
+          DateTime.formatIso(period.to),
+          DateTime.formatIso(DateTime.nowUnsafe())
+        )
       );
       const response = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
+        db.send(request(0, "/budget-status?timeZone=America%2FBogota"))
       );
       expect(response.status).toBe(200);
       const workspace = yield* Effect.tryPromise(() => response.clone().json());
@@ -1464,14 +1464,14 @@ it("reports only this User's exact same-Currency outflows in the applied half-op
       if (first === undefined) throw new Error("Budget status missing");
       expect(encodeMoneyAmount(first.spent.amount)).toBe("99.99");
       const other = yield* Effect.tryPromise(() =>
-        send(db, request(1, "/budget-status?timeZone=America%2FBogota"))
+        db.send(request(1, "/budget-status?timeZone=America%2FBogota"))
       );
       expect(other.status).toBe(200);
       expect(
         (yield* Schema.decodeUnknownEffect(Report)(yield* Effect.tryPromise(() => other.json())))
           .data.statuses
       ).toEqual([]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it(
@@ -1479,16 +1479,15 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* nativeTransactionJourney;
         const otherCategory = "10000000-0000-4000-8000-000000000001";
         expect(
-          (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload()))))
+          (yield* Effect.tryPromise(() => db.send(request(0, "/budgets", "POST", payload()))))
             .status
         ).toBe(201);
         expect(
           (yield* Effect.tryPromise(() =>
-            send(
-              db,
+            db.send(
               request(0, "/budgets", "POST", {
                 categoryId: otherCategory,
                 cap: { amount: "100", currency: "COP" },
@@ -1497,14 +1496,14 @@ it(
           )).status
         ).toBe(201);
         const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
-        yield* seedMonthlyMovements(db, {
+        yield* seedMonthlyMovements(db.exec, {
           categoryId: category,
           currency: "COP",
           count: 2500,
           offset: 0,
           occurredAt,
         });
-        yield* seedMonthlyMovements(db, {
+        yield* seedMonthlyMovements(db.exec, {
           categoryId: otherCategory,
           currency: "COP",
           count: 2500,
@@ -1512,7 +1511,7 @@ it(
           occurredAt,
         });
         const report = yield* Effect.tryPromise(() =>
-          send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
+          db.send(request(0, "/budget-status?timeZone=America%2FBogota"))
         );
         expect(report.status).toBe(200);
         const statuses = (yield* Schema.decodeUnknownEffect(Report)(
@@ -1522,7 +1521,7 @@ it(
           "25",
           "25",
         ]);
-      })
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
     ),
   90000
 );
@@ -2617,26 +2616,30 @@ it(
 it("denies read-scoped PAT writes and write-scoped PAT reads without disclosure or mutation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup();
+      const db = yield* nativeTransactionJourney;
       const readToken = `fin_${"r".repeat(8)}_${"a".repeat(43)}`;
       const writeToken = `fin_${"w".repeat(8)}_${"b".repeat(43)}`;
-      yield* seedPAT(db, {
+      yield* seedNativePAT({
+        db,
+        userId: users[0],
+        current: DateTime.nowUnsafe().epochMilliseconds,
         token: readToken,
-        scope: "read",
-        id: "40000000-0000-4000-8000-000000000031",
+        scopes: ["read"],
       });
-      yield* seedPAT(db, {
+      yield* seedNativePAT({
+        db,
+        userId: users[0],
+        current: DateTime.nowUnsafe().epochMilliseconds,
         token: writeToken,
-        scope: "write",
-        id: "40000000-0000-4000-8000-000000000032",
+        scopes: ["write"],
       });
       expect(
         (yield* Effect.tryPromise(() =>
-          send(db, patRequest(readToken, "/budgets", "POST", payload()))
+          db.send(patRequest(readToken, "/budgets", "POST", payload()))
         )).status
       ).toBe(403);
       const created = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/budgets", "POST", payload()))
+        db.send(request(0, "/budgets", "POST", payload()))
       );
       expect(created.status).toBe(201);
       const owner = (yield* Schema.decodeUnknownEffect(Created)(
@@ -2644,37 +2647,34 @@ it("denies read-scoped PAT writes and write-scoped PAT reads without disclosure 
       )).data;
       expect(
         (yield* Effect.tryPromise(() =>
-          send(db, patRequest(readToken, `/budgets/${owner.id}`, "DELETE"))
+          db.send(patRequest(readToken, `/budgets/${owner.id}`, "DELETE"))
         )).status
       ).toBe(403);
       const denied = yield* Effect.tryPromise(() =>
-        send(db, patRequest(writeToken, `/budgets/${owner.id}`))
+        db.send(patRequest(writeToken, `/budgets/${owner.id}`))
       );
       expect(denied.status).toBe(403);
       expect(
         (yield* Effect.tryPromise(() =>
-          send(db, patRequest(writeToken, "/budget-status?timeZone=America%2FBogota"))
+          db.send(patRequest(writeToken, "/budget-status?timeZone=America%2FBogota"))
         )).status
       ).toBe(403);
       expect(
-        (yield* Effect.tryPromise(() => send(db, request(0, `/budgets/${owner.id}`)))).status
+        (yield* Effect.tryPromise(() => db.send(request(0, `/budgets/${owner.id}`)))).status
       ).toBe(200);
       const count = yield* Effect.tryPromise(() =>
-        db
-          .prepare("SELECT COUNT(*) AS count FROM budgets WHERE user_id = ?")
-          .bind(users[0])
-          .first<{ count: number }>()
+        db.exec("SELECT count(*) AS count FROM budgets WHERE user_id=?", users[0])
       );
-      expect(count?.count).toBe(1);
-    })
+      expect(count[0]?.count).toBe(1);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("exposes spending without a matching Category and Currency cap in the monthly report", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup();
+      const db = yield* nativeTransactionJourney;
       expect(
-        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload("10000")))))
+        (yield* Effect.tryPromise(() => db.send(request(0, "/budgets", "POST", payload("10000")))))
           .status
       ).toBe(201);
       const unbudgetedCategory = "10000000-0000-4000-8000-000000000015";
@@ -2687,8 +2687,7 @@ it("exposes spending without a matching Category and Currency cap in the monthly
       ] as const) {
         expect(
           (yield* Effect.tryPromise(() =>
-            send(
-              db,
+            db.send(
               request(index, "/transactions", "POST", {
                 money: { amount, currency },
                 categoryId,
@@ -2700,7 +2699,7 @@ it("exposes spending without a matching Category and Currency cap in the monthly
         ).toBe(201);
       }
       const response = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
+        db.send(request(0, "/budget-status?timeZone=America%2FBogota"))
       );
       expect(response.status).toBe(200);
       expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
@@ -2712,15 +2711,14 @@ it("exposes spending without a matching Category and Currency cap in the monthly
         },
       });
       const filtered = yield* Effect.tryPromise(() =>
-        send(
-          db,
+        db.send(
           request(0, `/budget-status?timeZone=America%2FBogota&categoryId=${category}&currency=COP`)
         )
       );
       expect(yield* Effect.tryPromise(() => filtered.json())).toMatchObject({
         data: { unbudgetedExpenses: [] },
       });
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("keeps peer Budget cap and spending projections within one explicit User", () =>
@@ -2979,10 +2977,9 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* nativeTransactionJourney;
         const response = yield* Effect.tryPromise(() =>
-          send(
-            db,
+          db.send(
             request(0, "/budgets", "POST", { ...payload(), month: "2026-10", groupName: "Hogar" })
           )
         );
@@ -2996,7 +2993,7 @@ it(
         ): Effect.Effect<BudgetStatusReport, Cause.UnknownError | Schema.SchemaError> =>
           Effect.gen(function* () {
             const res = yield* Effect.tryPromise(() =>
-              send(db, request(owner, `/budget-status?timeZone=America%2FBogota&month=${month}`))
+              db.send(request(owner, `/budget-status?timeZone=America%2FBogota&month=${month}`))
             );
             expect(res.status).toBe(200);
             return (yield* Schema.decodeUnknownEffect(Report)(
@@ -3013,7 +3010,7 @@ it(
           ["2026-10", "50"],
         ]) {
           const saved = yield* Effect.tryPromise(() =>
-            send(db, request(0, `/budgets/${created.data.id}`, "PUT", { ...payload(cap), month }))
+            db.send(request(0, `/budgets/${created.data.id}`, "PUT", { ...payload(cap), month }))
           );
           expect(saved.status).toBe(200);
           expect(
@@ -3045,9 +3042,9 @@ it(
         ).toBe("200");
         expect((yield* report("2026-09")).statuses).toEqual([]);
         expect((yield* report("2026-11", 1)).statuses).toEqual([]);
+        yield* Effect.sleep("250 millis");
         const renamed = yield* Effect.tryPromise(() =>
-          send(
-            db,
+          db.send(
             request(0, `/budgets/${created.data.id}`, "PUT", {
               ...payload("200"),
               month: "2026-11",
@@ -3062,10 +3059,10 @@ it(
         ).toBe("Casa");
         expect(
           (yield* Effect.tryPromise(() =>
-            send(db, request(0, "/budget-status?timeZone=America%2FBogota&month=2026-13"))
+            db.send(request(0, "/budget-status?timeZone=America%2FBogota&month=2026-13"))
           )).status
         ).toBe(400);
-      })
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
     ),
   30000
 );
@@ -3184,12 +3181,13 @@ it(
 );
 
 const groupCurrenciesAt = (
-  db: D1Database,
-  month: string
+  db: Effect.Success<typeof nativeTransactionJourney>,
+  month: string,
+  owner = 0
 ): Effect.Effect<ReadonlyArray<string>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const response = yield* Effect.tryPromise(() =>
-      send(db, request(0, `/budget-status?timeZone=America%2FBogota&month=${month}`))
+      db.send(request(owner, `/budget-status?timeZone=America%2FBogota&month=${month}`))
     );
     const report = yield* Schema.decodeUnknownEffect(Schema.Struct({ data: BudgetStatusReport }))(
       yield* Effect.tryPromise(() => response.json())
@@ -3200,27 +3198,19 @@ const groupCurrenciesAt = (
 it("versions currency for every group member without changing earlier months or another owner", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup();
+      const db = yield* nativeTransactionJourney;
       const response = yield* Effect.tryPromise(() =>
-        send(
-          db,
+        db.send(
           request(0, "/budgets", "POST", { ...payload(), month: "2026-10", groupName: "Hogar" })
         )
       );
       const created = yield* Schema.decodeUnknownEffect(Created)(
         yield* Effect.tryPromise(() => response.json())
       );
-      const second = yield* Effect.tryPromise(() =>
-        db
-          .prepare("SELECT id FROM categories WHERE id<>? LIMIT 1")
-          .bind(category)
-          .first<string>("id")
-      );
-      expect(second).not.toBeNull();
+      const second = "10000000-0000-4000-8000-000000000012";
       expect(
         (yield* Effect.tryPromise(() =>
-          send(
-            db,
+          db.send(
             request(0, "/budgets", "POST", {
               categoryId: second,
               cap: { amount: "250", currency: "COP" },
@@ -3232,16 +3222,14 @@ it("versions currency for every group member without changing earlier months or 
       ).toBe(201);
       expect(
         (yield* Effect.tryPromise(() =>
-          send(
-            db,
+          db.send(
             request(1, "/budgets", "POST", { ...payload(), month: "2026-10", groupName: "Hogar" })
           )
         )).status
       ).toBe(201);
       expect(
         (yield* Effect.tryPromise(() =>
-          send(
-            db,
+          db.send(
             request(0, `/budgets/${created.data.id}`, "PUT", {
               ...payload(),
               month: "2026-11",
@@ -3255,13 +3243,22 @@ it("versions currency for every group member without changing earlier months or 
       expect(yield* groupCurrenciesAt(db, "2026-10")).toEqual(["COP", "COP"]);
       expect(yield* groupCurrenciesAt(db, "2026-11")).toEqual(["USD", "USD"]);
       expect(yield* groupCurrenciesAt(db, "2026-12")).toEqual(["USD", "USD"]);
-      expect(
-        Option.getOrThrow(yield* readBudgetCaps({ db, userId: users[1] }))[0]?.cap.currency
-      ).toBe("COP");
+      expect((yield* groupCurrenciesAt(db, "2026-11", 1))[0]).toBe("COP");
+      for (const month of ["2026-10", "2026-11"]) {
+        const duplicate = yield* Effect.tryPromise(() =>
+          db.send(
+            request(0, "/budgets", "POST", {
+              categoryId: second,
+              cap: { amount: "100", currency: "USD" },
+              month,
+            })
+          )
+        );
+        expect(duplicate.status).toBe(400);
+      }
       expect(
         (yield* Effect.tryPromise(() =>
-          send(
-            db,
+          db.send(
             request(0, `/budgets/${created.data.id}`, "PUT", {
               categoryId: category,
               cap: { amount: "100", currency: "EUR" },
@@ -3272,68 +3269,80 @@ it("versions currency for every group member without changing earlier months or 
         )).status
       ).toBe(400);
       expect(yield* groupCurrenciesAt(db, "2026-11")).toEqual(["USD", "USD"]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it("refuses group currency precision loss including previously saved future caps", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      const response = yield* Effect.tryPromise(() =>
-        send(
-          db,
-          request(0, "/budgets", "POST", {
-            categoryId: category,
-            cap: { amount: "100", currency: "USD" },
-            month: "2026-10",
-            groupName: "Hogar",
-          })
-        )
-      );
-      const created = yield* Schema.decodeUnknownEffect(Created)(
-        yield* Effect.tryPromise(() => response.json())
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(
-            db,
-            request(0, `/budgets/${created.data.id}`, "PUT", {
-              categoryId: category,
-              cap: { amount: "10.25", currency: "USD" },
-              month: "2026-12",
-              groupName: "Hogar",
-            })
-          )
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(
-            db,
-            request(0, `/budgets/${created.data.id}`, "PUT", {
+it.each(["2026-09", "2026-12"])(
+  "refuses group currency precision loss from a member cap saved in %s",
+  (capMonth) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* nativeTransactionJourney;
+        const response = yield* Effect.tryPromise(() =>
+          db.send(
+            request(0, "/budgets", "POST", {
               categoryId: category,
               cap: { amount: "100", currency: "USD" },
-              month: "2026-11",
+              month: "2026-08",
               groupName: "Hogar",
-              groupCategoryIds: [category],
-              groupCurrency: "JPY",
             })
           )
-        )).status
-      ).toBe(400);
-      expect(yield* groupCurrenciesAt(db, "2026-11")).toEqual(["USD"]);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT 1 FROM (SELECT rowid,user_id,month FROM budget_month_plan_records WHERE kind='plan') WHERE user_id=? AND month='2026-11'"
+        );
+        const created = yield* Schema.decodeUnknownEffect(Created)(
+          yield* Effect.tryPromise(() => response.json())
+        );
+        const second = "10000000-0000-4000-8000-000000000012";
+        const other = yield* Effect.tryPromise(() =>
+          db.send(
+            request(0, "/budgets", "POST", {
+              categoryId: second,
+              cap: { amount: "50", currency: "USD" },
+              month: "2026-08",
+              groupName: "Hogar",
+            })
+          )
+        );
+        const member = yield* Schema.decodeUnknownEffect(Created)(
+          yield* Effect.tryPromise(() => other.json())
+        );
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.send(
+              request(0, `/budgets/${member.data.id}`, "PUT", {
+                categoryId: second,
+                cap: { amount: "10.25", currency: "USD" },
+                month: capMonth,
+                groupName: "Hogar",
+              })
             )
-            .bind(users[0])
-            .first()
-        )
-      ).toBeNull();
-    })
-  ));
+          )).status
+        ).toBe(200);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.send(
+              request(0, `/budgets/${created.data.id}`, "PUT", {
+                categoryId: category,
+                cap: { amount: "100", currency: "USD" },
+                month: "2026-11",
+                groupName: "Hogar",
+                groupCategoryIds: [category, second],
+                groupCurrency: "JPY",
+              })
+            )
+          )).status
+        ).toBe(400);
+        expect(yield* groupCurrenciesAt(db, "2026-11")).toEqual(["USD", "USD"]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.exec(
+              "SELECT 1 FROM budget_month_plan_records WHERE kind='plan' AND user_id=? AND month='2026-11'",
+              users[0]
+            )
+          )
+        ).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
+    )
+);
 
 const monthlyDeletionReport = Effect.fn(function* (db: D1Database, month: string) {
   const response = yield* Effect.tryPromise(() =>

@@ -1,3 +1,4 @@
+import { dispatchLocalBudget, isLocalBudgetOperation } from "../budgets/operations";
 import { cancelLocalSubscription, offerDueSourceCancellations } from "../subscription/operations";
 import { handleSourceCancellationWork } from "../subscription/runtime";
 import type { LocalSourceCancellationWork, WompiBindings } from "../subscription/contract";
@@ -94,6 +95,18 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             ),
             Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
           )
+        )
+      );
+    }
+    if (Option.isSome(operation) && isLocalBudgetOperation(operation.value.id)) {
+      return Option.some(
+        this.runtime.runPromise(
+          dispatchLocalBudget({
+            request,
+            operation: operation.value,
+            owns,
+            storage: this.ctx.storage,
+          })
         )
       );
     }

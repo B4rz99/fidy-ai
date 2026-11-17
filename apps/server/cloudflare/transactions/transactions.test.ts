@@ -1,5 +1,6 @@
+import { retainedPlanningWork } from "../retained-planning.test-fixture";
 import { NodeFileSystem } from "@effect/platform-node";
-import { nativeTransactionJourney } from "./user-store.test-fixture";
+import { nativeTransactionJourney, seedNativePAT } from "../financial-user-store.test-fixture";
 import { TransactionInspection } from "../../src/shell/transactions/contract";
 import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
 import { IanaTimeZone } from "../../src/core/_shared/context";
@@ -706,43 +707,6 @@ const seedPAT = ({
         .run()
     );
   });
-const seedNativePAT = Effect.fn(function* ({
-  db,
-  userId,
-  token,
-  scopes,
-  current,
-}: Omit<Parameters<typeof seedPAT>[0], "db"> & { db: NativeJourney }) {
-  const id = newId();
-  const shortId = token.slice(4, 12);
-  const digestBytes = yield* fromTestPromise(() => digest(token));
-  yield* fromTestPromise(() =>
-    db
-      .owner(userId)
-      .exec(
-        "INSERT INTO pats(id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id) VALUES(?,?,?,?,'agent',?,7,?,?,?,?)",
-        id,
-        userId,
-        shortId,
-        digestBytes,
-        JSON.stringify(scopes),
-        current,
-        current,
-        current + 604800000,
-        id
-      )
-  );
-  yield* fromTestPromise(() =>
-    db.directory.exec(
-      "INSERT INTO pat_routes VALUES (?,?,?,?,?)",
-      shortId,
-      userId,
-      id,
-      "route-" + id,
-      current + 604800000
-    )
-  );
-});
 const publicationStatements = (
   db: D1Database
 ): Readonly<{
@@ -3190,17 +3154,20 @@ const sendBudgetCorrectionRequest = (
   ...args: [method?: string, body?: object]
 ): Promise<Response> => {
   const [method = "GET", body] = args;
-  return sendPublicRequest(
-    database,
-    new Request(`https://api.fidyapp.com${path}`, {
-      method,
-      headers: {
-        origin: "https://app.fidyapp.com",
-        "Fidy-Session-Binding": sessions[0] ?? "invalid",
-        cookie: `__Host-fidy_session=${bearer(0)}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
+  return Option.getOrThrow(
+    retainedPlanningWork({
+      db: database,
+      request: new Request(`https://api.fidyapp.com${path}`, {
+        method,
+        headers: {
+          origin: "https://app.fidyapp.com",
+          "Fidy-Session-Binding": sessions[0] ?? "invalid",
+          cookie: `__Host-fidy_session=${bearer(0)}`,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
     })
   );
 };
@@ -4349,15 +4316,14 @@ it("commits exact manual Money, immutable capture context, and audit before cano
       ]);
       const audit = yield* fromTestPromise(() =>
         db.exec(
-          "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY occurred_at_ms",
+          "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY operation",
           users[0] ?? ""
         )
       );
-      expect(
-        audit
-          .map((row) => row.operation)
-          .sort((first, second) => String(first).localeCompare(String(second)))
-      ).toEqual(["transactions.createTransaction", "transactions.listTransactions"]);
+      expect(audit.map((row) => row.operation)).toEqual([
+        "transactions.createTransaction",
+        "transactions.listTransactions",
+      ]);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 

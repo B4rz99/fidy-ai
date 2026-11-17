@@ -26,6 +26,8 @@ import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { ReviewFields } from "./fields";
 import { OriginalMaterial, ReviewMaterialPreload } from "./original";
+import { ReviewResubmission } from "./resubmission";
+import { earlierOriginalDeadline } from "./original-deadline";
 import { type Category, type Detail, type Item, deadline, sources } from "./model";
 
 type Props = Readonly<{
@@ -36,9 +38,16 @@ type Props = Readonly<{
   originalExpiresAt: Item["expiresAt"];
 }>;
 export const ReviewEditor = (props: Props): JSX.Element => {
-  const expired = useReviewExpired(props.item);
+  const item = {
+    ...props.item,
+    expiresAt: earlierOriginalDeadline({
+      first: props.item.expiresAt,
+      second: props.originalExpiresAt,
+    }),
+  };
+  const expired = useReviewExpired(item);
   return expired ? (
-    <ExpiredReviewItem item={props.item} />
+    <ExpiredReviewItem item={item} />
   ) : (
     <>
       <ReviewMaterialPreload item={props.item} expiresAt={props.originalExpiresAt} />
@@ -59,11 +68,11 @@ const ExpiredReviewItem = ({
         aria-hidden="true"
       />
       <h2>{item.status === "created" ? "Transacción creada" : "Este elemento venció"}</h2>
-      <p>
-        {item.status === "created"
-          ? "Creaste una transacción. El material original venció."
-          : "El original venció. Envía el material de nuevo para revisarlo."}
-      </p>
+      {item.status === "created" ? (
+        <p>Creaste una transacción. El material original venció.</p>
+      ) : (
+        <ReviewResubmission source={item.source} />
+      )}
       <CreatedTransactionLink item={item} />
     </div>
   </section>
@@ -285,7 +294,11 @@ const HistoryDetail = ({
         aria-hidden="true"
       />
       <h2 className="text-xl font-medium">{historyTitles[detail.item.status]}</h2>
-      <p className="mt-3 text-sm text-muted-foreground">{historyDescription(detail.item)}</p>
+      {detail.item.status === "expired" ? (
+        <ReviewResubmission source={detail.item.source} />
+      ) : (
+        <p className="mt-3 text-sm text-muted-foreground">{historyDescription(detail.item)}</p>
+      )}
       <CreatedTransactionLink item={detail.item} />
     </div>
   </div>
@@ -323,7 +336,6 @@ const ReviewItemHeading = ({
   </header>
 );
 const historyDescription = (item: Item): string => {
-  if (item.status === "expired") return "Envía el material de nuevo para revisarlo.";
   if (item.status === "created") {
     return "Creaste una transacción a partir de este elemento.";
   }

@@ -428,7 +428,8 @@
   font-weight: 600;
   margin-bottom: 12px;
 }
-[data-review="history"] p {
+[data-review="history"] p,
+[data-review="resubmission"] p {
   font-size: 13px;
   color: var(--muted-foreground);
   line-height: 1.8;
@@ -438,6 +439,12 @@
   height: 32px;
   color: var(--muted-foreground);
   margin-bottom: 14px;
+}
+[data-review="resubmission"] > div {
+  margin-top: 24px;
+}
+[data-review="resubmission"] [data-slot="button"] {
+  border-radius: 12px;
 }
 [data-review="empty"] {
   min-height: var(--review-height);

@@ -151,7 +151,7 @@ it.each(["Calendario", "Lista", "Todos los recurrentes"])(
         const registry = AtomRegistry.make();
         const router = createRouter({
           routeTree: createRootRoute({ component: Workspace }),
-          context: { apiClient },
+          context: { apiClient, sessionBinding: "recurring-feature-test" },
           history: createMemoryHistory({ initialEntries: ["/app/recurring"] }),
         });
         const container = document.createElement("div");

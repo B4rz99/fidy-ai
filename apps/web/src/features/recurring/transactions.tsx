@@ -12,6 +12,8 @@ import { Button } from "@/ui/components/button";
 import { TransactionCandidate } from "@/ui/components/transaction-candidate";
 import { TransactionSearchForm } from "./transaction-search-form";
 import {
+  type TransactionBrowserControl,
+  type TransactionBrowserState,
   type TransactionFilters,
   type TransactionSearch,
   emptyTransactionFilters,
@@ -34,6 +36,7 @@ type BrowserProps = Readonly<{
   timeZone: string;
   initial: TransactionFilters;
   children: (view: BrowserView) => ReactNode;
+  navigation: Option.Option<TransactionBrowserControl>;
 }>;
 const continuation = (
   page: CanonicalSuccess<"transactions.listTransactions">
@@ -51,22 +54,30 @@ const continuation = (
   )(suggestion.args.value).pipe(Option.map((value) => value.query.cursor));
 };
 export const TransactionBrowser = (props: BrowserProps): JSX.Element => {
-  const [draft, setDraft] = useState(props.initial);
-  const [query, setQuery] = useState(() =>
-    Option.getOrThrow(transactionSearch({ draft: props.initial, timeZone: props.timeZone }))
+  const [local, setLocal] = useState<TransactionBrowserState>(() => ({
+    draft: props.initial,
+    applied: props.initial,
+    cursors: [],
+  }));
+  const control = Option.getOrElse(props.navigation, () => ({
+    state: local,
+    change: setLocal,
+    select: (selectedId: Transaction["id"]): void => setLocal({ ...local, selectedId }),
+    clear: (): void => setLocal({ ...local, selectedId: undefined }),
+  }));
+  const current = control.state;
+  const change = control.change;
+  const query = Option.getOrThrow(
+    transactionSearch({ draft: current.applied, timeZone: props.timeZone })
   );
-  const [cursors, setCursors] = useState<ReadonlyArray<string>>([]);
-  const cursor = cursors.at(-1);
-  const apply = (value: TransactionSearch): void => {
-    setQuery(value);
-    setCursors([]);
-  };
   const filters = (
     <TransactionSearchForm
-      draft={draft}
-      setDraft={setDraft}
+      draft={current.draft}
+      setDraft={(draft) => change({ ...current, draft })}
       timeZone={props.timeZone}
-      apply={apply}
+      apply={(_query, applied) =>
+        change({ ...current, draft: applied, applied, cursors: [], selectedId: undefined })
+      }
     />
   );
   return (
@@ -74,17 +85,29 @@ export const TransactionBrowser = (props: BrowserProps): JSX.Element => {
       key={JSON.stringify(query)}
       {...props}
       query={query}
-      cursor={Option.fromUndefinedOr(cursor)}
+      cursor={Option.fromUndefinedOr(current.cursors.at(-1))}
       filters={filters}
-      next={(value) => setCursors([...cursors, value])}
+      selectedId={Option.fromUndefinedOr(current.selectedId)}
+      choose={control.select}
+      clear={control.clear}
+      next={(cursor) =>
+        change({ ...current, cursors: [...current.cursors, cursor], selectedId: undefined })
+      }
       previous={
-        cursors.length === 0 ? Option.none() : Option.some(() => setCursors(cursors.slice(0, -1)))
+        current.cursors.length === 0
+          ? Option.none()
+          : Option.some(() =>
+              change({ ...current, cursors: current.cursors.slice(0, -1), selectedId: undefined })
+            )
       }
     />
   );
 };
 type PageProps = BrowserProps &
   Readonly<{
+    selectedId: Option.Option<Transaction["id"]>;
+    choose: (id: Transaction["id"]) => void;
+    clear: () => void;
     query: TransactionSearch;
     cursor: Option.Option<string>;
     filters: ReactNode;
@@ -111,9 +134,6 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
           })
     ).pipe(revalidateWorkspaceQuery);
   });
-  const [selectedId, setSelectedId] = useState<Option.Option<Transaction["id"]>>(() =>
-    Option.none()
-  );
   const state = useAtomValue(resource).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(resource);
   const blocked =
@@ -123,7 +143,7 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
     Option.isSome(state.refreshFailure);
   const selected =
     state._tag === "Ready"
-      ? Option.flatMap(selectedId, (id) =>
+      ? Option.flatMap(props.selectedId, (id) =>
           Option.fromUndefinedOr(state.value.data.find((transaction) => transaction.id === id))
         )
       : Option.none();
@@ -133,8 +153,8 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
       state={state}
       refresh={refresh}
       blocked={blocked}
-      selected={selectedId}
-      choose={(transaction) => setSelectedId(Option.some(transaction.id))}
+      selected={props.selectedId}
+      choose={(transaction) => props.choose(transaction.id)}
     />
   );
   return (
@@ -144,12 +164,12 @@ const TransactionRequest = (props: PageProps): JSX.Element => {
         results,
         selected,
         blocked,
-        clear: () => setSelectedId(Option.none()),
+        clear: props.clear,
       })}
     </>
   );
 };
-type ResultsProps = PageProps &
+type ResultsProps = Omit<PageProps, "choose"> &
   Readonly<{
     state: ReturnType<
       typeof presentCanonicalQuery<CanonicalSuccess<"transactions.listTransactions">, unknown>
@@ -254,7 +274,12 @@ export const TransactionPicker = ({
   disabled: boolean;
   timeZone: string;
 }>): JSX.Element => (
-  <TransactionBrowser disabled={disabled} initial={emptyTransactionFilters} timeZone={timeZone}>
+  <TransactionBrowser
+    disabled={disabled}
+    initial={emptyTransactionFilters}
+    timeZone={timeZone}
+    navigation={Option.none()}
+  >
     {(view) => (
       <div className="grid gap-4">
         {view.filters}

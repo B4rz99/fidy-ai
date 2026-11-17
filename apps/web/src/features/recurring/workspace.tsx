@@ -1,3 +1,5 @@
+import { type RecurringNavigation, useRecurringNavigation } from "./navigation";
+import { emptyTransactionFilters } from "./transaction-filters";
 import { PendingRead } from "@/ui/components/pending-read";
 import { lazyRouteComponent, useRouterState } from "@tanstack/react-router";
 import { Array, Option } from "effect";
@@ -68,6 +70,7 @@ type Props = Readonly<{
   statusFor: typeof planStatus;
   disabled: boolean;
   filters: Filters;
+  previous: Option.Option<string>;
   applyFilters: (filters: Filters) => void;
   month: (step: number) => void;
   earlier: (month: string) => void;
@@ -81,8 +84,6 @@ const selectedOccurrence = (
     [...view.occurrences, ...view.previous],
     (item) => item.planId === panel.planId && item.date === panel.date
   );
-const linkSelection = (panel: Option.Option<Panel>): Option.Option<Panel> =>
-  Option.map(panel, (value) => (value.kind === "occurrence" ? { ...value, kind: "link" } : value));
 type EditorProps = Pick<Props, "view" | "categories" | "disabled" | "save" | "statusFor">;
 type SheetProps = EditorProps &
   Pick<Props, "notice"> &
@@ -326,10 +327,53 @@ const PreviousItems = ({
     </div>
   </details>
 );
+const useWorkspacePanel = (
+  view: Workspace,
+  filters: Filters,
+  previous: Option.Option<string>
+): Pick<SheetProps, "panel" | "setPanel" | "link"> &
+  Readonly<{ navigation: RecurringNavigation }> => {
+  const navigation = useRecurringNavigation({
+    month: view.month,
+    filters,
+    previous,
+  });
+  const [localPanel, setLocalPanel] = useState<Option.Option<Panel>>(() => Option.none());
+  const panel = Option.orElse(localPanel, () => navigation.selection);
+  const setPanel: Dispatch<SetStateAction<Option.Option<Panel>>> = (update) => {
+    if (typeof update === "function") {
+      setLocalPanel(update);
+      if (Option.isSome(navigation.selection) && Option.isNone(update(navigation.selection))) {
+        navigation.close();
+      }
+      return;
+    }
+    const next = update;
+    if (Option.isSome(next) && next.value.kind === "occurrence") {
+      setLocalPanel(Option.none());
+      navigation.open(next.value);
+      return;
+    }
+    setLocalPanel(next);
+    if (Option.isSome(navigation.selection)) navigation.close();
+  };
+  const link = (): void => {
+    if (Option.isNone(panel) || panel.value.kind !== "occurrence") return;
+    const item = selectedOccurrence(view, panel.value);
+    if (Option.isNone(item)) return;
+    setLocalPanel(Option.none());
+    navigation.link(item.value, {
+      ...emptyTransactionFilters,
+      currency: item.value.plan.currency,
+      direction: item.value.plan.kind === "income" ? "inflow" : "outflow",
+    });
+  };
+  return { panel, setPanel, link, navigation };
+};
 export const RecurringWorkspace = (props: Props): JSX.Element => {
   const { view, disabled, filters, timeZone, calendar, setCalendar, tab, setTab } = props;
   const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
-  const [panel, setPanel] = useState<Option.Option<Panel>>(() => Option.none());
+  const { panel, setPanel, navigation, link } = useWorkspacePanel(view, filters, props.previous);
   const save: Save = (edit, onSaved) =>
     props.save(edit, () => {
       if (onSaved !== undefined) onSaved();
@@ -340,7 +384,6 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
   const editing = { ...props, save };
   const open = (item: Occurrence): void =>
     setPanel(Option.some({ kind: "occurrence", planId: item.planId, date: item.date }));
-  const link = (): void => setPanel(linkSelection(panel));
   const create = (): void =>
     setPanel(
       Option.some({
@@ -351,8 +394,7 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
     );
   if (Option.isSome(panel) && panel.value.kind === "link") {
     const selection = panel.value;
-    const close = (): void => setPanel(Option.some({ ...selection, kind: "occurrence" }));
-    return <LinkWorkspace {...editing} selection={selection} close={close} />;
+    return <LinkWorkspace {...editing} selection={selection} navigation={navigation} />;
   }
   return (
     <RecurringSurface>
@@ -387,13 +429,14 @@ export const RecurringWorkspace = (props: Props): JSX.Element => {
 
 const LinkWorkspace = ({
   selection,
-  close,
+  navigation,
   ...props
 }: Props &
   Readonly<{
     selection: Extract<Panel, { kind: "occurrence" | "link" }>;
-    close: () => void;
+    navigation: RecurringNavigation;
   }>): JSX.Element => {
+  const close = navigation.returnToOccurrence;
   const item = selectedOccurrence(props.view, selection);
   return Option.isSome(item) ? (
     <Suspense fallback={<PendingRead label="Cargando vinculación" />}>
@@ -404,6 +447,7 @@ const LinkWorkspace = ({
         save={props.save}
         notice={props.notice}
         close={close}
+        navigation={navigation.browser}
       />
     </Suspense>
   ) : (

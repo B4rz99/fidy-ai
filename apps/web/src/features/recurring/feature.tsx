@@ -16,6 +16,7 @@ import { RecurringQueryFailure } from "./query-failure";
 import { Button } from "@/ui/components/button";
 import { Alert, AlertDescription } from "@/ui/components/alert";
 import { RecurringWorkspace } from "./workspace";
+import { useRecurringWorkspaceView } from "./workspace-view";
 import {
   type LifecycleConfirmation,
   type SaveState,
@@ -40,6 +41,7 @@ type Props = Readonly<{
   applyFilters: (filters: Filters) => void;
   previous: Option.Option<string>;
   earlier: (month: string) => void;
+  selectMonth: (month: string) => void;
 }>;
 const Resources = (props: Props): JSX.Element => {
   const router = useRouter();
@@ -91,7 +93,6 @@ const ResourceContent = ({
   tab: string;
   setTab: (value: string) => void;
 }>): JSX.Element => {
-  const router = useRouter();
   const { state, categoryState, waiting, retry } = planning;
   if (state._tag === "Failure" || categoryState._tag === "Failure") {
     return (
@@ -101,9 +102,6 @@ const ResourceContent = ({
   if (state._tag !== "Ready" || categoryState._tag !== "Ready") {
     return <PendingRead label="Cargando recurrentes" />;
   }
-  const navigate = (month: string): void => {
-    router.navigate({ to: "/app/recurring", search: { month } }).catch(() => undefined);
-  };
   const readState = planning.stale ? "stale" : "current";
 
   return (
@@ -122,8 +120,9 @@ const ResourceContent = ({
         statusFor={planning.statusFor}
         disabled={planning.disabled}
         filters={props.filters}
+        previous={props.previous}
         applyFilters={props.applyFilters}
-        month={(step) => navigate(shiftMonth({ month: props.month, step }))}
+        month={(step) => props.selectMonth(shiftMonth({ month: props.month, step }))}
         earlier={props.earlier}
         timeZone={props.timeZone}
       />
@@ -150,8 +149,7 @@ export const RecurringFeature = ({
     )
   );
   const now = useAtomValue(clock);
-  const [filters, setFilters] = useState<Filters>({});
-  const [previous, setPrevious] = useState<Option.Option<string>>(() => Option.none());
+  const { filters, applyFilters, previous, earlier, selectMonth } = useRecurringWorkspaceView();
   if (state._tag === "Failure") {
     return (
       <Button contentLayout="wrap" focusAppearance="subtle" onClick={refresh}>
@@ -177,9 +175,10 @@ export const RecurringFeature = ({
         month={month}
         timeZone={user.timeZone}
         filters={filters}
-        applyFilters={setFilters}
+        applyFilters={applyFilters}
         previous={Option.filter(previous, (value) => value < month)}
-        earlier={(value) => setPrevious(Option.some(value))}
+        earlier={earlier}
+        selectMonth={selectMonth}
       >
         {children}
       </Resources>

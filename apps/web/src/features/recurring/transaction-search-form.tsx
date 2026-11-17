@@ -12,6 +12,7 @@ import {
   type TransactionFilters,
   type TransactionSearch,
   emptyTransactionFilters,
+  maximumSearchLength,
   transactionSearch,
 } from "./transaction-filters";
 
@@ -19,7 +20,7 @@ type Props = Readonly<{
   draft: TransactionFilters;
   setDraft: (draft: TransactionFilters) => void;
   timeZone: string;
-  apply: (query: TransactionSearch) => void;
+  apply: (query: TransactionSearch, draft: TransactionFilters) => void;
 }>;
 const currencyOptions = [
   { value: "", label: "Todas las monedas" },
@@ -34,7 +35,7 @@ export const TransactionSearchForm = ({ draft, setDraft, timeZone, apply }: Prop
   const submit = (value: TransactionFilters): void => {
     const query = transactionSearch({ draft: value, timeZone });
     setInvalid(Option.isNone(query));
-    Option.map(query, apply);
+    Option.map(query, (search) => apply(search, value));
   };
   const id = useId();
   return (
@@ -52,7 +53,7 @@ export const TransactionSearchForm = ({ draft, setDraft, timeZone, apply }: Prop
           id={`${id}-text`}
           type="search"
           minLength={2}
-          maxLength={80}
+          maxLength={maximumSearchLength}
           value={draft.text}
           placeholder="Contraparte o nota"
           onChange={(event) => change("text")(event.target.value)}
@@ -115,6 +116,7 @@ const DateAmountFields = ({
       <AmountInput
         id={`${id}-amount`}
         width="full"
+        maxLength={maximumSearchLength}
         placeholder="Cualquier importe"
         value={draft.amount}
         onValueChange={change("amount")}

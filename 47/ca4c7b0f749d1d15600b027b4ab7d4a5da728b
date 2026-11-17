@@ -1,0 +1,21 @@
+apps/server/cloudflare/transactions/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_f11d151317cb67 26-30,41-45,64,75
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_4b4ff82a071576 15,367-368,378-380,387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "47ca4c7b0f749d1d15600b027b4ab7d4a5da728b",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

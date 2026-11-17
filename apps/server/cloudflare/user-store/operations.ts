@@ -558,6 +558,17 @@ BEGIN SELECT RAISE(ABORT, 'budget_capacity_limit'); END`,
 
 /** Per-User financial contributions and exact base-ten rollups, installed together with their initial facts. */
 const dashboardSchema = [
+  `ALTER TABLE canonical_request_receipts RENAME TO receipts_before_dashboard`,
+  `CREATE TABLE canonical_request_receipts (
+    user_id TEXT NOT NULL REFERENCES users(id),retry_key_digest TEXT NOT NULL CHECK(length(retry_key_digest)=64),
+    operation TEXT NOT NULL,input_digest TEXT NOT NULL CHECK(length(input_digest)=64),
+    accepted_at_ms INTEGER NOT NULL,status INTEGER NOT NULL CHECK(status BETWEEN 200 AND 499),
+    body TEXT, PRIMARY KEY(user_id,retry_key_digest),
+    CHECK(body IS NULL OR (operation IN ('subscription.cancelSubscription','transactions.createTransaction','transactions.updateTransaction','transactions.linkTransactions','transactions.unlinkTransactions','budgets.createBudget','budgets.updateBudget','budgets.deleteBudget','dashboard.initializeDashboard','dashboard.applyDashboardEdit') AND json_valid(body)))
+  ) STRICT`,
+  `INSERT INTO canonical_request_receipts SELECT * FROM receipts_before_dashboard`,
+  `DROP TABLE receipts_before_dashboard`,
+  `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
   `DELETE FROM transaction_projection_leaf`,
   `CREATE TABLE user_documents (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN('dashboard','recurring-plan')),document_json TEXT NOT NULL CHECK(json_valid(document_json)),revision INTEGER NOT NULL CHECK(revision>=1),PRIMARY KEY(user_id,kind)) STRICT`,
   `CREATE TABLE transaction_projection_bucket (

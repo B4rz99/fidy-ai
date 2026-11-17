@@ -10,7 +10,7 @@ import { prepareConsentAction } from "../../consent/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { TransactionAggregatesUnavailable } from "../contract";
 import { BigDecimal, Effect, Option, Schema } from "effect";
-import { Currency, Money } from "../../../src/core/_shared/money";
+import { Currency, Money, currencyMetadata } from "../../../src/core/_shared/money";
 import { currentCategoryRelease, interpretCategory } from "../../../src/core/categories/operations";
 import { CategoryId, CategoryReference } from "../../../src/core/categories/contract";
 
@@ -205,8 +205,11 @@ const decodeSums = (rows: ReadonlyArray<unknown>): Option.Option<Map<string, big
   return Option.some(sums);
 };
 
-const plausibleTotal = (sum: bigint, maximum: bigint, count: bigint): boolean =>
-  maximum > 0n && sum >= maximum && sum <= maximum * count;
+const plausibleTotal = (sum: bigint, group: typeof GroupRow.Type, count: bigint): boolean => {
+  const maximum = BigInt(group.max_minor);
+  const smallest = 10n ** BigInt(minorScale - currencyMetadata(group.currency).fractionalDigits);
+  return maximum >= smallest && sum >= maximum + (count - 1n) * smallest && sum <= maximum * count;
+};
 
 const decodeGroups = (
   rows: ReadonlyArray<unknown>,
@@ -228,7 +231,7 @@ const decodeGroups = (
     const total = Schema.decodeOption(Schema.toType(Money))({
       currency: group.currency,
       amount: BigDecimal.make(sum, minorScale),
-    }).pipe(Option.filter(() => plausibleTotal(sum, BigInt(group.max_minor), count)));
+    }).pipe(Option.filter(() => plausibleTotal(sum, group, count)));
     if (Option.isNone(total)) return Option.none();
     result.push({
       categoryId: group.category_id,

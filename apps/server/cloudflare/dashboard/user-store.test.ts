@@ -23,6 +23,7 @@ import { native } from "../user-store.test-fixture";
 import {
   alice,
   bob,
+  makeNativeTransactionJourney,
   nativeTransactionJourney,
   seedNativePAT,
 } from "../financial-user-store.test-fixture";
@@ -707,6 +708,66 @@ scenario(
   30000
 );
 
+scenario(
+  "replays committed PAT Dashboard writes and refuses new growth under storage pressure",
+  () =>
+    runNative(
+      Effect.gen(function* () {
+        const store = yield* makeNativeTransactionJourney("1000000");
+        const token = "fin_dbwrites_" + "x".repeat(43);
+        yield* seedNativePAT({
+          db: store,
+          userId: alice.user,
+          token,
+          scopes: ["dashboard"],
+          current: DateTime.nowUnsafe().epochMilliseconds,
+        });
+        const post = (path: string, key: string, body: object): Effect.Effect<Response> =>
+          native(() =>
+            store.send(
+              new Request("https://api.fidyapp.com" + path, {
+                method: "POST",
+                headers: {
+                  authorization: "Bearer " + token,
+                  "content-type": "application/json",
+                  "Fidy-Retry-Key": key,
+                },
+                body: JSON.stringify(body),
+              })
+            )
+          );
+        const initialize = (): Effect.Effect<Response> =>
+          post("/dashboard/initialize", "original-initialize", {});
+        const edit = (): Effect.Effect<Response> =>
+          post("/dashboard/edits", "original-edit", { op: "set-title", title: "Mi tablero" });
+        const original = yield* initialize();
+        const changed = yield* edit();
+        expect([original.status, changed.status]).toEqual([200, 200]);
+        yield* native(() => store.exec("CREATE TABLE storage_pressure (padding BLOB)"));
+        yield* native(() => store.exec("INSERT INTO storage_pressure VALUES(zeroblob(400000))"));
+        for (const [retry, response] of [
+          [initialize, original],
+          [edit, changed],
+        ] as const) {
+          const replay = yield* retry();
+          expect(replay.status).toBe(200);
+          expect(yield* native(() => replay.text())).toBe(yield* native(() => response.text()));
+        }
+        expect(
+          (yield* post("/dashboard/edits", "new-edit", { op: "set-title", title: "Otra" })).status
+        ).toBe(503);
+        expect((yield* post("/dashboard/initialize", "new-initialize", {})).status).toBe(503);
+        expect(
+          yield* native(() =>
+            store.exec(
+              "SELECT revision,(SELECT count(*) FROM canonical_request_receipts) AS receipts,(SELECT sum(units) FROM commercial_allowance_consumptions) AS units FROM user_documents"
+            )
+          )
+        ).toEqual([{ revision: 2, receipts: 2, units: 2 }]);
+      })
+    )
+);
+
 scenario.each(["/dashboard/view", "/dashboard/view?"])(
   "publishes one complete day chart at %s across a concurrent Correction and new SourceAttestation",
   (path) =>
@@ -986,6 +1047,9 @@ scenario(
         expect(yield* metricTotals(yield* native(() => send(store, 0, "/dashboard/view")))).toEqual(
           ["21.37"]
         );
+        yield* native(() => store.exec("UPDATE transaction_projection_bucket SET count=2"));
+        expect((yield* native(() => send(store, 0, "/dashboard/view"))).status).toBe(503);
+        yield* native(() => store.exec("UPDATE transaction_projection_bucket SET count=1"));
         yield* native(() => store.exec("UPDATE transaction_projection_digit SET digit_sum=0"));
         expect((yield* native(() => send(store, 0, "/dashboard/view"))).status).toBe(503);
       })

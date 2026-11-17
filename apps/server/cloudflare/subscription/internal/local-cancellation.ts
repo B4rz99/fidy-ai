@@ -1,4 +1,5 @@
-import { DateTime, Effect, Option, Result, Schema } from "effect";
+import { withStoreCapacity } from "../../runtime/sqlite/operations";
+import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { BillingCollectionFailure, type LocalSourceCancellationWork } from "../contract";
 import { WompiSourceId } from "./wompi-model";
@@ -74,7 +75,7 @@ export const dispatchCancellations = Effect.fnUntraced(function* (
   }>
 ) {
   const sql = yield* SqliteClient;
-  const work = yield* sql.withTransaction(
+  const work = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const page = yield* sql`SELECT c.paid_attempt_id,s.user_id FROM subscription_cancellations c
       JOIN subscriptions s ON s.id=c.subscription_id
@@ -136,7 +137,7 @@ export const observeCancellation = Effect.fnUntraced(function* (
 ) {
   const sql = yield* SqliteClient;
   const { work, current } = input;
-  const claim = yield* sql.withTransaction(
+  const claim = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const rows =
         yield* sql`SELECT src.wompi_source_id,src.wompi_environment,c.void_started_at_ms,c.verification_count
@@ -167,8 +168,11 @@ export const observeCancellation = Effect.fnUntraced(function* (
       .pipe(Effect.ignore);
   }
   if (!(yield* verifyVoidedSource(input.http, source.wompi_source_id))) return;
-  yield* sql.withTransaction(sql`UPDATE subscription_cancellations SET source_cancellation_state='voided',
-    void_verified_at_ms=${current},next_offer_at_ms=NULL,next_verification_at_ms=NULL
+  const verifiedAt = yield* Clock.currentTimeMillis;
+  yield* withStoreCapacity(
+    "required"
+  )(sql`UPDATE subscription_cancellations SET source_cancellation_state='voided',
+    void_verified_at_ms=${verifiedAt},next_offer_at_ms=NULL,next_verification_at_ms=NULL
     WHERE paid_attempt_id=${work.paidAttemptId} AND source_cancellation_state='void-pending' AND void_started_at_ms IS NOT NULL
     AND EXISTS (SELECT 1 FROM payment_sources src JOIN subscriptions s ON s.id=src.subscription_id
       JOIN billing_attempts a ON a.id=subscription_cancellations.paid_attempt_id AND a.subscription_id=s.id

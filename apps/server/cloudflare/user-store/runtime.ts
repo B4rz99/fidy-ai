@@ -70,7 +70,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
       );
     }
-    if (command === "POST /work/check" && request.body === null) {
+    if (command === "POST /work/check") {
       return this.checkWork().then((summary) =>
         Response.json(summary, {
           status: summary.failedFamilies > 0 ? uncertainCheckStatus : completedCheckStatus,

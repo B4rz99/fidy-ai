@@ -26,7 +26,11 @@ export class CancellationFixture extends DurableObject<unknown> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: unknown) {
     super(state, env);
-    this.runtime = createStoreRuntime(state.storage);
+    this.runtime = createStoreRuntime({
+      storage: state.storage,
+      owner: "user",
+      ceilingBytes: "1000000000",
+    });
     state.waitUntil(
       state.blockConcurrencyWhile(() =>
         this.runtime.runPromise(openSqliteStore(userStoreHistory, "fixture"))
@@ -110,7 +114,9 @@ const exerciseQueue = Effect.gen(function* () {
       });
     },
   };
-  const run = Effect.runPromiseWith(yield* Effect.context<SqliteClient>());
+  const run = Effect.runPromiseWith(
+    yield* Effect.context<Effect.Services<ReturnType<typeof handleSourceCancellationWork>>>()
+  );
   const environment: BillingWorkRouting = {
     USER_STORE: {
       getByName: (name) => ({

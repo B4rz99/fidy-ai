@@ -530,6 +530,10 @@ dialog[data-transaction-slot~="transaction-context-panel"] {
 [data-transaction-slot~="transaction-context-panel"] > div:focus {
   outline: none;
 }
+aside[data-transaction-slot~="transaction-context-panel"] > div:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
 [data-transaction-slot~="transaction-selection-bar"] {
   display: flex;
   flex-wrap: wrap;

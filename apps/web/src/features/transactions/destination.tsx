@@ -1,9 +1,28 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useSearch } from "@tanstack/react-router";
 import { Option, Predicate } from "effect";
 import type { JSX } from "react";
 import type { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
+
+export const TransactionDestinationRecovery = (): JSX.Element => {
+  const search = useSearch({ from: "/independent-application/app/transactions" });
+  return search.date === undefined ? (
+    <Button
+      variant="outline"
+      render={<Link to="/app/needs-review" search={{ status: "history" }} />}
+    >
+      Volver al historial
+    </Button>
+  ) : (
+    <Button
+      variant="outline"
+      render={<Link to="/app/transactions" search={{ date: search.date }} />}
+    >
+      Volver a las transacciones
+    </Button>
+  );
+};
 
 export const TransactionDestinationFailure = ({
   state,
@@ -32,12 +51,7 @@ export const TransactionDestinationFailure = ({
         retryingLabel="Reintentando…"
         waiting={state.waiting}
       />
-      <Button
-        variant="outline"
-        render={<Link to="/app/needs-review" search={{ status: "history" }} />}
-      >
-        Volver al historial
-      </Button>
+      <TransactionDestinationRecovery />
     </main>
   );
 };

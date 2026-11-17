@@ -3,6 +3,7 @@ import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { type ComponentProps, type JSX, type ReactNode } from "react";
 import { Option } from "effect";
+import type { TransactionId } from "@/transport/client";
 import { Button } from "./button";
 import { CategoryVisual } from "./category-visual";
 import { DirectionIndicator } from "./icon-indicator";
@@ -104,7 +105,7 @@ export const DashboardBudget = ({
 );
 
 type RecentRow = Readonly<{
-  id: string;
+  id: TransactionId;
   date: string;
   counterparty: string;
   category: string;
@@ -119,7 +120,7 @@ const RecentDirection = ({ inflow }: Readonly<{ inflow: boolean }>): JSX.Element
 const RecentRow = ({ row }: Readonly<{ row: RecentRow }>): JSX.Element => (
   <Link
     to="/app/transactions"
-    search={{ date: row.date }}
+    search={{ date: row.date, transaction: row.id }}
     className="dashboard-recent-row rounded-md focus-visible:outline-2 focus-visible:outline-ring"
     aria-label={`${row.counterparty}, ${row.category}, ${row.inflow ? "Ingreso" : "Gasto"}, ${row.money} ${row.currency}`}
   >

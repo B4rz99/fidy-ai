@@ -9,6 +9,8 @@ You don't remember every skill, so ask.
 
 A **flow** is a path through the skills. Most paths run along one **main flow**, and two **on-ramps** merge onto it. Everything else is standalone, or a vocabulary layer that runs underneath.
 
+Read the relevant skill's `SKILL.md` before describing what it does or recommending that a step be skipped.
+
 ## The main flow: idea → ship
 
 The route most work travels. You have an idea and want it built.
@@ -24,7 +26,7 @@ The route most work travels. You have an idea and want it built.
      - **`$implement-spec`** for the whole spec in one run. It reads the tickets as a **task graph**, runs implementer subagents across the ready **frontier** in parallel, and lands everything on one **integration branch**. Reach for it when you'd rather orchestrate the build than drive each ticket yourself.
    - **No** → **`$implement`** right here, in the same context window.
 
-   Either way, the code gets built by driving **`$tdd`** (one red-green slice at a time) and closes out with **`$code-review`**, a three-axis review (Standards + Security + Spec) of the diff. `$implement` runs both per ticket; `$implement-spec`'s implementers each drive `$tdd`, and it runs one `$code-review` over the integration branch. Reach for **`$tdd`** on its own when you just want to build a concrete behaviour test-first without a full spec, and **`$code-review`** on its own whenever you want to review a branch or PR against a fixed point.
+   Either way, the code gets built by driving **`$tdd`** (one red-green slice at a time) and closes out with **`$code-review`**. It covers Architecture, Standards, Security, and Spec, plus Design for UI changes. `$implement` runs both per ticket. `$implement-spec` uses `$tdd` per ticket and runs one `$code-review` over the integration branch. Reach for **`$tdd`** on its own when you just want to build a concrete behaviour test-first without a full spec, and **`$code-review`** on its own whenever you want to review a branch or PR against a fixed point.
 
    When the work goes up as a pull request, **`$opening-a-pr`** handles the repository's commit, PR, validation, and merge conventions.
 

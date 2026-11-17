@@ -61,7 +61,7 @@ Each ticket is a **child issue** of the map; the tracker's issue id is its ident
 <the decision or investigation this ticket resolves>
 ```
 
-Each ticket carries a `wayfinder:<type>` label, one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)).
+Each ticket carries a `wayfinder:<type>` label, one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)). Use only `wayfinder:` labels on the map and its tickets.
 
 A session **claims** a ticket by assigning it to the dev driving the map, **first**, before any work, so concurrent sessions skip it. That assignee _is_ the claim: an open, unassigned ticket is unclaimed.
 
@@ -110,8 +110,8 @@ User invokes with a loose idea.
 1. **Name the destination.** Read and follow the `grilling` and `domain-modeling` skills, to pin down what this map is finding its way to: the spec, decision, or change. The destination fixes the scope, so it's settled first.
 2. **Map the frontier.** Grill again, **breadth-first** this time: fan out across the whole space rather than deep on any one thread, surfacing the open decisions and the first steps takeable now. **If this surfaces no fog** (the way to the destination is already clear, the whole journey small enough for one session), you don't need a map. Stop and ask the user how they'd like to proceed.
 3. **Create the map** (label `wayfinder:map`): Destination and Notes filled in, Decisions-so-far empty, the fog sketched into **Not yet specified**.
-4. **Create the tickets you can specify now** as child issues of the map, then wire blocking edges in a **second pass** (issues need ids before they can reference each other). Wiring sorts them into the frontier and the blocked; everything you can't yet specify stays in the fog: the **Not yet specified** section.
-5. **Fire the research subagents.** For each `research` ticket you just created, create a dedicated worktree on a throwaway `research/<name>` branch and give its absolute path to a native Codex subagent that reads and follows the `research` skill to resolve the ticket in parallel, capturing its findings there with a context pointer from the ticket.
+4. **Create the tickets you can specify now** as child issues of the map, then add blocking edges and cross-references in a **second pass** using the actual issue IDs. Wiring sorts them into the frontier and the blocked; everything you can't yet specify stays in the fog: the **Not yet specified** section.
+5. **Fire the research subagents.** For each `research` ticket, create a dedicated worktree on a throwaway `research/<name>` branch. Give a fresh native Codex subagent (`fork_turns: "none"`) the ticket reference and absolute worktree path. Have it follow the `research` skill in parallel and capture its findings on that branch with a context pointer from the ticket. Publish the branch by pushing it without a PR.
 6. Stop: charting is one session's work; it hand-resolves nothing.
 
 ### Work through the map
@@ -120,7 +120,7 @@ User invokes with a map (URL or number). A ticket is **optional**: without one, 
 
 1. Load the **map**: the low-res view, not every ticket body.
 2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work.
-3. Resolve it. **Zoom as needed**: fetch the full body of any related or closed ticket on demand; read and follow whichever skills the `## Notes` block names. If in doubt, read and follow the `grilling` and `domain-modeling` skills.
+3. Use the ticket's `wayfinder:<type>` label to select the resolution workflow in [Ticket Types](#ticket-types). **Zoom as needed**: fetch the full body of any related or closed ticket on demand; read and follow whichever skills the `## Notes` block names. If in doubt, read and follow the `grilling` and `domain-modeling` skills.
 4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far.
 5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals that a ticket (this one or another) sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
 

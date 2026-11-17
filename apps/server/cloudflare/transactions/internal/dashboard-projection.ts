@@ -1,3 +1,4 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type {
   CompletePeriodAggregates,
@@ -9,8 +10,9 @@ import { prepareConsentAction } from "../../consent/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { TransactionAggregatesUnavailable } from "../contract";
 import { BigDecimal, Effect, Option, Schema } from "effect";
-import { Currency, Money } from "../../../src/core/_shared/money";
-import { CategoryId } from "../../../src/core/categories/contract";
+import { Currency, Money, currencyMetadata } from "../../../src/core/_shared/money";
+import { currentCategoryRelease, interpretCategory } from "../../../src/core/categories/operations";
+import { CategoryId, CategoryReference } from "../../../src/core/categories/contract";
 
 const maximumPeriodDays = 32;
 const minutesPerDay = 1440;
@@ -111,6 +113,36 @@ const selectedSpans = (
     )
     .join(" UNION ALL ");
 
+const aggregateStatements = (
+  selection: OwnedStatement,
+  range: ProjectionRange
+): ReadonlyArray<OwnedStatement> => {
+  const spans = projectionSpans(range);
+  const buckets = `FROM (${selectedSpans("transaction_projection_bucket", "currency,direction,category_id,count,max_minor", spans)})`;
+  const digits = `FROM (${selectedSpans("transaction_projection_digit", "currency,direction,category_id,position,digit_sum", spans)})`;
+  const params = [
+    ...selection.params,
+    ...spans.flatMap(({ from, toExclusive }) => [from, toExclusive]),
+  ];
+  return [
+    {
+      sql: `WITH owner AS MATERIALIZED (${selection.sql}), chosen AS (SELECT currency, direction, category_id, count, max_minor,
+      ROW_NUMBER() OVER (PARTITION BY currency, direction, category_id
+        ORDER BY length(max_minor) DESC, max_minor DESC) AS rank ${buckets})
+      SELECT currency, direction, category_id, SUM(count) AS count,
+        MAX(CASE WHEN rank = 1 THEN max_minor END) AS max_minor
+      FROM chosen GROUP BY currency, direction, category_id ORDER BY currency, direction, category_id`,
+      params,
+    },
+    {
+      sql: `WITH owner AS MATERIALIZED (${selection.sql}) SELECT currency, direction, category_id, position,
+      SUM(digit_sum) AS digit_sum ${digits}
+      GROUP BY currency, direction, category_id, position`,
+      params,
+    },
+  ];
+};
+
 export const projectionQueries = (
   input: Readonly<{
     db: D1Database;
@@ -126,28 +158,9 @@ export const projectionQueries = (
   const { db, range } = input;
   const selection =
     "userId" in input ? { sql: "SELECT ? AS userId", params: [input.userId] } : input.userSelection;
-  const spans = projectionSpans(range);
-  const buckets = `FROM (${selectedSpans("transaction_projection_bucket", "currency,direction,category_id,count,max_minor", spans)})`;
-  const digits = `FROM (${selectedSpans("transaction_projection_digit", "currency,direction,category_id,position,digit_sum", spans)})`;
-  const params = [
-    ...selection.params,
-    ...spans.flatMap(({ from, toExclusive }) => [from, toExclusive]),
-  ];
-  return [
-    db
-      .prepare(`WITH owner AS MATERIALIZED (${selection.sql}), chosen AS (SELECT currency, direction, category_id, count, max_minor,
-      ROW_NUMBER() OVER (PARTITION BY currency, direction, category_id
-        ORDER BY length(max_minor) DESC, max_minor DESC) AS rank ${buckets})
-      SELECT currency, direction, category_id, SUM(count) AS count,
-        MAX(CASE WHEN rank = 1 THEN max_minor END) AS max_minor
-      FROM chosen GROUP BY currency, direction, category_id ORDER BY currency, direction, category_id`)
-      .bind(...params),
-    db
-      .prepare(`WITH owner AS MATERIALIZED (${selection.sql}) SELECT currency, direction, category_id, position,
-      SUM(digit_sum) AS digit_sum ${digits}
-      GROUP BY currency, direction, category_id, position`)
-      .bind(...params),
-  ];
+  return aggregateStatements(selection, range).map((statement) =>
+    db.prepare(statement.sql).bind(...statement.params)
+  );
 };
 
 /** Count retained rows before aggregation so Dashboard can bound simultaneous raw results. */
@@ -192,6 +205,12 @@ const decodeSums = (rows: ReadonlyArray<unknown>): Option.Option<Map<string, big
   return Option.some(sums);
 };
 
+const plausibleTotal = (sum: bigint, group: typeof GroupRow.Type, count: bigint): boolean => {
+  const maximum = BigInt(group.max_minor);
+  const smallest = 10n ** BigInt(minorScale - currencyMetadata(group.currency).fractionalDigits);
+  return maximum >= smallest && sum >= maximum + (count - 1n) * smallest && sum <= maximum * count;
+};
+
 const decodeGroups = (
   rows: ReadonlyArray<unknown>,
   sums: ReadonlyMap<string, bigint>
@@ -208,17 +227,18 @@ const decodeGroups = (
     if (sum === undefined || Option.isNone(maximum) || !Number.isSafeInteger(group.count)) {
       return Option.none();
     }
+    const count = BigInt(group.count);
     const total = Schema.decodeOption(Schema.toType(Money))({
       currency: group.currency,
       amount: BigDecimal.make(sum, minorScale),
-    });
+    }).pipe(Option.filter(() => plausibleTotal(sum, group, count)));
     if (Option.isNone(total)) return Option.none();
     result.push({
       categoryId: group.category_id,
       direction: group.direction,
       sum: total.value,
       maximum: maximum.value,
-      count: BigInt(group.count),
+      count,
     });
   }
   return Option.some(result);
@@ -461,3 +481,51 @@ export const periodAggregateGuard = (
     )
     .bind(...protectedSelection.params);
 };
+
+/** Read one maintained, exact interval under the encompassing User transaction. */
+export const localProjectionRange = Effect.fn(function* (
+  userId: UserId,
+  from: number,
+  toExclusive: number
+) {
+  const sql = yield* SqliteClient;
+  const range = yield* Effect.fromOption(
+    projectionRange({ from, toExclusive }),
+    () => new TransactionAggregatesUnavailable()
+  );
+  const [groups, digits] = yield* Effect.forEach(
+    aggregateStatements({ sql: "SELECT ? AS userId", params: [userId] }, range),
+    (statement) => sql.unsafe(statement.sql, statement.params)
+  );
+  if (groups === undefined || digits === undefined) {
+    return yield* new TransactionAggregatesUnavailable();
+  }
+  return yield* Effect.fromOption(
+    Option.flatMap(decodeSums(digits), (sums) => decodeGroups(groups, sums)),
+    () => new TransactionAggregatesUnavailable()
+  );
+});
+
+/** Bound retained reference validation by the known taxonomy, independent of the User's history length. */
+export const localProjectionReady = Effect.fn(function* (user: UserId) {
+  const sql = yield* SqliteClient;
+  const [state] =
+    yield* sql`SELECT version, readiness FROM transaction_projection_state WHERE user_id=${user}`;
+  if (!projectionReady(state)) return false;
+  const limit = currentCategoryRelease.revisions.reduce(
+    (total, revision) => total + revision.categories.length,
+    0
+  );
+  const refs = yield* Schema.decodeUnknownEffect(Schema.Array(CategoryReference))(
+    yield* sql`SELECT category_revision AS revision,category_id AS categoryId FROM transaction_projection_references WHERE user_id=${user} LIMIT ${limit + 1}`
+  );
+  if (
+    refs.length > limit ||
+    refs.some((reference) =>
+      Option.isNone(interpretCategory({ release: currentCategoryRelease, reference }))
+    )
+  ) {
+    return yield* new TransactionAggregatesUnavailable();
+  }
+  return true;
+});

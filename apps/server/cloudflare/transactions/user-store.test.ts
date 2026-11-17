@@ -217,7 +217,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const money = { amount: "9007199254740993.15", currency: "USD" };
       const correction = { expectedRevision: 0, changes: { counterparty: "corrected" } };
       yield* owner.exec(
-        "INSERT INTO transaction_projection_state(user_id,version,readiness,fact_revision,first_captured_at_ms,time_zone) VALUES (?,1,'ready',1,?,'America/Bogota')",
+        "UPDATE transaction_projection_state SET fact_revision=1,first_captured_at_ms=?2,time_zone='America/Bogota' WHERE user_id=?1",
         alice.user,
         instant
       );
@@ -531,10 +531,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           id: "20000000-0000-4000-8000-000000000001",
           shortId: "abcdefgh",
         });
-        yield* owner.exec(
-          "INSERT INTO transaction_projection_state(user_id,version,readiness) VALUES (?,1,'ready')",
-          alice.user
-        );
         for (const table of [
           "source_attestations",
           "audit_entries",
@@ -553,7 +549,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           ).toEqual([
             {
               movements: 1,
-              projected: 0,
+              projected: 1,
               sources: 0,
               spent: 0,
               audited: 0,
@@ -566,7 +562,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect((yield* patCapture(runtime, bearer, "before-commit")).status).toBe(201);
         expect(
           yield* owner.exec("SELECT count(*) AS projected FROM transaction_projection_leaf")
-        ).toEqual([{ projected: 1 }]);
+        ).toEqual([{ projected: 2 }]);
       })
   );
   test.effect(
@@ -990,14 +986,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           second,
           alice.user
         );
+        yield* exec("DELETE FROM transaction_projection_leaf WHERE user_id=?", alice.user);
         yield* exec(
           "INSERT INTO transaction_projection_leaf(user_id,id,amount,currency,direction,category_id,counterparty,notes,occurred_at_ms,created_at_ms,revision) SELECT user_id,id,amount,currency,direction,category_id,counterparty,notes,occurred_at_ms,created_at_ms,revision FROM transaction_effective_source"
         );
-        if (readiness !== "absent") {
+        if (readiness === "absent") {
+          yield* exec("DELETE FROM transaction_projection_state WHERE user_id=?", alice.user);
+        } else {
           yield* exec(
-            "INSERT INTO transaction_projection_state(user_id,version,readiness) VALUES (?,1,?)",
-            alice.user,
-            readiness
+            "UPDATE transaction_projection_state SET readiness=? WHERE user_id=?",
+            readiness,
+            alice.user
           );
         }
         const query =

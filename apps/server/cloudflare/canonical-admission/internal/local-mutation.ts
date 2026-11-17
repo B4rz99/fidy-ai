@@ -228,6 +228,8 @@ const charge = Effect.fn(function* (call: Call) {
   return Option.none<Response>();
 });
 const financialGrowth = new Set<string>([
+  "dashboard.initializeDashboard",
+  "dashboard.applyDashboardEdit",
   "budgets.createBudget",
   "budgets.updateBudget",
   "transactions.createTransaction",

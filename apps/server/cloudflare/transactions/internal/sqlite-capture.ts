@@ -84,9 +84,6 @@ export const captureLocalTransaction = Effect.fn(function* (
   if (sources.length !== 1) {
     return yield* new CanonicalAdmissionUnavailable({ cause: "capture_source" });
   }
-  yield* sql`INSERT INTO transaction_projection_leaf(user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision)
-     SELECT user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision FROM transactions
-     WHERE user_id=${userId} AND id=${id} AND EXISTS(SELECT 1 FROM transaction_projection_state WHERE user_id=${userId} AND readiness='ready')`;
   const [row] =
     yield* sql`SELECT * FROM transaction_effective_source WHERE user_id=${userId} AND id=${id}`;
   const decoded = decodeTransactionRow(row);

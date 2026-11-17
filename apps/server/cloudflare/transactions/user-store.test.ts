@@ -15,7 +15,7 @@ import {
   second,
   seed,
   transaction,
-} from "./user-store.test-fixture";
+} from "../financial-user-store.test-fixture";
 
 const jsonBody = (response: Pick<Response, "json">): Effect.Effect<unknown> =>
   native(() => response.json());

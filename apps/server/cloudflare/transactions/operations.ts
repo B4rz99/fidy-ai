@@ -1,3 +1,4 @@
+import { readLocalTransactionAggregate as localAggregate } from "./internal/sqlite-aggregate";
 import { TransactionId } from "../../src/core/transactions/contract";
 import {
   correctLocalTransaction,
@@ -385,4 +386,5 @@ export const dispatchLocalTransaction = (
     Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
   );
 
-export { readLocalTransactionAggregate } from "./internal/sqlite-aggregate";
+export const readLocalTransactionAggregate: typeof localAggregate = (user, from, toExclusive) =>
+  localAggregate(user, from, toExclusive);

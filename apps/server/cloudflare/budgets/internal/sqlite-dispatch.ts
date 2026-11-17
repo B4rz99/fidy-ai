@@ -77,7 +77,7 @@ const dispatch = Effect.fn(function* (unit: Unit) {
       return yield* runLocalMutation({
         ...unit,
         input: Effect.succeed(
-          Option.flatMap(Schema.decodeOption(queryOperation)(operation.id), (operation) =>
+          Option.flatMap(Schema.decodeUnknownOption(queryOperation)(operation.id), (operation) =>
             budgetParameters({ operation, url })
           )
         ),

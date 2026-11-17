@@ -1,6 +1,7 @@
 import {
   installationNames,
   requireAbsentInstallation,
+  requireClosedBindings,
   requireFreshPlan,
   requireInstallationWorker,
 } from "./storage-installation";
@@ -147,6 +148,8 @@ it("binds each planned Worker to the closed installation before any provider app
     { workersDev: true },
     { version: { traffic: 100 } },
     { routes: ["api.fidyapp.com/*"] },
+    { crons: ["* * * * *"] },
+    { tailConsumers: ["another-worker"] },
   ]) {
     expect(() =>
       requireInstallationWorker({ logicalId: "Ingress", props: { ...ingress, ...drift } })
@@ -155,4 +158,22 @@ it("binds each planned Worker to the closed installation before any provider app
   expect(() =>
     requireInstallationWorker({ logicalId: "Core", props: { ...base, domain: "api.fidyapp.com" } })
   ).toThrow();
+});
+
+it("rejects open admission and producer bindings before applying either Worker", () => {
+  const closed = { name: "RECOVERY_ISOLATION", type: "plain_text", text: "isolated" };
+  const core = { name: "CORE", type: "service" };
+  expect(() =>
+    requireClosedBindings({ worker: "Ingress", bindings: [closed, core] })
+  ).not.toThrow();
+  expect(() => requireClosedBindings({ worker: "Core", bindings: [closed, core] })).toThrow();
+  for (const worker of ["Ingress", "Core"] as const) {
+    expect(() => requireClosedBindings({ worker, bindings: [] })).toThrow();
+    expect(() => requireClosedBindings({ worker, bindings: [{ ...closed, text: "" }] })).toThrow();
+    for (const type of ["queue", "workflow", "send_email", "d1"]) {
+      expect(() =>
+        requireClosedBindings({ worker, bindings: [closed, { name: "EXTRA", type }] })
+      ).toThrow();
+    }
+  }
 });

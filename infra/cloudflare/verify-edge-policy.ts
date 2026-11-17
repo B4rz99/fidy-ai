@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "dac1114c0328f5426cf21136bf9d34beb19e98f965ab0f3d1918514340f9b09c";
+const expectedEdgePolicyDigest = "024ffef96094beac442e3687058d980221816180057e724d01ca733f9c84c24f";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/tokens/operations.ts", import.meta.url)
@@ -12,6 +12,12 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/transactions/internal/sqlite-capture.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/transactions/internal/sqlite-corrections.ts",
+      import.meta.url
+    )
   ).text(),
   await Bun.file(
     new URL(

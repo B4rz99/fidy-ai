@@ -1,4 +1,4 @@
-import type { Plan } from "alchemy/Plan";
+import { type Plan, describeResource } from "alchemy/Plan";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, type Redacted, Schema } from "effect";
 import { browserOrigins } from "../../apps/server/cloudflare/runtime/contract";
@@ -112,6 +112,9 @@ const networkSurface = {
   routes: Schema.optional(Schema.Never),
   namespace: Schema.optional(Schema.Never),
   preview: Schema.optional(Schema.Never),
+  crons: Schema.optional(Schema.Never),
+  tailConsumers: Schema.optional(Schema.Never),
+  streamingTailConsumers: Schema.optional(Schema.Never),
 };
 export const requireInstallationWorker = ({
   logicalId,
@@ -131,6 +134,7 @@ export const requireInstallationWorker = ({
 };
 
 const ProviderBindings = Schema.Struct({
+  crons: Schema.optional(Schema.Never),
   bindings: Schema.optional(
     Schema.Array(
       Schema.StructWithRest(Schema.Struct({ type: Schema.String, name: Schema.String }), [
@@ -139,11 +143,45 @@ const ProviderBindings = Schema.Struct({
     )
   ),
 });
+type PlannedBinding = NonNullable<typeof ProviderBindings.Type.bindings>[number];
+const installationBindings = {
+  BROWSER_ORIGIN: "plain_text",
+  RELEASE_GIT_SHA: "plain_text",
+  CONTRACT_DIGEST: "plain_text",
+  RECOVERY_ISOLATION: "plain_text",
+  [storageReleaseBinding]: "plain_text",
+  CF_VERSION_METADATA: "version_metadata",
+  SMOKE_PROOF: "secret_text",
+};
+export const requireClosedBindings = ({
+  worker,
+  bindings,
+}: {
+  worker: keyof typeof installationNames;
+  bindings: ReadonlyArray<PlannedBinding>;
+}): void => {
+  const allowed = new Map(Object.entries(installationBindings));
+  if (worker === "Ingress") {
+    allowed.set("CORE", "service");
+  } else {
+    allowed.set("SQLITE_STORE_CAPACITY_BYTES", "plain_text");
+    for (const name of Object.keys(namespaceClasses)) allowed.set(name, "durable_object_namespace");
+  }
+  if (
+    bindings.filter((binding) => binding.name === "RECOVERY_ISOLATION").length !== 1 ||
+    !bindings.some(
+      (binding) => binding.name === "RECOVERY_ISOLATION" && binding.text === "isolated"
+    ) ||
+    !bindings.every((binding) => allowed.get(binding.name) === binding.type)
+  ) {
+    throw Error("Native installation requires closed admission and isolated bindings");
+  }
+};
 /** Use the same binding data the pinned provider reads when preparing its native class migration. */
 export const requireNativeBindings = (plan: Plan): void => {
   const rows = Object.values(plan.resources);
-  const core = rows.find((node) => node.resource.LogicalId === "Core");
-  const ingress = rows.find((node) => node.resource.LogicalId === "Ingress");
+  const core = rows.find((node) => describeResource(node).logicalId === "Core");
+  const ingress = rows.find((node) => describeResource(node).logicalId === "Ingress");
   if (rows.length !== 2 || core === undefined || ingress === undefined) {
     throw Error("Unexpected native Worker plan");
   }
@@ -151,9 +189,13 @@ export const requireNativeBindings = (plan: Plan): void => {
     node.action === "noop" ? node.state.props : node.props;
   requireInstallationWorker({ logicalId: "Core", props: workerProps(core) });
   requireInstallationWorker({ logicalId: "Ingress", props: workerProps(ingress) });
-  const material = core.bindings.flatMap(
-    (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
-  );
+  const bindings = (node: typeof core): ReadonlyArray<PlannedBinding> =>
+    node.bindings.flatMap(
+      (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
+    );
+  const material = bindings(core);
+  requireClosedBindings({ worker: "Core", bindings: material });
+  requireClosedBindings({ worker: "Ingress", bindings: bindings(ingress) });
   const classes = material.filter((binding) => binding.type === "durable_object_namespace");
   const exact = Object.entries(namespaceClasses).every(([name, expected]) =>
     classes.some(
@@ -164,11 +206,7 @@ export const requireNativeBindings = (plan: Plan): void => {
         binding.transferredFrom === undefined
     )
   );
-  if (
-    !exact ||
-    classes.length !== Object.keys(namespaceClasses).length ||
-    material.some((binding) => binding.type === "d1")
-  ) {
+  if (!exact || classes.length !== Object.keys(namespaceClasses).length) {
     throw Error("Native namespace lifecycle differs");
   }
 };

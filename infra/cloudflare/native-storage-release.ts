@@ -47,6 +47,12 @@ const {
 const origin = "https://" + nativeIngressHost;
 const successStatusStart = 200;
 const recoveryUnavailableStatus = 503;
+const IngressDomainResponse = Schema.Struct({
+  success: Schema.Literal(true),
+  result: Schema.Array(
+    Schema.Struct({ hostname: Schema.NonEmptyString, service: Schema.NonEmptyString })
+  ),
+});
 const firstInstallInventory = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const get = (path: string): Effect.Effect<unknown, Error> =>
     providerJson(
@@ -101,10 +107,9 @@ const firstInstallInventory = Effect.fn(function* (env: Config, client: HttpClie
         use_sqlite: Schema.optional(Schema.Boolean),
       })
     ),
-    domains: yield* pages(
-      "workers/domains",
-      Schema.Struct({ hostname: Schema.NonEmptyString, service: Schema.NonEmptyString })
-    ),
+    domains: (yield* Schema.decodeUnknownEffect(IngressDomainResponse)(
+      yield* get(`workers/domains?hostname=${nativeIngressHost}`)
+    )).result,
   };
 });
 
@@ -562,7 +567,7 @@ const rollbackNative = Effect.fn(function* (
   client: HttpClient.HttpClient,
   port: ReleasePort
 ) {
-  const { release, promoted, rollbackTested } = yield* Schema.decodeUnknownEffect(
+  const { release, promoted } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ ...RollbackReceipt.fields, rollbackTested: Schema.Literal(true) })
   )(yield* readFile(env.file + ".promoted"));
   yield* releaseController.requireTrunk(port, release.snapshot.revision);
@@ -570,7 +575,7 @@ const rollbackNative = Effect.fn(function* (
   yield* releaseRollback.restore(releaseEvidence.rollbackPort(port, env, client), {
     release,
     promoted,
-    compatible: rollbackTested && eligible.rollback,
+    compatible: eligible.rollback,
   });
   const restored = yield* readStablePair(
     {

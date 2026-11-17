@@ -60,7 +60,14 @@ const NavigationProbe = (): ReturnType<typeof createElement> => {
           ),
           createElement(
             "button",
-            { onClick: () => browser.change({ ...browser.state, applied: browser.state.draft }) },
+            {
+              onClick: () =>
+                browser.change({
+                  ...browser.state,
+                  applied: browser.state.draft,
+                  selectedId: undefined,
+                }),
+            },
             "Apply search"
           ),
           createElement(
@@ -68,7 +75,18 @@ const NavigationProbe = (): ReturnType<typeof createElement> => {
             { onClick: () => browser.select(transactionId) },
             "Review result"
           ),
-          createElement("button", { onClick: browser.clear }, "Close review")
+          createElement("button", { onClick: browser.clear }, "Close review"),
+          createElement(
+            "button",
+            {
+              onClick: () =>
+                browser.change({
+                  ...browser.state,
+                  draft: { ...browser.state.draft, text: "Factura" },
+                }),
+            },
+            "Change search"
+          )
         ),
     })
   );
@@ -203,3 +221,21 @@ const expectSearch = (container: HTMLElement, text: string): Promise<void> =>
 const back = (router: NavigationRouter): Promise<void> => reactWork(() => router.history.back());
 const forward = (router: NavigationRouter): Promise<void> =>
   reactWork(() => router.history.forward());
+
+it("applying another search during review keeps close and Back on the current picker", () =>
+  withNavigation(({ container, router }) =>
+    Effect.gen(function* () {
+      yield* openPicker(container);
+      yield* Effect.tryPromise(() => click(container, "Edit search"));
+      yield* Effect.tryPromise(() => click(container, "Apply search"));
+      yield* Effect.tryPromise(() => click(container, "Review result"));
+      yield* Effect.tryPromise(() => click(container, "Change search"));
+      yield* Effect.tryPromise(() => click(container, "Apply search"));
+      yield* Effect.tryPromise(() => expectSearch(container, "Factura|Factura|unselected"));
+      yield* Effect.tryPromise(() => click(container, "Review result"));
+      yield* Effect.tryPromise(() => click(container, "Close review"));
+      yield* Effect.tryPromise(() => expectSearch(container, "Factura|Factura|unselected"));
+      yield* Effect.tryPromise(() => back(router));
+      yield* Effect.tryPromise(() => expectStep(container, "occurrence"));
+    })
+  ));

@@ -137,7 +137,13 @@ export const useRecurringNavigation = (scope: string): RecurringNavigation => {
     if (Option.isNone(current)) return;
     const next = { ...current.value, browser };
     remember(Option.some(next));
-    save(Option.some(next), replace);
+    if (
+      replace &&
+      current.value.browser.selectedId !== undefined &&
+      browser.selectedId === undefined
+    ) {
+      restorePicker({ router, scope, value: next });
+    } else save(Option.some(next), replace);
   };
   return {
     selection,
@@ -149,25 +155,15 @@ export const useRecurringNavigation = (scope: string): RecurringNavigation => {
       select: (selectedId) =>
         changeBrowser({ ...value.browser, selectedId }, value.browser.selectedId !== undefined),
       clear: () =>
-        returnToIndex({
+        restorePicker({
           router,
-          index: value.pickerIndex,
-          fallback: () => changeBrowser({ ...value.browser, selectedId: undefined }, true),
+          scope,
+          value: { ...value, browser: { ...value.browser, selectedId: undefined } },
         }),
     })),
     close: () =>
       closeCurrent({ router, scope, key: Option.fromUndefinedOr(location.state.__TSR_key) }),
-    returnToOccurrence: () => {
-      const current = linkSelection(selection);
-      if (Option.isNone(current)) return;
-      const value = current.value;
-      returnToIndex({
-        router,
-        index: value.occurrenceIndex,
-        fallback: () =>
-          save(Option.some({ kind: "occurrence", planId: value.planId, date: value.date }), true),
-      });
-    },
+    returnToOccurrence: () => returnToOccurrence({ router, scope, selection }),
   };
 };
 const returnToIndex = ({
@@ -188,4 +184,69 @@ const closeCurrent = ({
   if (Option.contains(key, router.latestLocation.state.__TSR_key ?? "")) {
     saveSelection({ router, scope, selection: Option.none(), replace: true });
   }
+};
+
+const restorePicker = ({
+  router,
+  scope,
+  value,
+}: Readonly<{
+  router: RegisteredRouter;
+  scope: string;
+  value: typeof LinkSelection.Type;
+}>): void => {
+  const binding = router.options.context.sessionBinding;
+  const save = (): void =>
+    saveSelection({ router, scope, selection: Option.some(value), replace: true });
+  const distance = router.latestLocation.state.__TSR_index - value.pickerIndex;
+  if (distance <= 0 || distance > 2) {
+    save();
+    return;
+  }
+  const finish = (): void => {
+    stop();
+    const location = router.history.location;
+    if (
+      location.state.__TSR_index !== value.pickerIndex ||
+      router.options.context.sessionBinding !== binding
+    ) {
+      return;
+    }
+    const target = readSelection(location.state, binding, scope);
+    if (
+      Option.exists(
+        target,
+        (selection) => selection.kind === "link" && sameOccurrence(selection, value)
+      )
+    ) {
+      save();
+    }
+  };
+  const stop = router.history.subscribe(finish);
+  router.history.go(-distance);
+};
+
+const returnToOccurrence = ({
+  router,
+  scope,
+  selection,
+}: Readonly<{
+  router: RegisteredRouter;
+  scope: string;
+  selection: Option.Option<Selection>;
+}>): void => {
+  const current = linkSelection(selection);
+  if (Option.isNone(current)) return;
+  const value = current.value;
+  returnToIndex({
+    router,
+    index: value.occurrenceIndex,
+    fallback: () =>
+      saveSelection({
+        router,
+        scope,
+        selection: Option.some({ kind: "occurrence", planId: value.planId, date: value.date }),
+        replace: true,
+      }),
+  });
 };

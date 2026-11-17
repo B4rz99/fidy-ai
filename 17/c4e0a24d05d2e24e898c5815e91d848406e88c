@@ -1,0 +1,82 @@
+apps/server/cloudflare/user-store/initial-schema.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 274
+  s_a1be23a656acf0::t_2ffae26f244e00 1-273,275
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 317-322
+  s_a1be23a656acf0::t_d687b13ee76a8f 100,108-109,136,316
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 1748-1750
+  s_a1be23a656acf0::t_785a2680277a93 1,1747,1751
+apps/server/cloudflare/workflow-test-runtime.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 26
+  s_a1be23a656acf0::t_943d7c09f2b408 18-25,27
+apps/server/cloudflare/transactions/internal/transaction-history.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 276
+  s_a1be23a656acf0::t_2ffae26f244e00 283,526,562
+  s_a1be23a656acf0::t_e2092fda476f57 280-282
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 7-27,29-33,35-47
+  s_a1be23a656acf0::t_c676d16f51a593 1-6,28,34,48-53
+apps/server/cloudflare/quotas/operations.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 155,160-161,168-170
+  s_a1be23a656acf0::t_2ffae26f244e00 150-154,156
+apps/server/cloudflare/directory/operations.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 8-12,14-18,20-26,29-31,33-37
+  s_a1be23a656acf0::t_207cb9a0120422 1-7,13,19,27-28,32,38
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 8-12,17-27,29
+  s_a1be23a656acf0::t_d3acc31adbbe95 1-7,13-16,28,30-31
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 9-28,31-39,41-42,44-45,47-51,53,55-90,95-98,100-109,113-114,116-120,122-125,128-135,220-221,235,245,249,253,268,271-272,276-277,285,288-289,291,293,296-297,300,302-303,305,336-340
+  s_a1be23a656acf0::t_cbf510f91e2e40 1-8,29-30,40,43,46,52,54,91-94,99,110-112,115,121,126-127,136-219,222-234,236-244,246-248,250-252,254-267,269-270,273-275,278-284,286-287,290,292,294-295,298-299,301,304,306-335,341-351
+apps/server/cloudflare/transactions/internal/sqlite-history.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 4-29,36-51,56-61,64-85
+  s_a1be23a656acf0::t_073c4978efab83 1-2,30-33,35,52-55,62-63,86
+apps/server/cloudflare/web-session/internal/authentication.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 46-66,69,71-91
+apps/server/cloudflare/web-session/operations.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 34-35,38-41,45-61
+  s_a1be23a656acf0::t_132947abfaf0ad 1,26,29-32,36-37,62
+apps/server/cloudflare/routing/runtime.ts
+  s_a1be23a656acf0::t_c8319bd17124c5 16-17
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_303218fd9d2299 70-75
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_a1be23a656acf0::t_85da1bca5705b8 2
+apps/server/cloudflare/core-http/contract.ts
+  s_a1be23a656acf0::t_d21a5909a0c36e 1,8
+apps/server/cloudflare/core-worker.ts
+  s_a1be23a656acf0::t_9b2bc6cf87ce20 34-35
+apps/server/cloudflare/directory/contract.ts
+  s_a1be23a656acf0::t_b29d43d48cc558 1-12
+apps/server/cloudflare/runtime/sqlite/operations.ts
+  s_a1be23a656acf0::t_bd7baa44de6dbf 1-27
+apps/server/cloudflare/transactions/operations.ts
+  s_a1be23a656acf0::t_797df5930abc3a 3,119-120
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_6e3f85ceae228c 1-70
+apps/server/package.json
+  s_a1be23a656acf0::t_44fe28bd19fae6 321
+bun.lock
+  s_a1be23a656acf0::t_18c90e921bdaeb 55
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_c3c1d60b06e839 437-438
+tools/depcruise/boundaries.mjs
+  s_a1be23a656acf0::t_7b08adebacc965 118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17c4e0a24d05d2e24e898c5815e91d848406e88c",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

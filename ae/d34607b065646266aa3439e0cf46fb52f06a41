@@ -1,0 +1,59 @@
+apps/server/cloudflare/onboarding/native.ts
+  s_a1be23a656acf0::t_017ff0a9d5aad9 6,10,20-21,25-26,35,45-49,51-52,64,67,89,112
+  s_a1be23a656acf0::t_b47b9c25099327 1,101-111,113
+apps/server/cloudflare/directory/contract.ts
+  s_a1be23a656acf0::t_017ff0a9d5aad9 26-28,36-41,50
+  s_a1be23a656acf0::t_c96f377b97fae7 42-49,51-52
+apps/server/cloudflare/directory/schema/operations.ts
+  s_a1be23a656acf0::t_017ff0a9d5aad9 28,31-36
+  s_a1be23a656acf0::t_d1f7ffc8f40d5f 37
+apps/server/cloudflare/directory/internal/provider.ts
+  s_a1be23a656acf0::t_017ff0a9d5aad9 1,35,41-45,75,89,91,94,97-102,108,116-119
+apps/server/cloudflare/directory/internal/whatsapp.ts
+  s_a1be23a656acf0::t_017ff0a9d5aad9 3-27,29-45,47-48,50-64
+  s_a1be23a656acf0::t_bbbc745b6a59cd 1-2,28,46,49
+apps/server/cloudflare/browser-login/native.ts
+  s_a1be23a656acf0::t_7c54ce51dabf39 1-2,74-99
+apps/server/cloudflare/directory/bootstrap.test-fixture.ts
+  s_a1be23a656acf0::t_34ad458c74f6c1 1-37
+apps/server/cloudflare/directory/bootstrap.test.ts
+  s_a1be23a656acf0::t_f58f6cd22c0200 1-2,20,52-84
+apps/server/cloudflare/directory/internal/channel.ts
+  s_a1be23a656acf0::t_0954ab009acba3 1-32
+apps/server/cloudflare/directory/internal/reservations.ts
+  s_a1be23a656acf0::t_18563ead6a63cf 15-17,35,39-40,46-58
+apps/server/cloudflare/directory/oidc.test-fixture.ts
+  s_a1be23a656acf0::t_d348434d098da8 1-31
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_752980aa6f0ef6 1-4,6-7,97-99,103-108,110-112
+apps/server/cloudflare/provider-authentication/runtime.ts
+  s_a1be23a656acf0::t_abb67b1b919524 1-3,84-100
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_f51502237b53ac 89,98-103,125,149,159
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_306840de2bf4f7 749
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_bba0c7ef456095 4,157
+apps/server/cloudflare/web-session/native.ts
+  s_a1be23a656acf0::t_685f50a856efaf 69,74,81
+apps/server/cloudflare/whatsapp/contract.ts
+  s_a1be23a656acf0::t_55b0096cb0d2a4 249
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_a1be23a656acf0::t_ca60a2646327b6 4,220-221,224,275-277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aed34607b065646266aa3439e0cf46fb52f06a41",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

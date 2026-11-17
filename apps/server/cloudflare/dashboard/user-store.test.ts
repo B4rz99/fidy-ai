@@ -497,7 +497,7 @@ const viewWidgets = (
   node: DashboardView["layout"]
 ): ReadonlyArray<Extract<DashboardView["layout"], { kind: "leaf" }>["widget"]> =>
   node.kind === "leaf" ? [node.widget] : node.children.flatMap((child) => viewWidgets(child.node));
-const fetchView = Effect.fn(function* (store: Journey, path = "/dashboard/view") {
+const fetchView = Effect.fn(function* (store: Journey, path: string = "/dashboard/view") {
   const response = yield* native(() => send(store, 0, path));
   expect(response.status).toBe(200);
   const body = yield* Schema.decodeUnknownEffect(

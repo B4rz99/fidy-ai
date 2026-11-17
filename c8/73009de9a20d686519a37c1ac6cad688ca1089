@@ -1,0 +1,32 @@
+apps/web/src/features/recurring/workspace.tsx
+  s_398952c775f46d::t_36b855796f161e 334-338
+apps/web/src/features/recurring/navigation.test.ts
+  s_398952c775f46d::t_36b855796f161e 25-29,301,308-311
+  s_398952c775f46d::t_2dff022b2eba2f 130,136-137,139,299,302-304,307,316-317
+  s_398952c775f46d::t_a31daac48a1517 50,300,305-306,312-315,318-320
+  s_398952c775f46d::t_95abbb701cd73b 321-324
+  s_398952c775f46d::t_765fb545dcaaa7 138
+apps/web/src/features/recurring/navigation.ts
+  s_398952c775f46d::t_36b855796f161e 5,13-18,41,44,55,67-69
+  s_398952c775f46d::t_b73e26ea0eb48e 70-71,74,125-129,198,210,250
+apps/web/src/features/recurring/workspace-view.ts
+  s_398952c775f46d::t_f0bf46406ee5cb 3,25,27-38
+.patterns/sources.json
+  s_398952c775f46d::t_f055c6d7d73839 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c873009de9a20d686519a37c1ac6cad688ca1089",
+  "prompts": {},
+  "sessions": {
+    "s_398952c775f46d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7cc-45f6-7663-8706-7b8ec59907e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

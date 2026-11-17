@@ -804,12 +804,39 @@
   min-block-size: 3em;
   overflow-wrap: anywhere;
 }
-@media (min-width: 1251px) {
-  [data-review="columns"] {
-    overflow: hidden;
+@media (min-width: 901px) {
+  [data-review="detail"]:has(> [data-review="columns"] > [data-review="form"]) {
+    min-height: max(var(--review-height), 28rem);
+    padding-bottom: 0;
   }
-  [data-review="columns"] > * {
-    max-height: 100%;
+  [data-review="detail"]:has(> [data-review="columns"] > [data-review="form"])
+    > [data-review="footer"] {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    padding-bottom: 24px;
+    background: var(--background);
+  }
+  [data-review="columns"]:has(> [data-review="form"]) {
+    padding: 4px;
+    margin: -4px;
+  }
+}
+@media (min-width: 1251px) {
+  [data-review="columns"]:has(> [data-review="form"]) {
+    overflow: clip;
+  }
+  [data-review="columns"]:has(> [data-review="form"]) > * {
+    max-height: calc(100% + 8px);
+    padding: 4px;
+    margin: -4px;
     overflow-y: auto;
+  }
+}
+
+@media (min-width: 1251px) {
+  [data-review="columns"]:has(> [data-review="form"]) > :first-child {
+    position: sticky;
+    top: 8px;
   }
 }

@@ -1,8 +1,7 @@
 import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
-import { type Cause, Clock, DateTime, Effect, Option } from "effect";
+import { type Cause, Clock, Effect, Option } from "effect";
 import { listPATs } from "../tokens/operations";
 import { executeProtectedSubscriptionQuery } from "../subscription/operations";
-import { browseTransactions } from "../transactions/operations";
 import { type Mock, afterAll, expect, it, vi } from "vitest";
 import { getBoundOperationCatalog } from "../../src/shell/canonical-catalog/contract";
 
@@ -29,7 +28,6 @@ const atomicListings = [
   "recurringPlans.getRecurringWorkspace",
   "categories.listCategories",
   "dashboard.listDashboardCatalog",
-  "transactions.listTransactions",
   "budgets.getBudgetStatus",
   "ingestion.getReviewWorkspace",
   "ingestion.getReviewPageContext",
@@ -174,7 +172,6 @@ it.each([
   ["quota.getQuota", 3],
   ["recurringPlans.getRecurringWorkspace", 1],
   ["categories.listCategories", 1],
-  ["transactions.listTransactions", 1],
   ["budgets.getBudgetStatus", 1],
 ] as const)("serves %s within %i fresh recovery-generation checks", (operationId, checks) =>
   Effect.runPromise(
@@ -576,170 +573,6 @@ it.each(atomicListings)(
               .first()
           )
         ).toEqual({ total: 2 });
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()
-          )
-        ).toEqual({ total: 0 });
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
-              .first()
-          )
-        ).toEqual({ total: 0 });
-      })
-    )
-);
-
-const historyId = (index: number): string =>
-  `40000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
-const historyStart = 1767225600000;
-const historyMinute = 60000;
-
-it("refuses malformed atomic Transaction projections without a lease or commercial spend", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* browserFixture("transactions.listTransactions");
-      yield* seedScopedHistory(fixture);
-      yield* Effect.tryPromise(() =>
-        fixture.db
-          .prepare(
-            "UPDATE transaction_projection_leaf SET amount='invalid-money' WHERE user_id=? AND id=?"
-          )
-          .bind(fixture.userId, historyId(3))
-          .run()
-      );
-      const response = yield* Effect.tryPromise(() => fixture.request());
-      expect(response.status).toBe(503);
-      for (const table of ["canonical_request_leases", "commercial_allowance_consumptions"]) {
-        expect(
-          yield* Effect.tryPromise(() =>
-            fixture.db.prepare(`SELECT count(*) AS total FROM ${table}`).first()
-          )
-        ).toEqual({ total: 0 });
-      }
-    })
-  ));
-
-const seedScopedHistory = (fixture: BrowserReadFixture): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const foreignUser = "10000000-0000-4000-8000-000000000002";
-    yield* Effect.tryPromise(() =>
-      fixture.db
-        .prepare(
-          "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',0)"
-        )
-        .bind(foreignUser)
-        .run()
-    );
-    yield* Effect.tryPromise(() =>
-      fixture.db.batch(
-        Array.from({ length: 10 }, (_, offset) => {
-          const index = offset + 1;
-          return fixture.db
-            .prepare(
-              "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms,revision) VALUES (?,?,?,?,?,'shop','10000000-0000-4000-8000-000000000016',?,?,?,?)"
-            )
-            .bind(
-              historyId(index),
-              index > 8 ? foreignUser : fixture.userId,
-              index === 3 ? "9007199254740993.01" : "100",
-              index === 8 ? "USD" : "COP",
-              index === 8 ? "inflow" : "outflow",
-              index === 3 ? "corrected" : null,
-              historyStart + index * historyMinute,
-              historyStart + index * historyMinute + 1000,
-              index === 3 ? 1 : 0
-            );
-        })
-      )
-    );
-    yield* Effect.tryPromise(() =>
-      fixture.db.batch([
-        fixture.db
-          .prepare("INSERT INTO transaction_reconciliation_decisions VALUES (?,?,?,'linked',?,?)")
-          .bind(fixture.userId, historyId(1), historyId(2), historyId(1), historyStart),
-        fixture.db
-          .prepare(
-            "UPDATE transactions SET reconciliation_first_id=?,reconciliation_second_id=? WHERE user_id=? AND id IN (?,?)"
-          )
-          .bind(historyId(1), historyId(2), fixture.userId, historyId(1), historyId(2)),
-      ])
-    );
-  });
-
-it.each(["ready", "rebuilding", "absent"] as const)(
-  "keeps atomic History identical across filters, pages and %s projection state",
-  (readiness) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fixture = yield* browserFixture("transactions.listTransactions");
-        yield* seedScopedHistory(fixture);
-        if (readiness === "absent") {
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("DELETE FROM transaction_projection_state WHERE user_id=?")
-              .bind(fixture.userId)
-              .run()
-          );
-        } else {
-          yield* Effect.tryPromise(() =>
-            fixture.db
-              .prepare("UPDATE transaction_projection_state SET readiness=? WHERE user_id=?")
-              .bind(readiness, fixture.userId)
-              .run()
-          );
-        }
-        const digest = new Uint8Array(
-          yield* Effect.tryPromise(() =>
-            crypto.subtle.digest("SHA-256", new TextEncoder().encode(fixture.token))
-          )
-        );
-        const route = Option.getOrThrow(
-          Option.fromUndefinedOr(
-            getBoundOperationCatalog().byId.get("transactions.listTransactions")
-          )
-        ).route;
-        const cursor = `${DateTime.formatIso(DateTime.makeUnsafe(historyStart + 6 * historyMinute))}|${DateTime.formatIso(DateTime.makeUnsafe(historyStart + 6 * historyMinute + 1000))}|${historyId(6)}`;
-        for (const test of [
-          { query: "?limit=100", status: 200 },
-          { query: "?limit=2", status: 200 },
-          { query: "?limit=5&currency=COP&direction=outflow&counterparty=shop", status: 200 },
-          { query: "?from=2026-01-01T00:00:00Z&to=2026-01-01T00:10:00Z", status: 200 },
-          { query: `?limit=2&cursor=${encodeURIComponent(cursor)}`, status: 200 },
-          { query: "?limit=invalid", status: 400 },
-          { query: "?limit=2&limit=3", status: 400 },
-        ]) {
-          const request = new Request(`https://api.fidyapp.com${route}${test.query}`, {
-            headers: {
-              cookie: `__Host-fidy_session=${fixture.token}`,
-              [browserSessionBindingHeader]: fixture.sessionId,
-            },
-          });
-          fixture.generationReads.mockClear();
-          const actual = yield* Effect.tryPromise(() => fixture.core(request, fixture.environment));
-          expect(actual.status).toBe(test.status);
-          expect(fixture.generationReads).toHaveBeenCalledTimes(1);
-          const expected = yield* browseTransactions({
-            db: fixture.db,
-            selection: {
-              request,
-              search: false,
-              id: Option.none(),
-              subject: { id: fixture.sessionId, userId: fixture.userId, digest },
-            },
-          });
-          expect(expected.status).toBe(test.status);
-          const body = yield* Effect.tryPromise(() => actual.text());
-          expect(body).toBe(yield* Effect.tryPromise(() => expected.text()));
-          expect(body).not.toContain(historyId(9));
-          expect(body).not.toContain(historyId(10));
-          if (test.query === "?limit=100") {
-            expect(body).toContain("9007199254740993.01");
-            expect(body).not.toContain(historyId(2));
-          }
-        }
         expect(
           yield* Effect.tryPromise(() =>
             fixture.db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()

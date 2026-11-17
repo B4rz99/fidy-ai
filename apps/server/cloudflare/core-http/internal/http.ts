@@ -1,3 +1,4 @@
+import { routeBrowserHistory } from "../../directory/operations";
 import { coordinatorErasureStoreIds } from "../../transactions/runtime";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { prepareBoundRecurringWorkspace } from "../../recurring-plans/operations";
@@ -81,7 +82,6 @@ import { observeCanonicalResponse } from "../../runtime/application-observation/
 import { type Cause, Clock, Duration, Effect, Exit, Option, Schema } from "effect";
 import {
   correctionInput,
-  prepareBoundTransactionRead,
   transactionInput,
   transactionPairInput,
   transactionSession,
@@ -1605,7 +1605,6 @@ const browserSnapshotReads: ReadonlyArray<
     prepare: (): CanonicalBrowserRead =>
       prepareBoundSubscriptionRead("subscription.getSubscriptionStatus"),
   },
-  { operation: "transactions.listTransactions", prepare: prepareBoundTransactionRead },
   { operation: "recurringPlans.getRecurringWorkspace", prepare: prepareBoundRecurringWorkspace },
   {
     operation: "dashboard.listDashboardCatalog",
@@ -1745,6 +1744,11 @@ const authorizedCanonicalResponse = (
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
   if (!request.headers.has("authorization")) {
+    if (operation.id === "transactions.listTransactions") {
+      return routeBrowserHistory({ request, environment }).pipe(
+        observeCanonicalResponse(operation.id)
+      );
+    }
     return browserCanonicalResponse(request, environment, operation);
   }
   return withBrowserBinding(

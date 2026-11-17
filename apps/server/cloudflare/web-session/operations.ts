@@ -1,3 +1,4 @@
+import { sessionCookie, sessionDigest } from "./internal/credentials";
 import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
 import { prepareBrowserMetadata as prepareMetadata, readMetadata } from "./internal/metadata";
 import { bindingResponse } from "./internal/binding";
@@ -22,20 +23,42 @@ import {
   observeEntry,
   prepareBrowserSessionLookup as prepareBrowserLookup,
   prepareBrowserEntryLookup as prepareEntryLookup,
-  prepareSessionLookup,
+  sessionDigestLookup,
 } from "./internal/authentication";
 
-/** Prepare exact cookie, mounted identity, expiry and Consent proof for one atomic admission batch. */
+/** Digest the one cookie and decode its mounted binding before entering the local transaction. */
+export const readBoundWebSessionProof = (
+  request: Request
+): Promise<Option.Option<{ binding: WebSessionId; digest: Uint8Array }>> => {
+  const binding = Schema.decodeUnknownOption(WebSessionId)(
+    request.headers.get(browserSessionBindingHeader)
+  );
+  const bearer = sessionCookie(request);
+  if (Option.isNone(binding) || Option.isNone(bearer)) {
+    return Promise.resolve(Option.none<{ binding: WebSessionId; digest: Uint8Array }>());
+  }
+  return sessionDigest(bearer.value).then((digest) =>
+    Option.some({ digest, binding: binding.value })
+  );
+};
+
+/** Construct expiry, exact ownership and Consent conditions using the transaction's clock. */
+export const boundSessionLookup = (
+  input: Readonly<{ digest: Uint8Array; binding: WebSessionId; current: number }>
+): BoundWebSessionLookup =>
+  sessionDigestLookup({
+    ...input,
+    binding: Option.some(input.binding),
+    freshness: "live",
+    requireConsent: true,
+  });
+
 export const prepareBoundCanonicalWebSession = (
   input: Readonly<{ request: Request; current: number }>
-): Promise<Option.Option<BoundWebSessionLookup>> => {
-  const binding = Schema.decodeUnknownOption(WebSessionId)(
-    input.request.headers.get(browserSessionBindingHeader)
+): Promise<Option.Option<BoundWebSessionLookup>> =>
+  readBoundWebSessionProof(input.request).then(
+    Option.map((proof) => boundSessionLookup({ ...proof, current: input.current }))
   );
-  return Option.isNone(binding)
-    ? Promise.resolve(Option.none())
-    : prepareSessionLookup({ ...input, binding, freshness: "live", requireConsent: true });
-};
 
 /** Decode only the row returned by the exact prepared lookup; later work must recheck authority. */
 export const resolveBoundCanonicalWebSession = (

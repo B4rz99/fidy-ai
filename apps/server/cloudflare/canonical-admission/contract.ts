@@ -86,7 +86,6 @@ export type CanonicalBrowserSnapshotOperation =
   | "recurringPlans.getRecurringWorkspace"
   | "categories.listCategories"
   | "dashboard.listDashboardCatalog"
-  | "transactions.listTransactions"
   | "budgets.getBudgetStatus"
   | "ingestion.getReviewWorkspace"
   | "ingestion.getReviewPageContext"

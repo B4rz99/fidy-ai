@@ -13,7 +13,8 @@ export const sharedStorageRead = (request: Pick<Request, "method" | "url">): boo
   return (
     Option.exists(
       canonicalOperation({ method: request.method, path }),
-      (operation) => operation.policy.kind === "query"
+      (operation) =>
+        operation.policy.kind === "query" && operation.id !== "transactions.listTransactions"
     ) ||
     path === browserSessionBindingPath ||
     path === oauthPaths.connections ||

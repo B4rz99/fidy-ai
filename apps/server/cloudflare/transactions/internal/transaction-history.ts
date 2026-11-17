@@ -273,19 +273,17 @@ const listStatement = ({ db, userId, query, authority }: HistoryRow): D1Prepared
 };
 
 /** Prepare the same bounded page from a live, owner-prepared User selection in this snapshot. */
-export const selectedListStatement = ({
-  db,
+export const selectedHistoryPage = ({
   userSelection,
   query,
   authority,
-}: Omit<HistoryRow, "userId"> &
-  Readonly<{ userSelection: OwnedStatement }>): D1PreparedStatement => {
-  const page = selectedEffectiveHistoryPage({
+}: Omit<HistoryRow, "userId" | "db"> & Readonly<{ userSelection: OwnedStatement }>): ReturnType<
+  typeof selectedEffectiveHistoryPage
+> =>
+  selectedEffectiveHistoryPage({
     userSelection,
     ...listFilters({ userId: Option.none(), query, authority }),
   });
-  return db.prepare(page.sql).bind(...page.bindings);
-};
 
 type PresentationSelection = Readonly<{
   db: D1Database;
@@ -525,7 +523,7 @@ const decodeInspectionRow = (raw: unknown): Option.Option<TransactionInspection>
 };
 
 const decodedHistoryPage = (
-  rows: D1Result,
+  rows: Readonly<{ results: ReadonlyArray<unknown> }>,
   selection: Pick<Selection, "request" | "search">,
   query: typeof Query.Type
 ): Option.Option<typeof TransactionListResponse.Type> => {
@@ -561,7 +559,7 @@ export const presentHistory = ({
   selection,
   query,
 }: Readonly<{
-  rows: D1Result;
+  rows: Readonly<{ results: ReadonlyArray<unknown> }>;
   selection: Pick<Selection, "id" | "request" | "search">;
   query: typeof Query.Type;
 }>): Response => {

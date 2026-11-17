@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "48b1a6ae8acc9ee2c266f041d1bffe817e2bff174dc36a3548edd04d433bff2d";
+const expectedEdgePolicyDigest = "0abe2a805d517874cfd8bd8ee66de95e4a5081762978f00eacec191a5f7373e8";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/operator-access/operations.ts", import.meta.url)
@@ -239,7 +239,25 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/canonical-admission/contract.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/transactions/internal/bound-history.ts", import.meta.url)
+    new URL("../../apps/server/cloudflare/directory/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/initial-schema.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/runtime/sqlite/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/transactions/internal/sqlite-history.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL(

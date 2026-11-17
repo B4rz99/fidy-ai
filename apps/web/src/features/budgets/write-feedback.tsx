@@ -20,6 +20,14 @@ const writeMessages = {
       "No pudimos confirmar la eliminación. Actualiza para comprobar el plan antes de volver a editar.",
   },
 };
+const inlineMessages = {
+  saving: "Guardando presupuesto…",
+  saved: "Presupuesto guardado.",
+  failed:
+    "No se pudo guardar. Tu importe se conserva. Revísalo o vuelve a elegir el mes para reintentar y continuar.",
+  uncertain:
+    "No pudimos confirmar el guardado. Tu importe se conserva. Usa Actualizar para comprobar el plan antes de continuar.",
+};
 const feedbackVariants = {
   saving: "pending",
   saved: "success",
@@ -29,14 +37,18 @@ const feedbackVariants = {
 export const BudgetWriteFeedback = ({
   saveState,
   writeAction,
-}: Pick<BudgetEditing, "saveState" | "writeAction">): JSX.Element => {
+  inline,
+}: Pick<BudgetEditing, "saveState" | "writeAction"> &
+  Readonly<{ inline: boolean }>): JSX.Element => {
   if (saveState === "idle") return <></>;
   return (
     <Alert
       role={saveState === "saving" || saveState === "saved" ? "status" : "alert"}
-      variant={feedbackVariants[saveState]}
+      variant={inline && saveState === "uncertain" ? "warning" : feedbackVariants[saveState]}
     >
-      <AlertDescription>{writeMessages[writeAction][saveState]}</AlertDescription>
+      <AlertDescription>
+        {inline ? inlineMessages[saveState] : writeMessages[writeAction][saveState]}
+      </AlertDescription>
     </Alert>
   );
 };

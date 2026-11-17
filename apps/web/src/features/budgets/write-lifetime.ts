@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import { useLayoutEffect, useRef, useState } from "react";
-import type { BudgetDraft, SaveState, WorkspaceProps } from "./model";
+import type { BudgetDraft, BudgetEdit, SaveState, WorkspaceProps } from "./model";
 
 export type BudgetWriteContext = Readonly<{
   editable: boolean;
@@ -8,6 +8,7 @@ export type BudgetWriteContext = Readonly<{
   saveState: SaveState;
   writeAction: "save" | "delete";
   draft: Option.Option<BudgetDraft>;
+  inlineDraft: Option.Option<BudgetEdit>;
   refreshQueries: () => void;
 }>;
 const makeWriteOwner = (): Readonly<{ version: () => number; advance: () => void }> => {

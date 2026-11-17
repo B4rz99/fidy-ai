@@ -33,6 +33,11 @@ export type BudgetEditing = Readonly<{
   saveState: SaveState;
   writeAction: "save" | "delete";
   disabled: boolean;
+  navigationDisabled: boolean;
+  hasInlineDraft: boolean;
+  inlineRecovery: Option.Option<BudgetEdit>;
+  discardInline: () => void;
+  moveMonth: (navigate: () => void) => void;
   draft: Option.Option<BudgetDraft>;
   write: (edit: BudgetEdit) => void;
   remove: () => void;
@@ -41,6 +46,9 @@ export type BudgetEditing = Readonly<{
   assignCategory: (category: Category) => void;
   configureCategory: (status: BudgetStatus) => void;
   configureGroup: (group: string) => void;
+  rowDisabled: (status: BudgetStatus) => boolean;
+  rowAmount: (status: BudgetStatus) => string;
+  changeRow: (status: BudgetStatus, amount: string) => void;
   saveRow: (status: BudgetStatus, amount: string) => void;
   freezePlan: () => void;
   rowKey: (status: BudgetStatus) => string;

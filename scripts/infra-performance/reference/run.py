@@ -12,6 +12,7 @@ import signal
 import socket
 import statistics
 import subprocess
+import tempfile
 import time
 import urllib.request
 
@@ -106,11 +107,13 @@ def prepare(api, front):
 
 def observation(path, env, destination):
     with ExitStack() as stack:
+        # The preview process is terminated after each observation. Own its native D1 images here.
+        scratch = stack.enter_context(tempfile.TemporaryDirectory(prefix="fidy-reference-"))
         api = stack.enter_context(
             serve(
                 ["bun", "apps/server/cloudflare/browser-acceptance-preview.ts"],
                 path,
-                env,
+                {**env, "TMPDIR": scratch, "TEMP": scratch, "TMP": scratch},
                 destination / "api.log",
             )
         )

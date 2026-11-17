@@ -9,6 +9,7 @@ import {
   ManagedRuntime,
   type PlatformError,
   Predicate,
+  Ref,
   Schema,
 } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
@@ -242,14 +243,16 @@ export const withStoreAdmission = <Value, Failure, Requirements>(
       .withTransaction(
         Effect.gen(function* () {
           const before = yield* capacity.measure;
-          let growth = false;
+          const growth = yield* Ref.make(false);
           const admitGrowth = Effect.gen(function* () {
             if (before.band === "restricted") return yield* new StoreCapacityUnavailable();
-            growth = true;
+            yield* Ref.set(growth, true);
           });
           const result = yield* run(admitGrowth);
           const after = yield* capacity.measure;
-          if (growth && after.band === "restricted") return yield* new StoreCapacityUnavailable();
+          if ((yield* Ref.get(growth)) && after.band === "restricted") {
+            return yield* new StoreCapacityUnavailable();
+          }
           if (after.bytes > after.ceilingBytes && after.bytes > before.bytes) {
             return yield* new StoreCapacityUnavailable();
           }

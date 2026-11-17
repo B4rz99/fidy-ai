@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Clock, Effect, Schema } from "effect";
 import { expect } from "vitest";
+import { Currency } from "../../src/core/_shared/money";
 import { Budget } from "../../src/core/budgets/contract";
 import {
   alice,
@@ -235,7 +236,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           })).status
         ).toBe(200);
         yield* observe("90.75");
-        yield* Effect.sleep("350 millis");
+        yield* Effect.sleep("750 millis");
         expect(
           (yield* request("/transactions/" + second, "PUT", {
             expectedRevision: 0,
@@ -252,6 +253,56 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* observe("90.75");
         expect((yield* request("/transactions/unlink", "POST", pair)).status).toBe(200);
         yield* observe("110.76");
+      })
+  );
+  test.effect(
+    "materializes all 128 supported Budgets and refuses a concurrent create at capacity",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* nativeTransactionJourney;
+        const currencies = Currency.literals.slice(0, 127);
+        yield* native(() =>
+          db.exec(
+            "INSERT INTO budgets(id,user_id,category_id,category_revision,currency,cap,created_at_ms,updated_at_ms) SELECT printf('20000000-0000-4000-8000-%012d',key),?,?,'co-1',value,'1',0,0 FROM json_each(?)",
+            alice.user,
+            category,
+            JSON.stringify(currencies)
+          )
+        );
+        const create = (currency: string): Effect.Effect<Response> =>
+          native(() =>
+            db.send(
+              new Request("https://api.fidyapp.com/budgets", {
+                method: "POST",
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  cookie: "__Host-fidy_session=" + alice.bearer,
+                  "Fidy-Session-Binding": alice.session,
+                  "content-type": "application/json",
+                },
+                body: JSON.stringify({ categoryId: category, cap: { amount: "1", currency } }),
+              })
+            )
+          );
+        const attempts = yield* Effect.all([create("USD"), create("XAF")], { concurrency: 2 });
+        expect(attempts.map((response) => response.status).sort()).toEqual([201, 400]);
+        const list = yield* native(() => db.browser(0, "/budgets"));
+        expect(list.status).toBe(200);
+        const caps = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Array(Schema.toCodecJson(Budget)) })
+        )(yield* readJson(list));
+        expect(caps.data).toHaveLength(128);
+        expect(caps.data.map((budget) => budget.cap.currency)).toEqual(
+          caps.data.map((budget) => budget.cap.currency).toSorted()
+        );
+        const workspace = yield* native(() =>
+          db.browser(0, "/budget-status?timeZone=America%2FBogota")
+        );
+        expect(workspace.status).toBe(200);
+        const report = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Struct({ statuses: Schema.Array(Schema.Unknown) }) })
+        )(yield* readJson(workspace));
+        expect(report.data.statuses).toHaveLength(128);
       })
   );
 });

@@ -1,3 +1,4 @@
+import { useReviewAmountVisibility } from "./amount-visibility";
 import { useMatch } from "@tanstack/react-router";
 import { TimeField } from "@/ui/components/time-field";
 import { CalendarField } from "@/ui/components/calendar-field";
@@ -43,23 +44,7 @@ export const ReviewFields = (props: Props): JSX.Element => {
 const ReviewFieldControls = memo((props: Props): JSX.Element => (
   <div data-review="fields">
     <ReviewCounterparty {...props} />
-    <div data-review="money" className="grid grid-cols-2 items-start gap-3">
-      <ReviewAmount {...props} />
-      <div className="grid content-start gap-2.5">
-        <Label htmlFor="review-currency">Moneda</Label>
-        <SearchableChoiceDropdown
-          id="review-currency"
-          label="Moneda"
-          value={Option.getOrElse(props.draft.currency, () => "")}
-          options={Currency.literals.map((value) => ({ value, label: value }))}
-          disabled={props.locked}
-          width="full"
-          onChange={(currency) =>
-            props.change(editDraft({ draft: props.draft, field: "money", value: { currency } }))
-          }
-        />
-      </div>
-    </div>
+    <ReviewMoney {...props} />
     <ReviewOccurrence {...props} />
     <div data-review="classification" className="grid grid-cols-2 items-start gap-3">
       <ReviewDirection {...props} />
@@ -67,7 +52,7 @@ const ReviewFieldControls = memo((props: Props): JSX.Element => (
     </div>
   </div>
 ));
-const ReviewAmount = ({ draft, change, locked }: Props): JSX.Element => {
+const ReviewMoney = ({ draft, change, locked }: Props): JSX.Element => {
   const [visited, setVisited] = useState(false);
   const error = visited
     ? Option.match(draft.currency, {
@@ -79,24 +64,48 @@ const ReviewAmount = ({ draft, change, locked }: Props): JSX.Element => {
     onNone: () => "Selecciona una moneda para validar el monto.",
     onSome: moneyInputHint,
   });
+  const reveal = useReviewAmountVisibility(error);
   return (
-    <div className="grid content-start gap-2.5">
-      <Label htmlFor="review-amount">Valor</Label>
-      <Input
-        id="review-amount"
-        inputMode="decimal"
-        value={draft.amount}
-        maxLength={120}
-        disabled={locked}
-        aria-invalid={Option.isSome(error)}
-        aria-describedby="review-amount-help"
-        onBlur={() => setVisited(true)}
-        onValueChange={(amount) => change(editDraft({ draft, field: "money", value: { amount } }))}
-      />
+    <div data-review="money-feedback" ref={reveal}>
+      <div data-review="money" className="grid grid-cols-2 items-start gap-3">
+        <div className="grid content-start gap-2.5">
+          <Label htmlFor="review-amount">Valor</Label>
+          <Input
+            id="review-amount"
+            inputMode="decimal"
+            value={draft.amount}
+            maxLength={120}
+            disabled={locked}
+            aria-invalid={Option.isSome(error)}
+            aria-describedby="review-amount-help"
+            onBlur={() => setVisited(true)}
+            onValueChange={(amount) =>
+              change(editDraft({ draft, field: "money", value: { amount } }))
+            }
+          />
+        </div>
+        <div className="grid content-start gap-2.5">
+          <Label htmlFor="review-currency">Moneda</Label>
+          <SearchableChoiceDropdown
+            id="review-currency"
+            label="Moneda"
+            value={Option.getOrElse(draft.currency, () => "")}
+            options={Currency.literals.map((value) => ({ value, label: value }))}
+            disabled={locked}
+            width="full"
+            onChange={(currency) =>
+              change(editDraft({ draft, field: "money", value: { currency } }))
+            }
+          />
+        </div>
+      </div>
       <p
+        data-review="amount-help"
         id="review-amount-help"
         aria-live="polite"
-        className={visited ? "text-sm text-muted-foreground" : "sr-only"}
+        className={
+          Option.isSome(error) ? "text-sm text-error-foreground" : "text-sm text-muted-foreground"
+        }
       >
         {visited ? Option.getOrElse(error, () => hint) : ""}
       </p>

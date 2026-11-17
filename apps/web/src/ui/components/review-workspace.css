@@ -795,3 +795,21 @@
     flex-shrink: 0;
   }
 }
+
+[data-review="money-feedback"] {
+  display: grid;
+  gap: 8px;
+}
+[data-review="amount-help"] {
+  min-block-size: 3em;
+  overflow-wrap: anywhere;
+}
+@media (min-width: 1251px) {
+  [data-review="columns"] {
+    overflow: hidden;
+  }
+  [data-review="columns"] > * {
+    max-height: 100%;
+    overflow-y: auto;
+  }
+}

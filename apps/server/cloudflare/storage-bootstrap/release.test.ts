@@ -52,7 +52,7 @@ const rehearse = Effect.gen(function* () {
     [
       workerManifest("./public-worker.ts"),
       workerManifest("./core-worker.ts"),
-      workerManifest("./storage-bootstrap/forward-repair.test-fixture.ts"),
+      workerManifest("./storage-forward-repair.test-fixture.ts"),
     ],
     { concurrency: 3 }
   );

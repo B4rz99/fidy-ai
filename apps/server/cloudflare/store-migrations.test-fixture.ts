@@ -114,23 +114,25 @@ export class MigrationProbe extends DurableObject<FixtureEnvironment> {
     });
     const runtime = createStoreRuntime(storage);
     const history = selectedHistory(env.MODE);
-    state.blockConcurrencyWhile(() =>
-      runtime.runPromise(
-        Effect.gen(function* () {
-          const live = yield* Clock.Clock;
-          const now = Number(env.NOW);
-          yield* openSqliteStore(history, env.RELEASE).pipe(
-            Effect.provideService(Clock.Clock, {
-              currentTimeNanos: live.currentTimeNanos,
-              currentTimeNanosUnsafe: () => live.currentTimeNanosUnsafe(),
-              monotonicTimeNanos: live.monotonicTimeNanos,
-              monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
-              sleep: (duration) => live.sleep(duration),
-              currentTimeMillis: Effect.succeed(now),
-              currentTimeMillisUnsafe: () => now,
-            })
-          );
-        })
+    state.waitUntil(
+      state.blockConcurrencyWhile(() =>
+        runtime.runPromise(
+          Effect.gen(function* () {
+            const live = yield* Clock.Clock;
+            const now = Number(env.NOW);
+            yield* openSqliteStore(history, env.RELEASE).pipe(
+              Effect.provideService(Clock.Clock, {
+                currentTimeNanos: live.currentTimeNanos,
+                currentTimeNanosUnsafe: () => live.currentTimeNanosUnsafe(),
+                monotonicTimeNanos: live.monotonicTimeNanos,
+                monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+                sleep: (duration) => live.sleep(duration),
+                currentTimeMillis: Effect.succeed(now),
+                currentTimeMillisUnsafe: () => now,
+              })
+            );
+          })
+        )
       )
     );
   }

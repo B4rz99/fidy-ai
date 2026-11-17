@@ -171,7 +171,7 @@ def main():
     run_dir.mkdir(parents=True)
     plan_file = run_dir / "plan.json"
     with (run_dir / "native.log").open("wb") as log:
-        subprocess.run(["bun", str(ROOT / "apps/server/scripts/prepare-d1-calibration.ts"), str(plan_file)], cwd=ROOT,
+        subprocess.run(["bun", str(ROOT / "apps/server/scripts/prepare-d1-calibration.test-fixture.ts"), str(plan_file)], cwd=ROOT,
                        stdout=log, stderr=subprocess.STDOUT, check=True)
     plan_bytes = plan_file.read_bytes()
     plan = json.loads(plan_bytes)

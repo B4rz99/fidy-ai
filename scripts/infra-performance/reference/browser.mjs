@@ -167,7 +167,11 @@ try {
   assert.equal(target.counterparty, "Evaluación 2");
   assert.equal(target.revision, 0);
   await page.locator('[id="transaction-' + fixedId + '"]').click();
-  await page.getByRole("textbox", { name: "Contraparte", exact: true }).fill(afterName);
+  const counterparty = page.getByRole("textbox", { name: "Contraparte", exact: true });
+  const edit = page.getByRole("button", { name: "Editar transacción", exact: true });
+  await counterparty.or(edit).first().waitFor({ state: "visible" });
+  if (!(await counterparty.isVisible())) await edit.click();
+  await counterparty.fill(afterName);
   const save = responseFor("PUT", "/transactions/" + fixedId);
   const refresh = responseFor("GET", "/transactions");
   const saving = performance.now();

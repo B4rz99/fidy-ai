@@ -454,6 +454,27 @@ const canonicalCaptureMigration = [
   `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
 ] as const;
 
+/** Broaden the safe result allowlist without changing the schema history or any original retry window. */
+const cancellationReceiptMigration = [
+  `CREATE TRIGGER retained_source_identity BEFORE UPDATE OF id,subscription_id,method,wompi_source_id,wompi_environment ON payment_sources
+    WHEN EXISTS (SELECT 1 FROM subscription_cancellations WHERE payment_source_id=OLD.id)
+    AND (NEW.id IS NOT OLD.id OR NEW.subscription_id IS NOT OLD.subscription_id OR NEW.method IS NOT OLD.method
+      OR NEW.wompi_source_id IS NOT OLD.wompi_source_id OR NEW.wompi_environment IS NOT OLD.wompi_environment)
+    BEGIN SELECT RAISE(ABORT,'retained_source_identity'); END`,
+  "ALTER TABLE canonical_request_receipts RENAME TO receipts_before_cancellation",
+  `CREATE TABLE canonical_request_receipts (
+    user_id TEXT NOT NULL REFERENCES users(id),retry_key_digest TEXT NOT NULL CHECK(length(retry_key_digest)=64),
+    operation TEXT NOT NULL,input_digest TEXT NOT NULL CHECK(length(input_digest)=64),
+    accepted_at_ms INTEGER NOT NULL,status INTEGER NOT NULL CHECK(status BETWEEN 200 AND 499),
+    body TEXT,PRIMARY KEY(user_id,retry_key_digest),
+    CHECK(body IS NULL OR (operation IN ('transactions.createTransaction','subscription.cancelSubscription') AND json_valid(body)))
+  ) STRICT`,
+  `INSERT INTO canonical_request_receipts(user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body)
+    SELECT user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body FROM receipts_before_cancellation`,
+  "DROP TABLE receipts_before_cancellation",
+  "CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)",
+] as const;
+
 export const userStoreHistory: StoreHistory = {
   owner: "user",
   steps: [
@@ -461,6 +482,7 @@ export const userStoreHistory: StoreHistory = {
     { version: 2, id: "category-taxonomy", statements: categoryTaxonomyMigration },
     { version: 3, id: "subscription-cancellation", statements: sourceCancellationSchema },
     { version: 4, id: "canonical-capture", statements: canonicalCaptureMigration },
+    { version: 5, id: "cancellation-receipt", statements: cancellationReceiptMigration },
   ],
 };
 

@@ -1,0 +1,21 @@
+scripts/infra-performance/reference/run.py
+  s_a1be23a656acf0::t_804e6b52802f32 15,110-111,116
+scripts/infra-performance/reference/test_report.py
+  s_a1be23a656acf0::t_8e4adcf51652b3 1-3,5-7,11-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "85c736dfbf0156a51d2bed1c6226055ffc4507da",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+infra/cloudflare/rollback-compatibility.ts
+  s_a1be23a656acf0::t_0858a9ec9e219e 35-68,76,78,83,87
+  s_a1be23a656acf0::t_d5f090ff23da87 1-27,30,69,75,77,79-82,84-86,88-94,105-107
+  s_a1be23a656acf0::t_c17684f5292652 70-74
+infra/cloudflare/rollback-compatibility.test.ts
+  s_a1be23a656acf0::t_1bc8e4931b87d1 2-6,11-12,70-71,78-79,98-99,128,130,133
+  s_a1be23a656acf0::t_d5f090ff23da87 72-77,80-97,110-112,118-121,127
+  s_a1be23a656acf0::t_9bba3e4e58c07c 100-109,113-117,122-126,129,131-132,134-135
+infra/cloudflare/production-release.ts
+  s_a1be23a656acf0::t_d5f090ff23da87 39,1464,1472,1474,1585-1594
+  s_a1be23a656acf0::t_3619122847d6bf 1473
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "36113ef822e15bcd5cb5d8d5745e90151eba0b10",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

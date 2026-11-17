@@ -384,3 +384,5 @@ export const dispatchLocalTransaction = (
   dispatchTransaction(unit).pipe(
     Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
   );
+
+export { readLocalTransactionAggregate } from "./internal/sqlite-aggregate";

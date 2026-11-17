@@ -1,0 +1,25 @@
+apps/server/cloudflare/subscription/pricing.test-fixture.ts
+  s_a1be23a656acf0::t_1103dd973b705b 13,19,22-26
+apps/server/cloudflare/subscription/pricing.test.ts
+  s_a1be23a656acf0::t_1103dd973b705b 2,23,28,31,75-78,87-96,98-105,111,135,155,209
+apps/server/cloudflare/subscription/refund-support.test.ts
+  s_a1be23a656acf0::t_1103dd973b705b 439-442,449
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_5661d0cd30df0c 5,7-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "deb12a03ee7b96ae334fef1085205547588cc789",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

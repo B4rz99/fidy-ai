@@ -2,6 +2,7 @@ import { Effect, Exit, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UserId } from "../../src/core/identity/contract";
 import { registerUserLifetime } from "../maintenance/operations";
+import { dashboardSchema } from "./internal/dashboard-schema";
 import type { StoreHistory } from "../runtime/sqlite/contract";
 
 /** Initial User-store schema. Schema creation grants no identity, credential or Consent. */
@@ -568,6 +569,7 @@ export const userStoreHistory: StoreHistory = {
       ],
     },
     { version: 8, id: "monthly-budget-planning", statements: budgetPlanningMigration },
+    { version: 9, id: "native-dashboard", statements: dashboardSchema },
   ],
 };
 

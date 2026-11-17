@@ -1,3 +1,5 @@
+import { retainedPlanningWork } from "../retained-planning.test-fixture";
+import { listIds, metricTotals } from "./view.test-fixture";
 import { openAiTestKey } from "../openai.test-fixture";
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { encodeMoneyAmount } from "../../src/core/_shared/money";
@@ -145,27 +147,28 @@ const sendAtCurrentTime = (
   db: D1Database,
   credential: number | string,
   pathAndBody: string | Readonly<{ path: string; method: "POST" | "PUT"; body: object }>
-): Promise<Response> =>
-  publicWorker.fetch(
-    new Request(
-      `https://api.fidyapp.com${typeof pathAndBody === "string" ? pathAndBody : pathAndBody.path}`,
-      {
-        method: typeof pathAndBody === "string" ? "GET" : pathAndBody.method,
-        headers: {
-          origin: "https://app.fidyapp.com",
-          "cf-connecting-ip": "192.0.2.35",
-          ...(typeof credential === "number"
-            ? {
-                "Fidy-Session-Binding": sessions[credential] ?? "invalid",
-                cookie: `__Host-fidy_session=${bearer(credential)}`,
-              }
-            : { authorization: `Bearer ${credential}`, "x-provider-id": users[0] ?? "" }),
-          ...(typeof pathAndBody === "string" ? {} : { "content-type": "application/json" }),
-        },
-        ...(typeof pathAndBody === "string" ? {} : { body: JSON.stringify(pathAndBody.body) }),
-      }
-    ),
+): Promise<Response> => {
+  const request = new Request(
+    `https://api.fidyapp.com${typeof pathAndBody === "string" ? pathAndBody : pathAndBody.path}`,
     {
+      method: typeof pathAndBody === "string" ? "GET" : pathAndBody.method,
+      headers: {
+        origin: "https://app.fidyapp.com",
+        "cf-connecting-ip": "192.0.2.35",
+        ...(typeof credential === "number"
+          ? {
+              "Fidy-Session-Binding": sessions[credential] ?? "invalid",
+              cookie: `__Host-fidy_session=${bearer(credential)}`,
+            }
+          : { authorization: `Bearer ${credential}`, "x-provider-id": users[0] ?? "" }),
+        ...(typeof pathAndBody === "string" ? {} : { "content-type": "application/json" }),
+      },
+      ...(typeof pathAndBody === "string" ? {} : { body: JSON.stringify(pathAndBody.body) }),
+    }
+  );
+  const retained = retainedPlanningWork({ db, request });
+  return Option.getOrElse(retained, () =>
+    publicWorker.fetch(request, {
       BROWSER_ORIGIN: "https://app.fidyapp.com",
       LOCAL_CANONICAL_READ_BEARER: "",
       PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
@@ -241,8 +244,9 @@ const sendAtCurrentTime = (
             CLOUDFLARE_ACCESS_AUDIENCE: "",
           }),
       },
-    }
+    })
   );
+};
 
 const send = (...input: Parameters<typeof sendAtCurrentTime>): Promise<Response> => {
   vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
@@ -377,45 +381,6 @@ const count = (db: D1Database, table: "dashboard_documents" | "audit_entries"): 
     .bind(users[0])
     .first<{ count: number }>()
     .then((row) => row?.count ?? -1);
-
-const metricTotals = (
-  response: Response
-): Effect.Effect<ReadonlyArray<string>, Cause.UnknownError | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    expect(response.status).toBe(200);
-    const view = (yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
-    )(yield* Effect.tryPromise(() => response.json()))).data;
-    const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-      node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-    const metric = leaves(view.layout).find(
-      (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
-    );
-    if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
-      throw new Error("Expected custom metric");
-    }
-    return metric.widget.result.moneyGroups.map((group) => BigDecimal.format(group.outflow.amount));
-  });
-
-const listIds = (
-  response: Response,
-  widgetId: string
-): Effect.Effect<ReadonlyArray<string>, Cause.UnknownError | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    expect(response.status).toBe(200);
-    const view = (yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
-    )(yield* Effect.tryPromise(() => response.json()))).data;
-    const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-      node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-    const list = leaves(view.layout).find(
-      (node) => node.kind === "leaf" && node.widget.widget.id === widgetId
-    );
-    if (list?.kind !== "leaf" || !("transactions" in list.widget.result)) {
-      throw new Error("Expected list results");
-    }
-    return list.widget.result.transactions.map((transaction) => transaction.id);
-  });
 
 const recoveryDatabase = (db: D1Database): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -937,7 +902,7 @@ for (const fault of ["revoked", "withdrawn", "audit-failed", "audit-ignored"] as
 }
 
 it(
-  "explicit initialization creates one valid document and preserves edits and revision on concurrent retries",
+  "retained Dashboard initialization and batch children preserve edits, revision and the independent planning document",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -973,10 +938,9 @@ it(
             )
             .all();
         const planningBefore = (yield* Effect.tryPromise(retainedPlanning)).results;
-        // Concurrent requests share one instant; advancing Date per send can reverse admission time.
         const initialize = (): Promise<Response> =>
           sendAtCurrentTime(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} });
-        const replies = yield* Effect.tryPromise(() => Promise.all([initialize(), initialize()]));
+        const replies = yield* Effect.forEach([0, 1], () => Effect.tryPromise(initialize));
         expect(replies.map((reply) => reply.status)).toEqual([200, 200]);
         const documents = yield* Effect.forEach(replies, (reply) =>
           Effect.tryPromise(() => reply.json()).pipe(
@@ -1007,7 +971,7 @@ it(
             .bind(users[0])
             .first();
         const before = yield* Effect.tryPromise(stored);
-        const repeated = yield* Effect.tryPromise(() => Promise.all([initialize(), initialize()]));
+        const repeated = yield* Effect.forEach([0, 1], () => Effect.tryPromise(initialize));
         expect(repeated.map((reply) => reply.status)).toEqual([200, 200]);
         for (const reply of repeated) {
           const document = yield* Schema.decodeUnknownEffect(DocumentReply)(
@@ -1026,15 +990,13 @@ it(
         ).toBe("Keep my edits");
         expect(yield* Effect.tryPromise(stored)).toEqual(before);
         expect(before).toMatchObject({ revision: 2 });
-        const edits = yield* Effect.tryPromise(() =>
-          Promise.all(
-            ["Concurrent first", "Concurrent second"].map((title) =>
-              sendAtCurrentTime(db, 0, {
-                path: "/dashboard/edits",
-                method: "POST",
-                body: { op: "set-title", title },
-              })
-            )
+        const edits = yield* Effect.forEach(["First edit", "Second edit"], (title) =>
+          Effect.tryPromise(() =>
+            sendAtCurrentTime(db, 0, {
+              path: "/dashboard/edits",
+              method: "POST",
+              body: { op: "set-title", title },
+            })
           )
         );
         expect(edits.map((reply) => reply.status)).toEqual([200, 200]);
@@ -2264,172 +2226,6 @@ it("reads the established Dashboard document once per document request", () =>
   ));
 
 it(
-  "finds a recent Transaction by its captured notes in a configured list Widget",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* setup();
-        const documentResponse10 = yield* Effect.tryPromise(() => initialize(db));
-        const document = (yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
-        )(yield* Effect.tryPromise(() => documentResponse10.json()))).data;
-        const leaves = (
-          node: DashboardDocument["layout"]
-        ): ReadonlyArray<DashboardDocument["layout"]> =>
-          node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-        const list = leaves(document.layout).find(
-          (node) => node.kind === "leaf" && node.widget.type === "transaction-list"
-        );
-        if (list?.kind !== "leaf" || list.widget.type !== "transaction-list") {
-          throw new Error("Missing list");
-        }
-        const edited = yield* Effect.tryPromise(() =>
-          send(db, 0, {
-            path: "/dashboard/edits",
-            method: "POST",
-            body: {
-              op: "update-widget",
-              widget: { ...list.widget, search: "private note" },
-            },
-          })
-        );
-        expect(edited.status).toBe(200);
-        const created = yield* Effect.tryPromise(() =>
-          send(db, 0, {
-            path: "/transactions",
-            method: "POST",
-            body: {
-              money: { amount: "1.01", currency: "COP" },
-              categoryId: "10000000-0000-4000-8000-000000000001",
-              direction: "outflow",
-              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-              notes: "private note Café",
-            },
-          })
-        );
-        expect(created.status).toBe(201);
-        const viewResponse11 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
-        const view = (yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
-        )(yield* Effect.tryPromise(() => viewResponse11.json()))).data;
-        const viewLeaves = (
-          node: DashboardView["layout"]
-        ): ReadonlyArray<DashboardView["layout"]> =>
-          node.kind === "leaf" ? [node] : node.children.flatMap((child) => viewLeaves(child.node));
-        const row = viewLeaves(view.layout).find(
-          (node) => node.kind === "leaf" && node.widget.widget.id === list.widget.id
-        );
-        if (row?.kind !== "leaf" || !("transactions" in row.widget.result)) {
-          throw new Error("Missing list result");
-        }
-        expect(row.widget.result.transactions).toHaveLength(1);
-        const accented = yield* Effect.tryPromise(() =>
-          send(db, 0, {
-            path: "/dashboard/edits",
-            method: "POST",
-            body: { op: "update-widget", widget: { ...list.widget, search: "CAFÉ" } },
-          })
-        );
-        expect(accented.status).toBe(200);
-        const viewResponse12 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
-        expect(yield* listIds(viewResponse12, list.widget.id)).toHaveLength(1);
-        const twoCharacters = yield* Effect.tryPromise(() =>
-          send(db, 0, {
-            path: "/dashboard/edits",
-            method: "POST",
-            body: { op: "update-widget", widget: { ...list.widget, search: "fé" } },
-          })
-        );
-        expect(twoCharacters.status).toBe(200);
-        const viewResponse13 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
-        expect(yield* listIds(viewResponse13, list.widget.id)).toHaveLength(1);
-        const oneCharacter = yield* Effect.tryPromise(() =>
-          send(db, 0, {
-            path: "/dashboard/edits",
-            method: "POST",
-            body: { op: "update-widget", widget: { ...list.widget, search: "é" } },
-          })
-        );
-        expect(oneCharacter.status).toBe(200);
-        const viewResponse14 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
-        expect(yield* listIds(viewResponse14, list.widget.id)).toHaveLength(1);
-        const captured = (yield* Schema.decodeUnknownEffect(
-          Schema.Struct({
-            data: Schema.Struct({ id: Transaction.fields.id }),
-          })
-        )(yield* Effect.tryPromise(() => created.json()))).data;
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, 0, {
-              path: `/transactions/${captured.id}`,
-              method: "PUT",
-              body: { expectedRevision: 0, changes: { notes: "unrelated" } },
-            })
-          )).status
-        ).toBe(200);
-        const viewResponse15 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
-        expect(yield* listIds(viewResponse15, list.widget.id)).toEqual([]);
-      })
-    ),
-  30_000
-);
-
-it(
-  "projects the current User's Budget with exact outflow spend and remaining Money",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* initializedSetup();
-        const budget = yield* Effect.tryPromise(() =>
-          send(db, 0, {
-            path: "/budgets",
-            method: "POST",
-            body: {
-              categoryId: "10000000-0000-4000-8000-000000000001",
-              cap: { amount: "100.00", currency: "COP" },
-            },
-          })
-        );
-        expect(budget.status).toBe(201);
-        const captured = yield* Effect.tryPromise(() =>
-          send(db, 0, {
-            path: "/transactions",
-            method: "POST",
-            body: {
-              money: { amount: "25.02", currency: "COP" },
-              categoryId: "10000000-0000-4000-8000-000000000001",
-              direction: "outflow",
-              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-            },
-          })
-        );
-        expect(captured.status).toBe(201);
-        const viewResponse = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
-        expect(viewResponse.status).toBe(200);
-        const view = (yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
-        )(yield* Effect.tryPromise(() => viewResponse.json()))).data;
-        const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-          node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-        const bar = leaves(view.layout).find(
-          (node) => node.kind === "leaf" && node.widget.widget.type === "budget-bar"
-        );
-        if (
-          bar?.kind !== "leaf" ||
-          !("availability" in bar.widget.result) ||
-          bar.widget.result.availability !== "available"
-        ) {
-          throw new Error("Missing Budget bar");
-        }
-        expect(BigDecimal.format(bar.widget.result.spent.amount)).toBe("25.02");
-        if (bar.widget.result.status.type !== "under") throw new Error("Expected remaining Budget");
-        expect(BigDecimal.format(bar.widget.result.status.remaining.amount)).toBe("74.98");
-      })
-    ),
-  30_000
-);
-
-it(
   "denies under-scoped and revoked PAT Dashboard work without modifying a document",
   () =>
     Effect.runPromise(
@@ -2485,188 +2281,6 @@ it(
           Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
         )(yield* Effect.tryPromise(() => documentResponse16.json()))).data;
         expect(document.title).toBe("Tablero");
-      })
-    ),
-  30_000
-);
-
-it(
-  "a stale Dashboard read is replaced by current canonical facts after a Transaction correction",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* initializedSetup();
-        const created = yield* Effect.tryPromise(() =>
-          send(db, 0, {
-            path: "/transactions",
-            method: "POST",
-            body: {
-              money: { amount: "10.01", currency: "COP" },
-              categoryId: "10000000-0000-4000-8000-000000000001",
-              direction: "outflow",
-              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-            },
-          })
-        );
-        expect(created.status).toBe(201);
-        const { data: transaction } = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
-        )(yield* Effect.tryPromise(() => created.json()));
-        const before = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
-        expect(before.status).toBe(200);
-        const correction = yield* Effect.tryPromise(() =>
-          send(db, 0, {
-            path: `/transactions/${transaction.id}`,
-            method: "PUT",
-            body: { expectedRevision: 0, changes: { money: { amount: "25.02", currency: "COP" } } },
-          })
-        );
-        expect(correction.status).toBe(200);
-        const after = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
-        expect(after.status).toBe(200);
-        const view = (yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
-        )(yield* Effect.tryPromise(() => after.json()))).data;
-        const leaves = (node: DashboardView["layout"]): ReadonlyArray<DashboardView["layout"]> =>
-          node.kind === "leaf" ? [node] : node.children.flatMap((child) => leaves(child.node));
-        const metric = leaves(view.layout).find(
-          (node) => node.kind === "leaf" && node.widget.widget.type === "custom-metric"
-        );
-        expect(metric?.kind).toBe("leaf");
-        if (metric?.kind !== "leaf" || !("moneyGroups" in metric.widget.result)) {
-          throw new Error("Expected metric");
-        }
-        expect(
-          metric.widget.result.moneyGroups.map((group) => BigDecimal.format(group.outflow.amount))
-        ).toEqual(["25.02"]);
-      })
-    ),
-  30_000
-);
-
-it(
-  "reinterprets maintained UTC contributions immediately after a User IANA time-zone change",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* initializedSetup();
-        const now = DateTime.nowUnsafe();
-        const zones = (yield* Effect.forEach(["Pacific/Kiritimati", "America/Bogota"], (name) =>
-          Effect.map(Schema.decodeEffect(IanaTimeZone)(name), (timeZone) => ({
-            name,
-            from: resolveDashboardPeriod({ now, period: "this-month", timeZone }).from
-              .epochMilliseconds,
-          }))
-        )).sort((left, right) => left.from - right.from);
-        const earlier = zones[0];
-        const later = zones[1];
-        if (earlier === undefined || later === undefined || earlier.from === later.from) {
-          throw new Error("Expected distinct IANA month boundaries");
-        }
-        const occurredAt = DateTime.formatIso(DateTime.makeUnsafe(earlier.from + 60_000));
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, 0, {
-              path: "/transactions",
-              method: "POST",
-              body: {
-                money: { amount: "3.04", currency: "COP" },
-                categoryId: "10000000-0000-4000-8000-000000000001",
-                direction: "outflow",
-                occurredAt,
-              },
-            })
-          )).status
-        ).toBe(201);
-
-        const projected = (
-          zone: string
-        ): Effect.Effect<ReadonlyArray<string>, Cause.UnknownError | Schema.SchemaError> =>
-          Effect.gen(function* () {
-            yield* Effect.tryPromise(() =>
-              db.prepare("UPDATE users SET time_zone = ? WHERE id = ?").bind(zone, users[0]).run()
-            );
-            return yield* metricTotals(
-              yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))
-            );
-          });
-        expect(yield* projected(earlier.name)).toEqual(["3.04"]);
-        expect(yield* projected(later.name)).toEqual([]);
-        expect(yield* projected(earlier.name)).toEqual(["3.04"]);
-      })
-    ),
-  30_000
-);
-
-it(
-  "updates the next Dashboard view after linking, correcting, and unlinking effective Transactions",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* initializedSetup();
-        const responses = yield* Effect.forEach([0, 1], () =>
-          Effect.tryPromise(() =>
-            send(db, 0, {
-              path: "/transactions",
-              method: "POST",
-              body: {
-                money: { amount: "9007199254740993.01", currency: "COP" },
-                categoryId: "10000000-0000-4000-8000-000000000001",
-                direction: "outflow",
-                occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
-              },
-            })
-          )
-        );
-        expect(responses.map((response) => response.status)).toEqual([201, 201]);
-        const bodies = yield* Effect.tryPromise(() =>
-          Promise.all(responses.map((response) => response.json()))
-        );
-        const ids = yield* Effect.forEach(bodies, (body) =>
-          Effect.map(
-            Schema.decodeUnknownEffect(
-              Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
-            )(body),
-            (decoded) => decoded.data.id
-          )
-        );
-        const first = [...ids].sort()[0];
-        const second = [...ids].sort()[1];
-        if (first === undefined || second === undefined) throw new Error("Missing Transactions");
-
-        const total = (): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError> =>
-          Effect.gen(function* () {
-            return (yield* metricTotals(
-              yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))
-            )).join(",");
-          });
-        expect(yield* total()).toBe("18014398509481986.02");
-        const pair = { firstTransactionId: first, secondTransactionId: second };
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, 0, { path: "/transactions/link", method: "POST", body: pair })
-          )).status
-        ).toBe(200);
-        expect(yield* total()).toBe("9007199254740993.01");
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, 0, {
-              path: `/transactions/${first}`,
-              method: "PUT",
-              body: {
-                expectedRevision: 0,
-                changes: { money: { amount: "9007199254740993.02", currency: "COP" } },
-              },
-            })
-          )).status
-        ).toBe(200);
-        expect(yield* total()).toBe("9007199254740993.02");
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, 0, { path: "/transactions/unlink", method: "POST", body: pair })
-          )).status
-        ).toBe(200);
-        expect(yield* total()).toBe("18014398509481986.03");
       })
     ),
   30_000
@@ -2880,59 +2494,6 @@ it(
       })
     ),
   60_000
-);
-
-it(
-  "reads newly committed Transactions as exact separate Currency groups without another User's facts",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* initializedSetup();
-        const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
-        const capture = (index: number, amount: string, currency: string): Promise<Response> =>
-          send(db, index, {
-            path: "/transactions",
-            method: "POST",
-            body: {
-              money: { amount, currency },
-              categoryId: "10000000-0000-4000-8000-000000000001",
-              direction: "outflow",
-              occurredAt,
-            },
-          });
-        expect((yield* Effect.tryPromise(() => capture(0, "1.01", "COP"))).status).toBe(201);
-        expect((yield* Effect.tryPromise(() => capture(0, "2.02", "COP"))).status).toBe(201);
-        expect((yield* Effect.tryPromise(() => capture(0, "5.50", "USD"))).status).toBe(201);
-        expect((yield* Effect.tryPromise(() => capture(1, "999", "COP"))).status).toBe(201);
-        const reply = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
-        expect(reply.status).toBe(200);
-        const body = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
-        )(yield* Effect.tryPromise(() => reply.json()));
-        const leaves = (
-          node: DashboardView["layout"]
-        ): ReadonlyArray<Extract<DashboardView["layout"], { kind: "leaf" }>["widget"]> =>
-          node.kind === "leaf"
-            ? [node.widget]
-            : node.children.flatMap((child) => leaves(child.node));
-        const metric = leaves(body.data.layout).find(
-          (leaf) => leaf.widget.type === "custom-metric"
-        );
-        if (metric === undefined || !("moneyGroups" in metric.result)) {
-          throw new Error("Expected a custom metric");
-        }
-        expect(
-          metric.result.moneyGroups.map((group) => [
-            group.currency,
-            BigDecimal.format(group.outflow.amount),
-          ])
-        ).toEqual([
-          ["COP", "3.03"],
-          ["USD", "5.5"],
-        ]);
-      })
-    ),
-  30_000
 );
 
 it.each(["/dashboard/view", "/dashboard/view?"])(

@@ -1,3 +1,4 @@
+import * as localDashboard from "./internal/sqlite-dashboard";
 import { prepareAuthorizedAuditCall } from "../../src/shell/audit/operations";
 import {
   prepareChangedRowAssertion,
@@ -461,3 +462,9 @@ const queryDashboard = (
     Effect.catchTag("DashboardQueryLimited", limitedDashboardResponse),
     Effect.orElseSucceed(transactionUnavailable)
   );
+
+/** The UserStore owns these Dashboard documents and their complete financial views. */
+export const isLocalDashboardOperation: typeof localDashboard.isLocalDashboardOperation = (id) =>
+  localDashboard.isLocalDashboardOperation(id);
+export const dispatchLocalDashboard: typeof localDashboard.dispatchLocalDashboard = (unit) =>
+  localDashboard.dispatchLocalDashboard(unit);

@@ -1,8 +1,10 @@
+import { prepareBoundDashboardCatalog, prepareBoundDashboardView } from "./dashboard/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { CatalogOperation } from "../src/shell/canonical-catalog/contract";
 import {
   protectCanonicalBrowserRequest,
   protectCanonicalBrowserSnapshot,
+  protectCanonicalBrowserSource,
   protectCanonicalRequest,
 } from "./canonical-admission/operations";
 import type { CanonicalReadCompletion } from "./canonical-admission/contract";
@@ -61,6 +63,28 @@ const runOwner = Effect.fn(function* (
   return yield* execute({ _tag: "Call", operation: operation.id, input });
 });
 
+const deniedStatus = 403;
+const unauthenticatedStatus = 401;
+const retainedPAT = Effect.fn(function* (context: RequestContext) {
+  const subject = yield* resolveCanonicalPATCredential(context);
+  if (typeof subject === "string") {
+    return Response.json(
+      {
+        error: {
+          code: subject === "user_action_required" ? "user_action_required" : "unauthenticated",
+        },
+        next: [],
+      },
+      { status: subject === "user_action_required" ? deniedStatus : unauthenticatedStatus }
+    );
+  }
+  return yield* protectCanonicalRequest({
+    ...context,
+    caller: { _tag: "PAT", value: subject },
+    work: runOwner(context, subject, Option.none()),
+  });
+});
+
 /** Retained D1 peer, batch and alert tests exercise their actual admission and domain owners.
  * Public transport journeys for financial operations use the separate native User-store fixture. */
 export const retainedPlanningWork = ({
@@ -73,20 +97,32 @@ export const retainedPlanningWork = ({
   });
   if (Option.isNone(selected)) return Option.none();
   const operation = selected.value;
-  if (!operation.id.startsWith("budgets.") && !operation.id.startsWith("transactions.")) {
+  if (
+    !operation.id.startsWith("budgets.") &&
+    !operation.id.startsWith("transactions.") &&
+    !operation.id.startsWith("dashboard.")
+  ) {
     return Option.none();
   }
   return Option.some(
     Effect.runPromise(
       Effect.gen(function* () {
         const context = { db, operation, request, current: yield* Clock.currentTimeMillis };
-        if (request.headers.has("authorization")) {
-          const subject = yield* resolveCanonicalPATCredential(context);
-          if (typeof subject === "string") throw new Error("Retained fixture requires a live PAT");
-          return yield* protectCanonicalRequest({
+        if (request.headers.has("authorization")) return yield* retainedPAT(context);
+        if (operation.id === "dashboard.getDashboardView" && new URL(request.url).search === "") {
+          return yield* protectCanonicalBrowserSource({
             ...context,
-            caller: { _tag: "PAT", value: subject },
-            work: runOwner(context, subject, Option.none()),
+            read: prepareBoundDashboardView,
+          });
+        }
+        if (
+          operation.id === "dashboard.listDashboardCatalog" &&
+          new URL(request.url).search === ""
+        ) {
+          return yield* protectCanonicalBrowserSnapshot({
+            ...context,
+            operation: "dashboard.listDashboardCatalog",
+            read: prepareBoundDashboardCatalog,
           });
         }
         if (operation.id === "budgets.getBudgetStatus") {

@@ -1,3 +1,4 @@
+import { dispatchLocalDashboard, isLocalDashboardOperation } from "../dashboard/operations";
 import { dispatchLocalBudget, isLocalBudgetOperation } from "../budgets/operations";
 import { cancelLocalSubscription, offerDueSourceCancellations } from "../subscription/operations";
 import { handleSourceCancellationWork } from "../subscription/runtime";
@@ -76,7 +77,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     owns: (userId: string) => boolean,
     operation: ReturnType<typeof canonicalOperation>
   ): Option.Option<Promise<Response>> {
-    if (Option.isSome(operation) && operation.value.id === "subscription.cancelSubscription") {
+    if (Option.isNone(operation)) return Option.none();
+    const selected = operation.value;
+    const unit = { request, owns, operation: selected, storage: this.ctx.storage };
+    if (selected.id === "subscription.cancelSubscription") {
       return Option.some(
         this.runtime.runPromise(
           runLocalMutation({
@@ -98,29 +102,14 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         )
       );
     }
-    if (Option.isSome(operation) && isLocalBudgetOperation(operation.value.id)) {
-      return Option.some(
-        this.runtime.runPromise(
-          dispatchLocalBudget({
-            request,
-            operation: operation.value,
-            owns,
-            storage: this.ctx.storage,
-          })
-        )
-      );
+    if (isLocalDashboardOperation(selected.id)) {
+      return Option.some(this.runtime.runPromise(dispatchLocalDashboard(unit)));
     }
-    if (Option.isSome(operation) && isLocalTransactionOperation(operation.value.id)) {
-      return Option.some(
-        this.runtime.runPromise(
-          dispatchLocalTransaction({
-            request,
-            operation: operation.value,
-            owns,
-            storage: this.ctx.storage,
-          })
-        )
-      );
+    if (isLocalBudgetOperation(selected.id)) {
+      return Option.some(this.runtime.runPromise(dispatchLocalBudget(unit)));
+    }
+    if (isLocalTransactionOperation(selected.id)) {
+      return Option.some(this.runtime.runPromise(dispatchLocalTransaction(unit)));
     }
     return Option.none();
   }

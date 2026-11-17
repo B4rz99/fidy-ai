@@ -1,3 +1,8 @@
+import {
+  localProjectionRange,
+  localProjectionReady,
+  projectionRange,
+} from "./dashboard-projection";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { BigDecimal, Effect, Option, Order, Schema } from "effect";
 import { Money } from "../../../src/core/_shared/money";
@@ -58,6 +63,12 @@ export const readLocalTransactionAggregate = Effect.fn(function* (
   toExclusive: number
 ) {
   const sql = yield* SqliteClient;
+  if (
+    Option.isSome(projectionRange({ from, toExclusive })) &&
+    (yield* localProjectionReady(user))
+  ) {
+    return yield* localProjectionRange(user, from, toExclusive);
+  }
   const groups = new Map<string, EffectiveTransactionAggregate>();
   let cursor = "";
   for (;;) {

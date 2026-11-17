@@ -1,0 +1,19 @@
+apps/server/cloudflare/budgets/user-store.test.ts
+  s_a1be23a656acf0::t_2b34404ae01ae5 5,239,258-307
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1e6f388d5af1664f3a581aea779bc53745e65d16",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

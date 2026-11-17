@@ -1,8 +1,8 @@
 # Per-User Durable Objects own application storage and atomic execution
 
-- **Status:** Accepted migration direction, User storage/execution, routing and shared-fact
-  and background-discovery boundaries; independent restore/erasure, operations, acceptance and migration implementation
-  remain open.
+- **Status:** Accepted migration direction, User storage/execution, routing, shared facts,
+  background discovery and account erasure; operations, acceptance and migration implementation
+  remain open. Backup restoration is outside this migration.
 - **Supersedes:** The D1 storage destination and coordination-only Durable Object role in
   [ADR 0026](0026-cloudflare-native-production-replatform.md), and the initial-platform restriction
   in [ADR 0039](0039-fresh-read-performance-contract.md).
@@ -15,8 +15,9 @@ hybrid is not the destination.
 
 Live User authority checks, domain changes, accounting and Audit remain in one local transaction.
 One shared directory object owns routing and pre-User bootstrap; a separate shared pricing object
-owns the Price catalog and admission ordering. Independent erasure authority remains a separate
-recovery boundary. A transaction in one object cannot make changes in another object atomic.
+owns the Price catalog and admission ordering. Independent erasure authority retains deletion
+progress after User-local data is removed. A transaction in one object cannot make changes in
+another object atomic.
 R2, Queues and Workflows retain their existing responsibilities
 unless a concrete design constraint warrants changing them. Colombia versus North America is not
 a storage-placement requirement.
@@ -102,8 +103,8 @@ retention requirements, not extensions of credential authority.
 An empty or deleted destination never creates a User merely because a route points to it. Only
 the exact reserved bootstrap may initialize User domain state. Erasure fences old authority and
 pending handoffs before releasing identities. Once erasure is complete and the old reservation
-has been safely released, fresh signup may create a new UserId. Independent restore fencing and
-metadata expiry belong to the erasure decision; stale cleanup cannot affect the new User.
+has been safely released, fresh signup may create a new UserId. The erasure protocol below governs
+late-call refusal and metadata expiry; stale cleanup cannot affect the new User.
 
 Register Wompi environment/reference and WhatsApp endpoint/delivery correlation before sending;
 register a forwarding address before disclosure without enabling disabled ingestion. Authenticated
@@ -180,7 +181,7 @@ their required ServiceMarket, source-format, parser and anonymisation metadata. 
 receipt or raw-material locator. User-local approval and retained intent precede publication;
 external writes run outside the transaction, and recovery uses the same sample identity and
 approved contents. Background discovery owns missed handoff and bounded retry. Independent
-erasure/restore owns fencing and draining in-flight writes; approval is not permission to copy raw
+erasure owns fencing and draining in-flight writes; approval is not permission to copy raw
 material into shared storage. The existing automatic-approval implementation does not satisfy this
 accepted migration boundary and must be replaced during implementation.
 
@@ -233,8 +234,8 @@ letters are diagnostic with finite retention; owner reconciliation and expiry re
 Pricing uncertainty never blocks publication or unrelated registrations. Anonymous sample retries use
 only the exact human-approved revision, independent sample identity and approved content, outside the
 transaction. Original raw/candidate deadlines and independent erasure fences still apply. Independent
-erasure progress remains discoverable after User-local deletion. Safe registry retirement, metadata
-horizons and fencing late registration/restore belong to the independent restore/erasure decision.
+erasure progress remains discoverable after User-local deletion. The erasure protocol below governs
+safe registry retirement, metadata horizons and rejection of late registration.
 An empty User database alone never permits retirement.
 
 Reuse metadata-only owner, Queue, Workflow and retention monitoring. Add watchdog traversal age,
@@ -242,6 +243,73 @@ coverage, overdue checks and scoped uncertainty. Unknown/unavailable is not heal
 coverage is not successful execution. Keep User content and identifiers out of logs/alert dimensions.
 Operational page/concurrency/budget settings belong to the operations decision; five-minute traversal,
 fault isolation and aggregate load require acceptance evidence.
+
+## Account erasure and recovery scope
+
+The [account erasure decision](https://github.com/B4rz99/fidy-ai/issues/2203) preserves the existing
+ErasureRequest lifecycle and ordinary failure handling. The
+[scope decision](https://github.com/B4rz99/fidy-ai/issues/2203#issuecomment-6939307992) excludes live
+backup restoration, including individual and coordinated object restores, restricted-manual
+restore procedures and selective historical extraction/import. Native PITR availability is not
+a supported Fidy recovery procedure. Severe accidental data loss may have no supported recovery
+path initially. A future restoration capability requires a separate design that preserves erasure.
+This does not remove current-runtime D1 safeguards or authorize destructive cutover.
+
+Keep current durable owner intent, exact external-effect records, writer tracking and bounded
+retries. A process restart does not rewind storage. Do not introduce a new always-on independent
+receipt journal for external actions, generic restore generations or post-restore replay. Existing
+guarded code-only deployment rollback remains distinct from restoring data.
+
+The independent erasure owner uses private SQLite storage in a separate namespace from User stores.
+It owns deletion continuation, custody evidence and the minimal marker, not ordinary User queries
+or an additional copy of every application action. Its own alarm and the fixed maintenance
+watchdog target discover pending cases after User-local data is gone.
+After handoff, that case owns cross-owner deletion progress; User-local state retains the admission
+fence and owner drain facts until purging. These are not two independent completion authorities.
+
+1. A freshly authorized ErasureRequest commits the User-local admission fence and durable handoff
+   intent together. New User work, credential activation and bootstrap completion refuse under
+   that fence; already-issued external work follows existing settlement rules. Register the exact
+   UserId and ErasureReference with the independent owner before local data can be purged. A lost
+   acknowledgement repeats that same handoff; failure leaves the User fenced and discoverable.
+2. Directory/bootstrap, pricing and maintenance owners fence the old User and their bound
+   operations in their own short transactions before acknowledging erasure participation. Later
+   registration/completion calls for those operations refuse. Cleanup matches the original User
+   and reservation/operation identity; retain the identity hold until erasure completes. Resolve
+   exact committed or cancelled outcomes before removing required attribution. Missing rows,
+   timeout and an unreachable owner do not prove settlement. Other Users and Price publication
+   continue; anonymous shared counters and shared catalog facts are not erased with one User.
+3. Drain outstanding original-byte and sample writes using existing owner records. Unknown writes
+   can keep deletion pending indefinitely; cancelling a job or observing an absent file is not
+   proof that an already-issued write stopped. Raw material, review candidates and approval intent
+   remain User-scoped. Genuinely anonymous published samples retain their accepted shared lifetime;
+   unsafe samples remain withdrawable/deletable. Approval never exempts personal material from
+   erasure, and raw/candidate deadlines are not extended.
+4. Before purging, independently record completed drain and shared-owner fencing, together with
+   the bounded attribution needed for remaining custody cleanup. If a step still needs local
+   content or a Secret, finish that step before deleting it; do not copy those values into the
+   independent marker or custody evidence. Delete User records, projections and file prefixes,
+   then fully clear User object storage and its alarm. Normal callbacks or an empty object never
+   initialize a User; private erasure retries may repeat only that case's cleanup.
+5. Continue external cleanup from the independent case. It retains phase, required owner/custodian
+   outcomes, latest local-erasure time, next continuation and bounded custody evidence. Temporary
+   provider/callback attribution remains only for its pending cleanup purpose; it is distinct from
+   the minimal marker, which contains no User content or per-file locators. Retained callbacks may
+   settle their exact obligation but cannot restart User work. Repeating cleanup never extends a
+   proof's original deadline or affects a new identity binding.
+6. Complete only after local/shared cleanup and all writers are settled, every applicable custodian
+   is Verified or NotApplicable, and at least 30 days have passed since the latest local erasure.
+   Safely release old identity holds and retire the exact maintenance entry after completion;
+   temporary failure is retried from the independent case. Fresh signup requires completed
+   erasure and released identity ownership and always allocates a new UserId. Keep minimal
+   late-call protection until original validity/retry windows have ended and retirement is
+   acknowledged, then expire deletion metadata. The independent owner remains discoverable until
+   cleanup finishes; an empty User database alone never authorizes retirement.
+
+Native historical retention is not immediate backup destruction. Retaining the existing deletion
+marker/window does not assert that arbitrary restoration is safe. Ordinary entry requires live
+User state, and bootstrap requires its exact current reservation and unexpired proof; neither a
+lookup miss nor expired deletion metadata permits reusing an old UserId.
 
 ## Adoption evidence
 
@@ -254,15 +322,15 @@ not turn its 150 ms backend target into a browser-latency claim.
 
 The [infrastructure prototype evidence](https://github.com/B4rz99/fidy-ai/issues/1887) motivates
 reducing remote boundaries, but does not establish full-lifetime hosted acceptance, a performance
-benefit from per-User partitioning, or complete migration and restore guarantees. Acceptance must
-cover isolation, atomicity, revocation, retries, discovery, schema evolution and restore/erasure,
+benefit from per-User partitioning, or complete migration guarantees. Acceptance must
+cover isolation, atomicity, revocation, retries, discovery, schema evolution and account erasure,
 alongside representative latency and load. Exact thresholds and cutover procedures remain open.
 
 ## Design boundary
 
 The [migration map](https://github.com/B4rz99/fidy-ai/issues/2198) owns the remaining decisions:
-independent restore/erasure, schema operations, and acceptance/cutover. The resolved
-User storage/execution, identity routing and shared catalog tickets own their detailed decision
+schema operations and acceptance/cutover. The resolved User storage/execution, identity routing,
+shared catalog, background discovery and account erasure tickets own their detailed decision
 records. The
 [platform constraints research](https://github.com/B4rz99/fidy-ai/issues/2199#issuecomment-6839405060)
 records source-backed findings and outstanding evidence. Dated research and decision-ticket detail

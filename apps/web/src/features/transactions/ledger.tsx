@@ -106,6 +106,7 @@ const TransactionIdentity = ({
       ) : null}
       <button
         type="button"
+        id={`transaction-${row.id}`}
         disabled={disabled}
         onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
         aria-pressed={selection.active ? selection.ids.includes(row.id) : undefined}

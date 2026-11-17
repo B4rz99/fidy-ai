@@ -42,7 +42,42 @@ export const TransactionTypeToggle = ({
   </fieldset>
 );
 
-const noRestoreFocus = Option.none<HTMLElement>();
+const noRestoreFocus = Option.none<() => void>();
+const focusReturn =
+  (previous: HTMLElement, targetId: Option.Option<string>): (() => void) =>
+  (): void => {
+    const target = Option.flatMap(targetId, (id) =>
+      Option.fromNullishOr(document.getElementById(id))
+    );
+    if (Option.isSome(target)) {
+      target.value.focus({ preventScroll: true });
+      target.value.scrollIntoView({ block: "center", behavior: "instant" });
+    } else if (previous.isConnected) {
+      previous.focus({ preventScroll: true });
+    }
+  };
+
+const usePanelFocus = (active: boolean): RefCallback<HTMLDivElement> => {
+  const restoreFocus = useRef(noRestoreFocus);
+  return useCallback<RefCallback<HTMLDivElement>>(
+    (node): void => {
+      if (node === null) return;
+      if (active) {
+        const returnFocusId = Option.fromNullishOr(node.getAttribute("data-return-focus-id"));
+        if (document.activeElement instanceof HTMLElement) {
+          if (Option.isSome(returnFocusId) || Option.isNone(restoreFocus.current)) {
+            restoreFocus.current = Option.some(focusReturn(document.activeElement, returnFocusId));
+          }
+        }
+        node.focus({ preventScroll: true });
+      } else {
+        Option.map(restoreFocus.current, (restore) => restore());
+        restoreFocus.current = noRestoreFocus;
+      }
+    },
+    [active]
+  );
+};
 
 export const TransactionContextPanel = ({
   children,
@@ -51,6 +86,7 @@ export const TransactionContextPanel = ({
   locked,
   onClose,
   title,
+  returnFocusId,
 }: Readonly<{
   children: ReactNode;
   active: boolean;
@@ -58,25 +94,18 @@ export const TransactionContextPanel = ({
   locked: boolean;
   onClose: () => void;
   title: string;
+  returnFocusId: Option.Option<string>;
 }>): JSX.Element => {
-  const restoreFocus = useRef(noRestoreFocus);
-  const focusPanel = useCallback<RefCallback<HTMLDivElement>>(
-    (node): void => {
-      if (node === null) return;
-      if (active) {
-        if (Option.isNone(restoreFocus.current) && document.activeElement instanceof HTMLElement) {
-          restoreFocus.current = Option.some(document.activeElement);
-        }
-        node.focus({ preventScroll: true });
-      } else {
-        Option.map(restoreFocus.current, (element) => element.focus({ preventScroll: true }));
-        restoreFocus.current = noRestoreFocus;
-      }
-    },
-    [active]
-  );
+  const focusPanel = usePanelFocus(active);
   const content = (
-    <div key={identity} ref={focusPanel} tabIndex={-1}>
+    <div
+      key={identity}
+      ref={focusPanel}
+      tabIndex={-1}
+      role={active ? "group" : undefined}
+      aria-label={active ? title : undefined}
+      data-return-focus-id={Option.getOrUndefined(returnFocusId)}
+    >
       {children}
     </div>
   );

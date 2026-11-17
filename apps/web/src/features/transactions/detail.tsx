@@ -9,6 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
 import { CategoryVisual } from "@/ui/components/category-visual";
 import { Button } from "@/ui/components/button";
+import { Badge } from "@/ui/components/badge";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 import { type DetailMode, reconciliationLocked } from "./panel-state";
 import { TransactionCorrection } from "./correction";
@@ -34,6 +35,7 @@ type DetailProps = Readonly<{
   onClose: () => void;
   editable: boolean;
   inspectable: boolean;
+  fromReview: boolean;
   mode: DetailMode;
   onMode: (mode: DetailMode) => void;
 }>;
@@ -216,6 +218,11 @@ const DetailFrame = ({
       <h2>{detailTitle(props.mode)}</h2>
       <DetailClose props={props} />
     </header>
+    {props.fromReview ? (
+      <Badge variant="information" className="self-start">
+        Desde Historial de revisión
+      </Badge>
+    ) : null}
     {props.mode._tag !== "Reconciling" ? <DetailIdentity {...props} /> : null}
     {props.mode._tag === "Deleting" ||
     props.mode._tag === "Viewing" ||
@@ -290,6 +297,14 @@ const useEditingAdmission = (input: InspectedProps): boolean => {
   if (!editing && admitted) setAdmitted(false);
   return editing && (input.correctionReady || admitted);
 };
+const DetailEditAction = ({ props }: Readonly<{ props: InspectedProps }>): JSX.Element =>
+  props.mode._tag === "Viewing" && props.editable && props.correctionReady ? (
+    <Button variant="outline" onClick={() => props.onMode({ _tag: "Editing" })}>
+      Editar transacción
+    </Button>
+  ) : (
+    <></>
+  );
 const InspectedDetail = (input: InspectedProps): JSX.Element => {
   const editing = useEditingAdmission(input);
   const props =
@@ -318,6 +333,7 @@ const InspectedDetail = (input: InspectedProps): JSX.Element => {
     <DetailFrame props={props}>
       <>
         <DetailFacts {...props} />
+        <DetailEditAction props={props} />
         {props.inspectionChanged ? (
           <div className="mt-4 flex flex-col gap-3">
             <output>La transacción cambió. Actualiza el historial antes de editar.</output>

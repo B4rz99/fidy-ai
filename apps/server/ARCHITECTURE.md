@@ -72,6 +72,12 @@ UserStore. The UserStore checks its namespace identity, local credential, Consen
 then materializes the financial page, standing and Audit in one SQLite transaction. See
 [per-User storage](../../docs/adr/0041-per-user-durable-object-storage-direction.md).
 
+Browser and PAT Budget operations follow the credential through the Directory to the UserStore.
+Budget changes commit their monthly plan, group Currency, accounting, Audit and eligible retry
+receipt in the same local transaction. Budget status reads combine inherited caps and the
+Transaction owner's Effective Transactions in one snapshot. Only outflows in the matching Category
+and Currency count toward a cap.
+
 Unmigrated paths still use D1. Canonical mutation units commit live authority, owner
 changes, accounting and Audit together. Database guards enforce ownership and revisions alongside
 per-User coordination. Shared reads preserve the same authorization and accountability boundaries.

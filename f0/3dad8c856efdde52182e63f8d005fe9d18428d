@@ -1,0 +1,64 @@
+apps/web/src/features/budgets/write-lifetime.ts
+  s_24b0d6eeffc699::t_0bf766b998dad7 3,11
+apps/web/src/features/budgets/controller.ts
+  s_24b0d6eeffc699::t_c21eba32e813c2 268,424,428,430,446-448,467-469,484,493-495,561-564,576-582,584-588,595-597
+  s_24b0d6eeffc699::t_b7c2f114358f12 269,312,340-345,489-492,501-506,565-571,574-575,598-605,608-634
+  s_24b0d6eeffc699::t_d15b60aa658331 270-288,290-303,318,322,385-393,397-403,405-407,409,411,572
+  s_24b0d6eeffc699::t_0bf766b998dad7 174-175,188,195,313,375-377,553-559
+  s_24b0d6eeffc699::t_e9e788aca73c9d 304-311
+  s_24b0d6eeffc699::t_5ae0969d3225b8 356-357
+  s_24b0d6eeffc699::t_98d83d7ebcee0c 256,267,347,449,451-466,470,486
+  s_24b0d6eeffc699::t_b0e9fd8c8fa7f9 164-165,247-255,257-266,314-317,319-321,323-339,346,348-349,355,360,381-382,450,560,594,606-607,635-637
+apps/web/src/features/budgets/row.tsx
+  s_24b0d6eeffc699::t_0bf766b998dad7 4,25,27,38-39,60
+  s_24b0d6eeffc699::t_02a1bb5cb4dacf 5,26,40,59,118,124,140-145,153-162
+  s_24b0d6eeffc699::t_b7c2f114358f12 49-53
+apps/web/src/features/budgets/workspace.tsx
+  s_24b0d6eeffc699::t_0bf766b998dad7 328,330
+  s_24b0d6eeffc699::t_02a1bb5cb4dacf 97-101,329
+  s_24b0d6eeffc699::t_b7c2f114358f12 327
+  s_24b0d6eeffc699::t_112768689900ac 47,49,64,73,80
+apps/web/src/features/budgets/model.ts
+  s_24b0d6eeffc699::t_02a1bb5cb4dacf 37
+  s_24b0d6eeffc699::t_0bf766b998dad7 48-49
+  s_24b0d6eeffc699::t_b7c2f114358f12 47
+  s_24b0d6eeffc699::t_caf8faef42f7bb 36,38
+apps/web/src/features/budgets/navigation.test.ts
+  s_24b0d6eeffc699::t_3941762a67a09f 3-9,19-25,35-40,42-49,72-74,83-85,90-92,97-99,103-104,107-108,110-111,114-127,131-132,137-139,141,156-164,166-168,170-195,216-217,221-228,230-233,351,361-365
+  s_24b0d6eeffc699::t_4cec38f15268ba 26-34,50,58-71,75-82,109,145-146,150-153,388-414
+  s_24b0d6eeffc699::t_15badea08e6f7f 53-57,261-262,271
+  s_24b0d6eeffc699::t_523d1546857193 134,136,204,213
+  s_24b0d6eeffc699::t_e8b22330b55dbf 280-337,348,350,353-357,359
+  s_24b0d6eeffc699::t_19e3b82a339f67 11,105-106,129-130,135,143-144,147,196-203,205-212,214-215,218-220,279,338-347,349,352,358,360
+  s_24b0d6eeffc699::t_334f082737a65f 100
+  s_24b0d6eeffc699::t_76005234228bd5 112,229,236-260,263-270,272-278
+  s_24b0d6eeffc699::t_98d83d7ebcee0c 148-149,154-155
+  s_24b0d6eeffc699::t_60a05f54716a86 366-387,415-419
+  s_24b0d6eeffc699::t_3af465b1988a6a 1-2,12-18,41,51,86-89,93-96,101-102,234-235
+  s_24b0d6eeffc699::t_d4c1658ea08243 10,52,113,128,133,140,142,165,169
+apps/web/src/features/budgets/write-feedback.tsx
+  s_24b0d6eeffc699::t_02a1bb5cb4dacf 23-30,41,47,49-51
+  s_24b0d6eeffc699::t_b5c39e8b216d53 40,42
+apps/web/src/features/budgets/FEATURE.md
+  s_24b0d6eeffc699::t_99251b0748b5be 54,56,89
+apps/web/src/features/budgets/deletion.tsx
+  s_24b0d6eeffc699::t_a804c4a9480b8f 42
+apps/web/src/features/budgets/editor.tsx
+  s_24b0d6eeffc699::t_1965f85e0bc769 228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f03dad8c856efdde52182e63f8d005fe9d18428d",
+  "prompts": {},
+  "sessions": {
+    "s_24b0d6eeffc699": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9ad-318d-7e43-9d56-5e6732261a56",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

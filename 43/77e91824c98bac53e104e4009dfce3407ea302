@@ -1,0 +1,86 @@
+apps/server/cloudflare/erasure/internal/operator-request.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 13-14,16,207,211-213,215
+  s_a1be23a656acf0::t_6212ba2b30cfaa 210
+  s_a1be23a656acf0::t_b533b0d127832b 15,214
+apps/server/cloudflare/subscription/pricing.test.ts
+  s_a1be23a656acf0::t_c4a6d7e9fc72bb 1,3-27,29-43,47,49-60,63-66,68,72-74,80-88,97,101-110,112-118,120-122,124-127,234
+  s_a1be23a656acf0::t_cea46e0a1160ec 202-215,217-220,222-227,229-233
+  s_a1be23a656acf0::t_fea23a54d0e332 128-138,141-147,149-160,162-177,179-181,183-190,192-196,198-201
+  s_a1be23a656acf0::t_6212ba2b30cfaa 2,44-46,48,75-79
+  s_a1be23a656acf0::t_3429c5e10c35e2 28,61-62,67,69-71,89-96,98-100,111,119,123,139-140,148,161,178,182,191,197,216,221,228
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 437-440
+apps/server/cloudflare/subscription/pricing.test-fixture.ts
+  s_a1be23a656acf0::t_8534a3ed32ae37 1
+  s_a1be23a656acf0::t_8dfebf0f02361a 2,6-24,26-31
+  s_a1be23a656acf0::t_6212ba2b30cfaa 3-5,25
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 110,116
+  s_a1be23a656acf0::t_6212ba2b30cfaa 604,1942-1944
+apps/server/cloudflare/erasure/contract.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 120
+apps/server/cloudflare/subscription/refund-support.test.ts
+  s_a1be23a656acf0::t_6212ba2b30cfaa 424-425,439
+  s_a1be23a656acf0::t_5ba0b5ad5c13a2 400-415,417-423,426-430,432-434,438,440-446,448-461
+  s_a1be23a656acf0::t_62a9690106bc12 416,431,435-437,447
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 15-17,19,266,424-427,635-636
+  s_a1be23a656acf0::t_067dfcebe34e36 18
+apps/server/cloudflare/subscription/contract.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 5,201-205,207,209-212,214-226
+  s_a1be23a656acf0::t_6212ba2b30cfaa 208,213
+  s_a1be23a656acf0::t_8b6b2afe99884d 206,227-228
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 255
+  s_a1be23a656acf0::t_8534a3ed32ae37 1-3,9,32,256-292
+apps/server/package.json
+  s_a1be23a656acf0::t_59527663a2452c 321
+apps/server/cloudflare/operator-access/operations.ts
+  s_a1be23a656acf0::t_b44c6fe38ba6b2 86,88
+  s_a1be23a656acf0::t_d06e2cb1e9e876 1-3,5-7,9-17,19-69,79-80,89-99
+  s_a1be23a656acf0::t_f1ad569ef2664b 4
+  s_a1be23a656acf0::t_6212ba2b30cfaa 8,70-78,81-85,87
+  s_a1be23a656acf0::t_4816d50d7fa3d7 18
+apps/server/cloudflare/subscription/internal/publish-price.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 1,3-9,11-14,16-17,21,25-26,30-34,36-39,42,44-54,57-66
+  s_a1be23a656acf0::t_8534a3ed32ae37 2,22-24,43
+  s_a1be23a656acf0::t_6212ba2b30cfaa 18-20,27-29,35
+  s_a1be23a656acf0::t_f5f778560a18f5 10,15,40-41,55-56
+apps/server/cloudflare/core-worker.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 40,71-72
+apps/server/cloudflare/core-http/contract.ts
+  s_a1be23a656acf0::t_d06e2cb1e9e876 29-30
+apps/server/cloudflare/subscription/internal/pricing-object.ts
+  s_a1be23a656acf0::t_e58a660a59b9da 3-9,11,17-24,26-31,76-79,144-147,149-157,161-168,172-181,185-186
+  s_a1be23a656acf0::t_d06e2cb1e9e876 16
+  s_a1be23a656acf0::t_6212ba2b30cfaa 2,39,105-110,137-141,148,158-160,169-171,182-184,206
+  s_a1be23a656acf0::t_43e8c94acc8ad6 12-14,32-35,37-38,40-53,55-59,61-75,80-104,111-125,128-136,142-143,187-190,200
+  s_a1be23a656acf0::t_8534a3ed32ae37 1,15,60,191-199,201-205,207-208
+  s_a1be23a656acf0::t_a59d62a1df7c6e 10,25,36,54,126-127
+apps/server/cloudflare/subscription/operations.ts
+  s_a1be23a656acf0::t_862d389c9e907a 9
+apps/server/cloudflare/subscription/payment-enrollment-d1.test-fixture.ts
+  s_a1be23a656acf0::t_a68bb063e83b1d 1-3,66-112
+apps/server/cloudflare/subscription/weekly-renewal.test.ts
+  s_a1be23a656acf0::t_22c7dfd1ecda4d 25-28,498,2734,2934,2954
+bun.lock
+  s_a1be23a656acf0::t_8e85fc351d13be 55
+docs/runbooks/price-publication.md
+  s_a1be23a656acf0::t_e486d13a7b0802 1-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4377e91824c98bac53e104e4009dfce3407ea302",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

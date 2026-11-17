@@ -1,0 +1,21 @@
+dependency-policy.json
+  s_25622a6517eb19::t_d0e10f06331791 43-74
+.fluidattacks/sca.yaml
+  s_25622a6517eb19::t_d0e10f06331791 17-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3c41592836eeb777e57c0bd5ce7c3016f6a7b2ed",
+  "prompts": {},
+  "sessions": {
+    "s_25622a6517eb19": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb01-8c11-7003-a16c-1b81280a9587",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

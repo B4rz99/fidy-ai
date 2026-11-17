@@ -1,0 +1,54 @@
+apps/web/src/features/recurring/navigation.ts
+  s_398952c775f46d::t_f915745aad2ab6 2,6-9,11,24-25,73-74,78-100,106,117-125,128,131-141,145-154,156-157,161-167,169,172-175,177-180,184
+  s_398952c775f46d::t_87de86c33d1a35 1,3-5,12-23,26-41,53-63,65-72,75-77,111,113-116,142-144,160,170-171,181,191
+  s_398952c775f46d::t_a2a99a8b527ec3 158
+  s_398952c775f46d::t_3279d205a44798 10,42-52,64,101-105,107-110,112,126-127,129-130,155,159,168,176,182-183,185-190
+apps/web/src/features/recurring/transactions.tsx
+  s_398952c775f46d::t_37758980d8a539 15-16,57-59,61,70-71,75-76,80,88,90,93-95,97-101,108-110,146,156-157,167
+  s_398952c775f46d::t_4be5e107b273f5 60
+  s_398952c775f46d::t_b1955358b1beba 62-64,67-69
+  s_398952c775f46d::t_5bb17da7e7b608 78-79
+  s_398952c775f46d::t_79a6912f379e92 91-92
+  s_398952c775f46d::t_525de4d981dddf 39,65-66,172,277-282
+apps/web/src/features/recurring/workspace.tsx
+  s_398952c775f46d::t_a2a99a8b527ec3 340-341,343-347,351-352
+  s_398952c775f46d::t_8f6c62e815a5ab 337-339
+  s_398952c775f46d::t_48c487d98f8fa8 342
+  s_398952c775f46d::t_9cec061625cf9a 348-350
+  s_398952c775f46d::t_4c825f94994a4c 353-355
+  s_398952c775f46d::t_af5195116a04b0 1-2,329-336,356-368,372,393,428,433,435,446
+apps/web/src/features/recurring/transaction-search-form.tsx
+  s_398952c775f46d::t_4c3006e508202d 15,23,38,56,119
+apps/web/src/features/recurring/navigation.test.ts
+  s_398952c775f46d::t_743baa3e549c06 13,20-21,38-55,58-71,73-96,98-101,103-107,109,113-117,119-122,124-126,128-130,132-134,136-138,140-142,144,146-155,157-158,160-170,172,178,180,182-184,186-197
+  s_398952c775f46d::t_37758980d8a539 14,35
+  s_398952c775f46d::t_d89d115b758c6b 9,145
+  s_398952c775f46d::t_a2a99a8b527ec3 110-112,171,173,175,177,179,181,185,199-205
+  s_398952c775f46d::t_675e772451fbbf 1-8,10-12,15-19,22-34,36-37,56-57,72,97,102,108,118,123,127,131,135,139,143,156,159,174,176,198
+apps/web/src/features/recurring/transaction-filters.ts
+  s_398952c775f46d::t_4c3006e508202d 8,13,28
+  s_398952c775f46d::t_f915745aad2ab6 2-6,9,14-27,30-36
+  s_398952c775f46d::t_f0e60161050a08 7,29
+apps/web/src/features/recurring/FEATURE.md
+  s_398952c775f46d::t_374747dd0a8b03 74-81
+apps/web/src/features/recurring/transaction-link.tsx
+  s_398952c775f46d::t_e14ea9246f954d 2,11-16,28,30-37,41,47-84,87-110,152
+apps/web/src/ui/components/recurring.css
+  s_398952c775f46d::t_d1f46d0f912dde 17-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "20d9ddf0b92c9055555b37a5e42d80dc7a4fa039",
+  "prompts": {},
+  "sessions": {
+    "s_398952c775f46d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7cc-45f6-7663-8706-7b8ec59907e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

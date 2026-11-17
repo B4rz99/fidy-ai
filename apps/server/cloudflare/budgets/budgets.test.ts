@@ -3244,6 +3244,18 @@ it("versions currency for every group member without changing earlier months or 
       expect(yield* groupCurrenciesAt(db, "2026-11")).toEqual(["USD", "USD"]);
       expect(yield* groupCurrenciesAt(db, "2026-12")).toEqual(["USD", "USD"]);
       expect((yield* groupCurrenciesAt(db, "2026-11", 1))[0]).toBe("COP");
+      for (const month of ["2026-10", "2026-11"]) {
+        const duplicate = yield* Effect.tryPromise(() =>
+          db.send(
+            request(0, "/budgets", "POST", {
+              categoryId: second,
+              cap: { amount: "100", currency: "USD" },
+              month,
+            })
+          )
+        );
+        expect(duplicate.status).toBe(400);
+      }
       expect(
         (yield* Effect.tryPromise(() =>
           db.send(
@@ -3260,60 +3272,77 @@ it("versions currency for every group member without changing earlier months or 
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it("refuses group currency precision loss including previously saved future caps", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* nativeTransactionJourney;
-      const response = yield* Effect.tryPromise(() =>
-        db.send(
-          request(0, "/budgets", "POST", {
-            categoryId: category,
-            cap: { amount: "100", currency: "USD" },
-            month: "2026-10",
-            groupName: "Hogar",
-          })
-        )
-      );
-      const created = yield* Schema.decodeUnknownEffect(Created)(
-        yield* Effect.tryPromise(() => response.json())
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
+it.each(["2026-09", "2026-12"])(
+  "refuses group currency precision loss from a member cap saved in %s",
+  (capMonth) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* nativeTransactionJourney;
+        const response = yield* Effect.tryPromise(() =>
           db.send(
-            request(0, `/budgets/${created.data.id}`, "PUT", {
-              categoryId: category,
-              cap: { amount: "10.25", currency: "USD" },
-              month: "2026-12",
-              groupName: "Hogar",
-            })
-          )
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.send(
-            request(0, `/budgets/${created.data.id}`, "PUT", {
+            request(0, "/budgets", "POST", {
               categoryId: category,
               cap: { amount: "100", currency: "USD" },
-              month: "2026-11",
+              month: "2026-08",
               groupName: "Hogar",
-              groupCategoryIds: [category],
-              groupCurrency: "JPY",
             })
           )
-        )).status
-      ).toBe(400);
-      expect(yield* groupCurrenciesAt(db, "2026-11")).toEqual(["USD"]);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.exec(
-            "SELECT 1 FROM budget_month_plan_records WHERE kind='plan' AND user_id=? AND month='2026-11'",
-            users[0]
+        );
+        const created = yield* Schema.decodeUnknownEffect(Created)(
+          yield* Effect.tryPromise(() => response.json())
+        );
+        const second = "10000000-0000-4000-8000-000000000012";
+        const other = yield* Effect.tryPromise(() =>
+          db.send(
+            request(0, "/budgets", "POST", {
+              categoryId: second,
+              cap: { amount: "50", currency: "USD" },
+              month: "2026-08",
+              groupName: "Hogar",
+            })
           )
-        )
-      ).toEqual([]);
-    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
-  ));
+        );
+        const member = yield* Schema.decodeUnknownEffect(Created)(
+          yield* Effect.tryPromise(() => other.json())
+        );
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.send(
+              request(0, `/budgets/${member.data.id}`, "PUT", {
+                categoryId: second,
+                cap: { amount: "10.25", currency: "USD" },
+                month: capMonth,
+                groupName: "Hogar",
+              })
+            )
+          )).status
+        ).toBe(200);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.send(
+              request(0, `/budgets/${created.data.id}`, "PUT", {
+                categoryId: category,
+                cap: { amount: "100", currency: "USD" },
+                month: "2026-11",
+                groupName: "Hogar",
+                groupCategoryIds: [category, second],
+                groupCurrency: "JPY",
+              })
+            )
+          )).status
+        ).toBe(400);
+        expect(yield* groupCurrenciesAt(db, "2026-11")).toEqual(["USD", "USD"]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.exec(
+              "SELECT 1 FROM budget_month_plan_records WHERE kind='plan' AND user_id=? AND month='2026-11'",
+              users[0]
+            )
+          )
+        ).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
+    )
+);
 
 const monthlyDeletionReport = Effect.fn(function* (db: D1Database, month: string) {
   const response = yield* Effect.tryPromise(() =>

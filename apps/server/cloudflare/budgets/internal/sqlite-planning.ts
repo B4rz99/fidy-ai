@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { Currency, Money, encodeMoneyAmount } from "../../../src/core/_shared/money";
 import { Budget, type BudgetId, type UpdateBudgetInput } from "../../../src/core/budgets/contract";
@@ -121,7 +121,9 @@ const groupPrecision = Effect.fn(function* (
   if (Option.isNone(fits({ amount, currency }))) return false;
   // A future month can hold a different cap. Validate every distinct nominal amount in bounded pages.
   const caps = sql`WITH selected AS (SELECT id,cap FROM budgets WHERE ${members}), caps AS (
-    SELECT cap FROM selected UNION SELECT p.cap FROM budget_month_plan_records p JOIN selected s ON s.id=p.budget_id
+    SELECT cap FROM selected UNION SELECT COALESCE((SELECT p.cap FROM budget_month_plan_records p
+      WHERE p.kind='cap' AND p.user_id=${user} AND p.budget_id=s.id AND p.month<=${month} ORDER BY p.month DESC LIMIT 1),s.cap) FROM selected s
+    UNION SELECT p.cap FROM budget_month_plan_records p JOIN selected s ON s.id=p.budget_id
     WHERE p.kind='cap' AND p.user_id=${user} AND p.month>=${month})`;
   let cursor = Option.none<string>();
   for (;;) {
@@ -253,11 +255,29 @@ const writeBudget = Effect.fn(function* (
       starts_month=CASE WHEN starts_month>${month} THEN ${month} ELSE starts_month END, updated_at_ms=${current}
       WHERE id=${budgetId} AND user_id=${user} RETURNING id`;
 });
-export const saveLocalBudget = Effect.fn(function* (
-  save: SaveInput,
-  user: UserId,
-  current: number
-) {
+class MonthlyBudgetConflict extends Data.TaggedError("MonthlyBudgetConflict") {}
+
+/** Only a Budget start or a group Currency change can introduce a monthly Category/Currency collision. */
+const checkMonthlyDenominations = Effect.fn(function* (user: UserId) {
+  const sql = yield* SqliteClient;
+  const conflicts = yield* sql`WITH repeated_categories AS (
+    SELECT category_id FROM budgets WHERE user_id=${user} GROUP BY category_id HAVING COUNT(*)>1
+  ), members AS (
+    SELECT category_id,group_name,currency,COALESCE(starts_month,'') AS start FROM budgets
+    WHERE user_id=${user} AND category_id IN (SELECT category_id FROM repeated_categories)
+  ), periods AS (
+    SELECT category_id,start AS month FROM members UNION
+    SELECT b.category_id,g.month FROM members b JOIN budget_month_plan_records g ON g.group_name=b.group_name
+    WHERE g.kind='currency' AND g.user_id=${user} AND g.month>=b.start
+  ), monthly AS (
+    SELECT p.month,b.category_id,COALESCE((SELECT g.currency FROM budget_month_plan_records g
+      WHERE g.kind='currency' AND g.user_id=${user} AND g.group_name=b.group_name AND g.month<=p.month
+      ORDER BY g.month DESC LIMIT 1),b.currency) AS denomination
+    FROM periods p JOIN members b ON b.category_id=p.category_id AND b.start<=p.month
+  ) SELECT 1 FROM monthly GROUP BY month,category_id,denomination HAVING COUNT(*)>1 LIMIT 1`;
+  if (conflicts.length > 0) return yield* new MonthlyBudgetConflict();
+});
+const saveBudgetPlan = Effect.fn(function* (save: SaveInput, user: UserId, current: number) {
   const { id, input } = save;
   const failure = yield* validateBudget(save, user);
   if (Option.isSome(failure)) return failure.value;
@@ -288,6 +308,7 @@ export const saveLocalBudget = Effect.fn(function* (
     yield* sql`INSERT INTO budget_month_plan_records(kind,user_id,budget_id,month,cap) VALUES('cap',${user},${budgetId},${input.month},${cap})
     ON CONFLICT(user_id,budget_id,month) WHERE kind='cap' DO UPDATE SET cap=excluded.cap`;
   }
+  yield* checkMonthlyDenominations(user);
   const [saved] = (yield* plannedBudgets(
     user,
     Option.fromUndefinedOr(input.month),
@@ -298,6 +319,16 @@ export const saveLocalBudget = Effect.fn(function* (
     ...budgetSuccess(yield* Schema.encodeEffect(Schema.toCodecJson(Budget))(saved)),
     status: Option.isNone(id) ? createdStatus : updatedStatus,
   };
+});
+export const saveLocalBudget = Effect.fn(function* (
+  save: SaveInput,
+  user: UserId,
+  current: number
+) {
+  const sql = yield* SqliteClient;
+  return yield* sql
+    .withTransaction(saveBudgetPlan(save, user, current))
+    .pipe(Effect.catchTag("MonthlyBudgetConflict", () => Effect.succeed(invalid())));
 });
 export const deleteLocalBudget = Effect.fn(function* (id: BudgetId, user: UserId) {
   const sql = yield* SqliteClient;

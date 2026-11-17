@@ -1,0 +1,30 @@
+apps/server/cloudflare/runtime/sqlite/operations.ts
+  s_a1be23a656acf0::t_74f6efe019a345 253-255
+  s_a1be23a656acf0::t_ea6e11d78e5f1d 12,246,249
+infra/cloudflare/verify-edge-policy.ts
+  s_3753f0f146cfeb::t_471fe1a49b730e 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "435af20c59e221942415fae56780318ca9418aa8",
+  "prompts": {},
+  "sessions": {
+    "s_3753f0f146cfeb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb8d-4e58-7c03-a5f5-c3836bdd4237",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

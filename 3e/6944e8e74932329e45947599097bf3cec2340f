@@ -1,0 +1,34 @@
+apps/web/src/ui/components/transactions.tsx
+  s_b3b52c95df703e::t_2a543547a05d2b 45,48,55-59,61-65,67,70-77,79-80,89,101-106,108
+  s_b3b52c95df703e::t_ccb96b26e15225 47,49-54,68-69
+  s_b3b52c95df703e::t_a07e8efe3039ad 97
+  s_b3b52c95df703e::t_32008077b78798 46
+  s_b3b52c95df703e::t_ad2845e206b070 60,66,78,99,107
+apps/web/src/features/transactions/workspace.tsx
+  s_b3b52c95df703e::t_071fbd396c071f 655,869
+  s_b3b52c95df703e::t_e34e5083a5cba9 247,855,857,864-865,867,871-875,877-879,888,944
+apps/web/src/ui/transactions-reference.tsx
+  s_b3b52c95df703e::t_7af3d727f225bf 3,42
+apps/web/src/features/transactions/ledger.tsx
+  s_b3b52c95df703e::t_2a543547a05d2b 109
+apps/web/src/features/transactions/detail.tsx
+  s_b3b52c95df703e::t_4ce55e5774ca9f 300-307,336
+  s_b3b52c95df703e::t_e34e5083a5cba9 12,38,221,225
+  s_b3b52c95df703e::t_32008077b78798 222-224
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3e6944e8e74932329e45947599097bf3cec2340f",
+  "prompts": {},
+  "sessions": {
+    "s_b3b52c95df703e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7ce-acf7-75f3-ad7e-833ba7f20423",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

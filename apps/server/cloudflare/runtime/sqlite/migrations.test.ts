@@ -236,15 +236,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     })
   );
 
-  for (const owner of ["maintenance", "erasure"]) {
+  for (const [owner, versions] of [
+    ["maintenance", [1, 2]],
+    ["erasure", [1]],
+  ] as const) {
     test.effect(`initializes the independent ${owner} migration history`, () =>
       Effect.gen(function* () {
         const activate = yield* probe;
         const store = yield* activate(owner, "release");
         expect(yield* store.request).toBe(200);
-        expect(yield* store.exec("SELECT owner,version FROM store_migrations")).toEqual([
-          { owner, version: 1 },
-        ]);
+        expect(
+          yield* store.exec("SELECT owner,version FROM store_migrations ORDER BY version")
+        ).toEqual(versions.map((version) => ({ owner, version })));
       })
     );
   }

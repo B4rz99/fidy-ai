@@ -83,6 +83,7 @@ export type CoreMaintenanceInput = Omit<
 
 /** Private singleton for lifetime discovery. One UserId always names one User store. */
 export const maintenanceName = "core-maintenance-v1";
+export const registrationAcceptedStatus = 204;
 export const registerLifetimeUrl = "https://maintenance.invalid/lifetime/register";
 export const fenceLifetimeUrl = "https://maintenance.invalid/lifetime/fence";
 export const retireLifetimeUrl = "https://maintenance.invalid/lifetime/retire";

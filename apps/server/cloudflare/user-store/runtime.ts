@@ -122,7 +122,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
-  private owns = (userId: string): boolean =>
+  private readonly owns = (userId: string): boolean =>
     this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
 
   private registration(): Promise<boolean> {

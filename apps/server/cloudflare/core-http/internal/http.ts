@@ -107,11 +107,13 @@ import {
   handleWebAuthentication,
   ownsWebAuthenticationPath,
 } from "../../web-authentication/operations";
+import { pricePublicationPath } from "../../subscription/contract";
 import { prepareBoundSubscriptionRead, refundSupportRoute } from "../../subscription/operations";
 import { paymentEnrollmentTransport } from "../../../src/shell/subscription/runtime";
 import {
   dispatchBillingCollection,
   handlePaymentEnrollment,
+  handlePricePublication,
   handleRefundSupport,
   receiveWompiBillingEvent,
 } from "../../subscription/runtime";
@@ -599,6 +601,7 @@ const ownedCorePath = (path: string): boolean =>
   [
     "/health",
     "/internal/titular-erasure",
+    pricePublicationPath,
     smokePath,
     listCategoriesPath,
     "/providers/kapso/callback",
@@ -1935,6 +1938,9 @@ const supportCoreResponse = (
         storeIds: coordinatorErasureStoreIds(environment.DB),
       })
     );
+  }
+  if (path === pricePublicationPath) {
+    return Option.some(handlePricePublication({ request, environment }));
   }
   if (refundSupportRoute(path)) {
     return Option.some(

@@ -397,3 +397,65 @@ it("forwards billing support to Core without inheriting PAT or recovery permissi
       expect(prepared.admissions).toHaveLength(1);
     })
   ));
+
+it("accepts a Price publication through ingress only under current pricing-specific operator authority", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const prepared = yield* setup();
+      const publicationId = "22470000-0000-4000-8000-000000000001";
+      const price = {
+        id: "22470000-0000-4000-8000-000000000002",
+        money: { amount: "11900", currency: "COP" },
+        billingPeriod: "weekly",
+        serviceMarket: "CO",
+        taxTreatment: "not-taxable",
+        renewalTerms: {
+          automaticRenewal: true,
+          cancellation: "future-renewals-only",
+          renewalReminder: "none",
+          paidAccessEnds: "paid-period-end",
+        },
+        paymentMethods: ["card", "nequi", "daviplata"],
+      };
+      const environment = {
+        ...prepared.environment,
+        PRICING_PUBLISH_AUDIENCE: "pricing-permission",
+        PRICING: {
+          getByName: (name: string): Pick<Fetcher, "fetch"> => ({
+            fetch: (request: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+              expect(name).toBe("pricing");
+              return new Request(request, init).json().then((input) => {
+                expect(input).toMatchObject({
+                  publicationId,
+                  price,
+                  authority: { operatorId: "support-operator", permission: "pricing.publish" },
+                });
+                return Response.json({ publicationId, priceId: price.id });
+              });
+            },
+          }),
+        },
+      };
+      const send = (assertion: string): Effect.Effect<Response, Cause.UnknownError> =>
+        Effect.tryPromise(() =>
+          publicSupport(
+            new Request("https://api.fidyapp.com/internal/support/prices", {
+              method: "POST",
+              headers: { "cf-access-jwt-assertion": assertion, "content-type": "application/json" },
+              body: Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))({
+                publicationId,
+                price,
+              }),
+            }),
+            environment
+          )
+        );
+      for (const aud of ["refund-permission", "recovery-permission", "pricing-permission"]) {
+        const assertion = yield* Effect.tryPromise(() =>
+          prepared.token(aud, "5m", { email: "obarboza@fidyapp.com" })
+        );
+        expect((yield* send(assertion)).status).toBe(aud === "pricing-permission" ? 200 : 401);
+      }
+      expect((yield* send("")).status).toBe(401);
+    })
+  ));

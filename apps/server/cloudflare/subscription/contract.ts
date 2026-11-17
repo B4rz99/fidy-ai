@@ -2,6 +2,7 @@ import { type WompiEnvironment } from "../../src/shell/secret-material/contract"
 import { UserId } from "../../src/core/identity/contract";
 import {
   BillingAttemptId,
+  Price,
   type RefundAttemptId,
   StartRefundInput,
 } from "../../src/core/subscription/contract";
@@ -195,5 +196,33 @@ export type WompiBindings = Readonly<{
     Readonly<{
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;
       WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
+    }>
+  >;
+
+export const pricingName = "pricing";
+export const pricePublicationPath = "/internal/support/prices";
+export const PricePublication = Schema.Struct({
+  publicationId: Schema.String.check(Schema.isUUID()),
+  price: Price,
+});
+const maximumPricingOperatorIdLength = 256;
+export const AdmittedPricePublication = Schema.Struct({
+  ...PricePublication.fields,
+  authority: Schema.Struct({
+    permission: Schema.Literal("pricing.publish"),
+    operatorId: Schema.NonEmptyString.check(Schema.isMaxLength(maximumPricingOperatorIdLength)),
+    expiresAtMs: Schema.Int,
+  }),
+});
+export type PricingEnvironment = Readonly<{
+  CLOUDFLARE_ACCESS_ISSUER: string;
+  CLOUDFLARE_ACCESS_AUDIENCE: string;
+}> &
+  Partial<
+    Readonly<{
+      ERASURE_SUPPORT_AUDIENCE: string;
+      BILLING_SUPPORT_AUDIENCE: string;
+      PRICING_PUBLISH_AUDIENCE: string;
+      PRICING: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
     }>
   >;

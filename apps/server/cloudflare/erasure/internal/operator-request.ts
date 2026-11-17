@@ -6,12 +6,14 @@ import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import {
   ErasureOperatorAction,
-  type ErasureOperatorConfiguration,
   type ErasureOperatorEnvironment,
   ErasureRegistryMigration,
   erasureRegistryName,
 } from "../contract";
-import { authenticateOperator } from "./operator";
+import {
+  type OperatorAccessConfiguration,
+  authenticateOperator,
+} from "../../operator-access/operations";
 import { ErasureUnavailable } from "../../erasure-store/contract";
 
 const policy = Schema.decodeSync(RequestBodyPolicy)({
@@ -202,11 +204,15 @@ const commandBody = (
 
 const operatorConfiguration = (
   environment: ErasureOperatorEnvironment
-): ErasureOperatorConfiguration => ({
+): OperatorAccessConfiguration => ({
   issuer: environment.CLOUDFLARE_ACCESS_ISSUER,
   audience: environment.ERASURE_SUPPORT_AUDIENCE ?? "",
-  recoveryAudience: environment.CLOUDFLARE_ACCESS_AUDIENCE,
-  billingAudience: environment.BILLING_SUPPORT_AUDIENCE ?? "",
+  requiredEmail: Option.some("obarboza@fidyapp.com"),
+  otherAudiences: [
+    environment.CLOUDFLARE_ACCESS_AUDIENCE,
+    environment.BILLING_SUPPORT_AUDIENCE ?? "",
+    environment.PRICING_PUBLISH_AUDIENCE ?? "",
+  ],
 });
 
 const validRequest = (request: Request): boolean =>

@@ -48,13 +48,6 @@ export const ErasureContinuation = Schema.Struct({
 });
 export type ErasureContinuation = typeof ErasureContinuation.Type;
 
-export type ErasureOperatorConfiguration = Readonly<{
-  issuer: string;
-  audience: string;
-  recoveryAudience: string;
-  billingAudience: string;
-}>;
-
 /** Independent recovery metadata only. This capability never owns private original material. */
 export type ErasureRegistry = Readonly<{
   get: (key: string) => ReturnType<R2Bucket["get"]>;
@@ -124,6 +117,7 @@ export type ErasureOperatorEnvironment = Readonly<{
   Partial<
     Readonly<{
       ERASURE_SUPPORT_AUDIENCE: string;
+      PRICING_PUBLISH_AUDIENCE: string;
       BILLING_SUPPORT_AUDIENCE: string;
       ERASURE_REQUIRED: string;
       ERASURE_BUCKET: R2Bucket;

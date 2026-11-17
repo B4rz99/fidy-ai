@@ -1,8 +1,13 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
-import type { OutboundHttpService } from "../../../src/shell/outbound-http/operations";
-import { ErasureUnavailable } from "../../erasure-store/contract";
-import type { ErasureOperatorConfiguration } from "../contract";
+import type { OutboundHttpService } from "../../src/shell/outbound-http/operations";
+
+export type OperatorAccessConfiguration = Readonly<{
+  issuer: string;
+  audience: string;
+  requiredEmail: Option.Option<string>;
+  otherAudiences: ReadonlyArray<string>;
+}>;
 
 const maximumAssertionBytes = 8192;
 const maximumLifetimeSeconds = 900;
@@ -10,20 +15,19 @@ const millisecondsPerSecond = 1000;
 const maximumSubjectLength = 256;
 const Claims = Schema.Struct({
   sub: Schema.String.check(Schema.isBetweenLength(1, maximumSubjectLength)),
-  email: Schema.Literal("obarboza@fidyapp.com"),
+  email: Schema.String.check(Schema.isPattern(/^[^@\s]+@[^@\s]+$/u)),
   iat: Schema.Int,
   exp: Schema.Int,
 });
-const configured = (config: ErasureOperatorConfiguration): boolean =>
+const configured = (config: OperatorAccessConfiguration): boolean =>
   /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u.test(config.issuer) &&
   config.audience.length > 0 &&
-  config.audience !== config.recoveryAudience &&
-  config.audience !== config.billingAudience;
+  !config.otherAudiences.includes(config.audience);
 
 const signingKeys = (
   input: Readonly<{
     request: Request;
-    configuration: ErasureOperatorConfiguration;
+    configuration: OperatorAccessConfiguration;
     http: OutboundHttpService;
   }>
 ): ReturnType<typeof createRemoteJWKSet> =>
@@ -47,7 +51,7 @@ const signingKeys = (
 export const authenticateOperator = (
   input: Readonly<{
     request: Request;
-    configuration: ErasureOperatorConfiguration;
+    configuration: OperatorAccessConfiguration;
     http: OutboundHttpService;
   }>
 ): Effect.Effect<Option.Option<Readonly<{ operatorRef: string; expiresAtMs: number }>>> =>
@@ -62,21 +66,26 @@ export const authenticateOperator = (
     }
     const clock = yield* Clock.Clock;
     const keys = signingKeys(input);
-    const verified = yield* Effect.tryPromise({
-      try: () =>
-        jwtVerify(assertion, keys, {
-          issuer: input.configuration.issuer,
-          audience: input.configuration.audience,
-          algorithms: ["RS256"],
-          get currentDate(): Date {
-            return DateTime.toDateUtc(DateTime.makeUnsafe(clock.currentTimeMillisUnsafe()));
-          },
-        }),
-      catch: () => new ErasureUnavailable(),
-    });
+    const verified = yield* Effect.tryPromise(() =>
+      jwtVerify(assertion, keys, {
+        issuer: input.configuration.issuer,
+        audience: input.configuration.audience,
+        algorithms: ["RS256"],
+        get currentDate(): Date {
+          return DateTime.toDateUtc(DateTime.makeUnsafe(clock.currentTimeMillisUnsafe()));
+        },
+      })
+    );
     const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload);
     const now = Math.floor(clock.currentTimeMillisUnsafe() / millisecondsPerSecond);
-    if (!currentClaims(claims, now) || "common_name" in verified.payload) return Option.none();
+    if (
+      !currentClaims(claims, now) ||
+      "common_name" in verified.payload ||
+      verified.payload.aud !== input.configuration.audience ||
+      Option.exists(input.configuration.requiredEmail, (email) => claims.email !== email)
+    ) {
+      return Option.none();
+    }
     return Option.some({
       operatorRef: claims.sub,
       expiresAtMs: claims.exp * millisecondsPerSecond,

@@ -37,6 +37,7 @@ export {
 } from "./email-authentication/runtime";
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 export {
+  Pricing,
   BillingCollectionWorkflowV1,
   BillingRefundWorkflowV1,
   runBillingCollectionWorkflow,
@@ -67,6 +68,8 @@ type CoreEnvironment = ProviderEnvironment &
     Readonly<{
       RECOVERY_ISOLATION: string;
       BILLING_SUPPORT_AUDIENCE: string;
+      PRICING_PUBLISH_AUDIENCE: string;
+      PRICING: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
       ERASURE_SUPPORT_AUDIENCE: string;
       ERASURE_REQUIRED: string;
       ERASURE_BUCKET: R2Bucket;

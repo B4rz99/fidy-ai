@@ -1,9 +1,12 @@
+import * as Sqlite from "@effect/sql-sqlite-do/SqliteClient";
+import { initializePricing, pricingResponse } from "./internal/pricing-object";
+import { publishPrice } from "./internal/publish-price";
 import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
 import { makeWompiTransport } from "./internal/wompi-runtime";
-import { type WompiBindings } from "./contract";
+import { type PricingEnvironment, type WompiBindings, pricingName } from "./contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { dispatchCancellations } from "./internal/source-cancellation";
 import { dispatchSubscriptionRenewals as dispatchRenewals } from "./internal/subscription-renewal";
@@ -26,7 +29,7 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from "cloudflare:workers";
-import { type Cause, Context, Effect, Layer, type Option, Schema } from "effect";
+import { type Cause, Context, Effect, Layer, ManagedRuntime, type Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   makeAccessSigningKeysOutboundHttp,
@@ -249,3 +252,41 @@ export const dispatchSubscriptionCancellations = (
 
 export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+/** Private pricing namespace, selected by a stable name. Only Core holds this binding. */
+export class Pricing {
+  private readonly state: DurableObjectState;
+  private readonly runtime;
+  constructor(state: DurableObjectState) {
+    this.state = state;
+    this.runtime = ManagedRuntime.make(Sqlite.layer({ storage: state.storage }));
+    if (state.id.name === pricingName) {
+      state.waitUntil(
+        state.blockConcurrencyWhile(() => this.runtime.runPromise(initializePricing))
+      );
+    }
+  }
+
+  fetch(request: Request): Promise<Response> {
+    if (this.state.id.name !== pricingName) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    return this.runtime.runPromise(
+      pricingResponse(request).pipe(
+        Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+      )
+    );
+  }
+}
+
+/** Construct the bounded Access signing-key transport for private Price publication. */
+export const handlePricePublication = (
+  input: Readonly<{ request: Request; environment: PricingEnvironment }>
+): Effect.Effect<Response, never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const http = makeAccessSigningKeysOutboundHttp({
+      issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
+      httpClient: yield* HttpClient.HttpClient,
+    });
+    return yield* publishPrice({ ...input, http });
+  });

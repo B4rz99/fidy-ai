@@ -26,6 +26,8 @@ export type CoreHttpEnvironment = ProviderEnvironment &
     Readonly<{
       RECOVERY_ISOLATION: string;
       BILLING_SUPPORT_AUDIENCE: string;
+      PRICING_PUBLISH_AUDIENCE: string;
+      PRICING: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
       ERASURE_SUPPORT_AUDIENCE: string;
       ERASURE_BUCKET: R2Bucket;
       ERASURE_REGISTRY: ErasureRegistry;

@@ -2,8 +2,32 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "bb0e7e1c790222676e292e2904c1e961476c2f5bad4a76b3e53f059653e6f036";
+const expectedEdgePolicyDigest = "aa5a7ae937e5679af97d7b57b35cbe9c12b26ffa666ba3110d8fa97050f58d8f";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/sqlite-dispatch.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/sqlite-planning.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/budgets/internal/sqlite-workspace.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/dashboard/internal/sqlite-dashboard.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/transactions/internal/dashboard-query.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/transactions/internal/sqlite-aggregate.ts",
+      import.meta.url
+    )
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/tokens/operations.ts", import.meta.url)
   ).text(),

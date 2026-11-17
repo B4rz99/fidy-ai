@@ -1,3 +1,5 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { listLaunchCategories } from "../../../src/core/categories/operations";
 import type { CanonicalReadFinalization } from "../../canonical-admission/contract";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -12,11 +14,14 @@ import {
   collectLayoutWidgets,
   dashboardProjectionRanges,
 } from "../../../src/core/dashboard/operations";
-import type { DashboardFacts } from "../../../src/shell/dashboard/contract";
+import { type DashboardFacts, DashboardUnavailable } from "../../../src/shell/dashboard/contract";
 import type { Budget } from "../../../src/core/budgets/contract";
 import type { DashboardTransactionSnapshot } from "../../transactions/contract";
-import { prepareBudgetCaps } from "../../budgets/operations";
-import { readDashboardTransactions } from "../../transactions/operations";
+import { prepareBudgetCaps, readLocalBudgetCaps } from "../../budgets/operations";
+import {
+  readDashboardTransactions,
+  readLocalDashboardTransactions,
+} from "../../transactions/operations";
 import { unchangedUserDocument } from "../../user-documents/operations";
 
 export type DashboardReadContext = Readonly<{
@@ -180,21 +185,72 @@ export const loadDashboardFacts = ({
       now,
     });
     if (Option.isNone(selected)) return Option.none();
-    const groups = restoreGroups(plan, selected.value);
-    const listFacts = Option.all(
-      lists.widgets.map((widget) =>
-        Option.map(
-          Option.fromUndefinedOr(selected.value.lists[widget.query]),
-          (rows) => [widget.id, rows] as const
-        )
-      )
-    );
-    if (Option.isNone(groups) || Option.isNone(listFacts)) return Option.none();
-    return Option.some({
-      context: initial.context,
-      categories: new Map(initial.categories.map((category) => [category.id, category])),
-      lists: new Map(listFacts.value),
-      budgets: selected.value.snapshot,
-      groups: groups.value,
-    });
+    return assembleDashboardFacts({ ...initial, plan, lists, selected: selected.value });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+const assembleDashboardFacts = ({
+  context,
+  categories,
+  plan,
+  lists,
+  selected,
+}: Readonly<{
+  context: UserContext;
+  categories: ReadonlyArray<Category>;
+  plan: RangePlan;
+  lists: ListPlan;
+  selected: FinancialSnapshot;
+}>): Option.Option<DashboardFacts> => {
+  const groups = restoreGroups(plan, selected);
+  const listFacts = Option.all(
+    lists.widgets.map((widget) =>
+      Option.map(
+        Option.fromUndefinedOr(selected.lists[widget.query]),
+        (rows) => [widget.id, rows] as const
+      )
+    )
+  );
+  if (Option.isNone(groups) || Option.isNone(listFacts)) return Option.none();
+  return Option.some({
+    context,
+    categories: new Map(categories.map((category) => [category.id, category])),
+    lists: new Map(listFacts.value),
+    budgets: selected.snapshot,
+    groups: groups.value,
+  });
+};
+
+/** All widget periods, list pages, planned caps and accountability share the caller's SQLite transaction. */
+export const localDashboardFacts = Effect.fn(function* (
+  user: UserId,
+  document: DashboardDocument,
+  now: DateTime.Utc
+) {
+  const sql = yield* SqliteClient;
+  const [row] =
+    yield* sql`SELECT service_market AS serviceMarket,locale,time_zone AS timeZone FROM users WHERE id=${user}`;
+  const context = yield* Schema.decodeUnknownEffect(UserContext)(row);
+  const categories = listLaunchCategories();
+  const widgets = collectLayoutWidgets(document.layout);
+  const plan = planRanges(widgets, now, context);
+  const lists = planLists(widgets);
+  const financial = yield* readLocalDashboardTransactions(user, {
+    categories,
+    lists: lists.queries,
+    ranges: [...plan.unique.values()],
+  });
+  const month = DateTime.formatIsoDate(
+    DateTime.setZone(now, DateTime.zoneMakeNamedUnsafe(context.timeZone))
+  ).slice(0, monthLabelLength);
+  const snapshot = yield* readLocalBudgetCaps(user, month);
+  return yield* Effect.fromOption(
+    assembleDashboardFacts({
+      context,
+      categories,
+      plan,
+      lists,
+      selected: { ...financial, snapshot },
+    }),
+    () => new DashboardUnavailable()
+  );
+});

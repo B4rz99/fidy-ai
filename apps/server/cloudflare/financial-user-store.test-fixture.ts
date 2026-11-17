@@ -105,9 +105,9 @@ export const seed = Effect.fn(function* (
 });
 
 /** Production ingress and two isolated User stores; only fixture setup and invariant probes see SQL. */
-export const nativeTransactionJourney = Effect.gen(function* () {
+export const makeNativeTransactionJourney = Effect.fn(function* (ceiling?: string) {
   const create = yield* nativeUserPlatform;
-  const runtime = yield* create();
+  const runtime = yield* create(ceiling);
   const first = yield* seed(runtime, alice, false);
   const other = yield* seed(runtime, bob, false);
   yield* first.exec(
@@ -164,6 +164,8 @@ export const nativeTransactionJourney = Effect.gen(function* () {
     directory: first.directory,
   };
 });
+
+export const nativeTransactionJourney = makeNativeTransactionJourney();
 
 const patPrefixLength = 4;
 const shortIdLength = 8;

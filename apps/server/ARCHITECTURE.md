@@ -78,6 +78,12 @@ receipt in the same local transaction. Budget status reads combine inherited cap
 Transaction owner's Effective Transactions in one snapshot. Only outflows in the matching Category
 and Currency count toward a cap.
 
+Browser and PAT Dashboard operations use the same Directory routing. Each view reads the Dashboard
+document, User calendar, Effective Transaction lists and Budget caps in the SQLite transaction
+that commits its Audit. Capture, Correction, linked SourceAttestations and Reconciliation update
+the effective leaves and their exact per-Currency minute and day contributions in the financial
+write. A failed write or incomplete projection withholds the view.
+
 Unmigrated paths still use D1. Canonical mutation units commit live authority, owner
 changes, accounting and Audit together. Database guards enforce ownership and revisions alongside
 per-User coordination. Shared reads preserve the same authorization and accountability boundaries.

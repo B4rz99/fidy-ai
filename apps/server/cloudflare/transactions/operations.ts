@@ -1,4 +1,7 @@
 import { readLocalTransactionAggregate as localAggregate } from "./internal/sqlite-aggregate";
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { dashboardListStatement, decodeDashboardTransactions } from "./internal/dashboard-query";
+import { TransactionAggregatesUnavailable } from "./contract";
 import { TransactionId } from "../../src/core/transactions/contract";
 import {
   correctLocalTransaction,
@@ -28,11 +31,11 @@ import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { Effect, Option, Schema } from "effect";
 import type {
   BudgetContributionCursor,
+  DashboardTransactionRead,
   PrivacyTransactionsRead,
   RecurringFactPage,
   RecurringFactSnapshot,
   RecurringFactsUnavailable,
-  TransactionAggregatesUnavailable,
 } from "./contract";
 import { readDashboardTransactions as ownerReadDashboardTransactions } from "./internal/dashboard-read";
 import {
@@ -41,6 +44,8 @@ import {
   readPlanningTransactions as ownerReadPlanningTransactions,
 } from "./internal/planning-read";
 import {
+  localProjectionRange,
+  localProjectionReady,
   findDashboardAggregate as ownerFindDashboardAggregate,
   findDashboardAggregateRanges as ownerFindDashboardAggregateRanges,
   prepareBoundTransactionAggregate as ownerPrepareBoundTransactionAggregate,
@@ -388,3 +393,26 @@ export const dispatchLocalTransaction = (
 
 export const readLocalTransactionAggregate: typeof localAggregate = (user, from, toExclusive) =>
   localAggregate(user, from, toExclusive);
+/** Supply complete effective list selections and exact financial ranges in the caller's local unit. */
+export const readLocalDashboardTransactions = Effect.fn(function* (
+  user: UserId,
+  input: Pick<DashboardTransactionRead<never>, "lists" | "ranges" | "categories">
+) {
+  const sql = yield* SqliteClient;
+  if (!(yield* localProjectionReady(user))) return yield* new TransactionAggregatesUnavailable();
+  const lists = yield* Effect.forEach(
+    input.lists,
+    Effect.fnUntraced(function* (list) {
+      const query = dashboardListStatement({ userId: user, ...list });
+      const rows = yield* sql.unsafe(query.sql, query.params);
+      return yield* Effect.fromOption(
+        decodeDashboardTransactions({ rows, categories: input.categories }),
+        () => new TransactionAggregatesUnavailable()
+      );
+    })
+  );
+  const ranges = yield* Effect.forEach(input.ranges, (range) =>
+    localProjectionRange(user, range.from, range.toExclusive)
+  );
+  return { lists, ranges };
+});

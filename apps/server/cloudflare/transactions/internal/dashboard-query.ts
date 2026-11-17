@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { Option, Schema } from "effect";
 import { Money } from "../../../src/core/_shared/money";
 import { Category } from "../../../src/core/categories/contract";
@@ -73,50 +74,57 @@ const listSearchText = [
 );
 
 type ListInput = Readonly<{
-  db: D1Database;
   userId: string;
   categories: ReadonlyArray<string>;
   search: Option.Option<string>;
   limit: number;
 }>;
 
-const recentCategoryPage = ({ db, userId, categories, limit }: ListInput): D1PreparedStatement => {
+const recentCategoryPage = ({ userId, categories, limit }: ListInput): OwnedStatement => {
   const windows = categories.map(
     () => `SELECT id FROM (
     SELECT id FROM transaction_projection_leaf INDEXED BY transaction_projection_leaf_category_recent
     WHERE user_id = ? AND category_id = ? ORDER BY ${categoryWindowOrder} LIMIT ?)`
   );
   const bindings = categories.flatMap((category) => [userId, category, limit]);
-  return db
-    .prepare(`WITH selected AS (${windows.join(" UNION ALL ")})
+  return {
+    sql: `WITH selected AS (${windows.join(" UNION ALL ")})
     SELECT ${selectedColumns} ${selectedFrom}
     JOIN selected ON selected.id = effective.id
-    WHERE effective.user_id = ? ORDER BY ${recentOrder} LIMIT ?`)
-    .bind(...bindings, userId, limit);
+    WHERE effective.user_id = ? ORDER BY ${recentOrder} LIMIT ?`,
+    params: [...bindings, userId, limit],
+  };
 };
 
-const searchPage = ({ db, userId, categories, search, limit }: ListInput): D1PreparedStatement => {
+const searchPage = ({ userId, categories, search, limit }: ListInput): OwnedStatement => {
   const categoryPredicate =
     categories.length === 0
       ? ""
       : `AND effective.category_id IN (${categories.map(() => "?").join(",")})`;
   const text = Option.getOrThrow(search).toLocaleLowerCase("es-CO");
-  return db
-    .prepare(`SELECT ${selectedColumns}
+  return {
+    sql: `SELECT ${selectedColumns}
     FROM transaction_projection_leaf effective INDEXED BY transaction_projection_leaf_recent
     WHERE effective.user_id = ?
       ${categoryPredicate} AND instr(lower(${listSearchText}), ?) > 0
-    ORDER BY ${recentOrder} LIMIT ?`)
-    .bind(userId, ...categories, text, limit);
+    ORDER BY ${recentOrder} LIMIT ?`,
+    params: [userId, ...categories, text, limit],
+  };
 };
 
-const recentPage = ({ db, userId, categories, search, limit }: ListInput): D1PreparedStatement => {
-  if (Option.isSome(search)) return searchPage({ db, userId, categories, search, limit });
-  if (categories.length > 0) return recentCategoryPage({ db, userId, categories, search, limit });
-  return db
-    .prepare(`SELECT ${selectedColumns} ${selectedFrom}
-    WHERE effective.user_id = ? ORDER BY ${recentOrder} LIMIT ?`)
-    .bind(userId, limit);
+export const dashboardListStatement = ({
+  userId,
+  categories,
+  search,
+  limit,
+}: ListInput): OwnedStatement => {
+  if (Option.isSome(search)) return searchPage({ userId, categories, search, limit });
+  if (categories.length > 0) return recentCategoryPage({ userId, categories, search, limit });
+  return {
+    sql: `SELECT ${selectedColumns} ${selectedFrom}
+    WHERE effective.user_id = ? ORDER BY ${recentOrder} LIMIT ?`,
+    params: [userId, limit],
+  };
 };
 
 /** Publish indexed, User-scoped effective list pages; caller owns the encompassing D1 batch. */
@@ -135,6 +143,7 @@ export const dashboardTransactionQueries = ({
     }>
   >;
 }>): ReadonlyArray<D1PreparedStatement> =>
-  lists.map(({ categories, search, limit }) =>
-    recentPage({ db, userId, categories, search, limit })
-  );
+  lists.map((list) => {
+    const statement = dashboardListStatement({ userId, ...list });
+    return db.prepare(statement.sql).bind(...statement.params);
+  });

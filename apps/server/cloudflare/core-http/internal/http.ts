@@ -11,6 +11,7 @@ import {
 } from "../../ingestion/operations";
 import {
   browseDashboard,
+  isLocalDashboardOperation,
   prepareBoundDashboardCatalog,
   prepareBoundDashboardView,
 } from "../../dashboard/operations";
@@ -1746,16 +1747,18 @@ const browserCanonicalResponse = (
     })
   );
 
+const isUserStoreOperation = (id: string): boolean =>
+  isLocalTransactionOperation(id) ||
+  isLocalDashboardOperation(id) ||
+  isLocalBudgetOperation(id) ||
+  id === "subscription.cancelSubscription";
+
 const authorizedCanonicalResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
-  if (
-    isLocalTransactionOperation(operation.id) ||
-    isLocalBudgetOperation(operation.id) ||
-    operation.id === "subscription.cancelSubscription"
-  ) {
+  if (isUserStoreOperation(operation.id)) {
     const route = request.headers.has("authorization") ? routePATRequest : routeSessionRequest;
     return route({ request, environment }).pipe(observeCanonicalResponse(operation.id));
   }

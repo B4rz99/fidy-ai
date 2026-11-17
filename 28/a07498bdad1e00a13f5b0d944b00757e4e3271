@@ -1,0 +1,45 @@
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_cdb7c870343fd2 77-78
+apps/server/cloudflare/maintenance/contract.ts
+  s_a1be23a656acf0::t_f73550c352905b 83-90
+apps/server/cloudflare/maintenance/lifetime-registry.test.ts
+  s_a1be23a656acf0::t_164ceed0ed5693 1-113
+apps/server/cloudflare/maintenance/operations.ts
+  s_a1be23a656acf0::t_c1e4e9874ef14b 1-12,14,50,53-63,65-116
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_f8f40c4488d7e5 1-6,22,360,371-377,379
+apps/server/cloudflare/runtime/sqlite/migrations.test.ts
+  s_a1be23a656acf0::t_89b41da1059056 239-242,248-250
+apps/server/cloudflare/storage-bootstrap/operations.ts
+  s_a1be23a656acf0::t_8d9e9836853c5e 2,24
+apps/server/cloudflare/transactions/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_de493e601d2f33 26-30,41-45,64,75
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_f571c370b1cb17 15,80-116,367-368,378-380,387
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_00dd30d51f8fb4 82-87,126,133
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_d72dc710c09e5c 1-9,534-540,569-608
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_ae515b97914017 14,27,64-70,123-129,136-142,145,163-165
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_8db40f9da51831 441
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_29850d006438f3 5,319-321,325-327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "28a07498bdad1e00a13f5b0d944b00757e4e3271",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

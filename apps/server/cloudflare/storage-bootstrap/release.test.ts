@@ -4,7 +4,7 @@ import { Effect, FileSystem, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { expect } from "vitest";
 import { browserOrigins } from "../runtime/contract";
-import { smokePath, smokeProofHeader } from "../runtime/release-smoke/contract";
+import { SmokeIdentity, smokePath, smokeProofHeader } from "../runtime/release-smoke/contract";
 import { native, workerManifest } from "../user-store.test-fixture";
 import { SharedStoreMarkers, bootstrapQuery, compatibilityQuery } from "./contract";
 
@@ -150,7 +150,7 @@ const rehearse = Effect.gen(function* () {
     expect(probe.status).toBe(200);
     const body = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
-        core: Schema.Struct({ workerVersionId: Schema.String }),
+        core: SmokeIdentity,
         markers: SharedStoreMarkers,
       })
     )(yield* native(() => probe.json()));

@@ -1,4 +1,4 @@
-import { Data, type Effect, type Option } from "effect";
+import { Data, type Effect, type Option, type Schema } from "effect";
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
@@ -90,3 +90,10 @@ export type CanonicalBrowserSnapshotOperation =
   | "ingestion.getReviewWorkspace"
   | "ingestion.getReviewPageContext"
   | "ingestion.getReviewItem";
+
+/** A finite canonical outcome produced by an owner within the same User transaction. */
+export type LocalMutationResult = Readonly<{
+  status: number;
+  outcome: "success" | "validation_failed" | "not_found";
+  body: Schema.Json;
+}>;

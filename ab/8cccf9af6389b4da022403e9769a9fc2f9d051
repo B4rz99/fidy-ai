@@ -1,0 +1,36 @@
+scripts/infra-performance/reference/browser.mjs
+  s_a1be23a656acf0::t_7b6328f5c3fe7a 1-155
+apps/server/cloudflare/browser-assessment.test.ts
+  s_a1be23a656acf0::t_7b6328f5c3fe7a 1-69
+docs/operations/production-benchmark-budget.md
+  s_a1be23a656acf0::t_7b6328f5c3fe7a 64-100,103-105,108-115
+apps/server/cloudflare/browser-assessment.test-fixture.ts
+  s_a1be23a656acf0::t_7b6328f5c3fe7a 4-5,14-16,33-34,36,38-39,41-42,49,54-72,75,188-194,204-228,230,232
+scripts/infra-performance/reference/run.py
+  s_a1be23a656acf0::t_7b6328f5c3fe7a 1-345
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_a1be23a656acf0::t_7b6328f5c3fe7a 377-396,553,648,659-670
+  s_a1be23a656acf0::t_f78d735e83c95a 671
+scripts/infra-performance/reference/preview.mjs
+  s_a1be23a656acf0::t_7b6328f5c3fe7a 1-17
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_a1be23a656acf0::t_7b6328f5c3fe7a 489-495
+scripts/infra-performance/reference/test_report.py
+  s_a1be23a656acf0::t_7b6328f5c3fe7a 1-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ab8cccf9af6389b4da022403e9769a9fc2f9d051",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

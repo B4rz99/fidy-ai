@@ -12,7 +12,6 @@ import {
   PATPairingPublicCode,
   RecurringMonth,
 } from "@/transport/client";
-import { createElement } from "react";
 import {
   type RouterHistory,
   createRootRouteWithContext,
@@ -65,15 +64,10 @@ const ApplicationFrame = lazyRouteComponent(
   () => import("./application-frame"),
   "ApplicationFrame"
 );
+const PageNotFound = lazyRouteComponent(() => import("./not-found"), "PageNotFound");
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
   component: ApplicationFrame,
-  notFoundComponent: () =>
-    createElement(
-      "main",
-      { className: "p-8" },
-      createElement("h1", null, "Página no encontrada"),
-      createElement("a", { href: "https://fidyapp.com" }, "Volver al inicio")
-    ),
+  notFoundComponent: PageNotFound,
 });
 const AuthenticatedRoute = lazyRouteComponent(
   () => import("./authenticated-route"),
@@ -87,6 +81,7 @@ const authenticatedRoute = createRoute({
 const signedInRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/app",
+  notFoundComponent: PageNotFound,
 });
 const signedInIndexRoute = createRoute({
   getParentRoute: () => signedInRoute,

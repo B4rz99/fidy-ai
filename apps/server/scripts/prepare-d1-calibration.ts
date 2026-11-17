@@ -1,14 +1,21 @@
 // Generate every hosted statement from the pinned migrations and trusted measurement fixture.
-import { execFileSync } from "node:child_process";
-import { Effect, Schema } from "effect";
-import { isolatedTestDatabases, observeRetentionCost } from "../cloudflare/d1-test-fixture";
+import { Effect, Option, Schema } from "effect";
+import {
+  type RecordMeasuredStatement,
+  isolatedTestDatabases,
+  observeFixtureStatements,
+} from "../cloudflare/d1-test-fixture";
 import { seedAssessment } from "../cloudflare/browser-assessment.test-fixture";
 
 const baseline = "fb53d9e755c14393048dc945fc0b7f117730d872";
 const seedEpochMs = 1794916800000;
 const migrationDir = "apps/server/cloudflare/migrations";
 const batchSize = 15;
-const git = (...args: Array<string>): string => execFileSync("git", args, { encoding: "utf8" });
+const git = (...args: Array<string>): string => {
+  const result = Bun.spawnSync(["git", ...args]);
+  if (result.exitCode !== 0) throw new Error("Pinned Git revision unavailable");
+  return result.stdout.toString();
+};
 const pool = isolatedTestDatabases();
 type Batch = {
   batch: Array<Readonly<{ sql: string; params: ReadonlyArray<unknown> }>>;
@@ -20,24 +27,29 @@ const prepare = Effect.gen(function* () {
   const destination = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(process.argv[2]);
   const native = yield* Effect.tryPromise(() => pool.acquire());
   const batches: Array<Batch> = [];
-  const recorder = observeRetentionCost(native, (request, query, counters) => {
+  const record: RecordMeasuredStatement = (request, query, counters) => {
     if (request > batches.length) batches.push({ batch: [], reads: 0, writes: 0 });
     const entry = batches[request - 1];
     if (entry === undefined) throw new Error("Nonconsecutive native D1 batch");
     for (const value of [counters.rowsRead, counters.rowsWritten]) {
-      if (!Number.isSafeInteger(value) || value < 0) throw new Error("Missing native D1 metadata");
+      if (!Number.isSafeInteger(value) || value < 0) {
+        throw new Error("Missing native D1 metadata");
+      }
     }
     entry.batch.push(query);
     entry.reads += counters.rowsRead;
     entry.writes += counters.rowsWritten;
+  };
+  const { database: db } = observeFixtureStatements({
+    db: native,
+    onMeasuredStatement: Option.some(record),
   });
-  const db = recorder.database;
   const files = git("ls-tree", "--name-only", "-r", baseline, "--", migrationDir)
     .trim()
     .split("\n")
     .filter((path) => path.endsWith(".sql"))
     .sort();
-  if (!files.length) return yield* Effect.die(new Error("Pinned migrations missing"));
+  if (files.length === 0) return yield* Effect.die(new Error("Pinned migrations missing"));
   for (const file of files) {
     const statements = git("show", baseline + ":" + file)
       .split("--> statement-breakpoint")

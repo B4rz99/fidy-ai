@@ -37,6 +37,14 @@ locator/caption 30 days. Drafts and suggestions share the immutable evidence dea
 retention erases them. Conversation routing cannot shorten or extend that purpose. Expired items
 require resubmission. Metadata remains within the existing one-year history purpose.
 
+Expired items explain their source's resubmission route. Extractos and images open the fixed Fidy
+WhatsApp chat without preparing or sending a message; users attach the material from their linked
+WhatsApp. Email items explain that forwarding is currently unavailable and suggest manual entry in
+Transactions, without inventing a destination or promising processing through disabled intake.
+Supported resubmission begins a new review and leaves the expired item unchanged. Created items
+retain their Transaction link rather than inviting another
+submission. The detail respects the earlier observed original deadline when showing expiry guidance.
+
 Initial ingestion suggestions remain available when opening a draft. There is no manual reprocessing capability.
 Reviewed captures retain the captured context and a manual SourceAttestation referencing the item.
 No receipt or email is split into multiple Transactions.

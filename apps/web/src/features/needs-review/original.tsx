@@ -14,6 +14,7 @@ import { type JSX, useId, useState } from "react";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { Button } from "@/ui/components/button";
 import type { Item } from "./model";
+import { ReviewResubmission } from "./resubmission";
 
 export const OriginalMaterial = ({
   item,
@@ -25,7 +26,7 @@ export const OriginalMaterial = ({
   const deadline = useOriginalDeadline(item, expiresAt);
   const expired = useReviewExpired({ ...item, expiresAt: deadline });
   return expired ? (
-    <ExpiredOriginal />
+    <ExpiredOriginal item={item} />
   ) : (
     <RetainedMaterial item={{ ...item, expiresAt: deadline }} />
   );
@@ -37,11 +38,12 @@ const useOriginalDeadline = (item: Item, expiresAt: Item["expiresAt"]): Item["ex
   });
   return useAtomValue(query);
 };
-const ExpiredOriginal = (): JSX.Element => (
-  <p className="text-sm text-muted-foreground">
-    El original venció. Envía el material de nuevo para revisarlo.
-  </p>
-);
+const ExpiredOriginal = ({ item }: Readonly<{ item: Item }>): JSX.Element =>
+  item.status === "created" ? (
+    <p className="text-sm text-muted-foreground">El material original venció.</p>
+  ) : (
+    <ReviewResubmission source={item.source} />
+  );
 const useMaterialQuery = (
   item: Item
 ): Atom.Atom<AsyncResult.AsyncResult<CanonicalSuccess<"ingestion.getReviewMaterial">, unknown>> => {
@@ -78,7 +80,7 @@ const RetainedMaterial = ({
   const query = useMaterialQuery(item);
   const state = useAtomValue(query).pipe(presentCanonicalQuery);
   const refresh = useAtomRefresh(query);
-  if (reviewHasExpired(item)) return <ExpiredOriginal />;
+  if (reviewHasExpired(item)) return <ExpiredOriginal item={item} />;
   const unavailable =
     state._tag === "Failure" ? (
       <p className="text-sm text-muted-foreground">No pudimos cargar el original.</p>
@@ -93,7 +95,7 @@ const RetainedMaterial = ({
       </summary>
       <div data-review="original-body">
         {state._tag === "Ready" ? (
-          <MaterialBody material={state.value.data} searchable={item.source === "email"} />
+          <MaterialBody material={state.value.data} item={item} />
         ) : (
           unavailable
         )}
@@ -120,23 +122,23 @@ const RetainedMaterial = ({
 type Material = CanonicalSuccess<"ingestion.getReviewMaterial">["data"];
 const MaterialBody = ({
   material,
-  searchable,
+  item,
 }: Readonly<{
   material: Material;
-  searchable: boolean;
+  item: Item;
 }>): JSX.Element => {
   if (!material.available) {
+    if (material.reason === "expired") return <ExpiredOriginal item={item} />;
     return (
       <p className="text-sm text-muted-foreground">
-        {material.reason === "expired"
-          ? "El original venció. Envía el material de nuevo para revisarlo."
-          : "El original no está disponible. Puedes completar los datos manualmente mientras el elemento siga vigente. Una imagen puede conservar solo su descripción."}
+        El original no está disponible. Puedes completar los datos manualmente mientras el elemento
+        siga vigente. Una imagen puede conservar solo su descripción.
       </p>
     );
   }
   return (
     <>
-      {searchable ? (
+      {item.source === "email" ? (
         <SearchableOriginal text={material.text} />
       ) : (
         <OriginalText text={material.text} />

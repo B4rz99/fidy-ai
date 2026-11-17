@@ -1,0 +1,21 @@
+apps/server/cloudflare/d1-test-fixture.ts
+  s_a1be23a656acf0::t_a859dc5a781e62 490,506-512,530,567-569
+apps/server/scripts/prepare-d1-calibration.ts
+  s_a1be23a656acf0::t_fb37286ef4abd0 2-7,14-18,30,35-37,42-45,52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c65a2925db53bfe65f979534db69cc46e6b61675",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

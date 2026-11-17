@@ -1,0 +1,33 @@
+docs/adr/0041-per-user-durable-object-storage-direction.md
+  s_398952c775f46d::t_dfce89447282ba 3-5,18-20,106-107,184,237-238,247-313,325-326,332-333
+apps/web/src/features/transactions/FEATURE.md
+  s_398952c775f46d::t_c0ce81b70a6a71 96-101
+apps/web/src/features/transactions/detail.tsx
+  s_398952c775f46d::t_774c09f7554b35 12,38,221-225,300-307,336
+apps/web/src/features/transactions/ledger.tsx
+  s_398952c775f46d::t_3d424d120feb56 109
+apps/web/src/features/transactions/workspace.tsx
+  s_398952c775f46d::t_fbfd08492fc48d 247,655,855,857,864-865,867,869-878,880-882,891,947
+apps/web/src/ui/components/transactions.tsx
+  s_398952c775f46d::t_d21060aeee271d 45-80,89,97,99,101-108
+apps/web/src/ui/transactions-reference.tsx
+  s_398952c775f46d::t_3c8497c0123d82 3,42
+bun.lock
+  s_398952c775f46d::t_607ee16e7dfdb0 229,231,233,235,779,781,783,785,787,789,791,793,829,831,833,835,837,839,841,843,913,915,917,919,921,923,983,985,987,989,2107,2473,2475,2477,2479,2753,2755,2757,2759,2761,2763
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "46e02b107a55184d5686a3431a4f176c5244c75b",
+  "prompts": {},
+  "sessions": {
+    "s_398952c775f46d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7cc-45f6-7663-8706-7b8ec59907e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+apps/server/cloudflare/categories/internal/native-categorization.ts
+  s_a1be23a656acf0::t_535ae8a7de4b1e 1-58
+apps/server/cloudflare/categories/internal/projection.ts
+  s_a1be23a656acf0::t_644041e5c0e60a 1,4-9,34-36,65,67-71
+apps/server/cloudflare/categories/operations.test.ts
+  s_a1be23a656acf0::t_08c79f0c078923 32,42,74
+apps/server/cloudflare/categories/operations.ts
+  s_a1be23a656acf0::t_bcc91bd60aa130 1,99-101
+apps/server/cloudflare/categories/taxonomy.test-fixture.ts
+  s_a1be23a656acf0::t_3dc550db72b60e 1-69
+apps/server/cloudflare/core-http/browser-admission.test.ts
+  s_a1be23a656acf0::t_0b1ac2ee642b6c 477,488-489
+apps/server/cloudflare/transactions/internal/effective-transaction.ts
+  s_a1be23a656acf0::t_5848a2ef988f54 36,70,73,78-80,118,130-132,135
+apps/server/cloudflare/transactions/internal/sqlite-history.ts
+  s_a1be23a656acf0::t_807bedf0275822 1-2,4,8,22-38,90-94
+apps/server/cloudflare/transactions/internal/transaction-history.ts
+  s_a1be23a656acf0::t_e198fce6006b49 284
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_34c7dc71632ee0 279-394,397-400
+apps/server/src/core/categories/FEATURE.md
+  s_a1be23a656acf0::t_68b806eb2b71cb 16-29
+apps/server/src/core/categories/contract.ts
+  s_a1be23a656acf0::t_a847a4d10877a5 119-160
+apps/server/src/core/categories/internal/taxonomy-release.json
+  s_a1be23a656acf0::t_9d5153ef4de95e 1-74
+apps/server/src/core/categories/internal/taxonomy.ts
+  s_a1be23a656acf0::t_9b623e4de9c556 1-7,9-49
+apps/server/src/core/categories/operations.ts
+  s_a1be23a656acf0::t_06b84ed05f2e46 1-2,8,23-27,34,100-112
+apps/server/src/core/categories/taxonomy.test.ts
+  s_a1be23a656acf0::t_4b42ec5d587f4a 1-90
+apps/server/src/shell/categories/internal/query.ts
+  s_a1be23a656acf0::t_233bd8322167bb 1,18,20-21
+infra/cloudflare/production-release.ts
+  s_a1be23a656acf0::t_a0de8996b32833 1-2,1031-1054,1094,1588
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_5749927d7b2606 5,7-27
+tools/depcruise/boundaries.mjs
+  s_a1be23a656acf0::t_42fe0c9a07751f 28
+apps/server/cloudflare/categories/taxonomy.test.ts
+  s_a1be23a656acf0::t_7839806b20fd88 1-314
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9998ee5343b8546c2cde0670391ebb624fa8676e",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

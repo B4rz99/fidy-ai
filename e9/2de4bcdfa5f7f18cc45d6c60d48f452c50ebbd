@@ -1,0 +1,23 @@
+apps/server/cloudflare/subscription/cancellation-journey.test.ts
+  s_3753f0f146cfeb::t_a1ebbcf9a79aa7 227,244-246,254-268,270-283,285
+apps/server/cloudflare/subscription/cancellation-recovery.test-fixture.ts
+  s_3753f0f146cfeb::t_6b87c564659968 165-169,171-172
+apps/server/cloudflare/subscription/internal/billing-observation.ts
+  s_3753f0f146cfeb::t_8ece96c23fea75 68-72,91,108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e92de4bcdfa5f7f18cc45d6c60d48f452c50ebbd",
+  "prompts": {},
+  "sessions": {
+    "s_3753f0f146cfeb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb8d-4e58-7c03-a5f5-c3836bdd4237",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

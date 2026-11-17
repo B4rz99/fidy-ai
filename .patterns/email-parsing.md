@@ -1,7 +1,7 @@
 # Email MIME parsing
 
 Use for forwarded Email admission, queued reprocessing, and retained original material.
-Selected source is the integrity-locked `postal-mime@4.2.0` package:
+Selected source is the integrity-locked `postal-mime@4.2.1` package:
 `node_modules/postal-mime/src/{postal-mime,mime-node,types}.ts` and its published ESM build.
 Import `PostalMime` from `postal-mime`; the package owns its build paths and type declarations.
 

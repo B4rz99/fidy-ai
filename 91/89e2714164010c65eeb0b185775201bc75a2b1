@@ -1,0 +1,19 @@
+apps/web/src/app/review-recovery.test.ts
+  s_153bcea5fa2b5c::t_3c2011fd0cc6f4 10,12,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9189e2714164010c65eeb0b185775201bc75a2b1",
+  "prompts": {},
+  "sessions": {
+    "s_153bcea5fa2b5c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9fa-1173-7e52-8aa2-aad3dd7b0a08",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

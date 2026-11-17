@@ -61,31 +61,58 @@ Direct Core D1 counts exclude coordinator work; host-process CPU excludes worker
 timings are unavailable evidence, not zero cost. Do not combine owner and request records as though
 they were independent requests or sum nested stage durations.
 
-For complete screen readiness, use the local browser assessment on the isolated CLI topology after
-checking ports 4183–4185 are unused (see `.patterns/testing.md`):
+### Pinned local reference
+
+Use Bun 1.4.4, Python 3.10+, OpenSSL, Chromium, and free loopback ports 4183–4185.
+Install the repository dependencies in both checkouts. Apply the three test-only fixtures to a
+disposable checkout of the pinned D1 revision. The application, schema, ingress and client come
+from that checkout. Record any proposed baseline replacement, its intervening behavior changes,
+and the decision on #2226 before collecting observations.
 
 ```sh
-cd apps/web
-CLI_ACCEPTANCE_MODE=cli FIDY_ASSESSMENT=small FIDY_ASSESSMENT_NETWORK=normal \
-  FIDY_ASSESSMENT_COLD_REPEATS=1 PREVIEW_COMPRESSION=gzip \
-  bun --bun playwright test --config playwright.assessment.config.ts \
-  --grep 'assesses isolated cold documents'
+git worktree add --detach ../fidy-d1-reference fb53d9e755c14393048dc945fc0b7f117730d872
+(cd ../fidy-d1-reference && bun install --frozen-lockfile)
+cp apps/server/cloudflare/browser-assessment.test-fixture.ts \
+  apps/server/cloudflare/browser-acceptance-preview.ts apps/server/cloudflare/browser-acceptance-seed.ts \
+  ../fidy-d1-reference/apps/server/cloudflare/
+bun install --frozen-lockfile
+bunx playwright install chromium
+python3 scripts/infra-performance/reference/run.py --d1 ../fidy-d1-reference --dataset production
 ```
 
-This uses local storage and synthetic records. Cold documents are new browser documents, not proof
-of a new Worker isolate. Local timings distinguish processing from request waterfalls; they cannot
-establish Cloudflare placement, production network latency or deployed cold-start performance.
-Keep generated profiles and measurements in ignored results and attach findings to the relevant PR.
+Set `ASSESSMENT_CHROMIUM` to select an existing Chromium executable. Use `--dataset small` for
+500 Transactions, `--dataset extreme` for 100,000 and `--dataset breaking` for the separate
+million-Transaction stress run. The `production` dataset contains eight originals, one linked
+pair, two Currencies, two RecurringPlans with two revisions each, and four NeedsReviewItems.
+The command runs every profile locally. It verifies the effective Transaction count and each
+fixture family's stored counts before Login.
 
-For fresh documents, the assessment records enabled controls, visible populated content and the
-first Transaction registration interaction independently of response completion. `nativeContentDomMs`
-marks the DOM predicate; `nativeContentReadyMs` follows two animation callbacks, which provide a
-paint opportunity rather than a compositor paint timestamp. `nativeInteractionStartMs` and
-`nativeInteractionReadyMs` bracket the first registration click and its visible form when cold
-interactions are enabled. These are document-relative observations, not timings of each later
-navigation. Unobserved milestones are `-1`, not zero. Compare them with the separately recorded
-request/body timings; neither the final API response nor an early enabled button establishes
-populated-content readiness.
+Open the freshly loaded Transactions workspace, refresh its November 2026 history, correct one
+fixed Counterparty, and observe the committed Correction in the refreshed ledger. The runner drives
+these actions automatically. It verifies ordering, page length, revision, all unaffected records,
+Session Audit, and commercial accounting. The browser carries a real WebSession through the
+canonical ingress. The local test server records ingress-to-complete-body time. Chromium records
+each request through body completion, and the journey clock ends when the matching row is
+enabled and has had a paint opportunity. This harness uses local acceptance composition and
+cannot observe a deployed Worker or Durable Object reconstruction.
+
+To compare the completed native candidate, supply its clean checkout with the same loopback
+fixture protocol:
+
+```sh
+python3 scripts/infra-performance/reference/run.py --d1 ../fidy-d1-reference \
+  --candidate ../fidy-do-candidate --pairs 30 --dataset small --network normal \
+  --origin "local acceptance machine"
+```
+
+The runner predeclares one dataset, network, isolated User and loaded-app cohort per run. It
+starts a fresh installation per variant and pair, alternates which variant runs first, and
+includes every offered observation. `--network poor` applies 400 ms latency and 1 Mbps in
+both directions. Every run writes its plan, attempts, per-process logs and nearest-rank p95
+report to a unique directory under ignored `apps/web/test-results/reference/`. A D1-only
+run or fewer than 30 paired observations leaves the comparison missing. A failed attempt,
+different payload or accounting, or any comparable cell below 1.8× fails the local comparison.
+Hosted acceptance has separate lifecycle, offered-load and measurement-origin requirements.
 
 ## Recovery verification
 

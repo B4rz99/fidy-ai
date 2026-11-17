@@ -486,6 +486,12 @@ await Promise.all(
 export const prepareBrowserAssessment = (): Promise<void> => {
   const dataset = Bun.env.FIDY_ASSESSMENT ?? "small";
   return import("./browser-assessment.test-fixture").then(({ seedAssessment }) =>
-    Effect.runPromise(seedAssessment({ db, dataset, now }))
+    Effect.runPromise(
+      seedAssessment({
+        db,
+        dataset,
+        now: Bun.env.FIDY_REFERENCE === "1" ? Date.parse("2026-11-17T12:00:00Z") : now,
+      }).pipe(Effect.asVoid)
+    )
   );
 };

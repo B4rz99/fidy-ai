@@ -1,0 +1,32 @@
+scripts/infra-performance/reference/preview.mjs
+  s_a1be23a656acf0::t_fb0ed2a406fe74 17-18
+apps/server/cloudflare/subscription/pricing.test.ts
+  s_a1be23a656acf0::t_fb0ed2a406fe74 76-80
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_fb0ed2a406fe74 16
+  s_a1be23a656acf0::t_8268f0b4146b78 17-19
+scripts/infra-performance/reference/browser.mjs
+  s_a1be23a656acf0::t_fb0ed2a406fe74 4,6-39,47,69-70,77-79,84,100-104,106-109,114,133,136,150,166,175-176,187-192
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_fb0ed2a406fe74 30-32
+  s_a1be23a656acf0::t_38c60b2a3604ae 33
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_fb0ed2a406fe74 5
+  s_a1be23a656acf0::t_c89cb1a2f9ca0e 254-269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b2d8137445c0cacae1fb8c9ee1de51e3c5a14f8c",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

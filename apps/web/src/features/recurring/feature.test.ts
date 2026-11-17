@@ -66,10 +66,7 @@ const workspace = {
 const reactWork = (work: () => void): Promise<void> =>
   Promise.resolve(act(() => Promise.resolve(work())));
 const reactAssertion = (assertion: () => void): Promise<void> =>
-  vi.waitFor(async () => {
-    await reactWork(() => undefined);
-    assertion();
-  });
+  vi.waitFor(() => reactWork(() => undefined).then(assertion));
 const button = (container: HTMLElement, label: string): HTMLButtonElement => {
   const found = Array.from(container.querySelectorAll("button")).find(
     (candidate) => candidate.textContent.trim() === label

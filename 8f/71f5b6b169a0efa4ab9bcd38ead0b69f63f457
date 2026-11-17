@@ -1,0 +1,67 @@
+apps/server/cloudflare/transactions/internal/sqlite-history.ts
+  s_a1be23a656acf0::t_ad8312b16308c2 1,47-84
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_860aceb559ae8c 15-19
+apps/server/cloudflare/runtime/sqlite/contract.ts
+  s_a1be23a656acf0::t_ad8312b16308c2 1,21-29,31-33
+  s_a1be23a656acf0::t_be04ebf6443bea 18,30
+  s_a1be23a656acf0::t_d427d27865b1aa 2,16-17,19-20
+apps/server/cloudflare/subscription/internal/pricing-object.ts
+  s_a1be23a656acf0::t_ad8312b16308c2 1-6,98,114-115,121,143,164
+  s_a1be23a656acf0::t_5990f834679975 193
+apps/server/cloudflare/store-migrations.test-fixture.ts
+  s_a1be23a656acf0::t_860aceb559ae8c 116-120
+apps/server/cloudflare/runtime/sqlite/capacity.test-fixture.ts
+  s_a1be23a656acf0::t_860aceb559ae8c 23-27
+  s_a1be23a656acf0::t_7eef5e831a15d6 1-4,6,19,50,61-62,79-82,86-87
+  s_a1be23a656acf0::t_6401f7fb13856d 18
+  s_a1be23a656acf0::t_ad8312b16308c2 5,7-9,20-22,28-49,51-54,56-60,63-66,69-70,73,77-78,83-85
+  s_a1be23a656acf0::t_be04ebf6443bea 10-17,55,67-68,71-72,74-76
+apps/server/cloudflare/runtime/sqlite/capacity.test.ts
+  s_a1be23a656acf0::t_860aceb559ae8c 30-32
+  s_a1be23a656acf0::t_ad8312b16308c2 1-5,7-15,17-29,33-112
+  s_a1be23a656acf0::t_7eef5e831a15d6 6,16
+apps/server/cloudflare/subscription/pricing.test.ts
+  s_a1be23a656acf0::t_860aceb559ae8c 135
+  s_a1be23a656acf0::t_ad8312b16308c2 58,115-134,136-150
+apps/server/cloudflare/subscription/pricing.test-fixture.ts
+  s_a1be23a656acf0::t_be04ebf6443bea 4-5
+  s_a1be23a656acf0::t_860aceb559ae8c 19-33
+  s_a1be23a656acf0::t_b8715164449688 18,34
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_ad8312b16308c2 437-439
+apps/server/cloudflare/runtime/sqlite/operations.ts
+  s_a1be23a656acf0::t_860aceb559ae8c 4-5,218,274-282
+  s_a1be23a656acf0::t_67a9bda42a6268 240,244
+  s_a1be23a656acf0::t_be04ebf6443bea 166-167,177,204,211-215,225,241-243,245-259,261
+  s_a1be23a656acf0::t_ad8312b16308c2 3,6-14,17-23,188-203,205-210,216-217,219-221,227-239,262-273,283-288
+  s_a1be23a656acf0::t_d7f20adfa78c3e 185-187,222-224,226,260
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_860aceb559ae8c 33-37
+  s_a1be23a656acf0::t_ad8312b16308c2 4-8
+  s_a1be23a656acf0::t_5379e26606a178 54
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_860aceb559ae8c 263-267
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_ad8312b16308c2 94-125
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_ad8312b16308c2 33,62,70-74
+docs/operations/production-releases.md
+  s_a1be23a656acf0::t_84aeb13cfca294 590-614
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8f71f5b6b169a0efa4ab9bcd38ead0b69f63f457",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

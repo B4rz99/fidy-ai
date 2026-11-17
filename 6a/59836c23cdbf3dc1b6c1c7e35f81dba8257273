@@ -1,0 +1,27 @@
+.oxlintrc.json
+  s_a1be23a656acf0::t_8ce8a6e1f8bac0 319
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_4e79fb249d423a 16
+apps/server/cloudflare/storage-bootstrap/release.test.ts
+  s_a1be23a656acf0::t_dc5e99632da118 55
+apps/server/cloudflare/storage-forward-repair.test-fixture.ts
+  s_a1be23a656acf0::t_32477492fd6221 2-3,8,10
+scripts/check-lint-suppressions.test.ts
+  s_a1be23a656acf0::t_ba8d48af45c7b2 121,132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6a59836c23cdbf3dc1b6c1c7e35f81dba8257273",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

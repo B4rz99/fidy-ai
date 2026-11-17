@@ -1,0 +1,39 @@
+.agents/skills/diagnosing-bugs/SKILL.md
+  s_25622a6517eb19::t_428382ada4f800 125
+.agents/skills/implement/SKILL.md
+  s_25622a6517eb19::t_428382ada4f800 8-9
+.agents/skills/tdd/SKILL.md
+  s_25622a6517eb19::t_428382ada4f800 24
+.agents/skills/research/SKILL.md
+  s_25622a6517eb19::t_428382ada4f800 6
+.agents/skills/wayfinder/SKILL.md
+  s_25622a6517eb19::t_428382ada4f800 64,113-114,123
+.agents/skills/codebase-design/DESIGN-IT-TWICE.md
+  s_25622a6517eb19::t_428382ada4f800 21
+.agents/skills/ask-matt/SKILL.md
+  s_25622a6517eb19::t_80e8411451833a 29
+  s_25622a6517eb19::t_428382ada4f800 12-13
+.agents/skills/improve-codebase-architecture/SKILL.md
+  s_25622a6517eb19::t_428382ada4f800 26
+.agents/skills/to-tickets/SKILL.md
+  s_25622a6517eb19::t_428382ada4f800 66,100
+  s_25622a6517eb19::t_8efae50a0c8834 62
+.agents/skills/implement-spec/SKILL.md
+  s_25622a6517eb19::t_428382ada4f800 16,26,35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "499ec5758c38455fb184eeeba8909840714a2fd8",
+  "prompts": {},
+  "sessions": {
+    "s_25622a6517eb19": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb01-8c11-7003-a16c-1b81280a9587",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

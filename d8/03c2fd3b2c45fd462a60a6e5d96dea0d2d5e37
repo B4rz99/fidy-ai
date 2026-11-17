@@ -1,0 +1,21 @@
+apps/web/src/features/recurring/feature.tsx
+  s_398952c775f46d::t_e1cf4dc6e8844b 123
+apps/web/src/features/recurring/workspace.tsx
+  s_398952c775f46d::t_6f6fe987964475 73,332-333,339,376
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d803c2fd3b2c45fd462a60a6e5d96dea0d2d5e37",
+  "prompts": {},
+  "sessions": {
+    "s_398952c775f46d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7cc-45f6-7663-8706-7b8ec59907e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

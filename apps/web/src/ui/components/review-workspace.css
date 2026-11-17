@@ -795,3 +795,66 @@
     flex-shrink: 0;
   }
 }
+
+[data-review="money-feedback"] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+[data-review="money-feedback"] [data-review="money"] {
+  display: contents;
+}
+[data-review="amount-help"] {
+  grid-column: 1 / -1;
+  min-block-size: 3em;
+  overflow-wrap: anywhere;
+}
+@media (min-width: 901px) {
+  [data-review="detail"]:has(> [data-review="columns"] > [data-review="form"]) {
+    min-height: max(var(--review-height), 28rem);
+    padding-bottom: 0;
+  }
+  [data-review="detail"]:has(> [data-review="columns"] > [data-review="form"])
+    > [data-review="footer"] {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin-top: 0;
+    padding-bottom: 24px;
+    background: var(--background);
+  }
+  [data-review="columns"]:has(> [data-review="form"]) {
+    padding: 4px;
+    margin: -4px -4px 24px;
+  }
+}
+@media (min-width: 1251px) {
+  [data-review="columns"]:has(> [data-review="form"]) {
+    overflow: clip;
+  }
+  [data-review="columns"]:has(> [data-review="form"]) > * {
+    max-height: calc(100% + 8px);
+    padding: 4px;
+    margin: -4px;
+    overflow-y: auto;
+  }
+}
+
+@media (min-width: 1251px) {
+  [data-review="columns"]:has(> [data-review="form"]) > :first-child {
+    position: sticky;
+    top: 8px;
+  }
+}
+
+@container review-fields (width < 20rem) {
+  [data-review="money-feedback"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-review="amount-help"] {
+    grid-row: 2;
+  }
+  [data-review="currency"] {
+    grid-row: 3;
+  }
+}

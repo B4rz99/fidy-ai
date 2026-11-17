@@ -175,7 +175,7 @@ it(
 
 it.each([
   ["media", "Vuelve a enviar la imagen", "https://wa.me/12056871742"],
-  ["email", "Vuelve a reenviar el correo original a tu dirección de reenvío de Fidy", null],
+  ["email", "El reenvío de correos a Fidy no está disponible por ahora", null],
 ] as const)(
   "offers the supported resubmission route for expired %s material",
   (source, instruction, destination) =>
@@ -190,6 +190,10 @@ it.each([
               const link = page.container.querySelector('a[aria-label="Abrir WhatsApp"]');
               expect(link?.getAttribute("href") ?? null).toBe(destination);
               expect(page.container.textContent).toContain("Este elemento seguirá vencido");
+              if (source === "email") {
+                expect(page.container.textContent).toContain("manualmente en Transacciones");
+                expect(page.container.textContent).not.toContain("inicias una nueva revisión");
+              }
             })
           );
         } finally {

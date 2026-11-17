@@ -7,7 +7,7 @@ const instructions = {
   statement: "Vuelve a enviar el extracto al chat de Fidy desde el WhatsApp que tienes vinculado.",
   media: "Vuelve a enviar la imagen al chat de Fidy desde el WhatsApp que tienes vinculado.",
   email:
-    "Vuelve a reenviar el correo original a tu dirección de reenvío de Fidy. Si no la recuerdas, consúltala en tu chat de Fidy.",
+    "El reenvío de correos a Fidy no está disponible por ahora. Puedes registrar los datos del correo manualmente en Transacciones.",
 };
 
 export const ReviewResubmission = ({
@@ -16,7 +16,9 @@ export const ReviewResubmission = ({
   <div data-review="resubmission">
     <p>El original ya no está disponible. {instructions[source]}</p>
     <p className="mt-3">
-      Al reenviarlo, inicias una nueva revisión. Este elemento seguirá vencido.
+      {source === "email"
+        ? "Este elemento seguirá vencido. El original no se puede recuperar."
+        : "Al reenviarlo, inicias una nueva revisión. Este elemento seguirá vencido."}
     </p>
     {source === "email" ? null : (
       <>

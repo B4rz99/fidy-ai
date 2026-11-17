@@ -1,0 +1,24 @@
+apps/web/src/features/recurring/feature.test.ts
+  s_8fc963825a748b::t_6368cbc6770320 39,50,65,75,77-79,87-89,93-94,96,98-100,110-111,116-118,137-142,145,147
+  s_8fc963825a748b::t_08dcf55dea7129 69-72
+  s_8fc963825a748b::t_caf3aa77934517 1-36,38,40-49,59-64,66-68,73-74,76,80-86,90-92,95,97,101-109,112-115,119-135,146,148-195,197,199-218
+  s_8fc963825a748b::t_49c64c82b9c8f5 136,143-144
+  s_8fc963825a748b::t_46f48e4984e266 51-58,196,198
+  s_8fc963825a748b::t_b658e30ff08cc3 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "20b7392394aec8c39be89f7d18036f2281912ce1",
+  "prompts": {},
+  "sessions": {
+    "s_8fc963825a748b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7d4-7e3a-74e0-a78d-60e465a4a290",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

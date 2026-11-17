@@ -1,4 +1,7 @@
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Schema } from "effect";
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { UserId } from "../../src/core/identity/contract";
+import { registerUserLifetime } from "../maintenance/operations";
 import type { StoreHistory } from "../runtime/sqlite/contract";
 
 /** Initial User-store schema. Schema creation grants no identity, credential or Consent. */
@@ -483,6 +486,13 @@ export const userStoreHistory: StoreHistory = {
     { version: 3, id: "subscription-cancellation", statements: sourceCancellationSchema },
     { version: 4, id: "canonical-capture", statements: canonicalCaptureMigration },
     { version: 5, id: "cancellation-receipt", statements: cancellationReceiptMigration },
+    {
+      version: 6,
+      id: "lifetime-registration-acknowledgement",
+      statements: [
+        "ALTER TABLE users ADD COLUMN lifetime_registered INTEGER NOT NULL DEFAULT 0 CHECK(lifetime_registered IN (0,1))",
+      ],
+    },
   ],
 };
 
@@ -511,3 +521,25 @@ export const recoverUserWork = <E, R>(
       return { failedFamilies, attempted, failedOffers };
     })
   );
+
+/** An empty store has no work. Its reserved bootstrap registers independently before creating the User. */
+export const observeUserRegistration = Effect.fn(function* (
+  maintenance: Pick<DurableObjectNamespace, "getByName">,
+  owns: (id: string) => boolean
+) {
+  const sql = yield* SqliteClient;
+  const [row] = yield* sql`SELECT id,lifetime_registered FROM users LIMIT 1`;
+  if (row === undefined) return false;
+  const user = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      id: UserId,
+      lifetime_registered: Schema.Literals([0, 1]),
+    })
+  )(row);
+  if (!owns(user.id)) return false;
+  if (user.lifetime_registered === 1) return true;
+  yield* registerUserLifetime(maintenance, user.id);
+  const confirmed = yield* sql`UPDATE users SET lifetime_registered=1 WHERE id=${user.id}
+    AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=${user.id}) RETURNING id`;
+  return confirmed.length === 1;
+});

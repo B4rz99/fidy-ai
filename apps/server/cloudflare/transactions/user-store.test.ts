@@ -147,6 +147,43 @@ const provisionPAT = Effect.fn(function* (
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect("requires an observable lifetime registration before first local work", () =>
+    Effect.gen(function* () {
+      const create = yield* nativeUserPlatform;
+      const runtime = yield* create();
+      const owner = yield* seed(runtime, alice);
+      // Interrupt local acknowledgement after the registry commits.
+      yield* owner.exec(
+        "CREATE TRIGGER lose_ack BEFORE UPDATE OF lifetime_registered ON users BEGIN SELECT RAISE(ABORT,'lost'); END"
+      );
+      expect((yield* history(runtime)).status).toBe(503);
+      expect(yield* owner.exec("SELECT count(*) AS calls FROM audit_entries")).toEqual([
+        { calls: 0 },
+      ]);
+      const registry = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
+          name: "core-maintenance-v1",
+        })
+      );
+      const entries = native(() =>
+        registry.exec("SELECT user_id FROM lifetime_registry ORDER BY user_id")
+      );
+      expect(yield* entries).toEqual([{ user_id: alice.user }]);
+      yield* owner.exec("DROP TRIGGER lose_ack");
+      expect((yield* history(runtime)).status).toBe(200);
+      const waiting = yield* seed(runtime, bob);
+      yield* native(() => registry.exec("ALTER TABLE lifetime_registry RENAME TO offline"));
+      expect((yield* history(runtime)).status).toBe(200);
+      expect((yield* history(runtime, bob)).status).toBe(503);
+      expect(yield* waiting.exec("SELECT count(*) AS calls FROM audit_entries")).toEqual([
+        { calls: 0 },
+      ]);
+      yield* native(() => registry.exec("ALTER TABLE offline RENAME TO lifetime_registry"));
+      expect((yield* history(runtime, bob)).status).toBe(200);
+      expect(yield* entries).toEqual([{ user_id: alice.user }, { user_id: bob.user }]);
+    })
+  );
+
   test.effect(
     "serializes overlapping exact retries to a single retained capture, source and charge",
     () =>

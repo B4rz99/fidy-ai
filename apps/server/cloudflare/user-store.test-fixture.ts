@@ -79,6 +79,12 @@ const billingBindings = {
   },
 };
 
+const nativeOwners = {
+  UserStore: { type: "durable-object", storage: "sqlite" },
+  Maintenance: { type: "durable-object", storage: "sqlite" },
+  Directory: { type: "durable-object", storage: "sqlite" },
+} as const;
+
 /** Production ingress and Core in separate workerd isolates. SQL inspection belongs to the host fixture only. */
 const createUserPlatform = Effect.fnUntraced(function* (withBilling: boolean) {
   const fs = yield* FileSystem.FileSystem;
@@ -117,16 +123,14 @@ const createUserPlatform = Effect.fnUntraced(function* (withBilling: boolean) {
             compatibilityDate: "2026-09-08",
             compatibilityFlags: ["nodejs_compat"],
             manifest: core,
-            exports: {
-              UserStore: { type: "durable-object", storage: "sqlite" },
-              Directory: { type: "durable-object", storage: "sqlite" },
-            },
+            exports: nativeOwners,
             env: {
               BROWSER_ORIGIN: origin,
               CF_VERSION_METADATA: { type: "version-metadata" },
               SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: ceiling },
               ...(withBilling ? billingBindings : {}),
               USER_STORE: { type: "durable-object", worker: "core", exportName: "UserStore" },
+              MAINTENANCE: { type: "durable-object", worker: "core", exportName: "Maintenance" },
               DIRECTORY: { type: "durable-object", worker: "core", exportName: "Directory" },
             },
           },

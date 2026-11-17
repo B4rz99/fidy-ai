@@ -15,7 +15,7 @@ import {
   readUserHistory,
   transactionInput,
 } from "../transactions/operations";
-import { recoverUserWork, userStoreHistory } from "./operations";
+import { observeUserRegistration, recoverUserWork, userStoreHistory } from "./operations";
 import {
   type StoreReleaseEnvironment,
   releaseProbeName,
@@ -28,6 +28,7 @@ type UserStoreEnvironment = WompiBindings &
   StoreReleaseEnvironment &
   Readonly<{
     USER_STORE: DurableObjectNamespace;
+    MAINTENANCE: DurableObjectNamespace;
     BILLING_COLLECTION_QUEUE: Queue<typeof LocalSourceCancellationWork.Type>;
   }>;
 export class UserStore extends DurableObject<UserStoreEnvironment> {
@@ -64,7 +65,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
 
   override alarm(): Promise<void> {
-    return this.checkWork().then((summary) => {
+    return this.registration().then(async (registered) => {
+      if (!registered) return;
+      const summary = await this.checkWork();
       if (summary.failedFamilies > 0) throw new Error("User work discovery unavailable");
     });
   }
@@ -121,16 +124,29 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
+  private owns = (userId: string): boolean =>
+    this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
+
+  private registration(): Promise<boolean> {
+    return this.runtime.runPromise(observeUserRegistration(this.env.MAINTENANCE, this.owns));
+  }
+
   override fetch(request: Request): Promise<Response> {
     if (this.isReleaseProbe(request)) {
       return this.runtime.runPromise(
         storeReadiness({ history: userStoreHistory, release: this.env.CF_VERSION_METADATA.id })
       );
     }
+    return this.registration().then(
+      (registered) => this.dispatch(request, registered),
+      () => canonicalAdmissionUnavailable()
+    );
+  }
+
+  private dispatch(request: Request, registered: boolean): Promise<Response> {
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
-    const owns = (userId: string): boolean =>
-      this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
+    const owns = (userId: string): boolean => registered && this.owns(userId);
     const operation = canonicalOperation({ method: request.method, path });
     const mutation = this.mutation(request, owns, operation);
     if (Option.isSome(mutation)) return mutation.value;
@@ -148,6 +164,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       );
     }
     if (command === "POST /work/check") {
+      if (!registered) {
+        return Promise.resolve(Response.json({ failedFamilies: 0, attempted: 0, failedOffers: 0 }));
+      }
       return this.checkWork().then((summary) =>
         Response.json(summary, {
           status: summary.failedFamilies > 0 ? uncertainCheckStatus : completedCheckStatus,

@@ -1,0 +1,21 @@
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_a0e8ffbf82990a 81-86
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_5e61d095772988 559-712
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "47e5686999bf95c7f70776ae555729bf18b63351",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { categorizeLocalCapture as nativeCategory } from "./internal/native-categorization";
 import { captureCategories, prepareCaptureCategories as prepareCaptures } from "./internal/capture";
 import type { QueryAuthority } from "../canonical-work/operations";
 import {
@@ -95,3 +96,6 @@ export const verifyCategoryStorage = (
 
 /** Prepare request-local Category interpretation inside an existing protected snapshot. */
 export const prepareCaptureCategories: typeof prepareCaptures = (input) => prepareCaptures(input);
+
+/** Capture owners compose categorization and retention in the same native User transaction. */
+export const categorizeLocalCapture: typeof nativeCategory = (input) => nativeCategory(input);

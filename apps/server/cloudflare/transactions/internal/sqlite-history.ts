@@ -1,8 +1,11 @@
+import { CategoryReference } from "../../../src/core/categories/contract";
+import { currentCategoryRelease, interpretCategory } from "../../../src/core/categories/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Clock, Data, Effect, Option } from "effect";
+import { Clock, Data, Effect, Option, Schema } from "effect";
 import { recordAuthorizedCall } from "../../../src/shell/audit/operations";
 import {
   attachCanonicalStanding,
+  canonicalAdmissionUnavailable,
   noAuthority,
   rateLimited,
 } from "../../canonical-admission/operations";
@@ -15,6 +18,23 @@ import {
   resolveBoundCanonicalWebSession,
 } from "../../web-session/operations";
 import { invalid, parseQuery, presentHistory, selectedHistoryPage } from "./transaction-history";
+
+const HistoryCategoryReference = Schema.Struct({
+  category_revision: CategoryReference.fields.revision,
+  category_id: CategoryReference.fields.categoryId,
+});
+const understoodCategory = (row: unknown): boolean =>
+  Option.isSome(
+    Schema.decodeUnknownOption(HistoryCategoryReference)(row).pipe(
+      Option.flatMap(({ category_revision: revision, category_id: categoryId }) =>
+        interpretCategory({ release: currentCategoryRelease, reference: { revision, categoryId } })
+      )
+    )
+  );
+const presentRetainedHistory = (input: Parameters<typeof presentHistory>[0]): Response =>
+  input.rows.results.every(understoodCategory)
+    ? presentHistory(input)
+    : canonicalAdmissionUnavailable();
 
 class HistoryUnavailable extends Data.TaggedError("HistoryUnavailable") {}
 
@@ -67,7 +87,11 @@ export const readUserHistory = Effect.fn(function* (
       if (Option.isSome(query)) {
         const page = selectedHistoryPage({ authority, query: query.value, userSelection: users });
         const rows = yield* sql.unsafe(page.sql, page.bindings);
-        response = presentHistory({ rows: { results: rows }, query: query.value, selection });
+        response = presentRetainedHistory({
+          rows: { results: rows },
+          query: query.value,
+          selection,
+        });
         if (!response.ok) return yield* new HistoryUnavailable();
       }
       const audit = recordAuthorizedCall({

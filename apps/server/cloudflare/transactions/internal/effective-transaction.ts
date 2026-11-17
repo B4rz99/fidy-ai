@@ -33,7 +33,7 @@ type HistoryFilters = Readonly<{
   limit: number;
 }>;
 
-const presentation = [
+const ordinaryPresentation = [
   "user_id",
   "id",
   "amount",
@@ -67,12 +67,17 @@ const historyPage = ({
   where,
   bindings,
   limit,
+  taxonomyRevision,
 }: HistoryFilters &
   Readonly<{
+    taxonomyRevision: boolean;
     userSql: string;
     userBindings: ReadonlyArray<string>;
     prefix: OwnedStatement;
   }>): Readonly<{ sql: string; bindings: ReadonlyArray<string | number | Uint8Array> }> => {
+  const presentation = taxonomyRevision
+    ? ordinaryPresentation + ", category_revision"
+    : ordinaryPresentation;
   const relation = relationFor(userSql, userBindings);
   const ordered = `ORDER BY occurred_at_ms DESC, created_at_ms DESC, id DESC LIMIT ${limit}`;
   // SQLite compound ORDER BY keys must be result columns. Canonical row decoding omits these
@@ -110,6 +115,7 @@ export const effectiveHistoryPage = ({
 }: HistoryFilters & Readonly<{ userId: string }>): ReturnType<typeof historyPage> =>
   historyPage({
     ...filters,
+    taxonomyRevision: false,
     userSql: "?",
     userBindings: [userId],
     prefix: { sql: "", params: [] },
@@ -121,9 +127,12 @@ export const effectiveHistoryPage = ({
 export const selectedEffectiveHistoryPage = ({
   userSelection,
   ...filters
-}: HistoryFilters & Readonly<{ userSelection: OwnedStatement }>): ReturnType<typeof historyPage> =>
+}: HistoryFilters &
+  Readonly<{ userSelection: OwnedStatement }> &
+  Partial<Readonly<{ taxonomyRevision: boolean }>>): ReturnType<typeof historyPage> =>
   historyPage({
     ...filters,
+    taxonomyRevision: filters.taxonomyRevision === true,
     userSql: "(SELECT userId FROM transaction_history_user)",
     userBindings: [],
     prefix: {

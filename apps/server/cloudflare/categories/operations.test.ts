@@ -29,7 +29,7 @@ it("requires a stable Category while keeping its current label independent of id
       );
       expect(yield* requireCategory({ db, categoryId })).toEqual({
         id: categoryId,
-        label: "Comidas",
+        label: "Restaurantes",
       });
       const missing = CategoryId.make("90000000-0000-4000-8000-000000000001");
       deepStrictEqual(
@@ -39,7 +39,7 @@ it("requires a stable Category while keeping its current label independent of id
     })
   ));
 
-it("returns only bounded current Category projections in presentation order and fails closed on overflow", () =>
+it("returns the complete release taxonomy even when local rows contain additional identities", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(setup);
@@ -71,10 +71,7 @@ it("returns only bounded current Category projections in presentation order and 
           )
         )
       );
-      deepStrictEqual(
-        yield* Effect.exit(listCategories({ db })),
-        Exit.fail(new CategoriesUnavailable())
-      );
+      expect(yield* listCategories({ db })).toEqual(categories);
     })
   ));
 
@@ -149,30 +146,6 @@ it("categorizes each User's captures without exposing or borrowing another User'
         "10000000-0000-4000-8000-000000000016",
         "10000000-0000-4000-8000-000000000015",
       ]);
-    })
-  ));
-
-it("distinguishes malformed Category storage from absence without leaking rows or database failures", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(setup);
-      const categoryId = CategoryId.make("10000000-0000-4000-8000-000000000001");
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE categories SET label = '' WHERE id = ?").bind(categoryId).run()
-      );
-      deepStrictEqual(
-        yield* Effect.exit(requireCategory({ db, categoryId })),
-        Exit.fail(new CategoriesUnavailable())
-      );
-      deepStrictEqual(
-        yield* Effect.exit(listCategories({ db })),
-        Exit.fail(new CategoriesUnavailable())
-      );
-      yield* Effect.tryPromise(() => db.prepare("DROP TABLE categories").run());
-      deepStrictEqual(
-        yield* Effect.exit(requireCategory({ db, categoryId })),
-        Exit.fail(new CategoriesUnavailable())
-      );
     })
   ));
 

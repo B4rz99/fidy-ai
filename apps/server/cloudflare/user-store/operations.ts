@@ -276,7 +276,126 @@ SELECT user_id,id,amount,currency,direction,counterparty,category_id,notes,occur
 ) STRICT`,
 ] as const;
 
+/** User schema v2. Existing references were written under the one Colombian launch revision. */
+const categoryTaxonomyMigration = [
+  `ALTER TABLE transactions ADD COLUMN category_revision TEXT NOT NULL DEFAULT 'co-1'`,
+  `ALTER TABLE transaction_projection_leaf ADD COLUMN category_revision TEXT NOT NULL DEFAULT 'co-1'`,
+  `DROP VIEW transaction_effective_source`,
+  `CREATE VIEW transaction_effective_source AS
+WITH linked_decision AS (
+  SELECT user_id, first_transaction_id, second_transaction_id, visible_transaction_id
+  FROM transaction_reconciliation_decisions WHERE state = 'linked'
+), linked_member AS (
+  SELECT decision.user_id, decision.first_transaction_id, decision.second_transaction_id,
+    retained.id, retained.amount, retained.currency, retained.direction,
+    retained.counterparty, retained.category_id, retained.notes,
+    retained.occurred_at_ms, retained.created_at_ms, retained.revision,
+    (SELECT MAX(correction.corrected_at_ms) FROM transaction_corrections correction
+      WHERE correction.user_id = retained.user_id AND correction.transaction_id = retained.id) AS corrected_at_ms,
+    EXISTS (SELECT 1 FROM source_attestations source
+      WHERE source.user_id = retained.user_id AND source.transaction_id = retained.id
+        AND source.kind = 'statement-line') AS has_statement_source,
+    COALESCE(json_extract(retained.user_decisions, '$.categoryId') = 1, 0) AS category_decided,
+    COALESCE(json_extract(retained.user_decisions, '$.counterparty') = 1, 0) AS counterparty_decided,
+    COALESCE(json_extract(retained.user_decisions, '$.notes') = 1, 0) AS notes_decided
+  FROM linked_decision decision
+  JOIN transactions retained INDEXED BY sqlite_autoindex_transactions_2
+    ON retained.user_id = decision.user_id
+    AND retained.id IN (decision.first_transaction_id, decision.second_transaction_id)
+), effective_transaction AS (
+  SELECT retained.user_id, retained.id, retained.amount, retained.currency,
+    retained.direction, retained.counterparty, retained.category_id, retained.notes,
+    retained.occurred_at_ms, retained.created_at_ms, retained.revision, retained.category_revision
+  FROM transactions retained
+  WHERE retained.deleted_at_ms IS NULL AND NOT EXISTS (SELECT 1 FROM reconciled_transactions member
+    WHERE member.user_id = retained.user_id AND member.transaction_id = retained.id)
+  UNION ALL
+  SELECT decision.user_id, decision.visible_transaction_id,
+    movement.amount, movement.currency, movement.direction,
+    counterparty_member.counterparty, category_member.category_id, notes_member.notes,
+    movement.occurred_at_ms, visible.created_at_ms, visible.revision, category_member.category_revision
+  FROM linked_decision decision
+  JOIN transactions visible ON visible.user_id = decision.user_id
+    AND visible.id = decision.visible_transaction_id
+  JOIN transactions movement ON movement.user_id = decision.user_id AND movement.id = COALESCE(
+    (SELECT member.id FROM linked_member member
+      WHERE member.user_id = decision.user_id
+        AND member.first_transaction_id = decision.first_transaction_id
+        AND member.second_transaction_id = decision.second_transaction_id
+        AND member.corrected_at_ms IS NOT NULL
+      ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
+    (SELECT member.id FROM linked_member member
+      WHERE member.user_id = decision.user_id
+        AND member.first_transaction_id = decision.first_transaction_id
+        AND member.second_transaction_id = decision.second_transaction_id
+        AND member.has_statement_source = 1
+      ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
+    decision.visible_transaction_id)
+  JOIN transactions category_member ON category_member.user_id = decision.user_id
+    AND category_member.id = COALESCE(
+      (SELECT member.id FROM linked_member member
+        WHERE member.user_id = decision.user_id
+          AND member.first_transaction_id = decision.first_transaction_id
+          AND member.second_transaction_id = decision.second_transaction_id
+          AND member.category_decided = 1
+        ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
+      decision.visible_transaction_id)
+  JOIN transactions counterparty_member ON counterparty_member.user_id = decision.user_id
+    AND counterparty_member.id = COALESCE(
+      (SELECT member.id FROM linked_member member
+        WHERE member.user_id = decision.user_id
+          AND member.first_transaction_id = decision.first_transaction_id
+          AND member.second_transaction_id = decision.second_transaction_id
+          AND member.counterparty_decided = 1
+        ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
+      decision.visible_transaction_id)
+  JOIN transactions notes_member ON notes_member.user_id = decision.user_id
+    AND notes_member.id = COALESCE(
+      (SELECT member.id FROM linked_member member
+        WHERE member.user_id = decision.user_id
+          AND member.first_transaction_id = decision.first_transaction_id
+          AND member.second_transaction_id = decision.second_transaction_id
+          AND member.notes_decided = 1
+        ORDER BY COALESCE(member.corrected_at_ms, member.created_at_ms) DESC, member.id DESC LIMIT 1),
+      decision.visible_transaction_id)
+  WHERE EXISTS (SELECT 1 FROM reconciled_transactions first_member
+    WHERE first_member.user_id = decision.user_id
+      AND first_member.transaction_id = decision.first_transaction_id)
+    AND EXISTS (SELECT 1 FROM reconciled_transactions second_member
+      WHERE second_member.user_id = decision.user_id
+        AND second_member.transaction_id = decision.second_transaction_id)
+)
+SELECT user_id,id,amount,currency,direction,counterparty,category_id,notes,occurred_at_ms,created_at_ms,strftime('%Y-%m-%dT%H:%M:%fZ',occurred_at_ms/1000.0,'unixepoch') AS occurred_at,strftime('%Y-%m-%dT%H:%M:%fZ',created_at_ms/1000.0,'unixepoch') AS created_at,revision,category_revision FROM effective_transaction`,
+  `ALTER TABLE transaction_corrections ADD COLUMN before_category_revision TEXT NOT NULL DEFAULT 'co-1'`,
+  `ALTER TABLE transaction_corrections ADD COLUMN after_category_revision TEXT NOT NULL DEFAULT 'co-1'`,
+  `CREATE TABLE keyword_rules (
+    id TEXT PRIMARY KEY NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    keyword TEXT NOT NULL CHECK(length(keyword) BETWEEN 1 AND 80 AND keyword=trim(keyword)),
+    category_id TEXT NOT NULL REFERENCES categories(id),
+    category_revision TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    UNIQUE(user_id,keyword)
+  ) STRICT`,
+  `CREATE TRIGGER keyword_rule_capacity BEFORE INSERT ON keyword_rules
+     WHEN (SELECT count(*) FROM keyword_rules WHERE user_id=NEW.user_id)>=100
+     BEGIN SELECT RAISE(ABORT,'keyword_rule_capacity'); END`,
+  `CREATE TABLE budgets (
+    id TEXT PRIMARY KEY NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    category_id TEXT NOT NULL REFERENCES categories(id),
+    category_revision TEXT NOT NULL,
+    currency TEXT NOT NULL,cap TEXT NOT NULL,created_at_ms INTEGER NOT NULL,updated_at_ms INTEGER NOT NULL,
+    group_name TEXT,starts_month TEXT,
+    UNIQUE(user_id,category_id,currency),UNIQUE(user_id,id)
+  ) STRICT`,
+] as const;
+
 export const userStoreHistory: StoreHistory = {
   owner: "user",
-  steps: [{ version: 1, id: "initial-user-schema", statements: initialUserSchema }],
+  steps: [
+    { version: 1, id: "initial-user-schema", statements: initialUserSchema },
+    { version: 2, id: "category-taxonomy", statements: categoryTaxonomyMigration },
+  ],
 };

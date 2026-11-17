@@ -1,9 +1,11 @@
-import { Effect, Option } from "effect";
+import releaseData from "~/core/categories/internal/taxonomy-release.json";
+import { Effect, Option, Schema } from "effect";
 import {
   type Category,
   type CategoryFailure,
   type CategoryId,
   type CategoryKeyword,
+  CategoryTaxonomyRelease,
   type KeywordRule,
   KeywordRuleAlreadyExists,
   type KeywordRuleId,
@@ -18,14 +20,18 @@ import {
   findKnownCaptureCategory,
   hasKeywordRule,
 } from "~/core/categories/internal/rules";
-import { categoryRows } from "~/core/categories/internal/taxonomy";
+import {
+  canOverlap,
+  interpretReference,
+  writingTaxonomy,
+} from "~/core/categories/internal/taxonomy";
 
 export const fallbackCaptureCategory = (direction: "inflow" | "outflow"): CategoryId =>
   chooseFallback(direction);
 
 /** The direct launch taxonomy, in presentation order, without seed or persistence attributes. */
 export const listLaunchCategories = (): ReadonlyArray<Category> =>
-  categoryRows.map(({ id, label }) => ({ id, label }));
+  writingTaxonomy(currentCategoryRelease).categories;
 
 /** Explicit choice wins; otherwise the most specific User instruction wins before the direction fallback. */
 export const categorizeCapture = ({
@@ -91,3 +97,16 @@ export const validateKeywordRuleChange = ({
     }
     return Option.none<CategoryFailure>();
   });
+
+const decodedRelease = Schema.decodeSync(CategoryTaxonomyRelease)(releaseData);
+for (const revision of decodedRelease.revisions) {
+  for (const category of revision.categories) Object.freeze(category);
+  Object.freeze(revision.categories);
+  Object.freeze(revision);
+}
+Object.freeze(decodedRelease.revisions);
+export const currentCategoryRelease = Object.freeze(decodedRelease);
+
+export const activeCategoryTaxonomy: typeof writingTaxonomy = (release) => writingTaxonomy(release);
+export const compatibleCategoryReleases: typeof canOverlap = (input) => canOverlap(input);
+export const interpretCategory: typeof interpretReference = (input) => interpretReference(input);

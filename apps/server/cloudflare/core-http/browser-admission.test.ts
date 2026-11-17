@@ -474,7 +474,7 @@ it.each(atomicListings)(
     )
 );
 
-it("closes malformed Category projections without leaving a lease or spending commercial quota", () =>
+it("discloses only the release catalog when an unrelated stored Category is malformed", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* browserFixture();
@@ -485,7 +485,8 @@ it("closes malformed Category projections without leaving a lease or spending co
           .run()
       );
       const response = yield* Effect.tryPromise(() => fixture.request());
-      expect(response.status).toBe(503);
+      expect(response.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => response.text())).not.toContain("invalid fixture");
       expect(
         yield* Effect.tryPromise(() =>
           db.prepare("SELECT count(*) AS total FROM canonical_request_leases").first()

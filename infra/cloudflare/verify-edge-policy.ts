@@ -2,8 +2,29 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "a68a2781801f64e0e9a6afeefe4e69f51ac70489c6346d840e6d9407bef7b239";
+const expectedEdgePolicyDigest = "e26589cdfb0ce4eaaab1c4c886f6517edf5607b9de767ecd0083f639f132cdd5";
 const securityArtifacts = [
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/categories/internal/native-categorization.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/core/categories/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/core/categories/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/core/categories/internal/taxonomy.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/core/categories/internal/taxonomy-release.json", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/categories/internal/query.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/operator-access/operations.ts", import.meta.url)
   ).text(),

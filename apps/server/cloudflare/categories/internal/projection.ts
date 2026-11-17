@@ -1,7 +1,12 @@
+import { listLaunchCategories } from "../../../src/core/categories/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { decodeCategoryRead, prepareCategoryRead } from "../../../src/shell/categories/operations";
-import { Effect, Option, Schema } from "effect";
-import { Category, type CategoryId, CategoryNotFound } from "../../../src/core/categories/contract";
+import { Effect, Option } from "effect";
+import {
+  type Category,
+  type CategoryId,
+  CategoryNotFound,
+} from "../../../src/core/categories/contract";
 
 import { CategoriesUnavailable } from "../contract";
 import type { QueryAuthority } from "../../canonical-work/operations";
@@ -20,22 +25,15 @@ export const prepareCategorySnapshot = ({
 
 /** Load one required current projection; absence remains distinct from invalid or unreadable storage. */
 export const requiredCategory = ({
-  db,
   categoryId,
 }: Readonly<{ db: D1Database; categoryId: CategoryId }>): Effect.Effect<
   Category,
   CategoryNotFound | CategoriesUnavailable
 > =>
   Effect.gen(function* () {
-    const row = yield* Effect.tryPromise({
-      try: () =>
-        db.prepare("SELECT id, label FROM categories WHERE id = ?").bind(categoryId).first(),
-      catch: () => new CategoriesUnavailable(),
-    });
-    if (row === null) return yield* new CategoryNotFound({ categoryId });
-    return yield* Schema.decodeUnknownEffect(Category)(row).pipe(
-      Effect.mapError(() => new CategoriesUnavailable())
-    );
+    const category = listLaunchCategories().find((value) => value.id === categoryId);
+    if (category === undefined) return yield* new CategoryNotFound({ categoryId });
+    return category;
   });
 
 /** Every retained Category is decoded; corrupt overflow cannot masquerade as a complete taxonomy. */
@@ -64,9 +62,13 @@ export const categoryReferenceStatement = ({
   statement: OwnedStatement;
 }>): D1PreparedStatement =>
   db
-    .prepare(`WITH category_reference AS (SELECT id FROM categories WHERE id = ? LIMIT 1)
+    .prepare(`WITH category_reference AS (SELECT id FROM categories WHERE id = ? AND ? LIMIT 1)
 ${statement.sql}`)
-    .bind(categoryId, ...statement.params);
+    .bind(
+      categoryId,
+      Number(listLaunchCategories().some((value) => value.id === categoryId)),
+      ...statement.params
+    );
 
 /** Check the owned storage schema without reading Category or User content. */
 export const verifyStorage = ({

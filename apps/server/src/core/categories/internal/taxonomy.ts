@@ -1,36 +1,49 @@
-import { CategoryLabel, categoryIds } from "~/core/categories/contract";
+import { Option } from "effect";
+import {
+  type Category,
+  type CategoryReference,
+  type CategoryTaxonomyRelease,
+  type CategoryTaxonomyRevision,
+} from "~/core/categories/contract";
 
-export const categoryRows = [
-  {
-    id: categoryIds.restaurantes,
-    label: CategoryLabel.make("Restaurantes"),
-    displayOrder: 0,
-  },
-  { id: categoryIds.domicilios, label: CategoryLabel.make("Domicilios"), displayOrder: 1 },
-  { id: categoryIds.mercado, label: CategoryLabel.make("Mercado"), displayOrder: 2 },
-  { id: categoryIds.transporte, label: CategoryLabel.make("Transporte"), displayOrder: 3 },
-  { id: categoryIds.vivienda, label: CategoryLabel.make("Vivienda"), displayOrder: 4 },
-  { id: categoryIds.servicios, label: CategoryLabel.make("Servicios"), displayOrder: 5 },
-  { id: categoryIds.salud, label: CategoryLabel.make("Salud"), displayOrder: 6 },
-  { id: categoryIds.educacion, label: CategoryLabel.make("Educación"), displayOrder: 7 },
-  { id: categoryIds.compras, label: CategoryLabel.make("Compras"), displayOrder: 8 },
-  {
-    id: categoryIds.entretenimiento,
-    label: CategoryLabel.make("Entretenimiento"),
-    displayOrder: 9,
-  },
-  { id: categoryIds.viajes, label: CategoryLabel.make("Viajes"), displayOrder: 10 },
-  { id: categoryIds.impuestos, label: CategoryLabel.make("Impuestos"), displayOrder: 11 },
-  {
-    id: categoryIds.transferencias,
-    label: CategoryLabel.make("Transferencias"),
-    displayOrder: 12,
-  },
-  {
-    id: categoryIds.retirosDeEfectivo,
-    label: CategoryLabel.make("Retiros de efectivo"),
-    displayOrder: 13,
-  },
-  { id: categoryIds.ingresos, label: CategoryLabel.make("Ingresos"), displayOrder: 14 },
-  { id: categoryIds.otros, label: CategoryLabel.make("Otros"), displayOrder: 15 },
-] as const;
+export const writingTaxonomy = (release: CategoryTaxonomyRelease): CategoryTaxonomyRevision =>
+  Option.getOrThrow(
+    Option.fromUndefinedOr(release.revisions.find((revision) => revision.id === release.write))
+  );
+
+export const interpretReference = ({
+  release,
+  reference,
+}: Readonly<{
+  release: CategoryTaxonomyRelease;
+  reference: CategoryReference;
+}>): Option.Option<Category> =>
+  Option.fromUndefinedOr(
+    release.revisions
+      .find((item) => item.id === reference.revision)
+      ?.categories.find((item) => item.id === reference.categoryId)
+  );
+
+const understands = (
+  reader: CategoryTaxonomyRelease,
+  revision: CategoryTaxonomyRevision
+): boolean => {
+  const definition = reader.revisions.find((item) => item.id === revision.id);
+  return (
+    definition !== undefined &&
+    definition.categories.length === revision.categories.length &&
+    definition.categories.every(
+      (category, index) =>
+        category.id === revision.categories[index]?.id &&
+        category.label === revision.categories[index]?.label
+    )
+  );
+};
+
+/** Every old definition survives intact. Any revision the candidate writes must already ship in the serving release. */
+export const canOverlap = ({
+  serving,
+  candidate,
+}: Readonly<{ serving: CategoryTaxonomyRelease; candidate: CategoryTaxonomyRelease }>): boolean =>
+  serving.revisions.every((revision) => understands(candidate, revision)) &&
+  understands(serving, writingTaxonomy(candidate));

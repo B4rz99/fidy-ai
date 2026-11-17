@@ -1,8 +1,9 @@
 # Per-User Durable Objects own application storage and atomic execution
 
 - **Status:** Accepted migration direction, User storage/execution, routing, shared facts,
-  background discovery and account erasure; operations, acceptance and migration implementation
-  remain open. Backup restoration is outside this migration.
+  background discovery, account erasure and operations; acceptance/cutover and migration
+  implementation remain open. Backup restoration and a new complete User-data export are outside
+  this migration.
 - **Supersedes:** The D1 storage destination and coordination-only Durable Object role in
   [ADR 0026](0026-cloudflare-native-production-replatform.md), and the initial-platform restriction
   in [ADR 0039](0039-fresh-read-performance-contract.md).
@@ -166,8 +167,7 @@ Categories owns immutable taxonomy revisions distributed with application releas
 uses one complete revision. Stable CategoryIds survive label and order changes; retained references
 remain interpretable. User keyword rules, Transaction corrections and Budget choices stay local.
 This adds no runtime taxonomy publisher or shared taxonomy DO, and a taxonomy revision grants no
-User authority. Operational rollout and revision compatibility belong to the schema/operations
-decision.
+User authority. The schema and operations decision below governs release compatibility.
 
 Ingestion owns structural-sample preparation and human approval. Raw material, pending candidates,
 approval evidence and publication intent remain User-scoped. The reviewer sees only the anonymised
@@ -241,8 +241,9 @@ An empty User database alone never permits retirement.
 Reuse metadata-only owner, Queue, Workflow and retention monitoring. Add watchdog traversal age,
 coverage, overdue checks and scoped uncertainty. Unknown/unavailable is not healthy zero; complete
 coverage is not successful execution. Keep User content and identifiers out of logs/alert dimensions.
-Operational page/concurrency/budget settings belong to the operations decision; five-minute traversal,
-fault isolation and aggregate load require acceptance evidence.
+The [operations resolution](https://github.com/B4rz99/fidy-ai/issues/2204#issuecomment-6951201160)
+sets initial page, concurrency and call budgets; five-minute traversal, fault isolation and aggregate
+load still require acceptance evidence.
 
 ## Account erasure and recovery scope
 
@@ -311,6 +312,85 @@ marker/window does not assert that arbitrary restoration is safe. Ordinary entry
 User state, and bootstrap requires its exact current reservation and unexpired proof; neither a
 lookup miss nor expired deletion metadata permits reusing an old UserId.
 
+## Schema evolution and operations
+
+The [schema and operations decision](https://github.com/B4rz99/fidy-ai/issues/2204#issuecomment-6951201160)
+uses short, automatic SQL migrations on object activation before domain work. User, directory,
+pricing, maintenance and independent erasure stores have separate ordered migration histories.
+Keep the upgrade path from every schema still reachable in retained stores, including objects that
+skipped deployments. Each step's SQL and version marker commit in one native transaction; a failed
+step rolls back without undoing previously committed steps. Initialization ordering alone is not a
+transaction. Schema initialization never creates User domain state or supplies authority.
+
+All schema-dependent request, RPC, alarm and background paths pass the readiness gate. Unknown
+newer schemas, mismatched migration history and deterministic failures refuse domain work without
+resetting storage. Transient attempts are bounded and durably counted outside the failed step's
+transaction; process restarts cannot reset their budget. Resume from verified progress after an
+eligible retry or corrected release. A failed User store affects that User; a failed shared owner
+affects the capabilities depending on it. Neither failure proves cancellation, erasure or invalid
+credentials.
+
+Validate cumulative activation time and peak temporary storage before shipping a migration. A change
+that cannot fit the bounded startup path needs its own resumable design and explicit admission and
+interruption behavior before release. There is no general maintenance-window requirement or generic
+online backfill framework. Large changes may require an explicit pause of affected operations.
+
+Cloudflare class/namespace lifecycle changes are separate from application SQL migrations. Preserve
+resource and namespace identities and the stable User-to-object mapping across normal releases;
+never delete and recreate a namespace to upgrade its schema. Lifecycle changes use the selected
+deployment tool's verified native support and a separately reviewed rollout. Retirement cannot
+discard retained data, uncertain outcomes or independent erasure progress.
+
+Releases declare compatible schema and internal protocol versions and preserve compatibility across
+actual Worker/object deployment overlap. Code-only rollback requires a tested release that can use
+every reachable schema, protocol and taxonomy state; otherwise repair forward. No automatic
+down-migration or backup restoration is part of rollback. Preserve directory pairing creation order,
+original reservation deadlines and anchored limiter windows through deployment and cleanup.
+
+Keep one object per User and measure actual SQLite size. The initial policy warns at 70% of the
+configured storage ceiling and restricts ordinary growth at 80%, preserving validated headroom for
+accountability, security actions, retained obligations, cleanup and erasure. Apply the same capacity
+discipline to shared owners. These thresholds are adjustable operating choices, not proof that a
+particular migration or operation fits. Required Audit/accounting writes cannot be bypassed to keep
+reads available. Capacity pressure never silently drops accepted work, extends its deadlines or
+authorizes deletion of retained data. Sharding, routing caches and new capacity schedulers remain
+unjustified without measured need.
+
+Validate watchdog coverage initially with 1,000 registered User stores, including idle and newly
+registered stores, plus the fixed shared owners. This is a benchmark target, not a customer limit or
+a demonstrated capacity claim. Retain ADR 0039's active-User and per-User data fixtures. The
+resolution records adjustable initial budgets and requires measurement of idle-check cost, shared
+load, failures and aggregate producer pressure. Persist traversal progress, coalesce overlapping
+sweeps and separate attempted checks from successful observations. Checks perform bounded local
+inspection and repeat-safe alarm/intent repair; owner alarms execute the resulting work. Bound the
+underlying request and response lifetime rather than merely abandoning an awaited promise. A timed-out
+check has an unknown outcome; it cannot release uniqueness or establish that no repair committed.
+
+Category releases preserve stable identities and the ability to interpret retained revisions. Each
+operation uses one complete taxonomy revision. Introduce reader support before using new identities
+that older participating code cannot interpret, or delay their use until that code is no longer
+participating. Apply the same rule to rollback. Schema migration cannot manufacture sample approval:
+an authorized human previews and approves the exact anonymised candidate through the private CLI.
+Publication, retry, withdrawal and erasure preserve the accepted sample identity, deadlines and
+writer guards. Implementation must replace both automatic approval and the existing unconditional
+sample deletion prohibition; cutover must explicitly define how retained samples are handled.
+
+Use a private CLI with short-lived, capability-specific operator authority and attributable evidence
+for metadata inspection, exact migration retry, retained-work continuation, reconciliation, erasure
+cleanup and sample review. Existing identity-recovery permission does not grant these capabilities.
+Commands invoke owner protocols and live guards; they cannot manufacture User authority, force
+uncertain outcomes to success or blindly repeat external effects. Do not introduce a general SQL
+editor or unrestricted User-data dump. Preserve current scoped privacy access; a new complete
+User-data export/download feature is outside this migration.
+
+Reuse metadata-only monitoring, adding schema coverage, migration failures, storage bands, watchdog
+coverage/age and scoped uncertainty. Unknown remains distinct from healthy zero, and completed
+inspection is not completed recovery. Operator procedures inspect the exact owner and release,
+repair through the guarded operation or compatible forward release, and verify the owner outcome.
+Adjustable retry, page, concurrency, deadline and alert settings live in the resolution; implementation
+must publish repeatable procedures beside the real commands. Current-runtime runbooks continue to
+describe D1 until that implementation exists.
+
 ## Adoption evidence
 
 Migration adoption requires measured improvement without correctness regressions. The existing
@@ -328,10 +408,10 @@ alongside representative latency and load. Exact thresholds and cutover procedur
 
 ## Design boundary
 
-The [migration map](https://github.com/B4rz99/fidy-ai/issues/2198) owns the remaining decisions:
-schema operations and acceptance/cutover. The resolved User storage/execution, identity routing,
-shared catalog, background discovery and account erasure tickets own their detailed decision
-records. The
+The [migration map](https://github.com/B4rz99/fidy-ai/issues/2198) owns the remaining
+acceptance/cutover and implementation-handoff decisions. The resolved User storage/execution,
+identity routing, shared catalog, background discovery, account erasure and schema/operations
+tickets own their detailed decision records. The
 [platform constraints research](https://github.com/B4rz99/fidy-ai/issues/2199#issuecomment-6839405060)
 records source-backed findings and outstanding evidence. Dated research and decision-ticket detail
 remain on the tracker.

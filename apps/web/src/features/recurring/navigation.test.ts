@@ -44,6 +44,7 @@ const NavigationProbe = (): ReturnType<typeof createElement> => {
       "Filter workspace"
     ),
     createElement("button", { onClick: () => workspace.earlier("2026-08") }, "Earlier workspace"),
+    createElement("button", { onClick: () => workspace.selectMonth("2026-12") }, "Next month"),
     createElement("button", { onClick: () => navigation.open(item) }, "Open occurrence"),
     createElement(
       "button",
@@ -272,3 +273,21 @@ it("reload restores a filtered earlier workspace before restoring its picker and
       expect(container.querySelector("[data-workspace]")?.textContent).toBe("|");
     })
   ));
+
+it("month navigation retains workspace filters and earlier context without the prior picker", () =>
+  withNavigation(({ container, router }) =>
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => click(container, "Filter workspace"));
+      yield* Effect.tryPromise(() => click(container, "Earlier workspace"));
+      yield* openPicker(container);
+      yield* Effect.tryPromise(() => click(container, "Next month"));
+      yield* Effect.tryPromise(() => expectMonthWorkspace(container, router));
+      yield* Effect.tryPromise(() => expectStep(container, "monthly"));
+    })
+  ));
+
+const expectMonthWorkspace = (container: HTMLElement, router: NavigationRouter): Promise<void> =>
+  reactAssertion(() => {
+    expect(router.latestLocation.search).toEqual({ month: "2026-12" });
+    expect(container.querySelector("[data-workspace]")?.textContent).toBe("Internet|2026-08");
+  });

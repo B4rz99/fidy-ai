@@ -16,6 +16,7 @@ export const useRecurringWorkspaceView = (): Readonly<{
   previous: Option.Option<string>;
   applyFilters: (filters: Filters) => void;
   earlier: (month: string) => void;
+  selectMonth: (month: string) => void;
 }> => {
   const router = useRouter();
   const state = useRouterState({ select: (value) => value.location.state });
@@ -37,6 +38,19 @@ export const useRecurringWorkspaceView = (): Readonly<{
       .catch(() => undefined);
   };
   return {
+    selectMonth: (month) => {
+      router
+        .navigate({
+          to: "/app/recurring",
+          search: { month },
+          state: (previous) => ({
+            ...previous,
+            recurringWorkspace: view,
+            recurringView: undefined,
+          }),
+        })
+        .catch(() => undefined);
+    },
     filters: view.filters,
     previous: Option.fromUndefinedOr(view.previous),
     applyFilters: (filters) => save({ ...view, filters }),

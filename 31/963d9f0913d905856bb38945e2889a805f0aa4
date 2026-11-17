@@ -1,0 +1,39 @@
+apps/web/src/features/needs-review/FEATURE.md
+  s_153bcea5fa2b5c::t_c8a6ac11b070c4 40-46
+apps/web/src/features/needs-review/resubmission.tsx
+  s_153bcea5fa2b5c::t_1557120b56be65 1-6,8-12,16-17,21-22,42-45
+  s_153bcea5fa2b5c::t_0a417750ab65a7 7,13-15,18-20,27-34,39-41
+  s_153bcea5fa2b5c::t_ca080f8b747d42 23-24,26,35-38
+  s_153bcea5fa2b5c::t_c8a6ac11b070c4 25
+apps/web/src/ui/components/review-workspace.css
+  s_153bcea5fa2b5c::t_ca080f8b747d42 443-448
+  s_153bcea5fa2b5c::t_c8a6ac11b070c4 431-432
+apps/web/src/features/needs-review/editor.tsx
+  s_153bcea5fa2b5c::t_1557120b56be65 29,71-75
+  s_153bcea5fa2b5c::t_8039a96a616969 30,41-48,50,297-301
+apps/web/src/features/needs-review/original.tsx
+  s_153bcea5fa2b5c::t_8039a96a616969 17,29,41-46,83,98,125,128,131,134-135,141
+apps/web/src/features/needs-review/recovery.test.ts
+  s_153bcea5fa2b5c::t_46c76cb168628d 16,22-26
+  s_153bcea5fa2b5c::t_0a417750ab65a7 59-61,63-64,77-79,87-120,124-133,135-138,140-143,145-146,169-175
+  s_153bcea5fa2b5c::t_9644185b1dfd45 176-208,210-228
+  s_153bcea5fa2b5c::t_2ad52af1274724 1-13,15,27-33,46-48,65-76,80-86,121-123
+  s_153bcea5fa2b5c::t_dd2b242553cafc 14,17,21,34-35,37-45,49-58,62,147-159,161-168
+  s_153bcea5fa2b5c::t_2047f25e6643ba 18-20,36,134,139,144,160,209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31963d9f0913d905856bb38945e2889a805f0aa4",
+  "prompts": {},
+  "sessions": {
+    "s_153bcea5fa2b5c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9fa-1173-7e52-8aa2-aad3dd7b0a08",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

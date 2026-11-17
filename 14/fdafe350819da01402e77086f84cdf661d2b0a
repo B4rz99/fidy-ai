@@ -1,0 +1,59 @@
+apps/web/src/features/recurring/feature.test.ts
+  s_b3b52c95df703e::t_73f923996da42b 69
+.patterns/INDEX.md
+  s_8fc963825a748b::t_c7b130c7a3f565 6
+.patterns/effect-4-stable.md
+  s_398952c775f46d::t_be91c05c691f31 3-4,22
+.patterns/sources.json
+  s_398952c775f46d::t_9d707d5b43696e 17,22
+apps/cli/package.json
+  s_398952c775f46d::t_21fc33c0d81347 18,20,23
+apps/docs/package.json
+  s_398952c775f46d::t_ab0318323ed8cc 16
+apps/server/package.json
+  s_398952c775f46d::t_9011a6d87f88fb 320,322,324-325,332-335,340,343
+apps/site/package.json
+  s_398952c775f46d::t_dfd77ad8ca247e 13,15
+apps/web/package.json
+  s_398952c775f46d::t_32f0630ef7d4c0 24-25,34,46,50,57,59
+bun.lock
+  s_398952c775f46d::t_3b132fe05a2875 11,17,20-21,33,35,38,47,54,56,58-59,66-69,74,77,84,86,106-107,116,128,132,139,141,149,152-154,158,166,176-178,253,365,367,369,371,373,375,443,445,447,449,451,453,455,473,765,767,769,771,773,775,777,795,797,799,801,815,817,819,821,823,825,827,845,847,849,851,901,903,905,907,909,911,925,927,929,931,941,943,945,947,949,951,953,955,1121,1161,1253,1353,1559,1735-1736,1741,1779,1781,1907,1935,2089,2109,2165-2166,2253-2254,2275-2276,2301-2302,2367,2369,2455-2468,2487-2488,2629-2642,2683-2714,2741,2743,2745,2747,2749,2751,2765,2767,2769,2773-2774,2779-2792,2843-2844,2855-2856
+infra/cloudflare/package.json
+  s_398952c775f46d::t_5f3f50d5189f1f 17,20-22,26
+infra/docs/package.json
+  s_398952c775f46d::t_e7517a6a9da71b 13
+package.json
+  s_398952c775f46d::t_834d7ef63475c2 68,74,77-78,83-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14fdafe350819da01402e77086f84cdf661d2b0a",
+  "prompts": {},
+  "sessions": {
+    "s_398952c775f46d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7cc-45f6-7663-8706-7b8ec59907e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_8fc963825a748b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7d4-7e3a-74e0-a78d-60e465a4a290",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b3b52c95df703e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7ce-acf7-75f3-ad7e-833ba7f20423",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

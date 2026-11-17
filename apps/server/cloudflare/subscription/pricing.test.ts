@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { type Cause, Effect, FileSystem, Schema } from "effect";
+import { Clock, Effect, FileSystem, Schema } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect } from "vitest";
 import { Miniflare } from "miniflare";
@@ -20,15 +20,15 @@ const price = {
   paymentMethods: ["card", "nequi", "daviplata"],
 } as const satisfies typeof Price.Encoded;
 
-const publication = {
+const makePublication = Effect.map(Clock.currentTimeMillis, (now) => ({
   publicationId: "22700000-0000-4000-8000-000000000099",
   authority: {
     permission: "pricing.publish",
     operatorId: "operator-1",
-    expiresAtMs: Date.now() + 60_000,
+    expiresAtMs: now + 60_000,
   },
   price,
-};
+}));
 const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const platform = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -72,14 +72,10 @@ const platform = Effect.gen(function* () {
     });
   let runtime = create();
   yield* Effect.addFinalizer(() => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie));
-  const request = (
-    path: string,
-    body?: unknown,
-    name = "pricing"
-  ): Effect.Effect<{ status: number; body: unknown }, Cause.UnknownError> =>
-    Effect.tryPromise(async () => {
-      const namespace = await runtime.getDurableObjectNamespace("PRICING");
-      const response = await namespace.getByName(name).fetch(
+  const request = Effect.fnUntraced(function* (path: string, body?: unknown, name = "pricing") {
+    const namespace = yield* Effect.tryPromise(() => runtime.getDurableObjectNamespace("PRICING"));
+    const response = yield* Effect.tryPromise(() =>
+      namespace.getByName(name).fetch(
         "https://pricing.internal/" + path,
         body === undefined
           ? {}
@@ -88,24 +84,31 @@ const platform = Effect.gen(function* () {
               headers: { "content-type": "application/json" },
               body: encode(body),
             }
-      );
-      const text = await response.text();
-      return {
-        status: response.status,
-        body: text === "" ? null : Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(text),
-      };
-    });
-  const restart = Effect.tryPromise(async () => {
-    await runtime.dispose();
-    runtime = create();
+      )
+    );
+    const text = yield* Effect.tryPromise(() => response.text());
+    return {
+      status: response.status,
+      body:
+        text === ""
+          ? null
+          : yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text),
+    };
   });
-  return { request, restart };
+  const restart = Effect.tryPromise(() => runtime.dispose()).pipe(
+    Effect.tap(() =>
+      Effect.sync(() => {
+        runtime = create();
+      })
+    )
+  );
+  return { request, restart, publication: yield* makePublication };
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("publishes immutable weekly terms without changing the other offers", () =>
     Effect.gen(function* () {
-      const { request } = yield* platform;
+      const { request, publication } = yield* platform;
       expect(yield* request("publish", publication)).toEqual({
         status: 200,
         body: { publicationId: publication.publicationId, priceId: price.id },
@@ -129,7 +132,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     "recovers exact registrations for unavailable Users without holding up publication",
     () =>
       Effect.gen(function* () {
-        const { request, restart } = yield* platform;
+        const { request, restart, publication } = yield* platform;
         const next = {
           ...publication,
           publicationId: "22700000-0000-4000-8000-000000000098",
@@ -149,7 +152,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           },
           billingPeriod: "weekly",
           inputsDigest: "a".repeat(64),
-          deadlineMs: Date.now() + 60_000,
+          deadlineMs: (yield* Clock.currentTimeMillis) + 60_000,
         };
         const registered = yield* request("register", first);
         expect(registered).toEqual({ status: 200, body: { ...first, price } });
@@ -203,7 +206,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     "rolls back a failed publication receipt and recovers a lost response after reconstruction",
     () =>
       Effect.gen(function* () {
-        const { request, restart } = yield* platform;
+        const { request, restart, publication } = yield* platform;
         const original = yield* request("offers");
         expect((yield* request("fixture/fail-before-receipt", {})).status).toBe(204);
         expect((yield* request("publish", publication)).status).toBe(503);

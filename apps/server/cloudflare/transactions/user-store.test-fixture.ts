@@ -23,7 +23,11 @@ export const category = "10000000-0000-4000-8000-000000000016";
 export const transaction = "10000000-0000-4000-8000-000000000088";
 export const second = "10000000-0000-4000-8000-000000000089";
 export const instant = 1_700_000_000_000;
-export const history = Effect.fn(function* (runtime: Miniflare, subject = alice, query = "") {
+export const history = Effect.fn(function* (
+  runtime: Miniflare,
+  subject: typeof alice = alice,
+  query: string = ""
+) {
   return yield* native(() =>
     runtime.dispatchFetch(`https://${productionTopology.ingress.hostname}/transactions${query}`, {
       headers: {
@@ -33,6 +37,11 @@ export const history = Effect.fn(function* (runtime: Miniflare, subject = alice,
       },
     })
   );
+});
+export const receivedStatus = Effect.fn(function* (call: ReturnType<typeof history>) {
+  const response = yield* call;
+  yield* native(() => response.arrayBuffer());
+  return response.status;
 });
 export const seed = Effect.fn(function* (
   runtime: Miniflare,
@@ -52,7 +61,7 @@ export const seed = Effect.fn(function* (
   const exec = (
     ...args: Parameters<typeof local.exec>
   ): Effect.Effect<Awaited<ReturnType<typeof local.exec>>> => native(() => local.exec(...args));
-  expect((yield* history(runtime, subject)).status).toBe(unauthorizedStatus);
+  expect(yield* receivedStatus(history(runtime, subject))).toBe(unauthorizedStatus);
   yield* native(() =>
     directory.exec(
       "INSERT INTO session_routes VALUES (?,?,?,?,?)",
@@ -63,7 +72,7 @@ export const seed = Effect.fn(function* (
       now + sessionLifetimeMs
     )
   );
-  expect((yield* history(runtime, subject)).status).toBe(unauthorizedStatus);
+  expect(yield* receivedStatus(history(runtime, subject))).toBe(unauthorizedStatus);
   yield* exec(
     "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)",
     subject.user,

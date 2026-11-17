@@ -12,6 +12,7 @@ import {
   category,
   history,
   instant,
+  receivedStatus,
   second,
   seed,
   transaction,
@@ -363,6 +364,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               method: "POST",
               headers: {
                 "content-type": "application/json",
+                // An early refusal can close the socket before workerd reads the POST body.
+                connection: "close",
                 authorization: "Bearer " + bearer,
                 origin: browserOrigins.production,
                 "Fidy-Session-Binding": binding,
@@ -372,17 +375,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               body: JSON.stringify(capturePayload),
             })
           );
-        expect((yield* mixed(bob.session)).status).toBe(401);
-        expect((yield* mixed(alice.session)).status).toBe(201);
-        const unknown = yield* patCapture(runtime, "invalid", "key");
-        expect(unknown.status).toBe(401);
+        expect(yield* receivedStatus(mixed(bob.session))).toBe(401);
+        expect(yield* receivedStatus(mixed(alice.session))).toBe(201);
+        expect(yield* receivedStatus(patCapture(runtime, "invalid", "key"))).toBe(401);
         yield* native(() =>
           owner.directory.exec(
             "UPDATE unresolved_source_buckets SET virtual_at_ms=?",
             owner.now + 600000
           )
         );
-        expect((yield* patCapture(runtime, "invalid", "key")).status).toBe(429);
+        expect(yield* receivedStatus(patCapture(runtime, "invalid", "key"))).toBe(429);
         expect(
           yield* owner.exec("SELECT count(*) AS calls FROM commercial_allowance_consumptions")
         ).toEqual([{ calls: 0 }]);

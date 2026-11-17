@@ -7,15 +7,14 @@ import { AtomRegistry } from "effect/reactivity";
 import { StrictMode, act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { createWebRouter } from "@/app/routes";
+import { createWebRouter } from "./routes";
 import { SessionContext } from "@/session/session-context";
-import { makeFidyClient, makeWebAuthClient } from "@/transport/client";
+import { type CanonicalSuccess, makeFidyClient, makeWebAuthClient } from "@/transport/client";
 import { makeHostedTurnClient } from "@/transport/hosted-turn-client";
-import type { Item } from "./model";
 
 const reactWork = (work: () => void): Promise<void> => Promise.resolve(act(work));
 const expiredReview = (
-  source: Item["source"] = "statement",
+  source: CanonicalSuccess<"ingestion.getReviewWorkspace">["data"]["items"][number]["source"] = "statement",
   status: "expired" | "created" = "expired",
   originalExpired = false
 ): Readonly<{

@@ -2,7 +2,7 @@ import { type RegisteredRouter, useRouter, useRouterState } from "@tanstack/reac
 import { useState } from "react";
 import { Option, Schema } from "effect";
 import { RecurringDate, RecurringPlanId } from "@/transport/client";
-import type { Occurrence } from "./model";
+import type { Filters, Occurrence } from "./model";
 import {
   type TransactionBrowserControl,
   TransactionBrowserState,
@@ -10,6 +10,12 @@ import {
   transactionSearch,
 } from "./transaction-filters";
 
+type WorkspaceScope = Readonly<{
+  month: string;
+  filters: Filters;
+  previous: Option.Option<string>;
+}>;
+type Scope = Readonly<{ key: string; workspace: WorkspaceScope }>;
 type OccurrenceIdentity = Pick<Occurrence, "planId" | "date">;
 const OccurrenceSelection = Schema.Struct({
   kind: Schema.Literal("occurrence"),
@@ -32,10 +38,10 @@ const SavedView = Schema.Struct({
   selection: Schema.optionalKey(Selection),
 });
 const HistoryView = Schema.Struct({ recurringView: SavedView });
-const readSelection = (state: unknown, binding: string, scope: string): Option.Option<Selection> =>
+const readSelection = (state: unknown, binding: string, scope: Scope): Option.Option<Selection> =>
   Schema.decodeUnknownOption(HistoryView)(state).pipe(
     Option.filter(
-      ({ recurringView }) => recurringView.binding === binding && recurringView.scope === scope
+      ({ recurringView }) => recurringView.binding === binding && recurringView.scope === scope.key
     ),
     Option.flatMap(({ recurringView }) => Option.fromUndefinedOr(recurringView.selection))
   );
@@ -46,7 +52,7 @@ const saveSelection = ({
   replace,
 }: Readonly<{
   router: RegisteredRouter;
-  scope: string;
+  scope: Scope;
   selection: Option.Option<Selection>;
   replace: boolean;
 }>): void => {
@@ -58,9 +64,14 @@ const saveSelection = ({
       replace,
       state: (previous) => ({
         ...previous,
+        recurringWorkspace: {
+          binding: router.options.context.sessionBinding,
+          filters: scope.workspace.filters,
+          previous: Option.getOrUndefined(scope.workspace.previous),
+        },
         recurringView: {
           binding: router.options.context.sessionBinding,
-          scope,
+          scope: scope.key,
           selection: Option.getOrUndefined(selection),
         },
       }),
@@ -111,7 +122,11 @@ const makeLinkSelection = ({
   };
   return next;
 };
-export const useRecurringNavigation = (scope: string): RecurringNavigation => {
+export const useRecurringNavigation = (workspace: WorkspaceScope): RecurringNavigation => {
+  const scope = {
+    key: `${workspace.month}:${JSON.stringify(workspace.filters)}:${Option.getOrElse(workspace.previous, () => "")}`,
+    workspace,
+  };
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
   const selection = readSelection(
@@ -180,7 +195,7 @@ const closeCurrent = ({
   router,
   scope,
   key,
-}: Readonly<{ router: RegisteredRouter; scope: string; key: Option.Option<string> }>): void => {
+}: Readonly<{ router: RegisteredRouter; scope: Scope; key: Option.Option<string> }>): void => {
   if (Option.contains(key, router.latestLocation.state.__TSR_key ?? "")) {
     saveSelection({ router, scope, selection: Option.none(), replace: true });
   }
@@ -192,7 +207,7 @@ const restorePicker = ({
   value,
 }: Readonly<{
   router: RegisteredRouter;
-  scope: string;
+  scope: Scope;
   value: typeof LinkSelection.Type;
 }>): void => {
   const binding = router.options.context.sessionBinding;
@@ -232,7 +247,7 @@ const returnToOccurrence = ({
   selection,
 }: Readonly<{
   router: RegisteredRouter;
-  scope: string;
+  scope: Scope;
   selection: Option.Option<Selection>;
 }>): void => {
   const current = linkSelection(selection);

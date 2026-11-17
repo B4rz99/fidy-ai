@@ -1,7 +1,7 @@
 {
   "effect": {
     "repository": "https://github.com/Effect-TS/effect",
-    "verifiedOn": "2026-11-17",
+    "verifiedOn": "2026-11-10",
     "snapshot": {
       "manifest": ".repos/effect/packages/effect/package.json",
       "version": "4.0.4",

@@ -22,9 +22,11 @@ const item = {
 const transactionId = TransactionId.make("23200000-0000-4000-8000-000000000002");
 const NavigationProbe = (): ReturnType<typeof createElement> => {
   const workspace = useRecurringWorkspaceView();
-  const navigation = useRecurringNavigation(
-    `2026-11:${JSON.stringify(workspace.filters)}:${Option.getOrElse(workspace.previous, () => "")}`
-  );
+  const navigation = useRecurringNavigation({
+    month: "2026-11",
+    filters: workspace.filters,
+    previous: workspace.previous,
+  });
   return createElement(
     "main",
     null,
@@ -45,6 +47,7 @@ const NavigationProbe = (): ReturnType<typeof createElement> => {
     ),
     createElement("button", { onClick: () => workspace.earlier("2026-08") }, "Earlier workspace"),
     createElement("button", { onClick: () => workspace.selectMonth("2026-12") }, "Next month"),
+    createElement("button", { onClick: () => workspace.applyFilters({}) }, "Clear workspace"),
     createElement("button", { onClick: () => navigation.open(item) }, "Open occurrence"),
     createElement(
       "button",
@@ -124,14 +127,16 @@ const makeRouter = (
   history: ReturnType<typeof createMemoryHistory>,
   binding: string
 ): ReturnType<typeof createRouter> => {
-  const parent = createRootRoute();
+  const parent = createRootRoute({ component: NavigationProbe });
   const route = createRoute({
     getParentRoute: () => parent,
     path: "/app/recurring",
-    component: NavigationProbe,
   });
   return createRouter({
-    routeTree: parent.addChildren([route]),
+    routeTree: parent.addChildren([
+      route,
+      createRoute({ getParentRoute: () => parent, path: "/app/transactions" }),
+    ]),
     context: { sessionBinding: binding },
     history,
   });
@@ -290,4 +295,30 @@ const expectMonthWorkspace = (container: HTMLElement, router: NavigationRouter):
   reactAssertion(() => {
     expect(router.latestLocation.search).toEqual({ month: "2026-12" });
     expect(container.querySelector("[data-workspace]")?.textContent).toBe("Internet|2026-08");
+  });
+
+it("retained workspace filters survive sidebar departure and respect an explicit clear", () =>
+  withNavigation(({ container, router, reload }) =>
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => click(container, "Filter workspace"));
+      yield* Effect.tryPromise(() => click(container, "Earlier workspace"));
+      yield* Effect.tryPromise(() => visitRoute(router, "/app/transactions"));
+      yield* Effect.tryPromise(() => visitRoute(router, "/app/recurring"));
+      expect(container.querySelector("[data-workspace]")?.textContent).toBe("Internet|2026-08");
+      yield* openPicker(container);
+      yield* Effect.tryPromise(() => reload("session-a"));
+      yield* Effect.tryPromise(() => expectStep(container, "link"));
+      yield* Effect.tryPromise(() => click(container, "Return to occurrence"));
+      yield* Effect.tryPromise(() => click(container, "Clear workspace"));
+      yield* Effect.tryPromise(() => visitRoute(router, "/app/transactions"));
+      yield* Effect.tryPromise(() => visitRoute(router, "/app/recurring"));
+      expect(container.querySelector("[data-workspace]")?.textContent).toBe("|2026-08");
+    })
+  ));
+const visitRoute = (
+  router: NavigationRouter,
+  to: "/app/transactions" | "/app/recurring"
+): Promise<void> =>
+  reactWork(() => {
+    router.navigate({ to }).catch(() => undefined);
   });

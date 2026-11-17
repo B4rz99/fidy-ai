@@ -331,9 +331,11 @@ const useWorkspacePanel = (
   filters: Filters
 ): Pick<SheetProps, "panel" | "setPanel" | "link"> &
   Readonly<{ navigation: RecurringNavigation }> => {
-  const navigation = useRecurringNavigation(
-    `${view.month}:${JSON.stringify(filters)}:${view.previousMonth ?? ""}`
-  );
+  const navigation = useRecurringNavigation({
+    month: view.month,
+    filters,
+    previous: Option.fromUndefinedOr(view.previousMonth),
+  });
   const [localPanel, setLocalPanel] = useState<Option.Option<Panel>>(() => Option.none());
   const panel = Option.orElse(localPanel, () => navigation.selection);
   const setPanel: Dispatch<SetStateAction<Option.Option<Panel>>> = (update) => {

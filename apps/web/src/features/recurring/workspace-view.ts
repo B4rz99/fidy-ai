@@ -1,5 +1,6 @@
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { Option, Schema } from "effect";
+import { useState } from "react";
 import { RecurringFilters, RecurringMonth } from "@/transport/client";
 import type { Filters } from "./model";
 
@@ -21,9 +22,20 @@ export const useRecurringWorkspaceView = (): Readonly<{
   const router = useRouter();
   const state = useRouterState({ select: (value) => value.location.state });
   const binding = router.options.context.sessionBinding;
-  const view = Schema.decodeUnknownOption(HistoryView)(state).pipe(
+  const restored = Schema.decodeUnknownOption(HistoryView)(state).pipe(
     Option.map(({ recurringWorkspace }) => recurringWorkspace),
-    Option.filter((value) => value.binding === binding),
+    Option.filter((value) => value.binding === binding)
+  );
+  // Retained workspaces stay mounted while sidebar routes have no recurring history entry.
+  const [retained, retain] = useState(() => restored);
+  if (
+    Option.isSome(restored) &&
+    !Option.exists(retained, (value) => JSON.stringify(value) === JSON.stringify(restored.value))
+  ) {
+    retain(restored);
+  }
+  const view = restored.pipe(
+    Option.orElse(() => Option.filter(retained, (value) => value.binding === binding)),
     Option.getOrElse((): WorkspaceView => ({ binding, filters: {} }))
   );
   const save = (next: WorkspaceView): void => {

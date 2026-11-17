@@ -1,7 +1,8 @@
 import { DateTime, Effect, Schema } from "effect";
 
 const sizes = {
-  small: { transactions: 500, plans: 10, revisions: 1, review: 50, currencies: 1 },
+  production: { transactions: 8, plans: 2, revisions: 2, review: 4, currencies: 2 },
+  small: { transactions: 500, plans: 10, revisions: 1, review: 50, currencies: 2 },
   heavy: { transactions: 10_000, plans: 100, revisions: 12, review: 1000, currencies: 4 },
   extreme: { transactions: 100_000, plans: 100, revisions: 100, review: 5000, currencies: 8 },
   breaking: { transactions: 1_000_000, plans: 100, revisions: 100, review: 5000, currencies: 8 },
@@ -10,6 +11,9 @@ type DatasetSize = typeof sizes.small;
 const user = "24000000-0000-4000-8000-000000000481";
 const uuidWidth = 12;
 const categoryCount = 16;
+const currencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"] as const;
+// One adjacent pair per 100 originals represents the same purchase.
+const linkInterval = 100;
 const batchSize = 10_000;
 const recentCount = 500;
 const minuteMs = 60_000;
@@ -26,30 +30,49 @@ const seedTransactions = Effect.fn(function* (db: D1Database, size: DatasetSize,
       { length: Math.min(batchSize, size.transactions - offset) },
       (_, index) => {
         const ordinal = offset + index;
+        const pairStart = ordinal - (ordinal % linkInterval);
+        const purchase = ordinal % linkInterval === 1 ? pairStart : ordinal;
         return {
+          currency: currencies[purchase % size.currencies],
           id: uuid("81000000", ordinal),
-          category: `10000000-0000-4000-8000-${String((ordinal % categoryCount) + 1).padStart(uuidWidth, "0")}`,
-          counterparty: `Evaluación ${ordinal}`,
+          category: `10000000-0000-4000-8000-${String(purchase % 3 === 0 ? 1 : (purchase % (categoryCount - 1)) + 2).padStart(uuidWidth, "0")}`,
+          counterparty: `Evaluación ${purchase}`,
           occurred:
-            now - (ordinal < recentCount ? ordinal * minuteMs : (ordinal % historyDays) * dayMs),
+            now -
+            (purchase < recentCount ? purchase * minuteMs : ((purchase % historyDays) + 1) * dayMs),
         };
       }
     );
     yield* Effect.tryPromise(() =>
       db
         .prepare(`INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at_ms,created_at_ms)
-      SELECT json_extract(value,'$.id'),?,'1000','COP','outflow',json_extract(value,'$.counterparty'),json_extract(value,'$.category'),json_extract(value,'$.occurred'),json_extract(value,'$.occurred') FROM json_each(?)`)
+      SELECT json_extract(value,'$.id'),?,'1000',json_extract(value,'$.currency'),'outflow',json_extract(value,'$.counterparty'),json_extract(value,'$.category'),json_extract(value,'$.occurred'),json_extract(value,'$.occurred') FROM json_each(?)`)
         .bind(user, json(rows))
         .run()
     );
   }
+  yield* Effect.tryPromise(() =>
+    db.batch([
+      db
+        .prepare(`WITH RECURSIVE pairs(i) AS (
+      VALUES(0) UNION ALL SELECT i + ? FROM pairs WHERE i + ? < ?
+    ) INSERT INTO transaction_reconciliation_decisions
+      SELECT ?,printf('81000000-0000-4000-8000-%012d',i),
+        printf('81000000-0000-4000-8000-%012d',i+1),'linked',
+        printf('81000000-0000-4000-8000-%012d',i),? FROM pairs`)
+        .bind(linkInterval, linkInterval, size.transactions, user, now),
+      db
+        .prepare(`UPDATE transactions SET
+      reconciliation_first_id = d.first_transaction_id,
+      reconciliation_second_id = d.second_transaction_id
+      FROM transaction_reconciliation_decisions d WHERE d.user_id = ? AND transactions.user_id = d.user_id
+      AND transactions.id IN (d.first_transaction_id, d.second_transaction_id)`)
+        .bind(user),
+    ])
+  );
 });
 const seedBudgets = Effect.fn(function* (db: D1Database, size: DatasetSize, now: number) {
-  const currencies = ["COP", "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF"].slice(
-    0,
-    size.currencies
-  );
-  for (const [index, currency] of currencies.entries()) {
+  for (const [index, currency] of currencies.slice(0, size.currencies).entries()) {
     yield* Effect.tryPromise(() =>
       db
         .prepare(`INSERT INTO budgets(id,user_id,category_id,currency,cap,created_at_ms,updated_at_ms,group_name,starts_month)
@@ -162,7 +185,13 @@ export const seedAssessment = Effect.fn(function* ({
   now: number;
 }) {
   if (
-    !(dataset === "small" || dataset === "heavy" || dataset === "extreme" || dataset === "breaking")
+    !(
+      dataset === "production" ||
+      dataset === "small" ||
+      dataset === "heavy" ||
+      dataset === "extreme" ||
+      dataset === "breaking"
+    )
   ) {
     throw new Error("Unknown assessment dataset");
   }
@@ -172,7 +201,33 @@ export const seedAssessment = Effect.fn(function* ({
   yield* seedBudgets(db, size, now);
   yield* seedRecurring(db, size);
   yield* seedReview(db, size, now);
-  process.stdout.write(
-    `ASSESSMENT_SEED ${json({ dataset, ...size, milliseconds: performance.now() - start })}\n`
+  const counts = yield* Effect.tryPromise(() =>
+    db
+      .prepare(`SELECT
+    (SELECT count(*) FROM transactions WHERE user_id=?1) AS transactions,
+    (SELECT count(DISTINCT currency) FROM transactions WHERE user_id=?1) AS currencies,
+    (SELECT count(*) FROM transaction_projection_leaf WHERE user_id=?1) AS effectiveTransactions,
+    (SELECT count(*) FROM transaction_reconciliation_decisions WHERE user_id=?1 AND state='linked') AS links,
+    (SELECT count(*) FROM recurring_plans WHERE user_id=?1) AS plans,
+    (SELECT count(*) FROM recurring_plan_revisions WHERE user_id=?1) AS revisions,
+    (SELECT count(*) FROM ingestion_review_items WHERE user_id=?1) AS review`)
+      .bind(user)
+      .first()
   );
+  const expectedLinks = Math.ceil(size.transactions / linkInterval);
+  const verified = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      transactions: Schema.Literal(size.transactions),
+      currencies: Schema.Literal(size.currencies),
+      effectiveTransactions: Schema.Literal(size.transactions - expectedLinks),
+      links: Schema.Literal(expectedLinks),
+      plans: Schema.Literal(size.plans),
+      revisions: Schema.Literal(size.revisions * size.plans),
+      review: Schema.Literal(size.review),
+    })
+  )(counts);
+  process.stdout.write(
+    `ASSESSMENT_SEED ${json({ dataset, seedEpochMs: now, ...verified, milliseconds: performance.now() - start })}\n`
+  );
+  return verified;
 });

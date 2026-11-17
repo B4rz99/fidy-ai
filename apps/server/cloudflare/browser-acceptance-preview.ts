@@ -374,6 +374,26 @@ const clockOperator = (request: Request): Option.Option<Promise<Response>> => {
   }
   return Option.none();
 };
+const referenceAccountability = (request: Request): Option.Option<Promise<Response>> => {
+  if (
+    Bun.env.FIDY_REFERENCE === "1" &&
+    operatorRoute(request, "/assessment/accountability", "GET")
+  ) {
+    const subject = "24000000-0000-4000-8000-000000000481";
+    return Option.some(
+      db
+        .prepare(`SELECT
+        (SELECT count(*) FROM audit_entries WHERE user_id=?1 AND operation='transactions.listTransactions' AND outcome='success') AS reads,
+        (SELECT count(*) FROM audit_entries WHERE user_id=?1 AND operation='transactions.updateTransaction' AND outcome='success') AS corrections,
+        (SELECT COALESCE(sum(units),0) FROM commercial_allowance_consumptions WHERE user_id=?1 AND allowance='canonical_call') AS units,
+        (SELECT count(*) FROM canonical_request_replays WHERE user_id=?1 AND state='completed') AS receipts`)
+        .bind(subject)
+        .first()
+        .then((evidence) => Response.json(evidence))
+    );
+  }
+  return Option.none();
+};
 const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
   if (Option.isSome(browserCost) && operatorRoute(request, "/browser-cost", "GET")) {
     return Option.some(
@@ -530,6 +550,7 @@ const operator = Bun.serve({
       whatsappOperator(request),
       googleOperator(request),
       operatorSetup(request),
+      referenceAccountability(request),
       connectionFixture.operator(request),
     ]);
     if (Option.isSome(setup)) return setup.value;
@@ -624,6 +645,7 @@ const server = Bun.serve({
     if (acceptanceMode !== "shared" && ingress.headers.get("origin") === isolatedBrowserOrigin) {
       ingress.headers.set("origin", browserOrigin);
     }
+    const started = performance.now();
     return worker
       .fetch(ingress, {
         RELEASE_GIT_SHA: "browser-acceptance",
@@ -633,6 +655,19 @@ const server = Bun.serve({
         CORE: {
           fetch: (forwarded) => core.fetch(new Request(forwarded), coreEnvironment),
         },
+      })
+      .then((response) => {
+        if (
+          Bun.env.FIDY_REFERENCE !== "1" ||
+          !new URL(ingress.url).pathname.startsWith("/transactions")
+        ) {
+          return response;
+        }
+        return response.arrayBuffer().then((body) => {
+          const headers = new Headers(response.headers);
+          headers.set("x-reference-backend-ms", String(performance.now() - started));
+          return new Response(body, { headers, status: response.status });
+        });
       })
       .then(bridgeBrowserOrigin)
       .then((response) => {

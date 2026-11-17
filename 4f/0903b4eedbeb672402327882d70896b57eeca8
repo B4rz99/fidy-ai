@@ -1,0 +1,31 @@
+.patterns/effect-4-stable.md
+  s_f4b5c9b6af6412::t_41ced190207c10 87
+.patterns/email-parsing.md
+  s_f4b5c9b6af6412::t_074612cde80769 4
+apps/server/package.json
+  s_f4b5c9b6af6412::t_ec56a83b2acc53 327,343
+apps/web/package.json
+  s_f4b5c9b6af6412::t_3fa8c7f90fc160 59
+bun.lock
+  s_f4b5c9b6af6412::t_1e8f1d9d2d5100 12,61,77,141,158,365,367,369,371,373,457,459,461,463,465,467,469,471,1827,2107,2109,2369
+infra/cloudflare/package.json
+  s_f4b5c9b6af6412::t_0a25cdac431c4c 26
+package.json
+  s_f4b5c9b6af6412::t_ac686a50fcfe5c 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4f0903b4eedbeb672402327882d70896b57eeca8",
+  "prompts": {},
+  "sessions": {
+    "s_f4b5c9b6af6412": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7c7-d507-75c3-83c6-de2e1963d1a8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

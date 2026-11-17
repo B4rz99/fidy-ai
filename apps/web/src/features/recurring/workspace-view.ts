@@ -26,7 +26,6 @@ export const useRecurringWorkspaceView = (): Readonly<{
     Option.map(({ recurringWorkspace }) => recurringWorkspace),
     Option.filter((value) => value.binding === binding)
   );
-  // Retained workspaces stay mounted while sidebar routes have no recurring history entry.
   const [retained, retain] = useState(() => restored);
   if (
     Option.isSome(restored) &&

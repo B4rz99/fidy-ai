@@ -798,9 +798,14 @@
 
 [data-review="money-feedback"] {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+[data-review="money-feedback"] [data-review="money"] {
+  display: contents;
 }
 [data-review="amount-help"] {
+  grid-column: 1 / -1;
   min-block-size: 3em;
   overflow-wrap: anywhere;
 }
@@ -814,12 +819,13 @@
     position: sticky;
     bottom: 0;
     z-index: 1;
+    margin-top: 0;
     padding-bottom: 24px;
     background: var(--background);
   }
   [data-review="columns"]:has(> [data-review="form"]) {
     padding: 4px;
-    margin: -4px;
+    margin: -4px -4px 24px;
   }
 }
 @media (min-width: 1251px) {
@@ -838,5 +844,17 @@
   [data-review="columns"]:has(> [data-review="form"]) > :first-child {
     position: sticky;
     top: 8px;
+  }
+}
+
+@container review-fields (width < 20rem) {
+  [data-review="money-feedback"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-review="amount-help"] {
+    grid-row: 2;
+  }
+  [data-review="currency"] {
+    grid-row: 3;
   }
 }

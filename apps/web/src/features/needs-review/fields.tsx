@@ -67,8 +67,8 @@ const ReviewMoney = ({ draft, change, locked }: Props): JSX.Element => {
   const reveal = useReviewAmountVisibility(error);
   return (
     <div data-review="money-feedback" ref={reveal}>
-      <div data-review="money" className="grid grid-cols-2 items-start gap-3">
-        <div className="grid content-start gap-2.5">
+      <div data-review="money">
+        <div data-review="amount" className="grid content-start gap-2.5">
           <Label htmlFor="review-amount">Valor</Label>
           <Input
             id="review-amount"
@@ -84,7 +84,7 @@ const ReviewMoney = ({ draft, change, locked }: Props): JSX.Element => {
             }
           />
         </div>
-        <div className="grid content-start gap-2.5">
+        <div data-review="currency" className="grid content-start gap-2.5">
           <Label htmlFor="review-currency">Moneda</Label>
           <SearchableChoiceDropdown
             id="review-currency"

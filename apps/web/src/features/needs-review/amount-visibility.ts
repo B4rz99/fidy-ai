@@ -11,38 +11,47 @@ export const useReviewAmountVisibility = (
   return useCallback<RefCallback<HTMLDivElement>>(
     (node) => {
       if (node === null || message === "") return;
-      const form = node.closest<HTMLElement>('[data-review="form"]');
-      const columns = node.closest<HTMLElement>('[data-review="columns"]');
-      if (form === null || columns === null) return;
-      const footer = columns.parentElement?.querySelector<HTMLElement>('[data-review="footer"]');
-      if (footer === undefined || footer === null) return;
-      const reveal = (): void => {
-        const viewport = getComputedStyle(form).overflowY === "auto" ? form : columns;
-        if (getComputedStyle(viewport).overflowY !== "auto") return;
-        const bounds = viewport.getBoundingClientRect();
-        if (bounds.height === 0) return;
-        revealPage(bounds, footer, node.getBoundingClientRect().height);
-        const visible = viewport.getBoundingClientRect();
-        const top = Math.max(visible.top, 0) + clearance;
-        const end =
-          Math.min(visible.bottom, footer.getBoundingClientRect().top, window.innerHeight) -
-          clearance;
-        const target = node.getBoundingClientRect();
-        if (target.bottom > end) {
-          viewport.scrollBy({ top: target.bottom - end, behavior: "instant" });
-        } else if (target.height <= end - top && target.top < top) {
-          viewport.scrollBy({ top: target.top - top, behavior: "instant" });
-        }
-      };
-      const observer = new ResizeObserver(reveal);
-      observer.observe(node);
-      observer.observe(form);
-      observer.observe(columns);
-      reveal();
-      return (): void => observer.disconnect();
+      return observeAmount(node);
     },
     [message]
   );
+};
+
+const observeAmount = (node: HTMLDivElement): ReturnType<RefCallback<HTMLDivElement>> => {
+  const form = node.closest<HTMLElement>('[data-review="form"]');
+  const columns = node.closest<HTMLElement>('[data-review="columns"]');
+  if (form === null || columns === null) return;
+  const footer = columns.parentElement?.querySelector<HTMLElement>('[data-review="footer"]');
+  if (footer === undefined || footer === null) return;
+  const amount = node.querySelector<HTMLElement>('[data-review="amount"]');
+  const help = node.querySelector<HTMLElement>('[data-review="amount-help"]');
+  if (amount === null || help === null) return;
+  const measure = (): Readonly<{ top: number; bottom: number; height: number }> => {
+    const top = amount.getBoundingClientRect().top;
+    const bottom = help.getBoundingClientRect().bottom;
+    return { top, bottom, height: bottom - top };
+  };
+  const reveal = (): void => {
+    const viewport = getComputedStyle(form).overflowY === "auto" ? form : columns;
+    if (getComputedStyle(viewport).overflowY !== "auto") return;
+    const bounds = viewport.getBoundingClientRect();
+    if (bounds.height === 0) return;
+    revealPage(bounds, footer, measure().height);
+    const visible = viewport.getBoundingClientRect();
+    const top = Math.max(visible.top, 0) + clearance;
+    const end =
+      Math.min(visible.bottom, footer.getBoundingClientRect().top, window.innerHeight) - clearance;
+    const target = measure();
+    if (target.bottom > end) {
+      viewport.scrollBy({ top: target.bottom - end, behavior: "instant" });
+    } else if (target.height <= end - top && target.top < top) {
+      viewport.scrollBy({ top: target.top - top, behavior: "instant" });
+    }
+  };
+  const observer = new ResizeObserver(reveal);
+  [amount, help, form, columns].forEach((element) => observer.observe(element));
+  reveal();
+  return (): void => observer.disconnect();
 };
 
 const revealPage = (bounds: DOMRect, footer: HTMLElement, fieldHeight: number): void => {

@@ -1,0 +1,49 @@
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1-2,150-152,154-171,247,249,905,943,955,974,993-999,2159,2185
+apps/server/cloudflare/dashboard/view.test-fixture.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1-60
+apps/server/cloudflare/dashboard/user-store.test.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1-994
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 15,1751-1756,1762
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_e87daf8092f21c 81-86
+apps/server/cloudflare/dashboard/internal/dashboard-view.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1-2,17,20-24,188,190-256
+apps/server/cloudflare/transactions/internal/dashboard-query.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1,83,90-91,94-96,99,105-106,110-112,115-127,146-149
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 220,552,565,989,993-995,997-999
+apps/server/cloudflare/dashboard/operations.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1,465-470
+apps/server/cloudflare/transactions/internal/sqlite-aggregate.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1-5,66-71
+apps/server/cloudflare/dashboard/internal/sqlite-dashboard.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1-170
+apps/server/cloudflare/transactions/operations.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 2-4,34,47-48,396-418
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1,85-88,110-111,113-117
+apps/server/cloudflare/retained-planning.test-fixture.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1,7,66-87,100-104,111-122,124-125
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 559-712,730-731
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_a1be23a656acf0::t_e87daf8092f21c 1,14-15,116-145,161-163,208-210,227,231,238,481-528
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "77f3971f0c5deaa03ff3a33632b0887ded613485",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

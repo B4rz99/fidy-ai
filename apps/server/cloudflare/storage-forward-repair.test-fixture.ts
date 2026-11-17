@@ -1,13 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
-import { directoryHistory } from "../directory/schema/operations";
-import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
+import { directoryHistory } from "./directory/schema/operations";
+import { createStoreRuntime, openSqliteStore, storeReadiness } from "./runtime/sqlite/operations";
 import {
   type StoreHistory,
   type StoreReleaseEnvironment,
   storeReadinessUrl,
-} from "../runtime/sqlite/contract";
+} from "./runtime/sqlite/contract";
 
-export { default, Pricing, Maintenance, Erasure, UserStore } from "../core-worker";
+export { default, Pricing, Maintenance, Erasure, UserStore } from "./core-worker";
 
 const advanced: StoreHistory = {
   owner: "directory",

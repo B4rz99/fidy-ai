@@ -13,6 +13,7 @@ export default {
           "^cloudflare/oauth-agents/oauth-ingress\\.test-fixture\\.ts$",
           "^cloudflare/canonical-request-observer\\.test-fixture\\.ts$",
           "^cloudflare/core-worker\\.test-fixture\\.ts$",
+          "^cloudflare/storage-forward-repair\\.test-fixture\\.ts$",
           "^cloudflare/provider-authentication/journey\\.test-fixture\\.ts$",
           "^cloudflare/(core-worker|public-worker|operational-canary-workflow|browser-acceptance-preview)\\.ts$",
           "^cloudflare/ingestion/email-worker\\.ts$",

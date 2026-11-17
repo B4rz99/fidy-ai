@@ -1,3 +1,4 @@
+import { Effect, Exit } from "effect";
 import type { StoreHistory } from "../runtime/sqlite/contract";
 
 /** Initial User-store schema. Schema creation grants no identity, credential or Consent. */
@@ -417,3 +418,29 @@ export const userStoreHistory: StoreHistory = {
     { version: 3, id: "subscription-cancellation", statements: sourceCancellationSchema },
   ],
 };
+
+/** Complete each bounded family independently; a failed check remains distinguishable from an empty page. */
+export const recoverUserWork = <E, R>(
+  families: ReadonlyArray<Effect.Effect<Readonly<{ attempted: number; failed: number }>, E, R>>
+): Effect.Effect<
+  Readonly<{ failedFamilies: number; attempted: number; failedOffers: number }>,
+  never,
+  R
+> =>
+  Effect.forEach(families, (family) => family.pipe(Effect.timeout("45 seconds"), Effect.exit), {
+    concurrency: 4,
+  }).pipe(
+    Effect.map((results) => {
+      let failedFamilies = 0,
+        attempted = 0,
+        failedOffers = 0;
+      for (const result of results) {
+        if (Exit.isFailure(result)) failedFamilies++;
+        else {
+          attempted += result.value.attempted;
+          failedOffers += result.value.failed;
+        }
+      }
+      return { failedFamilies, attempted, failedOffers };
+    })
+  );

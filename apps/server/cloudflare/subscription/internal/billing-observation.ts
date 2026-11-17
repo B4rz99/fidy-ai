@@ -15,6 +15,8 @@ import {
   BillingCollectionFailure,
   type BillingObservationWorkflow,
   type BillingRuntime,
+  type BillingWorkRouting,
+  LocalSourceCancellationWork,
   SubscriptionCancellationWork,
 } from "../contract";
 
@@ -101,6 +103,53 @@ const offerBillingWorkflow = (
     return status.status === "queued" || status.status === "running" || status.status === "waiting";
   });
 
+const workPending = 202;
+const noEligibleWork = 204;
+const callCancellationOwner = (
+  environment: BillingWorkRouting,
+  work: typeof LocalSourceCancellationWork.Type,
+  action: "pending" | "observe"
+): Effect.Effect<boolean, BillingCollectionFailure> =>
+  Effect.gen(function* () {
+    if (environment.USER_STORE === undefined) return yield* failure();
+    const owner = environment.USER_STORE.getByName(work.userId);
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(LocalSourceCancellationWork))(
+      work
+    ).pipe(Effect.mapError(() => failure()));
+    const response = yield* Effect.tryPromise({
+      try: (signal) =>
+        owner.fetch("https://user-store.internal/work/source-cancellation/" + action, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          signal,
+        }),
+      catch: () => failure(),
+    });
+    if (response.status === noEligibleWork) return false;
+    if (response.status === workPending) return true;
+    return yield* failure();
+  });
+
+/** Queue redelivery follows the same native instance, consulting the live User owner before restart. */
+export const receiveLocalSourceCancellation = (
+  input: Readonly<{
+    environment: BillingWorkRouting;
+    workflow: BillingObservationWorkflow;
+    work: typeof LocalSourceCancellationWork.Type;
+  }>
+): Effect.Effect<void, BillingCollectionFailure> =>
+  Effect.gen(function* () {
+    if (!(yield* callCancellationOwner(input.environment, input.work, "pending"))) return;
+    const offered = yield* offerBillingWorkflow({
+      workflow: input.workflow,
+      id: `source-cancel-v3-${input.work.userId}-${input.work.paidAttemptId}`,
+      params: input.work,
+      reserve: Effect.succeed(true),
+    });
+    if (!offered) return yield* failure();
+  });
+
 /** Offer retained cancellation work; inactive or exhausted intent needs no handoff. Failures leave receipt retryable. */
 export const receiveSourceCancellation = (
   input: Readonly<{
@@ -138,6 +187,8 @@ type BillingObservationExecution = Readonly<{
 }>;
 /** Execute retained observation work; identities never replace live eligibility or provider evidence. */
 export const runBillingObservation = (input: BillingObservationExecution): Promise<void> => {
+  const local = Schema.decodeUnknownOption(LocalSourceCancellationWork)(input.payload);
+  if (Option.isSome(local)) return runLocalCancellationLoop(input, local.value);
   const work = Schema.decodeUnknownOption(
     Schema.Union([
       LookupWork,
@@ -184,6 +235,30 @@ export const runBillingObservation = (input: BillingObservationExecution): Promi
   }
   return runObservationLoop({ input, work: retained, runActivity });
 };
+
+const runLocalCancellationLoop = (
+  input: BillingObservationExecution,
+  work: typeof LocalSourceCancellationWork.Type
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const run = Effect.runPromiseWith(yield* Effect.context<never>());
+      for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
+        if (index > 0) {
+          yield* attempt(() =>
+            input.sleep(`source-cancellation-wait-v3-${index}`, candidateCooldownMs + 1)
+          );
+        }
+        yield* attempt(() =>
+          input.activity(
+            `verify-source-cancellation-v3-${index}`,
+            { retries: { limit: 0, delay: "1 second" } },
+            () => run(Effect.asVoid(callCancellationOwner(input.environment, work, "observe")))
+          )
+        );
+      }
+    })
+  );
 
 const runObservationLoop = ({
   input,

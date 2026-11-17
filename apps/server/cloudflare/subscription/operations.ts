@@ -1,3 +1,7 @@
+import {
+  dispatchCancellations as dispatchLocalCancellations,
+  retainCancellation,
+} from "./internal/local-cancellation";
 import { prepareBoundSubscriptionRead as prepareRead } from "./internal/bound-read";
 import { cancellationRefusal, prepareCancellation } from "./internal/cancellation";
 import type {
@@ -111,3 +115,9 @@ export const subscriptionCancellationRefusal = (
 
 export const prepareBoundSubscriptionRead: typeof prepareRead = (operation) =>
   prepareRead(operation);
+
+export const retainSubscriptionCancellation: typeof retainCancellation = (input) =>
+  retainCancellation(input);
+
+export const offerDueSourceCancellations: typeof dispatchLocalCancellations = (input) =>
+  dispatchLocalCancellations(input);

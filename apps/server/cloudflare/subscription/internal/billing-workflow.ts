@@ -17,11 +17,17 @@ import {
   BillingCollectionFailure,
   type BillingObservationWorkflow,
   type BillingRuntime,
+  type BillingWorkRouting,
+  LocalSourceCancellationWork,
   SubscriptionCancellationWork,
 } from "../contract";
 
 import { collectBillingTransaction } from "./billing-transaction";
-import { receiveSourceCancellation, runBillingObservation } from "./billing-observation";
+import {
+  receiveLocalSourceCancellation,
+  receiveSourceCancellation,
+  runBillingObservation,
+} from "./billing-observation";
 
 const CollectionMessage = Schema.Struct({
   traceContext: Schema.optionalKey(Schema.Unknown),
@@ -36,9 +42,9 @@ type CollectionWorkflow = BillingObservationWorkflow;
 /** Identify this Queue payload without interpreting any provider data as authority. */
 export const isBillingCollectionWork = (body: unknown): boolean =>
   Option.isSome(
-    Schema.decodeUnknownOption(Schema.Union([CollectionMessage, SubscriptionCancellationWork]))(
-      body
-    )
+    Schema.decodeUnknownOption(
+      Schema.Union([CollectionMessage, SubscriptionCancellationWork, LocalSourceCancellationWork])
+    )(body)
   );
 const ArmState = Schema.Struct({ state: Schema.Literals(["armed", "sent", "rejected"]) });
 const pendingBatchSize = 32;
@@ -123,28 +129,42 @@ export const dispatchBillingCollection = (
     if (failed) return yield* failure();
   }).pipe(Effect.withSpan("billing.collection.dispatch"));
 
+const receiveCancellation = (
+  environment: BillingWorkRouting &
+    Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: CollectionWorkflow }>,
+  work: typeof LocalSourceCancellationWork.Type | typeof SubscriptionCancellationWork.Type
+): Effect.Effect<void, BillingCollectionFailure> =>
+  work.version === 3
+    ? receiveLocalSourceCancellation({
+        environment,
+        workflow: environment.BILLING_COLLECTION_WORKFLOW,
+        work,
+      })
+    : receiveSourceCancellation({
+        db: environment.DB,
+        workflow: environment.BILLING_COLLECTION_WORKFLOW,
+        work,
+      });
+
 /** Duplicated Queue messages converge on one deterministic Workflow instance. */
 export const receiveBillingCollection = (
   input: Readonly<{
-    environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: CollectionWorkflow }>;
+    environment: BillingWorkRouting &
+      Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: CollectionWorkflow }>;
     batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
   }>
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     for (const message of input.batch.messages) {
       const work = Schema.decodeUnknownOption(
-        Schema.Union([CollectionMessage, SubscriptionCancellationWork])
+        Schema.Union([CollectionMessage, SubscriptionCancellationWork, LocalSourceCancellationWork])
       )(message.body);
       if (Option.isNone(work)) {
         message.ack();
         continue;
       }
       if ("kind" in work.value) {
-        yield* receiveSourceCancellation({
-          db: input.environment.DB,
-          workflow: input.environment.BILLING_COLLECTION_WORKFLOW,
-          work: work.value,
-        });
+        yield* receiveCancellation(input.environment, work.value);
         message.ack();
         continue;
       }

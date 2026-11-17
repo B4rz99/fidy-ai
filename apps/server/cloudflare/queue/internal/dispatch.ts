@@ -221,6 +221,7 @@ const receiveBillingQueue = ({
         environment: {
           DB: environment.DB,
           BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
+          ...(environment.USER_STORE === undefined ? {} : { USER_STORE: environment.USER_STORE }),
         },
         batch: { messages: charges },
       });

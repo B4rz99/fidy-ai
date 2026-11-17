@@ -1,3 +1,6 @@
+import { observeCancellation, pendingCancellation } from "./internal/local-cancellation";
+import { RequestBodyPolicy } from "../http/contract";
+import { boundedJsonBody } from "../http/operations";
 import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
 import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
 import { pricingHistory, pricingResponse } from "./internal/pricing-object";
@@ -7,7 +10,13 @@ import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
 import { makeWompiTransport } from "./internal/wompi-runtime";
-import { type PricingEnvironment, type WompiBindings, pricingName } from "./contract";
+import {
+  type BillingWorkRouting,
+  LocalSourceCancellationWork,
+  type PricingEnvironment,
+  type WompiBindings,
+  pricingName,
+} from "./contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { dispatchCancellations } from "./internal/source-cancellation";
 import { dispatchSubscriptionRenewals as dispatchRenewals } from "./internal/subscription-renewal";
@@ -30,7 +39,7 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from "cloudflare:workers";
-import { type Cause, Context, Effect, Layer, type Option, Schema } from "effect";
+import { type Cause, Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   makeAccessSigningKeysOutboundHttp,
@@ -177,10 +186,11 @@ export const dispatchBillingCollection = (
 /** Hand identity-only Queue work to its deterministic Workflow without repeating a charge. */
 export const receiveBillingCollection = (
   input: Readonly<{
-    environment: Readonly<{
-      DB: D1Database;
-      BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow;
-    }>;
+    environment: BillingWorkRouting &
+      Readonly<{
+        DB: D1Database;
+        BILLING_COLLECTION_WORKFLOW: BillingObservationWorkflow;
+      }>;
     batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
   }>
 ): Effect.Effect<void, BillingCollectionFailure> => receive(input);
@@ -293,3 +303,38 @@ export const handlePricePublication = (
     });
     return yield* publishPrice({ ...input, http });
   });
+
+const workPendingStatus = 202;
+const workAbsentStatus = 204;
+const cancellationBody = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 1024,
+  deadlineMilliseconds: 5000,
+});
+/** Only the private User owner receives these calls. The destination checks the object and retained work identity. */
+export const handleSourceCancellationWork = Effect.fnUntraced(function* (
+  input: Readonly<{
+    request: Request;
+    owns: (id: string) => boolean;
+    environment: WompiBindings;
+  }>
+) {
+  const action = new URL(input.request.url).pathname;
+  const body = yield* boundedJsonBody({
+    request: input.request,
+    policy: cancellationBody,
+    schema: LocalSourceCancellationWork,
+  });
+  if (Option.isNone(body) || !input.owns(body.value.userId)) {
+    return new Response(null, { status: 404 });
+  }
+  if (action === "/work/source-cancellation/observe") {
+    yield* observeCancellation({
+      work: body.value,
+      current: yield* Clock.currentTimeMillis,
+      environment: input.environment.WOMPI_ENVIRONMENT,
+      http: yield* wompiOutboundHttp(input.environment),
+    });
+  }
+  const pending = yield* pendingCancellation(body.value);
+  return new Response(null, { status: pending ? workPendingStatus : workAbsentStatus });
+});

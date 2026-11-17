@@ -215,16 +215,21 @@ const listFilters = ({
 }: Readonly<{
   userId: Option.Option<string>;
   query: HistoryRow["query"];
-  authority: AuthorityCondition;
+  authority: Option.Option<AuthorityCondition>;
 }>): Omit<Parameters<typeof effectiveHistoryPage>[0], "userId"> => {
   const conditions = [
     ...Option.toArray(Option.map(userId, () => "user_id = ?")),
-    `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+    ...Option.toArray(
+      Option.map(
+        authority,
+        (live) => `EXISTS (SELECT 1 FROM ${live.table} WHERE ${live.predicate})`
+      )
+    ),
   ];
 
   const values: Array<string | number | Uint8Array> = [
     ...Option.toArray(userId),
-    ...authority.bindings,
+    ...Option.toArray(authority).flatMap((live) => live.bindings),
   ];
 
   const fields: ReadonlyArray<readonly [string, Option.Option<string | number>]> = [
@@ -267,7 +272,7 @@ const listFilters = ({
 const listStatement = ({ db, userId, query, authority }: HistoryRow): D1PreparedStatement => {
   const page = effectiveHistoryPage({
     userId,
-    ...listFilters({ userId: Option.some(userId), query, authority }),
+    ...listFilters({ userId: Option.some(userId), query, authority: Option.some(authority) }),
   });
   return db.prepare(page.sql).bind(...page.bindings);
 };
@@ -283,9 +288,22 @@ export const selectedHistoryPage = ({
   selectedEffectiveHistoryPage({
     taxonomyRevision: true,
     userSelection,
-    ...listFilters({ userId: Option.none(), query, authority }),
+    ...listFilters({ userId: Option.none(), query, authority: Option.some(authority) }),
   });
 
+/** The enclosing User transaction already resolved the live caller; keep every row bound to this User. */
+export const localHistoryPage = ({
+  user,
+  query,
+}: {
+  user: string;
+  query: HistoryRow["query"];
+}): ReturnType<typeof selectedEffectiveHistoryPage> =>
+  selectedEffectiveHistoryPage({
+    taxonomyRevision: true,
+    userSelection: { sql: "SELECT ? AS userId", params: [user] },
+    ...listFilters({ userId: Option.some(user), query, authority: Option.none() }),
+  });
 type PresentationSelection = Readonly<{
   db: D1Database;
   userId: string;
@@ -325,16 +343,18 @@ const originalProjection = (member: "first" | "second"): string => `(SELECT json
  * `revision` is the requested member's, so the value a caller reads for an id is exactly the value
  * its correction compare-and-swaps.
  */
-const presentationStatement = ({
-  db,
+export const presentationQuery = ({
   userId,
   id,
   authority,
-}: PresentationSelection): D1PreparedStatement => {
+}: Omit<PresentationSelection, "db">): Readonly<{
+  sql: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+}> => {
   const relation = effectiveTransactionRelation(userId);
   const guard = presentationGuard(authority);
-  return db
-    .prepare(`WITH readiness AS MATERIALIZED (SELECT EXISTS (
+  return {
+    sql: `WITH readiness AS MATERIALIZED (SELECT EXISTS (
         SELECT 1 FROM transaction_projection_state
         WHERE user_id = ? AND version = 1 AND readiness = 'ready') AS available),
       ${relation.sql}, repair_presentation AS (
@@ -370,8 +390,8 @@ const presentationStatement = ({
         AND effective.id = COALESCE(decision.visible_transaction_id, requested.id)
       WHERE (SELECT available FROM readiness) AND requested.user_id = ?
         AND requested.id = ? AND requested.deleted_at_ms IS NULL${guard.sql}
-      UNION ALL SELECT * FROM repair_presentation`)
-    .bind(
+      UNION ALL SELECT * FROM repair_presentation`,
+    bindings: [
       userId,
       ...relation.bindings,
       userId,
@@ -379,10 +399,18 @@ const presentationStatement = ({
       ...guard.bindings,
       userId,
       id,
-      ...guard.bindings
-    );
+      ...guard.bindings,
+    ],
+  };
 };
 
+const presentationStatement = ({
+  db,
+  ...selection
+}: PresentationSelection): D1PreparedStatement => {
+  const query = presentationQuery(selection);
+  return db.prepare(query.sql).bind(...query.bindings);
+};
 const storedFields = (row: typeof Row.Type): typeof Transaction.Encoded => ({
   id: row.id,
   money: { amount: row.amount, currency: row.currency },
@@ -495,7 +523,7 @@ const InspectionRow = Schema.Struct({
   first_original: Schema.NullOr(Schema.fromJsonString(InspectionOriginal)),
   second_original: Schema.NullOr(Schema.fromJsonString(InspectionOriginal)),
 });
-const decodeInspectionRow = (raw: unknown): Option.Option<TransactionInspection> => {
+export const decodeInspectionRow = (raw: unknown): Option.Option<TransactionInspection> => {
   const decoded = Schema.decodeUnknownOption(InspectionRow)(raw);
   if (Option.isNone(decoded)) return Option.none();
   const row = decoded.value;
@@ -555,6 +583,16 @@ const decodedHistoryPage = (
   }));
 };
 
+export const decodeLocalHistoryPage = ({
+  rows,
+  selection,
+  query,
+}: Readonly<{
+  rows: ReadonlyArray<unknown>;
+  selection: Pick<Selection, "request" | "search">;
+  query: typeof Query.Type;
+}>): ReturnType<typeof decodedHistoryPage> =>
+  decodedHistoryPage({ results: rows }, selection, query);
 export const presentHistory = ({
   rows,
   selection,

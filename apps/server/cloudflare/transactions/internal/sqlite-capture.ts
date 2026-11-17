@@ -13,17 +13,30 @@ import { TransactionOutput, decodeTransactionRow } from "./transaction-history";
 
 const invalidStatus = 400;
 const missingStatus = 404;
-const refusal = (
-  status: number,
-  code: "not_found" | "validation_failed",
-  message: string
-): LocalMutationResult => ({
+export const localTransactionRefusal = ({
+  status,
+  code,
+  message,
+}: Readonly<{
+  status: number;
+  code: "not_found" | "validation_failed";
+  message: string;
+}>): LocalMutationResult => ({
   status,
   outcome: code,
   body: {
     error: { code, message, ...(code === "validation_failed" ? { fields: [] } : {}) },
     next: [],
   },
+});
+
+const captureDecisions = (input: CreateTransactionInput): Readonly<Record<string, boolean>> => ({
+  money: true,
+  direction: true,
+  occurredAt: true,
+  ...(Option.isSome(input.categoryId) ? { categoryId: true } : {}),
+  ...(Option.isSome(input.counterparty) ? { counterparty: true } : {}),
+  ...(Option.isSome(input.notes) ? { notes: true } : {}),
 });
 
 /** Compose the movement, provenance and history read model into the caller's protected SQLite transaction. */
@@ -34,7 +47,11 @@ export const captureLocalTransaction = Effect.fn(function* (
 ) {
   const occurredAt = DateTime.toEpochMillis(input.occurredAt);
   if (occurredAt > current) {
-    return refusal(invalidStatus, "validation_failed", "A Transaction cannot occur in the future.");
+    return localTransactionRefusal({
+      status: invalidStatus,
+      code: "validation_failed",
+      message: "A Transaction cannot occur in the future.",
+    });
   }
   const sql = yield* SqliteClient;
   const [owner] =
@@ -52,23 +69,15 @@ export const captureLocalTransaction = Effect.fn(function* (
     Effect.catchTag("CategoryNotFound", () => Effect.succeedNone)
   );
   if (Option.isNone(reference)) {
-    return refusal(
-      missingStatus,
-      "not_found",
-      "The Category does not exist; correct categoryId and retry."
-    );
+    return localTransactionRefusal({
+      status: missingStatus,
+      code: "not_found",
+      message: "The Category does not exist; correct categoryId and retry.",
+    });
   }
   const id = newId();
-  const facts = {
-    money: true,
-    direction: true,
-    occurredAt: true,
-    ...(Option.isSome(input.categoryId) ? { categoryId: true } : {}),
-    ...(Option.isSome(input.counterparty) ? { counterparty: true } : {}),
-    ...(Option.isSome(input.notes) ? { notes: true } : {}),
-  };
   yield* sql`INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,category_revision,notes,occurred_at_ms,created_at_ms,user_decisions)
-    VALUES (${id},${userId},${encodeMoneyAmount(input.money.amount)},${input.money.currency},${input.direction},${Option.getOrNull(input.counterparty)},${reference.value.categoryId},${reference.value.revision},${Option.getOrNull(input.notes)},${occurredAt},${current},${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean)))(facts)})`;
+    VALUES (${id},${userId},${encodeMoneyAmount(input.money.amount)},${input.money.currency},${input.direction},${Option.getOrNull(input.counterparty)},${reference.value.categoryId},${reference.value.revision},${Option.getOrNull(input.notes)},${occurredAt},${current},${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Boolean)))(captureDecisions(input))})`;
   const sources =
     yield* sql`INSERT INTO source_attestations(id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms)
     VALUES (${newId()},${userId},${id},'manual',${context.serviceMarket},${context.locale},${context.timeZone},'manual-v1',${current}) RETURNING id`;

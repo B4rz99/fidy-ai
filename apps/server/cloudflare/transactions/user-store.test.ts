@@ -1,95 +1,24 @@
 import { NodeFileSystem } from "@effect/platform-node";
-import { Clock, Effect } from "effect";
+import { Effect } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import type { Miniflare } from "miniflare";
 import { browserOrigins, productionTopology } from "../runtime/contract";
 import { native, nativeUserPlatform } from "../user-store.test-fixture";
 
-const alice = {
-  user: "10000000-0000-4000-8000-000000000051",
-  session: "10000000-0000-4000-8000-000000000061",
-  bearer: "1".repeat(43),
-};
-const bob = {
-  user: "10000000-0000-4000-8000-000000000052",
-  session: "10000000-0000-4000-8000-000000000062",
-  bearer: "2".repeat(43),
-};
-const category = "10000000-0000-4000-8000-000000000016";
-const transaction = "10000000-0000-4000-8000-000000000088";
-const second = "10000000-0000-4000-8000-000000000089";
+import {
+  alice,
+  bob,
+  category,
+  history,
+  instant,
+  second,
+  seed,
+  transaction,
+} from "./user-store.test-fixture";
+
 const jsonBody = (response: Pick<Response, "json">): Effect.Effect<unknown> =>
   native(() => response.json());
-const instant = 1_700_000_000_000;
-const history = (
-  runtime: Miniflare,
-  subject = alice,
-  query = ""
-): Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>> =>
-  native(() =>
-    runtime.dispatchFetch(`https://${productionTopology.ingress.hostname}/transactions${query}`, {
-      headers: {
-        origin: browserOrigins.production,
-        "Fidy-Session-Binding": subject.session,
-        cookie: `__Host-fidy_session=${subject.bearer}`,
-      },
-    })
-  );
-const seed = Effect.fn(function* (runtime: Miniflare, subject: typeof alice) {
-  const directory = yield* native(() =>
-    runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
-  );
-  const local = yield* native(() =>
-    runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: subject.user })
-  );
-  const digest = yield* native(() =>
-    crypto.subtle.digest("SHA-256", new TextEncoder().encode(subject.bearer))
-  );
-  const now = yield* Clock.currentTimeMillis;
-  const exec = (
-    ...args: Parameters<typeof local.exec>
-  ): Effect.Effect<Awaited<ReturnType<typeof local.exec>>> => native(() => local.exec(...args));
-  expect((yield* history(runtime, subject)).status).toBe(401);
-  yield* native(() =>
-    directory.exec(
-      "INSERT INTO session_routes VALUES (?,?,?,?,?)",
-      digest,
-      subject.user,
-      subject.session,
-      "route-" + subject.session,
-      now + 7776000000
-    )
-  );
-  expect((yield* history(runtime, subject)).status).toBe(401);
-  yield* exec(
-    "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)",
-    subject.user,
-    now
-  );
-  yield* exec(
-    "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)",
-    subject.session,
-    "10000000-0000-4000-8000-000000000071",
-    subject.user,
-    digest,
-    now,
-    now + 600000,
-    now + 3600000,
-    now + 7776000000
-  );
-  yield* exec("INSERT INTO categories VALUES (?,'Otros',1)", category);
-  yield* exec(
-    "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES (?,?,'9007199254740993.15','USD','outflow',?,?,?)",
-    transaction,
-    subject.user,
-    category,
-    instant,
-    instant
-  );
-  return { exec, digest, directory, now };
-});
-
 const capturePayload = {
   money: { amount: "31.77", currency: "USD" },
   direction: "outflow",
@@ -147,6 +76,187 @@ const provisionPAT = Effect.fn(function* (
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "rolls back a refused link commit, then replays completed changes under the same PAT without charging twice",
+    () =>
+      Effect.gen(function* () {
+        const create = yield* nativeUserPlatform;
+        const runtime = yield* create();
+        const owner = yield* seed(runtime, alice);
+        const token = yield* provisionPAT(owner, alice, {
+          id: "10000000-0000-4000-8000-000000000091",
+          shortId: "abcd1234",
+        });
+        yield* owner.exec(
+          "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) SELECT ?,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms+1 FROM transactions WHERE id=?",
+          second,
+          transaction
+        );
+        const pair = { firstTransactionId: transaction, secondTransactionId: second };
+        const send = (path: string, key: string, body: unknown): ReturnType<typeof history> =>
+          native(() =>
+            runtime.dispatchFetch(
+              `https://${productionTopology.ingress.hostname}/transactions/${path}`,
+              {
+                method: path === transaction ? "PUT" : "POST",
+                headers: {
+                  "content-type": "application/json",
+                  authorization: "Bearer " + token,
+                  "CF-Connecting-IP": "192.0.2.1",
+                  "Fidy-Retry-Key": key,
+                },
+                body: JSON.stringify(body),
+              }
+            )
+          );
+        yield* owner.exec(
+          "CREATE TRIGGER fail_link BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' BEGIN SELECT RAISE(IGNORE); END"
+        );
+        expect((yield* send("link", "lost-link", pair)).status).toBe(503);
+        expect(
+          yield* owner.exec(
+            "SELECT (SELECT count(*) FROM transaction_reconciliation_decisions) AS decisions,(SELECT count(*) FROM audit_entries) AS audits,(SELECT count(*) FROM canonical_request_receipts) AS receipts,(SELECT count(*) FROM commercial_allowance_consumptions) AS charges"
+          )
+        ).toEqual([{ decisions: 0, audits: 0, receipts: 0, charges: 0 }]);
+        yield* owner.exec("DROP TRIGGER fail_link");
+        const linked = yield* send("link", "lost-link", pair);
+        expect(linked.status).toBe(200);
+        const committed = yield* jsonBody(linked);
+        const correction = {
+          expectedRevision: 0,
+          changes: { money: { amount: "9999999999999999.13", currency: "COP" }, notes: "exact" },
+        };
+        const concurrent = yield* Effect.all(
+          [
+            send(transaction, "lost-correction", correction),
+            send(transaction, "lost-correction", correction),
+          ],
+          { concurrency: 2 }
+        );
+        expect(concurrent.map((response) => response.status)).toEqual([200, 200]);
+        expect(yield* jsonBody(concurrent[0])).toEqual(yield* jsonBody(concurrent[1]));
+        const restored = yield* send("unlink", "lost-unlink", pair);
+        expect(restored.status).toBe(200);
+        expect(yield* jsonBody(yield* send("link", "lost-link", pair))).toEqual(committed);
+        expect(yield* jsonBody(yield* send("unlink", "lost-unlink", pair))).toEqual(
+          yield* jsonBody(restored)
+        );
+        expect(yield* jsonBody(yield* history(runtime))).toMatchObject({
+          data: [
+            { id: second, money: { amount: "9007199254740993.15", currency: "USD" } },
+            { id: transaction, revision: 1, money: correction.changes.money },
+          ],
+        });
+        expect(
+          yield* owner.exec(
+            "SELECT (SELECT count(*) FROM transaction_corrections) AS corrections,(SELECT count(*) FROM canonical_request_receipts) AS receipts,(SELECT count(*) FROM commercial_allowance_consumptions) AS charges"
+          )
+        ).toEqual([{ corrections: 1, receipts: 3, charges: 3 }]);
+      })
+  );
+  test.effect("corrects, links, inspects and unlinks retained User transactions", () =>
+    Effect.gen(function* () {
+      const create = yield* nativeUserPlatform;
+      const runtime = yield* create();
+      const owner = yield* seed(runtime, alice);
+      yield* seed(runtime, bob);
+      const call = (path: string, method: string, body?: unknown): ReturnType<typeof history> =>
+        native(() =>
+          runtime.dispatchFetch(
+            `https://${productionTopology.ingress.hostname}/transactions/${path}`,
+            {
+              method,
+              headers: {
+                origin: browserOrigins.production,
+                "Fidy-Session-Binding": alice.session,
+                cookie: `__Host-fidy_session=${alice.bearer}`,
+                "content-type": "application/json",
+              },
+              ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            }
+          )
+        );
+      const money = { amount: "9007199254740993.15", currency: "USD" };
+      const correction = { expectedRevision: 0, changes: { counterparty: "corrected" } };
+      yield* owner.exec(
+        "INSERT INTO transaction_projection_state(user_id,version,readiness,fact_revision,first_captured_at_ms,time_zone) VALUES (?,1,'ready',1,?,'America/Bogota')",
+        alice.user,
+        instant
+      );
+      const corrected = yield* call(transaction, "PUT", correction);
+      expect(corrected.status).toBe(200);
+      expect(yield* jsonBody(corrected)).toMatchObject({
+        data: { revision: 1, money, counterparty: "corrected" },
+      });
+      expect((yield* call(transaction, "PUT", correction)).status).toBe(400);
+      yield* owner.exec(
+        "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES (?,?,'9007199254740993.15','USD','outflow',?,?,?)",
+        second,
+        alice.user,
+        category,
+        instant + 1000,
+        instant + 1000
+      );
+      yield* owner.exec(
+        "INSERT INTO source_attestations VALUES ('evidence',?,?,'statement-line','CO','es-CO','America/Bogota','statement-v1',?)",
+        alice.user,
+        second,
+        instant
+      );
+      const pair = { firstTransactionId: second, secondTransactionId: transaction };
+      expect(
+        (yield* native(() =>
+          runtime.dispatchFetch(
+            `https://${productionTopology.ingress.hostname}/transactions/link`,
+            {
+              method: "POST",
+              headers: {
+                origin: browserOrigins.production,
+                "Fidy-Session-Binding": bob.session,
+                cookie: `__Host-fidy_session=${bob.bearer}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify(pair),
+            }
+          )
+        )).status
+      ).toBe(404);
+      const linked = yield* call("link", "POST", pair);
+      expect(linked.status).toBe(200);
+      expect(yield* jsonBody(linked)).toMatchObject({
+        data: { id: transaction, money, presentation: { kind: "visible-member" } },
+      });
+      expect(yield* jsonBody(yield* history(runtime))).toMatchObject({
+        data: [{ id: transaction, counterparty: "corrected", money }],
+      });
+      expect(yield* jsonBody(yield* call(second, "GET"))).toMatchObject({
+        data: {
+          id: transaction,
+          presentation: { kind: "suppressed-member", requestedId: second },
+          reconciliation: {
+            kind: "linked",
+            firstTransaction: { id: transaction },
+            secondTransaction: { id: second },
+          },
+        },
+      });
+      expect((yield* call("unlink", "POST", pair)).status).toBe(200);
+      expect(yield* jsonBody(yield* history(runtime))).toMatchObject({
+        data: [
+          { id: second, money },
+          { id: transaction, money },
+        ],
+      });
+      expect(yield* owner.exec("SELECT fact_revision FROM transaction_projection_state")).toEqual([
+        { fact_revision: 4 },
+      ]);
+      expect(
+        yield* owner.exec("SELECT id,kind,interpretation_revision FROM source_attestations")
+      ).toEqual([
+        { id: "evidence", kind: "statement-line", interpretation_revision: "statement-v1" },
+      ]);
+    })
+  );
   test.effect(
     "serializes overlapping exact retries to a single retained capture, source and charge",
     () =>
@@ -812,6 +922,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const create = yield* nativeUserPlatform;
         const runtime = yield* create();
         const { exec, now } = yield* seed(runtime, alice);
+        yield* exec(
+          "INSERT INTO transaction_corrections(id,user_id,transaction_id,previous_revision,changed_fields,before_facts,after_facts,corrected_at_ms) VALUES ('fixture',?,?,0,'[]','{}','{}',?)",
+          alice.user,
+          transaction,
+          now
+        );
         yield* exec("UPDATE transactions SET counterparty='shop',notes='corrected',revision=1");
         yield* exec(
           "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES (?,?,'9007199254740993.15','USD','outflow',?,?,?)",

@@ -1265,7 +1265,8 @@ export const protectCanonicalBrowserSource = (
   });
 
 /** The User transaction owns live authority, admission, owner work, Audit and exact receipt. */
-export const runLocalMutation: typeof mutateLocal = (input) => mutateLocal(input);
+export const runLocalMutation: typeof mutateLocal = (input, invalidTarget) =>
+  mutateLocal(input, invalidTarget);
 export const admitLocalRequest: typeof admitLocal = (input) => admitLocal(input);
 
 /** Visit expired ordinary receipts, independently of new captures, within a bounded User maintenance page. */

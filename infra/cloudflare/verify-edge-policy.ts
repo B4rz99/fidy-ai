@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "660ca456e528e79de7951e1da67005f3b76232e60491d77273584cd36df26dda";
+const expectedEdgePolicyDigest = "3ff954063cfc011d9fbec794653089cf1e1a9c50c3510c0e9885bae01c7e99ab";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/tokens/operations.ts", import.meta.url)
@@ -370,6 +370,26 @@ const securityArtifacts = [
   await Bun.file(new URL("../../apps/server/cloudflare/mcp/runtime.ts", import.meta.url)).text(),
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
+  await Bun.file(new URL("alchemy.storage.ts", import.meta.url)).text(),
+  await Bun.file(new URL("storage-installation.ts", import.meta.url)).text(),
+  await Bun.file(new URL("storage-release.ts", import.meta.url)).text(),
+  await Bun.file(new URL("native-storage-resources.ts", import.meta.url)).text(),
+  await Bun.file(new URL("native-storage-release.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../.github/workflows/native-storage-release.yml", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/storage-bootstrap/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/storage-bootstrap/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/schema/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/subscription/pricing/operations.ts", import.meta.url)
+  ).text(),
   await Bun.file(new URL("worker-observability.ts", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)).text(),
   await Bun.file(

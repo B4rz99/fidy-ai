@@ -18,10 +18,14 @@ const readinessBody = {
   core: coreIdentity,
   manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
 };
-const readinessClient = (body: unknown, status = 200): HttpClient.HttpClient =>
+const readinessClient = (
+  body: unknown,
+  status = 200,
+  origin = "https://api.fidyapp.com"
+): HttpClient.HttpClient =>
   HttpClient.make((request) => {
     const url = new URL(request.url);
-    expect(url.origin).toBe("https://api.fidyapp.com");
+    expect(url.origin).toBe(origin);
     expect(request.headers["x-fidy-smoke-proof"]).toBe(proof);
     expect(request.headers["cloudflare-workers-version-overrides"]).toBeUndefined();
     const readOnly = request.method === "GET" && url.searchParams.get("readiness") === "1";
@@ -46,6 +50,15 @@ it.effect("captures stable identity without depending on synthetic publication a
       Effect.exit
     );
     expect(Exit.isSuccess(outcome)).toBe(true);
+  })
+);
+
+it.effect("sends the native proof only to its installation hostname", () =>
+  Effect.gen(function* () {
+    const origin = "https://storage-acceptance.fidyapp.com";
+    yield* verifyStableWorkerIdentity(expected, origin).pipe(
+      Effect.provideService(HttpClient.HttpClient, readinessClient(readinessBody, 200, origin))
+    );
   })
 );
 

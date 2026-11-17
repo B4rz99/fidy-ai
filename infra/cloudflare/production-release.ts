@@ -36,7 +36,7 @@ import {
 import { releaseCleanup } from "./release-cleanup";
 import { freeTierWorkerObservability } from "./worker-observability";
 import { type RollbackPort, RollbackReceipt, releaseRollback } from "./release-rollback";
-import { type WorkerResources, rollbackCompatible } from "./rollback-compatibility";
+import { rollbackCompatible, verifiedVersionResources } from "./rollback-compatibility";
 import {
   type Deployment,
   type ReleasePort,
@@ -59,19 +59,6 @@ const CreateResponse = Schema.Struct({ success: Schema.Literal(true), result: Ap
 const DeployableResponse = Schema.Struct({
   success: Schema.Literal(true),
   result: Schema.Struct({ items: Schema.Array(Schema.Struct({ id: VersionId })) }),
-});
-const VersionResponse = Schema.Struct({
-  success: Schema.Literal(true),
-  result: Schema.Struct({
-    id: VersionId,
-    resources: Schema.Struct({
-      bindings: Schema.Record(Schema.String, Schema.Unknown),
-      script_runtime: Schema.Struct({
-        migration_tag: Schema.optional(Schema.String),
-        exports: Schema.Record(Schema.String, Schema.Unknown),
-      }),
-    }),
-  }),
 });
 const ResourceIdentity = Schema.Struct({ logicalId: Schema.String });
 const ResourceLifecycle = Schema.Struct({
@@ -831,7 +818,10 @@ export const decodeWorkerReceipts = (output: string): WorkerReceipts =>
 export const decodeCaptureWorkerReceipts = (output: string): WorkerReceipts =>
   decodeWorkerReceiptsWithMode(output, "capture");
 
-const workersFromState = Effect.fn(function* (mode: "capture" | "completed" = "completed") {
+const workersFromState = Effect.fn(function* (
+  mode: "capture" | "completed" = "completed",
+  stack = "FidyCloudflare"
+) {
   const rawState = yield* shell([
     "bun",
     "../../node_modules/alchemy/bin/alchemy.js",
@@ -840,7 +830,7 @@ const workersFromState = Effect.fn(function* (mode: "capture" | "completed" = "c
     "--backend",
     "cloudflare",
     "--recursive",
-    "FidyCloudflare/production",
+    stack + "/production",
     "--no-input",
     "--log-level",
     "error",
@@ -858,19 +848,25 @@ const workersFromState = Effect.fn(function* (mode: "capture" | "completed" = "c
   });
 });
 
-const stableIdentity = Effect.fn(function* (input: {
-  publicVersionId: string;
-  coreVersionId: string;
-  proof: string;
-}) {
+const stableIdentity = Effect.fn(function* (
+  input: {
+    publicVersionId: string;
+    coreVersionId: string;
+    proof: string;
+  },
+  releaseOrigin = origin
+) {
   const health = yield* Schema.decodeUnknownEffect(healthSchema)(
-    yield* providerJson(HttpClientRequest.get(`${origin}/health`))
+    yield* providerJson(HttpClientRequest.get(`${releaseOrigin}/health`))
   );
-  yield* verifyStableWorkerIdentity({
-    public: { ...health, workerVersionId: input.publicVersionId },
-    core: { ...health, workerVersionId: input.coreVersionId },
-    proof: input.proof,
-  });
+  yield* verifyStableWorkerIdentity(
+    {
+      public: { ...health, workerVersionId: input.publicVersionId },
+      core: { ...health, workerVersionId: input.coreVersionId },
+      proof: input.proof,
+    },
+    releaseOrigin
+  );
   return { stableRevision: health.gitRevision, stableContractDigest: health.contractDigest };
 });
 
@@ -978,17 +974,20 @@ export const releasePort = ({
   };
 };
 
-const readStablePair = Effect.fn(function* ({
-  port,
-  workers,
-  proof,
-  client,
-}: {
-  port: ReleasePort;
-  workers: WorkerReceipts;
-  proof: string;
-  client: HttpClient.HttpClient;
-}) {
+const readStablePair = Effect.fn(function* (
+  {
+    port,
+    workers,
+    proof,
+    client,
+  }: {
+    port: ReleasePort;
+    workers: WorkerReceipts;
+    proof: string;
+    client: HttpClient.HttpClient;
+  },
+  releaseOrigin = origin
+) {
   const { publicDeployment, coreDeployment } = yield* Effect.all(
     {
       publicDeployment: port.current(workers.public.workerName),
@@ -1009,11 +1008,14 @@ const readStablePair = Effect.fn(function* ({
   const coreStable = yield* releaseController
     .servingVersion(coreDeployment)
     .pipe(Effect.mapError(() => new ReleaseFailure({ message: "Unstable Core Worker" })));
-  const identity = yield* stableIdentity({
-    publicVersionId: publicStable,
-    coreVersionId: coreStable,
-    proof,
-  }).pipe(
+  const identity = yield* stableIdentity(
+    {
+      publicVersionId: publicStable,
+      coreVersionId: coreStable,
+      proof,
+    },
+    releaseOrigin
+  ).pipe(
     Effect.provideService(HttpClient.HttpClient, client),
     Effect.mapError(
       (failure) =>
@@ -1467,6 +1469,7 @@ const promote = Effect.fn(function* (port: ReleasePort, env: Config) {
   const promoted = yield* releaseController.promoteRelease(port, staged, {
     exactPairPassed: true,
     middlePairPassed: true,
+    rollbackEligible: true,
   });
   yield* writeFile(`${env.file}.promoted`, encodeJson({ release: staged, promoted }));
 });
@@ -1474,7 +1477,7 @@ const promote = Effect.fn(function* (port: ReleasePort, env: Config) {
 const versionResources = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  worker: { name: string; id: string }
+  worker: { name: string; id: string; revision: string }
 ) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(worker.name)}/versions/${worker.id}`;
   const raw = yield* providerJson(
@@ -1482,15 +1485,9 @@ const versionResources = Effect.fn(function* (
       headers: { authorization: `Bearer ${env.token}` },
     })
   ).pipe(Effect.provideService(HttpClient.HttpClient, client));
-  const version = yield* Schema.decodeUnknownEffect(VersionResponse)(raw);
-  if (version.result.id !== worker.id) {
-    return yield* Effect.fail(Error("Worker version identity changed"));
-  }
-  return {
-    bindings: version.result.resources.bindings,
-    migrationTag: version.result.resources.script_runtime.migration_tag ?? "",
-    exports: version.result.resources.script_runtime.exports,
-  } satisfies WorkerResources;
+  return yield* Effect.try(() =>
+    verifiedVersionResources({ raw, versionId: worker.id, revision: worker.revision })
+  );
 });
 const retentionCompatibilityPort = (
   port: ReleasePort,
@@ -1556,6 +1553,8 @@ const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snap
     snapshot.revision,
     "--",
     "infra/cloudflare/alchemy.run.ts",
+    "infra/cloudflare/alchemy.storage.ts",
+    "infra/cloudflare/storage-installation.ts",
     "apps/server/cloudflare/",
   ]))
     .trim()
@@ -1601,8 +1600,16 @@ const rollbackCompatibility = Effect.fn(function* (
   ];
   let compatible = true;
   for (const pair of pairs) {
-    const stable = yield* versionResources(env, client, { name: pair.name, id: pair.stable });
-    const candidate = yield* versionResources(env, client, { name: pair.name, id: pair.candidate });
+    const stable = yield* versionResources(env, client, {
+      name: pair.name,
+      id: pair.stable,
+      revision: release.snapshot.stableRevision,
+    });
+    const candidate = yield* versionResources(env, client, {
+      name: pair.name,
+      id: pair.candidate,
+      revision: release.snapshot.revision,
+    });
     compatible &&= rollbackCompatible({
       stable,
       candidate,
@@ -1611,6 +1618,26 @@ const rollbackCompatibility = Effect.fn(function* (
   }
   return compatible;
 });
+const rollbackPort = (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+): RollbackPort => ({
+  ...port,
+  deployable: (name, id) =>
+    Effect.gen(function* () {
+      const versions = yield* Schema.decodeUnknownEffect(DeployableResponse)(
+        yield* providerJson(
+          HttpClientRequest.get(
+            `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/versions?deployable=true`,
+            { headers: { authorization: `Bearer ${env.token}` } }
+          )
+        ).pipe(Effect.provideService(HttpClient.HttpClient, client))
+      );
+      return versions.result.items.some((item) => item.id === id);
+    }),
+});
+
 const rollback = Effect.fn(function* (
   port: ReleasePort,
   env: Config,
@@ -1621,21 +1648,7 @@ const rollback = Effect.fn(function* (
   );
   yield* requireRetentionRollback(retentionCompatibilityPort(port, env, client), release.snapshot);
   const compatible = yield* rollbackCompatibility(env, client, release);
-  const guarded: RollbackPort = {
-    ...port,
-    deployable: (name, id) =>
-      Effect.gen(function* () {
-        const versions = yield* Schema.decodeUnknownEffect(DeployableResponse)(
-          yield* providerJson(
-            HttpClientRequest.get(
-              `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/versions?deployable=true`,
-              { headers: { authorization: `Bearer ${env.token}` } }
-            )
-          ).pipe(Effect.provideService(HttpClient.HttpClient, client))
-        );
-        return versions.result.items.some((item) => item.id === id);
-      }),
-  };
+  const guarded = rollbackPort(port, env, client);
   yield* releaseRollback.restore(guarded, { release, promoted, compatible });
 });
 
@@ -1685,6 +1698,23 @@ const runRouting = Effect.fn(function* ({
   }
 });
 
+/** Shared provider observations and routing primitives for the independently named native installation. */
+export const releaseEvidence = {
+  config,
+  encodeJson,
+  readFile,
+  writeFile,
+  workersFromState,
+  readStablePair,
+  proveRecoveryCorePrivate,
+  versionResources,
+  rollbackSource,
+  verifyTaxonomyOverlap,
+  providerJson,
+  rollbackPort,
+};
+export { ReleaseFailure };
+export type { Config as ProductionReleaseConfig };
 if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(Commands)(process.argv[2]);

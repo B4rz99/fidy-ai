@@ -11,7 +11,7 @@ const policyFixture = Effect.gen(function* () {
   yield* fs.makeDirectory(`${root}/infra`, { recursive: true });
   yield* fs.copy(`${workspaceRoot}infra/cloudflare`, `${root}/infra/cloudflare`);
   yield* fs.copy(`${workspaceRoot}patches`, `${root}/patches`);
-  for (const name of ["apps", "node_modules", "tsconfig.base.json"]) {
+  for (const name of [".github", "apps", "node_modules", "tsconfig.base.json"]) {
     yield* fs.symlink(`${workspaceRoot}${name}`, `${root}/${name}`);
   }
   return `${root}/infra/cloudflare`;

@@ -290,6 +290,23 @@ export const createStoreRuntime = ({
     )
   );
 
+export const storeReadiness = Effect.fn(function* ({
+  history,
+  release,
+}: {
+  history: StoreHistory;
+  release: string;
+}) {
+  const sql = yield* SqliteClient;
+  const rows = yield* sql`SELECT checksum FROM store_migrations WHERE owner=${history.owner}
+    ORDER BY version LIMIT ${history.steps.length + 1}`;
+  const markers = yield* Schema.decodeUnknownEffect(
+    Schema.Array(Schema.Struct({ checksum: Schema.String }))
+  )(rows);
+  if (markers.length !== history.steps.length) return new Response(null, { status: 503 });
+  return Response.json({ workerVersionId: release, history: markers.map((row) => row.checksum) });
+});
+
 /** Use the owner's existing native transaction. Another family's earlier scheduled alarm is preserved. */
 export const preserveStoreAlarm = Effect.fnUntraced(function* (
   storage: DurableObjectStorage,

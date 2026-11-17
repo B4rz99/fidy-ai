@@ -272,7 +272,7 @@ const restoreAmbiguousCore = Effect.fn(function* (
 const promoteRelease = Effect.fn(function* (
   port: ReleasePort,
   release: StagedRelease,
-  smoke: { exactPairPassed: boolean; middlePairPassed: boolean }
+  smoke: { exactPairPassed: boolean; middlePairPassed: boolean; rollbackEligible: boolean }
 ) {
   if (!smoke.exactPairPassed || !smoke.middlePairPassed) {
     return yield* Effect.fail(Error("Release smoke or compatibility check failed"));
@@ -288,7 +288,10 @@ const promoteRelease = Effect.fn(function* (
   ]).pipe(
     Effect.catchCauseIf(
       (cause) => !Cause.hasInterrupts(cause),
-      () => restoreAmbiguousCore(port, release, publicStaged)
+      () =>
+        smoke.rollbackEligible
+          ? restoreAmbiguousCore(port, release, publicStaged)
+          : Effect.fail(Error("Core promotion uncertain; inspect and use forward repair"))
     )
   );
   const publicPromoted = yield* Effect.gen(function* () {
@@ -301,7 +304,10 @@ const promoteRelease = Effect.fn(function* (
   }).pipe(
     Effect.catchCauseIf(
       (cause) => !Cause.hasInterrupts(cause),
-      () => restoreCore(port, { release, publicStaged, corePromoted })
+      () =>
+        smoke.rollbackEligible
+          ? restoreCore(port, { release, publicStaged, corePromoted })
+          : Effect.fail(Error("Core advanced; preserve current stores and use forward repair"))
     )
   );
   return { publicDeploymentId: publicPromoted.id, coreDeploymentId: corePromoted.id };
@@ -369,6 +375,7 @@ const verifyRetirement = Effect.fn(function* (
 });
 
 export const releaseController = {
+  requireTrunk,
   servingVersion,
   requireCapturedWorker,
   captureRelease,

@@ -1,9 +1,11 @@
+import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
+import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
+
+import { pricingHistory } from "./pricing/operations";
+import { pricingResponse } from "./internal/pricing-object";
 import { observeCancellation, pendingCancellation } from "./internal/local-cancellation";
 import { RequestBodyPolicy } from "../http/contract";
 import { boundedJsonBody } from "../http/operations";
-import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
-import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
-import { pricingHistory, pricingResponse } from "./internal/pricing-object";
 import { publishPrice } from "./internal/publish-price";
 import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
@@ -267,10 +269,12 @@ export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<Era
 
 /** Private pricing namespace, selected by a stable name. Only Core holds this binding. */
 export class Pricing {
+  private readonly version: string;
   private readonly state: DurableObjectState;
   private readonly runtime;
   constructor(state: DurableObjectState, env: StoreReleaseEnvironment) {
     this.state = state;
+    this.version = env.CF_VERSION_METADATA.id;
     this.runtime = createStoreRuntime({
       storage: state.storage,
       owner: "pricing",
@@ -288,6 +292,11 @@ export class Pricing {
   fetch(request: Request): Promise<Response> {
     if (this.state.id.name !== pricingName) {
       return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (request.method === "GET" && request.url === storeReadinessUrl) {
+      return this.runtime.runPromise(
+        storeReadiness({ history: pricingHistory, release: this.version })
+      );
     }
     return this.runtime.runPromise(
       pricingResponse(request).pipe(

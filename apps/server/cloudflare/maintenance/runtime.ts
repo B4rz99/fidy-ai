@@ -1,3 +1,8 @@
+import { executeDueSchedule, maintenanceStoreHistory } from "./operations";
+import { DurableObject } from "cloudflare:workers";
+import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
+import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
+
 import { makeBancolombiaSandboxCleanup } from "../bancolombia-authentication/runtime";
 import { sweepProviderAuthentication } from "../provider-authentication/runtime";
 import { sweepRecoveryEvidence } from "../recovery/runtime";
@@ -10,7 +15,7 @@ import {
   type ScheduledOperation,
   type ScheduledWorkFailed,
 } from "./contract";
-import { executeDueSchedule } from "./operations";
+
 import { sweepCanonicalAdmission } from "../canonical-admission/runtime";
 import { sweepCommercialAllowances } from "../quotas/runtime";
 import type { ForwardedEmailEnvironment } from "../ingestion/contract";
@@ -336,3 +341,36 @@ export const runEmailMaintenance = (
       nowEpochMs: "environment" in input ? input.scheduledAtEpochMs : nowEpochMs,
     });
   }).pipe(Effect.mapError(() => new EmailScheduleUnavailable()));
+
+export class Maintenance extends DurableObject<StoreReleaseEnvironment> {
+  private readonly runtime;
+  constructor(state: DurableObjectState, env: StoreReleaseEnvironment) {
+    super(state, env);
+    this.runtime = createStoreRuntime({
+      storage: state.storage,
+      owner: maintenanceStoreHistory.owner,
+      ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
+    });
+    if (state.id.name === "core-maintenance-v1") {
+      state.waitUntil(
+        state.blockConcurrencyWhile(() =>
+          this.runtime.runPromise(
+            openSqliteStore(maintenanceStoreHistory, env.CF_VERSION_METADATA.id)
+          )
+        )
+      );
+    }
+  }
+  override fetch(request: Request): Promise<Response> {
+    if (
+      this.ctx.id.name !== "core-maintenance-v1" ||
+      request.method !== "GET" ||
+      request.url !== storeReadinessUrl
+    ) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    return this.runtime.runPromise(
+      storeReadiness({ history: maintenanceStoreHistory, release: this.env.CF_VERSION_METADATA.id })
+    );
+  }
+}

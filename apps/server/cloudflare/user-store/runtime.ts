@@ -11,7 +11,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
     super(state, env);
     this.runtime = createStoreRuntime(state.storage);
-    state.blockConcurrencyWhile(() => this.runtime.runPromise(openSqliteStore(initialUserSchema)));
+    state.waitUntil(
+      state.blockConcurrencyWhile(() => this.runtime.runPromise(openSqliteStore(initialUserSchema)))
+    );
   }
 
   override fetch(request: Request): Promise<Response> {

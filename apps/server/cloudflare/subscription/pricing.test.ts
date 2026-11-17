@@ -72,7 +72,11 @@ const platform = Effect.gen(function* () {
     });
   let runtime = create();
   yield* Effect.addFinalizer(() => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie));
-  const request = Effect.fnUntraced(function* (path: string, body?: unknown, name = "pricing") {
+  const request = Effect.fnUntraced(function* (
+    path: string,
+    body?: unknown,
+    name: string = "pricing"
+  ) {
     const namespace = yield* Effect.tryPromise(() => runtime.getDurableObjectNamespace("PRICING"));
     const response = yield* Effect.tryPromise(() =>
       namespace.getByName(name).fetch(

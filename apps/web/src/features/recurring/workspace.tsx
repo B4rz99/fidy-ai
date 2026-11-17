@@ -70,6 +70,7 @@ type Props = Readonly<{
   statusFor: typeof planStatus;
   disabled: boolean;
   filters: Filters;
+  previous: Option.Option<string>;
   applyFilters: (filters: Filters) => void;
   month: (step: number) => void;
   earlier: (month: string) => void;
@@ -328,13 +329,14 @@ const PreviousItems = ({
 );
 const useWorkspacePanel = (
   view: Workspace,
-  filters: Filters
+  filters: Filters,
+  previous: Option.Option<string>
 ): Pick<SheetProps, "panel" | "setPanel" | "link"> &
   Readonly<{ navigation: RecurringNavigation }> => {
   const navigation = useRecurringNavigation({
     month: view.month,
     filters,
-    previous: Option.fromUndefinedOr(view.previousMonth),
+    previous,
   });
   const [localPanel, setLocalPanel] = useState<Option.Option<Panel>>(() => Option.none());
   const panel = Option.orElse(localPanel, () => navigation.selection);
@@ -371,7 +373,7 @@ const useWorkspacePanel = (
 export const RecurringWorkspace = (props: Props): JSX.Element => {
   const { view, disabled, filters, timeZone, calendar, setCalendar, tab, setTab } = props;
   const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
-  const { panel, setPanel, navigation, link } = useWorkspacePanel(view, filters);
+  const { panel, setPanel, navigation, link } = useWorkspacePanel(view, filters, props.previous);
   const save: Save = (edit, onSaved) =>
     props.save(edit, () => {
       if (onSaved !== undefined) onSaved();

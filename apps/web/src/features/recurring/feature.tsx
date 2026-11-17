@@ -120,6 +120,7 @@ const ResourceContent = ({
         statusFor={planning.statusFor}
         disabled={planning.disabled}
         filters={props.filters}
+        previous={props.previous}
         applyFilters={props.applyFilters}
         month={(step) => props.selectMonth(shiftMonth({ month: props.month, step }))}
         earlier={props.earlier}

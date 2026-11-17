@@ -12,6 +12,7 @@ import {
   category,
   history,
   instant,
+  receivedStatus,
   second,
   seed,
   transaction,
@@ -76,6 +77,43 @@ const provisionPAT = Effect.fn(function* (
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect("requires an observable lifetime registration before first local work", () =>
+    Effect.gen(function* () {
+      const create = yield* nativeUserPlatform;
+      const runtime = yield* create();
+      const owner = yield* seed(runtime, alice);
+      // Interrupt local acknowledgement after the registry commits.
+      yield* owner.exec(
+        "CREATE TRIGGER lose_ack BEFORE UPDATE OF lifetime_registered ON users BEGIN SELECT RAISE(ABORT,'lost'); END"
+      );
+      expect(yield* receivedStatus(history(runtime))).toBe(503);
+      expect(yield* owner.exec("SELECT count(*) AS calls FROM audit_entries")).toEqual([
+        { calls: 0 },
+      ]);
+      const registry = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Maintenance", {
+          name: "core-maintenance-v1",
+        })
+      );
+      const entries = native(() =>
+        registry.exec("SELECT user_id FROM lifetime_registry ORDER BY user_id")
+      );
+      expect(yield* entries).toEqual([{ user_id: alice.user }]);
+      yield* owner.exec("DROP TRIGGER lose_ack");
+      expect(yield* receivedStatus(history(runtime))).toBe(200);
+      const waiting = yield* seed(runtime, bob);
+      yield* native(() => registry.exec("ALTER TABLE lifetime_registry RENAME TO offline"));
+      expect(yield* receivedStatus(history(runtime))).toBe(200);
+      expect(yield* receivedStatus(history(runtime, bob))).toBe(503);
+      expect(yield* waiting.exec("SELECT count(*) AS calls FROM audit_entries")).toEqual([
+        { calls: 0 },
+      ]);
+      yield* native(() => registry.exec("ALTER TABLE offline RENAME TO lifetime_registry"));
+      expect(yield* receivedStatus(history(runtime, bob))).toBe(200);
+      expect(yield* entries).toEqual([{ user_id: alice.user }, { user_id: bob.user }]);
+    })
+  );
+
   test.effect(
     "rolls back a refused link commit, then replays completed changes under the same PAT without charging twice",
     () =>
@@ -326,6 +364,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               method: "POST",
               headers: {
                 "content-type": "application/json",
+                // An early refusal can close the socket before workerd reads the POST body.
+                connection: "close",
                 authorization: "Bearer " + bearer,
                 origin: browserOrigins.production,
                 "Fidy-Session-Binding": binding,
@@ -335,17 +375,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
               body: JSON.stringify(capturePayload),
             })
           );
-        expect((yield* mixed(bob.session)).status).toBe(401);
-        expect((yield* mixed(alice.session)).status).toBe(201);
-        const unknown = yield* patCapture(runtime, "invalid", "key");
-        expect(unknown.status).toBe(401);
+        expect(yield* receivedStatus(mixed(bob.session))).toBe(401);
+        expect(yield* receivedStatus(mixed(alice.session))).toBe(201);
+        expect(yield* receivedStatus(patCapture(runtime, "invalid", "key"))).toBe(401);
         yield* native(() =>
           owner.directory.exec(
             "UPDATE unresolved_source_buckets SET virtual_at_ms=?",
             owner.now + 600000
           )
         );
-        expect((yield* patCapture(runtime, "invalid", "key")).status).toBe(429);
+        expect(yield* receivedStatus(patCapture(runtime, "invalid", "key"))).toBe(429);
         expect(
           yield* owner.exec("SELECT count(*) AS calls FROM commercial_allowance_consumptions")
         ).toEqual([{ calls: 0 }]);

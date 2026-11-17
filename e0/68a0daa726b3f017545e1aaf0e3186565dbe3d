@@ -1,0 +1,27 @@
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a1be23a656acf0::t_cacb3a81ef2425 4319,4323-4326
+apps/server/cloudflare/budgets/internal/sqlite-planning.ts
+  s_a1be23a656acf0::t_cacb3a81ef2425 2,124-126,258-280,311,323-332
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_a1be23a656acf0::t_cacb3a81ef2425 3247-3258,3275-3281,3283,3285-3286,3290-3295,3297-3300,3304-3340,3342-3345
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_cacb3a81ef2425 75-80
+apps/server/cloudflare/budgets/user-store.test.ts
+  s_a1be23a656acf0::t_cacb3a81ef2425 288-290
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e068a0daa726b3f017545e1aaf0e3186565dbe3d",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

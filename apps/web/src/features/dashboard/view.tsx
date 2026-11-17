@@ -192,10 +192,17 @@ const TransactionList = ({
   const groups: Array<{ date: string; rows: Array<DashboardRecentGroup["rows"][number]> }> = [];
   for (const transaction of data.transactions) {
     const date = dateFormatter.format(transaction.occurredAt.epochMilliseconds);
-    const row = {
+    const day = DateTime.formatIsoDate(
+      DateTime.setZone(transaction.occurredAt, DateTime.zoneMakeNamedUnsafe(timeZone))
+    );
+    const row: DashboardRecentGroup["rows"][number] = {
       id: transaction.id,
-      date: DateTime.formatIsoDate(
-        DateTime.setZone(transaction.occurredAt, DateTime.zoneMakeNamedUnsafe(timeZone))
+      renderLink: (props) => (
+        <Link
+          to="/app/transactions"
+          search={{ date: day, transaction: transaction.id }}
+          {...props}
+        />
       ),
       counterparty: Option.getOrElse(transaction.counterparty, () => "Sin contraparte"),
       category: transaction.category.label,

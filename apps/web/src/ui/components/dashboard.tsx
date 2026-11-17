@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { type ComponentProps, type JSX, type ReactNode } from "react";
@@ -105,7 +104,9 @@ export const DashboardBudget = ({
 
 type RecentRow = Readonly<{
   id: string;
-  date: string;
+  renderLink: (
+    props: Pick<ComponentProps<"a">, "children" | "className" | "aria-label">
+  ) => JSX.Element;
   counterparty: string;
   category: string;
   inflow: boolean;
@@ -116,39 +117,39 @@ export type DashboardRecentGroup = Readonly<{ date: string; rows: ReadonlyArray<
 const RecentDirection = ({ inflow }: Readonly<{ inflow: boolean }>): JSX.Element => (
   <DirectionIndicator inflow={inflow} />
 );
-const RecentRow = ({ row }: Readonly<{ row: RecentRow }>): JSX.Element => (
-  <Link
-    to="/app/transactions"
-    search={{ date: row.date }}
-    className="dashboard-recent-row rounded-md focus-visible:outline-2 focus-visible:outline-ring"
-    aria-label={`${row.counterparty}, ${row.category}, ${row.inflow ? "Ingreso" : "Gasto"}, ${row.money} ${row.currency}`}
-  >
-    <div className="dashboard-recent-identity">
-      <span className="dashboard-recent-identity-icon">
-        <CategoryVisual label={row.category} bubble large={false} />
-      </span>
-      <span>
-        <span>{row.counterparty}</span>
-        <small>{row.category}</small>
-      </span>
-    </div>
-    <div className="dashboard-recent-category">
-      <CategoryVisual label={row.category} bubble large={false} />
-      <span>{row.category}</span>
-    </div>
-    <div className="dashboard-recent-type">
-      <RecentDirection inflow={row.inflow} />
-      <span>{row.inflow ? "Ingreso" : "Gasto"}</span>
-    </div>
-    <div className="dashboard-recent-amount">
-      <span className="dashboard-recent-inline-direction">
-        <RecentDirection inflow={row.inflow} />
-      </span>
-      <span title={row.currency}>{row.money}</span>
-      <HugeiconsIcon icon={ArrowRight01Icon} size={16} strokeWidth={1.5} aria-hidden="true" />
-    </div>
-  </Link>
-);
+const RecentRow = ({ row }: Readonly<{ row: RecentRow }>): JSX.Element =>
+  row.renderLink({
+    className: "dashboard-recent-row rounded-md focus-visible:outline-2 focus-visible:outline-ring",
+    "aria-label": `${row.counterparty}, ${row.category}, ${row.inflow ? "Ingreso" : "Gasto"}, ${row.money} ${row.currency}`,
+    children: (
+      <>
+        <div className="dashboard-recent-identity">
+          <span className="dashboard-recent-identity-icon">
+            <CategoryVisual label={row.category} bubble large={false} />
+          </span>
+          <span>
+            <span>{row.counterparty}</span>
+            <small>{row.category}</small>
+          </span>
+        </div>
+        <div className="dashboard-recent-category">
+          <CategoryVisual label={row.category} bubble large={false} />
+          <span>{row.category}</span>
+        </div>
+        <div className="dashboard-recent-type">
+          <RecentDirection inflow={row.inflow} />
+          <span>{row.inflow ? "Ingreso" : "Gasto"}</span>
+        </div>
+        <div className="dashboard-recent-amount">
+          <span className="dashboard-recent-inline-direction">
+            <RecentDirection inflow={row.inflow} />
+          </span>
+          <span title={row.currency}>{row.money}</span>
+          <HugeiconsIcon icon={ArrowRight01Icon} size={16} strokeWidth={1.5} aria-hidden="true" />
+        </div>
+      </>
+    ),
+  });
 export const DashboardRecentList = ({
   groups,
 }: Readonly<{ groups: ReadonlyArray<DashboardRecentGroup> }>): JSX.Element => (

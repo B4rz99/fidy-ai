@@ -244,7 +244,7 @@ const DetailPanel = ({
       timeZone={props.currentUser.timeZone}
       editable={props.editable}
       inspectable={props.readOnly !== true}
-      fromReview={Option.contains(props.locate, panel.id)}
+      fromReview={Option.contains(props.locate, panel.id) && props.dateFilter.value === ""}
       mode={panel.mode}
       onMode={(mode) => onPanel({ ...panel, mode })}
       onClose={close}

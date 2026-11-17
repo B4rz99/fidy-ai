@@ -42,18 +42,20 @@ export const TransactionTypeToggle = ({
   </fieldset>
 );
 
-const noRestoreFocus = Option.none<() => void>();
+const noRestoreFocus = Option.none<(fallback: HTMLElement) => void>();
 const focusReturn =
-  (previous: HTMLElement, targetId: Option.Option<string>): (() => void) =>
-  (): void => {
+  (previous: HTMLElement, targetId: Option.Option<string>): ((fallback: HTMLElement) => void) =>
+  (fallback): void => {
     const target = Option.flatMap(targetId, (id) =>
       Option.fromNullishOr(document.getElementById(id))
     );
     if (Option.isSome(target)) {
       target.value.focus({ preventScroll: true });
       target.value.scrollIntoView({ block: "center", behavior: "instant" });
-    } else if (previous.isConnected) {
+    } else if (previous.isConnected && previous !== document.body) {
       previous.focus({ preventScroll: true });
+    } else {
+      fallback.focus();
     }
   };
 
@@ -71,7 +73,7 @@ const usePanelFocus = (active: boolean): RefCallback<HTMLDivElement> => {
         }
         node.focus({ preventScroll: true });
       } else {
-        Option.map(restoreFocus.current, (restore) => restore());
+        Option.map(restoreFocus.current, (restore) => restore(node));
         restoreFocus.current = noRestoreFocus;
       }
     },
@@ -103,7 +105,7 @@ export const TransactionContextPanel = ({
       ref={focusPanel}
       tabIndex={-1}
       role={active ? "group" : undefined}
-      aria-label={active ? title : undefined}
+      aria-label={title}
       data-return-focus-id={Option.getOrUndefined(returnFocusId)}
     >
       {children}

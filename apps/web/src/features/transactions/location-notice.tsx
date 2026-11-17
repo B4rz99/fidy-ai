@@ -1,7 +1,7 @@
-import { Link } from "@tanstack/react-router";
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";
 import type { HistoryState } from "./history";
+import { TransactionDestinationRecovery } from "./destination";
 
 export const TransactionLocationNotice = ({
   history,
@@ -33,12 +33,7 @@ const LocationProgress = ({
       return (
         <>
           <p>La transacción ya no aparece en este periodo.</p>
-          <Button
-            variant="outline"
-            render={<Link to="/app/needs-review" search={{ status: "history" }} />}
-          >
-            Volver al historial
-          </Button>
+          <TransactionDestinationRecovery />
         </>
       );
     case "BoundReached":

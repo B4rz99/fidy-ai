@@ -74,7 +74,11 @@ Ordinary history defaults to the User's current local month. The visible month c
 months directly or select a month and year; month changes clear the selected day. Validated route
 search owns the month and optional local day, so reload and browser Back restore the period.
 A selected day remains in the closed date control and its accessible name. Removing the day filter
-retains the month. Dashboard recent Transaction links select that Transaction's local date in history.
+retains the month. Dashboard recent Transaction links carry its validated identity and local date,
+so history locates it and opens its existing detail view directly, including on later pages.
+Unavailable Dashboard destinations offer the same-day history without the missing identity.
+Closing detail restores focus to the current row, or a named, visibly focused summary when saved
+filters hide that row and there is no connected invoking control.
 
 The period remains visible with empty results. Counts and Money summaries describe loaded records
 matching the filters within that period; continuation feedback identifies incomplete coverage.

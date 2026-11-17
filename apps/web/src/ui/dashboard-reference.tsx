@@ -114,7 +114,11 @@ export const DashboardReference = (): JSX.Element => (
             rows: [
               {
                 id: "example",
-                date: "2026-10-24",
+                renderLink: ({ children, ...props }) => (
+                  <a href="/app/transactions?date=2026-10-24" {...props}>
+                    {children}
+                  </a>
+                ),
                 counterparty: "Mercado de ejemplo",
                 category: "Mercado",
                 inflow: false,

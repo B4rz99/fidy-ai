@@ -1,0 +1,55 @@
+.patterns/INDEX.md
+  s_f4b5c9b6af6412::t_413fa99f041f4f 6
+.patterns/effect-4-stable.md
+  s_f4b5c9b6af6412::t_1603d740768333 3-4,22
+apps/cli/package.json
+  s_398952c775f46d::t_27aed1f8c689f3 18,20,23
+apps/docs/package.json
+  s_398952c775f46d::t_73cdb0c690a53d 16
+apps/server/package.json
+  s_398952c775f46d::t_590b3147c1d42e 320,322,324-325,332-335,340,343
+apps/site/package.json
+  s_f4b5c9b6af6412::t_aec2e01df22993 13,15
+apps/web/package.json
+  s_f4b5c9b6af6412::t_d204ff7cc49ff2 24-25,34,46,50,57,59
+bun.lock
+  s_b3b52c95df703e::t_985ac40b65a46d 11,17,20-21,33,35,38,47,54,56,58-59,66-69,74,77,84,86,106-107,116,128,132,139,141,149,152-154,158,166,176-178,253,365,367,369,371,373,375,443,445,447,449,451,453,455,473,765,767,769,771,773,775,777,779,781,783,785,787,789,791,793,795,797,799,801,815,817,819,821,823,825,827,829,831,833,835,837,839,841,843,845,847,849,851,901,903,905,907,909,911,913,915,917,919,921,923,925,927,929,931,941,943,945,947,949,951,953,955,1121,1161,1253,1353,1559,1735-1736,1741,1779,1781,1907,1935,2089,2107,2109,2165-2166,2253-2254,2275-2276,2301-2302,2367,2369,2455-2468,2487-2488,2629-2642,2683-2714,2741,2743,2745,2747,2749,2751,2753,2755,2757,2759,2761,2763,2765,2767,2769,2773-2774,2779-2792,2843-2844,2855-2856
+infra/cloudflare/package.json
+  s_f4b5c9b6af6412::t_60bd5e69e77990 17,20-22,26
+infra/docs/package.json
+  s_f4b5c9b6af6412::t_436c6fae3841c1 13
+package.json
+  s_f4b5c9b6af6412::t_d4e968c0fb967d 68,74,77-78,83-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf41e771e6ab6637d37006af6ea4996f61ea2521",
+  "prompts": {},
+  "sessions": {
+    "s_398952c775f46d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7cc-45f6-7663-8706-7b8ec59907e3",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b3b52c95df703e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7ce-acf7-75f3-ad7e-833ba7f20423",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f4b5c9b6af6412": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7c7-d507-75c3-83c6-de2e1963d1a8",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

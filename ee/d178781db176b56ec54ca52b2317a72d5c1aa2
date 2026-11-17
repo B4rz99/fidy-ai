@@ -1,0 +1,40 @@
+apps/server/cloudflare/maintenance/lifetime-registry.test.ts
+  s_a1be23a656acf0::t_6949103339aa1c 62-85,101-110
+apps/server/cloudflare/runtime/sqlite/migrations.test.ts
+  s_a1be23a656acf0::t_6949103339aa1c 239-242,248-250
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_0de1821edb27a9 5
+  s_a1be23a656acf0::t_6949103339aa1c 319-321,325-327
+apps/server/.dependency-cruiser.mjs
+  s_7998ef7def1eff::t_3646a16de4802a 76-77
+apps/server/cloudflare/maintenance/contract.ts
+  s_7998ef7def1eff::t_a42cab6634eff0 86
+apps/server/cloudflare/maintenance/operations.ts
+  s_7998ef7def1eff::t_1d9f2a78112a36 10,72
+apps/server/cloudflare/user-store/runtime.ts
+  s_7998ef7def1eff::t_3083020db0f8bc 123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eed178781db176b56ec54ca52b2317a72d5c1aa2",
+  "prompts": {},
+  "sessions": {
+    "s_7998ef7def1eff": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ebc0-70e3-7781-88fb-5126d4df0af4",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

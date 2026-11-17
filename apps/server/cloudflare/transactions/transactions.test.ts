@@ -4316,15 +4316,14 @@ it("commits exact manual Money, immutable capture context, and audit before cano
       ]);
       const audit = yield* fromTestPromise(() =>
         db.exec(
-          "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY occurred_at_ms",
+          "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? ORDER BY operation",
           users[0] ?? ""
         )
       );
-      expect(
-        audit
-          .map((row) => row.operation)
-          .sort((first, second) => String(first).localeCompare(String(second)))
-      ).toEqual(["transactions.createTransaction", "transactions.listTransactions"]);
+      expect(audit.map((row) => row.operation)).toEqual([
+        "transactions.createTransaction",
+        "transactions.listTransactions",
+      ]);
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 

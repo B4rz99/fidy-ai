@@ -1,0 +1,20 @@
+docs/adr/0041-per-user-durable-object-storage-direction.md
+  s_e76e865580a804::t_4a6ea2c6df4865 4-6,170,244-246,315-375,377-393,411-414
+  s_e76e865580a804::t_4da11b44e3fbfc 376
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5c09be09484aba0deea8b100d66597a7d4877c8a",
+  "prompts": {},
+  "sessions": {
+    "s_e76e865580a804": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9aa-8eac-7932-a6f9-57857cbb32e1",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

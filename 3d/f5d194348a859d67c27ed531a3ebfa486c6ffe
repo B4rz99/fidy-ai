@@ -1,0 +1,19 @@
+apps/web/src/app/application-frame.tsx
+  s_f0bd2e11e89e70::t_3279aaa40d320f 5,60-63,75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3df5d194348a859d67c27ed531a3ebfa486c6ffe",
+  "prompts": {},
+  "sessions": {
+    "s_f0bd2e11e89e70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e9f8-9467-7762-b166-60cae51f3c09",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

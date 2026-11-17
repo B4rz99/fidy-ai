@@ -5,8 +5,7 @@ import {
 } from "@/ui/components/dashboard-chart";
 import { dashboardCategoryVisual } from "@/ui/components/dashboard-category";
 import "@/ui/components/application.css";
-import { Option, Schema } from "effect";
-import { TransactionId } from "@/transport/client";
+import { Option } from "effect";
 import { type JSX, useId, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
@@ -114,8 +113,12 @@ export const DashboardReference = (): JSX.Element => (
             date: "24 de octubre de 2026",
             rows: [
               {
-                id: Schema.decodeSync(TransactionId)("24000000-0000-4000-8000-000000000001"),
-                date: "2026-10-24",
+                id: "example",
+                renderLink: ({ children, ...props }) => (
+                  <a href="/app/transactions?date=2026-10-24" {...props}>
+                    {children}
+                  </a>
+                ),
                 counterparty: "Mercado de ejemplo",
                 category: "Mercado",
                 inflow: false,

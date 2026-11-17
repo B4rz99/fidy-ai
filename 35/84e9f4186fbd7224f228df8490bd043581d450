@@ -1,0 +1,83 @@
+apps/web/src/ui/components/transactions.tsx
+  s_f4b5c9b6af6412::t_f969a054aae337 52,73-79,82
+  s_f4b5c9b6af6412::t_7083e50a36e07f 47-50,59-61,64-67
+  s_f4b5c9b6af6412::t_cbdf37cc2d7189 58,85
+  s_f4b5c9b6af6412::t_6438c39ee66042 96,104
+  s_f4b5c9b6af6412::t_0cd0d72ce36b55 72,80,108
+  s_f4b5c9b6af6412::t_7cedc37cb2f3bc 51,53-57,62-63,68-71,81,83-84,86-88,106
+apps/web/src/features/transactions/list-feature.tsx
+  s_f4b5c9b6af6412::t_ae0d3e1f511f5f 485,495,589-598
+apps/web/src/features/transactions/ledger.tsx
+  s_f4b5c9b6af6412::t_6438c39ee66042 97
+apps/web/src/features/transactions/privacy-view.tsx
+  s_f4b5c9b6af6412::t_ae0d3e1f511f5f 69
+apps/web/src/features/transactions/location-notice.tsx
+  s_f4b5c9b6af6412::t_345550ef570937 5,41
+apps/web/src/app/routes.ts
+  s_f4b5c9b6af6412::t_ae0d3e1f511f5f 267
+apps/web/src/features/transactions/FEATURE.md
+  s_f4b5c9b6af6412::t_8b40aa854804cf 77-78,81-82
+  s_f4b5c9b6af6412::t_7843b6a2a1eca5 79-80
+apps/web/e2e/dashboard-branding.spec.ts
+  s_f4b5c9b6af6412::t_7a9e42ac9ee7e1 442,447-449,460-462,466,471-473,475,491-493,498,500,502-518,560-562,570-581,590-593
+  s_f4b5c9b6af6412::t_b7d6c79e1bb2c3 463,748,757
+  s_f4b5c9b6af6412::t_7083e50a36e07f 480-490,499,524-558,568,582-588
+  s_f4b5c9b6af6412::t_c5a5f9fcf06cc8 609-615,620-624,639-660,663-665,670,673-678,681-708,712-716,729,735,758-759,762-763
+  s_b3b52c95df703e::t_f36034cdc7d99d 443,616,760-761
+  s_f4b5c9b6af6412::t_449f44ec9686a8 2,595-608,617-619,625-628,633-638,661-662,666-669,671-672,679-680
+  s_f4b5c9b6af6412::t_e6940937841bc4 479,494-497,501
+  s_f4b5c9b6af6412::t_feaa3c58d80d05 3,380,400,409-424,440
+  s_f4b5c9b6af6412::t_b506d8048c31d4 444-445,523,563-567,569,589
+  s_f4b5c9b6af6412::t_6e1cc18a021188 446,450-458,464,468,474,476-478
+  s_f4b5c9b6af6412::t_9a068e22eb6991 594,629-632,709-711,717-728,730-734,736-747
+  s_f4b5c9b6af6412::t_29f5700e35f04c 441,459,749-756
+  s_b3b52c95df703e::t_c7ee59b3fe448f 559
+apps/web/src/features/transactions/destination.tsx
+  s_f4b5c9b6af6412::t_409a80ffdb5a01 3
+  s_f4b5c9b6af6412::t_7cedc37cb2f3bc 8
+  s_f4b5c9b6af6412::t_345550ef570937 60,64-74
+  s_f4b5c9b6af6412::t_301539612e7c8f 75-78
+apps/web/src/ui/dashboard-reference.tsx
+  s_f4b5c9b6af6412::t_2ebf73e8751941 8-9,117
+apps/web/ARCHITECTURE.md
+  s_f4b5c9b6af6412::t_7843b6a2a1eca5 126-128
+  s_f4b5c9b6af6412::t_8b40aa854804cf 124-125,129
+apps/web/src/ui/components/dashboard.tsx
+  s_f4b5c9b6af6412::t_ae0d3e1f511f5f 123
+  s_f4b5c9b6af6412::t_2ebf73e8751941 2,108
+apps/web/src/features/transactions/workspace.tsx
+  s_f4b5c9b6af6412::t_7a9e42ac9ee7e1 655-657
+  s_f4b5c9b6af6412::t_ae0d3e1f511f5f 59,849,851,863,865,873,875,877-878,934
+  s_f4b5c9b6af6412::t_345550ef570937 860-861,876,879
+  s_f4b5c9b6af6412::t_06a133943f6a34 867-872,874
+apps/web/src/ui/components/transactions.css
+  s_f4b5c9b6af6412::t_c3b227086c3eea 533-536
+apps/web/src/features/transactions/period.ts
+  s_f4b5c9b6af6412::t_ae0d3e1f511f5f 23,29-30
+apps/web/src/ui/transactions-reference.tsx
+  s_f4b5c9b6af6412::t_6438c39ee66042 4,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3584e9f4186fbd7224f228df8490bd043581d450",
+  "prompts": {},
+  "sessions": {
+    "s_b3b52c95df703e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7ce-acf7-75f3-ad7e-833ba7f20423",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    },
+    "s_f4b5c9b6af6412": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7c7-d507-75c3-83c6-de2e1963d1a8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

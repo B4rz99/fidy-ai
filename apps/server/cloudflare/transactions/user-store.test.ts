@@ -92,6 +92,38 @@ const seed = Effect.fn(function* (runtime: Miniflare, subject: typeof alice) {
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
+    "keeps an accountable read available under User storage pressure and isolates an uncommittable Audit",
+    () =>
+      Effect.gen(function* () {
+        const create = yield* nativeUserPlatform;
+        const runtime = yield* create("500000");
+        const pressured = yield* seed(runtime, alice);
+        const independent = yield* seed(runtime, bob);
+        yield* pressured.exec(
+          `WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<180)
+      INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms,notes)
+      SELECT printf('31000000-0000-4000-8000-%012d',i),?,'500','COP','outflow',?,i,i,printf('%0500d',i) FROM n`,
+          alice.user,
+          category
+        );
+        expect((yield* history(runtime, alice, "?limit=1")).status).toBe(200);
+        expect(yield* pressured.exec("SELECT count(*) AS total FROM audit_entries")).toEqual([
+          { total: 1 },
+        ]);
+        yield* pressured.exec(
+          "CREATE TRIGGER full_audit BEFORE INSERT ON audit_entries BEGIN SELECT RAISE(ABORT,'capacity'); END"
+        );
+        expect((yield* history(runtime, alice, "?limit=1")).status).toBe(503);
+        expect(yield* pressured.exec("SELECT count(*) AS total FROM audit_entries")).toEqual([
+          { total: 1 },
+        ]);
+        expect((yield* history(runtime, bob, "?limit=1")).status).toBe(200);
+        expect(yield* independent.exec("SELECT count(*) AS total FROM audit_entries")).toEqual([
+          { total: 1 },
+        ]);
+      })
+  );
+  test.effect(
     "commits a complete, ordered browser history page with current standing and Audit",
     () =>
       Effect.gen(function* () {

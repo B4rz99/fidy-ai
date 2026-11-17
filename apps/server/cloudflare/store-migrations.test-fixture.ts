@@ -112,8 +112,12 @@ export class MigrationProbe extends DurableObject<FixtureEnvironment> {
     const storage = observeStorage(state.storage, env.MODE, (size) => {
       this.peakBytes = Math.max(this.peakBytes, size);
     });
-    const runtime = createStoreRuntime(storage);
     const history = selectedHistory(env.MODE);
+    const runtime = createStoreRuntime({
+      storage,
+      owner: history.owner,
+      ceilingBytes: "1000000000",
+    });
     state.waitUntil(
       state.blockConcurrencyWhile(() =>
         runtime.runPromise(

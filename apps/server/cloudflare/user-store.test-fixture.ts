@@ -30,7 +30,7 @@ export const nativeUserPlatform = Effect.gen(function* () {
     { concurrency: 2 }
   );
   const origin = { type: "text", value: browserOrigins.production } as const;
-  const create = (): Miniflare =>
+  const create = (ceiling: string): Miniflare =>
     new Miniflare({
       unsafeInspectDurableObjects: true,
       resourcePersistencePath: directory,
@@ -59,6 +59,7 @@ export const nativeUserPlatform = Effect.gen(function* () {
             env: {
               BROWSER_ORIGIN: origin,
               CF_VERSION_METADATA: { type: "version-metadata" },
+              SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: ceiling },
               USER_STORE: { type: "durable-object", worker: "core", exportName: "UserStore" },
               DIRECTORY: { type: "durable-object", worker: "core", exportName: "Directory" },
             },
@@ -66,6 +67,9 @@ export const nativeUserPlatform = Effect.gen(function* () {
         },
       ],
     });
-  return (): Effect.Effect<Miniflare, never, Scope.Scope> =>
-    Effect.acquireRelease(Effect.sync(create), (runtime) => native(() => runtime.dispose()));
+  return (ceiling = "1000000000"): Effect.Effect<Miniflare, never, Scope.Scope> =>
+    Effect.acquireRelease(
+      Effect.sync(() => create(ceiling)),
+      (runtime) => native(() => runtime.dispose())
+    );
 });

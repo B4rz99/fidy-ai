@@ -35,7 +35,7 @@ const understands = (
     definition.categories.every(
       (category, index) =>
         category.id === revision.categories[index]?.id &&
-        category.label === revision.categories[index]?.label
+        category.label === revision.categories[index].label
     )
   );
 };

@@ -1,4 +1,9 @@
-import type { StoreHistory } from "../../runtime/sqlite/contract";
+import { withStoreAdmission } from "../../runtime/sqlite/operations";
+import {
+  StoreCapacity,
+  type StoreCapacityUnavailable,
+  type StoreHistory,
+} from "../../runtime/sqlite/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 import { UserId } from "../../../src/core/identity/contract";
@@ -90,6 +95,7 @@ export const pricingHistory: StoreHistory = {
 };
 
 const offers = Effect.gen(function* () {
+  yield* (yield* StoreCapacity).observe;
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* sql`SELECT p.terms FROM selected_prices s JOIN prices p ON p.id=s.price_id
     ORDER BY CASE s.period WHEN 'weekly' THEN 1 WHEN 'monthly' THEN 2 WHEN 'yearly' THEN 3 END LIMIT 4`;
@@ -105,14 +111,14 @@ const offers = Effect.gen(function* () {
 
 type PricingResult = Effect.Effect<
   Response,
-  SqlError.SqlError | Schema.SchemaError,
-  SqlClient.SqlClient
+  SqlError.SqlError | Schema.SchemaError | StoreCapacityUnavailable,
+  SqlClient.SqlClient | StoreCapacity
 >;
 const publish = (input: typeof publication.Type): PricingResult =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const encoded = yield* Schema.encodeEffect(terms)(input.price);
-    return yield* sql.withTransaction(
+    return yield* withStoreAdmission((admitGrowth) =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
         if (input.authority.expiresAtMs <= now) return new Response(null, { status: 403 });
@@ -134,6 +140,7 @@ const publish = (input: typeof publication.Type): PricingResult =>
         }
         const known = yield* sql`SELECT 1 FROM prices WHERE id=${input.price.id}`;
         if (known.length > 0) return new Response(null, { status: 409 });
+        yield* admitGrowth;
         yield* sql`INSERT INTO prices VALUES (${input.price.id}, ${encoded})`;
         const changed =
           yield* sql`UPDATE selected_prices SET price_id=${input.price.id} WHERE period=${input.price.billingPeriod} RETURNING price_id`;
@@ -154,7 +161,7 @@ const register = (input: typeof registration.Type): PricingResult =>
       input.admission.kind === "renewal"
         ? input.admission.previousPaidAttemptId
         : input.admission.enrollmentId;
-    return yield* sql.withTransaction(
+    return yield* withStoreAdmission((admitGrowth) =>
       Effect.gen(function* () {
         if (input.deadlineMs <= (yield* Clock.currentTimeMillis)) {
           return new Response(null, { status: 410 });
@@ -183,6 +190,7 @@ const register = (input: typeof registration.Type): PricingResult =>
         ) {
           return new Response(null, { status: 409 });
         }
+        yield* admitGrowth;
         yield* sql`INSERT INTO price_registrations VALUES (${input.operationId}, ${input.userId}, ${input.admission.kind}, ${admissionId}, ${encoded}, ${row.terms.id})`;
         return Response.json({ ...input, price: yield* Schema.encodeEffect(Price)(row.terms) });
       })

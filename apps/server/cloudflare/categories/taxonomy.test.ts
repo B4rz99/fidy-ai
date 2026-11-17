@@ -94,6 +94,7 @@ const start = Effect.fn(function* (
                 manifest: owner,
                 exports: { CategoryProbe: { type: "durable-object", storage: "sqlite" } },
                 env: {
+                  SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: "1000000000" },
                   CF_VERSION_METADATA: { type: "version-metadata" },
                   USER_STORE: {
                     type: "durable-object",

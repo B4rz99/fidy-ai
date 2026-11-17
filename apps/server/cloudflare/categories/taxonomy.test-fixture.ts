@@ -19,7 +19,11 @@ export class CategoryProbe extends DurableObject<ConstructorParameters<typeof Us
   constructor(state: DurableObjectState, env: ConstructorParameters<typeof UserStore>[1]) {
     super(state, env);
     this.store = new UserStore(state, env);
-    this.runtime = createStoreRuntime(state.storage);
+    this.runtime = createStoreRuntime({
+      storage: state.storage,
+      owner: "user",
+      ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
+    });
   }
   override fetch(request: Request): Promise<Response> {
     if (new URL(request.url).pathname !== "/fixture/capture") return this.store.fetch(request);

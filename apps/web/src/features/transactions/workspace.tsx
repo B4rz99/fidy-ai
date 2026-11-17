@@ -244,6 +244,7 @@ const DetailPanel = ({
       timeZone={props.currentUser.timeZone}
       editable={props.editable}
       inspectable={props.readOnly !== true}
+      fromReview={Option.contains(props.locate, panel.id)}
       mode={panel.mode}
       onMode={(mode) => onPanel({ ...panel, mode })}
       onClose={close}
@@ -651,6 +652,7 @@ const WorkspaceContext = ({
     locked={panelLocked(panel) || busy}
     onClose={onClose}
     title={panelTitle(panel)}
+    returnFocusId={panel._tag === "Detail" ? Option.some(`transaction-${panel.id}`) : Option.none()}
   >
     {children}
   </TransactionContextPanel>
@@ -850,21 +852,34 @@ const capturePanelStatus = (
   return { _tag: "Capture", status: capture.value.uncertain ? "uncertain" : "idle" };
 };
 const useWorkspacePanel = (
-  generation: number
+  props: WorkspaceProps
 ): Readonly<{ panel: TransactionPanel; onPanel: (panel: TransactionPanel) => void }> => {
+  const generation = props.generation;
   const capture = use(ManualCaptureContext);
   const corrections = use(TransactionCorrectionContext);
   const defaultPanel: TransactionPanel = Option.exists(capture, (owner) => owner.uncertain)
     ? { _tag: "Capture", status: "uncertain" }
     : { _tag: "Summary" };
   const [interaction, setInteraction] = useState<
-    Readonly<{ generation: number; panel: TransactionPanel }>
-  >({ generation, panel: defaultPanel });
+    Readonly<{ generation: number; panel: Option.Option<TransactionPanel> }>
+  >({ generation, panel: Option.none() });
   if (interaction.generation !== generation) {
-    setInteraction({ generation, panel: defaultPanel });
+    setInteraction({ generation, panel: Option.some(defaultPanel) });
   }
+  const located = Option.filter(
+    props.locate,
+    (id) =>
+      props.location === "Located" &&
+      props.transactions.some((transaction) => transaction.id === id)
+  );
+  const initialPanel: TransactionPanel =
+    defaultPanel._tag === "Summary" && Option.isSome(located)
+      ? { _tag: "Detail", id: located.value, mode: { _tag: "Viewing" } }
+      : defaultPanel;
   const panel: TransactionPanel =
-    interaction.generation === generation ? interaction.panel : defaultPanel;
+    interaction.generation === generation
+      ? Option.getOrElse(interaction.panel, () => initialPanel)
+      : defaultPanel;
   const onPanel = (next: TransactionPanel): void => {
     if (
       panel._tag === "Detail" &&
@@ -873,7 +888,7 @@ const useWorkspacePanel = (
     ) {
       Option.map(corrections, (owner) => owner.cancelDeletion());
     }
-    setInteraction({ generation, panel: next });
+    setInteraction({ generation, panel: Option.some(next) });
   };
   return { panel: capturePanelStatus(panel, capture), onPanel };
 };
@@ -929,7 +944,7 @@ const usePeriodSelection = (
 };
 export const TransactionWorkspace = (source: WorkspaceProps): JSX.Element => {
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
-  const { panel: activePanel, onPanel } = useWorkspacePanel(source.generation);
+  const { panel: activePanel, onPanel } = useWorkspacePanel(source);
   const { props, confirmation } = usePeriodSelection(source, activePanel, onPanel);
   const month = Option.getOrElse(
     Option.map(props.monthFilter, (filter) => filter.value),

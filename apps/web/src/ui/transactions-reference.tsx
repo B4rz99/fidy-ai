@@ -1,5 +1,6 @@
 import { TransactionCaptureRecovery } from "@/ui/components/transaction-capture-recovery";
 import { SearchableChoiceDropdown } from "@/ui/components/searchable-choice-dropdown";
+import { Option } from "effect";
 import { type JSX, useState } from "react";
 import { AmountInput } from "@/ui/components/amount-input";
 import { Label } from "@/ui/components/label";
@@ -38,6 +39,7 @@ export const TransactionsReference = (): JSX.Element => {
         <TransactionContextPanel
           title="Campos de ejemplo"
           identity="example"
+          returnFocusId={Option.none()}
           active={false}
           locked={false}
           onClose={() => {}}

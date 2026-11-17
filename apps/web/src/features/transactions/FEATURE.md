@@ -93,8 +93,12 @@ pending or fail, without admitting an old-generation append or claiming the old 
 Located. Lookup failure remains explicit even when earlier rows are visible. Each generation keeps
 the existing five-second stale-on-focus policy and five-minute source retention. Mutation recovery
 still owns affected identity and Category rereads; history reset alone does not resolve an uncertain write. Privacy history
-retains its independent authorized read-only query and policies. Row reveal remains a DOM commit
-callback and does not move keyboard focus.
+retains its independent authorized read-only query and policies. Once the current destination is
+Located in the loaded month list, its existing detail view opens for inspection and the ledger
+identifies its selected row. Focus enters the named detail group; closing resolves the current row
+control and returns focus and the viewport to it. Editing remains explicit and subject to fresh
+inspection and the existing Correction owner. Pending or failed location never opens stale retained
+rows as a newly located destination.
 
 ## Owners
 

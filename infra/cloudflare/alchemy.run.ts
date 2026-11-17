@@ -438,6 +438,7 @@ export default Alchemy.Stack(
           Config.withDefault("1000000000")
         ),
         USER_STORE: Cloudflare.DurableObject("UserStore", { className: "UserStore" }),
+        MAINTENANCE: Cloudflare.DurableObject("Maintenance", { className: "Maintenance" }),
         DIRECTORY: Cloudflare.DurableObject("Directory", { className: "Directory" }),
         PRICING: Cloudflare.DurableObject("Pricing", { className: "Pricing" }),
         PRICING_PUBLISH_AUDIENCE: yield* Config.String("PRICING_PUBLISH_AUDIENCE").pipe(

@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { maintenanceName } from "../maintenance/contract";
 import { directoryName } from "../directory/contract";
 import { pricingName } from "../subscription/contract";
 import { erasureRegistryName } from "../erasure/contract";
@@ -20,7 +21,7 @@ export const initializeSharedStores = Effect.fn(function* (bindings: SharedBindi
       user: read(bindings.USER_STORE, releaseProbeName),
       directory: read(bindings.DIRECTORY, directoryName),
       pricing: read(bindings.PRICING, pricingName),
-      maintenance: read(bindings.MAINTENANCE, "core-maintenance-v1"),
+      maintenance: read(bindings.MAINTENANCE, maintenanceName),
       erasure: read(bindings.ERASURE, erasureRegistryName),
     },
     { concurrency: 4 }

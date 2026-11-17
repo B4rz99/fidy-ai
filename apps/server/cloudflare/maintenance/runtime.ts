@@ -1,4 +1,9 @@
-import { executeDueSchedule, maintenanceStoreHistory } from "./operations";
+import {
+  executeDueSchedule,
+  handleLifetimeRegistration,
+  lifetimeRequest,
+  maintenanceStoreHistory,
+} from "./operations";
 import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
 import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
@@ -14,6 +19,7 @@ import {
   type ScheduledActivity,
   type ScheduledOperation,
   type ScheduledWorkFailed,
+  maintenanceName,
 } from "./contract";
 
 import { sweepCanonicalAdmission } from "../canonical-admission/runtime";
@@ -351,7 +357,7 @@ export class Maintenance extends DurableObject<StoreReleaseEnvironment> {
       owner: maintenanceStoreHistory.owner,
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
-    if (state.id.name === "core-maintenance-v1") {
+    if (state.id.name === maintenanceName) {
       state.waitUntil(
         state.blockConcurrencyWhile(() =>
           this.runtime.runPromise(
@@ -362,8 +368,15 @@ export class Maintenance extends DurableObject<StoreReleaseEnvironment> {
     }
   }
   override fetch(request: Request): Promise<Response> {
+    if (this.ctx.id.name === maintenanceName && lifetimeRequest(request)) {
+      return this.runtime.runPromise(
+        handleLifetimeRegistration(request).pipe(
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
+      );
+    }
     if (
-      this.ctx.id.name !== "core-maintenance-v1" ||
+      this.ctx.id.name !== maintenanceName ||
       request.method !== "GET" ||
       request.url !== storeReadinessUrl
     ) {

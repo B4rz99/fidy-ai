@@ -1,6 +1,6 @@
 import { prepareGroupCorrection as ownerPrepareGroupCorrection } from "./internal/group-correction";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
-import { prepareBoundTransactionRead as ownerPrepareBoundRead } from "./internal/bound-history";
+import { readUserHistory as readLocalHistory } from "./internal/sqlite-history";
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
 import {
   findSnapshot,
@@ -116,9 +116,8 @@ export const prepareFactRevisionProjection = (
 export const browseTransactions: typeof ownerBrowseTransactions = (...args) =>
   ownerBrowseTransactions(...args);
 
-/** Compose bounded browser History and its required Audit in one live native read. */
-export const prepareBoundTransactionRead: typeof ownerPrepareBoundRead = (request) =>
-  ownerPrepareBoundRead(request);
+/** Run the browser History query with live authority and accountability in the destination User's transaction. */
+export const readUserHistory: typeof readLocalHistory = (...args) => readLocalHistory(...args);
 
 /** Return bounded same-User financial history for an explicit Titular access request; every page requires fresh browser proof and atomic Audit, never renewed processing Consent. */
 export const readPrivacyTransactions = (input: PrivacyTransactionsRead): Effect.Effect<Response> =>

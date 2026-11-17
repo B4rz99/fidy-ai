@@ -15,3 +15,13 @@ export class WorkerEntrypoint<Environment> {
     return Promise.resolve(new Response(null, { status: 404 }));
   }
 }
+
+/** Import-only class identity for Workers bundled into host-side tests. */
+export class DurableObject<Environment> {
+  protected readonly ctx: DurableObjectState;
+  protected readonly env: Environment;
+  constructor(state: DurableObjectState, environment: Environment) {
+    this.ctx = state;
+    this.env = environment;
+  }
+}

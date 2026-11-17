@@ -115,6 +115,7 @@ const sharedTestSupport = new Set([
   "src/shell/testing/crypto-harness.ts",
   "src/shell/outbound-http/testing.ts",
   "cloudflare/d1-test-fixture.ts",
+  "cloudflare/user-store.test-fixture.ts",
   "cloudflare/d1-test-bridge.test-fixture.ts",
   "cloudflare/d1-test-images.test-fixture.ts",
   "cloudflare/maintenance-performance.test-fixture.ts",

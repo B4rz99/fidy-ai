@@ -67,7 +67,12 @@ retained-work processing and erasure remain separate capabilities.
 
 ## 5. State and atomicity
 
-D1 is authoritative for application state. Canonical mutation units commit live authority, owner
+Browser Transaction history follows the mounted session digest through the shared Directory to its
+UserStore. The UserStore checks its namespace identity, local credential, Consent and erasure fence,
+then materializes the financial page, standing and Audit in one SQLite transaction. See
+[per-User storage](../../docs/adr/0041-per-user-durable-object-storage-direction.md).
+
+Unmigrated paths still use D1. Canonical mutation units commit live authority, owner
 changes, accounting and Audit together. Database guards enforce ownership and revisions alongside
 per-User coordination. Shared reads preserve the same authorization and accountability boundaries.
 

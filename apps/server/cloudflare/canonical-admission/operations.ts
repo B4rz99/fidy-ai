@@ -97,7 +97,7 @@ type MeteredCall<E, R> = Call<E, R> &
     inputHash: string;
     retryKey: Option.Option<string>;
   }>;
-const unavailable = (): Response =>
+export const canonicalAdmissionUnavailable = (): Response =>
   Response.json(
     {
       error: { code: "unavailable", message: "The operation is unavailable. Retry later." },
@@ -105,7 +105,8 @@ const unavailable = (): Response =>
     },
     { status: 503 }
   );
-const noAuthority = (): Response =>
+const unavailable = canonicalAdmissionUnavailable;
+export const noAuthority = (): Response =>
   Response.json(
     {
       error: {
@@ -132,7 +133,7 @@ const invalid = (message: string): Response =>
     { error: { code: "validation_failed", message, fields: [] }, next: [] },
     { status: 400 }
   );
-const rateLimited = (): Response =>
+export const rateLimited = (): Response =>
   Response.json(
     {
       error: {
@@ -312,6 +313,13 @@ const attachStanding = (response: Response, status: QuotaStatus, current: number
   );
   return new Response(response.body, { status: response.status, headers });
 };
+/** Disclose current allowance only after the caller's atomic read and accountability succeed. */
+export const attachCanonicalStanding = ({
+  response,
+  status,
+  current,
+}: Readonly<{ response: Response; status: QuotaStatus; current: number }>): Response =>
+  attachStanding(response, status, current);
 const replayResponse = (replay: Replay): Response => {
   if (replay.state !== "completed" || Option.isNone(replay.status) || Option.isNone(replay.body)) {
     return unavailable();

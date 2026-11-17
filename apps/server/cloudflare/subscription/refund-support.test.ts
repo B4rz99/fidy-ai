@@ -436,16 +436,17 @@ it("accepts a Price publication through ingress only under current pricing-speci
           }),
         },
       };
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        publicationId,
+        price,
+      });
       const send = (assertion: string): Effect.Effect<Response, Cause.UnknownError> =>
         Effect.tryPromise(() =>
           publicSupport(
             new Request("https://api.fidyapp.com/internal/support/prices", {
               method: "POST",
               headers: { "cf-access-jwt-assertion": assertion, "content-type": "application/json" },
-              body: Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))({
-                publicationId,
-                price,
-              }),
+              body,
             }),
             environment
           )

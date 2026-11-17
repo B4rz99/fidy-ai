@@ -1,0 +1,43 @@
+apps/web/src/ui/components/transactions.tsx
+  s_f4b5c9b6af6412::t_6438c39ee66042 91,99
+  s_f4b5c9b6af6412::t_7cedc37cb2f3bc 63,64-67,73-75,77,78-79,81-83
+apps/web/src/features/transactions/location-notice.tsx
+  s_f4b5c9b6af6412::t_345550ef570937 4,36
+apps/web/src/features/transactions/destination.tsx
+  s_f4b5c9b6af6412::t_345550ef570937 48
+apps/web/src/ui/dashboard-reference.tsx
+  s_f4b5c9b6af6412::t_2ebf73e8751941 8-9,117
+apps/web/src/ui/components/dashboard.tsx
+  s_f4b5c9b6af6412::t_2ebf73e8751941 108
+apps/web/src/features/transactions/workspace.tsx
+  s_f4b5c9b6af6412::t_ae0d3e1f511f5f 874,947
+  s_f4b5c9b6af6412::t_06a133943f6a34 871
+apps/web/src/ui/components/transactions.css
+  s_f4b5c9b6af6412::t_c3b227086c3eea 533-536
+apps/web/src/ui/transactions-reference.tsx
+  s_f4b5c9b6af6412::t_6438c39ee66042 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a31383b8cd92d670df40711d3a08213533f1f37",
+  "prompts": {},
+  "sessions": {
+    "s_b3b52c95df703e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7ce-acf7-75f3-ad7e-833ba7f20423",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    },
+    "s_f4b5c9b6af6412": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7c7-d507-75c3-83c6-de2e1963d1a8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

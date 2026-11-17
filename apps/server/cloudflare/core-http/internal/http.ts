@@ -89,7 +89,11 @@ import {
 } from "../../transactions/operations";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
-import { budgetRefusal, prepareBoundBudgetWorkspace } from "../../budgets/operations";
+import {
+  budgetRefusal,
+  isLocalBudgetOperation,
+  prepareBoundBudgetWorkspace,
+} from "../../budgets/operations";
 
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 import {
@@ -1749,6 +1753,7 @@ const authorizedCanonicalResponse = (
 ): Effect.Effect<Response> => {
   if (
     isLocalTransactionOperation(operation.id) ||
+    isLocalBudgetOperation(operation.id) ||
     operation.id === "subscription.cancelSubscription"
   ) {
     const route = request.headers.has("authorization") ? routePATRequest : routeSessionRequest;

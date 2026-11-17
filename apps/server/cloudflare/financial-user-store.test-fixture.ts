@@ -1,8 +1,9 @@
+import { newId } from "./secret-material/operations";
 import { Clock, Effect } from "effect";
 import { expect } from "vitest";
 import type { Miniflare } from "miniflare";
-import { browserOrigins, productionTopology } from "../runtime/contract";
-import { native, nativeUserPlatform } from "../user-store.test-fixture";
+import { browserOrigins, productionTopology } from "./runtime/contract";
+import { native, nativeUserPlatform } from "./user-store.test-fixture";
 
 const bearerLength = 43;
 const sessionLifetimeMs = 7776000000;
@@ -162,4 +163,53 @@ export const nativeTransactionJourney = Effect.gen(function* () {
     browser,
     directory: first.directory,
   };
+});
+
+const patPrefixLength = 4;
+const shortIdLength = 8;
+const patLifetime = 604800000;
+export const seedNativePAT = Effect.fn(function* ({
+  db,
+  userId,
+  token,
+  scopes,
+  current,
+}: Readonly<{
+  db: Effect.Success<typeof nativeTransactionJourney>;
+  userId: string;
+  token: string;
+  scopes: ReadonlyArray<string>;
+  current: number;
+}>) {
+  const id = newId();
+  const shortId = token.slice(patPrefixLength, patPrefixLength + shortIdLength);
+  const digestBytes = yield* native(() =>
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))
+  );
+  yield* native(() =>
+    db
+      .owner(userId)
+      .exec(
+        "INSERT INTO pats(id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id) VALUES(?,?,?,?,'agent',?,7,?,?,?,?)",
+        id,
+        userId,
+        shortId,
+        digestBytes,
+        JSON.stringify(scopes),
+        current,
+        current,
+        current + patLifetime,
+        id
+      )
+  );
+  yield* native(() =>
+    db.directory.exec(
+      "INSERT INTO pat_routes VALUES (?,?,?,?,?)",
+      shortId,
+      userId,
+      id,
+      "route-" + id,
+      current + patLifetime
+    )
+  );
 });

@@ -228,12 +228,15 @@ const charge = Effect.fn(function* (call: Call) {
   return Option.none<Response>();
 });
 const financialGrowth = new Set<string>([
+  "budgets.createBudget",
+  "budgets.updateBudget",
   "transactions.createTransaction",
   "transactions.updateTransaction",
   "transactions.linkTransactions",
 ]);
 const replayableOperations = new Set<string>([
   ...financialGrowth,
+  "budgets.deleteBudget",
   "subscription.cancelSubscription",
   "transactions.unlinkTransactions",
 ]);

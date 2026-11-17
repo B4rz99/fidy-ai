@@ -522,6 +522,40 @@ WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NO
 BEGIN SELECT RAISE(ABORT, 'transaction_user_decision'); END`,
 ] as const;
 
+const budgetPlanningMigration = [
+  `ALTER TABLE canonical_request_receipts RENAME TO receipts_before_budgets`,
+  `CREATE TABLE canonical_request_receipts (
+    user_id TEXT NOT NULL REFERENCES users(id),retry_key_digest TEXT NOT NULL CHECK(length(retry_key_digest)=64),
+    operation TEXT NOT NULL,input_digest TEXT NOT NULL CHECK(length(input_digest)=64),
+    accepted_at_ms INTEGER NOT NULL,status INTEGER NOT NULL CHECK(status BETWEEN 200 AND 499),
+    body TEXT, PRIMARY KEY(user_id,retry_key_digest),
+    CHECK(body IS NULL OR (operation IN ('subscription.cancelSubscription','transactions.createTransaction','transactions.updateTransaction','transactions.linkTransactions','transactions.unlinkTransactions','budgets.createBudget','budgets.updateBudget','budgets.deleteBudget') AND json_valid(body)))
+  ) STRICT`,
+  `INSERT INTO canonical_request_receipts SELECT * FROM receipts_before_budgets`,
+  `DROP TABLE receipts_before_budgets`,
+  `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
+  `CREATE TABLE budget_month_plan_records (
+ kind TEXT NOT NULL CHECK(kind IN ('cap','plan','currency')),
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ month TEXT NOT NULL,
+ budget_id TEXT,
+ group_name TEXT,
+ cap TEXT,
+ currency TEXT,
+ FOREIGN KEY(user_id,budget_id) REFERENCES budgets(user_id,id) ON DELETE CASCADE,
+ CHECK((kind='cap' AND budget_id IS NOT NULL AND cap IS NOT NULL AND group_name IS NULL AND currency IS NULL)
+ OR(kind='plan' AND budget_id IS NULL AND cap IS NULL AND group_name IS NULL AND currency IS NULL)
+ OR(kind='currency' AND budget_id IS NULL AND cap IS NULL AND group_name IS NOT NULL AND currency IS NOT NULL))
+) STRICT`,
+  `CREATE UNIQUE INDEX budget_month_cap_identity ON budget_month_plan_records(user_id,budget_id,month) WHERE kind='cap'`,
+  `CREATE UNIQUE INDEX budget_month_currency_identity ON budget_month_plan_records(user_id,group_name,month) WHERE kind='currency'`,
+  `CREATE UNIQUE INDEX budget_month_plan_identity ON budget_month_plan_records(user_id,month) WHERE kind='plan'`,
+  `CREATE INDEX budgets_by_user ON budgets(user_id, currency, category_id)`,
+  `CREATE TRIGGER budget_capacity BEFORE INSERT ON budgets
+WHEN (SELECT COUNT(*) FROM budgets WHERE user_id = NEW.user_id) >= 128
+BEGIN SELECT RAISE(ABORT, 'budget_capacity_limit'); END`,
+] as const;
+
 export const userStoreHistory: StoreHistory = {
   owner: "user",
   steps: [
@@ -538,6 +572,7 @@ export const userStoreHistory: StoreHistory = {
         "ALTER TABLE users ADD COLUMN lifetime_registered INTEGER NOT NULL DEFAULT 0 CHECK(lifetime_registered IN (0,1))",
       ],
     },
+    { version: 8, id: "monthly-budget-planning", statements: budgetPlanningMigration },
   ],
 };
 

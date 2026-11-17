@@ -61,11 +61,13 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
 
   override alarm(): Promise<void> {
-    return this.registration().then(async (registered) => {
-      if (!registered) return;
-      const summary = await this.checkWork();
-      if (summary.failedFamilies > 0) throw new Error("User work discovery unavailable");
-    });
+    return this.registration().then((registered) =>
+      registered
+        ? this.checkWork().then((summary) => {
+            if (summary.failedFamilies > 0) throw new Error("User work discovery unavailable");
+          })
+        : undefined
+    );
   }
 
   private mutation(

@@ -1,3 +1,6 @@
+import type { UserId } from "../../../src/core/identity/contract";
+import { TransactionListResponse } from "../../../src/shell/transactions/contract";
+import { localTransactionRefusal } from "./sqlite-capture";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import { CategoryReference } from "../../../src/core/categories/contract";
 import { currentCategoryRelease, interpretCategory } from "../../../src/core/categories/operations";
@@ -19,7 +22,14 @@ import {
   readBoundWebSessionProof,
   resolveBoundCanonicalWebSession,
 } from "../../web-session/operations";
-import { invalid, parseQuery, presentHistory, selectedHistoryPage } from "./transaction-history";
+import {
+  decodeLocalHistoryPage,
+  invalid,
+  localHistoryPage,
+  parseQuery,
+  presentHistory,
+  selectedHistoryPage,
+} from "./transaction-history";
 
 const HistoryCategoryReference = Schema.Struct({
   category_revision: CategoryReference.fields.revision,
@@ -49,7 +59,9 @@ export const readUserHistory = Effect.fn(function* (
   const prepared = yield* Effect.tryPromise(() => readBoundWebSessionProof(request));
   if (Option.isNone(prepared)) return noAuthority();
   // Hashing the cookie can yield. Build the final expiry predicates at the transaction's decision instant.
-  const selection = { request, search: false, id: Option.none<string>() } as const;
+  const search = new URL(request.url).pathname === "/transactions/search";
+  const operation = search ? "transactions.searchTransactions" : "transactions.listTransactions";
+  const selection = { request, search, id: Option.none<string>() } as const;
   const query = parseQuery(selection);
   return yield* Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
@@ -85,7 +97,7 @@ export const readUserHistory = Effect.fn(function* (
       authority,
       id: newId(),
       current,
-      operation: "transactions.listTransactions",
+      operation,
       outcome: response.ok ? "success" : "validation_failed",
       afterOwnerWrite: false,
     });
@@ -93,4 +105,33 @@ export const readUserHistory = Effect.fn(function* (
     if (audited.length !== 1) return yield* new HistoryUnavailable();
     return attachCanonicalStanding({ response, status: status.value, current });
   }).pipe(withStoreCapacity("required"));
+});
+
+export const readLocalTransactionPage = Effect.fn(function* (request: Request, user: UserId) {
+  const selection = {
+    request,
+    search: new URL(request.url).pathname === "/transactions/search",
+    id: Option.none<string>(),
+  };
+  const query = parseQuery(selection);
+  if (Option.isNone(query)) {
+    return localTransactionRefusal({
+      status: 400,
+      code: "validation_failed",
+      message: "Invalid Transaction history query.",
+    });
+  }
+  const sql = yield* SqliteClient;
+  const page = localHistoryPage({ user, query: query.value });
+  const rows = yield* sql.unsafe(page.sql, page.bindings);
+  if (!rows.every(understoodCategory)) return yield* new HistoryUnavailable();
+  const records = yield* Effect.fromOption(
+    decodeLocalHistoryPage({ rows, selection, query: query.value }),
+    () => new HistoryUnavailable()
+  );
+  return {
+    status: 200,
+    outcome: "success" as const,
+    body: yield* Schema.encodeEffect(Schema.toCodecJson(TransactionListResponse))(records),
+  };
 });

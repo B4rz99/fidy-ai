@@ -5,12 +5,7 @@ import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
 import { Clock, Effect, Option } from "effect";
 import { canonicalOperation } from "../routing/operations";
-import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-admission/operations";
-import {
-  captureLocalTransaction,
-  readUserHistory,
-  transactionInput,
-} from "../transactions/operations";
+import { dispatchLocalTransaction, isLocalTransactionOperation } from "../transactions/operations";
 import { recoverUserWork, userStoreHistory } from "./operations";
 import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
 
@@ -66,15 +61,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     const owns = (userId: string): boolean =>
       this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
     const operation = canonicalOperation({ method: request.method, path });
-    if (Option.isSome(operation) && operation.value.id === "transactions.createTransaction") {
+    if (Option.isSome(operation) && isLocalTransactionOperation(operation.value.id)) {
       return this.runtime.runPromise(
-        runLocalMutation({
-          request,
-          operation: operation.value,
-          owns,
-          input: transactionInput(request),
-          work: captureLocalTransaction,
-        }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+        dispatchLocalTransaction({ request, operation: operation.value, owns })
       );
     }
     if (
@@ -97,13 +86,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         })
       );
     }
-    if (command !== "GET /transactions" || request.headers.has("authorization")) {
-      return Promise.resolve(new Response(null, { status: 404 }));
-    }
-    return this.runtime.runPromise(
-      readUserHistory(request, owns).pipe(
-        Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
-      )
-    );
+    return Promise.resolve(new Response(null, { status: 404 }));
   }
 }

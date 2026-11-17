@@ -1,7 +1,20 @@
+import { TransactionId } from "../../src/core/transactions/contract";
+import {
+  correctLocalTransaction,
+  inspectLocalTransaction,
+  missingLocalTransaction,
+  reconcileLocalTransactions,
+} from "./internal/sqlite-corrections";
+import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
+import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-admission/operations";
+import { rawPathId } from "../http/operations";
 import { captureLocalTransaction as captureNative } from "./internal/sqlite-capture";
 import { prepareGroupCorrection as ownerPrepareGroupCorrection } from "./internal/group-correction";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
-import { readUserHistory as readLocalHistory } from "./internal/sqlite-history";
+import {
+  readUserHistory as readLocalHistory,
+  readLocalTransactionPage,
+} from "./internal/sqlite-history";
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
 import {
   findSnapshot,
@@ -283,3 +296,90 @@ export const prepareGroupCorrection: typeof ownerPrepareGroupCorrection = (input
 /** Native single or composed capture. Admission and completion belong to the enclosing User transaction. */
 export const captureLocalTransaction: typeof captureNative = (input, userId, current) =>
   captureNative(input, userId, current);
+
+/** Canonical operations whose financial authority lives in the destination UserStore. */
+export const isLocalTransactionOperation = (id: string): boolean =>
+  [
+    "transactions.createTransaction",
+    "transactions.searchTransactions",
+    "transactions.listTransactions",
+    "transactions.updateTransaction",
+    "transactions.getTransaction",
+    "transactions.linkTransactions",
+    "transactions.unlinkTransactions",
+  ].includes(id);
+
+const invalidTransactionTarget = (
+  id: string
+): Option.Option<ReturnType<typeof missingLocalTransaction>> =>
+  Option.isNone(Schema.decodeOption(TransactionId)(id))
+    ? Option.some(missingLocalTransaction())
+    : Option.none();
+type LocalTransactionRequest = Readonly<{
+  request: Request;
+  operation: CatalogOperation;
+  owns: (userId: string) => boolean;
+}>;
+const historyResponse = Effect.fn(function* (unit: LocalTransactionRequest) {
+  return yield* unit.request.headers.has("authorization")
+    ? runLocalMutation({
+        ...unit,
+        input: Effect.succeedSome(unit.request),
+        work: readLocalTransactionPage,
+      })
+    : readUserHistory(unit.request, unit.owns);
+});
+const dispatchTransaction = Effect.fn(function* (unit: LocalTransactionRequest) {
+  const { request, operation } = unit;
+  const id = rawPathId({ request });
+  const invalidTarget = invalidTransactionTarget(id);
+  switch (operation.id) {
+    case "transactions.listTransactions":
+    case "transactions.searchTransactions":
+      return yield* historyResponse(unit);
+    case "transactions.createTransaction":
+      return yield* runLocalMutation({
+        ...unit,
+        input: transactionInput(request),
+        work: captureLocalTransaction,
+      });
+    case "transactions.updateTransaction":
+      return yield* runLocalMutation(
+        {
+          ...unit,
+          input: correctionInput(request).pipe(Effect.map(Option.map((input) => ({ id, input })))),
+          work: correctLocalTransaction,
+        },
+        invalidTarget
+      );
+    case "transactions.getTransaction":
+      return yield* runLocalMutation(
+        {
+          ...unit,
+          input: Effect.succeedSome(id),
+          work: inspectLocalTransaction,
+        },
+        invalidTarget
+      );
+    case "transactions.linkTransactions":
+    case "transactions.unlinkTransactions": {
+      const link = operation.id === "transactions.linkTransactions";
+      return yield* runLocalMutation({
+        ...unit,
+        input: transactionPairInput(request).pipe(
+          Effect.map(Option.map((input) => ({ input, link })))
+        ),
+        work: reconcileLocalTransactions,
+      });
+    }
+    default:
+      return new Response(null, { status: 404 });
+  }
+});
+
+export const dispatchLocalTransaction = (
+  unit: LocalTransactionRequest
+): Effect.Effect<Response, never, Effect.Services<ReturnType<typeof runLocalMutation>>> =>
+  dispatchTransaction(unit).pipe(
+    Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+  );

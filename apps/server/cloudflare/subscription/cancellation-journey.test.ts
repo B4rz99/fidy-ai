@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schedule } from "effect";
+import { Clock, DateTime, Effect, Schedule } from "effect";
 import { expect } from "vitest";
 import type { Miniflare } from "miniflare";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
@@ -215,7 +215,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const response = yield* cancel();
         expect(response.status).toBe(200);
         expect(yield* native(() => response.json())).toMatchObject({
-          data: { sourceCancellation: "detached", paidThrough: new Date(expires).toISOString() },
+          data: {
+            sourceCancellation: "detached",
+            paidThrough: DateTime.formatIso(DateTime.makeUnsafe(expires)),
+          },
         });
       }),
     25000

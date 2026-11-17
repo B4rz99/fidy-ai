@@ -285,7 +285,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           );
         const attempts = yield* Effect.all([create("USD"), create("XAF")], { concurrency: 2 });
-        expect(attempts.map((response) => response.status).sort()).toEqual([201, 400]);
+        expect(
+          attempts.map((response) => response.status).sort((left, right) => left - right)
+        ).toEqual([201, 400]);
         const list = yield* native(() => db.browser(0, "/budgets"));
         expect(list.status).toBe(200);
         const caps = yield* Schema.decodeUnknownEffect(

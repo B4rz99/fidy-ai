@@ -1,0 +1,23 @@
+apps/server/cloudflare/store-migrations.test-fixture.ts
+  s_a1be23a656acf0::t_19c4e523e6a591 117-135
+scripts/infra-performance/hosted/run.py
+  s_a1be23a656acf0::t_2e7d32dbfad3ea 174
+scripts/infra-performance/reference/browser.mjs
+  s_a1be23a656acf0::t_cc2968203f0c39 170-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2445f8b1d5f0a4f206912ed73279b03065e64f94",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

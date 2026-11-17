@@ -1,7 +1,12 @@
-import { Effect, Exit, Schema } from "effect";
+import { Clock, Effect, Exit, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UserId } from "../../src/core/identity/contract";
-import { registerUserLifetime } from "../maintenance/operations";
+import {
+  UserRegistrationUnavailable,
+  maintenanceName,
+  registerLifetimeUrl,
+  registrationAcceptedStatus,
+} from "../maintenance/contract";
 import type { StoreHistory } from "../runtime/sqlite/contract";
 
 /** Initial User-store schema. Schema creation grants no identity, credential or Consent. */
@@ -561,6 +566,24 @@ export const recoverUserWork = <E, R>(
       return { failedFamilies, attempted, failedOffers };
     })
   );
+
+/** Register outside the User transaction, before committing activation or accepting work. */
+export const registerUserLifetime = Effect.fn(function* (
+  maintenance: Pick<DurableObjectNamespace, "getByName">,
+  userId: UserId
+) {
+  const issuedAt = yield* Clock.currentTimeMillis;
+  const response = yield* Effect.tryPromise((signal) =>
+    maintenance.getByName(maintenanceName).fetch(registerLifetimeUrl, {
+      method: "POST",
+      headers: { "fidy-user-id": userId, "fidy-registration-issued-ms": String(issuedAt) },
+      signal,
+    })
+  );
+  if (response.status !== registrationAcceptedStatus) {
+    return yield* new UserRegistrationUnavailable();
+  }
+});
 
 /** An empty store has no work. Its reserved bootstrap registers independently before creating the User. */
 export const observeUserRegistration = Effect.fn(function* (

@@ -59,6 +59,30 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: fresh })
       );
       expect(yield* native(() => local.exec("SELECT id FROM users"))).toEqual([]);
+      yield* native(() =>
+        local.exec(
+          "INSERT INTO users (id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',0)",
+          fresh
+        )
+      );
+      yield* native(() =>
+        local.exec(
+          "INSERT INTO erasure_requests(id,user_id,state) VALUES (?,?,'pending')",
+          other,
+          fresh
+        )
+      );
+      const check = yield* native(() =>
+        users.getByName(fresh).fetch("https://user.invalid/work/check", { method: "POST" })
+      );
+      expect(yield* native(() => check.json())).toEqual({
+        failedFamilies: 0,
+        attempted: 0,
+        failedOffers: 0,
+      });
+      expect(yield* native(() => local.exec("SELECT lifetime_registered FROM users"))).toEqual([
+        { lifetime_registered: 0 },
+      ]);
       expect(yield* call("retire", fresh, erasure)).toBe(409);
       expect(yield* call("retire", original, other)).toBe(409);
       const store = yield* native(() =>
@@ -74,6 +98,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       expect(yield* call("retire", original, erasure)).toBe(204);
       expect(yield* call("register", original)).toBe(409);
       expect(yield* discoverable).toEqual([{ user_id: fresh }]);
+      expect(
+        yield* native(() =>
+          store.exec(
+            "SELECT user_id,erasure_reference,retired FROM lifetime_registry ORDER BY user_id"
+          )
+        )
+      ).toEqual([
+        { user_id: original, erasure_reference: erasure, retired: 1 },
+        { user_id: fresh, erasure_reference: null, retired: 0 },
+      ]);
     })
   );
 });

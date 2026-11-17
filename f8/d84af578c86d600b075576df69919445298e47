@@ -1,0 +1,59 @@
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_c49b7ca2ee6b47 3-7,109,126,235,237,251,256,317,355,373-396
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_cf227b1caf95ed 1750-1753
+apps/server/cloudflare/transactions/operations.ts
+  s_a1be23a656acf0::t_97a2f07621033a 319
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_ac5feceb36abdf 1,9-13,47,64-105,112-113
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_3753f0f146cfeb::t_69f171f1f774d6 13,1274-1276
+apps/server/cloudflare/runtime/sqlite/operations.ts
+  s_3753f0f146cfeb::t_22e53bb95febe3 292-302
+apps/server/cloudflare/subscription/cancellation-journey.test.ts
+  s_3753f0f146cfeb::t_87c1bad40cfc13 3,56-122,125-166,171-233,244-246,253-286,288,291
+apps/server/cloudflare/subscription/cancellation-recovery.test-fixture.ts
+  s_3753f0f146cfeb::t_8651eaa00f2ad8 1,9,19,31-34,42,51-53,97-113,165-169,171-172,211-212,243-247,260,268-281
+apps/server/cloudflare/subscription/cancellation-recovery.test.ts
+  s_3753f0f146cfeb::t_c028f50542a32e 51,55,113-127,135,176,204-215
+apps/server/cloudflare/subscription/contract.ts
+  s_3753f0f146cfeb::t_6ceb1094706c1e 242-248
+apps/server/cloudflare/subscription/internal/billing-observation.ts
+  s_3753f0f146cfeb::t_c0d78a1bda3277 18,68-72,91,108,189-190,251-252,260-261,264,267
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_3753f0f146cfeb::t_400608f9a7c4cc 20,255-256
+apps/server/cloudflare/subscription/internal/local-cancellation.ts
+  s_3753f0f146cfeb::t_c5a1582c953dc1 1,47-54,57,101
+apps/server/cloudflare/subscription/operations.ts
+  s_3753f0f146cfeb::t_2acf75ab28ec6d 1,14-18,129-153
+apps/server/cloudflare/subscription/runtime.ts
+  s_3753f0f146cfeb::t_beff3b02d8da5e 15,37,220,238-248
+apps/server/cloudflare/subscription/weekly-renewal.test.ts
+  s_3753f0f146cfeb::t_84d4488017b603 1218,1292,1294
+docs/operations/cloudflare-background-work.md
+  s_3753f0f146cfeb::t_5072409ff4a97f 178-186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f8d84af578c86d600b075576df69919445298e47",
+  "prompts": {},
+  "sessions": {
+    "s_3753f0f146cfeb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb8d-4e58-7c03-a5f5-c3836bdd4237",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

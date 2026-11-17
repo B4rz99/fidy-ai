@@ -1553,6 +1553,8 @@ const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snap
     snapshot.revision,
     "--",
     "infra/cloudflare/alchemy.run.ts",
+    "infra/cloudflare/alchemy.storage.ts",
+    "infra/cloudflare/storage-installation.ts",
     "apps/server/cloudflare/",
   ]))
     .trim()

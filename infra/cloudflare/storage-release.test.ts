@@ -134,13 +134,13 @@ it("refuses to bootstrap an existing target or a plan that can replace or delete
 
 it("binds each planned Worker to the closed installation before any provider apply", () => {
   const base = { name: installationNames.Core, workersDev: false, version: { traffic: 0 } };
-  expect(() => requireInstallationWorker("Core", base)).not.toThrow();
+  expect(() => requireInstallationWorker({ logicalId: "Core", props: base })).not.toThrow();
   const ingress = {
     ...base,
     name: installationNames.Ingress,
     domain: "storage-acceptance.fidyapp.com",
   };
-  expect(() => requireInstallationWorker("Ingress", ingress)).not.toThrow();
+  expect(() => requireInstallationWorker({ logicalId: "Ingress", props: ingress })).not.toThrow();
   for (const drift of [
     { name: "incumbent" },
     { domain: "api.fidyapp.com" },
@@ -148,7 +148,11 @@ it("binds each planned Worker to the closed installation before any provider app
     { version: { traffic: 100 } },
     { routes: ["api.fidyapp.com/*"] },
   ]) {
-    expect(() => requireInstallationWorker("Ingress", { ...ingress, ...drift })).toThrow();
+    expect(() =>
+      requireInstallationWorker({ logicalId: "Ingress", props: { ...ingress, ...drift } })
+    ).toThrow();
   }
-  expect(() => requireInstallationWorker("Core", { ...base, domain: "api.fidyapp.com" })).toThrow();
+  expect(() =>
+    requireInstallationWorker({ logicalId: "Core", props: { ...base, domain: "api.fidyapp.com" } })
+  ).toThrow();
 });

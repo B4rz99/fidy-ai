@@ -109,6 +109,8 @@ export const rollbackCompatible = (
     (path) =>
       input.workflowPaths.includes(path) ||
       path === "infra/cloudflare/alchemy.run.ts" ||
+      path === "infra/cloudflare/alchemy.storage.ts" ||
+      path === "infra/cloudflare/storage-installation.ts" ||
       path.startsWith("apps/server/cloudflare/migrations/") ||
       (path.startsWith("apps/server/cloudflare/") && /workflow|queue/i.test(path))
   );

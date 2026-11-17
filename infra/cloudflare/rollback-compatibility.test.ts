@@ -34,6 +34,8 @@ describe("rollback compatibility evidence", () => {
     );
     for (const path of [
       ...base.workflowPaths,
+      "infra/cloudflare/alchemy.storage.ts",
+      "infra/cloudflare/storage-installation.ts",
       "apps/server/cloudflare/subscription/internal/billing-collection-workflow.ts",
       "apps/server/cloudflare/email-authentication/internal/onboarding-workflow.ts",
     ]) {

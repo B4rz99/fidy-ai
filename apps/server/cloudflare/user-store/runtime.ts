@@ -18,6 +18,8 @@ import { userStoreHistory } from "./operations";
 
 type UserStoreEnvironment = StoreReleaseEnvironment &
   Readonly<{ USER_STORE: DurableObjectNamespace }>;
+const isStoreReadiness = (request: Request): boolean =>
+  request.method === "GET" && request.url === storeReadinessUrl;
 export class UserStore extends DurableObject<UserStoreEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
@@ -51,8 +53,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       );
     }
     if (
-      request.method === "GET" &&
-      request.url === storeReadinessUrl &&
+      isStoreReadiness(request) &&
       this.ctx.id.equals(this.env.USER_STORE.idFromName(releaseProbeName))
     ) {
       return this.runtime.runPromise(

@@ -113,10 +113,13 @@ const networkSurface = {
   namespace: Schema.optional(Schema.Never),
   preview: Schema.optional(Schema.Never),
 };
-export const requireInstallationWorker = (
-  logicalId: keyof typeof installationNames,
-  props: unknown
-): void => {
+export const requireInstallationWorker = ({
+  logicalId,
+  props,
+}: {
+  logicalId: keyof typeof installationNames;
+  props: unknown;
+}): void => {
   Schema.decodeUnknownSync(
     Schema.Struct({
       ...networkSurface,
@@ -146,8 +149,8 @@ export const requireNativeBindings = (plan: Plan): void => {
   }
   const workerProps = (node: typeof core): unknown =>
     node.action === "noop" ? node.state.props : node.props;
-  requireInstallationWorker("Core", workerProps(core));
-  requireInstallationWorker("Ingress", workerProps(ingress));
+  requireInstallationWorker({ logicalId: "Core", props: workerProps(core) });
+  requireInstallationWorker({ logicalId: "Ingress", props: workerProps(ingress) });
   const material = core.bindings.flatMap(
     (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
   );

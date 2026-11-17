@@ -98,7 +98,7 @@ const firstInstallInventory = Effect.fn(function* (env: Config, client: HttpClie
         script: Schema.NonEmptyString,
         id: Schema.NonEmptyString,
         class: Schema.NonEmptyString,
-        use_sqlite: Schema.Boolean,
+        use_sqlite: Schema.optional(Schema.Boolean),
       })
     ),
     domains: yield* pages(
@@ -137,6 +137,8 @@ const verifyStorageUpload = Effect.fn(function* (
   const stored = yield* Effect.try(() =>
     verifiedStoragePair({ ingress: ingress.bindings, core: core.bindings })
   );
+  yield* proveRecoveryCorePrivate(env, client, installationNames.Core);
+  yield* verifyInstalledNamespaces({ env, client, storage: stored, workers: [ingress, core] });
   const candidate = yield* buildStorageRelease();
   if (!storageOverlap({ stable: stored.description, candidate }).forward) {
     return yield* new ReleaseFailure({
@@ -189,15 +191,7 @@ const verifyInstalledNamespaces = Effect.fn(function* ({
   ) {
     return yield* new ReleaseFailure({ message: "Fresh namespace or network identity differs" });
   }
-  for (const worker of workers) {
-    if (
-      !Schema.is(
-        Schema.Struct({ type: Schema.Literal("plain_text"), text: Schema.Literal("isolated") })
-      )(worker.bindings["RECOVERY_ISOLATION"])
-    ) {
-      return yield* new ReleaseFailure({ message: "First-install admission must remain closed" });
-    }
-  }
+  yield* requireClosedWorkers(workers);
 });
 const verifyInstalledMarkers = Effect.fn(function* ({
   env,
@@ -293,7 +287,7 @@ const verifyFirstInstall = Effect.fn(function* (
   yield* verifyInstalledNamespaces({ env, client, storage, workers: [ingress, core] });
   const proof = yield* verifyInstalledMarkers({ env, client, pair, storage });
   yield* writeFile(
-    env.file,
+    env.smokeAttestationFile,
     encodeJson({
       revision: env.revision,
       publicVersionId: pair.publicStable,

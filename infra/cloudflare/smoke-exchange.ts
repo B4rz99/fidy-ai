@@ -117,7 +117,7 @@ export const exchangeSmoke = Effect.fn(
     } satisfies SmokeExchange;
   },
   Effect.scoped,
-  (work, input) =>
+  (work, input, _origin = "https://api.fidyapp.com") =>
     work.pipe(
       Effect.timeout(
         Option.exists(

@@ -260,7 +260,11 @@ export class Pricing {
   private readonly runtime;
   constructor(state: DurableObjectState, env: StoreReleaseEnvironment) {
     this.state = state;
-    this.runtime = createStoreRuntime(state.storage);
+    this.runtime = createStoreRuntime({
+      storage: state.storage,
+      owner: "pricing",
+      ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
+    });
     if (state.id.name === pricingName) {
       state.waitUntil(
         state.blockConcurrencyWhile(() =>

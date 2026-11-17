@@ -1,7 +1,11 @@
 import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
 import { DurableObject } from "cloudflare:workers";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import type { StoreHistory, StoreReleaseEnvironment } from "../runtime/sqlite/contract";
+import {
+  StoreCapacity,
+  type StoreHistory,
+  type StoreReleaseEnvironment,
+} from "../runtime/sqlite/contract";
 import { Clock, Effect, Schema } from "effect";
 import { SessionRoute, directoryName, sessionRouteUrl } from "./contract";
 
@@ -26,7 +30,11 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: DirectoryEnvironment) {
     super(state, env);
-    this.runtime = createStoreRuntime(state.storage);
+    this.runtime = createStoreRuntime({
+      storage: state.storage,
+      owner: "directory",
+      ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
+    });
     state.waitUntil(
       state.blockConcurrencyWhile(() =>
         this.runtime.runPromise(openSqliteStore(directoryHistory, env.CF_VERSION_METADATA.id))
@@ -43,6 +51,7 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     }
     return this.runtime.runPromise(
       Effect.gen(function* () {
+        yield* (yield* StoreCapacity).observe;
         const digest = new Uint8Array(yield* Effect.tryPromise(() => request.arrayBuffer()));
         if (digest.byteLength !== digestBytes) return new Response(null, { status: 400 });
         const sql = yield* SqliteClient;

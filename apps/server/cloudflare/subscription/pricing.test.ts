@@ -55,6 +55,7 @@ const platform = Effect.gen(function* () {
             name: "pricing-test",
             compatibilityDate: "2026-09-08",
             env: {
+              SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: "131072" },
               CF_VERSION_METADATA: { type: "version-metadata" },
               PRICING: {
                 type: "durable-object",
@@ -111,6 +112,42 @@ const platform = Effect.gen(function* () {
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "keeps exact accepted Price work available when pricing reaches its growth restriction",
+    () =>
+      Effect.gen(function* () {
+        const { request, publication } = yield* platform;
+        const enrollment = {
+          userId: "12700000-0000-4000-8000-000000000001",
+          operationId: "22700000-0000-4000-8000-000000000018",
+          admission: {
+            kind: "enrollment",
+            enrollmentId: "22700000-0000-4000-8000-000000000016",
+            acceptedPriceId: "22700000-0000-4000-8000-000000000001",
+          },
+          inputsDigest: "a".repeat(64),
+          billingPeriod: "weekly",
+          deadlineMs: (yield* Clock.currentTimeMillis) + 60000,
+        };
+        const accepted = yield* request("register", enrollment);
+        expect(accepted.status).toBe(200);
+        const before = yield* request("offers");
+        expect((yield* request("fixture/restrict-growth", {})).status).toBe(200);
+        expect((yield* request("publish", publication)).status).toBe(503);
+        expect(yield* request("offers")).toEqual(before);
+        expect(yield* request("register", enrollment)).toEqual(accepted);
+        expect(
+          (yield* request("register", {
+            ...enrollment,
+            operationId: "22700000-0000-4000-8000-000000000014",
+            admission: {
+              ...enrollment.admission,
+              enrollmentId: "22700000-0000-4000-8000-000000000015",
+            },
+          })).status
+        ).toBe(503);
+      })
+  );
   test.effect("publishes immutable weekly terms without changing the other offers", () =>
     Effect.gen(function* () {
       const { request, publication } = yield* platform;

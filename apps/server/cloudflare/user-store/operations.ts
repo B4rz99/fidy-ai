@@ -392,10 +392,28 @@ SELECT user_id,id,amount,currency,direction,counterparty,category_id,notes,occur
   ) STRICT`,
 ] as const;
 
+/** Immutable User-store step extending the existing Subscription standing tables for cancellation. */
+const sourceCancellationSchema = [
+  "ALTER TABLE payment_sources ADD COLUMN method TEXT CHECK(method IN ('card','nequi','daviplata'))",
+  "ALTER TABLE payment_sources ADD COLUMN wompi_source_id INTEGER CHECK(wompi_source_id>0)",
+  "ALTER TABLE payment_sources ADD COLUMN wompi_environment TEXT CHECK(wompi_environment IN ('sandbox','production'))",
+  "ALTER TABLE billing_attempts ADD COLUMN wompi_environment TEXT CHECK(wompi_environment IN ('sandbox','production'))",
+  `CREATE TABLE subscription_cancellations (
+    paid_attempt_id TEXT PRIMARY KEY REFERENCES billing_attempts(id), subscription_id TEXT NOT NULL REFERENCES subscriptions(id),
+    payment_source_id TEXT NOT NULL REFERENCES payment_sources(id), cancelled_at_ms INTEGER NOT NULL,
+    paid_through_ms INTEGER NOT NULL, source_cancellation_state TEXT NOT NULL CHECK(source_cancellation_state IN ('void-pending','voided','detached')),
+    void_started_at_ms INTEGER, void_verified_at_ms INTEGER, verification_count INTEGER NOT NULL DEFAULT 0 CHECK(verification_count BETWEEN 0 AND 8),
+    next_offer_at_ms INTEGER, next_verification_at_ms INTEGER,
+    CHECK(source_cancellation_state='void-pending' OR next_offer_at_ms IS NULL)
+  ) STRICT`,
+  "CREATE INDEX subscription_cancellation_due ON subscription_cancellations(next_offer_at_ms,paid_attempt_id) WHERE next_offer_at_ms IS NOT NULL",
+] as const;
+
 export const userStoreHistory: StoreHistory = {
   owner: "user",
   steps: [
     { version: 1, id: "initial-user-schema", statements: initialUserSchema },
     { version: 2, id: "category-taxonomy", statements: categoryTaxonomyMigration },
+    { version: 3, id: "subscription-cancellation", statements: sourceCancellationSchema },
   ],
 };

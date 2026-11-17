@@ -1,3 +1,5 @@
+import { Alert, AlertDescription } from "@/ui/components/alert";
+import { AmountInput } from "@/ui/components/amount-input";
 import { RefreshButton } from "@/ui/components/refresh-button";
 import { BudgetWriteFeedback } from "./write-feedback";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
@@ -44,9 +46,9 @@ type ViewProps = Readonly<{
 const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
   const navigate = useNavigate();
   const move = (month: string): void => {
-    if (!controller.disabled) {
+    controller.moveMonth(() => {
       navigate({ to: "/app/budgets", search: { month } }).catch(() => undefined);
-    }
+    });
   };
   return (
     <WorkspaceHeader
@@ -61,7 +63,7 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
         variant="outline"
         size="icon"
         aria-label="Mes anterior"
-        disabled={controller.disabled}
+        disabled={controller.navigationDisabled}
         onClick={() => move(monthShift({ month: props.month, offset: -1 }))}
       >
         <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={1.5} />
@@ -70,14 +72,14 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
         variant="outline"
         size="icon"
         aria-label="Mes siguiente"
-        disabled={controller.disabled}
+        disabled={controller.navigationDisabled}
         onClick={() => move(monthShift({ month: props.month, offset: 1 }))}
       >
         <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={1.5} />
       </Button>
       <Button
         variant="outline"
-        disabled={controller.disabled || props.month === currentBudgetMonth(props.user)}
+        disabled={controller.navigationDisabled || props.month === currentBudgetMonth(props.user)}
         onClick={() => move(currentBudgetMonth(props.user))}
       >
         Hoy
@@ -94,8 +96,13 @@ const BudgetToolbar = ({ props, controller }: ViewProps): JSX.Element => {
 const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => (
   <div className="px-5 empty:hidden [&:not(:empty)]:pt-4" aria-live="polite">
     {Option.isSome(controller.draft) ? null : (
-      <BudgetWriteFeedback saveState={controller.saveState} writeAction={controller.writeAction} />
+      <BudgetWriteFeedback
+        saveState={controller.saveState}
+        writeAction={controller.writeAction}
+        inline={controller.hasInlineDraft}
+      />
     )}
+    <BudgetInlineRecovery controller={controller} />
     {props.report.initialized === false && props.report.statuses.length > 0 ? (
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-sm text-muted-foreground">
@@ -113,6 +120,43 @@ const BudgetFeedback = ({ props, controller }: ViewProps): JSX.Element => (
     ) : null}
   </div>
 );
+const BudgetInlineRecovery = ({ controller }: Pick<ViewProps, "controller">): JSX.Element =>
+  Option.match(controller.inlineRecovery, {
+    onNone: () => <></>,
+    onSome: (edit) => (
+      <Alert variant="warning">
+        <AlertDescription>
+          <p>
+            El presupuesto cambió. Conservamos tu edición pendiente; descártala para continuar con
+            el plan actualizado.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <label htmlFor="budget-inline-recovery">
+              Edición pendiente de {edit.target.category.label}
+            </label>
+            <span className="inline-flex max-w-full items-center gap-2">
+              <span>{edit.currency}</span>
+              <AmountInput
+                id="budget-inline-recovery"
+                width="content"
+                value={edit.amount}
+                readOnly
+                aria-label={`Edición pendiente de ${edit.target.category.label} (${edit.currency})`}
+              />
+            </span>
+            <Button
+              variant="outline"
+              disabled={controller.navigationDisabled || controller.saveState === "saving"}
+              onClick={controller.discardInline}
+            >
+              Descartar edición
+            </Button>
+          </div>
+        </AlertDescription>
+      </Alert>
+    ),
+  });
+
 const BudgetPanel = ({
   props,
   controller,
@@ -320,7 +364,10 @@ const BudgetGroup = ({
                 status={status}
                 category={category}
                 user={props.user}
-                disabled={controller.disabled}
+                disabled={controller.rowDisabled(status)}
+                amount={controller.rowAmount(status)}
+                saveState={controller.saveState}
+                onChange={controller.changeRow}
                 onSave={controller.saveRow}
                 onSettings={() => controller.configureCategory(status)}
               />

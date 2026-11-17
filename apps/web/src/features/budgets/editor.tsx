@@ -225,7 +225,7 @@ const BudgetEditorFeedback = ({
 }: Pick<EditorProps, "saveState" | "writeAction" | "onRefresh">): JSX.Element => (
   <>
     {writeAction === "save" ? (
-      <BudgetWriteFeedback saveState={saveState} writeAction={writeAction} />
+      <BudgetWriteFeedback inline={false} saveState={saveState} writeAction={writeAction} />
     ) : null}
     {saveState === "uncertain" ? (
       <Button type="button" variant="outline" onClick={onRefresh}>

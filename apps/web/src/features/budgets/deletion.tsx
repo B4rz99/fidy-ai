@@ -39,7 +39,7 @@ export const BudgetDeletion = ({
       Tus transacciones se conservan y siguen contando en los resúmenes de gastos. Las alertas ya
       registradas en tu historial se conservan. Esta acción no se puede deshacer.
     </p>
-    <BudgetWriteFeedback saveState={saveState} writeAction="delete" />
+    <BudgetWriteFeedback inline={false} saveState={saveState} writeAction="delete" />
     {saveState === "uncertain" || saveState === "failed" ? (
       <RefreshButton variant="outline" onClick={onRefresh} label="Actualizar presupuestos" />
     ) : null}

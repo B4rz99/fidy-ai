@@ -1,7 +1,8 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CreditCardIcon, PencilIcon } from "@hugeicons/core-free-icons";
 import { BigDecimal } from "effect";
-import { type JSX, useState } from "react";
+import { type JSX } from "react";
+import type { SaveState } from "./model";
 import { formatMoneyWithCode } from "@/transport/money";
 import { Button } from "@/ui/components/button";
 import { BudgetSpending } from "./spending";
@@ -21,6 +22,9 @@ type RowProps = Readonly<{
   category: Category;
   user: CurrentUser;
   disabled: boolean;
+  amount: string;
+  saveState: SaveState;
+  onChange: (status: BudgetStatus, amount: string) => void;
   onSave: (status: BudgetStatus, amount: string) => void;
   onSettings: () => void;
 }>;
@@ -31,22 +35,29 @@ export const BudgetRow = ({
   disabled,
   onSave,
   onSettings,
+  amount,
+  onChange,
+  saveState,
 }: RowProps): JSX.Element => {
   const initial = BigDecimal.format(status.budget.cap.amount);
-  const [amount, setAmount] = useState(initial);
   const submit = (): void => {
     if (!disabled && amount !== initial) onSave(status, amount);
   };
   return (
     <div className="budget-row border-t">
       <div className="budget-tracks items-center gap-4 px-4 py-4">
-        <BudgetRowLabel category={category} disabled={disabled} onSettings={onSettings} />
+        <BudgetRowLabel
+          category={category}
+          disabled={disabled || amount !== initial}
+          onSettings={onSettings}
+        />
         <BudgetAmount
           status={status}
           category={category}
           disabled={disabled}
           amount={amount}
-          onChange={setAmount}
+          invalid={saveState === "failed" && amount !== initial}
+          onChange={(value) => onChange(status, value)}
           onSubmit={submit}
         />
         <span className="budget-value text-right whitespace-nowrap tabular-nums">
@@ -60,6 +71,9 @@ export const BudgetRow = ({
         </span>
         <RowBalance status={status} user={user} />
       </div>
+      {saveState === "failed" && amount !== initial ? (
+        <BudgetRowError status={status} disabled={disabled} onRetry={submit} />
+      ) : null}
       <div className="budget-progress pl-4">
         <BudgetMeter
           variant="default"
@@ -74,6 +88,21 @@ export const BudgetRow = ({
     </div>
   );
 };
+
+const BudgetRowError = ({
+  status,
+  disabled,
+  onRetry,
+}: Pick<RowProps, "status" | "disabled"> & Readonly<{ onRetry: () => void }>): JSX.Element => (
+  <div className="budget-progress flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
+    <p id={`budget-error-${status.budget.id}`} className="text-sm text-error-foreground">
+      Revisa el importe e intenta guardar de nuevo.
+    </p>
+    <Button type="button" variant="outline" disabled={disabled} onClick={onRetry}>
+      Reintentar
+    </Button>
+  </div>
+);
 
 const BudgetRowLabel = ({
   category,
@@ -104,11 +133,13 @@ const BudgetAmount = ({
   amount,
   onChange,
   onSubmit,
+  invalid,
 }: Pick<RowProps, "status" | "category" | "disabled"> &
   Readonly<{
     amount: string;
     onChange: (value: string) => void;
     onSubmit: () => void;
+    invalid: boolean;
   }>): JSX.Element => (
   <form
     className="budget-value"
@@ -124,7 +155,12 @@ const BudgetAmount = ({
       </span>
       <AmountInput
         aria-label={`Presupuesto de ${category.label} (${status.budget.cap.currency})`}
-        aria-describedby={`budget-currency-${status.budget.id}`}
+        aria-describedby={
+          invalid
+            ? `budget-currency-${status.budget.id} budget-error-${status.budget.id}`
+            : `budget-currency-${status.budget.id}`
+        }
+        aria-invalid={invalid || undefined}
         width="content"
         value={amount}
         disabled={disabled}

@@ -161,6 +161,9 @@ type BudgetWrites = Pick<
   | "saveState"
   | "writeAction"
   | "disabled"
+  | "navigationDisabled"
+  | "moveMonth"
+  | "discardInline"
   | "draft"
   | "write"
   | "remove"
@@ -169,6 +172,8 @@ type BudgetWrites = Pick<
 > &
   Readonly<{
     refreshVersion: number;
+    inlineDraft: Option.Option<BudgetEdit>;
+    changeRow: (edit: BudgetEdit) => void;
     openEditor: (draft: BudgetDraft) => void;
   }>;
 const writeOutcome = (exit: Exit.Exit<WriteOutcome, never>): Option.Option<WriteOutcome> => {
@@ -181,12 +186,14 @@ type BudgetInteraction = Readonly<{
   writeAction: "save" | "delete";
   draft: Option.Option<BudgetDraft>;
   refreshVersion: number;
+  inlineDraft: Option.Option<BudgetEdit>;
 }>;
 const initialInteraction: BudgetInteraction = {
   saveState: "idle",
   writeAction: "save",
   draft: Option.none(),
   refreshVersion: 0,
+  inlineDraft: Option.none(),
 };
 
 const deletionWrite = (draft: Option.Option<BudgetDraft>): Option.Option<ValidWrite> => {
@@ -238,36 +245,126 @@ const useBudgetSubmission = (apiClient: FidyClient): BudgetSubmission => {
 const eligibleContext = (context: BudgetWriteContext): boolean =>
   context.editable && context.saveState !== "saving" && context.saveState !== "uncertain";
 
-const useBudgetWrites = ({
-  apiClient,
-  month,
-  editable,
-  refreshQueries,
-  data,
+type MonthNavigation = Readonly<{
+  defer: (navigate: () => void) => void;
+  finish: () => void;
+  reset: () => void;
+}>;
+const makeMonthNavigation = (): MonthNavigation => {
+  let destination = Option.none<() => void>();
+  const reset = (): void => {
+    destination = Option.none();
+  };
+  return {
+    defer: (navigate) => {
+      destination = Option.some(navigate);
+    },
+    finish: () => {
+      const next = destination;
+      reset();
+      Option.match(next, { onNone: () => undefined, onSome: (navigate) => navigate() });
+    },
+    reset,
+  };
+};
+const inlineMatchesSaved = (context: Pick<BudgetWriteContext, "inlineDraft" | "data">): boolean => {
+  if (Option.isNone(context.inlineDraft) || Option.isNone(context.data)) return false;
+  const edit = context.inlineDraft.value;
+  const target = currentTarget(edit.target, context.data.value);
+  const amount = BigDecimal.fromString(edit.amount.trim().replace(",", "."));
+  return (
+    Option.isSome(target) &&
+    Option.isSome(target.value.budget) &&
+    Option.isSome(amount) &&
+    target.value.budget.value.cap.currency === edit.currency &&
+    BigDecimal.equals(target.value.budget.value.cap.amount, amount.value)
+  );
+};
+
+const budgetMonthNavigation = ({
+  lifetime,
+  current,
+  pending,
+  navigation,
+  write,
 }: Readonly<{
+  write: (edit: BudgetEdit) => void;
+  lifetime: ReturnType<typeof useBudgetWriteLifetime>;
+  current: () => Option.Option<BudgetWriteContext>;
+  pending: () => boolean;
+  navigation: MonthNavigation;
+}>): Pick<BudgetEditing, "moveMonth"> => ({
+  moveMonth: (navigate) => {
+    const context = lifetime.current();
+    if (Option.isNone(context) || context.value.saveState === "uncertain") return;
+    if (pending()) {
+      if (Option.isNone(context.value.draft)) navigation.defer(navigate);
+      return;
+    }
+    if (Option.isNone(current())) return;
+    if (inlineMatchesSaved(context.value)) return navigate();
+    Option.match(context.value.inlineDraft, {
+      onNone: navigate,
+      onSome: (edit) => {
+        write(edit);
+        if (pending()) navigation.defer(navigate);
+      },
+    });
+  },
+});
+
+const budgetWriteRefresh =
+  ({
+    lifetime,
+    pending,
+    reset,
+    refreshProjections,
+    navigation,
+    update,
+    refreshVersion,
+  }: Readonly<{
+    lifetime: ReturnType<typeof useBudgetWriteLifetime>;
+    pending: () => boolean;
+    reset: () => void;
+    refreshProjections: () => void;
+    navigation: MonthNavigation;
+    update: (patch: Partial<BudgetInteraction>) => void;
+    refreshVersion: number;
+  }>): (() => void) =>
+  () => {
+    const context = lifetime.current();
+    if (Option.isNone(context) || (pending() && context.value.saveState !== "uncertain")) return;
+    lifetime.reset();
+    navigation.reset();
+    reset();
+    if (context.value.writeAction === "delete") refreshProjections();
+    update({
+      refreshVersion: refreshVersion + 1,
+      saveState: "idle",
+      draft: Option.none(),
+      inlineDraft: inlineMatchesSaved(context.value) ? Option.none() : context.value.inlineDraft,
+    });
+    context.value.refreshQueries();
+  };
+
+type BudgetWritesInput = Readonly<{
   apiClient: FidyClient;
   month: string;
   editable: boolean;
   data: Option.Option<MonthData>;
   refreshQueries: () => void;
-}>): BudgetWrites => {
+}>;
+const useBudgetWrites = (input: BudgetWritesInput): BudgetWrites => {
+  const { apiClient, month, editable, refreshQueries, data } = input;
   const { pending, submit, refreshProjections, reset } = useBudgetSubmission(apiClient);
   const [interaction, setInteraction] = useState(initialInteraction);
+  const [navigation] = useState(makeMonthNavigation);
   const update = (patch: Partial<typeof interaction>): void =>
     setInteraction((current) => ({ ...current, ...patch }));
   const lifetime = useBudgetWriteLifetime({ ...interaction, editable, data, refreshQueries });
   const { saveState, refreshVersion } = interaction;
   const current = (): Option.Option<BudgetWriteContext> =>
     Option.filter(lifetime.current(), eligibleContext);
-  const refresh = (): void => {
-    const context = lifetime.current();
-    if (Option.isNone(context) || (pending() && context.value.saveState !== "uncertain")) return;
-    lifetime.reset();
-    reset();
-    if (context.value.writeAction === "delete") refreshProjections();
-    update({ refreshVersion: refreshVersion + 1, saveState: "idle", draft: Option.none() });
-    context.value.refreshQueries();
-  };
   const execute = (command: ValidWrite): void => {
     if (Option.isNone(current()) || pending()) return;
     update({ saveState: "saving", writeAction: command.type === "delete" ? "delete" : "save" });
@@ -276,26 +373,43 @@ const useBudgetWrites = ({
       if (Option.isNone(context)) return;
       if (outcome === "saved") lifetime.reset();
       update(
-        outcome === "saved" ? { saveState: outcome, draft: Option.none() } : { saveState: outcome }
+        outcome === "saved"
+          ? { saveState: outcome, draft: Option.none(), inlineDraft: Option.none() }
+          : { saveState: outcome }
       );
       if (outcome === "saved" && command.type !== "delete") {
         context.value.refreshQueries();
-      }
+        navigation.finish();
+      } else navigation.reset();
     });
   };
+  const actions = budgetEditActions({
+    current,
+    pending,
+    execute,
+    update,
+    month,
+    isCurrent: lifetime.isCurrent,
+    retire: lifetime.reset,
+  });
   return {
     ...interaction,
     disabled: !editable || saveState === "saving" || saveState === "uncertain",
-    refresh,
-    ...budgetEditActions({
-      current,
+    navigationDisabled:
+      !editable ||
+      saveState === "uncertain" ||
+      (saveState === "saving" && Option.isSome(interaction.draft)),
+    ...budgetMonthNavigation({ lifetime, current, pending, navigation, write: actions.write }),
+    refresh: budgetWriteRefresh({
+      lifetime,
       pending,
-      execute,
+      reset,
+      refreshProjections,
+      navigation,
       update,
-      month,
-      isCurrent: lifetime.isCurrent,
-      retire: lifetime.reset,
+      refreshVersion,
     }),
+    ...actions,
   };
 };
 
@@ -308,15 +422,13 @@ type EditActionsInput = Readonly<{
   isCurrent: () => boolean;
   retire: () => void;
 }>;
-const budgetEditActions = ({
+const budgetEditWrite = ({
   current,
   pending,
-  execute,
   update,
+  execute,
   month,
-  isCurrent,
-  retire,
-}: EditActionsInput): Pick<BudgetWrites, "write" | "remove" | "openEditor" | "closeEditor"> => {
+}: EditActionsInput): BudgetWrites["write"] => {
   const write = (edit: BudgetEdit): void => {
     if (Option.isNone(current()) || pending()) return;
     const context = current();
@@ -332,6 +444,34 @@ const budgetEditActions = ({
       }
     );
   };
+  return write;
+};
+
+const budgetInlineChange =
+  ({ current, pending, update }: EditActionsInput): BudgetWrites["changeRow"] =>
+  (edit) => {
+    const context = current();
+    if (Option.isNone(context) || pending()) return;
+    if (
+      Option.isSome(context.value.inlineDraft) &&
+      !inlineMatchesSaved(context.value) &&
+      context.value.inlineDraft.value.target.category.id !== edit.target.category.id
+    ) {
+      return;
+    }
+    const inlineDraft = inlineMatchesSaved({ ...context.value, inlineDraft: Option.some(edit) })
+      ? Option.none<BudgetEdit>()
+      : Option.some(edit);
+    update({ inlineDraft, saveState: "idle" });
+  };
+
+const budgetEditActions = (
+  input: EditActionsInput
+): Pick<
+  BudgetWrites,
+  "write" | "remove" | "openEditor" | "closeEditor" | "changeRow" | "discardInline"
+> => {
+  const { current, pending, execute, update, isCurrent, retire } = input;
   const remove = (): void =>
     Option.match(
       Option.flatMap(current(), (context) =>
@@ -345,17 +485,34 @@ const budgetEditActions = ({
       }
     );
   return {
-    write,
+    write: budgetEditWrite(input),
     remove,
+    changeRow: budgetInlineChange(input),
+    discardInline: () => {
+      if (Option.isNone(current()) || pending()) return;
+      retire();
+      update({ inlineDraft: Option.none(), saveState: "idle" });
+    },
     openEditor: (value) => {
       const context = current();
-      if (Option.isNone(context) || pending()) return;
+      if (
+        Option.isNone(context) ||
+        pending() ||
+        (Option.isSome(context.value.inlineDraft) && !inlineMatchesSaved(context.value))
+      ) {
+        return;
+      }
       const target = Option.flatMap(context.value.data, (valueData) =>
         currentTarget(value, valueData)
       );
       if (Option.isSome(target)) {
         retire();
-        update({ draft: target, saveState: "idle", writeAction: "save" });
+        update({
+          draft: target,
+          inlineDraft: Option.none(),
+          saveState: "idle",
+          writeAction: "save",
+        });
       }
     },
     closeEditor: () => {
@@ -402,55 +559,98 @@ const currentTarget = (draft: BudgetDraft, data: MonthData): Option.Option<Budge
   });
 };
 
-const budgetEditing = (data: MonthData, writes: BudgetWrites): BudgetEditing => {
-  const saveRow = (status: BudgetStatus, amount: string): void =>
-    writes.write({
-      target: rowDraft({ status, categories: data.categories }),
-      amount,
-      currency: status.budget.cap.currency,
-      groupCurrency: Option.none(),
-      groupName: groupFor({ status, categories: data.categories }),
-    });
+const inlineRowEdit = (data: MonthData, status: BudgetStatus, amount: string): BudgetEdit => ({
+  target: rowDraft({ status, categories: data.categories }),
+  amount,
+  currency: status.budget.cap.currency,
+  groupCurrency: Option.none(),
+  groupName: groupFor({ status, categories: data.categories }),
+});
+
+const budgetRowEditing = (
+  data: MonthData,
+  writes: BudgetWrites
+): Pick<BudgetEditing, "disabled" | "rowDisabled" | "rowAmount" | "changeRow" | "saveRow"> => {
+  const inlinePending =
+    Option.isSome(writes.inlineDraft) &&
+    !inlineMatchesSaved({ inlineDraft: writes.inlineDraft, data: Option.some(data) });
+  const isInlineRow = (status: BudgetStatus): boolean =>
+    Option.exists(
+      writes.inlineDraft,
+      (edit) =>
+        edit.target.category.id === status.budget.categoryId &&
+        Option.isSome(currentTarget(edit.target, data))
+    );
   return {
-    saveState: writes.saveState,
-    writeAction: writes.writeAction,
-    disabled: writes.disabled,
-    draft: writes.draft,
-    write: writes.write,
-    remove: writes.remove,
-    refresh: writes.refresh,
-    closeEditor: writes.closeEditor,
-    assignCategory: (category: Category) =>
-      writes.openEditor({
-        category,
-        budget: Option.fromUndefinedOr(
-          data.budgets.find((budget) => budget.categoryId === category.id)
-        ),
-        groupCategoryIds: Option.none(),
+    disabled: writes.disabled || inlinePending,
+    rowDisabled: (status) => writes.disabled || (inlinePending && !isInlineRow(status)),
+    rowAmount: (status) =>
+      Option.match(writes.inlineDraft, {
+        onNone: () => BigDecimal.format(status.budget.cap.amount),
+        onSome: (edit) =>
+          Option.isSome(edit.target.budget) &&
+          edit.target.budget.value.id === status.budget.id &&
+          Option.isSome(currentTarget(edit.target, data))
+            ? edit.amount
+            : BigDecimal.format(status.budget.cap.amount),
       }),
-    configureCategory: (status: BudgetStatus) =>
-      writes.openEditor(rowDraft({ status, categories: data.categories })),
-    configureGroup: (group: string) => {
-      const statuses = data.report.statuses.filter(
-        (status) => groupFor({ status, categories: data.categories }) === group
-      );
-      const first = statuses[0];
-      if (first !== undefined) {
-        writes.openEditor({
-          ...rowDraft({ status: first, categories: data.categories }),
-          groupCategoryIds: Option.some(statuses.map((status) => status.budget.categoryId)),
-        });
+    changeRow: (status, amount) => writes.changeRow(inlineRowEdit(data, status, amount)),
+    saveRow: (status, amount) => {
+      const edit = inlineRowEdit(data, status, amount);
+      if (!inlineMatchesSaved({ inlineDraft: Option.some(edit), data: Option.some(data) })) {
+        writes.write(edit);
       }
     },
-    saveRow,
-    freezePlan: () => {
-      const first = data.report.statuses[0];
-      if (first !== undefined) saveRow(first, BigDecimal.format(first.budget.cap.amount));
-    },
-    rowKey: (status: BudgetStatus) =>
-      `${status.budget.id}:${BigDecimal.format(status.budget.cap.amount)}:${writes.refreshVersion}`,
   };
 };
+
+const budgetEditing = (data: MonthData, writes: BudgetWrites): BudgetEditing => ({
+  saveState: writes.saveState,
+  writeAction: writes.writeAction,
+  ...budgetRowEditing(data, writes),
+  navigationDisabled: writes.navigationDisabled,
+  hasInlineDraft: Option.isSome(writes.inlineDraft),
+  inlineRecovery: Option.filter(writes.inlineDraft, (edit) =>
+    Option.isNone(currentTarget(edit.target, data))
+  ),
+  discardInline: writes.discardInline,
+  moveMonth: writes.moveMonth,
+  draft: writes.draft,
+  write: writes.write,
+  remove: writes.remove,
+  refresh: writes.refresh,
+  closeEditor: writes.closeEditor,
+  assignCategory: (category: Category) =>
+    writes.openEditor({
+      category,
+      budget: Option.fromUndefinedOr(
+        data.budgets.find((budget) => budget.categoryId === category.id)
+      ),
+      groupCategoryIds: Option.none(),
+    }),
+  configureCategory: (status: BudgetStatus) =>
+    writes.openEditor(rowDraft({ status, categories: data.categories })),
+  configureGroup: (group: string) => {
+    const statuses = data.report.statuses.filter(
+      (status) => groupFor({ status, categories: data.categories }) === group
+    );
+    const first = statuses[0];
+    if (first !== undefined) {
+      writes.openEditor({
+        ...rowDraft({ status: first, categories: data.categories }),
+        groupCategoryIds: Option.some(statuses.map((status) => status.budget.categoryId)),
+      });
+    }
+  },
+  freezePlan: () => {
+    const first = data.report.statuses[0];
+    if (first !== undefined) {
+      writes.write(inlineRowEdit(data, first, BigDecimal.format(first.budget.cap.amount)));
+    }
+  },
+  rowKey: (status: BudgetStatus) =>
+    `${status.budget.id}:${BigDecimal.format(status.budget.cap.amount)}:${writes.refreshVersion}`,
+});
 
 /** Owns one User's monthly reads, write admission and explicit reread recovery.
  * Query atoms retain canonical facts; local state retains only edit interaction and feedback.

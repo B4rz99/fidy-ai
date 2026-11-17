@@ -1,0 +1,19 @@
+apps/web/src/features/recurring/feature.test.ts
+  s_b3b52c95df703e::t_73f923996da42b 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "63d4c141b49f13d680f95be9e74298fd55b40f21",
+  "prompts": {},
+  "sessions": {
+    "s_b3b52c95df703e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e7ce-acf7-75f3-ad7e-833ba7f20423",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

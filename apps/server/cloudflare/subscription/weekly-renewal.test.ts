@@ -1215,7 +1215,7 @@ it("cancels a paid Subscription through a write-scoped PAT", () =>
       });
     })
   ));
-it("routes HTTP cancellation through the User coordinator and preserves paid access", () =>
+it("refuses cancellation when only the D1 User coordinator is bound", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* cancellationFixture("card");
@@ -1289,9 +1289,9 @@ it("routes HTTP cancellation through the User coordinator and preserves paid acc
           environment
         )
       );
-      expect(response.status, yield* fromPromise(() => response.clone().text())).toBe(200);
+      expect(response.status).toBe(503);
       expect(yield* fromPromise(() => response.json())).toMatchObject({
-        data: { sourceCancellation: "detached", paidThrough: "2026-10-13T15:00:00.000Z" },
+        error: { code: "unavailable" },
       });
     })
   ));

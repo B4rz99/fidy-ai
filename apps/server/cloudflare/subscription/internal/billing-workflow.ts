@@ -9,7 +9,6 @@ import {
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { BillingAttemptId } from "../../../src/core/subscription/contract";
 import { verifiedWompiEventHint } from "./wompi-event";
-import { type WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { type WompiTransportFactory } from "./wompi-runtime";
 import {
@@ -18,6 +17,7 @@ import {
   type BillingObservationWorkflow,
   type BillingRuntime,
   type BillingWorkRouting,
+  type BillingWorkflowActivity,
   LocalSourceCancellationWork,
   SubscriptionCancellationWork,
 } from "../contract";
@@ -249,16 +249,11 @@ export const receiveWompiBillingEvent = (
     return new Response(null, { status: 200 });
   });
 
-type CollectionActivity = (
-  name: string,
-  options: WorkflowStepConfig,
-  run: () => Promise<void>
-) => Promise<void>;
-
 type BillingWorkflowExecution = Readonly<{
   environment: BillingRuntime;
   payload: unknown;
-  activity: CollectionActivity;
+  activity: BillingWorkflowActivity;
+  observe: Option.Option<BillingWorkflowActivity<boolean>>;
   sleep: (name: string, duration: number) => Promise<void>;
   wompiHttp: WompiTransportFactory;
 }>;

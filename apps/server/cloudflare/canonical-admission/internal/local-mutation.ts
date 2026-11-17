@@ -1,6 +1,10 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { StoreCapacityUnavailable } from "../../runtime/sqlite/contract";
-import { withStoreAdmission } from "../../runtime/sqlite/operations";
+import {
+  preserveStoreAlarm,
+  withStoreAdmission,
+  withStoreCapacity,
+} from "../../runtime/sqlite/operations";
 import type { QuotaStatus } from "../../../src/core/quotas/contract";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { CanonicalRetryKey, canonicalRetryLifetimeMs } from "../../../src/core/quotas/contract";
@@ -102,6 +106,7 @@ const localProof = Effect.fn(function* (request: Request, owns: (user: string) =
 });
 type Mutation<A, E> = Readonly<{
   request: Request;
+  storage: DurableObjectStorage;
   operation: CatalogOperation;
   owns: (user: string) => boolean;
   input: Effect.Effect<Option.Option<A>>;
@@ -118,6 +123,7 @@ type Subject = Exclude<
   string
 >;
 type Call = Readonly<{
+  storage: DurableObjectStorage;
   subject: Subject;
   operation: CatalogOperation;
   status: QuotaStatus;
@@ -232,11 +238,12 @@ const complete = Effect.fn(function* (
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(outcome.body);
   if (Option.isSome(invocation.digest)) {
     const sql = yield* SqliteClient;
+    yield* preserveStoreAlarm(call.storage, current + canonicalRetryLifetimeMs);
     yield* sql`DELETE FROM canonical_request_receipts WHERE user_id=${subject.userId} AND retry_key_digest=${invocation.digest.value} AND accepted_at_ms<=${current - canonicalRetryLifetimeMs}`;
     // A positive allowlist keeps future one-time responses out of storage until explicitly reviewed.
     yield* oneStored(
       yield* sql`INSERT INTO canonical_request_receipts(user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body)
-      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${operation.id === "transactions.createTransaction" ? body : null}) RETURNING status`
+      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${["transactions.createTransaction", "subscription.cancelSubscription"].includes(operation.id) ? body : null}) RETURNING status`
     );
   }
   return attachStanding({
@@ -295,6 +302,7 @@ const withdrawn = (): Response =>
   );
 export const runLocalMutation = Effect.fn(function* <A, E>({
   request,
+  storage,
   operation,
   owns,
   input,
@@ -317,7 +325,7 @@ export const runLocalMutation = Effect.fn(function* <A, E>({
       if (subject === "unauthenticated") return noAuthority();
       if (subject === "consent_revoked") return withdrawn();
       const status = yield* localStanding(subject.userId, current);
-      const call = { subject, status, current, operation };
+      const call = { subject, status, current, operation, storage };
       if ((yield* admitLocalRequest({ user: subject.userId, current })).length !== 1) {
         return attachStanding({ ...call, response: rateLimited() });
       }
@@ -329,6 +337,30 @@ export const runLocalMutation = Effect.fn(function* <A, E>({
         admission: operation.id === "transactions.createTransaction" ? admitGrowth : Effect.void,
         work: work.bind(null, prepared.value, subject.userId, current),
       });
+    })
+  );
+});
+
+export const sweepReceiptWork = Effect.fnUntraced(function* (
+  current: number,
+  storage: DurableObjectStorage
+) {
+  const sql = yield* SqliteClient;
+  return yield* withStoreCapacity("required")(
+    Effect.gen(function* () {
+      yield* sweepLocalReceipts(current);
+      const next =
+        yield* sql`SELECT accepted_at_ms FROM canonical_request_receipts ORDER BY accepted_at_ms LIMIT 1`;
+      if (next.length > 0) {
+        const [row] = yield* Schema.decodeUnknownEffect(
+          Schema.Tuple([Schema.Struct({ accepted_at_ms: Schema.Int })])
+        )(next);
+        yield* preserveStoreAlarm(
+          storage,
+          Math.max(current, row.accepted_at_ms + canonicalRetryLifetimeMs)
+        );
+      }
+      return { attempted: 0, failed: 0 };
     })
   );
 });

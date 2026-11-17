@@ -1,11 +1,15 @@
-import { offerDueSourceCancellations } from "../subscription/operations";
+import { cancelLocalSubscription, offerDueSourceCancellations } from "../subscription/operations";
 import { handleSourceCancellationWork } from "../subscription/runtime";
 import type { LocalSourceCancellationWork, WompiBindings } from "../subscription/contract";
 import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
 import { Clock, Effect, Option } from "effect";
 import { canonicalOperation } from "../routing/operations";
-import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-admission/operations";
+import {
+  canonicalAdmissionUnavailable,
+  recoverLocalReceipts,
+  runLocalMutation,
+} from "../canonical-admission/operations";
 import {
   captureLocalTransaction,
   readUserHistory,
@@ -44,6 +48,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return this.runtime.runPromise(
       Effect.flatMap(Clock.currentTimeMillis, (current) =>
         recoverUserWork([
+          recoverLocalReceipts(current, this.ctx.storage),
           offerDueSourceCancellations({
             current,
             storage: this.ctx.storage,
@@ -60,23 +65,58 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     });
   }
 
+  private mutation(
+    request: Request,
+    owns: (userId: string) => boolean,
+    operation: ReturnType<typeof canonicalOperation>
+  ): Option.Option<Promise<Response>> {
+    if (Option.isSome(operation) && operation.value.id === "subscription.cancelSubscription") {
+      return Option.some(
+        this.runtime.runPromise(
+          runLocalMutation({
+            request,
+            storage: this.ctx.storage,
+            operation: operation.value,
+            owns,
+            input: Effect.succeedSome(true),
+            work: (_input, userId, current) =>
+              cancelLocalSubscription({ userId, current, storage: this.ctx.storage }),
+          }).pipe(
+            Effect.tap((response) =>
+              Effect.sync(() => {
+                if (response.ok) this.ctx.waitUntil(this.alarm());
+              })
+            ),
+            Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+          )
+        )
+      );
+    }
+    if (Option.isSome(operation) && operation.value.id === "transactions.createTransaction") {
+      return Option.some(
+        this.runtime.runPromise(
+          runLocalMutation({
+            request,
+            storage: this.ctx.storage,
+            operation: operation.value,
+            owns,
+            input: transactionInput(request),
+            work: captureLocalTransaction,
+          }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+        )
+      );
+    }
+    return Option.none();
+  }
+
   override fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
     const owns = (userId: string): boolean =>
       this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
     const operation = canonicalOperation({ method: request.method, path });
-    if (Option.isSome(operation) && operation.value.id === "transactions.createTransaction") {
-      return this.runtime.runPromise(
-        runLocalMutation({
-          request,
-          operation: operation.value,
-          owns,
-          input: transactionInput(request),
-          work: captureLocalTransaction,
-        }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
-      );
-    }
+    const mutation = this.mutation(request, owns, operation);
+    if (Option.isSome(mutation)) return mutation.value;
     if (
       ["POST /work/source-cancellation/pending", "POST /work/source-cancellation/observe"].includes(
         command

@@ -7,7 +7,6 @@ import {
 } from "../../runtime/telemetry/operations";
 import { cancelSource } from "./source-cancellation";
 import { WompiTransactionId } from "./wompi-model";
-import { type WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { type WompiTransportFactory } from "./wompi-runtime";
@@ -16,6 +15,7 @@ import {
   type BillingObservationWorkflow,
   type BillingRuntime,
   type BillingWorkRouting,
+  type BillingWorkflowActivity,
   LocalSourceCancellationWork,
   SubscriptionCancellationWork,
 } from "../contract";
@@ -181,7 +181,8 @@ export const receiveSourceCancellation = (
 type BillingObservationExecution = Readonly<{
   environment: BillingRuntime;
   payload: unknown;
-  activity: (name: string, options: WorkflowStepConfig, run: () => Promise<void>) => Promise<void>;
+  activity: BillingWorkflowActivity;
+  observe: Option.Option<BillingWorkflowActivity<boolean>>;
   sleep: (name: string, duration: number) => Promise<void>;
   wompiHttp: WompiTransportFactory;
 }>;
@@ -242,6 +243,8 @@ const runLocalCancellationLoop = (
 ): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const observe = input.observe;
+      if (Option.isNone(observe)) return yield* failure();
       const run = Effect.runPromiseWith(yield* Effect.context<never>());
       for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
         if (index > 0) {
@@ -249,13 +252,14 @@ const runLocalCancellationLoop = (
             input.sleep(`source-cancellation-wait-v3-${index}`, candidateCooldownMs + 1)
           );
         }
-        yield* attempt(() =>
-          input.activity(
+        const pending = yield* attempt(() =>
+          observe.value(
             `verify-source-cancellation-v3-${index}`,
             { retries: { limit: 0, delay: "1 second" } },
-            () => run(Effect.asVoid(callCancellationOwner(input.environment, work, "observe")))
+            () => run(callCancellationOwner(input.environment, work, "observe"))
           )
         );
+        if (!pending) return;
       }
     })
   );

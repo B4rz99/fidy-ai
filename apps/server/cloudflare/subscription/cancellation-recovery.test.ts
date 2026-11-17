@@ -48,11 +48,11 @@ const platform = Effect.gen(function* () {
     });
   let runtime = create();
   yield* Effect.addFinalizer(() => native(() => runtime.dispose()));
-  const request = (action: string): Effect.Effect<unknown> =>
+  const request = (action: string, owner = "user"): Effect.Effect<unknown> =>
     native(() =>
       runtime
         .getDurableObjectNamespace("OWNER")
-        .then((namespace) => namespace.getByName("user").fetch("https://owner.internal/" + action))
+        .then((namespace) => namespace.getByName(owner).fetch("https://owner.internal/" + action))
         .then((response) => response.json())
     );
   const restart = native(() => runtime.dispose()).pipe(
@@ -111,12 +111,28 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
   );
   test.effect(
+    "pages a due backlog and retains the first remaining deadline after every offer fails",
+    () =>
+      Effect.gen(function* () {
+        const { request, restart } = yield* platform;
+        yield* request("seed");
+        yield* request("seed-page");
+        expect(yield* request("dispatch-failed")).toEqual({
+          offered: 32,
+          alarm: 2_000_000_000_000,
+        });
+        yield* restart;
+        expect(yield* request("dispatch-failed")).toEqual({ offered: 2, alarm: 2_000_000_060_000 });
+      })
+  );
+  test.effect(
     "never repeats a claimed void and only confirms the exact Wompi source after a lost response",
     () =>
       Effect.gen(function* () {
         const { request, restart } = yield* platform;
         yield* request("seed");
         yield* request("accept");
+        expect(yield* request("rebind")).toEqual({ rebound: false });
         expect(yield* request("observe-lost")).toMatchObject({
           state: "void-pending",
           count: 1,
@@ -181,6 +197,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           failedOffers: 0,
           recovered: "22370000-0000-4000-8000-000000000004",
           alarm: 2_000_000_060_000,
+        });
+      })
+  );
+  test.effect(
+    "upgrading an occupied v4 store preserves a capture receipt and refuses an unreviewed response body",
+    () =>
+      Effect.gen(function* () {
+        const { request } = yield* platform;
+        expect(yield* request("upgrade", "v4")).toEqual({
+          before: { accepted_at_ms: 123, status: 201, body: '{"data":"capture"}' },
+          after: { accepted_at_ms: 123, status: 201, body: '{"data":"capture"}' },
+          unsafeRetained: false,
         });
       })
   );

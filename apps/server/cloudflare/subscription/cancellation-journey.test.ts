@@ -53,14 +53,181 @@ const paidUser = Effect.fnUntraced(function* (runtime: Miniflare) {
   return { exec, check, provider, now };
 });
 
+const verified = Effect.fnUntraced(function* (paid: Effect.Success<ReturnType<typeof paidUser>>) {
+  const { exec } = paid;
+  const settled = Effect.gen(function* () {
+    const state = yield* exec(
+      "SELECT source_cancellation_state FROM subscription_cancellations WHERE paid_attempt_id=?",
+      attempt
+    );
+    return state[0]?.["source_cancellation_state"] === "voided";
+  });
+  yield* settled.pipe(
+    Effect.repeat({
+      until: (confirmed) => confirmed,
+      schedule: Schedule.spaced("50 millis"),
+    }),
+    Effect.timeout("12 seconds")
+  );
+});
+
+const routePAT = Effect.fnUntraced(function* (
+  runtime: Miniflare,
+  paid: Effect.Success<ReturnType<typeof paidUser>>
+) {
+  const id = "22370000-0000-4000-8000-000000000005";
+  const short = "abcdefgh";
+  const bearer = "fin_" + short + "_" + "x".repeat(43);
+  const digest = yield* native(() =>
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer))
+  );
+  const expires = paid.now + 604800000;
+  yield* paid.exec(
+    "INSERT INTO pats(id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id) VALUES (?,?,?,?,'agent',?,7,?,?,?,?)",
+    id,
+    user,
+    short,
+    digest,
+    '["write"]',
+    paid.now,
+    paid.now,
+    expires,
+    id
+  );
+  const directory = yield* native(() =>
+    runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+  );
+  yield* native(() =>
+    runtime
+      .getDurableObjectNamespace("DIRECTORY", "core")
+      .then((ns) =>
+        ns.getByName("directory-v1").fetch("https://directory.internal/initialize-fixture")
+      )
+  );
+  yield* native(() =>
+    directory.exec("INSERT INTO pat_routes VALUES (?,?,?,?,?)", short, user, id, id, expires)
+  );
+  return (key: string): Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>> =>
+    native(() =>
+      runtime.dispatchFetch("https://api.fidyapp.com/subscription/cancellation", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer " + bearer,
+          "Fidy-Retry-Key": key,
+          "CF-Connecting-IP": "192.0.2.1",
+        },
+      })
+    );
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "canonical cancellation seals a replayable receipt with its Audit and the User's recoverable intent",
+    () =>
+      Effect.gen(function* () {
+        const start = yield* nativeBillingPlatform;
+        const runtime = yield* start();
+        const paid = yield* paidUser(runtime);
+        const cancel = yield* routePAT(runtime, paid);
+        const key = "22370000-0000-4000-8000-000000000006";
+        yield* paid.exec("UPDATE payment_sources SET method=NULL WHERE id=?", source);
+        expect((yield* cancel(key)).status).toBe(503);
+        yield* paid.exec("UPDATE payment_sources SET method='daviplata' WHERE id=?", source);
+        yield* paid.exec(
+          "CREATE TRIGGER interrupt_receipt BEFORE INSERT ON canonical_request_receipts BEGIN SELECT RAISE(ABORT,'unavailable'); END"
+        );
+        expect((yield* cancel(key)).status).toBe(503);
+        expect(
+          yield* paid.exec("SELECT COUNT(*) AS count FROM subscription_cancellations")
+        ).toEqual([{ count: 0 }]);
+        expect(yield* paid.exec("SELECT COUNT(*) AS count FROM audit_entries")).toEqual([
+          { count: 0 },
+        ]);
+        yield* paid.exec("DROP TRIGGER interrupt_receipt");
+        const response = yield* cancel(key);
+        expect(response.status).toBe(200);
+        const accepted = yield* native(() => response.json());
+        expect(accepted).toMatchObject({ data: { sourceCancellation: "void-pending" } });
+        yield* verified(paid);
+        const replay = yield* cancel(key);
+        expect(replay.status).toBe(200);
+        expect(yield* native(() => replay.json())).toEqual(accepted);
+        expect(
+          yield* paid.exec(
+            "SELECT operation, COUNT(*) AS count FROM canonical_request_receipts GROUP BY operation"
+          )
+        ).toEqual([{ operation: "subscription.cancelSubscription", count: 1 }]);
+        yield* paid.exec("UPDATE pats SET revoked_at_ms=? WHERE short_id='abcdefgh'", paid.now + 1);
+        expect((yield* cancel(key)).status).toBe(401);
+      }),
+    25000
+  );
+  test.effect(
+    "a browser cancellation detaches the card and preserves the paid-through instant",
+    () =>
+      Effect.gen(function* () {
+        const start = yield* nativeBillingPlatform;
+        const runtime = yield* start();
+        const paid = yield* paidUser(runtime);
+        yield* paid.exec("UPDATE payment_sources SET method='card' WHERE id=?", source);
+        const bearer = "1".repeat(43);
+        const session = "22370000-0000-4000-8000-000000000007";
+        const digest = yield* native(() =>
+          crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer))
+        );
+        const expires = paid.now + 3600000;
+        const cancel = (): Effect.Effect<Awaited<ReturnType<Miniflare["dispatchFetch"]>>> =>
+          native(() =>
+            runtime.dispatchFetch("https://api.fidyapp.com/subscription/cancellation", {
+              method: "POST",
+              headers: {
+                origin: "https://app.fidyapp.com",
+                "Fidy-Session-Binding": session,
+                cookie: "__Host-fidy_session=" + bearer,
+              },
+            })
+          );
+        expect((yield* cancel()).status).toBe(401);
+        const directory = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+        );
+        yield* native(() =>
+          directory.exec(
+            "INSERT INTO session_routes VALUES (?,?,?,?,?)",
+            digest,
+            user,
+            session,
+            "route-" + session,
+            expires
+          )
+        );
+        yield* paid.exec(
+          "INSERT INTO web_sessions(id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?,?,?,?,?,?,?,?)",
+          session,
+          session,
+          user,
+          digest,
+          paid.now,
+          paid.now + 600000,
+          expires,
+          paid.now + 7776000000
+        );
+        const response = yield* cancel();
+        expect(response.status).toBe(200);
+        expect(yield* native(() => response.json())).toMatchObject({
+          data: { sourceCancellation: "detached", paidThrough: new Date(expires).toISOString() },
+        });
+      }),
+    25000
+  );
   test.effect(
     "a cold User's missed cancellation handoff reaches its verified outcome through the real billing Queue and Workflow",
     () =>
       Effect.gen(function* () {
         const start = yield* nativeBillingPlatform;
         const runtime = yield* start();
-        const { exec, check, provider, now } = yield* paidUser(runtime);
+        const paid = yield* paidUser(runtime);
+        const { exec, check, provider, now } = paid;
         // Interrupted after commit, with all native alarm retries exhausted.
         yield* exec(
           "INSERT INTO subscription_cancellations(paid_attempt_id,subscription_id,payment_source_id,cancelled_at_ms,paid_through_ms,source_cancellation_state,next_offer_at_ms) VALUES (?,?,?,?,?,'void-pending',?)",
@@ -77,19 +244,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           failedFamilies: 0,
           failedOffers: 0,
         });
-        const settled = Effect.gen(function* () {
-          const state = yield* exec(
-            "SELECT source_cancellation_state FROM subscription_cancellations WHERE paid_attempt_id=?",
-            attempt
-          );
-          return state[0]?.["source_cancellation_state"] === "voided";
-        });
-        yield* settled.pipe(
+        yield* verified(paid);
+        const bindings = yield* native(() =>
+          runtime.getBindings<{ BILLING_COLLECTION_WORKFLOW: Workflow }>("core")
+        );
+        const instance = yield* native(() =>
+          bindings.BILLING_COLLECTION_WORKFLOW.get("source-cancel-v3-" + user + "-" + attempt)
+        );
+        yield* native(() => instance.status()).pipe(
           Effect.repeat({
-            until: (confirmed) => confirmed,
+            until: (state) => state.status === "complete",
             schedule: Schedule.spaced("50 millis"),
           }),
-          Effect.timeout("12 seconds")
+          Effect.timeout("3 seconds")
         );
         const [evidence] = yield* exec(
           "SELECT void_started_at_ms,void_verified_at_ms,verification_count,next_offer_at_ms FROM subscription_cancellations"

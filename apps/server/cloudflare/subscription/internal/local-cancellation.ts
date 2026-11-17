@@ -1,4 +1,4 @@
-import { withStoreCapacity } from "../../runtime/sqlite/operations";
+import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { BillingCollectionFailure, type LocalSourceCancellationWork } from "../contract";
@@ -44,14 +44,17 @@ export const retainCancellation = Effect.fnUntraced(function* (
     yield* sql`SELECT c.source_cancellation_state,c.cancelled_at_ms,c.paid_through_ms,c.next_offer_at_ms
     FROM subscription_cancellations c JOIN subscriptions s ON s.id=c.subscription_id AND s.current_paid_attempt_id=c.paid_attempt_id
     WHERE s.user_id=${input.userId} AND NOT EXISTS (SELECT 1 FROM erasure_requests WHERE user_id=s.user_id)`;
-  if (rows.length === 0) return Option.none<SubscriptionCancellation>();
+  if (rows.length === 0) {
+    const paid = yield* sql`SELECT 1 FROM subscriptions s JOIN billing_attempts a
+      ON a.id=s.current_paid_attempt_id AND a.subscription_id=s.id
+      WHERE s.user_id=${input.userId} AND a.paid_starts_at_ms IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM erasure_requests WHERE user_id=s.user_id) LIMIT 1`;
+    if (paid.length > 0) return yield* new BillingCollectionFailure({ cause: Option.none() });
+    return Option.none<SubscriptionCancellation>();
+  }
   const [row] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Cancelled]))(rows);
   if (row.next_offer_at_ms !== null) {
-    const pending = yield* Effect.tryPromise(() => input.storage.getAlarm());
-    const due = row.next_offer_at_ms;
-    if (pending === null || pending > due) {
-      yield* Effect.tryPromise(() => input.storage.setAlarm(due));
-    }
+    yield* preserveStoreAlarm(input.storage, row.next_offer_at_ms);
   }
   return Option.some(
     SubscriptionCancellation.make({
@@ -95,10 +98,7 @@ export const dispatchCancellations = Effect.fnUntraced(function* (
         const [row] = yield* Schema.decodeUnknownEffect(
           Schema.Tuple([Schema.Struct({ next_offer_at_ms: Schema.Int })])
         )(remaining);
-        const alarm = yield* Effect.tryPromise(() => input.storage.getAlarm());
-        if (alarm === null || alarm <= input.current || alarm > row.next_offer_at_ms) {
-          yield* Effect.tryPromise(() => input.storage.setAlarm(row.next_offer_at_ms));
-        }
+        yield* preserveStoreAlarm(input.storage, row.next_offer_at_ms);
       }
       return rows;
     })

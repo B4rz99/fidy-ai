@@ -1,15 +1,19 @@
 import {
   createStoreRuntime,
   openSqliteStore,
+  storeReadiness,
   withStoreAdmission,
 } from "../runtime/sqlite/operations";
-import { DurableObject } from "cloudflare:workers";
-import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import {
   StoreCapacity,
-  type StoreHistory,
   type StoreReleaseEnvironment,
+  storeReadinessUrl,
 } from "../runtime/sqlite/contract";
+
+import { DurableObject } from "cloudflare:workers";
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+
+import { directoryHistory } from "./schema/operations";
 import { Clock, Effect, Schema } from "effect";
 import { TokenShortId } from "../../src/core/tokens/contract";
 import { canonicalRequestProtection } from "../canonical-admission/contract";
@@ -29,29 +33,6 @@ const digestBytes = 32;
 const sourceExpiryPageSize = 32;
 const admittedStatus = 204;
 const pressureStatus = 429;
-
-const initialDirectorySchema = [
-  `CREATE TABLE session_routes (
-          token_digest BLOB PRIMARY KEY CHECK(length(token_digest)=32),
-          user_id TEXT NOT NULL, session_id TEXT NOT NULL, reservation_id TEXT NOT NULL,
-          hard_expires_at_ms INTEGER NOT NULL) STRICT`,
-];
-
-const directoryHistory: StoreHistory = {
-  owner: "directory",
-  steps: [
-    { version: 1, id: "initial-session-routes", statements: initialDirectorySchema },
-    {
-      version: 2,
-      id: "pat-routes",
-      statements: [
-        `CREATE TABLE pat_routes(short_id TEXT PRIMARY KEY CHECK(length(short_id)=8),user_id TEXT NOT NULL,pat_id TEXT NOT NULL,reservation_id TEXT NOT NULL,expires_at_ms INTEGER NOT NULL) STRICT`,
-        `CREATE TABLE unresolved_source_buckets(subject TEXT PRIMARY KEY NOT NULL,virtual_at_ms INTEGER NOT NULL) STRICT`,
-        `CREATE INDEX unresolved_source_expiry ON unresolved_source_buckets(virtual_at_ms)`,
-      ],
-    },
-  ],
-};
 
 const admitUnresolved = Effect.fn(function* (source: string) {
   const sql = yield* SqliteClient;
@@ -89,6 +70,15 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     );
   }
   override fetch(request: Request): Promise<Response> {
+    if (
+      request.method === "GET" &&
+      request.url === storeReadinessUrl &&
+      this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))
+    ) {
+      return this.runtime.runPromise(
+        storeReadiness({ history: directoryHistory, release: this.env.CF_VERSION_METADATA.id })
+      );
+    }
     if (
       request.method !== "POST" ||
       ![sessionRouteUrl, patRouteUrl, sourcePressureUrl].includes(request.url) ||

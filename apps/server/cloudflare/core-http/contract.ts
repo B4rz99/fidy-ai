@@ -1,3 +1,4 @@
+import type { SharedBindings } from "../storage-bootstrap/contract";
 import type { UserStoreBindings } from "../directory/contract";
 import type { ErasureRegistry } from "../erasure/contract";
 import type { ProviderEnvironment } from "../provider-authentication/contract";
@@ -6,6 +7,7 @@ import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
 /** Private HTTP binding boundary; no model execution or scheduled maintenance authority. */
 export type CoreHttpEnvironment = ProviderEnvironment &
   Partial<UserStoreBindings> &
+  SharedBindings &
   Readonly<{
     DB: D1Database;
     RELEASE_GIT_SHA: string;

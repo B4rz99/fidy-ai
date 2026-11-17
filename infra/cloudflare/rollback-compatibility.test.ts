@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { rollbackCompatible } from "./rollback-compatibility";
+import {
+  type WorkerResources,
+  rollbackCompatible,
+  verifiedVersionResources,
+} from "./rollback-compatibility";
 
 const worker = (
   migrationTag: string,
   bindings: Readonly<Record<string, unknown>>
-): {
-  migrationTag: string;
-  bindings: Readonly<Record<string, unknown>>;
-  exports: Readonly<Record<string, unknown>>;
-} => ({
+): WorkerResources => ({
+  runtime: {},
   migrationTag,
   bindings,
   exports: { Counter: { type: "durable-object", state: "created" } },
@@ -33,6 +34,8 @@ describe("rollback compatibility evidence", () => {
     );
     for (const path of [
       ...base.workflowPaths,
+      "infra/cloudflare/alchemy.storage.ts",
+      "infra/cloudflare/storage-installation.ts",
       "apps/server/cloudflare/subscription/internal/billing-collection-workflow.ts",
       "apps/server/cloudflare/email-authentication/internal/onboarding-workflow.ts",
     ]) {
@@ -65,4 +68,70 @@ describe("rollback compatibility evidence", () => {
       })
     ).toBe(false);
   });
+});
+
+it("compares immutable namespace IDs from the Worker Versions response before a code rollback", () => {
+  const stable = "a".repeat(40);
+  const candidate = "b".repeat(40);
+  const response = (revision: string, namespace: string, flip = false): unknown => {
+    const bindings = [
+      {
+        name: "USER_STORE",
+        type: "durable_object_namespace",
+        class_name: "UserStore",
+        namespace_id: namespace,
+      },
+      { name: "RELEASE_GIT_SHA", type: "plain_text", text: revision },
+    ];
+    return {
+      success: true,
+      result: {
+        id: "10000000-0000-4000-8000-000000000001",
+        resources: {
+          script: {
+            handlers: ["fetch"],
+            named_handlers: [{ name: "UserStore", handlers: ["class"] }],
+          },
+          script_runtime: {
+            compatibility_date: "2026-09-08",
+            compatibility_flags: ["nodejs_compat"],
+            usage_model: "standard",
+          },
+          bindings: flip ? bindings.reverse() : bindings,
+        },
+      },
+    };
+  };
+  const version = "10000000-0000-4000-8000-000000000001";
+  const established = verifiedVersionResources({
+    raw: response(stable, "existing"),
+    versionId: version,
+    revision: stable,
+  });
+  const unchanged = verifiedVersionResources({
+    raw: response(candidate, "existing", true),
+    versionId: version,
+    revision: candidate,
+  });
+  expect(
+    rollbackCompatible({ ...base, stable: established, candidate: unchanged, changedPaths: [] })
+  ).toBe(true);
+  const replaced = verifiedVersionResources({
+    raw: response(candidate, "replacement"),
+    versionId: version,
+    revision: candidate,
+  });
+  expect(
+    rollbackCompatible({ ...base, stable: established, candidate: replaced, changedPaths: [] })
+  ).toBe(false);
+  expect(() =>
+    verifiedVersionResources({
+      raw: response(stable, "existing"),
+      versionId: version,
+      revision: candidate,
+    })
+  ).toThrow();
+  expect(() =>
+    verifiedVersionResources({ raw: response(stable, ""), versionId: version, revision: stable })
+  ).toThrow();
 });

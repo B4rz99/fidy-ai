@@ -2,7 +2,7 @@ import { cancelLocalSubscription, offerDueSourceCancellations } from "../subscri
 import { handleSourceCancellationWork } from "../subscription/runtime";
 import type { LocalSourceCancellationWork, WompiBindings } from "../subscription/contract";
 import { DurableObject } from "cloudflare:workers";
-import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
+import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
 import { Clock, Effect, Option } from "effect";
 import { canonicalOperation } from "../routing/operations";
 import { dispatchLocalTransaction, isLocalTransactionOperation } from "../transactions/operations";
@@ -12,7 +12,11 @@ import {
   runLocalMutation,
 } from "../canonical-admission/operations";
 import { recoverUserWork, userStoreHistory } from "./operations";
-import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
+import {
+  type StoreReleaseEnvironment,
+  releaseProbeName,
+  storeReadinessUrl,
+} from "../runtime/sqlite/contract";
 
 const completedCheckStatus = 200;
 const uncertainCheckStatus = 503;
@@ -103,7 +107,20 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return Option.none();
   }
 
+  private isReleaseProbe(request: Request): boolean {
+    return (
+      request.method === "GET" &&
+      request.url === storeReadinessUrl &&
+      this.ctx.id.equals(this.env.USER_STORE.idFromName(releaseProbeName))
+    );
+  }
+
   override fetch(request: Request): Promise<Response> {
+    if (this.isReleaseProbe(request)) {
+      return this.runtime.runPromise(
+        storeReadiness({ history: userStoreHistory, release: this.env.CF_VERSION_METADATA.id })
+      );
+    }
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
     const owns = (userId: string): boolean =>

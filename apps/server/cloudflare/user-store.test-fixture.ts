@@ -5,7 +5,7 @@ import { browserOrigins } from "./runtime/contract";
 export const native = <Value>(run: () => Promise<Value>): Effect.Effect<Value> =>
   Effect.tryPromise(run).pipe(Effect.orDie);
 
-const manifest = Effect.fn(function* (module: string) {
+export const workerManifest = Effect.fn(function* (module: string) {
   const result = yield* native(() =>
     Bun.build({
       entrypoints: [new URL(module, import.meta.url).pathname],
@@ -31,7 +31,7 @@ const billingProvider = Effect.fnUntraced(function* (withBilling: boolean) {
             compatibilityDate: "2026-09-08",
             exports: { CancellationProviderFixture: { type: "worker" as const } },
             env: { PROVIDER_STATE: { type: "d1" as const, id: "wompi-cancellation-fixture" } },
-            manifest: yield* manifest("./subscription/wompi-cancellation.test-fixture.ts"),
+            manifest: yield* workerManifest("./subscription/wompi-cancellation.test-fixture.ts"),
           },
         },
       ]
@@ -84,7 +84,7 @@ const createUserPlatform = Effect.fnUntraced(function* (withBilling: boolean) {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-user-store-" });
   const [ingress, core] = yield* Effect.all(
-    [manifest("./public-worker.ts"), manifest("./core-worker.ts")],
+    [workerManifest("./public-worker.ts"), workerManifest("./core-worker.ts")],
     { concurrency: 2 }
   );
   const origin = { type: "text", value: browserOrigins.production } as const;

@@ -5,7 +5,7 @@ import { browserOrigins } from "./runtime/contract";
 export const native = <Value>(run: () => Promise<Value>): Effect.Effect<Value> =>
   Effect.tryPromise(run).pipe(Effect.orDie);
 
-const manifest = Effect.fn(function* (module: string) {
+export const workerManifest = Effect.fn(function* (module: string) {
   const result = yield* native(() =>
     Bun.build({
       entrypoints: [new URL(module, import.meta.url).pathname],
@@ -26,7 +26,7 @@ export const nativeUserPlatform = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-user-store-" });
   const [ingress, core] = yield* Effect.all(
-    [manifest("./public-worker.ts"), manifest("./core-worker.ts")],
+    [workerManifest("./public-worker.ts"), workerManifest("./core-worker.ts")],
     { concurrency: 2 }
   );
   const origin = { type: "text", value: browserOrigins.production } as const;

@@ -31,6 +31,8 @@ import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/tel
 
 import { UserTransactionCoordinator as UserCoordinatorRuntime } from "./transactions/runtime";
 
+export { Erasure } from "./erasure-store/runtime";
+export { Maintenance } from "./maintenance/runtime";
 export { Directory } from "./directory/runtime";
 export { UserStore } from "./user-store/runtime";
 export {

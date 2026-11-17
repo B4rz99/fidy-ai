@@ -66,10 +66,11 @@ export const exchangeSmoke = Effect.fn(
       query: string;
       headers: Readonly<Record<string, string>>;
       body: Option.Option<string>;
-    }>
+    }>,
+    origin = "https://api.fidyapp.com"
   ) {
     const client = yield* HttpClient.HttpClient;
-    const url = `https://api.fidyapp.com${smokePath}${input.query}`;
+    const url = `${origin}${smokePath}${input.query}`;
     const request = Option.isSome(input.body)
       ? HttpClientRequest.post(url, {
           headers: input.headers,

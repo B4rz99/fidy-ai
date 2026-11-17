@@ -1,3 +1,7 @@
+import { isStorageBootstrap, isStorageCompatibility } from "../storage-bootstrap/contract";
+import { initializeSharedStores } from "../storage-bootstrap/operations";
+import { smokeManifest, smokePath } from "../runtime/release-smoke/contract";
+import { smokeProofAccepted } from "../runtime/release-smoke/operations";
 import {
   bancolombiaSandboxAdmission,
   verifyBancolombiaSandboxAuthentication,
@@ -16,7 +20,7 @@ import { Clock, Context, Effect, Layer, Option } from "effect";
 import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import type { TelemetryService } from "../../src/shell/observability/contract";
-import type { CoreHttpHandler } from "./contract";
+import type { CoreHttpEnvironment, CoreHttpHandler } from "./contract";
 import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
 import { recoveryIsolationResponse } from "../release-isolation/operations";
@@ -34,6 +38,43 @@ type CoreComposition = Readonly<{
   institutions: typeof registeredConnectionInstitutionIds;
 }>;
 
+const sharedReadiness = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
+  if (
+    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" }) ||
+    environment.CF_VERSION_METADATA === undefined
+  ) {
+    return new Response(null, { status: 404 });
+  }
+  const core = {
+    workerVersionId: environment.CF_VERSION_METADATA.id,
+    gitRevision: environment.RELEASE_GIT_SHA,
+    contractDigest: environment.CONTRACT_DIGEST,
+  };
+  return yield* initializeSharedStores(environment).pipe(
+    Effect.map((markers) =>
+      Response.json(
+        isStorageBootstrap(request) || isStorageCompatibility(request)
+          ? { core, markers }
+          : { core, manifest: smokeManifest, status: "pending" }
+      )
+    ),
+    Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+  );
+});
+const storageProbe = Effect.fn(function* (request: Request, environment: CoreHttpEnvironment) {
+  const url = new URL(request.url);
+  if (
+    environment.RECOVERY_ISOLATION === "isolated" &&
+    environment.MAINTENANCE !== undefined &&
+    (isStorageCompatibility(request) ||
+      isStorageBootstrap(request) ||
+      (request.method === "GET" && url.pathname === smokePath && url.search === "?readiness=1"))
+  ) {
+    return Option.some(yield* sharedReadiness(request, environment));
+  }
+  return Option.none<Response>();
+});
+
 export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
   return (request, environment, context) =>
@@ -46,6 +87,8 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         },
       });
       if (Option.isSome(isolated)) return isolated.value;
+      const storage = yield* storageProbe(request, environment);
+      if (Option.isSome(storage)) return storage.value;
       const recovery = measureErasureRecovery(environment);
       const clients = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)

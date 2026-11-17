@@ -1,30 +1,21 @@
-import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
-import { DurableObject } from "cloudflare:workers";
-import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
 import {
   StoreCapacity,
-  type StoreHistory,
   type StoreReleaseEnvironment,
+  storeReadinessUrl,
 } from "../runtime/sqlite/contract";
+
+import { DurableObject } from "cloudflare:workers";
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+
 import { Clock, Effect, Schema } from "effect";
+import { directoryHistory } from "./schema/operations";
 import { SessionRoute, directoryName, sessionRouteUrl } from "./contract";
 
 type DirectoryEnvironment = StoreReleaseEnvironment &
   Readonly<{ DIRECTORY: DurableObjectNamespace }>;
 
 const digestBytes = 32;
-
-const initialDirectorySchema = [
-  `CREATE TABLE session_routes (
-          token_digest BLOB PRIMARY KEY CHECK(length(token_digest)=32),
-          user_id TEXT NOT NULL, session_id TEXT NOT NULL, reservation_id TEXT NOT NULL,
-          hard_expires_at_ms INTEGER NOT NULL) STRICT`,
-];
-
-const directoryHistory: StoreHistory = {
-  owner: "directory",
-  steps: [{ version: 1, id: "initial-session-routes", statements: initialDirectorySchema }],
-};
 
 export class Directory extends DurableObject<DirectoryEnvironment> {
   private readonly runtime;
@@ -42,6 +33,15 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     );
   }
   override fetch(request: Request): Promise<Response> {
+    if (
+      request.method === "GET" &&
+      request.url === storeReadinessUrl &&
+      this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))
+    ) {
+      return this.runtime.runPromise(
+        storeReadiness({ history: directoryHistory, release: this.env.CF_VERSION_METADATA.id })
+      );
+    }
     if (
       request.method !== "POST" ||
       request.url !== sessionRouteUrl ||

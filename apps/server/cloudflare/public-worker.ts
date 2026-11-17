@@ -1,3 +1,4 @@
+import { isStorageProbe } from "./storage-bootstrap/contract";
 import {
   browserSessionBindingHeader,
   browserSessionBindingPath,
@@ -872,6 +873,30 @@ const annotateSmokeVersion = (
   return new Response(response.body, { status: response.status, headers });
 };
 
+const forwardStorageProbe = Effect.fn(function* (request: Request, environment: PublicEnvironment) {
+  if (
+    environment.RECOVERY_ISOLATION !== "isolated" ||
+    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
+  ) {
+    return new Response(null, { status: 404 });
+  }
+  const admitted = new Headers({ [smokeProofHeader]: environment.SMOKE_PROOF ?? "" });
+  forwardCandidateVersionOverride(request, environment, admitted);
+  const result = yield* Effect.tryPromise(() =>
+    environment.CORE.fetch(request.url, {
+      method: request.method,
+      headers: admitted,
+      signal: request.signal,
+    })
+  ).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })));
+  const headers = new Headers({
+    "cache-control": "no-store",
+    "content-type": "application/json",
+    "x-fidy-smoke-worker-version": environment.CF_VERSION_METADATA?.id ?? "",
+  });
+  return new Response(result.body, { status: result.status, headers });
+});
+
 const fetchEffect = (
   request: Request,
   environment: PublicEnvironment,
@@ -900,6 +925,9 @@ const fetchEffect = (
     });
     if (Option.isSome(recoveryResponse)) {
       return applyApiPolicy(recoveryResponse.value, browserOrigin.value, origin);
+    }
+    if (isStorageProbe(request)) {
+      return yield* forwardStorageProbe(request, environment);
     }
     const distributionResponse = yield* cliDistributionResponse(request);
     if (Option.isSome(distributionResponse)) {

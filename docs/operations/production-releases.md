@@ -612,3 +612,34 @@ bun node_modules/vitest/vitest.mjs run --root apps/server --config cloudflare/vi
 The fixture prints `STORE_CAPACITY` records for each owner class. Check new operation families at
 their maximum supported size and retain their measured peaks with the associated release evidence.
 See the [Cloudflare SQLite storage limits](https://developers.cloudflare.com/durable-objects/platform/limits/).
+
+## First installation of native SQLite storage
+
+Use the manual **Release isolated native storage** workflow on protected trunk. The native Alchemy stack is `FidyNativeStorage/production`. Its Workers are `fidy-native-storage-ingress` and `fidy-native-storage-core`. Its protected ingress is `https://storage-acceptance.fidyapp.com`. Existing Workers, hostnames and Alchemy state remain independently managed by the ordinary Production workflow. The acceptance hostname must belong to the reviewed Cloudflare zone. Configure Production environment variable `NATIVE_STORAGE_ADMISSION=closed` and a separate 64-hex deployment credential in `NATIVE_STORAGE_SMOKE_PROOF`. Keep normal admission closed throughout the rehearsal.
+
+Select `first-install`. The protected job checks that the intended Workers, their namespaces and the ingress domain have no predecessor. It accepts a fresh two-Worker Alchemy plan. The pinned Worker provider provisions the SQLite namespaces from its Durable Object declarations. Core opens each owner’s ordered SQL history and commits the release seed facts separately. The fixed schema probe has a name outside the UUID User identity space. Normal requests receive HTTP 503 throughout the job.
+
+Inspect the workflow artifact for the source revision, exact Worker versions, five provider namespace IDs and the observed migration checksums. Check the independently recorded five named classes, the private Core and the protected ingress. A partial install requires inspection before another attempt. Preserve any namespaces that were already created. Run the verification phase against the exact installed pair if both creations completed and the receipt step failed.
+
+Admission stays closed until the native Product, provider and hosted acceptance gates have passed. Select `rollout` for later native versions. The workflow performs stable capture, zero-traffic upload, mixed-pair and candidate checks against the same native stack and physical IDs. The closed-only command rejects an admission change. Opening Product traffic is a separate cutover after field acceptance. A fresh installation has no previous deployment receipt or D1 migration floor.
+
+Run the protected steps from a checkout with GitHub Actions dispatch permission. Wait for each run to complete and inspect its artifact before starting another. Run the first command once for the empty target. A later compatible protected build can exercise promotion and restoration in one job.
+
+```sh
+gh workflow run native-storage-release.yml --ref trunk -f operation=first-install
+gh workflow run native-storage-release.yml --ref trunk -f operation=rehearse-rollback
+```
+
+The `rollout` operation keeps the promoted candidate serving. The `rehearse-rollback` operation also restores the tested stable pair and verifies its serving versions, source revision and closed admission. The job tests the stable pair before promotion while both versions are in the active deployment. After promotion the guard checks the immutable versions, compatibility, current deployment IDs and provider deployability against that receipt. The artifact includes the exact staged and promoted IDs, whether the rollback target passed, and the verified restored pair when restoration succeeds.
+
+## Retained-state incidents
+
+Keep the production namespace IDs and the exact User ID mapping. Isolate the affected capability and inspect the Worker version pair and the reachable owner migration checksums. A normal release checks both directions of the private protocol, retained Category readers and ordered migration history. It pins ingress and Core versions at the protected storage probe and checks the actual object versions, checksums and immutable namespace IDs. Any new migration makes older code ineligible for code-only rollback. A partial promotion in that state preserves the advanced Core. Repair forward on the same namespaces and use the owner’s guarded operation to resume retained work.
+
+Restore the captured Worker versions only after the protected rollback command has proved the target against current retained state and the provider still lists it as deployable. A missing descriptor, inaccessible probe, incompatible target or changed resource identity requires inspection and forward repair. Preserve receipts for uncertain operations while resolving the incident.
+
+### Offline rehearsal
+
+Run `bun run --cwd apps/server test:cloudflare -- storage-bootstrap/release.test.ts` and `bun run --cwd infra/cloudflare test -- storage-release.test.ts release-controller.test.ts rollback-compatibility.test.ts release-rollback.test.ts`. The native test starts with fresh local storage, checks closed admission and protected shared initialization, exercises independent Worker and object versions, reopens retained state across compatible code, observes refusal from older code after an appended migration, and tests forward repair.
+
+To exercise the same declaration with pinned Alchemy local mode, configure the repository’s local Alchemy profile, switch to `infra/cloudflare`, and run `SMOKE_PROOF=<64-local-hex-digits> ALCHEMY_PROFILE=local bun ../../node_modules/alchemy/bin/alchemy.js dev alchemy.storage.ts --stage <fresh-local-stage>`. The ingress listens on loopback port 18981 and Core on 18982. Check GET `/transactions` for HTTP 503. POST `/internal/release-smoke?storage=initialize` with the local proof in `x-fidy-smoke-proof` returns the five owners’ migration checksums. Keep the proof out of artifacts.

@@ -31,3 +31,9 @@ export class StoreCapacity extends Context.Service<
     readonly observe: Effect.Effect<StoreCapacityEvidence, StoreCapacityUnavailable>;
   }
 >()("@fidy/server/cloudflare/runtime/sqlite/contract/StoreCapacity") {}
+
+/** Only the Core holder of a shared namespace can ask its singleton for retained migration markers. */
+export const storeReadinessUrl = "https://store.invalid/release-readiness";
+
+/** Cannot equal a canonical UUID UserId. This named schema probe holds no User authority. */
+export const releaseProbeName = "release-schema-probe-v1";

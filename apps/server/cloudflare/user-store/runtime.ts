@@ -1,10 +1,16 @@
+import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
+import {
+  type StoreReleaseEnvironment,
+  releaseProbeName,
+  storeReadinessUrl,
+} from "../runtime/sqlite/contract";
+
 import { DurableObject } from "cloudflare:workers";
-import { createStoreRuntime, openSqliteStore } from "../runtime/sqlite/operations";
+
 import { Effect } from "effect";
 import { canonicalAdmissionUnavailable } from "../canonical-admission/operations";
 import { readUserHistory } from "../transactions/operations";
 import { userStoreHistory } from "./operations";
-import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
 
 type UserStoreEnvironment = StoreReleaseEnvironment &
   Readonly<{ USER_STORE: DurableObjectNamespace }>;
@@ -25,6 +31,15 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
 
   override fetch(request: Request): Promise<Response> {
+    if (
+      request.method === "GET" &&
+      request.url === storeReadinessUrl &&
+      this.ctx.id.equals(this.env.USER_STORE.idFromName(releaseProbeName))
+    ) {
+      return this.runtime.runPromise(
+        storeReadiness({ history: userStoreHistory, release: this.env.CF_VERSION_METADATA.id })
+      );
+    }
     if (
       request.method !== "GET" ||
       new URL(request.url).pathname !== "/transactions" ||

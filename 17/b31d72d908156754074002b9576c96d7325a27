@@ -1,0 +1,108 @@
+infra/cloudflare/native-storage-resources.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-85
+infra/cloudflare/rollback-compatibility.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-27,30,35-94,105-107,112-113
+apps/server/cloudflare/storage-bootstrap/release.test.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-226
+apps/server/cloudflare/subscription/internal/pricing-object.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 2
+infra/cloudflare/native-storage-release.ts
+  s_a1be23a656acf0::t_3d34c0d94888e2 570,578
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-49,56-109,113-569,571-577,579-647
+  s_a1be23a656acf0::t_467574d27092e8 50-55,110-112
+infra/cloudflare/storage-release.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-152
+infra/cloudflare/release-controller.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 275,291-294,307-310,378
+infra/cloudflare/stable-worker-identity.test.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 21-25,28,56-61
+  s_a1be23a656acf0::t_c5582cbdc8de59 62-64
+infra/cloudflare/production-release.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 39,821-824,833,851-858,860-868,977-990,1011-1018,1472,1480,1488-1490,1556-1557,1603-1612,1621-1640,1651,1701-1717
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_467574d27092e8 5
+  s_a1be23a656acf0::t_b3e857b8e566fb 373-392
+infra/cloudflare/release-controller.test.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 111,133,326,556,604,639,715,734,753,786,820,847,860-882,893
+docs/operations/production-releases.md
+  s_a1be23a656acf0::t_b3e857b8e566fb 615-645
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1,876-899,929-930
+  s_a1be23a656acf0::t_9321362b31a81d 931
+apps/server/cloudflare/storage-bootstrap/contract.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-39
+.oxlintrc.json
+  s_a1be23a656acf0::t_b3e857b8e566fb 312,319
+apps/server/cloudflare/directory/schema/operations.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-24
+apps/server/cloudflare/erasure-store/runtime.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-4,37-67
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-5,272,277,296-299
+  s_a1be23a656acf0::t_3686032da5236a 300
+apps/server/cloudflare/runtime/sqlite/contract.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 34-39
+infra/cloudflare/rollback-compatibility.test.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 2-6,11-12,37-38,72-136
+  s_a1be23a656acf0::t_0b3585d6061ad2 137
+apps/server/cloudflare/core-http/contract.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1,10
+apps/server/cloudflare/subscription/pricing/operations.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-55
+apps/server/cloudflare/core-worker.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 34-35
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 5,19-23,116-123,125-129
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 8,34,87
+apps/server/cloudflare/storage-bootstrap/forward-repair.test-fixture.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-45
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-5,18,344-376
+apps/server/cloudflare/core-http/runtime.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-4,23,41-77,90-91
+apps/server/cloudflare/runtime/sqlite/operations.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 293-309
+infra/cloudflare/smoke-exchange.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 69-70,73,120
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 4,10,12-16,73-81
+apps/server/cloudflare/storage-bootstrap/operations.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-29
+infra/cloudflare/storage-installation.ts
+  s_a1be23a656acf0::t_7f1d45a39922f8 115-117,137,146,177-179,183-184,192,196
+  s_a1be23a656acf0::t_467574d27092e8 1,147-169,171-175,197-198
+  s_a1be23a656acf0::t_91d174f312ab92 170,176,193-195,209
+  s_a1be23a656acf0::t_b3e857b8e566fb 2-114,118-136,138-145,180-182,185-191,199-208,210-212
+infra/cloudflare/storage-release.test.ts
+  s_a1be23a656acf0::t_467574d27092e8 4,166-169,174,176
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-3,5-150,153-160,179
+  s_a1be23a656acf0::t_0cf37954aeaf96 171-172,175
+  s_a1be23a656acf0::t_4e4e6e809bb27e 151-152,161-165,170,173,177-178
+infra/cloudflare/verify-edge-policy.test.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 14
+tsconfig.base.json
+  s_a1be23a656acf0::t_b3e857b8e566fb 213-214
+infra/cloudflare/alchemy.storage.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-42
+infra/cloudflare/stable-worker-identity.ts
+  s_a1be23a656acf0::t_b3e857b8e566fb 5-9,11-22
+.github/workflows/native-storage-release.yml
+  s_a1be23a656acf0::t_b3e857b8e566fb 1-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "17b31d72d908156754074002b9576c96d7325a27",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

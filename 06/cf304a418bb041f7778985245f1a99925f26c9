@@ -1,0 +1,37 @@
+infra/cloudflare/native-storage-release.ts
+  s_a1be23a656acf0::t_f23475a52d8d20 101,140-141,194,290
+.github/workflows/native-storage-release.yml
+  s_a1be23a656acf0::t_f23475a52d8d20 85-87
+infra/cloudflare/production-release.ts
+  s_a1be23a656acf0::t_f23475a52d8d20 1556-1557
+infra/cloudflare/rollback-compatibility.ts
+  s_a1be23a656acf0::t_f23475a52d8d20 112-113
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_f23475a52d8d20 5,373-392
+infra/cloudflare/rollback-compatibility.test.ts
+  s_a1be23a656acf0::t_f23475a52d8d20 37-38
+infra/cloudflare/smoke-exchange.ts
+  s_a1be23a656acf0::t_5bfa4ccdab1d52 120
+infra/cloudflare/stable-worker-identity.test.ts
+  s_a1be23a656acf0::t_8a6bcd8927861e 21-25,28,56-64
+infra/cloudflare/storage-installation.ts
+  s_a1be23a656acf0::t_96034e36b76f7c 116-122,152-153
+infra/cloudflare/storage-release.test.ts
+  s_a1be23a656acf0::t_0770691ef0c8d0 137,143,151-153,155-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "06cf304a418bb041f7778985245f1a99925f26c9",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

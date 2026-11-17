@@ -1,0 +1,45 @@
+apps/server/cloudflare/maintenance/contract.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 86
+apps/server/cloudflare/financial-user-store.test-fixture.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 27-31,42-46,65,76
+apps/server/cloudflare/maintenance/lifetime-registry.test.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 62-85,101-110
+apps/server/cloudflare/maintenance/operations.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 10,72
+apps/server/cloudflare/budgets/user-store.test.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 5,239,258-305
+  s_a1be23a656acf0::t_e572481dedea27 306-307
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 5,319-321,325-327
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 15,89,103,106-107,112,367-368,378-380,387
+apps/server/cloudflare/budgets/internal/sqlite-planning.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 121-139
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 1,5-10,607-623
+  s_a1be23a656acf0::t_a3ed49469428f5 624
+tools/depcruise/boundaries.mjs
+  s_a1be23a656acf0::t_5cc1e1206efae4 120-121
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 125
+apps/server/cloudflare/runtime/sqlite/migrations.test.ts
+  s_a1be23a656acf0::t_5cc1e1206efae4 239-242,248-250
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_5cc1e1206efae4 76-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b232a3f2041e125b0c1125338642fb5693544af5",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

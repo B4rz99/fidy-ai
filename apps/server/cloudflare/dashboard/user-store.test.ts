@@ -5,7 +5,7 @@ import { IanaTimeZone } from "../../src/core/_shared/context";
 import { DashboardDocument } from "../../src/core/dashboard/contract";
 import { Transaction } from "../../src/core/transactions/contract";
 import { DashboardView } from "../../src/shell/dashboard/contract";
-import { listIds, metricTotals } from "./view.test-fixture";
+import { assertListSelection, listIds, metricTotals } from "./view.test-fixture";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import {
@@ -872,6 +872,122 @@ scenario(
         expect(
           yield* native(() => store.exec("SELECT revision,document_json FROM user_documents"))
         ).toEqual(before);
+      })
+    ),
+  30000
+);
+
+scenario(
+  "reuses the same complete pages across 24 list Widgets and refreshes the next native view",
+  () =>
+    runNative(
+      Effect.gen(function* () {
+        const store = yield* setup();
+        const document = yield* Schema.decodeUnknownEffect(DashboardDocument)({
+          title: "Listas",
+          layout: {
+            kind: "split",
+            axis: "column",
+            children: Array.from({ length: 24 }, (_, index) => ({
+              weight: 1,
+              node: {
+                kind: "leaf",
+                widget: {
+                  id: `33300000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+                  type: "transaction-list",
+                  limit: index === 23 ? 2 : 50,
+                  ...(index === 21 ? { categories: ["10000000-0000-4000-8000-000000000002"] } : {}),
+                  ...(index === 22 ? { search: "missing" } : {}),
+                },
+              },
+            })),
+          },
+        });
+        const encoded = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.toCodecJson(DashboardDocument))
+        )(document);
+        yield* native(() =>
+          store.exec("INSERT INTO user_documents VALUES (?,'dashboard',?,1)", alice.user, encoded)
+        );
+        yield* native(() =>
+          store.exec(
+            "INSERT INTO categories VALUES (?,'Restaurantes',3)",
+            "10000000-0000-4000-8000-000000000001"
+          )
+        );
+        yield* native(() =>
+          store.exec(
+            `INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms)
+      WITH RECURSIVE sequence(number) AS (SELECT 0 UNION ALL SELECT number+1 FROM sequence WHERE number<249)
+      SELECT printf('77700000-0000-4000-8000-%012d',number),?,'0.01','COP','outflow',?,?,? FROM sequence`,
+            alice.user,
+            "10000000-0000-4000-8000-000000000001",
+            1,
+            1
+          )
+        );
+
+        const check = Effect.fn(function* (expected: string) {
+          const widgets = yield* fetchView(store);
+          expect(widgets).toHaveLength(24);
+          widgets.forEach((widget, index) =>
+            assertListSelection({ node: { kind: "leaf", widget }, index, firstId: expected })
+          );
+        });
+        yield* check("77700000-0000-4000-8000-000000000249");
+        const response = yield* native(() =>
+          send(store, 0, {
+            path: "/transactions",
+            method: "POST",
+            body: {
+              money: { amount: "1", currency: "COP" },
+              direction: "outflow",
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            },
+          })
+        );
+        expect(response.status).toBe(201);
+        const { data } = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
+        )(yield* native(() => response.json()));
+        yield* check(data.id);
+      })
+    ),
+  30000
+);
+
+scenario(
+  "withholds an impossible stored total and a failed capture adds no Dashboard contribution",
+  () =>
+    runNative(
+      Effect.gen(function* () {
+        const store = yield* initializedSetup();
+        const capture = (): Promise<Response> =>
+          send(store, 0, {
+            path: "/transactions",
+            method: "POST",
+            body: {
+              money: { amount: "21.37", currency: "COP" },
+              direction: "outflow",
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            },
+          });
+        yield* native(() =>
+          store.exec(
+            "CREATE TRIGGER skip_bucket BEFORE INSERT ON transaction_projection_bucket BEGIN SELECT RAISE(IGNORE); END"
+          )
+        );
+        expect((yield* native(capture)).status).toBe(503);
+        yield* native(() => store.exec("DROP TRIGGER skip_bucket"));
+        expect(yield* metricTotals(yield* native(() => send(store, 0, "/dashboard/view")))).toEqual(
+          []
+        );
+        expect((yield* native(capture)).status).toBe(201);
+        expect(yield* metricTotals(yield* native(() => send(store, 0, "/dashboard/view")))).toEqual(
+          ["21.37"]
+        );
+        yield* native(() => store.exec("UPDATE transaction_projection_digit SET digit_sum=0"));
+        expect((yield* native(() => send(store, 0, "/dashboard/view"))).status).toBe(503);
       })
     ),
   30000

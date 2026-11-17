@@ -48,6 +48,7 @@ BEGIN
     AND currency = OLD.currency
     AND direction = OLD.direction AND category_id = OLD.category_id
     AND bucket = (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / size_seconds;
+  SELECT CASE WHEN changes()<>2 THEN RAISE(ABORT,'dashboard_bucket_removed') END;
   DELETE FROM transaction_projection_bucket WHERE user_id = OLD.user_id
     AND (size_seconds, bucket) IN (
       (60, (OLD.occurred_at_ms / 1000 - (OLD.occurred_at_ms < 0 AND OLD.occurred_at_ms % 1000 != 0)) / 60),
@@ -95,6 +96,7 @@ BEGIN
     max_minor = (CASE WHEN length(excluded.max_minor) > length(max_minor)
       OR (length(excluded.max_minor) = length(max_minor) AND excluded.max_minor > max_minor)
       THEN excluded.max_minor ELSE max_minor END);
+  SELECT CASE WHEN changes()<>2 THEN RAISE(ABORT,'dashboard_bucket_missing') END;
   INSERT INTO transaction_projection_digit
     (user_id, size_seconds, bucket, currency, direction, category_id, position, digit_sum)
   WITH RECURSIVE
@@ -111,6 +113,9 @@ BEGIN
     (SELECT 60 AS size_seconds UNION ALL SELECT 86400) segment WHERE true
   ON CONFLICT (user_id, size_seconds, bucket, currency, direction, category_id, position)
   DO UPDATE SET digit_sum = digit_sum + excluded.digit_sum;
+  SELECT CASE WHEN changes()<>2*length(CASE WHEN instr(NEW.amount,'.')=0 THEN NEW.amount||'0000'
+    ELSE replace(NEW.amount,'.','')||substr('0000',1,4-(length(NEW.amount)-instr(NEW.amount,'.'))) END)
+    THEN RAISE(ABORT,'dashboard_digits_missing') END;
 END`,
   `CREATE TRIGGER dashboard_new_user AFTER INSERT ON users BEGIN
   INSERT INTO transaction_projection_state(user_id,version,readiness) VALUES(NEW.id,1,'ready');

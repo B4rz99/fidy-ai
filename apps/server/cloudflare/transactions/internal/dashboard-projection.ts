@@ -205,6 +205,9 @@ const decodeSums = (rows: ReadonlyArray<unknown>): Option.Option<Map<string, big
   return Option.some(sums);
 };
 
+const plausibleTotal = (sum: bigint, maximum: bigint, count: bigint): boolean =>
+  maximum > 0n && sum >= maximum && sum <= maximum * count;
+
 const decodeGroups = (
   rows: ReadonlyArray<unknown>,
   sums: ReadonlyMap<string, bigint>
@@ -221,17 +224,18 @@ const decodeGroups = (
     if (sum === undefined || Option.isNone(maximum) || !Number.isSafeInteger(group.count)) {
       return Option.none();
     }
+    const count = BigInt(group.count);
     const total = Schema.decodeOption(Schema.toType(Money))({
       currency: group.currency,
       amount: BigDecimal.make(sum, minorScale),
-    });
+    }).pipe(Option.filter(() => plausibleTotal(sum, BigInt(group.max_minor), count)));
     if (Option.isNone(total)) return Option.none();
     result.push({
       categoryId: group.category_id,
       direction: group.direction,
       sum: total.value,
       maximum: maximum.value,
-      count: BigInt(group.count),
+      count,
     });
   }
   return Option.some(result);

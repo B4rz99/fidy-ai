@@ -1,5 +1,5 @@
 import { retainedPlanningWork } from "../retained-planning.test-fixture";
-import { listIds, metricTotals } from "./view.test-fixture";
+import { assertListSelection, listIds, metricTotals } from "./view.test-fixture";
 import { openAiTestKey } from "../openai.test-fixture";
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { encodeMoneyAmount } from "../../src/core/_shared/money";
@@ -952,7 +952,7 @@ it(
           )
         );
         expect(documents[0]).toEqual(documents[1]);
-        expect(documents[0].data.title).toBe("Tablero");
+        expect(documents[0]?.data.title).toBe("Tablero");
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(1);
         expect(
           (yield* Effect.tryPromise(() =>
@@ -2098,23 +2098,6 @@ it(
   60_000
 );
 
-const assertListSelection = (
-  node: DashboardView["layout"],
-  index: number,
-  firstId: string
-): void => {
-  if (node.kind !== "leaf" || !("transactions" in node.widget.result)) {
-    throw new Error("Expected Transaction list");
-  }
-  let pageSize = 50;
-  if (index === 21 || index === 22) pageSize = 0;
-  else if (index === 23) pageSize = 2;
-  expect(node.widget.result.transactions).toHaveLength(pageSize);
-  expect(node.widget.result.transactions.slice(0, 1).map(({ id }) => id)).toEqual(
-    pageSize === 0 ? [] : [firstId]
-  );
-};
-
 it("shares identical list selections within one fresh Dashboard request", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2173,7 +2156,7 @@ it("shares identical list selections within one fresh Dashboard request", () =>
       if (view.layout.kind !== "split") throw new Error("Expected list layout");
       expect(view.layout.children).toHaveLength(24);
       for (const [index, { node }] of view.layout.children.entries()) {
-        assertListSelection(node, index, "77700000-0000-4000-8000-000000000249");
+        assertListSelection({ node, index, firstId: "77700000-0000-4000-8000-000000000249" });
       }
       expect(observed.cost().rowsRead).toBeLessThanOrEqual(1024);
       const captured = yield* Effect.tryPromise(() =>
@@ -2199,7 +2182,7 @@ it("shares identical list selections within one fresh Dashboard request", () =>
       )(yield* Effect.tryPromise(() => fresh.json()));
       if (next.layout.kind !== "split") throw new Error("Expected list layout");
       for (const [index, { node }] of next.layout.children.entries()) {
-        assertListSelection(node, index, transaction.id);
+        assertListSelection({ node, index, firstId: transaction.id });
       }
     })
   ));

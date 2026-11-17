@@ -37,3 +37,24 @@ export const listIds = Effect.fn(function* (response: Response, widgetId: string
   }
   return list.widget.result.transactions.map((transaction) => transaction.id);
 });
+
+const fullListPage = 50;
+const categoryFilterPosition = 21,
+  emptySearchPosition = 22,
+  shortListPosition = 23;
+export const assertListSelection = ({
+  node,
+  index,
+  firstId,
+}: Readonly<{ node: DashboardView["layout"]; index: number; firstId: string }>): void => {
+  if (node.kind !== "leaf" || !("transactions" in node.widget.result)) {
+    throw new Error("Expected Transaction list");
+  }
+  let pageSize = fullListPage;
+  if (index === categoryFilterPosition || index === emptySearchPosition) pageSize = 0;
+  else if (index === shortListPosition) pageSize = 2;
+  expect(node.widget.result.transactions).toHaveLength(pageSize);
+  expect(node.widget.result.transactions.slice(0, 1).map(({ id }) => id)).toEqual(
+    pageSize === 0 ? [] : [firstId]
+  );
+};

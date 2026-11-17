@@ -1,3 +1,8 @@
+import type { LocalMutationResult } from "../canonical-admission/contract";
+import {
+  dispatchCancellations as dispatchLocalCancellations,
+  retainCancellation,
+} from "./internal/local-cancellation";
 import { prepareBoundSubscriptionRead as prepareRead } from "./internal/bound-read";
 import { cancellationRefusal, prepareCancellation } from "./internal/cancellation";
 import type {
@@ -6,7 +11,11 @@ import type {
   CanonicalPreparationWork,
 } from "../canonical-operations/contract";
 import { claimSubscriptionRenewal } from "./internal/subscription-renewal";
-import { type RefundAttempt, type RefundStartFailure } from "../../src/core/subscription/contract";
+import {
+  type RefundAttempt,
+  type RefundStartFailure,
+  SubscriptionCancellation,
+} from "../../src/core/subscription/contract";
 import {
   type RefundReadCall,
   type RefundStartCall,
@@ -111,3 +120,34 @@ export const subscriptionCancellationRefusal = (
 
 export const prepareBoundSubscriptionRead: typeof prepareRead = (operation) =>
   prepareRead(operation);
+
+export const retainSubscriptionCancellation: typeof retainCancellation = (input) =>
+  retainCancellation(input);
+
+export const offerDueSourceCancellations: typeof dispatchLocalCancellations = (input) =>
+  dispatchLocalCancellations(input);
+
+/** The canonical mutation kernel owns admission, live authority, accounting, Audit and the final receipt. */
+export const cancelLocalSubscription = Effect.fnUntraced(function* (
+  input: Parameters<typeof retainCancellation>[0]
+) {
+  const result = yield* retainCancellation(input);
+  if (Option.isNone(result)) {
+    const absent: LocalMutationResult = {
+      status: 404,
+      outcome: "not_found",
+      body: {
+        error: { code: "not_found", message: "No paid Subscription belongs to you." },
+        next: [],
+      },
+    };
+    return absent;
+  }
+  const data = yield* Schema.encodeEffect(SubscriptionCancellation)(result.value);
+  const completed: LocalMutationResult = {
+    status: 200,
+    outcome: "success",
+    body: { data, next: [] },
+  };
+  return completed;
+});

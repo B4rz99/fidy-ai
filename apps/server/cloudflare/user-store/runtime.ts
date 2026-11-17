@@ -1,25 +1,35 @@
+import { cancelLocalSubscription, offerDueSourceCancellations } from "../subscription/operations";
+import { handleSourceCancellationWork } from "../subscription/runtime";
+import type { LocalSourceCancellationWork, WompiBindings } from "../subscription/contract";
+import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
+import { Clock, Effect, Option } from "effect";
+import { canonicalOperation } from "../routing/operations";
+import {
+  canonicalAdmissionUnavailable,
+  recoverLocalReceipts,
+  runLocalMutation,
+} from "../canonical-admission/operations";
+import {
+  captureLocalTransaction,
+  readUserHistory,
+  transactionInput,
+} from "../transactions/operations";
+import { recoverUserWork, userStoreHistory } from "./operations";
 import {
   type StoreReleaseEnvironment,
   releaseProbeName,
   storeReadinessUrl,
 } from "../runtime/sqlite/contract";
 
-import { DurableObject } from "cloudflare:workers";
-import { Effect, Option } from "effect";
-import { canonicalOperation } from "../routing/operations";
-import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-admission/operations";
-import {
-  captureLocalTransaction,
-  readUserHistory,
-  transactionInput,
-} from "../transactions/operations";
-import { userStoreHistory } from "./operations";
-
-type UserStoreEnvironment = StoreReleaseEnvironment &
-  Readonly<{ USER_STORE: DurableObjectNamespace }>;
-const isStoreReadiness = (request: Request): boolean =>
-  request.method === "GET" && request.url === storeReadinessUrl;
+const completedCheckStatus = 200;
+const uncertainCheckStatus = 503;
+type UserStoreEnvironment = WompiBindings &
+  StoreReleaseEnvironment &
+  Readonly<{
+    USER_STORE: DurableObjectNamespace;
+    BILLING_COLLECTION_QUEUE: Queue<typeof LocalSourceCancellationWork.Type>;
+  }>;
 export class UserStore extends DurableObject<UserStoreEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
@@ -36,35 +46,115 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
-  override fetch(request: Request): Promise<Response> {
-    const path = new URL(request.url).pathname;
-    const owns = (userId: string): boolean =>
-      this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
-    const operation = canonicalOperation({ method: request.method, path });
-    if (Option.isSome(operation) && operation.value.id === "transactions.createTransaction") {
-      return this.runtime.runPromise(
-        runLocalMutation({
-          request,
-          operation: operation.value,
-          owns,
-          input: transactionInput(request),
-          work: captureLocalTransaction,
-        }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+  private checkWork(): Promise<
+    Readonly<{ failedFamilies: number; attempted: number; failedOffers: number }>
+  > {
+    return this.runtime.runPromise(
+      Effect.flatMap(Clock.currentTimeMillis, (current) =>
+        recoverUserWork([
+          recoverLocalReceipts(current, this.ctx.storage),
+          offerDueSourceCancellations({
+            current,
+            storage: this.ctx.storage,
+            queue: this.env.BILLING_COLLECTION_QUEUE,
+          }),
+        ])
+      )
+    );
+  }
+
+  override alarm(): Promise<void> {
+    return this.checkWork().then((summary) => {
+      if (summary.failedFamilies > 0) throw new Error("User work discovery unavailable");
+    });
+  }
+
+  private mutation(
+    request: Request,
+    owns: (userId: string) => boolean,
+    operation: ReturnType<typeof canonicalOperation>
+  ): Option.Option<Promise<Response>> {
+    if (Option.isSome(operation) && operation.value.id === "subscription.cancelSubscription") {
+      return Option.some(
+        this.runtime.runPromise(
+          runLocalMutation({
+            request,
+            storage: this.ctx.storage,
+            operation: operation.value,
+            owns,
+            input: Effect.succeedSome(true),
+            work: (_input, userId, current) =>
+              cancelLocalSubscription({ userId, current, storage: this.ctx.storage }),
+          }).pipe(
+            Effect.tap((response) =>
+              Effect.sync(() => {
+                if (response.ok) this.ctx.waitUntil(this.alarm());
+              })
+            ),
+            Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+          )
+        )
       );
     }
-    if (
-      isStoreReadiness(request) &&
+    if (Option.isSome(operation) && operation.value.id === "transactions.createTransaction") {
+      return Option.some(
+        this.runtime.runPromise(
+          runLocalMutation({
+            request,
+            storage: this.ctx.storage,
+            operation: operation.value,
+            owns,
+            input: transactionInput(request),
+            work: captureLocalTransaction,
+          }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+        )
+      );
+    }
+    return Option.none();
+  }
+
+  private isReleaseProbe(request: Request): boolean {
+    return (
+      request.method === "GET" &&
+      request.url === storeReadinessUrl &&
       this.ctx.id.equals(this.env.USER_STORE.idFromName(releaseProbeName))
-    ) {
+    );
+  }
+
+  override fetch(request: Request): Promise<Response> {
+    if (this.isReleaseProbe(request)) {
       return this.runtime.runPromise(
         storeReadiness({ history: userStoreHistory, release: this.env.CF_VERSION_METADATA.id })
       );
     }
+    const path = new URL(request.url).pathname;
+    const command = request.method + " " + path;
+    const owns = (userId: string): boolean =>
+      this.ctx.id.equals(this.env.USER_STORE.idFromName(userId));
+    const operation = canonicalOperation({ method: request.method, path });
+    const mutation = this.mutation(request, owns, operation);
+    if (Option.isSome(mutation)) return mutation.value;
     if (
-      request.method !== "GET" ||
-      new URL(request.url).pathname !== "/transactions" ||
-      request.headers.has("authorization")
+      ["POST /work/source-cancellation/pending", "POST /work/source-cancellation/observe"].includes(
+        command
+      )
     ) {
+      return this.runtime.runPromise(
+        handleSourceCancellationWork({
+          request,
+          environment: this.env,
+          owns,
+        }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
+      );
+    }
+    if (command === "POST /work/check") {
+      return this.checkWork().then((summary) =>
+        Response.json(summary, {
+          status: summary.failedFamilies > 0 ? uncertainCheckStatus : completedCheckStatus,
+        })
+      );
+    }
+    if (command !== "GET /transactions" || request.headers.has("authorization")) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
     return this.runtime.runPromise(

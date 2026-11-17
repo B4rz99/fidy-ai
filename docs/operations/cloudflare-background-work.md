@@ -175,6 +175,15 @@ step. Alert delivery and test notification to an operator are owned by #717, not
    follow the owner's ambiguity/replacement path rather than reuse or resend its proof.
 6. Remove a dead-letter message only after its durable outcome or safe recovery is understood.
 
+For a UserStore-owned DaviPlata Subscription cancellation, recover the original UserStore through
+its private `POST /work/check` operation. The check drains expired retry receipts and offers a page
+of due cancellations to the billing Queue. It preserves any earlier alarm and reports failed families
+even when another family completed. The version 3 Queue and Workflow identity contains the User and
+the original paid BillingAttempt. The owner retains the one-shot Wompi void claim and checks the
+original source independently before recording `voided`. An exhausted verification budget leaves
+the cancellation `void-pending` for reconciliation. Preserve the original claim and source identity
+when investigating an ambiguous provider response.
+
 Dead letters have finite Cloudflare retention. They support diagnosis, not authoritative storage.
 The outbox remains the recovery source. Current Cloudflare behavior is documented in
 [delivery guarantees](https://developers.cloudflare.com/queues/reference/delivery-guarantees/),

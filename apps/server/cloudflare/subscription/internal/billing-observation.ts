@@ -7,7 +7,6 @@ import {
 } from "../../runtime/telemetry/operations";
 import { cancelSource } from "./source-cancellation";
 import { WompiTransactionId } from "./wompi-model";
-import { type WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { type WompiTransportFactory } from "./wompi-runtime";
@@ -15,6 +14,9 @@ import {
   BillingCollectionFailure,
   type BillingObservationWorkflow,
   type BillingRuntime,
+  type BillingWorkRouting,
+  type BillingWorkflowActivity,
+  LocalSourceCancellationWork,
   SubscriptionCancellationWork,
 } from "../contract";
 
@@ -63,6 +65,11 @@ const billingWorkflowRetention = {
   successRetention: "3 days",
   errorRetention: "3 days",
 } as const;
+const activeStatuses: ReadonlySet<InstanceStatus["status"]> = new Set([
+  "queued",
+  "running",
+  "waiting",
+]);
 const terminalStatuses: ReadonlySet<InstanceStatus["status"]> = new Set([
   "errored",
   "terminated",
@@ -81,7 +88,7 @@ const offerBillingWorkflow = (
     const existing = yield* Effect.exit(attempt(() => input.workflow.get(input.id)));
     if (Exit.isSuccess(existing)) {
       const current = yield* attempt(() => existing.value.status());
-      if (!terminalStatuses.has(current.status)) return true;
+      if (!terminalStatuses.has(current.status)) return activeStatuses.has(current.status);
     }
     if (!(yield* input.reserve)) return true;
     const started = yield* Effect.exit(
@@ -98,7 +105,54 @@ const offerBillingWorkflow = (
     if (Exit.isSuccess(started)) return true;
     const recovered = yield* attempt(() => input.workflow.get(input.id));
     const status = yield* attempt(() => recovered.status());
-    return status.status === "queued" || status.status === "running" || status.status === "waiting";
+    return activeStatuses.has(status.status);
+  });
+
+const workPending = 202;
+const noEligibleWork = 204;
+const callCancellationOwner = (
+  environment: BillingWorkRouting,
+  work: typeof LocalSourceCancellationWork.Type,
+  action: "pending" | "observe"
+): Effect.Effect<boolean, BillingCollectionFailure> =>
+  Effect.gen(function* () {
+    if (environment.USER_STORE === undefined) return yield* failure();
+    const owner = environment.USER_STORE.getByName(work.userId);
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(LocalSourceCancellationWork))(
+      work
+    ).pipe(Effect.mapError(() => failure()));
+    const response = yield* Effect.tryPromise({
+      try: (signal) =>
+        owner.fetch("https://user-store.internal/work/source-cancellation/" + action, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          signal,
+        }),
+      catch: () => failure(),
+    });
+    if (response.status === noEligibleWork) return false;
+    if (response.status === workPending) return true;
+    return yield* failure();
+  });
+
+/** Queue redelivery follows the same native instance, consulting the live User owner before restart. */
+export const receiveLocalSourceCancellation = (
+  input: Readonly<{
+    environment: BillingWorkRouting;
+    workflow: BillingObservationWorkflow;
+    work: typeof LocalSourceCancellationWork.Type;
+  }>
+): Effect.Effect<void, BillingCollectionFailure> =>
+  Effect.gen(function* () {
+    if (!(yield* callCancellationOwner(input.environment, input.work, "pending"))) return;
+    const offered = yield* offerBillingWorkflow({
+      workflow: input.workflow,
+      id: `source-cancel-v3-${input.work.userId}-${input.work.paidAttemptId}`,
+      params: input.work,
+      reserve: Effect.succeed(true),
+    });
+    if (!offered) return yield* failure();
   });
 
 /** Offer retained cancellation work; inactive or exhausted intent needs no handoff. Failures leave receipt retryable. */
@@ -132,12 +186,15 @@ export const receiveSourceCancellation = (
 type BillingObservationExecution = Readonly<{
   environment: BillingRuntime;
   payload: unknown;
-  activity: (name: string, options: WorkflowStepConfig, run: () => Promise<void>) => Promise<void>;
+  activity: BillingWorkflowActivity;
+  observe: Option.Option<BillingWorkflowActivity<boolean>>;
   sleep: (name: string, duration: number) => Promise<void>;
   wompiHttp: WompiTransportFactory;
 }>;
 /** Execute retained observation work; identities never replace live eligibility or provider evidence. */
 export const runBillingObservation = (input: BillingObservationExecution): Promise<void> => {
+  const local = Schema.decodeUnknownOption(LocalSourceCancellationWork)(input.payload);
+  if (Option.isSome(local)) return runLocalCancellationLoop(input, local.value);
   const work = Schema.decodeUnknownOption(
     Schema.Union([
       LookupWork,
@@ -184,6 +241,33 @@ export const runBillingObservation = (input: BillingObservationExecution): Promi
   }
   return runObservationLoop({ input, work: retained, runActivity });
 };
+
+const runLocalCancellationLoop = (
+  input: BillingObservationExecution,
+  work: typeof LocalSourceCancellationWork.Type
+): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const observe = input.observe;
+      if (Option.isNone(observe)) return yield* failure();
+      const run = Effect.runPromiseWith(yield* Effect.context<never>());
+      for (let index = 0; index < maximumCandidateLookupAttempts; index++) {
+        if (index > 0) {
+          yield* attempt(() =>
+            input.sleep(`source-cancellation-wait-v3-${index}`, candidateCooldownMs + 1)
+          );
+        }
+        const pending = yield* attempt(() =>
+          observe.value(
+            `verify-source-cancellation-v3-${index}`,
+            { retries: { limit: 0, delay: "1 second" } },
+            () => run(callCancellationOwner(input.environment, work, "observe"))
+          )
+        );
+        if (!pending) return;
+      }
+    })
+  );
 
 const runObservationLoop = ({
   input,

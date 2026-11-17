@@ -1,11 +1,14 @@
 import type { ProactivityDeliveryWork } from "../insights/contract";
 
 /** Queue composition receives only native handoff bindings. */
-export type CoreQueueEnvironment = Readonly<{
-  DB: D1Database;
-  RELEASE_GIT_SHA: string;
-  USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-}> &
+import type { BillingWorkRouting } from "../subscription/contract";
+
+export type CoreQueueEnvironment = BillingWorkRouting &
+  Readonly<{
+    DB: D1Database;
+    RELEASE_GIT_SHA: string;
+    USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+  }> &
   Partial<
     Readonly<{
       EMAIL_BUCKET: R2Bucket;

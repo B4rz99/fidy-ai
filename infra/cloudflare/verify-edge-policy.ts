@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "fcdd0c57f1e936521678af5a4299c8c396d9b659ae70ecf7858ccd77f16fc288";
+const expectedEdgePolicyDigest = "dac1114c0328f5426cf21136bf9d34beb19e98f965ab0f3d1918514340f9b09c";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/tokens/operations.ts", import.meta.url)

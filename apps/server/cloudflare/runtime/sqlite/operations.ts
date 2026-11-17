@@ -306,3 +306,14 @@ export const storeReadiness = Effect.fn(function* ({
   if (markers.length !== history.steps.length) return new Response(null, { status: 503 });
   return Response.json({ workerVersionId: release, history: markers.map((row) => row.checksum) });
 });
+
+/** Use the owner's existing native transaction. Another family's earlier scheduled alarm is preserved. */
+export const preserveStoreAlarm = Effect.fnUntraced(function* (
+  storage: DurableObjectStorage,
+  instant: number
+) {
+  const earlier = yield* Effect.tryPromise(() => storage.getAlarm());
+  if (earlier === null || instant < earlier) {
+    yield* Effect.tryPromise(() => storage.setAlarm(instant));
+  }
+});

@@ -123,10 +123,11 @@ export type RefundReceiveInput = Readonly<{
   batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
 }>;
 
-export type BillingRuntime = Pick<
-  BillingCollectionEnvironment,
-  "DB" | "WOMPI_ENVIRONMENT" | "WOMPI_PUBLIC_KEY" | "WOMPI_PRIVATE_KEY" | "WOMPI_INTEGRITY_SECRET"
->;
+export type BillingRuntime = BillingWorkRouting &
+  Pick<
+    BillingCollectionEnvironment,
+    "DB" | "WOMPI_ENVIRONMENT" | "WOMPI_PUBLIC_KEY" | "WOMPI_PRIVATE_KEY" | "WOMPI_INTEGRITY_SECRET"
+  >;
 
 /** Closed correction-work failure; Queue redelivery remains possible without publishing platform diagnostics. */
 export class RefundWorkFailure extends Data.TaggedError("RefundWorkFailure")<{
@@ -226,3 +227,22 @@ export type PricingEnvironment = Readonly<{
       PRICING: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
     }>
   >;
+
+/** Exact accepted paid period; a transport redelivery carries no independent billing authority. */
+export const LocalSourceCancellationWork = Schema.Struct({
+  version: Schema.Literal(3),
+  kind: Schema.Literal("source-cancellation"),
+  userId: UserId,
+  paidAttemptId: BillingAttemptId,
+});
+
+export type BillingWorkRouting = Partial<
+  Readonly<{ USER_STORE: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }> }>
+>;
+
+/** A value returned by a named billing activity is durable across Workflow reconstruction. */
+export type BillingWorkflowActivity<Value extends boolean | void = void> = (
+  name: string,
+  options: WorkflowStepConfig,
+  run: () => Promise<Value>
+) => Promise<Value>;

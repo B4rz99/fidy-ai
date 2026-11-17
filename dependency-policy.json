@@ -40,5 +40,36 @@
       "until": "2026-12-20T00:00:00Z"
     }
   ],
-  "acceptedVulnerabilities": []
+  "acceptedVulnerabilities": [
+    {
+      "cve": "CVE-2026-112366",
+      "path": "bun.lock",
+      "reason": "Temporary acceptance approved on 2026-11-17 because Picomatch 4.0.7 is the latest published release and no patched release is available. Track https://github.com/micromatch/picomatch/issues/247. Upgrade the affected resolutions and remove the matching scanner exclusion as soon as a patched release clears the seven-day install delay.",
+      "until": "2026-12-02T05:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-112366",
+      "path": "tools/astro/bun.lock",
+      "reason": "Temporary acceptance approved on 2026-11-17 because Picomatch 4.0.7 is the latest published release and no patched release is available. Track https://github.com/micromatch/picomatch/issues/247. Upgrade the affected resolutions and remove the matching scanner exclusion as soon as a patched release clears the seven-day install delay.",
+      "until": "2026-12-02T05:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-112366",
+      "path": "tools/depcruise/bun.lock",
+      "reason": "Temporary acceptance approved on 2026-11-17 because Picomatch 4.0.7 is the latest published release and no patched release is available. Track https://github.com/micromatch/picomatch/issues/247. Upgrade the affected resolutions and remove the matching scanner exclusion as soon as a patched release clears the seven-day install delay.",
+      "until": "2026-12-02T05:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-112366",
+      "path": "tools/mcp-inspector/bun.lock",
+      "reason": "Temporary acceptance approved on 2026-11-17 because Picomatch 4.0.7 is the latest published release and no patched release is available. Track https://github.com/micromatch/picomatch/issues/247. Upgrade the affected resolutions and remove the matching scanner exclusion as soon as a patched release clears the seven-day install delay.",
+      "until": "2026-12-02T05:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-112366",
+      "path": "tools/mutation/bun.lock",
+      "reason": "Temporary acceptance approved on 2026-11-17 because Picomatch 4.0.7 is the latest published release and no patched release is available. Track https://github.com/micromatch/picomatch/issues/247. Upgrade the affected resolutions and remove the matching scanner exclusion as soon as a patched release clears the seven-day install delay.",
+      "until": "2026-12-02T05:00:00Z"
+    }
+  ]
 }

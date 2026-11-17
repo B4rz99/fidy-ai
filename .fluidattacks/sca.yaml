@@ -14,3 +14,11 @@ sca:
   exclude:
     - glob(.repos/**)
     - glob(**/node_modules/**)
+  exclusions:
+    - CVE: CVE-2026-112366
+      paths:
+        - bun.lock
+        - tools/astro/bun.lock
+        - tools/depcruise/bun.lock
+        - tools/mcp-inspector/bun.lock
+        - tools/mutation/bun.lock

@@ -10,9 +10,9 @@
     "typecheck": "astro sync && bun install --cwd ../../tools/astro --frozen-lockfile && bun ../../tools/astro/check.ts"
   },
   "dependencies": {
-    "@astrojs/react": "7.1.5",
+    "@astrojs/react": "7.1.7",
     "@astrojs/sitemap": "3.7.4",
-    "astro": "7.4.8",
+    "astro": "7.4.10",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

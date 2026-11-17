@@ -71,6 +71,14 @@ partial Transaction is linked, another capture can record the remaining payment.
 marks must be reduced before linking; stale replacement selections can be corrected while retaining
 the confirmed Transaction.
 
+The transaction-linking workspace participates in browser history. Back closes a selected-result
+review before returning to its originating occurrence; Forward restores the search and review.
+The visible return control returns to the occurrence without adding another history entry. Search
+drafts, applied filters, pagination and selection are validated and scoped to the current browser
+session binding and recurring workspace. Reload restores the read-only step and rereads its facts;
+only explicit confirmation submits an association. The header identifies the occurrence date and
+expected Money, and the review retains the existing responsive panel and shared semantic colors.
+
 ## Audit, 2026-10-15
 
 Audited after synchronizing with trunk `5d3db388ee`, including the released planning workspace

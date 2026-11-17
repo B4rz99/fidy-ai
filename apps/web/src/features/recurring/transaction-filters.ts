@@ -1,15 +1,39 @@
 import { DateTime, Option, Schema } from "effect";
-import { type CanonicalInput, type CanonicalSuccess, Currency } from "@/transport/client";
+import {
+  type CanonicalInput,
+  type CanonicalSuccess,
+  Currency,
+  RecurringDate,
+  TransactionId,
+  TransactionQueryValues,
+} from "@/transport/client";
 import { formatMoneyWithCode } from "@/transport/money";
 import { parseMoneyInput } from "@/transport/money-input";
 
-export type TransactionFilters = Readonly<{
-  text: string;
-  from: string;
-  to: string;
-  amount: string;
-  currency: string;
-  direction: string;
+export const maximumSearchLength = 80;
+const DraftText = Schema.String.check(Schema.isMaxLength(maximumSearchLength));
+const FilterDate = Schema.Union([Schema.Literal(""), RecurringDate]);
+export const TransactionFilters = Schema.Struct({
+  text: DraftText,
+  from: FilterDate,
+  to: FilterDate,
+  amount: DraftText,
+  currency: Schema.Union([Schema.Literal(""), Currency]),
+  direction: Schema.Literals(["", "inflow", "outflow"]),
+});
+export type TransactionFilters = typeof TransactionFilters.Type;
+export const TransactionBrowserState = Schema.Struct({
+  draft: TransactionFilters,
+  applied: TransactionFilters,
+  cursors: Schema.Array(TransactionQueryValues.fields.cursor),
+  selectedId: Schema.optional(TransactionId),
+});
+export type TransactionBrowserState = typeof TransactionBrowserState.Type;
+export type TransactionBrowserControl = Readonly<{
+  state: TransactionBrowserState;
+  change: (state: TransactionBrowserState) => void;
+  select: (id: TransactionId) => void;
+  clear: () => void;
 }>;
 export type TransactionSearch = Readonly<{
   filters: CanonicalInput<"transactions.listTransactions">["query"];
@@ -23,7 +47,6 @@ export const emptyTransactionFilters: TransactionFilters = {
   currency: "",
   direction: "",
 };
-const maximumSearchLength = 80;
 const transactionPageSize = 20;
 const localMidnight = (date: string, timeZone: string): DateTime.Zoned =>
   DateTime.makeZonedUnsafe(`${date}T00:00:00`, { timeZone, adjustForTimeZone: true });

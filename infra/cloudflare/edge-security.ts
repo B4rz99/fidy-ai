@@ -1,4 +1,4 @@
-import { browserSessionBindingPath } from "@fidy/server/browser-transport";
+import { browserSessionBindingPath, installedOrigins } from "@fidy/server/browser-transport";
 
 import {
   microsoftProviderPaths,
@@ -24,11 +24,15 @@ const cloudflareHttpDdosRulesetId = "4d21379b4f9f4bb088e0729962c8b3cf";
 const freePlanRateLimitPeriod = 10;
 const freePlanRequestsPerPeriod = 60;
 const apiHostname = productionTopology.ingress.hostname;
+const nativeIngressHost = new URL(installedOrigins.acceptance.api).hostname;
+const apiHosts = `http.host in {"${apiHostname}" "${nativeIngressHost}"}`;
 const ownedHostnames = [
   productionTopology.docs.hostname,
   productionTopology.site.hostname,
   productionTopology.web.hostname,
   apiHostname,
+  nativeIngressHost,
+  new URL(installedOrigins.acceptance.browser).hostname,
 ];
 const ownedHostExpression = ownedHostnames.map((hostname) => `"${hostname}"`).join(" ");
 
@@ -61,7 +65,7 @@ const customFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
     },
     description: "Keep API and callback callers free of interactive security products",
     enabled: true,
-    expression: `(http.host eq "${apiHostname}")`,
+    expression: `(${apiHosts})`,
   },
   {
     action: "block",
@@ -73,7 +77,7 @@ const customFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
     action: "block",
     description: "Reject methods not owned by the public API ingress",
     enabled: true,
-    expression: `(http.host eq "${apiHostname}" and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))`,
+    expression: `(${apiHosts} and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))`,
   },
   {
     action: "skip",

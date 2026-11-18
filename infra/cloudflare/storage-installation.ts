@@ -1,3 +1,4 @@
+import { installedOrigins } from "@fidy/server/browser-transport";
 import { type Plan, describeResource } from "alchemy/Plan";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, type Redacted, Schema } from "effect";
@@ -8,7 +9,8 @@ import { freeTierWorkerObservability } from "./worker-observability";
 
 // The Production physical names are recorded independently of the two Alchemy logical IDs.
 export const nativeStack = "FidyNativeStorage";
-export const nativeIngressHost = "storage-acceptance.fidyapp.com";
+export const nativeIngressHost = new URL(installedOrigins.acceptance.api).hostname;
+export const nativeWebHost = new URL(installedOrigins.acceptance.browser).hostname;
 export const installationNames = {
   Core: "fidy-native-storage-core",
   Ingress: "fidy-native-storage-ingress",
@@ -32,7 +34,7 @@ export const closedInstallation = Effect.fn(function* (input: {
 }) {
   const environment = {
     RECOVERY_ISOLATION: "isolated",
-    BROWSER_ORIGIN: browserOrigins.production,
+    BROWSER_ORIGIN: browserOrigins.nativeAcceptance,
     RELEASE_GIT_SHA: input.release.gitRevision,
     CONTRACT_DIGEST: input.release.contractDigest,
     SMOKE_PROOF: input.smokeProof,

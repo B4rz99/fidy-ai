@@ -1,3 +1,4 @@
+import { installedOrigins } from "../../src/shell/browser-transport/contract";
 import { Data, type Effect, type Option } from "effect";
 import type { ProactivityEnvironment } from "../insights/contract";
 import type { OpenAiEnvironment } from "../ai/contract";
@@ -89,7 +90,8 @@ export const productionTopology = {
 export const browserOrigins = {
   local: `http://127.0.0.1:${productionTopology.web.localPort}`,
   acceptance: "https://127.0.0.1:4173",
-  production: `https://${productionTopology.web.hostname}`,
+  production: installedOrigins.production.browser,
+  nativeAcceptance: installedOrigins.acceptance.browser,
 } as const;
 
 /** Canonical lowercase release-identity formats shared by deployment and Worker boundaries. */

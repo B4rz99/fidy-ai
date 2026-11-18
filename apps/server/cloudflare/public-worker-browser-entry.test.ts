@@ -73,3 +73,33 @@ it.effect("rejects an unapproved browser Origin before forwarding to Core", () =
     expect(fetch).not.toHaveBeenCalled();
   })
 );
+
+it.effect("allows the matching native browser preflight and refuses another browser", () =>
+  Effect.gen(function* () {
+    const browser = "https://storage-web-acceptance.fidyapp.com";
+    const fetch = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })));
+    const environment = {
+      BROWSER_ORIGIN: browser,
+      LOCAL_CANONICAL_READ_BEARER: "",
+      PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+      RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+      CORE: { fetch },
+    };
+    for (const origin of [browser, "https://app.fidyapp.com"]) {
+      const result = yield* Effect.tryPromise(() =>
+        publicWorker.fetch(
+          new Request("https://storage-acceptance.fidyapp.com/transactions", {
+            method: "OPTIONS",
+            headers: { origin, "access-control-request-method": "GET" },
+          }),
+          environment
+        )
+      );
+      expect(result.status).toBe(origin === browser ? 204 : 403);
+      expect(result.headers.get("access-control-allow-origin")).toBe(
+        origin === browser ? browser : null
+      );
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  })
+);

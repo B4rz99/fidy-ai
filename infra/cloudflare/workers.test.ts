@@ -475,7 +475,7 @@ describe("Production topology contract", () => {
         phases: ["http_request_sbfm"],
         products: ["bic", "hot", "securityLevel", "uaBlock", "zoneLockdown"],
       },
-      expression: '(http.host eq "api.fidyapp.com")',
+      expression: '(http.host in {"api.fidyapp.com" "storage-acceptance.fidyapp.com"})',
     });
     expect(edgeSecurityPolicy.rulesets.managedFirewall.rules[0]).toMatchObject({
       action: "execute",
@@ -507,7 +507,7 @@ describe("Production topology contract", () => {
       action: "block",
       enabled: true,
       expression:
-        'not http.host in {"docs.fidyapp.com" "fidyapp.com" "app.fidyapp.com" "api.fidyapp.com"}',
+        'not http.host in {"docs.fidyapp.com" "fidyapp.com" "app.fidyapp.com" "api.fidyapp.com" "storage-acceptance.fidyapp.com" "storage-web-acceptance.fidyapp.com"}',
     });
     expect(rules[4]).toEqual({
       action: "skip",
@@ -530,7 +530,7 @@ describe("Production topology contract", () => {
     expect(edgeSecurityPolicy.rulesets.customFirewall.rules[2]).toMatchObject({
       action: "block",
       expression:
-        '(http.host eq "api.fidyapp.com" and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))',
+        '(http.host in {"api.fidyapp.com" "storage-acceptance.fidyapp.com"} and not (http.request.method in {"GET" "POST" "OPTIONS" "DELETE" "PUT" "PATCH"}))',
     });
   });
 

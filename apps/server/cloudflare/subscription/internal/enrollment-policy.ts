@@ -18,6 +18,7 @@ import type { EnrollmentEnvironment } from "../contract";
 const hexBase = 16;
 const Origin = Schema.Literals([
   browserOrigins.production,
+  browserOrigins.nativeAcceptance,
   browserOrigins.local,
   browserOrigins.acceptance,
 ]);

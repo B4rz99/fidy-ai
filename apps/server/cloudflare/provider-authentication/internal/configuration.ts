@@ -1,3 +1,4 @@
+import { installedOrigins } from "../../../src/shell/browser-transport/contract";
 import type { AuthenticationProvider } from "../../../src/shell/provider-authentication/contract";
 import { browserOrigins } from "../../runtime/contract";
 import type { ProviderConfiguration } from "../contract";
@@ -15,7 +16,8 @@ const bindingNames = {
   },
 } as const;
 const apiOrigins = new Map<string, string>([
-  [browserOrigins.production, "https://api.fidyapp.com"],
+  [browserOrigins.production, installedOrigins.production.api],
+  [browserOrigins.nativeAcceptance, installedOrigins.acceptance.api],
   [browserOrigins.acceptance, "https://127.0.0.1:4174"],
   [browserOrigins.local, "http://localhost:8787"],
 ]);

@@ -1,3 +1,10 @@
+import { reconcileLocalHostedReceipt } from "../../agent/operations";
+import {
+  claimLocalDisclosure,
+  claimLocalReminderPurpose,
+  isRetainedDisclosure,
+  reconcileLocalReminder,
+} from "../../insights/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -22,18 +29,45 @@ const conflictStatus = 409;
 
 type Send = typeof DeliverySend.Type;
 const answer = (status: number): Response => new Response(null, { status });
-const sendAllowed = (work: Send): ReturnType<typeof protectConsentStatement> =>
-  protectConsentStatement({
-    subject: { _tag: "User", userId: work.userId },
-    requirement: "active",
+const sendAllowed = (work: Send, now: number): ReturnType<typeof protectConsentStatement> => {
+  const statement = {
+    sql: "SELECT id FROM users WHERE id=? AND whatsapp_portfolio_id=? AND whatsapp_bsuid=? AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=?)",
+    params: [work.userId, work.portfolio, work.bsuid, work.userId],
+  };
+  const subject = { _tag: "User" as const, userId: work.userId };
+  const live = protectConsentStatement({ subject, requirement: "active", statement });
+  if (work.family !== "hosted" || work.deadline === null) return live;
+  const retained = protectConsentStatement({
+    subject,
+    requirement: "granted",
     statement: {
-      sql: "SELECT id FROM users WHERE id=? AND whatsapp_portfolio_id=? AND whatsapp_bsuid=? AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=?)",
-      params: [work.userId, work.portfolio, work.bsuid, work.userId],
+      sql:
+        statement.sql +
+        ` AND EXISTS(SELECT 1 FROM hosted_turns t JOIN hosted_agent_sessions s ON s.id=t.session_id AND s.user_id=t.user_id JOIN hosted_whatsapp_inbound i ON i.turn_id=t.id AND i.user_id=t.user_id
+      JOIN consent_history g ON g.id=json_extract(s.basis_json,'$.grantId') AND g.user_id=t.user_id AND g.record_type='processing_grant' AND json_extract(g.disclosure_json,'$.contentSha256')=json_extract(s.basis_json,'$.disclosureSha256')
+      WHERE t.user_id=users.id AND t.id=? AND t.state='proposed' AND t.deadline_ms=? AND t.deadline_ms>? AND i.portfolio=users.whatsapp_portfolio_id AND i.bsuid=users.whatsapp_bsuid AND i.endpoint=? AND i.correlation=? AND i.answer_digest=?
+      AND coalesce(i.sandbox_phone,'')=? AND users.whatsapp_verified_at_ms<=i.occurred_ms+999 AND i.occurred_ms+86400000>?)`,
+      params: [
+        ...statement.params,
+        work.operationId,
+        work.deadline,
+        now,
+        work.endpoint,
+        work.correlation,
+        work.contentDigest,
+        work.sandboxPhone ?? "",
+        now,
+      ],
     },
   });
+  return {
+    sql: live.sql + " UNION ALL " + retained.sql,
+    params: [...live.params, ...retained.params],
+  };
+};
 const stage = Effect.fn(function* (work: Send) {
   const sql = yield* SqliteClient;
-  const guard = sendAllowed(work);
+  const guard = sendAllowed(work, yield* Clock.currentTimeMillis);
   const [live] = yield* sql.unsafe(guard.sql, guard.params);
   if (live === undefined) return false;
   yield* sql`INSERT INTO whatsapp_deliveries(user_id,family,operation_id,endpoint,correlation,portfolio,bsuid,sandbox_phone,original_deadline_ms,content_digest)
@@ -59,14 +93,30 @@ const reserve = Effect.fn(function* (work: Send, env: Pick<ExternalEventBindings
     yield* sql`UPDATE whatsapp_deliveries SET route_ready=1 WHERE user_id=${work.userId} AND family=${work.family} AND operation_id=${work.operationId} AND correlation=${work.correlation} AND content_digest=${work.contentDigest} AND state='staged' AND NOT EXISTS(SELECT 1 FROM erasure_requests) RETURNING 1`;
   return answer(ready.length === 1 ? noContentStatus : conflictStatus);
 });
-const start = Effect.fn(function* (work: Send) {
+const start = Effect.fn(function* (work: Send, enabled: boolean) {
   return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const sql = yield* SqliteClient;
-      const guard = sendAllowed(work);
+      const guard = sendAllowed(work, yield* Clock.currentTimeMillis);
       const now = yield* Clock.currentTimeMillis;
+      if (work.family === "disclosure" && !(yield* claimLocalDisclosure(work, enabled))) {
+        return answer(conflictStatus);
+      }
+      if (work.family === "proactivity") {
+        const [live] = yield* sql.unsafe(guard.sql, guard.params);
+        const [ready] =
+          yield* sql`SELECT 1 FROM whatsapp_deliveries WHERE user_id=${work.userId} AND family='proactivity' AND operation_id=${work.operationId} AND correlation=${work.correlation} AND route_ready=1 AND started_ms IS NULL AND state='staged'`;
+        if (
+          ready === undefined ||
+          live === undefined ||
+          !(yield* claimLocalReminderPurpose(work, enabled))
+        ) {
+          return answer(conflictStatus);
+        }
+      }
       const result = yield* sql.unsafe(
-        `UPDATE whatsapp_deliveries SET started_ms=?,state='sending' WHERE user_id=? AND family=? AND operation_id=? AND correlation=? AND endpoint=? AND state='staged' AND route_ready=1 AND portfolio=? AND bsuid=? AND sandbox_phone IS ? AND content_digest=? AND original_deadline_ms IS ? AND started_ms IS NULL AND (original_deadline_ms IS NULL OR original_deadline_ms>?) AND EXISTS(${guard.sql}) RETURNING 1`,
+        `UPDATE whatsapp_deliveries SET started_ms=?,state='sending' WHERE user_id=? AND family=? AND operation_id=? AND correlation=? AND endpoint=? AND state='staged' AND route_ready=1 AND portfolio=? AND bsuid=? AND sandbox_phone IS ? AND content_digest=? AND original_deadline_ms IS ? AND started_ms IS NULL AND (original_deadline_ms IS NULL OR original_deadline_ms>?) AND EXISTS(${guard.sql})
+        AND (family<>'hosted' OR NOT EXISTS(SELECT 1 FROM hosted_whatsapp_inbound i WHERE i.user_id=whatsapp_deliveries.user_id AND i.turn_id=whatsapp_deliveries.operation_id) OR EXISTS(SELECT 1 FROM hosted_turns t JOIN hosted_whatsapp_inbound i ON i.turn_id=t.id AND i.user_id=t.user_id WHERE t.id=whatsapp_deliveries.operation_id AND t.user_id=whatsapp_deliveries.user_id AND t.state='proposed' AND t.deadline_ms=whatsapp_deliveries.original_deadline_ms AND i.answer_digest=whatsapp_deliveries.content_digest AND i.correlation=whatsapp_deliveries.correlation AND i.endpoint=whatsapp_deliveries.endpoint AND i.portfolio=whatsapp_deliveries.portfolio AND i.bsuid=whatsapp_deliveries.bsuid AND i.sandbox_phone IS whatsapp_deliveries.sandbox_phone)) RETURNING 1`,
         [
           now,
           work.userId,
@@ -87,6 +137,25 @@ const start = Effect.fn(function* (work: Send) {
     })
   );
 });
+const settledStatus = Effect.fn(function* (work: typeof DeliveredObservation.Type) {
+  if (
+    work.family === "disclosure" &&
+    (yield* isRetainedDisclosure(work.userId, work.operationId))
+  ) {
+    return answer(noContentStatus);
+  }
+  if (work.family === "proactivity") {
+    yield* reconcileLocalReminder(work.userId, work.operationId);
+    return answer(noContentStatus);
+  }
+  if (
+    work.family === "hosted" &&
+    (yield* reconcileLocalHostedReceipt(work.userId, work.operationId))
+  ) {
+    return answer(noContentStatus);
+  }
+  return answer(pendingStatus);
+});
 const status = Effect.fn(function* (work: typeof DeliveredObservation.Type) {
   const sql = yield* SqliteClient;
   const event = work.evidence;
@@ -104,24 +173,27 @@ const status = Effect.fn(function* (work: typeof DeliveredObservation.Type) {
   const [fresh] =
     yield* sql`INSERT INTO whatsapp_delivery_status(user_id,family,operation_id,provider_message_id,outcome,occurred_ms)
     VALUES(${work.userId},${work.family},${work.operationId},${event.providerMessageId},${event.outcome},${event.occurredAtMs}) ON CONFLICT DO NOTHING RETURNING 1`;
-  if (fresh === undefined) return answer(pendingStatus);
+  if (fresh === undefined) return yield* settledStatus(work);
   yield* sql`UPDATE whatsapp_deliveries SET provider_message_id=coalesce(provider_message_id,${event.providerMessageId}),
     state=CASE WHEN state='delivered' OR (family='hosted' AND state='rejected') THEN state WHEN ${event.outcome}='delivered' AND (family<>'hosted' OR ${event.receivedAtMs}<=original_deadline_ms) THEN 'delivered'
     WHEN state='rejected' THEN state WHEN ${event.outcome}='failed' THEN 'rejected' WHEN family<>'hosted' AND state IN ('sending','ambiguous') THEN 'accepted' ELSE state END,
     delivered_at_ms=CASE WHEN ${event.outcome}='delivered' AND (family<>'hosted' OR state<>'rejected') AND (family<>'hosted' OR ${event.receivedAtMs}<=original_deadline_ms) THEN coalesce(delivered_at_ms,${event.occurredAtMs}) ELSE delivered_at_ms END
     WHERE user_id=${work.userId} AND family=${work.family} AND operation_id=${work.operationId}`;
-  return answer(pendingStatus);
+  return yield* settledStatus(work);
 });
 export const nativeDeliveryRequest = Effect.fn(function* (
   request: Request,
-  env: Pick<ExternalEventBindings, "DIRECTORY">,
+  env: Pick<ExternalEventBindings, "DIRECTORY"> &
+    Partial<Readonly<{ PROACTIVITY_ENABLED: string }>>,
   owns: (id: string) => boolean
 ) {
   const body: unknown = yield* Effect.tryPromise(() => request.json());
   if (request.url === claimDeliveryUrl || request.url === reserveDeliveryUrl) {
     const work = yield* Schema.decodeUnknownEffect(DeliverySend)(body);
     if (!owns(work.userId)) return answer(conflictStatus);
-    return request.url === reserveDeliveryUrl ? yield* reserve(work, env) : yield* start(work);
+    return request.url === reserveDeliveryUrl
+      ? yield* reserve(work, env)
+      : yield* start(work, env.PROACTIVITY_ENABLED === "enabled");
   }
   if (request.url === replyDeliveryUrl) {
     const work = yield* Schema.decodeUnknownEffect(SendReply)(body);

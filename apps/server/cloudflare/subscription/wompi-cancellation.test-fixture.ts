@@ -115,6 +115,9 @@ export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
     const env = this.env;
     return Effect.runPromise(
       Effect.gen(function* () {
+        if (request.url === "https://api.openai.com/v1/chat/completions") {
+          return yield* statementModel(request);
+        }
         if (new URL(request.url).hostname === "api.kapso.ai") {
           return yield* Effect.tryPromise(() => statementProvider(request));
         }
@@ -150,6 +153,35 @@ export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
   }
 }
 
+const statementModel = Effect.fnUntraced(function* (request: Request) {
+  const input = yield* Effect.tryPromise(() => request.text());
+  const item = /fila-prueba ([0-9a-f-]{36})/u.exec(input)?.[1];
+  if (item === undefined) return new Response(null, { status: 400 });
+  return Response.json({
+    choices: [
+      {
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "skip-review",
+              type: "function",
+              function: {
+                name: "ingestion__skipNeedsReviewItem",
+                arguments: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+                  params: { id: item },
+                }),
+              },
+            },
+          ],
+        },
+        finish_reason: "tool_calls",
+      },
+    ],
+    usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+  });
+});
 const signedMediaLifetimeMs = 60_000;
 const media = "media_statement_123";
 const mixed = "media_statement_mixed";
@@ -165,6 +197,7 @@ const mediaVariants = new Map([
 const statementProvider = (request: Request): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      if (request.method === "POST") return new Response(null, { status: 503 });
       const url = new URL(request.url);
       const id = url.searchParams.get("token") ?? url.pathname.split("/").at(-1) ?? "";
       const bytes = mediaVariants.get(id);

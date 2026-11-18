@@ -503,5 +503,7 @@ export const prepareLocalDeletion: typeof prepareDeletionInStore = (id, user, cu
 export const prepareSourcedCapture: typeof prepareNativeSourcedCapture = (...args) =>
   prepareNativeSourcedCapture(...args);
 
+export const readAddressedLocalTransaction: typeof inspectLocalTransaction = (...args) =>
+  inspectLocalTransaction(...args);
 export const prepareConnectionMovement: typeof prepareBankCapture = (...args) =>
   prepareBankCapture(...args);

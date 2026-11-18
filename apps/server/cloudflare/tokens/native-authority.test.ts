@@ -8,12 +8,13 @@ import { native } from "../user-store.test-fixture";
 const issuedFixture = Effect.gen(function* () {
   const db = yield* nativeTransactionJourney;
   const current = yield* Clock.currentTimeMillis;
-  const request = new Request("https://api.fidyapp.com/pats", {
+  const init = {
     method: "POST",
     headers: {
       origin: "https://app.fidyapp.com",
       cookie: "__Host-fidy_session=" + alice.bearer,
       "Fidy-Session-Binding": alice.session,
+      "Fidy-Retry-Key": "reviewed-manual-issue",
       "content-type": "application/json",
     },
     body: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
@@ -25,8 +26,10 @@ const issuedFixture = Effect.gen(function* () {
         reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(current + 604800000)),
       },
     }),
-  });
-  const issued = yield* native(() => db.send(request));
+  };
+  const issue = (): Effect.Effect<Response> =>
+    native(() => db.send(new Request("https://api.fidyapp.com/pats", init)));
+  const issued = yield* issue();
   expect(issued.status).toBe(200);
   const { data } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
@@ -46,7 +49,7 @@ const issuedFixture = Effect.gen(function* () {
         })
       )
     );
-  return { db, call, shortId: data.pat.shortId };
+  return { db, call, shortId: data.pat.shortId, bearer: data.bearer, issue };
 });
 const capture = {
   money: { amount: "23.50", currency: "COP" },
@@ -54,6 +57,26 @@ const capture = {
   occurredAt: "2026-09-01T12:00:00.000Z",
 };
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect("returns the manual bearer once and retains no replayable secret", () =>
+    Effect.gen(function* () {
+      const { db, issue, bearer } = yield* issuedFixture;
+      const repeated = yield* issue();
+      expect(repeated.status).toBe(409);
+      expect(yield* native(() => repeated.text())).not.toContain(bearer);
+      expect(yield* native(() => db.exec("SELECT count(*) AS n FROM pats"))).toEqual([{ n: 1 }]);
+      const receipts = yield* native(() =>
+        db.exec(
+          "SELECT body FROM canonical_request_receipts WHERE operation='pats.createManualPAT' AND body IS NOT NULL"
+        )
+      );
+      expect(receipts).toEqual([]);
+      expect(
+        yield* native(() =>
+          db.exec("SELECT part FROM canonical_receipt_parts WHERE instr(part,?)>0", bearer)
+        )
+      ).toEqual([]);
+    })
+  );
   test.effect(
     "preserves standing on scope and input refusal, rolls back refused Audit, and records PAT use at fixed expiry",
     () =>

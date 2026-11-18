@@ -113,6 +113,13 @@ const failed = ({ index, operation, code, message }: Refusal): LocalMutationResu
     next: [],
   },
 });
+const refusalOutcome = (failure: ChildRefused): LocalMutationResult["outcome"] => {
+  if (failure.code === "not_found") return "not_found";
+  if (failure.code === "quota_exhausted" && failure.operation.id.startsWith("memory.")) {
+    return "resource_limit";
+  }
+  return "validation_failed";
+};
 const childFailure = (child: Child, outcome: LocalMutationResult): ChildRefused => {
   const decoded = Schema.decodeUnknownSync(
     Schema.Struct({ error: Schema.Struct({ code: ErrorCode, message: Schema.String }) })
@@ -304,10 +311,9 @@ const applyChildren = Effect.fn(function* (call: Call, children: ReadonlyArray<C
     )
     .pipe(
       Effect.catchTag("ChildRefused", (failure) =>
-        audit(
-          { ...call, operation: failure.operation },
-          failure.code === "not_found" ? "not_found" : "validation_failed"
-        ).pipe(Effect.as(failed(failure)))
+        audit({ ...call, operation: failure.operation }, refusalOutcome(failure)).pipe(
+          Effect.as(failed(failure))
+        )
       )
     );
 });

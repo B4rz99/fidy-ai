@@ -1,3 +1,4 @@
+import { providerAllowanceSchema } from "../../resource-admission/contract";
 import { publicDirectorySchema } from "./credential-schema";
 import { externalRoutesSchema } from "./external-events";
 import type { StoreHistory } from "../../runtime/sqlite/contract";
@@ -107,5 +108,6 @@ export const directoryHistory: StoreHistory = {
         "CREATE INDEX email_capacity_expiry ON email_capacity_slots(expires_at_ms) WHERE receipt IS NOT NULL",
       ],
     },
+    { version: 9, id: "shared-provider-allowances", statements: providerAllowanceSchema },
   ],
 };

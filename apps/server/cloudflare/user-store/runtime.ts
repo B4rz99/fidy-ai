@@ -1,3 +1,19 @@
+import { pendingExecutionRecoveryMs } from "../agent/contract";
+import {
+  nativeReminderActivity,
+  recoverLocalReminders,
+  repairLocalReminderAlarm,
+} from "../insights/runtime";
+import type { NativeReminderEnvironment } from "../insights/contract";
+import {
+  acceptLocalHostedText,
+  admitLocalHostedDocument,
+  handleLocalHosted,
+  isLocalHostedPath,
+  offerLocalHostedReply,
+  recoverLocalHosted,
+  repairLocalHostedAlarm,
+} from "../agent/runtime";
 import { HttpClient } from "effect/http";
 import { Cause, Clock, Context, Effect, Layer, Option, Result } from "effect";
 import { OutboundHttpLive } from "../outbound-http/runtime";
@@ -174,7 +190,8 @@ import {
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 
 const uncertainCheckStatus = 503;
-type UserStoreEnvironment = WompiBindings &
+type UserStoreEnvironment = NativeReminderEnvironment &
+  WompiBindings &
   LocalIngestionEnvironment &
   BancolombiaSandboxEnvironment &
   StoreReleaseEnvironment &
@@ -182,6 +199,8 @@ type UserStoreEnvironment = WompiBindings &
     PRICING: DurableObjectNamespace;
     BROWSER_ORIGIN: string;
     RESEND_API_KEY: string;
+    OPENAI_API_KEY: string;
+    HOSTED_AI_MODEL: string;
     BROWSER_PAIRING_EMAIL_QUEUE: Queue<typeof NativeLoginEmailWork.Type>;
     DIRECTORY: DurableObjectNamespace;
     USER_STORE: DurableObjectNamespace;
@@ -261,6 +280,34 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
+  private connectionFamilies(
+    current: number
+  ): readonly [
+    ReturnType<typeof expireConnectionAttempts>,
+    ReturnType<typeof cleanConnectionGrants>,
+    ReturnType<typeof offerConnectionWork>,
+  ] {
+    return [
+      expireConnectionAttempts({
+        storage: this.ctx.storage,
+        now: current,
+        adapters: this.connectionAdapters(),
+      }),
+      cleanConnectionGrants({
+        storage: this.ctx.storage,
+        adapters: this.connectionAdapters(),
+        owns: this.owns,
+      }),
+      offerConnectionWork({
+        now: current,
+        storage: this.ctx.storage,
+        queue: this.env.CONNECTION_SYNCHRONIZATION_QUEUE,
+        owns: this.owns,
+        environment: this.env,
+      }),
+    ];
+  }
+
   private checkWork(): Promise<
     Readonly<{ failedFamilies: number; attempted: number; failedOffers: number }>
   > {
@@ -279,6 +326,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           recoverRotations(current, this.env.DIRECTORY, this.ctx.storage).pipe(
             Effect.mapError((cause) => new Cause.UnknownError(cause))
           ),
+          recoverLocalReminders(this.env, this.ctx.storage, this.owns).pipe(
+            Effect.mapError((cause) => new Cause.UnknownError(cause))
+          ),
           recoverLocalRecurringSeries(current, this.ctx.storage, this.owns),
           recoverLocalReceipts(current, this.ctx.storage),
           Effect.scoped(
@@ -291,32 +341,29 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
               )
             )
           ).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
-          expireConnectionAttempts({
-            storage: this.ctx.storage,
-            now: current,
-            adapters: this.connectionAdapters(),
-          }),
-          cleanConnectionGrants({
-            storage: this.ctx.storage,
-            adapters: this.connectionAdapters(),
-            owns: this.owns,
-          }),
-          offerConnectionWork({
-            now: current,
-            storage: this.ctx.storage,
-            queue: this.env.CONNECTION_SYNCHRONIZATION_QUEUE,
-            owns: this.owns,
-            environment: this.env,
-          }),
+          ...this.connectionFamilies(current),
           recoverLocalPATExpiry(current, this.ctx.storage),
           offerDueSourceCancellations({
             current,
             storage: this.ctx.storage,
             queue: this.env.BILLING_COLLECTION_QUEUE,
           }),
+          offerLocalHostedReply(this.env, this.ctx.storage, this.owns).pipe(
+            Effect.mapError((cause) => new Cause.UnknownError(cause))
+          ),
         ] as const;
         type Work = (typeof families)[number];
-        return recoverUserWork<Effect.Error<Work>, Effect.Services<Work>>(families);
+        return recoverUserWork<Effect.Error<Work>, Effect.Services<Work>>({
+          families,
+          hosted: recoverLocalHosted(this.env, this.ctx.storage, this.owns).pipe(
+            Effect.provideService(
+              ConnectionSandboxAdmission,
+              bancolombiaSandboxAdmission(this.env)
+            ),
+            Effect.mapError((cause) => new Cause.UnknownError(cause))
+          ),
+          timeoutMs: pendingExecutionRecoveryMs,
+        });
       })
     );
   }
@@ -460,6 +507,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   private inspectWork(): Promise<Response> {
     const storage = this.ctx.storage;
     const ownsUser = this.owns;
+    const remindersEnabled = this.env.PROACTIVITY_ENABLED === "enabled";
     const adapters = this.connectionAdapters();
     return this.runtime.runPromise(
       Effect.gen(function* () {
@@ -467,6 +515,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         const inspections = yield* Effect.all(
           [
             repairLoginAlarm(current, storage),
+            repairLocalHostedAlarm(current, storage),
+            repairLocalReminderAlarm(current, storage, remindersEnabled),
             repairReplacementAlarm(current, storage),
             repairRecoveryAlarm(current, storage),
             repairReceiptAlarm(current, storage),
@@ -535,7 +585,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           this.runtime.runPromise(
             Effect.scoped(
               Effect.flatMap(Layer.build(OutboundHttpLive), (clients) =>
-                admitLocalDocument(unit).pipe(
+                admitLocalDocument(unit, admitLocalHostedDocument).pipe(
                   Effect.provideService(
                     HttpClient.HttpClient,
                     Context.get(clients, HttpClient.HttpClient)
@@ -688,6 +738,11 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   private registeredRequest(request: Request, registered: boolean): Promise<Response> {
     const owns = (userId: string): boolean => registered && this.owns(userId);
     if (request.method === "POST") {
+      if (request.url === "https://user.invalid/hosted-turn/whatsapp") {
+        return this.runtime.runPromise(
+          acceptLocalHostedText(request, owns, { storage: this.ctx.storage, env: this.env })
+        );
+      }
       const ingestion = this.ingestionRequest(request, owns);
       if (Option.isSome(ingestion)) return ingestion.value;
     }
@@ -699,6 +754,17 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     ) {
       return this.runtime.runPromise(
         nativeDeliveryRequest(request, this.env, owns).pipe(
+          Effect.tap(() =>
+            request.url === statusDeliveryUrl
+              ? Effect.flatMap(Clock.currentTimeMillis, (now) =>
+                  repairLocalReminderAlarm(
+                    now,
+                    this.ctx.storage,
+                    this.env.PROACTIVITY_ENABLED === "enabled"
+                  )
+                )
+              : Effect.void
+          ),
           Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
         )
       );
@@ -717,6 +783,30 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       );
     }
     return this.dispatch(request, registered);
+  }
+
+  private agentRequest(
+    request: Request,
+    owns: (id: string) => boolean
+  ): Option.Option<Promise<Response>> {
+    if (request.method !== "POST") return Option.none();
+    if (isLocalHostedPath(new URL(request.url).pathname)) {
+      return Option.some(
+        this.runtime.runPromise(
+          handleLocalHosted(request, owns, { env: this.env, storage: this.ctx.storage })
+        )
+      );
+    }
+    if (request.url === "https://coordinator/proactivity-work") {
+      return Option.some(
+        this.runtime.runPromise(
+          nativeReminderActivity(request, this.env, owns).pipe(
+            Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+          )
+        )
+      );
+    }
+    return Option.none();
   }
 
   private connectionRequest(
@@ -770,8 +860,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
     const owns = (userId: string): boolean => registered && this.owns(userId);
-    const connection = this.connectionRequest({ request, owns }, path, command);
-    if (Option.isSome(connection)) return connection.value;
+    const family = Option.orElse(this.agentRequest(request, owns), () =>
+      this.connectionRequest({ request, owns }, path, command)
+    );
+    if (Option.isSome(family)) return family.value;
     const billing = this.enrollmentRequest(request, owns);
     if (Option.isSome(billing)) return billing.value;
     const identity = this.identityRequest(request, owns);

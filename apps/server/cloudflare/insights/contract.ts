@@ -127,6 +127,7 @@ export const WeeklyQuestionWork = Schema.Struct({
 export type WeeklyQuestionWork = typeof WeeklyQuestionWork.Type;
 /** Content-free continuation for one frozen category message; the report owns its role and live grant. */
 export const CategoryDeliveryWork = Schema.Struct({
+  owner: Schema.optionalKey(Schema.Literal("user")),
   traceContext: Schema.optionalKey(Schema.Unknown),
   kind: Schema.Literal("proactivity-delivery"),
   version: Schema.Literal(1),
@@ -235,3 +236,10 @@ export class InsightUnavailable extends Data.TaggedError("InsightUnavailable") {
 export type RecurringDigestAdvanceResult =
   | Readonly<{ _tag: "NoWork" | "Progress" }>
   | Readonly<{ _tag: "Created"; id: InsightEventId }>;
+
+export type NativeReminderEnvironment = UserStoreBindings &
+  Pick<
+    ProactivityEnvironment,
+    "KAPSO_API_KEY" | "PROACTIVITY_ENABLED" | "PROACTIVITY_TEMPLATE_JSON"
+  > &
+  Partial<{ WEEKLY_DELIVERY_QUEUE: Pick<Queue<ProactivityDeliveryWork>, "send"> }>;

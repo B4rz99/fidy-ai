@@ -1,3 +1,10 @@
+import { recordReminderReply } from "./internal/local-reminder-attention";
+import { withStoreCapacity } from "../runtime/sqlite/operations";
+import { handleChoice } from "./internal/local-reminder-choice";
+import { dispatchDisclosure } from "./internal/local-disclosure";
+import type { WhatsAppTurnAdmission } from "../whatsapp/contract";
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { deliverReminder, processReminder, repairReminder } from "./internal/local-reminder";
 import { withErasureRecovery } from "../erasure/runtime";
 import { evidenceRetentionDue, summariesDue } from "./internal/cadence";
 import { projections as erasureProjections } from "./internal/erasure";
@@ -41,8 +48,10 @@ import {
   runWeeklyGeneration,
 } from "./operations";
 import {
+  type CategoryDeliveryWork,
   type DueWeeklySchedule,
   InsightUnavailable,
+  type NativeReminderEnvironment,
   ProactivityActivity,
   ProactivityActivityResult,
   ProactivityDeliveryWork,
@@ -67,7 +76,7 @@ type NativeExecution = Readonly<{
   now: DateTime.Utc;
 }>;
 const nativeOutbound = (
-  environment: ProactivityEnvironment
+  environment: Pick<ProactivityEnvironment, "KAPSO_API_KEY">
 ): Effect.Effect<OutboundHttpService, InsightUnavailable, Scope.Scope> =>
   Effect.gen(function* () {
     if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
@@ -365,22 +374,25 @@ export const startProactivityWorkflow = (
     }
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
+const isNativeWork = (work: ProactivityActivity): work is CategoryDeliveryWork =>
+  work.kind === "proactivity-delivery" && work.owner === "user";
 /** Per-message acknowledgment follows durable Workflow handoff; failures remain eligible for bounded native retries. */
 export const receiveProactivityWork = (
   input: Readonly<{
     messages: ReadonlyArray<Pick<Message<unknown>, "body" | "ack" | "retry">>;
     workflow: Option.Option<Workflow<ProactivityDeliveryWork>>;
     coordinator: Coordinator;
-  }>
+  }> &
+    Partial<{ users: Coordinator }>
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     for (const message of input.messages) {
+      const native = Schema.is(ProactivityDeliveryWork)(message.body) && isNativeWork(message.body);
+      const coordinator = native ? input.users : input.coordinator;
       const outcome = yield* Effect.exit(
-        startProactivityWorkflow({
-          body: message.body,
-          workflow: input.workflow,
-          coordinator: input.coordinator,
-        })
+        coordinator === undefined
+          ? Effect.fail(new InsightUnavailable())
+          : startProactivityWorkflow({ body: message.body, workflow: input.workflow, coordinator })
       );
       if (outcome._tag === "Success") message.ack();
       else message.retry({ delaySeconds: 60 });
@@ -436,10 +448,14 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
   ProactivityDeliveryWork
 > {
   run(event: WorkflowEvent<ProactivityDeliveryWork>, step: WorkflowStep): Promise<void> {
+    const coordinator = isNativeWork(event.payload)
+      ? this.env.USER_STORE
+      : this.env.USER_TRANSACTION_COORDINATOR;
+    if (coordinator === undefined) return Promise.reject(new InsightUnavailable());
     return observeWorkerPromise(
       () =>
         runProactivityWorkflow({
-          coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+          coordinator,
           payload: event.payload,
           step,
           environment: withErasureRecovery(this.env),
@@ -456,3 +472,88 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
 
 export const makeInsightsErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+const localSender = Effect.fn(function* (env: NativeReminderEnvironment) {
+  const config = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
+    env.PROACTIVITY_TEMPLATE_JSON ?? ""
+  );
+  return makeProactivityTemplateSender({
+    configuration: config,
+    outboundHttp: yield* nativeOutbound(env),
+  });
+});
+export const observedReminderChoice = Effect.fn(function* (
+  event: WhatsAppTurnAdmission,
+  environment: NativeReminderEnvironment,
+  storage: DurableObjectStorage
+) {
+  yield* recordReminderReply(event).pipe(withStoreCapacity("required"));
+  if (
+    !/^(?:(?:re)?activar (?:los )?recordatorios$|p:manual-entry-reminder:|s[ií]$|no$|desactivar$)/iu.test(
+      event.text.trim()
+    )
+  ) {
+    return Option.none<Response>();
+  }
+  const privacyChoice =
+    /^(?:no|desactivar)$|^p:manual-entry-reminder:[0-9a-f-]{36}:(?:decline|revoke)$/iu.test(
+      event.text.trim()
+    );
+  if (privacyChoice || environment.PROACTIVITY_ENABLED !== "enabled") {
+    return yield* handleChoice(event, Option.none(), storage).pipe(withStoreCapacity("required"));
+  }
+  return yield* Effect.scoped(
+    Effect.flatMap(localSender(environment), (sender) =>
+      handleChoice(event, Option.some(sender), storage).pipe(withStoreCapacity("growth"))
+    )
+  );
+});
+export const repairLocalReminderAlarm: typeof repairReminder = (...input) =>
+  repairReminder(...input);
+export const recoverLocalReminders = Effect.fn(function* (
+  environment: NativeReminderEnvironment,
+  storage: DurableObjectStorage,
+  owns: (id: string) => boolean
+) {
+  if (environment.PROACTIVITY_ENABLED !== "enabled") return { attempted: 0, failed: 0 };
+  return yield* Effect.scoped(
+    Effect.flatMap(localSender(environment), (sender) =>
+      Effect.gen(function* () {
+        const offer = yield* dispatchDisclosure(environment, sender, storage).pipe(Effect.result);
+        const recovered = yield* processReminder({ environment, storage, owns, sender });
+        return { ...recovered, failed: recovered.failed + Number(offer._tag === "Failure") };
+      })
+    )
+  );
+});
+export const nativeReminderActivity = Effect.fn(function* (
+  request: Request,
+  environment: NativeReminderEnvironment,
+  owns: (id: string) => boolean
+) {
+  const work = yield* Schema.decodeUnknownEffect(ProactivityActivity)(
+    yield* Effect.tryPromise(() => request.json())
+  );
+  if (!owns(work.userId) || environment.PROACTIVITY_ENABLED !== "enabled") {
+    return Response.json({ _tag: "Done" });
+  }
+  if (work.kind === "proactivity-recover") {
+    if (!isNativeWork(work.work) || work.work.userId !== work.userId) {
+      return Response.json({ _tag: "Done" });
+    }
+    const sql = yield* SqliteClient;
+    const rows =
+      yield* sql`UPDATE reminder_deliveries SET restarts=restarts+1 WHERE user_id=${work.userId} AND id=${work.work.id} AND state='ready' AND deadline_ms>${DateTime.toEpochMillis(yield* DateTime.now)} AND restarts<3 RETURNING id`;
+    return Response.json({ _tag: rows.length === 1 ? "RecoveryAdmitted" : "Done" });
+  }
+  if (!isNativeWork(work)) {
+    return Response.json({ _tag: "Done" });
+  }
+  return Response.json(
+    yield* Effect.scoped(
+      Effect.flatMap(localSender(environment), (sender) =>
+        deliverReminder(environment, work, sender)
+      )
+    )
+  );
+});

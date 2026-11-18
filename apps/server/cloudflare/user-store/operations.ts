@@ -1,4 +1,5 @@
 import { sampleSchema } from "./internal/sample-schema";
+import { hostedSchema } from "./internal/hosted-schema";
 import { ingestionSchema } from "./internal/ingestion-schema";
 import { billingAdmissionSchema } from "./internal/billing-admission-schema";
 import { connectionSchema } from "./internal/connection-schema";
@@ -974,20 +975,37 @@ export const userStoreHistory: StoreHistory = {
         ...connectionAuditSchema(),
       ],
     },
+    { version: 21, id: "hosted-agent-work", statements: hostedSchema() },
   ],
 };
 
 /** Complete each bounded family independently; a failed check remains distinguishable from an empty page. */
+type RecoveryFamily<E, R> = Effect.Effect<Readonly<{ attempted: number; failed: number }>, E, R>;
 export const recoverUserWork = <E, R>(
-  families: ReadonlyArray<Effect.Effect<Readonly<{ attempted: number; failed: number }>, E, R>>
+  jobs:
+    | ReadonlyArray<RecoveryFamily<E, R>>
+    | {
+        families: ReadonlyArray<RecoveryFamily<E, R>>;
+        hosted: RecoveryFamily<E, R>;
+        timeoutMs: number;
+      }
 ): Effect.Effect<
   Readonly<{ failedFamilies: number; attempted: number; failedOffers: number }>,
   never,
   R
 > =>
-  Effect.forEach(families, (family) => family.pipe(Effect.timeout("45 seconds"), Effect.exit), {
-    concurrency: 4,
-  }).pipe(
+  Effect.forEach(
+    [
+      ...("hosted" in jobs ? jobs.families : jobs).map((family) =>
+        family.pipe(Effect.timeout("45 seconds"))
+      ),
+      ...("hosted" in jobs ? [jobs.hosted.pipe(Effect.timeout(jobs.timeoutMs))] : []),
+    ],
+    (family) => Effect.exit(family),
+    {
+      concurrency: 4,
+    }
+  ).pipe(
     Effect.map((results) => {
       let failedFamilies = 0,
         attempted = 0,

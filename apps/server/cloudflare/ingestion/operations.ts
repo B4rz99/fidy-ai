@@ -1,3 +1,4 @@
+import { localReviewPage, localSubmission } from "./internal/local-review-list";
 import { retainDocumentOrigin as retainOrigin } from "./internal/local-document";
 import {
   dispatchLocalForwarding as dispatchLocalForwardingOwned,
@@ -8,6 +9,7 @@ import {
 import {
   prepareLocalAbandon as localAbandon,
   prepareLocalDecision as localDecision,
+  resolveOrigin,
 } from "./internal/local-statement-decision";
 import { prepareLocalReviewEdit as localEdit } from "./internal/local-review-edit";
 import {
@@ -324,3 +326,7 @@ export const prepareLocalForwardingEnable: typeof prepareAddress = (...args) =>
 
 export const retainLocalStatementDocumentOrigin: typeof retainOrigin = (input) =>
   retainOrigin(input);
+
+export const localHostedStatementOrigin: typeof resolveOrigin = (...args) => resolveOrigin(...args);
+export const readLocalSubmission: typeof localSubmission = (...args) => localSubmission(...args);
+export const readLocalReviewPage: typeof localReviewPage = (...args) => localReviewPage(...args);

@@ -1,0 +1,280 @@
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
+import { DisclosureSnapshot } from "../../src/shell/consent/contract";
+import { HostedTurnProcessing, HostedTurnProposal } from "../../src/shell/agent/contract";
+import { native, nativeConnectionProfile, nativeHostedPlatform } from "../user-store.test-fixture";
+import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
+import { Effect, Schedule, Schema } from "effect";
+import { expect } from "vitest";
+import {
+  alice,
+  bob,
+  history,
+  nativeBrowserWrite,
+  nativeTransactionJourney,
+  seed,
+} from "../financial-user-store.test-fixture";
+
+const nativeTurnJourney = Effect.fnUntraced(function* (
+  mode: "ordinary" | "confirm" | "stale" | "withdraw" | "connection"
+) {
+  const create = yield* nativeHostedPlatform;
+  const runtime = yield* create(undefined, [], {
+    BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: yield* nativeConnectionProfile,
+  });
+  const owner = yield* seed(runtime, alice);
+  yield* seed(runtime, bob);
+  const disclosure = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
+    currentDisclosureFor()
+  );
+  yield* owner.exec(
+    "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES(?,?,'processing_grant',?,?)",
+    bob.user,
+    alice.user,
+    owner.now,
+    disclosure
+  );
+  const post = (subject: typeof alice, path: string, body: unknown): Effect.Effect<Response> =>
+    Effect.gen(function* () {
+      const reply = yield* native(() =>
+        runtime.dispatchFetch("https://api.fidyapp.com/web/hosted-turns" + path, {
+          method: "POST",
+          headers: {
+            origin: "https://app.fidyapp.com",
+            cookie: "__Host-fidy_session=" + subject.bearer,
+            "Fidy-Session-Binding": subject.session,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        })
+      );
+      return new Response(yield* native(() => reply.text()), { status: reply.status });
+    });
+  const controls = yield* native(() =>
+    runtime.getDurableObjectNamespace("CONTROL", "hosted-provider")
+  );
+  const provider = controls.getByName("provider");
+  const providerPath = {
+    connection: "connect",
+    confirm: "forget",
+    stale: "forget",
+    withdraw: "waiting",
+    ordinary: "waiting",
+  }[mode];
+  yield* native(() => provider.fetch("https://fixture.invalid/" + providerPath));
+  const id = "22460000-0000-4000-8000-000000000020";
+
+  if (["confirm", "stale"].includes(mode)) {
+    yield* owner.exec(
+      "INSERT INTO memories VALUES(?,?,'Preparo almuerzos',?,?)",
+      id,
+      alice.user,
+      owner.now,
+      owner.now
+    );
+  }
+  if (mode === "ordinary") {
+    yield* owner.exec("ALTER TABLE reminder_schedules RENAME TO unavailable_reminder_schedules");
+  }
+  const admitted = yield* post(alice, "", { text: "¿Qué recuerdas?" });
+  expect(admitted.status).toBe(202);
+  const identity = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
+    yield* native(() => admitted.json())
+  );
+  yield* Effect.retry(
+    Effect.gen(function* () {
+      const state = yield* native(() => provider.fetch("https://fixture.invalid/waiting"));
+      const value = yield* Schema.decodeUnknownEffect(Schema.Struct({ waiting: Schema.Boolean }))(
+        yield* native(() => state.json())
+      );
+      if (!value.waiting) return yield* Effect.fail("provider_not_waiting");
+    }),
+    { times: 40, schedule: Schedule.spaced("50 millis") }
+  );
+  expect((yield* history(runtime, alice)).status).toBe(200);
+  expect((yield* post(alice, "", { text: "Otra consulta" })).status).toBe(409);
+  expect((yield* post(bob, "/progress", { turnId: identity.turnId })).status).toBe(401);
+  if (mode === "withdraw") {
+    yield* owner.exec(
+      "INSERT INTO consent_history(id,user_id,record_type,grant_record_id,session_id,occurred_at_ms) VALUES(?,?,'processing_withdrawal',?,?,?)",
+      id,
+      alice.user,
+      bob.user,
+      alice.session,
+      owner.now
+    );
+  }
+  yield* native(() => provider.fetch("https://fixture.invalid/release"));
+  const proposal = yield* Effect.retry(
+    Effect.gen(function* () {
+      const reply = yield* post(alice, "/progress", { turnId: identity.turnId });
+      return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+        yield* native(() => reply.json())
+      );
+    }),
+    { times: 50, schedule: Schedule.spaced("50 millis") }
+  );
+  if (["ordinary", "withdraw"].includes(mode)) expect(proposal.text).toBe("Listo.");
+  const redelivery = yield* post(alice, "/progress", { turnId: identity.turnId });
+  expect(yield* native(() => redelivery.json())).toMatchObject({
+    receipt: proposal.receipt,
+    text: proposal.text,
+  });
+  const delivered = yield* post(alice, "/delivery", {
+    turnId: identity.turnId,
+    receipt: proposal.receipt,
+  });
+  expect(delivered.status).toBe(200);
+  if (mode === "connection") {
+    expect(proposal.text).toMatch(/https:\/\/app\.fidyapp\.com\/connections\/continue\?attempt=/u);
+    expect(yield* owner.exec("SELECT public_reference FROM connection_attempts")).toEqual([
+      { public_reference: proposal.text.split("attempt=")[1] },
+    ]);
+    expect(
+      yield* owner.exec(
+        "SELECT json_extract(entry_json,'$.outcome.output.data[0].availability') AS availability FROM hosted_transcript WHERE json_extract(entry_json,'$.operation')='connections.listInstitutions' AND json_extract(entry_json,'$._tag')='CanonicalToolResultEntry'"
+      )
+    ).toEqual([{ availability: "available" }]);
+    const state = yield* native(() => provider.fetch("https://fixture.invalid/waiting"));
+    expect(yield* native(() => state.json())).toMatchObject({ rounds: 1 });
+    return;
+  }
+  if (mode === "withdraw") {
+    expect(yield* owner.exec("SELECT outcome FROM hosted_tool_calls")).toEqual([
+      { outcome: "CanonicalOperationFailed" },
+    ]);
+    expect((yield* post(alice, "", { text: "Otro turno" })).status).toBe(403);
+    return;
+  }
+  if (["confirm", "stale"].includes(mode)) {
+    const assertReviewed = Effect.fnUntraced(function* () {
+      expect(proposal.text).toContain("Preparo almuerzos");
+      expect(proposal.confirmation?.command).toMatch(/^CONFIRMAR [a-f0-9]{64}$/u);
+      expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([{ n: 1 }]);
+      if (mode === "stale") {
+        yield* owner.exec("UPDATE memories SET text='Estado nuevo' WHERE id=?", id);
+      }
+      const confirmed = yield* post(alice, "", { text: proposal.confirmation?.command });
+      const accepted = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
+        yield* native(() => confirmed.json())
+      );
+      yield* Effect.retry(
+        Effect.gen(function* () {
+          const res = yield* post(alice, "/progress", { turnId: accepted.turnId });
+          return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+            yield* native(() => res.json())
+          );
+        }),
+        { times: 50, schedule: Schedule.spaced("50 millis") }
+      );
+      expect(yield* owner.exec("SELECT count(*) AS n FROM memories")).toEqual([
+        { n: mode === "confirm" ? 0 : 1 },
+      ]);
+      expect(
+        yield* owner.exec("SELECT outcome FROM hosted_tool_calls WHERE turn_id=?", accepted.turnId)
+      ).toEqual([{ outcome: mode === "confirm" ? "Succeeded" : "CanonicalOperationFailed" }]);
+    });
+    return yield* assertReviewed();
+  }
+  yield* owner.exec("ALTER TABLE unavailable_reminder_schedules RENAME TO reminder_schedules");
+  expect(
+    yield* owner.exec(
+      "SELECT json_extract(entry_json,'$._tag') AS entry FROM hosted_transcript ORDER BY sequence"
+    )
+  ).toEqual([
+    { entry: "UserTranscriptEntry" },
+    { entry: "CanonicalToolCallEntry" },
+    { entry: "CanonicalToolResultEntry" },
+    { entry: "AssistantTranscriptEntry" },
+  ]);
+  yield* owner.exec(
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<80) INSERT INTO hosted_transcript(session_id,turn_id,entry_json) SELECT t.session_id,t.id,json_object('_tag','UserTranscriptEntry','id',printf('90000000-0000-4000-8000-%012d',i),'turnId',t.id,'occurredAt','2026-09-01T10:00:00.000Z','text','Registro') FROM n JOIN hosted_turns t ON t.id=?",
+    identity.turnId
+  );
+  yield* owner.exec(
+    "UPDATE hosted_agent_sessions SET basis_json=json_set(basis_json,'$.policyRevision','earlier-policy')"
+  );
+  const again = yield* post(alice, "", { text: "Continuar" });
+  const later = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
+    yield* native(() => again.json())
+  );
+  yield* Effect.retry(
+    Effect.gen(function* () {
+      const reply = yield* post(alice, "/progress", { turnId: later.turnId });
+      return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+        yield* native(() => reply.json())
+      );
+    }),
+    { times: 50, schedule: Schedule.spaced("50 millis") }
+  );
+  expect(yield* owner.exec("SELECT compacted_text FROM hosted_agent_sessions")).toEqual([
+    { compacted_text: "Resumen anterior." },
+  ]);
+  expect(
+    yield* owner.exec(
+      "SELECT count(*) AS original FROM hosted_transcript WHERE turn_id=?",
+      identity.turnId
+    )
+  ).toEqual([{ original: 0 }]);
+});
+
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "uses the same User-gated Connection owners for institution discovery and the browser handoff in a hosted Turn",
+    () => nativeTurnJourney("connection")
+  );
+  test.effect("consumes a host-issued destructive Memory review only after its delivery", () =>
+    nativeTurnJourney("confirm")
+  );
+  test.effect("refuses confirmation after the reviewed Memory changes", () =>
+    nativeTurnJourney("stale")
+  );
+  test.effect("rechecks live Consent before a tool returned by a paused provider", () =>
+    nativeTurnJourney("withdraw")
+  );
+  test.effect(
+    "rolls back preflight without charging a Turn when the provider configuration is unavailable",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* nativeTransactionJourney;
+        yield* native(() =>
+          db.exec(
+            "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES(?,?,'processing_grant',?,?)",
+            bob.user,
+            alice.user,
+            0,
+            Schema.encodeSync(Schema.fromJsonString(DisclosureSnapshot))(currentDisclosureFor())
+          )
+        );
+        expect(
+          (yield* nativeBrowserWrite(db)(alice, {
+            path: "/web/hosted-turns",
+            method: "POST",
+            body: { text: "¿Qué recuerdas?" },
+          })).status
+        ).toBe(503);
+        expect(yield* native(() => db.exec("SELECT count(*) AS n FROM hosted_turns"))).toEqual([
+          { n: 0 },
+        ]);
+        expect(yield* native(() => db.exec("SELECT count(*) AS n FROM hosted_transcript"))).toEqual(
+          [{ n: 0 }]
+        );
+      })
+  );
+  test.effect("requires an admitted processing Consent basis before opening a hosted Turn", () =>
+    Effect.gen(function* () {
+      const db = yield* nativeTransactionJourney;
+      const response = yield* nativeBrowserWrite(db)(alice, {
+        method: "POST",
+        path: "/web/hosted-turns",
+        body: { text: "Mi presupuesto" },
+      });
+      expect(response.status).toBe(403);
+    })
+  );
+
+  test.effect(
+    "continues hosted work through a failed Reminder recovery, permits unrelated work during inference, and preserves ordered Transcript and Compaction",
+    () => nativeTurnJourney("ordinary")
+  );
+});

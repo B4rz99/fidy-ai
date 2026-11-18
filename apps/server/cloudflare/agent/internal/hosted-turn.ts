@@ -1,7 +1,8 @@
 import type { ExternalEventBindings } from "../../directory/contract";
 import { SecureRandom } from "effect/crypto";
 import { plainReply } from "./plain-reply";
-import { captureWithoutCommit, transactionReceipt } from "./capture-reply";
+import { captureWithoutCommit } from "./capture-reply";
+import { type HostedToolAction, committedAnswer, failedQueryReply } from "./tool-reply";
 import { browserConfirmationText, readBrowserConfirmation } from "./hosted-browser-confirmation";
 import type { HostedTurnConfirmation, HostedTurnProposal } from "../../../src/shell/agent/contract";
 import { observeApplicationOperation } from "../../runtime/application-observation/operations";
@@ -1276,7 +1277,7 @@ const executeAdmittedTurn = ({
                 db,
                 userId,
                 turnId,
-                answer: committedAnswer(Option.none(), timeZone),
+                answer: committedAnswer({ actions: Option.none(), timeZone }),
                 deliver,
                 finish,
                 scheduleRecovery,
@@ -1297,7 +1298,7 @@ const executeAdmittedTurn = ({
               db,
               userId,
               turnId,
-              answer: committedAnswer(Option.some(actions), timeZone),
+              answer: committedAnswer({ actions: Option.some(actions), timeZone }),
               deliver,
               finish,
               scheduleRecovery,
@@ -1414,65 +1415,6 @@ const hostedResponseOutcome = (
     if (!response.ok) return { _tag: "CanonicalOperationFailed", failure: output.value };
     return { _tag: "Succeeded", output: output.value };
   });
-
-type HostedToolAction =
-  | Readonly<{ _tag: "Result"; event: HostedToolEvent; mutationSucceeded: boolean }>
-  | Readonly<{ _tag: "Challenge"; text: TranscriptText }>;
-const queryAbsence = Schema.Struct({ error: Schema.Struct({ code: Schema.Literal("not_found") }) });
-const confirmedQueryResult = (outcome: CanonicalToolOutcome): boolean =>
-  outcome._tag === "Succeeded" ||
-  (outcome._tag === "CanonicalOperationFailed" && Schema.is(queryAbsence)(outcome.failure));
-
-/** A rejected read supplies no data from which the model may infer an empty result. */
-const failedQueryReply = (
-  actions: ReadonlyArray<HostedToolAction>
-): Option.Option<TranscriptText> =>
-  actions.some(
-    (action) =>
-      action._tag === "Result" &&
-      operationCatalog.byId.get(action.event.operation)?.policy.kind === "query" &&
-      !confirmedQueryResult(action.event.outcome)
-  )
-    ? Option.some(
-        TranscriptText.make(
-          "No pude completar la consulta solicitada. No puedo confirmar sus resultados. Inténtalo de nuevo."
-        )
-      )
-    : Option.none();
-
-/** A completed canonical write never licenses an unqualified success for other failed calls. */
-const committedAnswer = (
-  actions: Option.Option<ReadonlyArray<HostedToolAction>>,
-  timeZone: string
-): TranscriptText => {
-  if (Option.isNone(actions)) {
-    return TranscriptText.make(
-      "Una operación se completó; el estado de las demás no está confirmado."
-    );
-  }
-  const partial = actions.value.some(
-    (action) =>
-      action._tag === "Result" &&
-      action.event.outcome._tag !== "Succeeded" &&
-      action.event.outcome._tag !== "CommittedOutputUnavailable"
-  );
-  if (!partial) {
-    for (const action of actions.value) {
-      if (action._tag !== "Result" || action.event.outcome._tag !== "Succeeded") continue;
-      const receipt = transactionReceipt({
-        operation: action.event.operation,
-        output: action.event.outcome.output,
-        timeZone,
-      });
-      if (Option.isSome(receipt)) return receipt.value;
-    }
-  }
-  return TranscriptText.make(
-    partial
-      ? "Completé una parte de lo que pediste. Quedaron cambios sin hacer."
-      : "Listo, apliqué los cambios."
-  );
-};
 
 type ToolIdentity = Readonly<{
   turnId: TranscriptTurnId;

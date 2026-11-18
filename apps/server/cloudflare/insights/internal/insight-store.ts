@@ -40,7 +40,7 @@ import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/c
 import { oauthMutationReview } from "../../oauth-confirmation/operations";
 import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
 
-const maximumPendingInsights = 64;
+export const maximumPendingInsights = 64;
 const HTTP_NOT_FOUND = 404;
 const HTTP_BAD_REQUEST = 400;
 
@@ -251,7 +251,7 @@ const recordInsightCall = (input: InsightCall): Effect.Effect<"recorded" | "unav
     Effect.orElseSucceed(() => "unavailable" as const)
   );
 
-const pendingCursor = (
+export const pendingCursor = (
   url: URL
 ): Option.Option<Readonly<{ scheduledAt: Option.Option<number>; id: string }>> => {
   const raw = url.searchParams.get("cursor");

@@ -1,6 +1,7 @@
+import { hostedStatements } from "./local-statement-scope";
 import { localClarificationReview } from "./oauth-review";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { UserContext, type UserId } from "../../../src/core/identity/contract";
 import type { TransactionExtraction } from "../../../src/core/transactions/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -22,9 +23,14 @@ type DecisionOwner = Readonly<{
   user: UserId;
   current: number;
   origin: Option.Option<{ sessionId: string; turnId: string }>;
+  requiresOrigin: boolean;
 }>;
-const eligible = Effect.fn(function* (id: string, { user, current, origin }: DecisionOwner) {
+const eligible = Effect.fn(function* (
+  id: string,
+  { user, current, origin, requiresOrigin }: DecisionOwner
+) {
   const sql = yield* SqliteClient;
+  if (requiresOrigin && Option.isNone(origin)) return false;
   const predicate = Option.isSome(origin)
     ? "hosted_session_id=? AND hosted_turn_id=? AND hosted_abandoned_at_ms IS NULL AND hosted_expires_at_ms>?"
     : "hosted_session_id IS NULL";
@@ -143,4 +149,17 @@ export const prepareLocalDecision = Effect.fn(function* (
     }),
     premises: ["statement:" + row.id],
   });
+});
+
+/** Re-open a clarification only for its exact verified channel, issuing Turn and admitted Session. */
+export const resolveOrigin = Effect.fn(function* (active: string, target: string, user: UserId) {
+  const sql = yield* SqliteClient;
+  const scope = yield* hostedStatements(active, user, yield* Clock.currentTimeMillis);
+  const [row] =
+    yield* sql`SELECT s.hosted_session_id AS sessionId,s.hosted_turn_id AS turnId FROM statement_submissions s
+    WHERE s.id IN (${scope}) AND (s.id=${target} OR EXISTS(SELECT 1 FROM ingestion_review_items i WHERE i.id=${target} AND i.user_id=s.user_id AND i.statement_submission_id=s.id))`;
+  return Option.flatMap(
+    Option.fromUndefinedOr(row),
+    Schema.decodeUnknownOption(Schema.Struct({ sessionId: Schema.String, turnId: Schema.String }))
+  );
 });

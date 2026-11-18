@@ -1,3 +1,5 @@
+import { providerAllowanceUrl } from "../resource-admission/contract";
+import { admitSharedProvider } from "../resource-admission/operations";
 import { nativePATDirectoryUrl } from "../tokens/contract";
 import { oauthRouteCommandUrl } from "../oauth-agents/contract";
 import { routeSessionRequest } from "./operations";
@@ -248,6 +250,8 @@ const routingCommands = new Map<
 ]);
 const identityRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   switch (request.url) {
+    case providerAllowanceUrl:
+      return yield* admitSharedProvider(request);
     case loginAllowanceUrl:
       return yield* chargeLoginAttempt;
     case replaceIdentityUrl:

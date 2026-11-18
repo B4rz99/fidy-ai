@@ -67,15 +67,7 @@ import {
   protectCanonicalBrowserSnapshot,
   protectCanonicalBrowserSource,
 } from "../../canonical-admission/operations";
-import { UserId } from "../../../src/core/identity/contract";
-import { HostedTurnProgressRequest } from "../../../src/shell/agent/contract";
-import {
-  HostedDeliveryAdmission,
-  HostedProgressAdmission,
-  HostedTurnAdmission,
-  hostedDeliveryReceipt,
-  hostedTurnInput,
-} from "../../agent/contract";
+import { isLocalHostedPath } from "../../agent/runtime";
 
 import { dispatchEmailReplacement } from "../../email-authentication/runtime";
 
@@ -89,7 +81,6 @@ import {
   isLocalTransactionOperation,
   transactionInput,
   transactionPairInput,
-  transactionSession,
 } from "../../transactions/operations";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
@@ -107,7 +98,6 @@ import {
   maximumTransactionInputBytes,
   rejectBatchEnvelope,
   rejectInvalidTransactionInput,
-  unauthenticatedTransaction,
 } from "../../canonical-work/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody, pathId, rawPathId } from "../../http/operations";
@@ -172,13 +162,8 @@ import {
   statementStagingPath,
 } from "../../../src/shell/ingestion/contract";
 
-import {
-  type WhatsAppDocumentAdmission,
-  WhatsAppInboundAdmission,
-  WhatsAppStatusAdmission,
-  type WhatsAppTurnAdmission,
-} from "../../whatsapp/contract";
-import { dispatchWhatsAppWork, receiveWhatsAppWebhook } from "../../whatsapp/runtime";
+import { WhatsAppInboundAdmission } from "../../whatsapp/contract";
+import { receiveWhatsAppWebhook } from "../../whatsapp/runtime";
 
 import type { CoreHttpEnvironment } from "../contract";
 
@@ -187,7 +172,7 @@ const ReleaseConfiguration = Schema.Struct({
   RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(gitRevisionPattern)),
 });
 
-type PublicationKind = "emailReplacement" | "whatsapp";
+type PublicationKind = "emailReplacement";
 type PublishAcceptedWork = (kind: PublicationKind, id: string) => void;
 
 const publicationActivities = (
@@ -195,14 +180,6 @@ const publicationActivities = (
   identity: Option.Option<string>
 ): Record<PublicationKind, () => Effect.Effect<void, void>> => {
   const publishers: Record<PublicationKind, () => Effect.Effect<void, void>> = {
-    whatsapp: () =>
-      environment.HOSTED_WHATSAPP_QUEUE === undefined
-        ? Effect.void
-        : dispatchWhatsAppWork({
-            db: environment.DB,
-            queue: environment.HOSTED_WHATSAPP_QUEUE,
-            userId: Option.map(identity, (id) => UserId.make(id)),
-          }).pipe(Effect.mapError(() => undefined)),
     emailReplacement: () =>
       environment.EMAIL_REPLACEMENT_QUEUE === undefined
         ? Effect.void
@@ -253,7 +230,6 @@ const jsonHeaders = {
 } as const;
 
 const HTTP_OK = 200;
-const HTTP_ACCEPTED = 202;
 const HTTP_NOT_FOUND = 404;
 const HTTP_FORBIDDEN = 403;
 const HTTP_METHOD_NOT_ALLOWED = 405;
@@ -271,46 +247,27 @@ const methodNotAllowed = (): Response =>
     status: HTTP_METHOD_NOT_ALLOWED,
   });
 
-const forwardHostedWhatsApp = (
-  environment: CoreHttpEnvironment,
-  path: "whatsapp" | "whatsapp/status",
-  {
-    admission,
-    traceHeaders,
-  }: Readonly<{
-    admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission | WhatsAppStatusAdmission;
-    traceHeaders: Readonly<Record<string, string>>;
-  }>
-): Promise<Response> =>
-  Effect.runPromise(
-    Schema.encodeEffect(
-      Schema.fromJsonString(Schema.Union([WhatsAppInboundAdmission, WhatsAppStatusAdmission]))
-    )(admission)
-  ).then((body) =>
-    environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId).fetch(
-      new Request(`https://coordinator.internal/hosted-turn/${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json", ...traceHeaders },
-        body,
-      })
-    )
-  );
-
 const callbackEffect = (
   request: Request,
-  environment: CoreHttpEnvironment,
-  publish: PublishAcceptedWork
+  environment: CoreHttpEnvironment
 ): Effect.Effect<Response> =>
   request.method === "POST"
     ? Effect.flatMap(captureTraceHeaders, (traceHeaders) =>
         receiveWhatsAppWebhook({
           ...environment,
           onHostedText: (admission) =>
-            forwardHostedWhatsApp(environment, "whatsapp", { admission, traceHeaders }).then(
-              (response) => {
-                if (response.status === HTTP_ACCEPTED) publish("whatsapp", admission.userId);
-                return response;
-              }
+            Effect.runPromise(
+              Schema.encodeEffect(Schema.fromJsonString(WhatsAppInboundAdmission))(admission)
+            ).then(
+              (body) =>
+                environment.USER_STORE?.getByName(admission.userId).fetch(
+                  "https://user.invalid/hosted-turn/whatsapp",
+                  {
+                    method: "POST",
+                    headers: { "content-type": "application/json", ...traceHeaders },
+                    body,
+                  }
+                ) ?? unavailable()
             ),
         })(request)
       )
@@ -318,11 +275,10 @@ const callbackEffect = (
 
 const providerCallbackEffect = (
   request: Request,
-  environment: CoreHttpEnvironment,
-  publish: PublishAcceptedWork
+  environment: CoreHttpEnvironment
 ): Effect.Effect<Response> => {
   const path = new URL(request.url).pathname;
-  if (path === "/providers/kapso/callback") return callbackEffect(request, environment, publish);
+  if (path === "/providers/kapso/callback") return callbackEffect(request, environment);
   if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
   if (environment.WOMPI_EVENT_SECRET === undefined) return Effect.succeed(unavailable());
   return receiveWompiBillingEvent({
@@ -997,154 +953,10 @@ const statementUploadResponse = (request: Request): Effect.Effect<Response> =>
       : methodNotAllowed()
   );
 
-const hostedTurnPolicy = Schema.decodeSync(RequestBodyPolicy)({
-  maximumBytes: 16_384,
-  deadlineMilliseconds: 2_000,
-});
-const hostedReceiptPolicy = Schema.decodeSync(RequestBodyPolicy)({
-  maximumBytes: 512,
-  deadlineMilliseconds: 2_000,
-});
-
-const hostedTurnResponse = (
-  request: Request,
-  environment: CoreHttpEnvironment
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    if (request.method !== "POST") return methodNotAllowed();
-    const current = yield* Clock.currentTimeMillis;
-    const subject = yield* Effect.tryPromise(() =>
-      transactionSession({ request, db: environment.DB, current })
-    );
-    if (Option.isNone(subject)) return unauthenticatedTransaction();
-    const input = yield* boundedJsonBody({
-      request,
-      policy: hostedTurnPolicy,
-      schema: hostedTurnInput,
-    });
-    if (Option.isNone(input)) {
-      return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
-    }
-    const traceHeaders = yield* captureTraceHeaders;
-    const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(HostedTurnAdmission))({
-      userId: UserId.make(subject.value.userId),
-      sessionId: subject.value.id,
-      digest: Array.from(subject.value.digest),
-      text: input.value.text,
-    });
-    return yield* Effect.tryPromise(() =>
-      stub.fetch(
-        new Request("https://coordinator.internal/hosted-turn", {
-          method: "POST",
-          headers: { "content-type": "application/json", ...traceHeaders },
-          body,
-          signal: request.signal,
-        })
-      )
-    );
-  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("agent.hostedTurn"));
-
-const hostedProgressResponse = (
-  request: Request,
-  environment: CoreHttpEnvironment
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    if (request.method !== "POST") return methodNotAllowed();
-    const current = yield* Clock.currentTimeMillis;
-    const subject = yield* Effect.tryPromise(() =>
-      transactionSession({ request, db: environment.DB, current })
-    );
-    if (Option.isNone(subject)) return unauthenticatedTransaction();
-    const input = yield* boundedJsonBody({
-      request,
-      policy: hostedReceiptPolicy,
-      schema: HostedTurnProgressRequest,
-    });
-    if (Option.isNone(input)) {
-      return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
-    }
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(HostedProgressAdmission))({
-      userId: UserId.make(subject.value.userId),
-      sessionId: subject.value.id,
-      digest: Array.from(subject.value.digest),
-      ...input.value,
-    });
-    const traceHeaders = yield* captureTraceHeaders;
-    const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
-    return yield* Effect.tryPromise(() =>
-      stub.fetch(
-        new Request("https://coordinator.internal/hosted-turn/progress", {
-          method: "POST",
-          headers: { "content-type": "application/json", ...traceHeaders },
-          body,
-          signal: request.signal,
-        })
-      )
-    );
-  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("agent.hostedProgress"));
-
-const hostedReceiptResponse = (
-  request: Request,
-  environment: CoreHttpEnvironment
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    if (request.method !== "POST") return methodNotAllowed();
-    const current = yield* Clock.currentTimeMillis;
-    const subject = yield* Effect.tryPromise(() =>
-      transactionSession({ request, db: environment.DB, current })
-    );
-    if (Option.isNone(subject)) return unauthenticatedTransaction();
-    const input = yield* boundedJsonBody({
-      request,
-      policy: hostedReceiptPolicy,
-      schema: hostedDeliveryReceipt,
-    });
-    if (Option.isNone(input)) {
-      return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
-    }
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(HostedDeliveryAdmission))({
-      userId: UserId.make(subject.value.userId),
-      sessionId: subject.value.id,
-      digest: Array.from(subject.value.digest),
-      ...input.value,
-    });
-    const traceHeaders = yield* captureTraceHeaders;
-    const stub = environment.USER_TRANSACTION_COORDINATOR.getByName(subject.value.userId);
-    return yield* Effect.tryPromise(() =>
-      stub.fetch(
-        new Request("https://coordinator.internal/hosted-turn/receipt", {
-          method: "POST",
-          headers: { "content-type": "application/json", ...traceHeaders },
-          body,
-          signal: request.signal,
-        })
-      )
-    );
-  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("agent.hostedReceipt"));
-
-const directPathResponse = (
-  request: Request,
-  environment: CoreHttpEnvironment
-): Option.Option<Effect.Effect<Response>> => {
+const directPathResponse = (request: Request): Option.Option<Effect.Effect<Response>> => {
   const path = new URL(request.url).pathname;
   if (path === statementStagingPath) {
     return Option.some(statementUploadResponse(request));
-  }
-  if (path === "/web/hosted-turns") {
-    return Option.some(
-      withBrowserBinding(request, environment, hostedTurnResponse(request, environment))
-    );
-  }
-  if (path === "/web/hosted-turns/delivery") {
-    return Option.some(
-      withBrowserBinding(request, environment, hostedReceiptResponse(request, environment))
-    );
-  }
-  if (path === "/web/hosted-turns/progress") {
-    return Option.some(
-      withBrowserBinding(request, environment, hostedProgressResponse(request, environment))
-    );
   }
   return Option.none();
 };
@@ -1960,15 +1772,13 @@ const dispatchCoreHttp = ({
   const reserved = reservedCoreResponse({ request, environment, bankAuthentication }, url.pathname);
   if (Option.isSome(reserved)) return reservedBindingResponse(request, environment, reserved.value);
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
-    return bound(providerCallbackEffect(request, environment, publish));
+    return bound(providerCallbackEffect(request, environment));
   }
   if (enrollmentCorePath(url.pathname)) {
     return routeSessionRequest({ request, environment });
   }
-  const directPath = directPathResponse(request, environment);
-  if (Option.isSome(directPath)) {
-    return directPath.value;
-  }
+  const directPath = directPathResponse(request);
+  if (Option.isSome(directPath)) return directPath.value;
   const patListing = canonicalOperation({ method: request.method, path: url.pathname }).pipe(
     Option.filter(
       (operation) => isLocalPATManagement(operation.id) || isLocalPATGrant(operation.id)
@@ -1997,6 +1807,11 @@ const dispatchCoreHttp = ({
   return canonicalOrHealthResponse(request, environment, url.pathname);
 };
 
+const nativeSessionWrite = (path: string): boolean =>
+  isLocalHostedPath(path) ||
+  ["/recovery/backup-code/rotate", emailReplacementPath, emailReplacementCompletionPath].includes(
+    path
+  );
 const nativeIdentityResponse = (
   input: RequestExecution
 ): Option.Option<Effect.Effect<Response>> => {
@@ -2005,12 +1820,7 @@ const nativeIdentityResponse = (
   if (Option.isSome(paymentEnrollmentTransport(path))) {
     return Option.some(routeSessionRequest({ request, environment }));
   }
-  if (
-    request.method === "POST" &&
-    ["/recovery/backup-code/rotate", emailReplacementPath, emailReplacementCompletionPath].includes(
-      path
-    )
-  ) {
+  if (request.method === "POST" && nativeSessionWrite(path)) {
     return Option.some(routeSessionRequest({ request, environment }));
   }
   if (request.method === "GET" && path === "/user" && request.headers.has("authorization")) {

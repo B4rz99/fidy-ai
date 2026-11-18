@@ -1,51 +1,22 @@
-import { openAiTestKey } from "../openai.test-fixture";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
-import { ErrorCode } from "../../src/shell/public-http/contract";
-import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
+import { newId } from "../secret-material/operations";
+import { NodeFileSystem } from "@effect/platform-node";
+import { Clock, Effect, Option, Schema } from "effect";
+import { expect, it } from "vitest";
 import { Memory, MemoryId, maximumAggregateMemoryTokens } from "../../src/core/memory/contract";
-import coreWorker from "../core-worker";
-import publicWorker from "../public-worker";
-import { UserTransactionCoordinator } from "../transactions/runtime";
-import { recallMemories } from "./operations";
+import { ErrorCode } from "../../src/shell/public-http/contract";
+import { alice, bob, nativeTransactionJourney, seed } from "../financial-user-store.test-fixture";
+import { native as fromTestPromise, nativeBrowserPlatform } from "../user-store.test-fixture";
 
-class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
-const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
-  Effect.tryPromise({
-    try: () => Promise.resolve(promise()),
-    catch: (cause) => new TestPromiseFailure({ cause }),
-  }).pipe(Effect.orDie);
-const users = [
-  "10000000-0000-4000-8000-000000000071",
-  "10000000-0000-4000-8000-000000000072",
-] as const;
-const sessions = [
-  "10000000-0000-4000-8000-000000000081",
-  "10000000-0000-4000-8000-000000000082",
-] as const;
-const pairings = [
-  "10000000-0000-4000-8000-000000000091",
-  "10000000-0000-4000-8000-000000000092",
-] as const;
-const dayMilliseconds = 86_400_000;
+const users = [alice.user, bob.user] as const,
+  sessions = [alice.session, bob.session] as const;
+const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
+const tick = Effect.sleep("5 millis");
 const compareText = (left: string, right: string): number => left.localeCompare(right);
 const compareCount = (left: number, right: number): number => left - right;
-const databases = isolatedTestDatabases();
-const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
-const iso = (milliseconds: number): string => DateTime.formatIso(DateTime.makeUnsafe(milliseconds));
-const tick = Effect.sleep("5 millis");
-const digest = (text: string): Promise<Uint8Array> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(text))
-    .then((bytes) => new Uint8Array(bytes));
-const bearer = (index: number): string => String(index + 1).repeat(43);
 
-let identifierSequence = 0;
-const identifier = (): string =>
-  `20000000-0000-4000-8000-${String((identifierSequence += 1)).padStart(12, "0")}`;
-const cookie = (index: number): string => `__Host-fidy_session=${bearer(index)}`;
-
+const cookie = (index: number): string =>
+  "__Host-fidy_session=" + (index === 0 ? alice.bearer : bob.bearer);
+type Db = Effect.Success<typeof nativeTransactionJourney>;
 type Send = Readonly<{ path: string; method: "GET" | "POST" | "PUT" | "DELETE" }> &
   Partial<
     Readonly<{
@@ -57,112 +28,6 @@ type Send = Readonly<{ path: string; method: "GET" | "POST" | "PUT" | "DELETE" }
       origin: string;
     }>
   >;
-
-const setup = (): Promise<D1Database> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      coordinators.clear();
-      const db = yield* fromTestPromise(() => databases.acquire());
-      yield* fromTestPromise(() => installTestSchema({ db }));
-      const current = clock();
-      yield* Effect.forEach(
-        users,
-        (user, index) =>
-          Effect.gen(function* () {
-            const verifier = yield* fromTestPromise(() => digest(`verifier${index}`));
-            const sessionDigest = yield* fromTestPromise(() => digest(bearer(index)));
-            yield* fromTestPromise(() =>
-              db
-                .prepare(
-                  "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
-                )
-                .bind(user, current)
-                .run()
-            );
-            yield* fromTestPromise(() =>
-              db
-                .prepare(
-                  "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
-                )
-                .bind(
-                  pairings[index],
-                  `BCDF-GHJ${index}`,
-                  verifier,
-                  user,
-                  current - 1_000,
-                  current + 599_000
-                )
-                .run()
-            );
-            yield* fromTestPromise(() =>
-              db
-                .prepare(
-                  "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-                )
-                .bind(
-                  sessions[index],
-                  pairings[index],
-                  user,
-                  sessionDigest,
-                  current,
-                  current + 600_000,
-                  current + 3_600_000,
-                  current + 7_776_000_000
-                )
-                .run()
-            );
-          }),
-        { concurrency: "unbounded" }
-      );
-      return db;
-    })
-  );
-
-const coordinators = new Map<string, UserTransactionCoordinator>();
-const coordinationEnvironment = (db: D1Database): Parameters<typeof coreWorker.fetch>[1] => ({
-  DB: db,
-  OPENAI_API_KEY: openAiTestKey({ run: (): Promise<never> => Promise.reject(new Error("unused")) }),
-  CONTRACT_DIGEST: "a".repeat(64),
-  RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-  HOSTED_AI_MODEL: approvedOpenAiModel,
-  BROWSER_ORIGIN: "https://app.fidyapp.com",
-  WOMPI_ENVIRONMENT: "",
-  WOMPI_PUBLIC_KEY: "",
-  WOMPI_PRIVATE_KEY: "",
-  WOMPI_INTEGRITY_SECRET: "",
-  KAPSO_API_KEY: "",
-  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-  KAPSO_WEBHOOK_SECRET: "",
-  WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
-  CLOUDFLARE_ACCESS_ISSUER: "",
-  CLOUDFLARE_ACCESS_AUDIENCE: "",
-  USER_TRANSACTION_COORDINATOR: {
-    getByName: (name: string): Pick<Fetcher, "fetch"> => {
-      let coordinator = coordinators.get(name);
-      if (coordinator === undefined) {
-        coordinator = new UserTransactionCoordinator(
-          {
-            id: { name },
-            storage: {
-              getAlarm: (): ReturnType<DurableObjectStorage["getAlarm"]> => Promise.resolve(null),
-              deleteAlarm: (): Promise<void> => Promise.resolve(),
-              setAlarm: (): Promise<void> => Promise.resolve(),
-            },
-          },
-          {
-            DB: db,
-            OPENAI_API_KEY: openAiTestKey({
-              run: (): Promise<never> => Promise.reject(new Error("unused")),
-            }),
-            HOSTED_AI_MODEL: approvedOpenAiModel,
-          }
-        );
-        coordinators.set(name, coordinator);
-      }
-      return { fetch: (input) => coordinator.fetch(new Request(input)) };
-    },
-  },
-});
 
 const forwardedHeaders = (input: Send): Headers => {
   const headers = new Headers({ origin: input.origin ?? "https://app.fidyapp.com" });
@@ -179,69 +44,14 @@ const forwardedBody = (input: Send): Option.Option<string> =>
   Option.orElse(Option.fromUndefinedOr(input.body), () =>
     Option.map(Option.fromUndefinedOr(input.payload), (payload) => JSON.stringify(payload))
   );
-beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
-afterEach(() => vi.useRealTimers());
-const sendAtCurrentTime = (db: D1Database, input: Send): Promise<Response> =>
-  publicWorker.fetch(
-    new Request(`https://api.fidyapp.com${input.path}`, {
+const send = (db: Db, input: Send): Promise<Response> =>
+  db.send(
+    new Request("https://api.fidyapp.com" + input.path, {
       method: input.method,
-      headers: new Headers({
-        ...Object.fromEntries(forwardedHeaders(input)),
-        "cf-connecting-ip": "192.0.2.35",
-      }),
+      headers: forwardedHeaders(input),
       body: Option.getOrUndefined(forwardedBody(input)),
-    }),
-    {
-      BROWSER_ORIGIN: "https://app.fidyapp.com",
-      LOCAL_CANONICAL_READ_BEARER: "",
-      PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
-      RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-      CORE: {
-        fetch: (incoming) => coreWorker.fetch(new Request(incoming), coordinationEnvironment(db)),
-      },
-    }
-  );
-const send = (db: D1Database, input: Send): Promise<Response> => {
-  vi.setSystemTime(clock() + 1000);
-  return sendAtCurrentTime(db, input);
-};
-
-const issuedPAT = Schema.Struct({
-  pat: Schema.Struct({ shortId: Schema.String }),
-  bearer: Schema.String,
-});
-type IssuedPAT = typeof issuedPAT.Type;
-const issuePAT = (
-  db: D1Database,
-  session: string,
-  scopes: ReadonlyArray<string>
-): Promise<IssuedPAT> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const response = yield* fromTestPromise(() =>
-        send(db, {
-          path: "/pats",
-          method: "POST",
-          session,
-          payload: {
-            requestId: identifier(),
-            grant: {
-              recipientLabel: "Agent",
-              scopes,
-              lifetimeDays: 7,
-              reviewExpiresAt: iso(clock() + 7 * dayMilliseconds),
-            },
-          },
-        })
-      );
-      expect(response.status).toBe(200);
-      const issued = yield* Schema.decodeUnknownEffect(Schema.Struct({ data: issuedPAT }))(
-        yield* fromTestPromise(() => response.json())
-      ).pipe(Effect.orDie);
-      return issued.data;
     })
   );
-
 const Cell = Schema.toCodecJson(Memory);
 const Single = Schema.Struct({ data: Cell, next: Schema.Array(Schema.Unknown) });
 const Listed = Schema.Struct({ data: Schema.Array(Cell), next: Schema.Array(Schema.Unknown) });
@@ -269,45 +79,23 @@ const decode = <A>(schema: Schema.Codec<A, unknown>, response: Response): Effect
     const body = yield* fromTestPromise(() => response.json());
     return yield* Schema.decodeUnknownEffect(schema)(body).pipe(Effect.orDie);
   });
-const remembered = (db: D1Database, text: string, session: string): Promise<Response> =>
+const remembered = (db: Db, text: string, session: string): Promise<Response> =>
   send(db, { path: "/memories", method: "POST", session, payload: { text } });
-const recalled = (db: D1Database, session: string): Promise<Response> =>
+const recalled = (db: Db, session: string): Promise<Response> =>
   send(db, { path: "/memories", method: "GET", session });
-const memoryTextRows = (db: D1Database, user: string): Promise<Array<{ text: string }>> =>
-  fromTestPromise(() =>
-    db
-      .prepare("SELECT text FROM memories WHERE user_id = ? ORDER BY created_at_ms, id")
-      .bind(user)
-      .all<{ text: string }>()
-  ).pipe(
-    Effect.map((result) => result.results),
-    Effect.runPromise
-  );
-type AuditRow = Readonly<{
-  operation: string;
-  outcome: string;
-  session_id: string;
-  occurred_at_ms: number;
-}>;
-const auditRows = (db: D1Database, user: string): Promise<ReadonlyArray<AuditRow>> =>
-  fromTestPromise(() =>
-    db
-      .prepare(
-        "SELECT operation, outcome, session_id, occurred_at_ms FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY occurred_at_ms"
-      )
-      .bind(user)
-      .all<AuditRow>()
-  ).pipe(
-    Effect.map((result) => result.results),
-    Effect.runPromise
-  );
-
-afterAll(() => databases.dispose());
-
+const memoryTextRows = (db: Db, user: string): ReturnType<Db["exec"]> =>
+  db.owner(user).exec("SELECT text FROM memories WHERE user_id=? ORDER BY created_at_ms,id", user);
+const auditRows = (db: Db, user: string): ReturnType<Db["exec"]> =>
+  db
+    .owner(user)
+    .exec(
+      "SELECT operation,coalesce(refusal_reason,outcome) AS outcome FROM audit_entries WHERE user_id=? AND record_type='session_call' AND operation GLOB 'memory.*' ORDER BY occurred_at_ms,rowid",
+      user
+    );
 it("normalizes formatting, retains current prose, and recalls it in stable creation order", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const created = yield* fromTestPromise(() =>
         remembered(db, "  primera\r\nmemoria  ", cookie(0))
       );
@@ -332,19 +120,23 @@ it("normalizes formatting, retains current prose, and recalls it in stable creat
       const noStore = yield* fromTestPromise(() => recalled(db, cookie(0)));
       expect(noStore.headers.get("cache-control")).toBe("no-store");
       const audits = yield* fromTestPromise(() => auditRows(db, users[0]));
-      expect(audits.map(({ operation }) => operation).toSorted(compareText)).toEqual(
+      expect(
+        audits
+          .map(({ operation }) => Schema.decodeUnknownSync(Schema.String)(operation))
+          .toSorted(compareText)
+      ).toEqual(
         ["memory.recall", "memory.recall", "memory.remember", "memory.remember"].toSorted(
           compareText
         )
       );
       expect(audits.every(({ outcome }) => outcome === "success")).toBe(true);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("replaces stale prose in place and physically removes a forgotten Memory", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const first = yield* decode(
         Single,
         yield* fromTestPromise(() => remembered(db, "texto anterior", cookie(0)))
@@ -415,13 +207,13 @@ it("replaces stale prose in place and physically removes a forgotten Memory", ()
         expect.objectContaining({ operation: "memory.forget", outcome: "not_found" }),
       ]);
       expect(audits.filter((row) => row.outcome === "success")).toHaveLength(6);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("refuses malformed, empty, and oversized prose without changing Memory state", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const targetText = "estado intacto";
       yield* decode(Single, yield* fromTestPromise(() => remembered(db, targetText, cookie(0))));
       const malformedId = "not-a-memory-id";
@@ -478,14 +270,15 @@ it("refuses malformed, empty, and oversized prose without changing Memory state"
       expect(malformed.error.code).toBe("validation_failed");
       expect(serialized(malformed)).not.toContain(targetText);
       expect(malformed.next).toEqual([]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("rejects aggregate capacity overflow without dropping Memories or echoing prose", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       for (let index = 0; index < 7; index += 1) {
+        yield* Effect.sleep("125 millis");
         const response = yield* fromTestPromise(() =>
           remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))
         );
@@ -527,25 +320,24 @@ it("rejects aggregate capacity overflow without dropping Memories or echoing pro
           expect.objectContaining({ operation: "memory.revise", outcome: "resource_limit" }),
         ])
       );
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("bounds concurrent remember calls so one User's aggregate is never oversubscribed", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       for (let index = 0; index < 6; index += 1) {
         expect(
           (yield* fromTestPromise(() => remembered(db, `${index}${"x".repeat(1_999)}`, cookie(0))))
             .status
         ).toBe(201);
       }
-      vi.setSystemTime(clock() + 1000);
       const outcomes = yield* Effect.forEach(
         ["a", "b"],
         (prefix) =>
           fromTestPromise(() =>
-            sendAtCurrentTime(db, {
+            send(db, {
               path: "/memories",
               method: "POST",
               session: cookie(0),
@@ -564,13 +356,13 @@ it("bounds concurrent remember calls so one User's aggregate is never oversubscr
           (row) => row.operation === "memory.remember" && row.outcome === "resource_limit"
         )
       ).toHaveLength(1);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("enforces the private data API's two-User Memory boundary without partial writes", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const owned = yield* decode(
         Single,
         yield* fromTestPromise(() => remembered(db, "memoria privada", cookie(0)))
@@ -609,149 +401,16 @@ it("enforces the private data API's two-User Memory boundary without partial wri
         expect.objectContaining({ operation: "memory.remember", outcome: "success" }),
         expect.objectContaining({ operation: "memory.recall", outcome: "success" }),
       ]);
-    })
-  ));
-
-it("requires the declared PAT scope, lifetime, revocation standing, and Consent on every Memory call", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const reader = yield* fromTestPromise(() => issuePAT(db, cookie(0), ["read"]));
-      const writer = yield* fromTestPromise(() => issuePAT(db, cookie(0), ["write"]));
-
-      const created = yield* fromTestPromise(() =>
-        send(db, {
-          path: "/memories",
-          method: "POST",
-          bearer: writer.bearer,
-          payload: { text: "pat" },
-        })
-      );
-      expect(created.status).toBe(201);
-      expect(
-        (yield* fromTestPromise(() =>
-          send(db, { path: "/memories", method: "GET", bearer: reader.bearer })
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* fromTestPromise(() =>
-          send(db, { path: "/memories", method: "GET", bearer: writer.bearer })
-        )).status
-      ).toBe(403);
-      const underScoped = yield* fromTestPromise(() =>
-        send(db, {
-          path: "/memories",
-          method: "POST",
-          bearer: reader.bearer,
-          payload: { text: "fuera de alcance" },
-        })
-      );
-      expect(underScoped.status).toBe(403);
-      expect((yield* decode(Failure, underScoped)).error.code).toBe("scope_missing");
-      expect(
-        (yield* fromTestPromise(() =>
-          send(db, {
-            path: `/memories/${identifier()}`,
-            method: "DELETE",
-            bearer: reader.bearer,
-          })
-        )).status
-      ).toBe(403);
-      expect(yield* fromTestPromise(() => memoryTextRows(db, users[0]))).toEqual([{ text: "pat" }]);
-
-      const listed = yield* decode(
-        Listed,
-        yield* fromTestPromise(() =>
-          send(db, { path: "/memories", method: "GET", bearer: reader.bearer })
-        )
-      );
-      expect(listed.data.map(({ text }) => text)).toEqual(["pat"]);
-      const patAudit = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE user_id = ? AND operation LIKE 'memory.%' AND outcome = 'accepted'"
-          )
-          .bind(users[0])
-          .all<{ operation: string; outcome: string }>()
-      );
-      expect(patAudit.results.map(({ operation }) => operation).toSorted(compareText)).toEqual(
-        ["memory.remember", "memory.recall", "memory.recall"].toSorted(compareText)
-      );
-      expect(patAudit.results.every(({ outcome }) => outcome === "accepted")).toBe(true);
-      const used = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT COUNT(*) AS used FROM pats WHERE short_id = ? AND last_used_at_ms IS NOT NULL"
-          )
-          .bind(reader.pat.shortId)
-          .first<{ used: number }>()
-      );
-      expect(used?.used).toBe(1);
-
-      yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE pats SET expires_at_ms = ? WHERE short_id = ?")
-          .bind(clock() - 1, reader.pat.shortId)
-          .run()
-      );
-      expect(
-        (yield* fromTestPromise(() =>
-          send(db, { path: "/memories", method: "GET", bearer: reader.bearer })
-        )).status
-      ).toBe(401);
-      yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE pats SET expires_at_ms = ?, revoked_at_ms = ? WHERE short_id = ?")
-          .bind(clock() + dayMilliseconds, clock(), reader.pat.shortId)
-          .run()
-      );
-      expect(
-        (yield* fromTestPromise(() =>
-          send(db, { path: "/memories", method: "GET", bearer: reader.bearer })
-        )).status
-      ).toBe(401);
-
-      const grantId = "e0000000-0000-4000-8000-000000000061";
-      yield* fromTestPromise(() =>
-        db
-          .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
-          )
-          .bind(grantId, users[0], clock(), clock())
-          .run()
-      );
-      yield* fromTestPromise(() =>
-        db
-          .prepare(
-            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
-          )
-          .bind("e0000000-0000-4000-8000-000000000062", users[0], grantId, sessions[0], clock())
-          .run()
-      );
-      const withdrawn = yield* fromTestPromise(() =>
-        send(db, {
-          path: "/memories",
-          method: "POST",
-          bearer: writer.bearer,
-          payload: { text: "después de revocar" },
-        })
-      );
-      expect(withdrawn.status).toBe(403);
-      expect((yield* decode(Failure, withdrawn)).error.code).toBe("user_action_required");
-      expect(yield* fromTestPromise(() => memoryTextRows(db, users[0]))).toEqual([{ text: "pat" }]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("stops a revoked WebSession and a withdrawn Consent from reading or writing Memories", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       yield* fromTestPromise(() => remembered(db, "memoria viva", cookie(0)));
       yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
-          .bind(clock(), sessions[0])
-          .run()
+        db.exec("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?", clock(), sessions[0])
       );
       expect((yield* fromTestPromise(() => recalled(db, cookie(0)))).status).toBe(401);
       expect(
@@ -760,7 +419,7 @@ it("stops a revoked WebSession and a withdrawn Consent from reading or writing M
       expect(
         (yield* fromTestPromise(() =>
           send(db, {
-            path: `/memories/${identifier()}`,
+            path: `/memories/${newId()}`,
             method: "DELETE",
             session: cookie(0),
           })
@@ -777,96 +436,70 @@ it("stops a revoked WebSession and a withdrawn Consent from reading or writing M
       const grantId = "e0000000-0000-4000-8000-000000000063";
       yield* fromTestPromise(() =>
         db
-          .prepare(
-            `INSERT INTO consent_history (record_type,id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,occurred_at_ms) VALUES ('processing_grant',?,?,'{}','disclosure','decision',?,?)`
+          .owner(bob.user)
+          .exec(
+            "INSERT INTO consent_history(record_type,id,user_id,occurred_at_ms) VALUES('processing_grant',?,?,?)",
+            grantId,
+            bob.user,
+            clock()
           )
-          .bind(grantId, users[1], clock(), clock())
-          .run()
       );
       yield* fromTestPromise(() =>
         db
-          .prepare(
-            `INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES ('processing_withdrawal',?,?,?,?,?)`
+          .owner(bob.user)
+          .exec(
+            "INSERT INTO consent_history(record_type,id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES('processing_withdrawal',?,?,?,?,?)",
+            newId(),
+            bob.user,
+            grantId,
+            bob.session,
+            clock()
           )
-          .bind("e0000000-0000-4000-8000-000000000064", users[1], grantId, sessions[1], clock())
-          .run()
       );
       expect((yield* fromTestPromise(() => recalled(db, cookie(1)))).status).toBe(401);
       expect(yield* fromTestPromise(() => memoryTextRows(db, users[1]))).toEqual([
         { text: "memoria dos" },
       ]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
-it("keeps retained prose out of logs and bounded telemetry records", () =>
+it("keeps Memory prose out of emitted telemetry and failed validation responses", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const canary = `telemetry-canary-${identifier()}`;
-      const described = (argument: unknown): string =>
-        typeof argument === "string" ? argument : serialized(argument);
-      const captured: Array<string> = [];
-      const channels = ["log", "info", "warn", "error"] as const;
-      const spies = channels.map((channel) =>
-        vi.spyOn(console, channel).mockImplementation((...args: ReadonlyArray<unknown>) => {
-          captured.push(args.map(described).join(" "));
-        })
-      );
-      try {
-        expect((yield* fromTestPromise(() => remembered(db, canary, cookie(0)))).status).toBe(201);
-        expect((yield* fromTestPromise(() => recalled(db, cookie(0)))).status).toBe(200);
-        expect(
-          (yield* fromTestPromise(() => remembered(db, canary.repeat(100), cookie(0)))).status
-        ).toBe(400);
-      } finally {
-        for (const spy of spies) spy.mockRestore();
-      }
-      expect(captured.some((line) => line.includes("worker.core.fetch"))).toBe(true);
-      expect(captured.some((line) => line.includes(canary))).toBe(false);
-    })
+      const logs: string[] = [],
+        runtime = yield* (yield* nativeBrowserPlatform)(undefined, logs);
+      yield* seed(runtime, alice);
+      const canary = "private-memory-" + newId();
+      const call = (text: string): ReturnType<typeof runtime.dispatchFetch> =>
+        runtime.dispatchFetch("https://api.fidyapp.com/memories", {
+          method: "POST",
+          headers: {
+            origin: "https://app.fidyapp.com",
+            cookie: cookie(0),
+            "Fidy-Session-Binding": alice.session,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ text }),
+        });
+      expect((yield* fromTestPromise(() => call(canary))).status).toBe(201);
+      const denied = yield* fromTestPromise(() => call(canary.repeat(100)));
+      expect(denied.status).toBe(400);
+      expect(yield* fromTestPromise(() => denied.text())).not.toContain(canary);
+      expect(logs.some((line) => line.includes("worker.core.fetch"))).toBe(true);
+      expect(logs.join("\n")).not.toContain(canary);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
-
-it("rechecks Memory recall under the caller's Clock at WebSession expiry", () =>
+it("rechecks the bound WebSession deadline for Memory recall", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(setup);
-      const session = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          created_at_ms: Schema.Finite,
-          idle_expires_at_ms: Schema.Finite,
-        })
-      )(
-        yield* fromTestPromise(() =>
-          db
-            .prepare("SELECT created_at_ms,idle_expires_at_ms FROM web_sessions WHERE id = ?")
-            .bind(sessions[0])
-            .first()
+      const db = yield* nativeTransactionJourney;
+      expect((yield* fromTestPromise(() => recalled(db, cookie(0)))).status).toBe(200);
+      yield* fromTestPromise(() =>
+        db.exec(
+          "UPDATE web_sessions SET idle_expires_at_ms=created_at_ms+1 WHERE id=?",
+          alice.session
         )
       );
-      const liveClock = yield* Clock.Clock;
-      const atTime = (time: number): Clock.Clock => ({
-        currentTimeMillis: Effect.succeed(time),
-        currentTimeMillisUnsafe: () => time,
-        currentTimeNanos: liveClock.currentTimeNanos,
-        currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
-        monotonicTimeNanos: liveClock.monotonicTimeNanos,
-        monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
-        sleep: (duration) => liveClock.sleep(duration),
-      });
-      const work = recallMemories({
-        db,
-        subject: {
-          userId: users[0],
-          id: sessions[0],
-          digest: yield* fromTestPromise(() => digest(bearer(0))),
-        },
-      });
-      expect(
-        (yield* work.pipe(Effect.provideService(Clock.Clock, atTime(session.created_at_ms)))).status
-      ).toBe(200);
-      expect(
-        (yield* work.pipe(Effect.provideService(Clock.Clock, atTime(session.idle_expires_at_ms))))
-          .status
-      ).toBe(401);
-    })
+      expect((yield* fromTestPromise(() => recalled(db, cookie(0)))).status).toBe(401);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));

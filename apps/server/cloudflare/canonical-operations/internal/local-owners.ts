@@ -1,3 +1,5 @@
+import { prepareLocalInsight, prepareLocalReminder } from "../../insights/operations";
+import { prepareLocalMemory } from "../../memory/operations";
 import { prepareLocalConnection } from "../../connections/operations";
 import { userOwnedAgentCapability } from "../../../src/shell/canonical-policy/contract";
 import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/contract";
@@ -22,6 +24,7 @@ import { prepareLocalRecurringEdit } from "../../recurring-plans/operations";
 import { prepareLocalDashboard } from "../../dashboard/operations";
 import { newKeywordRuleId, prepareLocalKeywordRule } from "../../categories/operations";
 import {
+  localHostedStatementOrigin,
   prepareLocalForwardingEnable,
   prepareLocalReviewEdit,
   prepareLocalStatementAbandonment,
@@ -36,7 +39,9 @@ import {
 import { prepareLocalWrite } from "../../canonical-admission/operations";
 
 const firstFailureStatus = 400;
-type Context = { user: UserId; current: number; storage: DurableObjectStorage };
+type Context = { user: UserId; current: number; storage: DurableObjectStorage } & Partial<{
+  hostedTurn: string;
+}>;
 type Prepare = (
   input: unknown,
   context: Context
@@ -72,27 +77,64 @@ const groupReview = Effect.fn(function* (plans: ReadonlyArray<LocalMutationPlan>
     ),
   };
 });
+const decisionOwner = Effect.fn(function* (target: string, context: Context) {
+  const origin =
+    context.hostedTurn === undefined
+      ? Option.none()
+      : yield* localHostedStatementOrigin(context.hostedTurn, target, context.user);
+  return { ...context, origin, requiresOrigin: context.hostedTurn !== undefined };
+});
 /** Only local, transaction-composable commands. Catalog policy controls eligibility and disclosure. */
 export const localBatchOwners = new Map<string, Prepare>([
+  owner("insights.markInsightDelivered", ({ params, payload }, { user }) =>
+    prepareLocalInsight({ id: params.id, target: "delivered", evidence: payload }, user)
+  ),
+  owner("insights.markInsightRead", ({ params }, { user }) =>
+    prepareLocalInsight({ id: params.id, target: "read" }, user)
+  ),
+  owner("insights.dismissInsight", ({ params }, { user }) =>
+    prepareLocalInsight({ id: params.id, target: "dismissed" }, user)
+  ),
+  owner("insights.updateReminderSchedule", ({ payload }, { user, current, storage }) =>
+    prepareLocalReminder(payload, { user, current, storage })
+  ),
+  owner("memory.remember", ({ payload }, { user, current }) =>
+    prepareLocalMemory({ kind: "remember", text: payload.text }, user, current)
+  ),
+  owner("memory.revise", ({ payload, params }, { user, current }) =>
+    prepareLocalMemory({ kind: "revise", id: params.id, text: payload.text }, user, current)
+  ),
+  owner("memory.forget", ({ params }, { user, current }) =>
+    prepareLocalMemory({ kind: "forget", id: params.id }, user, current)
+  ),
   owner("ingestion.enableEmailForwarding", (_input, { user }) =>
     prepareLocalForwardingEnable(user)
   ),
-  owner("ingestion.skipNeedsReviewItem", ({ params }, { user, current }) =>
-    prepareLocalStatementDecision(params.id, Option.none(), {
-      user,
-      current,
-      origin: Option.none(),
+  owner("ingestion.skipNeedsReviewItem", ({ params }, context) =>
+    Effect.gen(function* () {
+      return yield* prepareLocalStatementDecision(
+        params.id,
+        Option.none(),
+        yield* decisionOwner(params.id, context)
+      );
     })
   ),
-  owner("ingestion.resolveNeedsReviewItem", ({ params, payload }, { user, current }) =>
-    prepareLocalStatementDecision(params.id, Option.some(payload.extraction), {
-      user,
-      current,
-      origin: Option.none(),
+  owner("ingestion.resolveNeedsReviewItem", ({ params, payload }, context) =>
+    Effect.gen(function* () {
+      return yield* prepareLocalStatementDecision(
+        params.id,
+        Option.some(payload.extraction),
+        yield* decisionOwner(params.id, context)
+      );
     })
   ),
-  owner("ingestion.abandonStatementSubmission", ({ params }, { user, current }) =>
-    prepareLocalStatementAbandonment(params.id, { user, current, origin: Option.none() })
+  owner("ingestion.abandonStatementSubmission", ({ params }, context) =>
+    Effect.gen(function* () {
+      return yield* prepareLocalStatementAbandonment(
+        params.id,
+        yield* decisionOwner(params.id, context)
+      );
+    })
   ),
   owner("ingestion.applyReviewEdit", ({ payload }, { user, current }) =>
     prepareLocalReviewEdit(payload, user, current)

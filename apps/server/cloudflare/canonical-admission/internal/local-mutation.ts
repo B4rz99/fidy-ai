@@ -181,6 +181,12 @@ const oneStored = (
   rows.length === 1
     ? Effect.void
     : Effect.fail(new CanonicalAdmissionUnavailable({ cause: "incomplete_local_mutation" }));
+const sessionOutcome = (
+  outcome: LocalMutationResult["outcome"]
+): { kind: string; reason: Option.Option<string> } =>
+  outcome === "resource_limit"
+    ? { kind: "validation_failed", reason: Option.some(outcome) }
+    : { kind: outcome, reason: Option.none() };
 export const audit = Effect.fn(function* (
   { subject, operation, current }: Call,
   outcome: LocalMutationResult["outcome"]
@@ -219,9 +225,10 @@ export const audit = Effect.fn(function* (
       }
     }
   } else {
+    const recorded = sessionOutcome(outcome);
     yield* oneStored(
-      yield* sql`INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms)
-      VALUES('session_call',${newId()},${userId},${subject.sessionId},${operation.id},${outcome},${current}) RETURNING id`
+      yield* sql`INSERT INTO audit_entries(record_type,id,user_id,session_id,operation,outcome,occurred_at_ms,refusal_reason)
+      VALUES('session_call',${newId()},${userId},${subject.sessionId},${operation.id},${recorded.kind},${current},${Option.getOrNull(recorded.reason)}) RETURNING id`
     );
   }
 });
@@ -285,8 +292,8 @@ export const replay = Effect.fn(function* (call: Call, invocation: Invocation) {
   const sql = yield* SqliteClient;
   const { operation, current, subject } = call;
   const [stored] =
-    yield* sql`SELECT operation,input_digest,status,body FROM canonical_request_receipts
-    WHERE user_id=${subject.userId} AND retry_key_digest=${invocation.digest.value} AND accepted_at_ms>${current - canonicalRetryLifetimeMs}`;
+    yield* sql`SELECT r.operation,r.input_digest,r.status,coalesce(a.body,r.body) AS body FROM canonical_request_receipts r LEFT JOIN agent_operation_receipt_bodies a ON a.user_id=r.user_id AND a.retry_key_digest=r.retry_key_digest
+    WHERE r.user_id=${subject.userId} AND r.retry_key_digest=${invocation.digest.value} AND r.accepted_at_ms>${current - canonicalRetryLifetimeMs}`;
   if (stored === undefined) return Option.none<Response>();
   const receipt = yield* Schema.decodeUnknownEffect(Receipt)(stored);
   if (receipt.operation !== operation.id || receipt.input_digest !== invocation.inputHash) {
@@ -338,6 +345,9 @@ export const charge = Effect.fn(function* (call: Call) {
   return Option.none<Response>();
 });
 const financialGrowth = new Set<string>([
+  "memory.remember",
+  "memory.revise",
+  "insights.updateReminderSchedule",
   "connections.connectInstitution",
   "categories.createKeywordRule",
   "categories.updateKeywordRule",
@@ -359,12 +369,18 @@ export const requiresGrowthAdmission = (operation: string): boolean =>
   operation === "pats.approvePATPairing";
 export const replayableOperations = new Set<string>([
   ...financialGrowth,
+  "memory.forget",
+  "insights.dismissInsight",
+  "insights.markInsightRead",
+  "insights.markInsightDelivered",
   "categories.deleteKeywordRule",
   "budgets.deleteBudget",
   "subscription.cancelSubscription",
   "transactions.unlinkTransactions",
   "transactions.deleteTransaction",
 ]);
+const usesAgentReceiptBody = (operation: string): boolean =>
+  operation.startsWith("memory.") || operation.startsWith("insights.");
 const highSurrogateStart = 0xd800;
 const highSurrogateEnd = 0xdbff;
 const writeReceiptParts = Effect.fn(function* (body: string, user: UserId, digest: string) {
@@ -379,6 +395,18 @@ const writeReceiptParts = Effect.fn(function* (body: string, user: UserId, diges
     start = end;
   }
 });
+const receiptStorage = (
+  operation: string,
+  retain: boolean,
+  body: string
+): { parent: Option.Option<string>; agent: boolean; parts: boolean } => {
+  if (!retain) return { parent: Option.none(), agent: false, parts: false };
+  if (usesAgentReceiptBody(operation)) return { parent: Option.none(), agent: true, parts: false };
+  if (chunkedReceipt(operation) && body.length > receiptPartCharacters) {
+    return { parent: Option.some(String(body.length)), agent: false, parts: true };
+  }
+  return { parent: Option.some(body), agent: false, parts: false };
+};
 export const complete = Effect.fn(function* (
   call: Call,
   invocation: Invocation,
@@ -393,14 +421,18 @@ export const complete = Effect.fn(function* (
     const sql = yield* SqliteClient;
     yield* preserveStoreAlarm(call.storage, current + canonicalRetryLifetimeMs);
     yield* sql`DELETE FROM canonical_request_receipts WHERE user_id=${subject.userId} AND retry_key_digest=${invocation.digest.value} AND accepted_at_ms<=${current - canonicalRetryLifetimeMs}`;
-    const large = retain && chunkedReceipt(operation.id) && body.length > receiptPartCharacters;
-    const value = large ? String(body.length) : body;
+    const storage = receiptStorage(operation.id, retain, body);
     // A positive allowlist keeps future one-time responses out of storage until explicitly reviewed.
     yield* oneStored(
       yield* sql`INSERT INTO canonical_request_receipts(user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body)
-      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${retain ? value : null}) RETURNING status`
+      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${Option.getOrNull(storage.parent)}) RETURNING status`
     );
-    if (large) yield* writeReceiptParts(body, subject.userId, invocation.digest.value);
+    if (storage.agent) {
+      yield* oneStored(
+        yield* sql`INSERT INTO agent_operation_receipt_bodies(user_id,retry_key_digest,body) VALUES(${subject.userId},${invocation.digest.value},${body}) RETURNING user_id`
+      );
+    }
+    if (storage.parts) yield* writeReceiptParts(body, subject.userId, invocation.digest.value);
   }
   return attachStanding({
     response: bodyResponse(outcome.status, body),

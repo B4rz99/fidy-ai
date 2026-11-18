@@ -243,6 +243,7 @@ const receiveIdentityOnlyQueue = ({
       receiveProactivityWork({
         messages: batch.messages,
         workflow: Option.fromUndefinedOr(environment.WEEKLY_DELIVERY_WORKFLOW),
+        ...(environment.USER_STORE === undefined ? {} : { users: environment.USER_STORE }),
         coordinator: environment.USER_TRANSACTION_COORDINATOR,
       }).pipe(Effect.mapError(deliveryFailure))
     );

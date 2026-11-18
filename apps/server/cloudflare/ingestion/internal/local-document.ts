@@ -42,6 +42,10 @@ const rowSchema = Schema.Struct({
   disposition: Schema.Int,
 });
 type Document = typeof NativeStatementDocument.Type;
+type Origin = (
+  doc: Document,
+  storage: DurableObjectStorage
+) => Effect.Effect<Option.Option<Response>, CanonicalAdmissionUnavailable, SqliteClient>;
 const live = Effect.fn(function* (doc: Document, current: number) {
   const sql = yield* SqliteClient;
   const query = protectConsentStatement({
@@ -86,18 +90,8 @@ const resumeDocument = Effect.fn(function* (
     yield* sql`SELECT id FROM statement_submissions WHERE id=${row.id} AND user_id=${doc.userId}`;
   return submission === undefined ? row : new Response(null, { status: 202 });
 });
-const reserve = Effect.fn(function* (
-  doc: Document,
-  current: number,
-  storage: DurableObjectStorage
-) {
+const availableCapacity = Effect.fn(function* (doc: Document, current: number) {
   const sql = yield* SqliteClient;
-  if (!(yield* live(doc, current))) return new Response(null, { status: 403 });
-  const [prior] =
-    yield* sql`SELECT * FROM statement_documents WHERE user_id=${doc.userId} AND portfolio=${doc.portfolio} AND message=${doc.message}`;
-  if (prior !== undefined) {
-    return yield* resumeDocument(yield* Schema.decodeUnknownEffect(rowSchema)(prior), doc, current);
-  }
   const pro = activeProUserCondition({ userId: doc.userId, nowEpochMs: current });
   const [admission] = yield* sql.unsafe(
     `SELECT ${pro.sql} AS pro,EXISTS(SELECT 1 FROM statement_backfill WHERE user_id=?) AS reserved,
@@ -113,13 +107,34 @@ const reserve = Effect.fn(function* (
       pending: Schema.Int,
     })
   )(admission);
-  if (budget.pro === 0 && budget.reserved === 1) return new Response(null, { status: 402 });
+  if (budget.pro === 0 && budget.reserved === 1) {
+    return { refused: new Response(null, { status: 402 }) };
+  }
   if (
     budget.recent >= maximumStatementSubmissionsPerHour ||
     budget.pending >= maximumOutstandingStatementSubmissions
   ) {
-    return new Response(null, { status: 429 });
+    return { refused: new Response(null, { status: 429 }) };
   }
+  return budget;
+});
+const reserve = Effect.fn(function* (
+  doc: Document,
+  current: number,
+  { storage, origin }: { storage: DurableObjectStorage; origin: Option.Option<Origin> }
+) {
+  const sql = yield* SqliteClient;
+  if (!(yield* live(doc, current))) return new Response(null, { status: 403 });
+  const [prior] =
+    yield* sql`SELECT * FROM statement_documents WHERE user_id=${doc.userId} AND portfolio=${doc.portfolio} AND message=${doc.message}`;
+  if (prior !== undefined) {
+    return yield* resumeDocument(yield* Schema.decodeUnknownEffect(rowSchema)(prior), doc, current);
+  }
+  const budget = yield* availableCapacity(doc, current);
+  if ("refused" in budget) return budget.refused;
+  if (Option.isNone(origin)) return new Response(null, { status: conflict });
+  const refused = yield* origin.value(doc, storage);
+  if (Option.isSome(refused)) return refused.value;
   const id = newId(),
     expires = doc.occurredAt + statementStagingLifetimeMilliseconds,
     key = userPrivateObjectPrefix(UserId.make(doc.userId)) + "staging/statement/v1/" + newId();
@@ -225,10 +240,10 @@ const discardUnpublished = Effect.fn(function* (
 const publishDocument = Effect.fn(function* (
   doc: Document,
   storage: DurableObjectStorage,
-  env: LocalIngestionEnvironment
+  { env, origin }: { env: LocalIngestionEnvironment; origin: Option.Option<Origin> }
 ) {
   const current = yield* Clock.currentTimeMillis;
-  const row = yield* withStoreCapacity("growth")(reserve(doc, current, storage));
+  const row = yield* withStoreCapacity("growth")(reserve(doc, current, { storage, origin }));
   if (row instanceof Response) return row;
   const material = yield* stageDocument(row, doc, { env, current });
   if (material instanceof Response) {
@@ -257,12 +272,12 @@ const publishDocument = Effect.fn(function* (
   );
 });
 export const admitLocalDocument = Effect.fn(
-  function* ({ request, env, owns, storage }: LocalIngestionRequest) {
+  function* ({ request, env, owns, storage }: LocalIngestionRequest, origin: Origin) {
     const doc = yield* Schema.decodeUnknownEffect(NativeStatementDocument)(
       yield* Effect.tryPromise(() => request.json())
     );
     if (!owns(doc.userId)) return new Response(null, { status: 404 });
-    return yield* publishDocument(doc, storage, env);
+    return yield* publishDocument(doc, storage, { env, origin: Option.some(origin) });
   },
   Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
 );
@@ -310,7 +325,9 @@ export const recoverDocumentStages = Effect.fn(function* (
   let failed = 0;
   for (const raw of rows) {
     const doc = yield* Schema.decodeUnknownEffect(NativeStatementDocument)(raw);
-    const publication = yield* Effect.option(publishDocument(doc, storage, env));
+    const publication = yield* Effect.option(
+      publishDocument(doc, storage, { env, origin: Option.none() })
+    );
     if (Option.isNone(publication) || publication.value.status >= serverErrorStatus) failed++;
     if (Option.isSome(publication) && publication.value.status === forbidden) {
       const id = yield* Schema.decodeUnknownEffect(Schema.String)(raw.id);

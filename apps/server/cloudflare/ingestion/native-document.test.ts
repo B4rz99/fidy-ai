@@ -1,3 +1,7 @@
+import { completeHostedClarification } from "./clarification.test-fixture";
+import { statementStagingLifetimeMilliseconds } from "../../src/core/ingestion/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
+import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, Schedule, Schema } from "effect";
@@ -9,7 +13,10 @@ import { batchCallId } from "./statement-batch.test-fixture";
 
 const storedText = Schema.decodeUnknownSync(Schema.String);
 const documentJourney = Effect.fn(function* (mediaId: string = "media_statement_123") {
-  const runtime = yield* (yield* nativeBillingPlatform)();
+  const runtime = yield* (yield* nativeBillingPlatform)(undefined, [], {
+    OPENAI_API_KEY: "fixture-openai",
+    HOSTED_AI_MODEL: "gpt-6-luna",
+  });
   const owner = yield* seed(runtime, alice, false);
   const bsuid = "CO.13491208655302741918",
     portfolio = "123456789012345";
@@ -21,9 +28,10 @@ const documentJourney = Effect.fn(function* (mediaId: string = "media_statement_
     alice.user
   );
   yield* owner.exec(
-    "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES('grant',?,'processing_grant',?)",
+    "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms,disclosure_json) VALUES('22460000-0000-4000-8000-000000000010',?,'processing_grant',?,?)",
     alice.user,
-    owner.now
+    owner.now,
+    yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(currentDisclosureFor())
   );
   yield* native(() =>
     owner.directory.exec(
@@ -60,14 +68,37 @@ const documentJourney = Effect.fn(function* (mediaId: string = "media_statement_
         body,
       })
     );
-  return { runtime, owner, deliver };
+  const holdUnboundStage = Effect.fnUntraced(function* () {
+    // A canonical submission has no Hosted Turn. Exercise its decisions with an independent
+    // durable pre-publication stage, then let the actual extractor build its Review rows.
+    const id = "22460000-0000-4000-8000-000000000017",
+      at = Math.floor(owner.now / 1000) * 1000;
+    yield* owner.exec(
+      "INSERT INTO statement_documents VALUES(?,?,?,?,?,?,?,?,?,?,?, ?,0,0)",
+      id,
+      alice.user,
+      portfolio,
+      bsuid,
+      "wamid.native.statement",
+      portfolio,
+      mediaId,
+      at,
+      owner.now,
+      at + statementStagingLifetimeMilliseconds,
+      "users/" + alice.user + "/staging/statement/v1/" + id,
+      owner.now
+    );
+    yield* owner.exec("INSERT INTO statement_backfill VALUES(?,?,NULL)", alice.user, id);
+  });
+  return { runtime, owner, deliver, holdUnboundStage };
 });
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
-    "publishes a verified WhatsApp attachment once and processes its private bytes through Queue and Workflow",
+    "resumes an unbound private statement stage and resolves its review through published entrypoints",
     () =>
       Effect.gen(function* () {
-        const { runtime, owner, deliver } = yield* documentJourney();
+        const { runtime, owner, deliver, holdUnboundStage } = yield* documentJourney();
+        yield* holdUnboundStage();
         expect((yield* deliver()).status).toBe(202);
         expect((yield* deliver()).status).toBe(202);
         const rows = yield* owner
@@ -220,7 +251,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => bucket.head(key))).not.toBeNull();
         yield* owner.exec("DROP TRIGGER stop_publication");
         yield* owner.exec(
-          "INSERT INTO consent_history(id,user_id,record_type,grant_record_id,session_id,occurred_at_ms) VALUES('withdraw',?,'processing_withdrawal','grant',?,?)",
+          "INSERT INTO consent_history(id,user_id,record_type,grant_record_id,session_id,occurred_at_ms) VALUES('withdraw',?,'processing_withdrawal','22460000-0000-4000-8000-000000000010',?,?)",
           alice.user,
           alice.session,
           owner.now
@@ -337,7 +368,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           original?.etag
         );
         yield* owner.exec(
-          "INSERT INTO consent_history(id,user_id,record_type,grant_record_id,session_id,occurred_at_ms) VALUES('withdraw',?,'processing_withdrawal','grant',?,?)",
+          "INSERT INTO consent_history(id,user_id,record_type,grant_record_id,session_id,occurred_at_ms) VALUES('withdraw',?,'processing_withdrawal','22460000-0000-4000-8000-000000000010',?,?)",
           alice.user,
           alice.session,
           owner.now
@@ -386,18 +417,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("ties statement decisions to the originating Hosted Agent Session and Turn", () =>
     Effect.gen(function* () {
       const { owner, runtime, deliver } = yield* documentJourney();
-      const occurred = Math.floor(owner.now / 1000) * 1000,
-        deadline = occurred + 60000;
-      yield* owner.exec(
-        "INSERT INTO statement_document_origins VALUES(?,?,?,?,?,?,?)",
-        alice.user,
-        "wamid.native.statement",
-        "session-1",
-        "turn-1",
-        occurred,
-        deadline,
-        occurred + 86400000
-      );
       expect((yield* deliver()).status).toBe(202);
       const [item] = yield* owner
         .exec(
@@ -411,10 +430,28 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           Effect.retry({ times: 100, schedule: Schedule.spaced("50 millis") })
         );
       if (item === undefined) return yield* Effect.die("Missing hosted row");
+      const [reply] = yield* owner
+        .exec("SELECT answer FROM hosted_turns WHERE answer IS NOT NULL")
+        .pipe(
+          Effect.filterOrFail(
+            (rows) => rows.length === 1,
+            () => "waiting for exact statement"
+          ),
+          Effect.retry({ times: 80, schedule: Schedule.spaced("50 millis") })
+        );
+      expect(reply?.answer).toContain("fila 1");
+      expect(yield* owner.exec("SELECT operation,outcome FROM hosted_tool_calls")).toEqual([
+        { operation: "ingestion.submitForExtraction", outcome: "Succeeded" },
+      ]);
+      const [origin] = yield* owner.exec(
+        "SELECT o.session_id,o.turn_id,o.expires_at_ms FROM statement_document_origins o JOIN hosted_turns t ON t.id=o.turn_id AND t.session_id=o.session_id AND t.user_id=o.user_id JOIN hosted_agent_sessions s ON s.id=t.session_id AND s.user_id=t.user_id WHERE o.message='wamid.native.statement' AND o.user_id=?",
+        alice.user
+      );
+      expect(origin).toBeDefined();
       expect(item).toMatchObject({
-        hosted_session_id: "session-1",
-        hosted_turn_id: "turn-1",
-        hosted_expires_at_ms: deadline,
+        hosted_session_id: origin?.session_id,
+        hosted_turn_id: origin?.turn_id,
+        hosted_expires_at_ms: origin?.expires_at_ms,
       });
       const invoke = (
         path: string,
@@ -450,13 +487,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           item.id
         )
       ).toEqual([{ workspace_revision: null }]);
+      yield* completeHostedClarification(runtime, owner, storedText(item.id));
     })
   );
   test.effect(
     "captures a clean line once and retains its consumed Free grant when the ambiguous line is skipped",
     () =>
       Effect.gen(function* () {
-        const { owner, runtime, deliver } = yield* documentJourney("media_statement_mixed");
+        const { owner, runtime, deliver, holdUnboundStage } =
+          yield* documentJourney("media_statement_mixed");
+        yield* holdUnboundStage();
         expect((yield* deliver()).status).toBe(202);
         const [record] = yield* owner
           .exec(
@@ -505,7 +545,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     "composes fresh statement review, skip, and resolution owners in the atomic batch",
     () =>
       Effect.gen(function* () {
-        const { runtime, owner, deliver } = yield* documentJourney();
+        const { runtime, owner, deliver, holdUnboundStage } = yield* documentJourney();
+        yield* holdUnboundStage();
         expect((yield* deliver()).status).toBe(202);
         const reviews = yield* owner
           .exec(

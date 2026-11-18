@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "033cfba689f36fd42e54b77a01a0fbb88c9ef1dfbe62df831eef39693ce9e600";
+const expectedEdgePolicyDigest = "ef5e024fa7ec4e4304b111b9be7714beab1f836785c7b3fbee22506c6b114fe9";
 const securityArtifacts = [
   await Bun.file(
     new URL(
@@ -986,6 +986,35 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/mcp/native-confirmation.ts", import.meta.url)
   ).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/mcp/runtime.ts", import.meta.url)).text(),
+  ...(await Promise.all(
+    [
+      "agent/internal/local-turn-store.ts",
+      "agent/internal/local-turn.ts",
+      "agent/internal/local-inference.ts",
+      "agent/internal/tool-reply.ts",
+      "ingestion/internal/local-statement-scope.ts",
+      "agent/internal/local-tool.ts",
+      "agent/internal/local-recovery.ts",
+      "agent/internal/local-compaction.ts",
+      "agent/internal/local-history.ts",
+      "agent/internal/local-challenge.ts",
+      "agent/internal/local-whatsapp.ts",
+      "agent/internal/local-channel-delivery.ts",
+      "agent/internal/local-channel-receipt.ts",
+      "agent/internal/local-document-reply.ts",
+      "insights/internal/local-reminder.ts",
+      "insights/internal/local-reminder-choice.ts",
+      "insights/internal/local-reminder-attention.ts",
+      "insights/internal/local-disclosure.ts",
+      "insights/internal/local-reminder-attention.ts",
+      "insights/internal/reminder-claim.ts",
+      "resource-admission/internal/provider-allowance.ts",
+      "whatsapp/internal/native-delivery.ts",
+      "user-store/internal/hosted-schema.ts",
+    ].map((relative) =>
+      Bun.file(new URL("../../apps/server/cloudflare/" + relative, import.meta.url)).text()
+    )
+  )),
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
   await Bun.file(new URL("alchemy.storage.ts", import.meta.url)).text(),

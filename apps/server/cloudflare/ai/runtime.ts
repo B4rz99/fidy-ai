@@ -87,6 +87,50 @@ const constructInference = (
   });
 };
 
+/** Build the same bounded production adapter with an owning User's short, per-attempt egress claim. */
+export const makeLocalHostedInference = ({
+  environment,
+  admit,
+}: {
+  environment: OpenAiEnvironment;
+  admit: (units: number) => Effect.Effect<boolean, HostedInferenceError>;
+}): Effect.Effect<HostedInferenceService, HostedInferenceError> => {
+  const key = Schema.decodeOption(ApiKey)(environment.OPENAI_API_KEY);
+  return makeOpenAiHostedInference({
+    model: Option.fromNullishOr(environment.HOSTED_AI_MODEL),
+    run: Option.map(key, (apiKey) => {
+      const run = makeOpenAiRun(Redacted.make(apiKey));
+      return (model, request) =>
+        Effect.gen(function* () {
+          const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+            request
+          ).pipe(
+            Effect.mapError(
+              () =>
+                new HostedInferenceError({
+                  reason: { _tag: "InvalidAuthority" },
+                  retryable: false,
+                  retryAfter: Option.none(),
+                })
+            )
+          );
+          if (
+            !(yield* admit(
+              new TextEncoder().encode(encoded).length + request.max_completion_tokens
+            ))
+          ) {
+            return yield* new HostedInferenceError({
+              reason: { _tag: "ResourceLimit" },
+              retryable: false,
+              retryAfter: Option.none(),
+            });
+          }
+          return yield* run(model, request);
+        });
+    }),
+  });
+};
+
 /** Unmetered inference exists only for private provider verification fixtures. */
 export const makeCloudflareHostedInference = (
   environment: OpenAiEnvironment

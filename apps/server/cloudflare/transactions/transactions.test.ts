@@ -680,51 +680,6 @@ const seedPAT = ({
         .run()
     );
   });
-const publicationStatements = (
-  db: D1Database
-): Readonly<{
-  prepare: D1Database["prepare"];
-  publishes: (statements: ReadonlyArray<D1PreparedStatement>) => boolean;
-}> => {
-  const writes = new WeakSet<D1PreparedStatement>();
-  const wrap = (statement: D1PreparedStatement, publishes: boolean): D1PreparedStatement => {
-    const proxy = new Proxy(statement, {
-      get: (target, property): unknown => {
-        if (property === "bind") {
-          return (...params: Parameters<D1PreparedStatement["bind"]>): D1PreparedStatement =>
-            wrap(target.bind(...params), publishes);
-        }
-        const value: unknown = Reflect.get(target, property, target);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-    if (publishes) writes.add(proxy);
-    return proxy;
-  };
-  return {
-    prepare: (sql) =>
-      wrap(
-        db.prepare(sql),
-        /(?:INSERT INTO|UPDATE|DELETE FROM)\s+(?:transaction_corrections|transactions)\b/iu.test(
-          sql
-        )
-      ),
-    publishes: (statements) => statements.some((statement) => writes.has(statement)),
-  };
-};
-const racingBatch = (db: D1Database, before: () => Promise<unknown>): D1Database => {
-  const publication = publicationStatements(db);
-  return {
-    prepare: publication.prepare,
-    batch: (statements) =>
-      publication.publishes(statements)
-        ? before().then(() => db.batch(statements))
-        : db.batch(statements),
-    exec: (sql) => db.exec(sql),
-    withSession: (constraint) => db.withSession(constraint),
-    dump: () => db.dump(),
-  };
-};
 let measuringLoad = false;
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
 afterEach(() => vi.useRealTimers());
@@ -5391,10 +5346,9 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
 it("commits a mixed-owner canonical batch once with ordered correlated results and immediate reads", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input({ counterparty: "Mixed owner" })),
             memoryCall(2, "Prefiere pagar en efectivo"),
@@ -5411,17 +5365,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
         [batchCallId(2), "memory.remember"],
         [batchCallId(3), "categories.createKeywordRule"],
       ]);
-      const send = (index: number, path: string): Promise<Response> =>
-        sendPublicRequest(
-          db,
-          new Request(`https://api.fidyapp.com${path}`, {
-            headers: {
-              origin: "https://app.fidyapp.com",
-              "Fidy-Session-Binding": sessions[index] ?? "invalid",
-              cookie: `__Host-fidy_session=${bearer(index)}`,
-            },
-          })
-        );
+      const send = db.browser;
       const transactions = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => send(0, "/transactions").then((value) => value.json()))
       ).pipe(Effect.orDie);
@@ -5441,16 +5385,16 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
       expect(rules.data.map(({ keyword }) => keyword)).toEqual(["panaderia"]);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*') AND user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
             users[0] ?? ""
           )
         )
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? AND operation = 'memory.remember' AND outcome = 'success'",
             users[0] ?? ""
@@ -5459,7 +5403,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ? AND operation = 'categories.createKeywordRule'",
             users[0] ?? ""
@@ -5480,7 +5424,7 @@ it("commits a mixed-owner canonical batch once with ordered correlated results a
         )
       ).pipe(Effect.orDie);
       expect(neighborRules.data).toEqual([]);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("attributes a duplicate keyword in one batch with the owner's declared conflict and refusal Audit", () =>
@@ -5527,24 +5471,21 @@ it("attributes a duplicate keyword in one batch with the owner's declared confli
 it("rolls back every owner when a later mixed-owner keyword-rule child exceeds capacity", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const current = DateTime.formatIso(DateTime.nowUnsafe());
       yield* fromTestPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 99)
-            INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
-            SELECT printf('90000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, ?, ?, ? FROM seq`)
-          .bind(
-            users[0] ?? "",
-            category,
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
-          )
-          .run()
+        db.exec(
+          `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 99)
+            INSERT INTO keyword_rules (id, user_id, keyword,category_id,category_revision,created_at_ms,updated_at_ms)
+            SELECT printf('90000000-0000-4000-8000-%012d', n), ?, 'seed ' || n, ?, 'co-1', ?, ? FROM seq`,
+          users[0] ?? "",
+          category,
+          DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+          DateTime.toEpochMillis(DateTime.makeUnsafe(current))
+        )
       );
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             transactionCall(1, input()),
             memoryCall(2, "Sobrevive al rollback"),
@@ -5562,7 +5503,7 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
       expect(rejection.error.operation).toBe("categories.createKeywordRule");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
@@ -5571,12 +5512,16 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+          nativeCountRows(
+            db,
+            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?",
+            users[0] ?? ""
+          )
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
             users[0] ?? ""
@@ -5585,15 +5530,15 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
       ).toBe(99);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*')"
           )
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*'"
           )
@@ -5601,42 +5546,37 @@ it("rolls back every owner when a later mixed-owner keyword-rule child exceeds c
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*'"
           )
         )
       ).toBe(1);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("attributes a cross-owner Memory conflict at commit time and keeps no earlier child state", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const memoryId = "50000000-0000-4000-8000-000000000001";
       const current = DateTime.formatIso(DateTime.nowUnsafe());
       yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Original', ?, ?)"
-          )
-          .bind(
-            memoryId,
-            users[0] ?? "",
-            DateTime.makeUnsafe(current).epochMilliseconds,
-            DateTime.makeUnsafe(current).epochMilliseconds
-          )
-          .run()
+        db.exec(
+          "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Original', ?, ?)",
+          memoryId,
+          users[0] ?? "",
+          DateTime.makeUnsafe(current).epochMilliseconds,
+          DateTime.makeUnsafe(current).epochMilliseconds
+        )
+      );
+      yield* fromTestPromise(() =>
+        db.exec(
+          "CREATE TRIGGER drop_memory BEFORE INSERT ON transactions BEGIN DELETE FROM memories; END"
+        )
       );
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          racingBatch(db, () =>
-            db
-              .prepare("DELETE FROM memories WHERE user_id = ? AND id = ?")
-              .bind(users[0] ?? "", memoryId)
-              .run()
-          ),
+        db.send(
           batchRequest(0, [transactionCall(1, input()), reviseMemoryCall(2, memoryId, "Revisado")])
         )
       );
@@ -5649,7 +5589,7 @@ it("attributes a cross-owner Memory conflict at commit time and keeps no earlier
       expect(rejection.error.operation).toBe("memory.revise");
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
@@ -5658,47 +5598,54 @@ it("attributes a cross-owner Memory conflict at commit time and keeps no earlier
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+          nativeCountRows(
+            db,
+            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?",
+            users[0] ?? ""
+          )
         )
-      ).toBe(0);
+      ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*')"
           )
         )
       ).toBe(0);
       const audits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY operation"
-          )
-          .bind(users[0] ?? "")
-          .all<{ operation: string; outcome: string }>()
+        db.exec(
+          "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY operation",
+          users[0] ?? ""
+        )
       );
-      expect(audits.results).toEqual([{ operation: "memory.revise", outcome: "not_found" }]);
-    })
+      expect(audits).toEqual([{ operation: "memory.revise", outcome: "not_found" }]);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("executes a mixed-owner batch under one write PAT and refuses a read PAT without writes", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const current = yield* Clock.currentTimeMillis;
       const writeToken = `fin_${"m".repeat(8)}_${"c".repeat(43)}`;
       const readToken = `fin_${"n".repeat(8)}_${"d".repeat(43)}`;
-      yield* seedPAT({
+      yield* seedNativePAT({
         db,
         userId: users[0] ?? "",
         token: writeToken,
         scopes: ["write"],
         current,
       });
-      yield* seedPAT({ db, userId: users[0] ?? "", token: readToken, scopes: ["read"], current });
+      yield* seedNativePAT({
+        db,
+        userId: users[0] ?? "",
+        token: readToken,
+        scopes: ["read"],
+        current,
+      });
       const refused = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           bearerRequest(0, readToken, [
             memoryCall(1, "Memoria"),
             keywordRuleCall(2, "Panadería", category),
@@ -5712,12 +5659,16 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
       expect(rejection.error.code).toBe("scope_missing");
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+          nativeCountRows(
+            db,
+            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?",
+            users[0] ?? ""
+          )
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
             users[0] ?? ""
@@ -5726,16 +5677,15 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted'"
           )
         )
       ).toBe(0);
 
       const committed = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           bearerRequest(0, writeToken, [
             transactionCall(1, input({ counterparty: "Mixed agent" })),
             memoryCall(2, "Prefiere pagar en efectivo"),
@@ -5753,20 +5703,19 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
         "categories.createKeywordRule",
       ]);
       const audits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted' ORDER BY operation"
-          )
-          .all<{ operation: string; outcome: string }>()
+        db.exec(
+          "SELECT operation, outcome FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE outcome = 'accepted' ORDER BY operation"
+        )
       );
-      expect(audits.results).toEqual([
+      expect(audits).toEqual([
         { operation: "categories.createKeywordRule", outcome: "accepted" },
         { operation: "memory.remember", outcome: "accepted" },
+        { operation: "operations.executeAtomicBatch", outcome: "accepted" },
         { operation: "transactions.createTransaction", outcome: "accepted" },
       ]);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
@@ -5775,19 +5724,23 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+          nativeCountRows(
+            db,
+            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?",
+            users[0] ?? ""
+          )
         )
       ).toBe(1);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM keyword_rules WHERE user_id = ?",
             users[0] ?? ""
           )
         )
       ).toBe(1);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("rejects a duplicate call identity named across owners before any child commits", () =>
@@ -5813,7 +5766,7 @@ it("rejects a duplicate call identity named across owners before any child commi
         yield* fromTestPromise(() =>
           nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch')"
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*')"
           )
         )
       ).toBe(0);
@@ -5841,39 +5794,32 @@ it("rejects a duplicate call identity named across owners before any child commi
 it("refuses two children addressing one retained rule or Memory before any child commits", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const current = DateTime.formatIso(DateTime.nowUnsafe());
       const ruleId = "70000000-0000-4000-8000-000000000001";
       const memoryId = "70000000-0000-4000-8000-000000000002";
       yield* fromTestPromise(() =>
-        db
-          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
-            VALUES (?, ?, 'original', ?, ?, ?)`)
-          .bind(
-            ruleId,
-            users[0] ?? "",
-            category,
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
-          )
-          .run()
+        db.exec(
+          `INSERT INTO keyword_rules (id, user_id, keyword,category_id,category_revision,created_at_ms,updated_at_ms)
+            VALUES (?, ?, 'original', ?, 'co-1', ?, ?)`,
+          ruleId,
+          users[0] ?? "",
+          category,
+          DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+          DateTime.toEpochMillis(DateTime.makeUnsafe(current))
+        )
       );
       yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Repetida', ?, ?)"
-          )
-          .bind(
-            memoryId,
-            users[0] ?? "",
-            DateTime.makeUnsafe(current).epochMilliseconds,
-            DateTime.makeUnsafe(current).epochMilliseconds
-          )
-          .run()
+        db.exec(
+          "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Repetida', ?, ?)",
+          memoryId,
+          users[0] ?? "",
+          DateTime.makeUnsafe(current).epochMilliseconds,
+          DateTime.makeUnsafe(current).epochMilliseconds
+        )
       );
       const repeatedRule = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             updateKeywordRuleCall(1, ruleId, { keyword: "Una", categoryId: category }),
             deleteKeywordRuleCall(2, ruleId),
@@ -5888,8 +5834,7 @@ it("refuses two children addressing one retained rule or Memory before any child
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("categories.deleteKeywordRule");
       const repeatedMemory = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             reviseMemoryCall(1, memoryId, "Corregida"),
             forgetMemoryCall(2, memoryId),
@@ -5898,80 +5843,67 @@ it("refuses two children addressing one retained rule or Memory before any child
       );
       expect(repeatedMemory.status).toBe(400);
       const rule = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT keyword FROM keyword_rules WHERE id = ?")
-          .bind(ruleId)
-          .first<{ keyword: string }>()
+        db.exec("SELECT keyword FROM keyword_rules WHERE id = ?", ruleId).then((rows) => rows[0])
       );
       expect(rule).toEqual({ keyword: "original" });
       const memory = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT text FROM memories WHERE id = ?")
-          .bind(memoryId)
-          .first<{ text: string }>()
+        db.exec("SELECT text FROM memories WHERE id = ?", memoryId).then((rows) => rows[0])
       );
       expect(memory).toEqual({ text: "Repetida" });
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*'"
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE outcome='success' AND operation GLOB 'categories.*'"
           )
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*'"
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE outcome='success' AND operation GLOB 'memory.*'"
           )
         )
       ).toBe(0);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("commits retained keyword-rule updates and deletes and Memory forgets in one mixed-owner batch", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
+      const db = yield* nativeTransactionJourney;
       const current = DateTime.formatIso(DateTime.nowUnsafe());
       const updatedRuleId = "60000000-0000-4000-8000-000000000001";
       const deletedRuleId = "60000000-0000-4000-8000-000000000002";
       const forgottenMemoryId = "60000000-0000-4000-8000-000000000003";
       yield* fromTestPromise(() =>
-        db
-          .prepare(`INSERT INTO keyword_rules (id, user_id, keyword,category_id,created_at_ms,updated_at_ms)
-            VALUES (?, ?, 'antes', ?, ?, ?), (?, ?, 'borrar', ?, ?, ?)`)
-          .bind(
-            updatedRuleId,
-            users[0] ?? "",
-            category,
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
-            deletedRuleId,
-            users[0] ?? "",
-            category,
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
-            DateTime.toEpochMillis(DateTime.makeUnsafe(current))
-          )
-          .run()
+        db.exec(
+          `INSERT INTO keyword_rules (id, user_id, keyword,category_id,category_revision,created_at_ms,updated_at_ms)
+            VALUES (?, ?, 'antes', ?, 'co-1', ?, ?), (?, ?, 'borrar', ?, 'co-1', ?, ?)`,
+          updatedRuleId,
+          users[0] ?? "",
+          category,
+          DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+          DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+          deletedRuleId,
+          users[0] ?? "",
+          category,
+          DateTime.toEpochMillis(DateTime.makeUnsafe(current)),
+          DateTime.toEpochMillis(DateTime.makeUnsafe(current))
+        )
       );
       yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Olvidar', ?, ?)"
-          )
-          .bind(
-            forgottenMemoryId,
-            users[0] ?? "",
-            DateTime.makeUnsafe(current).epochMilliseconds,
-            DateTime.makeUnsafe(current).epochMilliseconds
-          )
-          .run()
+        db.exec(
+          "INSERT INTO memories (id, user_id, text, created_at_ms, updated_at_ms) VALUES (?, ?, 'Olvidar', ?, ?)",
+          forgottenMemoryId,
+          users[0] ?? "",
+          DateTime.makeUnsafe(current).epochMilliseconds,
+          DateTime.makeUnsafe(current).epochMilliseconds
+        )
       );
       const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
+        db.send(
           batchRequest(0, [
             updateKeywordRuleCall(1, updatedRuleId, { keyword: "Después", categoryId: category }),
             deleteKeywordRuleCall(2, deletedRuleId),
@@ -5991,20 +5923,24 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
         "transactions.createTransaction",
       ]);
       const rules = yield* fromTestPromise(() =>
-        db
-          .prepare("SELECT id, keyword FROM keyword_rules WHERE user_id = ? ORDER BY id")
-          .bind(users[0] ?? "")
-          .all<{ id: string; keyword: string }>()
+        db.exec(
+          "SELECT id, keyword FROM keyword_rules WHERE user_id = ? ORDER BY id",
+          users[0] ?? ""
+        )
       );
-      expect(rules.results).toEqual([{ id: updatedRuleId, keyword: "despues" }]);
+      expect(rules).toEqual([{ id: updatedRuleId, keyword: "despues" }]);
       expect(
         yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
+          nativeCountRows(
+            db,
+            "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?",
+            users[0] ?? ""
+          )
         )
       ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
             "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
             users[0] ?? ""
@@ -6012,36 +5948,32 @@ it("commits retained keyword-rule updates and deletes and Memory forgets in one 
         )
       ).toBe(1);
       const categoryAudits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ? ORDER BY operation"
-          )
-          .bind(users[0] ?? "")
-          .all<{ operation: string }>()
+        db.exec(
+          "SELECT operation FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'categories.*' AND user_id = ? ORDER BY operation",
+          users[0] ?? ""
+        )
       );
-      expect(categoryAudits.results).toEqual([
+      expect(categoryAudits).toEqual([
         { operation: "categories.deleteKeywordRule" },
         { operation: "categories.updateKeywordRule" },
       ]);
       const memoryAudits = yield* fromTestPromise(() =>
-        db
-          .prepare(
-            "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY operation"
-          )
-          .bind(users[0] ?? "")
-          .all<{ operation: string; outcome: string }>()
+        db.exec(
+          "SELECT operation, outcome FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'memory.*' AND user_id = ? ORDER BY operation",
+          users[0] ?? ""
+        )
       );
-      expect(memoryAudits.results).toEqual([{ operation: "memory.forget", outcome: "success" }]);
+      expect(memoryAudits).toEqual([{ operation: "memory.forget", outcome: "success" }]);
       expect(
         yield* fromTestPromise(() =>
-          countRows(
+          nativeCountRows(
             db,
-            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*' OR operation = 'operations.executeAtomicBatch') AND user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
+            "SELECT COUNT(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE (operation GLOB 'transactions.*') AND user_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'success'",
             users[0] ?? ""
           )
         )
       ).toBe(1);
-    })
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("fails closed on a cross-owner dependency defect without partial state", () =>

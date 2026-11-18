@@ -1,3 +1,4 @@
+import { hostedStatements } from "./local-statement-scope";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DateTime, Effect, Option, Schema } from "effect";
 import {
@@ -21,8 +22,16 @@ import {
 } from "./statement-review";
 import { missing, result } from "./local-review-snapshot";
 
-export const localSubmission = Effect.fn(function* (user: UserId, id: string) {
+export const localSubmission = Effect.fn(function* (
+  user: UserId,
+  id: string,
+  hosted: Option.Option<{ turn: string; current: number }> = Option.none()
+) {
   const sql = yield* SqliteClient;
+  if (Option.isSome(hosted)) {
+    const scope = yield* hostedStatements(hosted.value.turn, user, hosted.value.current);
+    if ((yield* sql`SELECT 1 WHERE ${id} IN (${scope})`).length === 0) return missing();
+  }
   const [raw] = yield* sql.unsafe(ownedSubmissionSelection, [id, user]);
   if (raw === undefined) return missing();
   const found = Option.flatMap(yield* decodeOwnedSubmission(raw), submissionProjection);
@@ -32,17 +41,21 @@ export const localSubmission = Effect.fn(function* (user: UserId, id: string) {
   return result(yield* Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(found.value));
 });
 export const localReviewPage = Effect.fn(function* (
-  page: typeof ReviewPage.Type,
+  page: typeof ReviewPage.Type & Partial<{ hostedTurn: string }>,
   user: UserId,
   current: number
 ) {
   const sql = yield* SqliteClient;
   const status = Option.getOrNull(page.status);
+  const origin =
+    page.hostedTurn === undefined
+      ? sql`1`
+      : sql`statement_submission_id IN (${yield* hostedStatements(page.hostedTurn, user, current)})`;
   const rows =
     yield* sql`SELECT * FROM (SELECT id,source_kind,reason,created_at_ms,evidence_expires_at_ms,service_market,locale,time_zone,
     CASE WHEN workspace_state='created' THEN 'resolved' WHEN workspace_state='abandoned' THEN 'abandoned' WHEN evidence_expires_at_ms<=${current} THEN 'expired' ELSE coalesce(workspace_state,'pending') END AS status,
     statement_submission_id AS submission_id,record_number,source_format,parser_revision,extractor_revision,transaction_id,workspace_updated_at_ms AS decided_at_ms,email_receipt_id AS receipt_id,media_submission_id
-    FROM ingestion_review_items WHERE user_id=${user} AND (source_kind='statement' OR coalesce(workspace_state,'pending')='pending'))
+    FROM ingestion_review_items WHERE user_id=${user} AND (${origin}) AND (source_kind='statement' OR coalesce(workspace_state,'pending')='pending'))
     WHERE (${status} IS NULL OR status=${status}) ORDER BY created_at_ms DESC,id DESC LIMIT ${page.limit} OFFSET ${page.offset}`;
   const items: NeedsReviewItem[] = [];
   for (const raw of rows) {

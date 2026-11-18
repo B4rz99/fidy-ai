@@ -95,7 +95,7 @@ export type CanonicalBrowserSnapshotOperation =
 /** A finite canonical outcome produced by an owner within the same User transaction. */
 export type LocalMutationResult = Readonly<{
   status: number;
-  outcome: "success" | "validation_failed" | "not_found";
+  outcome: "success" | "validation_failed" | "not_found" | "resource_limit";
   body: Schema.Json;
 }>;
 

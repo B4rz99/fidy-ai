@@ -234,3 +234,24 @@ export const seedNativePAT = Effect.fn(function* ({
     )
   );
 });
+
+export const nativeBrowserWrite =
+  (db: Pick<Effect.Success<typeof nativeTransactionJourney>, "send">) =>
+  (
+    user: typeof alice,
+    input: { path: string; method: string } & ({} | { body: unknown })
+  ): Effect.Effect<Response> =>
+    native(() =>
+      db.send(
+        new Request("https://api.fidyapp.com" + input.path, {
+          method: input.method,
+          headers: {
+            origin: browserOrigins.production,
+            cookie: "__Host-fidy_session=" + user.bearer,
+            "Fidy-Session-Binding": user.session,
+            "content-type": "application/json",
+          },
+          ...("body" in input ? { body: JSON.stringify(input.body) } : {}),
+        })
+      )
+    );

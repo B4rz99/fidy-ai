@@ -227,7 +227,7 @@ const manifests = Effect.fnUntraced(function* (module: string) {
   });
 });
 
-type NativeFixture = "connection" | "user" | "billing" | "browser" | "login" | "oauth";
+type NativeFixture = "connection" | "hosted" | "user" | "billing" | "browser" | "login" | "oauth";
 const minuteMs = 60000;
 const attemptLifetimeMs = 600000;
 const empty: {
@@ -235,9 +235,26 @@ const empty: {
   owners: NonNullable<MiniflareWorkerConfig["exports"]>;
   configuration: Pick<MiniflareWorkerConfig, "triggers">;
 } = { bindings: {}, owners: {}, configuration: {} };
+export const nativeConnectionProfile = Effect.gen(function* () {
+  const now = yield* Clock.currentTimeMillis;
+  return yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+    contract: "bancolombia-sandbox-consent-2026-10-27",
+    userId: "10000000-0000-4000-8000-000000000051",
+    admission: {
+      startsAt: DateTime.formatIso(DateTime.makeUnsafe(now - minuteMs)),
+      expiresAt: DateTime.formatIso(DateTime.makeUnsafe(now + attemptLifetimeMs)),
+    },
+    financialId: "",
+    accountOwner: { SchemeName: "CC", Identification: "fixture" },
+    intent: {
+      permissions: ["ReadAccountsBasic", "ReadTransactionsDetail"],
+      historyPolicy: "bank-default",
+      expiryPolicy: "bank-default",
+    },
+  }).pipe(Effect.orDie);
+});
 const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean) {
   if (!enabled) return empty;
-  const now = yield* Clock.currentTimeMillis;
   return {
     bindings: {
       CONNECTION_FIXTURE: {
@@ -261,21 +278,7 @@ const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean)
       },
       BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: {
         type: "text" as const,
-        value: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-          contract: "bancolombia-sandbox-consent-2026-10-27",
-          userId: "10000000-0000-4000-8000-000000000051",
-          admission: {
-            startsAt: DateTime.formatIso(DateTime.makeUnsafe(now - minuteMs)),
-            expiresAt: DateTime.formatIso(DateTime.makeUnsafe(now + attemptLifetimeMs)),
-          },
-          financialId: "",
-          accountOwner: { SchemeName: "CC", Identification: "fixture" },
-          intent: {
-            permissions: ["ReadAccountsBasic", "ReadTransactionsDetail"],
-            historyPolicy: "bank-default",
-            expiryPolicy: "bank-default",
-          },
-        }).pipe(Effect.orDie),
+        value: yield* nativeConnectionProfile,
       },
     },
     owners: {
@@ -317,6 +320,98 @@ const fixtureWorkers = (
     : {},
 });
 
+const hostedFixture = Effect.fnUntraced(function* (mode: NativeFixture) {
+  return mode === "hosted"
+    ? [
+        {
+          config: {
+            type: "worker" as const,
+            name: "hosted-provider",
+            compatibilityDate: "2026-09-08",
+            exports: {
+              HostedProviderFixture: { type: "worker" as const },
+              HostedProviderControl: {
+                type: "durable-object" as const,
+                storage: "sqlite" as const,
+              },
+            },
+            env: {
+              CONTROL: {
+                type: "durable-object" as const,
+                worker: "hosted-provider",
+                exportName: "HostedProviderControl",
+              },
+            },
+            manifest: yield* workerManifest("./agent/provider.test-fixture.ts"),
+          },
+        },
+      ]
+    : [];
+});
+const hostedOpenAi = {
+  dev: {
+    outboundService: {
+      type: "worker" as const,
+      worker: "hosted-provider",
+      exportName: "HostedProviderFixture",
+    },
+  },
+  env: {
+    HOSTED_WHATSAPP_QUEUE: { type: "queue" as const, name: "reminder-test" },
+    WHATSAPP_BUSINESS_PORTFOLIO_ID: billingBindings.WHATSAPP_BUSINESS_PORTFOLIO_ID,
+    WHATSAPP_SANDBOX_PHONE_NUMBER_ID: billingBindings.WHATSAPP_SANDBOX_PHONE_NUMBER_ID,
+    KAPSO_WEBHOOK_SECRET: billingBindings.KAPSO_WEBHOOK_SECRET,
+    OPENAI_API_KEY: { type: "text" as const, value: "fixture-openai" },
+    HOSTED_AI_MODEL: { type: "text" as const, value: "gpt-6-luna" },
+    PROACTIVITY_ENABLED: { type: "text" as const, value: "enabled" },
+    KAPSO_API_KEY: { type: "text" as const, value: "test-kapso-key" },
+    PROACTIVITY_TEMPLATE_JSON: {
+      type: "text" as const,
+      value:
+        '{"name":"fidy_reminder","language":"es","approval":"approved","body":"Fidy te avisa: {{1}} Más en Fidy."}',
+    },
+    WEEKLY_DELIVERY_QUEUE: { type: "queue" as const, name: "reminder-test" },
+    WEEKLY_DELIVERY_WORKFLOW: {
+      type: "workflow" as const,
+      name: "reminder-flow",
+      worker: "core",
+      exportName: "ProactivityDeliveryWorkflow",
+    },
+  },
+  triggers: [
+    {
+      type: "queue" as const,
+      name: "reminder-test",
+      maxBatchSize: 4,
+      maxBatchTimeout: 0,
+      maxRetries: 2,
+      retryDelay: 0,
+    },
+  ],
+};
+const fixtureProviders = Effect.fnUntraced(function* (mode: NativeFixture) {
+  const { withBilling, withOidc } = fixtureWorkers(mode);
+  return (yield* Effect.all([
+    billingProvider(withBilling),
+    privateEmailWorker(withBilling),
+    oidcWorkers(withOidc),
+    hostedFixture(mode),
+  ])).flat();
+});
+const hostedOptions = (
+  mode: NativeFixture
+): {
+  outbound: Pick<MiniflareWorkerConfig, "type"> | {};
+  env: MiniflareWorkerConfig["env"];
+  triggers: Pick<MiniflareWorkerConfig, "triggers"> | {};
+} =>
+  mode === "hosted"
+    ? {
+        outbound: { dev: hostedOpenAi.dev },
+        env: hostedOpenAi.env,
+        triggers: { triggers: hostedOpenAi.triggers },
+      }
+    : { outbound: {}, env: {}, triggers: {} };
 const textBindings = (
   deployment: Readonly<Record<string, string>>
 ): Record<string, { type: "text"; value: string }> =>
@@ -360,12 +455,12 @@ const privateEmailWorker = Effect.fnUntraced(function* (withBilling: boolean) {
     : [];
   return emailFixture;
 });
-const testServices = Effect.fnUntraced(function* (billing: boolean, oidc: boolean) {
-  return [
-    ...(yield* billingProvider(billing)),
-    ...(yield* privateEmailWorker(billing)),
-    ...(yield* oidcWorkers(oidc)),
-  ];
+const fixtureFeatures = Effect.fnUntraced(function* (mode: NativeFixture) {
+  return {
+    providers: yield* fixtureProviders(mode),
+    hostedPlatform: hostedOptions(mode),
+    connection: yield* connectionPlatformOptions(mode === "connection"),
+  };
 });
 const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   const { withBilling, withOidc, coreModule, ingressOptions } = fixtureWorkers(mode);
@@ -373,8 +468,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-user-store-" });
   const [ingress, core] = yield* manifests(coreModule);
 
-  const services = yield* testServices(withBilling, withOidc);
-  const connection = yield* connectionPlatformOptions(mode === "connection");
+  const { providers, hostedPlatform, connection } = yield* fixtureFeatures(mode);
   const create = (
     ceiling: string,
     logs: Array<string>,
@@ -388,11 +482,13 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
       workers: [
         ingressWorker(ingress),
         {
+          ...hostedPlatform.outbound,
           ...(withBilling ? providerOnlyOutbound : {}),
           ...(withOidc ? browserOutbound : {}),
           config: {
             type: "worker",
             name: "core",
+            ...hostedPlatform.triggers,
             ...connection.configuration,
             ...(withBilling ? billingTrigger : {}),
             ...(withOidc ? loginEmailTrigger : {}),
@@ -401,6 +497,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
             manifest: core,
             exports: { ...nativeOwners, ...connection.owners },
             env: {
+              ...hostedPlatform.env,
               BROWSER_ORIGIN: origin,
               ...connection.bindings,
               ...(withOidc ? browserBindings : {}),
@@ -412,7 +509,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
             },
           },
         },
-        ...services,
+        ...providers,
       ],
     });
   return (
@@ -434,3 +531,5 @@ export const nativeBillingPlatform = createUserPlatform("billing");
 
 /** Preserve the public hostname across Miniflare's loopback HTTP bridge for MCP Host validation. */
 export const nativeOAuthPlatform = createUserPlatform("oauth");
+
+export const nativeHostedPlatform = createUserPlatform("hosted");

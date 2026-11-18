@@ -1,0 +1,61 @@
+apps/server/cloudflare/directory/operations.ts
+  s_a1be23a656acf0::t_918c8f878d833f 220
+apps/server/cloudflare/ingestion/internal/statement-delivery.ts
+  s_a1be23a656acf0::t_69b30acff64b92 106-112,120,127,136,142-209
+apps/server/cloudflare/ingestion/runtime.ts
+  s_a1be23a656acf0::t_6e50da0ed8a18b 40,106-107
+apps/server/cloudflare/maintenance/global-scan.test-fixture.ts
+  s_a1be23a656acf0::t_36ce23b6e4b1c7 1-297
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_87c780a0f1c420 3,8-9
+apps/server/cloudflare/queue/failure-isolation.test.ts
+  s_a1be23a656acf0::t_8fc6acc2ac3dac 1-11,13-17,24,39,51-73,75-82,84-101,146,152,154,179,182,216,234-237,243,252,259,261-268,297,300,308-309,314,316-319,352-353,377,399,411,413,461,499,501,530,543,545,581-582
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_a1be23a656acf0::t_512b0f9a5d6e57 23,30,245
+apps/server/cloudflare/queue/runtime.test.ts
+  s_a1be23a656acf0::t_a5327356d00bad 2
+apps/server/cloudflare/subscription/internal/refund-support.ts
+  s_a1be23a656acf0::t_7be51424d3a9b3 170
+apps/server/cloudflare/core-coordinator.test-fixture.ts
+  s_e85b14fd415424::t_4614424e1ebd3e 12
+apps/server/cloudflare/core-worker.ts
+  s_e85b14fd415424::t_8d4e3b979a7b2e 31
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_e85b14fd415424::t_6ece38ef59b063 32,34-35
+apps/server/cloudflare/ingestion/legacy-email.test-fixture.ts
+  s_e85b14fd415424::t_834a4a77feb5da 1
+apps/server/cloudflare/maintenance/cadence.test.ts
+  s_e85b14fd415424::t_dc7466ceffa82d 5
+apps/server/cloudflare/maintenance/idle-budget.test.ts
+  s_e85b14fd415424::t_d4990380b3b962 9
+apps/server/cloudflare/maintenance/monitoring-isolation.test.ts
+  s_e85b14fd415424::t_7823ac6aecf94c 10
+apps/server/cloudflare/maintenance/performance.test.ts
+  s_e85b14fd415424::t_9a06fa301ca9d5 8
+apps/server/cloudflare/transactions/performance.test.ts
+  s_e85b14fd415424::t_dcc7cf3ef9f42e 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ad7ba058fb8fe18f80ffd6841e063f542443426",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e85b14fd415424": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eecc-3a6d-7202-88a4-6766ce0233e7",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

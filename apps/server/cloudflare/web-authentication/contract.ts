@@ -3,10 +3,7 @@ import type { HttpClient } from "effect/http";
 import type { TelemetryService } from "../../src/shell/observability/contract";
 
 /** Identity-only acceleration after owner commit; the Core runtime retains durable publication. */
-export type PublishAuthenticationWork = (
-  kind: "browserPairing" | "emailReplacement",
-  id: string
-) => void;
+export type PublishAuthenticationWork = (kind: "emailReplacement", id: string) => void;
 
 /**
  * One request admitted by the public/Core boundary. Owners receive their existing native binding,
@@ -16,6 +13,7 @@ export type PublishAuthenticationWork = (
 export type WebAuthenticationRequest = Readonly<{
   request: Request;
   db: D1Database;
+  loginEmail: Effect.Effect<Response>;
   support: Effect.Effect<Response, never, HttpClient.HttpClient>;
   telemetry: TelemetryService;
   publish: PublishAuthenticationWork;

@@ -21,11 +21,11 @@ import { receiveProactivityWork } from "../../insights/runtime";
 import { Cause, Clock, Context, Data, Effect, Exit, Option, Schema } from "effect";
 import type { CoreQueueEnvironment } from "../contract";
 import {
-  isBrowserPairingEmailWork,
   isEmailReplacementWork,
-  receiveBrowserPairingEmail,
   receiveEmailReplacement,
+  startLoginWorkflow,
 } from "../../email-authentication/runtime";
+import { NativeLoginEmailWork } from "../../email-authentication/contract";
 import { receiveCanary } from "../../runtime/operational-health/operations";
 import {
   isForwardedEmailWork,
@@ -153,6 +153,22 @@ const receiveEmailQueue = ({
   environment,
 }: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> =>
   Effect.gen(function* () {
+    if (batch.messages.some((message) => Schema.is(NativeLoginEmailWork)(message.body))) {
+      const workflow = environment.BROWSER_PAIRING_EMAIL_WORKFLOW;
+      if (workflow === undefined) return yield* deliveryFailure("Login email unavailable");
+      return yield* receiveWorkflowBatch(
+        batch,
+        (entry) =>
+          Effect.gen(function* () {
+            for (const message of entry.messages) {
+              const work = yield* Schema.decodeUnknownEffect(NativeLoginEmailWork)(message.body);
+              yield* startLoginWorkflow(workflow, work);
+              message.ack();
+            }
+          }),
+        4
+      );
+    }
     if (batch.messages.some((message) => isEmailReplacementWork(message.body))) {
       if (environment.EMAIL_REPLACEMENT_WORKFLOW === undefined) {
         return yield* deliveryFailure(new Error("Email replacement unavailable"));
@@ -165,19 +181,6 @@ const receiveEmailQueue = ({
         }),
         4
       ).pipe(Effect.withSpan("emailReplacement.receive"));
-    }
-    if (batch.messages.some((message) => isBrowserPairingEmailWork(message.body))) {
-      if (environment.BROWSER_PAIRING_EMAIL_WORKFLOW === undefined) {
-        return yield* deliveryFailure(new Error("Browser pairing email unavailable"));
-      }
-      return yield* receiveWorkflowBatch(
-        batch,
-        receiveBrowserPairingEmail({
-          DB: environment.DB,
-          BROWSER_PAIRING_EMAIL_WORKFLOW: environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
-        }),
-        4
-      );
     }
     return yield* deliveryFailure(new Error("Unknown email work"));
   }).pipe(Effect.mapError(deliveryFailure));

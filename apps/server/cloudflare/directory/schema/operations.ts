@@ -90,5 +90,13 @@ export const directoryHistory: StoreHistory = {
         "CREATE INDEX pat_bootstrap_expiry ON pat_bootstrap(expires_at_ms)",
       ],
     },
+    {
+      version: 7,
+      id: "login-email-allowance",
+      statements: [
+        "ALTER TABLE browser_pairings ADD COLUMN email_handoff TEXT",
+        "CREATE TABLE login_email_window(singleton INTEGER PRIMARY KEY CHECK(singleton=1),reset_at_ms INTEGER NOT NULL,used INTEGER NOT NULL CHECK(used BETWEEN 1 AND 1000)) STRICT",
+      ],
+    },
   ],
 };

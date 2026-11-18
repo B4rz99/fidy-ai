@@ -23,7 +23,7 @@ export const registerBrowserSession = Effect.fn(function* (request: Request) {
   return yield* Effect.gen(function* () {
     const [route] =
       yield* sql`SELECT 1 FROM browser_pairings p WHERE p.id=${input.pairingId} AND p.user_id=${input.userId} AND p.expires_at_ms>${yield* Clock.currentTimeMillis} AND
-      (EXISTS(SELECT 1 FROM provider_attempts a WHERE a.id=${input.attemptId} AND a.pairing_id=p.id AND a.state='bound') OR EXISTS(SELECT 1 FROM support_handoffs h WHERE h.id=${input.attemptId} AND h.pairing_id=p.id AND h.user_id=p.user_id) OR EXISTS(SELECT 1 FROM channel_approvals c WHERE c.id=${input.attemptId} AND c.pairing_id=p.id AND c.user_id=p.user_id))`;
+      (p.email_handoff=${input.attemptId} OR EXISTS(SELECT 1 FROM provider_attempts a WHERE a.id=${input.attemptId} AND a.pairing_id=p.id AND a.state='bound') OR EXISTS(SELECT 1 FROM support_handoffs h WHERE h.id=${input.attemptId} AND h.pairing_id=p.id AND h.user_id=p.user_id) OR EXISTS(SELECT 1 FROM channel_approvals c WHERE c.id=${input.attemptId} AND c.pairing_id=p.id AND c.user_id=p.user_id))`;
     if (route === undefined) return invalidProvider();
     yield* sql`INSERT INTO session_routes(token_digest,user_id,session_id,reservation_id,hard_expires_at_ms) VALUES(${digest},${input.userId},${input.sessionId},${input.attemptId},${input.hard}) ON CONFLICT DO NOTHING`;
     const exact =

@@ -3,10 +3,8 @@ import { Cause, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { redeemBrowserPairing, startBrowserPairing } from "../browser-login/operations";
 import {
-  completeBrowserPairingEmail,
   completeEmailReplacement,
   requestEmailReplacement,
-  startBrowserPairingEmail,
 } from "../email-authentication/operations";
 import { supportRecoveryPath } from "../recovery/contract";
 import { retainedRecoveryPairingsQuery, rotateBackupRecoveryCode } from "../recovery/operations";
@@ -23,12 +21,8 @@ const handlers = {
     startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }),
   redeemPairing: redeemBrowserPairing,
   logout: (input): Effect.Effect<Response, void> => logoutWebSession(input),
-  startEmail: ({ request, db, publish }): Effect.Effect<Response, Cause.UnknownError> =>
-    Effect.tryPromise(() =>
-      startBrowserPairingEmail({ request, db, onAccepted: (id) => publish("browserPairing", id) })
-    ),
-  completeEmail: (input): Effect.Effect<Response, Cause.UnknownError> =>
-    Effect.tryPromise(() => completeBrowserPairingEmail(input)),
+  startEmail: ({ loginEmail }): Effect.Effect<Response> => loginEmail,
+  completeEmail: ({ loginEmail }): Effect.Effect<Response> => loginEmail,
   requestReplacement: ({ request, db, publish }): Effect.Effect<Response, Cause.UnknownError> =>
     Effect.tryPromise(() =>
       requestEmailReplacement({ request, db, onAccepted: (id) => publish("emailReplacement", id) })

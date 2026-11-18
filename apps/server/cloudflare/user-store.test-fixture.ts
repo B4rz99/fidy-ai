@@ -94,7 +94,26 @@ const billingBindings = {
   },
 };
 
+const loginEmailTrigger = {
+  triggers: [
+    {
+      type: "queue" as const,
+      name: "login-email",
+      maxBatchSize: 4,
+      maxBatchTimeout: 0,
+      maxRetries: 2,
+      retryDelay: 0,
+    },
+  ],
+};
 const browserBindings = {
+  BROWSER_PAIRING_EMAIL_QUEUE: { type: "queue", name: "login-email" },
+  BROWSER_PAIRING_EMAIL_WORKFLOW: {
+    type: "workflow",
+    name: "login-email-flow",
+    worker: "core",
+    exportName: "BrowserPairingEmailWorkflowV1",
+  },
   FIXTURE_PROVIDER: {
     type: "worker",
     worker: "browser-oidc-fixture",
@@ -174,26 +193,39 @@ const ingressWorker = (
     },
   },
 });
-const manifests = Effect.all(
-  [workerManifest("./public-worker.ts"), workerManifest("./core-worker.ts")],
-  { concurrency: 2 }
-);
+const manifests = Effect.fnUntraced(function* (module: string) {
+  return yield* Effect.all([workerManifest("./public-worker.ts"), workerManifest(module)], {
+    concurrency: 2,
+  });
+});
+
+type NativeFixture = "user" | "billing" | "browser" | "login" | "oauth";
+const fixtureWorkers = (
+  mode: NativeFixture
+): Readonly<{
+  withBilling: boolean;
+  withOidc: boolean;
+  coreModule: string;
+  ingressOptions: Pick<ConstructorParameters<typeof Miniflare>[0], "upstream">;
+}> => ({
+  withBilling: mode === "billing",
+  withOidc: mode === "browser" || mode === "login",
+  coreModule: mode === "login" ? "./login-email-worker.test-fixture.ts" : "./core-worker.ts",
+  ingressOptions: mode === "oauth" ? { upstream: "https://api.fidyapp.com" } : {},
+});
 
 /** Production ingress and Core in separate workerd isolates. SQL inspection belongs to the host fixture only. */
-const createUserPlatform = Effect.fnUntraced(function* (
-  withBilling: boolean,
-  withOidc: boolean = false,
-  ingressOrigin?: string
-) {
+const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
+  const { withBilling, withOidc, coreModule, ingressOptions } = fixtureWorkers(mode);
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-user-store-" });
-  const [ingress, core] = yield* manifests;
+  const [ingress, core] = yield* manifests(coreModule);
 
   const provider = yield* billingProvider(withBilling);
   const oidc = yield* oidcWorkers(withOidc);
   const create = (ceiling: string, logs: Array<string>): Miniflare =>
     new Miniflare({
-      ...(ingressOrigin === undefined ? {} : { upstream: ingressOrigin }),
+      ...ingressOptions,
       ...(withOidc
         ? {
             handleStructuredLogs: (log: { message: string }) => {
@@ -212,6 +244,7 @@ const createUserPlatform = Effect.fnUntraced(function* (
             type: "worker",
             name: "core",
             ...(withBilling ? billingTrigger : {}),
+            ...(withOidc ? loginEmailTrigger : {}),
             compatibilityDate: "2026-09-08",
             compatibilityFlags: ["nodejs_compat"],
             manifest: core,
@@ -240,9 +273,10 @@ const createUserPlatform = Effect.fnUntraced(function* (
     );
 });
 
-export const nativeBrowserPlatform = createUserPlatform(false, true);
-export const nativeUserPlatform = createUserPlatform(false);
-export const nativeBillingPlatform = createUserPlatform(true);
+export const nativeLoginPlatform = createUserPlatform("login");
+export const nativeBrowserPlatform = createUserPlatform("browser");
+export const nativeUserPlatform = createUserPlatform("user");
+export const nativeBillingPlatform = createUserPlatform("billing");
 
 /** Preserve the public hostname across Miniflare's loopback HTTP bridge for MCP Host validation. */
-export const nativeOAuthPlatform = createUserPlatform(false, false, "https://api.fidyapp.com");
+export const nativeOAuthPlatform = createUserPlatform("oauth");

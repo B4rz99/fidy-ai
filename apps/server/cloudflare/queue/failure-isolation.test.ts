@@ -35,7 +35,7 @@ const body = (owner: Owner, index: number): Readonly<Record<string, unknown>> =>
     case "billing":
       return { version: 1, attemptId: id };
     case "pairing":
-      return { version: 1, kind: "browser-pairing-email", id };
+      return { version: 2, kind: "browser-pairing-email", userId, id };
     case "replacement":
       return { version: 1, kind: "email-replacement", id };
   }

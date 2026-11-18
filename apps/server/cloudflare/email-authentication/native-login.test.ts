@@ -1,0 +1,489 @@
+import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
+import { Effect, Schedule, Schema } from "effect";
+import { expect } from "vitest";
+import { native, nativeLoginPlatform } from "../user-store.test-fixture";
+import { NativeLoginEmailWork, loginDeliverUrl } from "./contract";
+import { ownerCheckUrl } from "../maintenance/contract";
+import { alice, bob, seed } from "../financial-user-store.test-fixture";
+
+const setup = Effect.fn(function* (address: string) {
+  const logs: string[] = [];
+  const runtime = yield* (yield* nativeLoginPlatform)("1000000000", logs);
+  const owner = yield* seed(runtime, alice, false);
+  yield* owner.exec(
+    "INSERT INTO verified_email_credentials VALUES(?,?,1,?)",
+    alice.user,
+    address,
+    owner.now
+  );
+  yield* native(() =>
+    owner.directory.exec(
+      "INSERT INTO verified_email_routes VALUES(?,?,?,1)",
+      address,
+      alice.user,
+      alice.session
+    )
+  );
+  const post = (
+    path: string,
+    body: object
+  ): Effect.Effect<Awaited<ReturnType<typeof runtime.dispatchFetch>>> =>
+    native(() =>
+      runtime.dispatchFetch("https://api.fidyapp.com" + path, {
+        method: "POST",
+        headers: {
+          origin: "https://app.fidyapp.com",
+          "cf-connecting-ip": "192.0.2.35",
+          "content-type": "application/json",
+          connection: "close",
+        },
+        body: JSON.stringify(body),
+      })
+    );
+  const pairing = (): Effect.Effect<
+    { pairingId: string; privateVerifier: string },
+    Schema.SchemaError
+  > =>
+    post("/web/pairings", {}).pipe(
+      Effect.flatMap((reply) => native(() => reply.json())),
+      Effect.flatMap(
+        Schema.decodeUnknownEffect(
+          Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+        )
+      )
+    );
+  const start = (
+    proof: { pairingId: string; privateVerifier: string },
+    email = address
+  ): ReturnType<typeof post> => post("/web/email/authentication/start", { ...proof, email });
+  const { FIXTURE_PROVIDER } = yield* native(() =>
+    runtime.getBindings<{ FIXTURE_PROVIDER: Fetcher }>("core")
+  );
+  const inbox = (recipient = address): Effect.Effect<ReadonlyArray<string>, Schema.SchemaError> =>
+    native(() =>
+      FIXTURE_PROVIDER.fetch(
+        "https://mailbox.fixture.invalid/?to=" + encodeURIComponent(recipient)
+      ).then((reply) => reply.json())
+    ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Schema.String))));
+  const awaitMail = (recipient = address): ReturnType<typeof inbox> =>
+    inbox(recipient).pipe(
+      Effect.repeat({
+        until: (letters) => letters.length > 0,
+        times: 36,
+        schedule: Schedule.spaced("100 millis"),
+      })
+    );
+  const namespace = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+  const user = namespace.getByName(alice.user);
+  const deliver = (work: typeof NativeLoginEmailWork.Type): Effect.Effect<number> =>
+    native(() =>
+      user
+        .fetch(loginDeliverUrl, { method: "POST", body: JSON.stringify(work) })
+        .then((reply) => reply.status)
+    );
+  const work = (): Effect.Effect<typeof NativeLoginEmailWork.Type, Schema.SchemaError> =>
+    owner.exec("SELECT work_id AS id FROM login_email_proofs").pipe(
+      Effect.flatMap((rows) =>
+        Schema.decodeUnknownEffect(NativeLoginEmailWork)({
+          kind: "browser-pairing-email",
+          version: 2,
+          userId: alice.user,
+          id: rows[0]?.id,
+        })
+      )
+    );
+  const directory = (
+    ...args: Parameters<typeof owner.directory.exec>
+  ): ReturnType<typeof owner.exec> => native(() => owner.directory.exec(...args));
+  const hold = owner.exec(
+    "CREATE TRIGGER hold_queue_offer AFTER INSERT ON login_email_proofs BEGIN UPDATE login_email_proofs SET offer_at_ms=expires_at_ms; END"
+  );
+  return {
+    owner,
+    start,
+    pairing,
+    post,
+    logs,
+    runtime,
+    address,
+    inbox,
+    delivered: awaitMail(),
+    awaitMail,
+    deliver,
+    work,
+    directory,
+    hold,
+    user,
+  };
+});
+const interruptClaim = Effect.fn(function* (
+  owner: Effect.Success<ReturnType<typeof setup>>["owner"],
+  outcome: string
+) {
+  if (outcome === "settlement") {
+    yield* owner.exec(
+      "CREATE TRIGGER interrupt_settlement BEFORE UPDATE ON login_email_proofs WHEN OLD.state='sending' AND NEW.state='awaiting_proof' BEGIN SELECT RAISE(ABORT,'fixture'); END"
+    );
+  }
+  if (outcome === "revoked-after-claim") {
+    yield* owner.exec(
+      "CREATE TRIGGER revoke_after_claim AFTER UPDATE ON login_email_proofs WHEN NEW.state='sending' BEGIN UPDATE verified_email_credentials SET revision=revision+1; END"
+    );
+  }
+});
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect("a mailbox revoked while awaiting allowance cannot charge the local window", () =>
+    Effect.gen(function* () {
+      const { owner, start, pairing, directory, inbox } = yield* setup(
+        "revoked-during-allowance@example.test"
+      );
+      yield* directory("CREATE TABLE revoke_on_allowance(user_id TEXT)");
+      yield* directory("INSERT INTO revoke_on_allowance VALUES(?)", alice.user);
+      expect((yield* start(yield* pairing())).status).toBe(202);
+      expect(yield* owner.exec("SELECT revision FROM verified_email_credentials")).toEqual([
+        { revision: 2 },
+      ]);
+      expect(yield* owner.exec("SELECT used FROM login_email_window")).toEqual([]);
+      expect(yield* owner.exec("SELECT state FROM login_email_proofs")).toEqual([]);
+      expect(yield* directory("SELECT used FROM login_email_window")).toEqual([{ used: 1 }]);
+      expect(yield* inbox()).toEqual([]);
+    })
+  );
+  test.effect("only the latest generation can approve its original pairing", () =>
+    Effect.gen(function* () {
+      const { owner, start, pairing, post, deliver, work, inbox, hold } =
+        yield* setup("resend@example.test");
+      yield* hold;
+      const proof = yield* pairing();
+      yield* start(proof);
+      const first = yield* work();
+      yield* deliver(first);
+      yield* owner.exec("UPDATE login_email_proofs SET requested_at_ms=requested_at_ms-61000");
+      yield* start(proof);
+      const next = yield* work();
+      expect(first.id).not.toBe(next.id);
+      yield* deliver(first);
+      yield* deliver(next);
+      const messages = yield* inbox();
+      expect(messages).toHaveLength(2);
+      const verify = (letter: string): ReturnType<typeof post> =>
+        post("/web/email/authentication/complete", {
+          ...proof,
+          combinedCode: letter.split("\n\n")[1],
+        });
+      expect((yield* verify(messages[0] ?? "")).status).toBe(400);
+      expect((yield* verify(messages[1] ?? "")).status).toBe(200);
+    })
+  );
+  test.effect(
+    "a stale Directory mapping cannot bind a browser pairing or spend either window",
+    () =>
+      Effect.gen(function* () {
+        const { owner, start, pairing, directory } = yield* setup("stale@example.test");
+        const proof = yield* pairing();
+        yield* owner.exec("UPDATE verified_email_credentials SET revision=2");
+        expect((yield* start(proof)).status).toBe(202);
+        expect(
+          yield* directory("SELECT user_id FROM browser_pairings WHERE id=?", proof.pairingId)
+        ).toEqual([{ user_id: null }]);
+        expect(yield* directory("SELECT used FROM login_email_window")).toEqual([]);
+      })
+  );
+  test.effect(
+    "a lost shared reply permits no send or local charge; retry spends another allowance",
+    () =>
+      Effect.gen(function* () {
+        const { owner, start, pairing, directory, inbox, delivered } =
+          yield* setup("uncertain@example.test");
+        yield* directory("CREATE TABLE lose_next_allowance(id INTEGER)");
+        const proof = yield* pairing();
+        expect((yield* start(proof)).status).toBe(503);
+        expect(yield* directory("SELECT used FROM login_email_window")).toEqual([{ used: 1 }]);
+        expect(yield* owner.exec("SELECT used FROM login_email_window")).toEqual([]);
+        expect(yield* owner.exec("SELECT state FROM login_email_proofs")).toEqual([]);
+        expect(yield* inbox()).toEqual([]);
+        expect((yield* start(proof)).status).toBe(202);
+        expect(yield* directory("SELECT used FROM login_email_window")).toEqual([{ used: 2 }]);
+        expect(yield* delivered).toHaveLength(1);
+      })
+  );
+  test.effect(
+    "parallel pairings share five local admissions after deletion and a separate Directory deadline",
+    () =>
+      Effect.gen(function* () {
+        const { owner, start, pairing, directory, hold } = yield* setup("limits@example.test");
+        yield* hold;
+        const proofs = yield* Effect.all(
+          Array.from({ length: 8 }, () => pairing()),
+          { concurrency: 8 }
+        );
+        const requests = yield* Effect.forEach(proofs, (proof) => start(proof), { concurrency: 8 });
+        expect(requests.every((reply) => reply.status === 202)).toBe(true);
+        expect(yield* owner.exec("SELECT used FROM login_email_window")).toEqual([{ used: 5 }]);
+        expect(yield* owner.exec("SELECT count(*) AS count FROM login_email_proofs")).toEqual([
+          { count: 5 },
+        ]);
+        yield* owner.exec("DELETE FROM browser_handoffs");
+        const reset = owner.now + 100000;
+        yield* directory("UPDATE login_email_window SET reset_at_ms=?,used=999", reset);
+        yield* start(yield* pairing());
+        expect(yield* directory("SELECT used FROM login_email_window")).toEqual([{ used: 999 }]);
+        yield* owner.exec("UPDATE login_email_window SET reset_at_ms=0");
+        const final = yield* Effect.all([pairing(), pairing()], { concurrency: 2 });
+        yield* Effect.forEach(final, (proof) => start(proof), { concurrency: 2 });
+        expect(yield* directory("SELECT reset_at_ms,used FROM login_email_window")).toEqual([
+          { reset_at_ms: reset, used: 1000 },
+        ]);
+        expect(yield* owner.exec("SELECT used FROM login_email_window")).toEqual([{ used: 1 }]);
+        yield* directory("UPDATE login_email_window SET reset_at_ms=0");
+        const local = yield* owner.exec("SELECT reset_at_ms FROM login_email_window");
+        yield* start(yield* pairing());
+        expect(yield* owner.exec("SELECT reset_at_ms FROM login_email_window")).toEqual(local);
+        expect(yield* owner.exec("SELECT used FROM login_email_window")).toEqual([{ used: 2 }]);
+        expect(yield* directory("SELECT used FROM login_email_window")).toEqual([{ used: 1 }]);
+      })
+  );
+  test.effect(
+    "a refused intent rolls back the User charge and retains the spent shared allowance",
+    () =>
+      Effect.gen(function* () {
+        const { owner, start, pairing, directory } = yield* setup("rollback@example.test");
+        yield* owner.exec(
+          "CREATE TRIGGER refuse_work BEFORE INSERT ON login_email_proofs BEGIN SELECT RAISE(IGNORE); END"
+        );
+        expect((yield* start(yield* pairing())).status).toBe(503);
+        expect(yield* owner.exec("SELECT used FROM login_email_window")).toEqual([]);
+        expect(yield* directory("SELECT used FROM login_email_window")).toEqual([{ used: 1 }]);
+      })
+  );
+  for (const change of ["mailbox", "pairing", "expiry", "work deadline", "erase"] as const) {
+    test.effect("rechecks " + change + " immediately before the one-shot claim", () =>
+      Effect.gen(function* () {
+        const { owner, start, pairing, work, deliver, inbox, hold } =
+          yield* setup("revoked@example.test");
+        yield* hold;
+        yield* start(yield* pairing());
+        const identity = yield* work();
+        const mutations = {
+          mailbox: "UPDATE verified_email_credentials SET revision=revision+1",
+          pairing: "UPDATE browser_handoffs SET state='invalidated'",
+          expiry: "UPDATE browser_handoffs SET expires_at_ms=0",
+          "work deadline": "UPDATE login_email_proofs SET expires_at_ms=0",
+          erase:
+            "INSERT INTO erasure_requests(id,user_id,state) SELECT 'erase',id,'pending' FROM users",
+        };
+        yield* owner.exec(mutations[change]);
+        expect(yield* deliver(identity)).toBe(204);
+        expect(yield* deliver(identity)).toBe(204);
+        expect(yield* inbox()).toEqual([]);
+        expect(yield* owner.exec("SELECT state FROM login_email_proofs")).toEqual([
+          { state: "rejected" },
+        ]);
+      })
+    );
+  }
+  for (const outcome of [
+    "accepted",
+    "lost",
+    "limited",
+    "settlement",
+    "revoked-after-claim",
+  ] as const) {
+    test.effect("keeps duplicate delivery secret-free and one-shot after " + outcome, () =>
+      Effect.gen(function* () {
+        const { owner, start, pairing, hold, work, deliver, inbox, logs, post, address } =
+          yield* setup(outcome + "@example.test");
+        yield* hold;
+        const proof = yield* pairing();
+        yield* start(proof);
+        const identity = yield* work();
+        yield* interruptClaim(owner, outcome);
+        const claims = yield* Effect.all([deliver(identity), deliver(identity)], {
+          concurrency: 2,
+        });
+        expect(claims.filter((status) => status === 503)).toHaveLength(
+          outcome === "settlement" ? 1 : 0
+        );
+        yield* deliver(identity);
+        const messages = yield* inbox();
+        expect(messages).toHaveLength(1);
+        const code = yield* Schema.decodeUnknownEffect(Schema.String)(
+          messages[0]?.split("\n\n")[1]
+        );
+
+        const state = {
+          accepted: "awaiting_proof",
+          lost: "ambiguous",
+          limited: "rejected",
+          settlement: "sending",
+          "revoked-after-claim": "awaiting_proof",
+        }[outcome];
+        expect(yield* owner.exec("SELECT state FROM login_email_proofs")).toEqual([{ state }]);
+        const keep = ["accepted", "settlement", "revoked-after-claim"].includes(outcome);
+        expect(
+          yield* owner.exec("SELECT selector,length(digest) AS bytes FROM login_email_proofs")
+        ).toEqual([{ selector: keep ? code.slice(0, 9) : null, bytes: keep ? 32 : null }]);
+        expect(
+          yield* owner.exec("SELECT normalized_address FROM verified_email_credentials")
+        ).toEqual([{ normalized_address: address }]);
+        expect(yield* owner.exec("SELECT state FROM browser_handoffs")).toEqual([
+          { state: "pending_approval" },
+        ]);
+        expect(
+          (yield* post("/web/email/authentication/complete", { ...proof, combinedCode: code }))
+            .status
+        ).toBe(outcome === "accepted" ? 200 : 400);
+        const retained = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+          yield* owner.exec("SELECT *,hex(digest) AS retained FROM login_email_proofs")
+        );
+        for (const secret of [code, code.slice(10), proof.privateVerifier]) {
+          expect(retained).not.toContain(secret);
+          expect(
+            yield* Schema.encodeEffect(Schema.fromJsonString(NativeLoginEmailWork))(identity)
+          ).not.toContain(secret);
+          expect(logs.join(" ")).not.toContain(secret);
+        }
+        expect(logs.join(" ")).not.toContain(address);
+      })
+    );
+  }
+  test.effect("the watchdog reoffers an admitted intent after a missed scheduling hint", () =>
+    Effect.gen(function* () {
+      const { owner, start, pairing, hold, user, delivered } = yield* setup(
+        "rediscovered@example.test"
+      );
+      yield* hold;
+      yield* start(yield* pairing());
+      yield* owner.exec("UPDATE login_email_proofs SET offer_at_ms=0");
+      expect((yield* native(() => user.fetch(ownerCheckUrl, { method: "POST" }))).status).toBe(204);
+      expect(yield* delivered).toHaveLength(1);
+    })
+  );
+  test.effect("distinct Users cannot consume each other's mailbox proof or browser verifier", () =>
+    Effect.gen(function* () {
+      const { runtime, owner, pairing, start, delivered, awaitMail, post } =
+        yield* setup("first@example.test");
+      const other = yield* seed(runtime, bob, false);
+      yield* other.exec(
+        "INSERT INTO verified_email_credentials VALUES(?,?,1,?)",
+        bob.user,
+        "second@example.test",
+        owner.now
+      );
+      yield* native(() =>
+        other.directory.exec(
+          "INSERT INTO verified_email_routes VALUES(?,?,?,1)",
+          "second@example.test",
+          bob.user,
+          bob.session
+        )
+      );
+      const left = yield* pairing(),
+        right = yield* pairing();
+      yield* start(left);
+      yield* start(right, "second@example.test");
+      const first = (yield* delivered)[0]?.split("\n\n")[1];
+      const second = (yield* awaitMail("second@example.test"))[0]?.split("\n\n")[1];
+      expect(
+        (yield* post("/web/email/authentication/complete", { ...left, combinedCode: second }))
+          .status
+      ).toBe(400);
+      expect(
+        (yield* post("/web/email/authentication/complete", { ...right, combinedCode: first }))
+          .status
+      ).toBe(400);
+      expect(yield* owner.exec("SELECT wrong_attempts FROM login_email_proofs")).toEqual([
+        { wrong_attempts: 0 },
+      ]);
+      expect(yield* other.exec("SELECT wrong_attempts FROM login_email_proofs")).toEqual([
+        { wrong_attempts: 0 },
+      ]);
+      expect(
+        (yield* post("/web/email/authentication/complete", { ...left, combinedCode: first })).status
+      ).toBe(200);
+      expect(
+        (yield* post("/web/email/authentication/complete", { ...right, combinedCode: second }))
+          .status
+      ).toBe(200);
+    })
+  );
+  test.effect("consumes one mailbox proof and redeems only its bound browser pairing", () =>
+    Effect.gen(function* () {
+      const { start, pairing, delivered, post, owner } = yield* setup("approved@example.test");
+      const proof = yield* pairing();
+      yield* start(proof);
+      const code = yield* Schema.decodeUnknownEffect(Schema.String)(
+        (yield* delivered)[0]?.split("\n\n")[1]
+      );
+      const verify = (
+        combinedCode: string,
+        privateVerifier = proof.privateVerifier
+      ): ReturnType<typeof post> =>
+        post("/web/email/authentication/complete", { ...proof, privateVerifier, combinedCode });
+      expect((yield* verify(code, "X".repeat(43))).status).toBe(400);
+      yield* owner.exec("UPDATE verified_email_credentials SET revision=2");
+      expect((yield* verify(code)).status).toBe(400);
+      expect((yield* verify(code.slice(0, -1) + (code.endsWith("A") ? "B" : "A"))).status).toBe(
+        400
+      );
+      expect(yield* owner.exec("SELECT wrong_attempts,state FROM login_email_proofs")).toEqual([
+        { wrong_attempts: 0, state: "awaiting_proof" },
+      ]);
+      yield* owner.exec("UPDATE verified_email_credentials SET revision=1");
+      const replies = yield* Effect.all([verify(code), verify(code)], { concurrency: 2 });
+      expect(replies.map((reply) => reply.status).sort((left, right) => left - right)).toEqual([
+        200, 400,
+      ]);
+      const redeemed = yield* post("/web/pairings/redeem", proof);
+      expect(redeemed.status).toBe(200);
+      expect(redeemed.headers.get("set-cookie")).toContain("__Host-fidy_session=");
+    })
+  );
+  test.effect("delivers the admitted generation through the Queue and Workflow", () =>
+    Effect.gen(function* () {
+      const { start, pairing, delivered, work, runtime, inbox } =
+        yield* setup("alice@example.test");
+      expect((yield* start(yield* pairing())).status).toBe(202);
+      expect(yield* delivered).toHaveLength(1);
+      const identity = yield* work();
+      const bindings = yield* native(() =>
+        runtime.getBindings<{ BROWSER_PAIRING_EMAIL_WORKFLOW: Workflow }>("core")
+      );
+      const instance = yield* native(() =>
+        bindings.BROWSER_PAIRING_EMAIL_WORKFLOW.get(identity.id)
+      );
+      const completed = native(() => instance.status()).pipe(
+        Effect.repeat({
+          until: (status) => status.status === "complete",
+          schedule: Schedule.spaced("50 millis"),
+        }),
+        Effect.timeout("5 seconds")
+      );
+      const status = yield* completed;
+      expect(status.output ?? null).toBeNull();
+      yield* native(() => instance.restart());
+      expect((yield* completed).output ?? null).toBeNull();
+      expect(yield* inbox()).toHaveLength(1);
+    })
+  );
+  test.effect("admits only pending browser proof for the established mailbox", () =>
+    Effect.gen(function* () {
+      const { owner, start, pairing } = yield* setup("alice@example.test");
+      const proof = yield* pairing();
+      expect((yield* start({ ...proof, privateVerifier: "X".repeat(43) })).status).toBe(400);
+      const unknown = yield* start(proof, "unknown@example.test");
+      expect(unknown.status).toBe(202);
+      expect(yield* owner.exec("SELECT work_id FROM login_email_proofs")).toEqual([]);
+      const known = yield* start(proof);
+      expect(known.status).toBe(unknown.status);
+      expect(known.headers.get("cache-control")).toBe("no-store");
+      expect(yield* native(() => known.text())).toBe(yield* native(() => unknown.text()));
+      expect((yield* start(proof)).status).toBe(202);
+      expect(yield* owner.exec("SELECT used FROM login_email_window")).toEqual([{ used: 1 }]);
+      expect(
+        yield* native(() => owner.directory.exec("SELECT used FROM login_email_window"))
+      ).toEqual([{ used: 1 }]);
+    })
+  );
+});

@@ -17,6 +17,15 @@ const symbols = (count: number): string =>
   selectEmailCodeSymbols({ bytes: crypto.getRandomValues(new Uint8Array(count)), maximum: count })
     .match(/.{4}/gu)
     ?.join("-") ?? "";
+export const issueProofCode = Effect.fn(function* () {
+  const selector = symbols(publicSymbols),
+    secret = symbols(secretSymbols);
+  return {
+    selector,
+    code: yield* Schema.decodeEffect(EmailVerificationCode)(selector + "-" + secret),
+    hash: yield* mailboxSecretDigest(secret),
+  };
+});
 export const deliverPendingReplacement = Effect.fn(function* (
   environment: Readonly<{ RESEND_API_KEY: string }>,
   storage: DurableObjectStorage,
@@ -29,10 +38,7 @@ export const deliverPendingReplacement = Effect.fn(function* (
     yield* sql`SELECT work_id,candidate FROM email_replacements WHERE state='awaiting_delivery' LIMIT 1`;
   if (raw === undefined) return { attempted: 0, failed: 0 };
   const work = yield* Schema.decodeUnknownEffect(Scan)(raw);
-  const selector = symbols(publicSymbols),
-    secret = symbols(secretSymbols);
-  const code = yield* Schema.decodeEffect(EmailVerificationCode)(selector + "-" + secret);
-  const hash = yield* mailboxSecretDigest(secret);
+  const { selector, code, hash } = yield* issueProofCode();
   const claimed = yield* Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     const [row] =

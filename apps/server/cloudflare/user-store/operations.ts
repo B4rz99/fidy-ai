@@ -905,6 +905,18 @@ export const userStoreHistory: StoreHistory = {
       id: "native-cli-credentials",
       statements: [...userPATSchema(), issueForwardingAddress(), ...oauthUserSchema()],
     },
+    {
+      version: 16,
+      id: "login-email-admission",
+      statements: [
+        "ALTER TABLE browser_handoffs ADD COLUMN email_login INTEGER NOT NULL DEFAULT 0",
+        "CREATE INDEX login_email_handoff_expiry ON browser_handoffs(expires_at_ms) WHERE email_login=1",
+        "CREATE TABLE login_email_window(singleton INTEGER PRIMARY KEY CHECK(singleton=1),reset_at_ms INTEGER NOT NULL,used INTEGER NOT NULL CHECK(used BETWEEN 1 AND 5)) STRICT",
+        "CREATE TABLE login_email_proofs(pairing_id TEXT PRIMARY KEY REFERENCES browser_handoffs(pairing_id) ON DELETE CASCADE,work_id TEXT NOT NULL UNIQUE,address TEXT NOT NULL,revision INTEGER NOT NULL,generation INTEGER NOT NULL,requested_at_ms INTEGER NOT NULL,expires_at_ms INTEGER NOT NULL,offer_at_ms INTEGER NOT NULL,state TEXT NOT NULL CHECK(state IN ('awaiting_delivery','sending','awaiting_proof','rejected','ambiguous','approved')),selector TEXT,digest BLOB,wrong_attempts INTEGER NOT NULL DEFAULT 0) STRICT",
+        "CREATE INDEX login_email_offer ON login_email_proofs(offer_at_ms) WHERE state='awaiting_delivery'",
+        "CREATE INDEX login_email_expiry ON login_email_proofs(expires_at_ms)",
+      ],
+    },
   ],
 };
 

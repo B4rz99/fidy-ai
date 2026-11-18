@@ -33,9 +33,7 @@ import { makeAgentRetention } from "../agent/runtime";
 import { sweepExpiredOpenAiAdmission } from "../ai/runtime";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
 import {
-  dispatchBrowserPairingEmail,
   dispatchEmailReplacement,
-  reconcileBrowserPairingEmail,
   reconcileEmailReplacement,
 } from "../email-authentication/runtime";
 import {
@@ -73,19 +71,6 @@ const activity = <E>(
 ): ScheduledActivity => ({ operation, work: work.pipe(Effect.mapError(() => undefined)) });
 
 const emailActivities = (environment: CoreMaintenanceInput): ReadonlyArray<ScheduledActivity> => [
-  activity(
-    "browserPairing.email.dispatch",
-    Option.match(environment.BROWSER_PAIRING_EMAIL_QUEUE, {
-      onNone: () => Effect.void,
-      onSome: (queue) =>
-        dispatchBrowserPairingEmail({
-          DB: environment.DB,
-          BROWSER_PAIRING_EMAIL_QUEUE: queue,
-          identity: Option.none(),
-        }),
-    })
-  ),
-  activity("browserPairing.email.reconcile", reconcileBrowserPairingEmail(environment.DB)),
   activity(
     "emailReplacement.dispatch",
     Option.match(environment.EMAIL_REPLACEMENT_QUEUE, {

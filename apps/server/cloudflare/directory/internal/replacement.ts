@@ -103,6 +103,14 @@ const reconcile = Effect.fn(function* (
   }).pipe(withStoreCapacity("required"));
   return committed ? new Response(null) : refusal();
 });
+export const findMailboxRoute = Effect.fn(function* (address: EmailAddress) {
+  const sql = yield* SqliteClient;
+  const [row] =
+    yield* sql`SELECT user_id,revision FROM verified_email_routes WHERE normalized_address=${address}`;
+  return yield* Schema.decodeUnknownEffect(
+    Schema.NullOr(Schema.Struct({ user_id: UserId, revision: Schema.Int }))
+  )(row ?? null);
+});
 export const directoryIdentityRequest = Effect.fn(function* (
   request: Request,
   users: Pick<DurableObjectNamespace, "getByName">
@@ -111,16 +119,8 @@ export const directoryIdentityRequest = Effect.fn(function* (
     const address = yield* Schema.decodeEffect(EmailAddress)(
       yield* Effect.tryPromise(() => request.text())
     );
-    const sql = yield* SqliteClient;
-    const [raw] =
-      yield* sql`SELECT user_id,revision FROM verified_email_routes WHERE normalized_address=${address}`;
-    return raw === undefined
-      ? new Response(null, { status: 404 })
-      : Response.json(
-          yield* Schema.decodeUnknownEffect(
-            Schema.Struct({ user_id: UserId, revision: Schema.Int })
-          )(raw)
-        );
+    const route = yield* findMailboxRoute(address);
+    return route === null ? new Response(null, { status: 404 }) : Response.json(route);
   }
   const input = yield* Schema.decodeUnknownEffect(ReplacementInput)(
     yield* Effect.tryPromise(() => request.json())

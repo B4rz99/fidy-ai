@@ -13,8 +13,6 @@ export type ScheduledOperation =
   | "connections.recovery"
   | "quota.consumptionRetention"
   | "operational.canary.publish"
-  | "browserPairing.email.dispatch"
-  | "browserPairing.email.reconcile"
   | "emailReplacement.dispatch"
   | "emailReplacement.reconcile"
   | "billing.refund.dispatch"

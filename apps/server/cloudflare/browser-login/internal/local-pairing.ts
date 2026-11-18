@@ -38,6 +38,8 @@ const Ready = Schema.Struct({
   minimum_poll_seconds: Schema.Int,
   state: Schema.Literals(["ready", "invalidated", "consumed", "pending_approval"]),
 });
+const localLifecycle = (row: typeof Ready.Type): (typeof Ready.Type)["state"] =>
+  row.wrong_attempts >= maximumWrongProofs ? "invalidated" : row.state;
 const prepareClaim = Effect.fn(function* (
   { id, digest, session }: Readonly<{ id: string; digest: string; session: string }>,
   owns: (user: string) => boolean
@@ -50,7 +52,7 @@ const prepareClaim = Effect.fn(function* (
   const row = yield* Schema.decodeUnknownEffect(Ready)(raw);
   if (!owns(row.user_id)) return invalidPairing();
   const decision = decideBrowserLoginRedemption({
-    lifecycle: row.wrong_attempts >= maximumWrongProofs ? "invalidated" : row.state,
+    lifecycle: localLifecycle(row),
     verifierMatches: row.matches === 1,
     expiresAt: DateTime.makeUnsafe(row.expires_at_ms),
     wrongVerifierAttempts: row.wrong_attempts,
@@ -70,6 +72,17 @@ const prepareClaim = Effect.fn(function* (
     return Response.json(
       { error: { code: "rate_limited", retryAfterSeconds: retry } },
       { status: 429, headers: { "retry-after": String(retry), "cache-control": "no-store" } }
+    );
+  }
+  if (decision._tag === "Pending") {
+    yield* sql`UPDATE browser_handoffs SET last_poll_ms=${current} WHERE id=${row.id}`;
+    return Response.json(
+      {
+        status: "pending_approval",
+        expiresAt: DateTime.formatIso(DateTime.makeUnsafe(row.expires_at_ms)),
+        pollingIntervalSeconds: decision.minimumPollIntervalSeconds,
+      },
+      { status: 202, headers: { "cache-control": "no-store" } }
     );
   }
   if (decision._tag !== "Consume") return invalidPairing();

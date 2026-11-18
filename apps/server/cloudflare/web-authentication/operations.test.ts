@@ -34,6 +34,7 @@ it("refuses wrong-method authentication and unknown paths before any owner can c
         ["/web/pairings/unknown", "POST", 404],
       ] as const) {
         const response = yield* handleWebAuthentication({
+          loginEmail: Effect.die("Unexpected login email"),
           request: new Request(`https://api.fidyapp.com${path}`, { method }),
           db,
           support,
@@ -98,6 +99,7 @@ it("never turns a foreign or duplicate cookie into another User's logout authori
         );
       }
       const duplicate = yield* handleWebAuthentication({
+        loginEmail: Effect.die("Unexpected login email"),
         request: new Request("https://api.fidyapp.com/web/session/logout", {
           method: "POST",
           headers: { cookie: `__Host-fidy_session=${tokenA}; __Host-fidy_session=${tokenB}` },
@@ -122,6 +124,7 @@ it("never turns a foreign or duplicate cookie into another User's logout authori
         expect(Option.map(session, (subject) => subject.userId)).toEqual(Option.some(user.user));
       }
       const logout = yield* handleWebAuthentication({
+        loginEmail: Effect.die("Unexpected login email"),
         request: new Request("https://api.fidyapp.com/web/session/logout", {
           method: "POST",
           headers: { cookie: `__Host-fidy_session=${tokenA}` },
@@ -177,6 +180,7 @@ effectIt.effect("retains the composing caller's Clock when revoking the presente
     yield* TestClock.setTime(4102444800000);
     const outcome = yield* Effect.exit(
       handleWebAuthentication({
+        loginEmail: Effect.die("Unexpected login email"),
         request: new Request("https://api.fidyapp.com/web/session/logout", {
           method: "POST",
           headers: { cookie: `__Host-fidy_session=${token}` },

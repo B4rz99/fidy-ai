@@ -27,6 +27,8 @@ import {
 } from "./contract";
 import { directoryIdentityRequest, reconcileIdentityReplacements } from "./internal/replacement";
 
+import { loginAllowanceUrl } from "../email-authentication/contract";
+import { chargeLoginAttempt, directoryLoginEmail } from "./internal/login-email";
 import { directorySupport } from "./internal/support";
 
 import { recoveryRouteDecision } from "./internal/recovery-rotation";
@@ -224,8 +226,14 @@ const pairRequest = Effect.fn(function* (request: Request, environment: Director
 });
 const routingCommands = new Map<
   string,
-  typeof handleOAuthRouteCommand | typeof handlePATDirectoryCommand | typeof externalEventRequest
+  | typeof handleOAuthRouteCommand
+  | typeof handlePATDirectoryCommand
+  | typeof externalEventRequest
+  | typeof credentialLookup
 >([
+  [sessionRouteUrl, credentialLookup],
+  [sourcePressureUrl, credentialLookup],
+  [patRouteUrl, credentialLookup],
   [oauthRouteCommandUrl, handleOAuthRouteCommand],
   [nativePATDirectoryUrl, handlePATDirectoryCommand],
   [statusLookupAdmissionUrl, externalEventRequest],
@@ -234,6 +242,8 @@ const routingCommands = new Map<
 ]);
 const identityRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   switch (request.url) {
+    case loginAllowanceUrl:
+      return yield* chargeLoginAttempt;
     case replaceIdentityUrl:
     case emailRouteUrl:
       return yield* directoryIdentityRequest(request, environment.USER_STORE);
@@ -285,14 +295,14 @@ const directoryRequest = Effect.fn(function* (request: Request, environment: Dir
   }
   if (ownsProviderAuthenticationPath(path)) return yield* nativeProvider(request, environment);
   if (request.method !== "POST") return new Response(null, { status: 404 });
+  if (["/web/email/authentication/start", "/web/email/authentication/complete"].includes(path)) {
+    return yield* directoryLoginEmail(request, environment.USER_STORE);
+  }
   if (["/pat-pairings", "/pat-pairings/claim"].includes(path)) {
     return yield* nativePATPairing({ request, users: environment.USER_STORE });
   }
   if (["/web/pairings", "/web/pairings/redeem"].includes(path)) {
     return yield* pairRequest(request, environment);
-  }
-  if ([sessionRouteUrl, sourcePressureUrl, patRouteUrl].includes(request.url)) {
-    return yield* credentialLookup(request);
   }
   return yield* internalRequest(request, environment);
 });

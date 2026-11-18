@@ -2,8 +2,38 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "670439663788a37c9d2b59112632964a3f6bec079d8e6b06a3cf207d10355b9b";
+const expectedEdgePolicyDigest = "288b62a927be6ceaf6e6dc45bd8430ff43c80a7344720c628a64ff2e228136aa";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/email-authentication/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/queue/internal/dispatch.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/maintenance/internal/cadence.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/login-email.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/email-authentication/internal/login-admission.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/email-authentication/internal/login-completion.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/email-authentication/internal/login-delivery.ts",
+      import.meta.url
+    )
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/categories/internal/oauth-review.ts", import.meta.url)
   ).text(),

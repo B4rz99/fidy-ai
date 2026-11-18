@@ -460,6 +460,7 @@ it("cancels a stalled browser redemption body when authentication is interrupted
       );
       const fiber = yield* Effect.forkChild(
         handleWebAuthentication({
+          loginEmail: Effect.die("Unexpected login email"),
           request: new Request("https://api.fidyapp.com/web/pairings/redeem", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -505,6 +506,7 @@ it("reports corrupt retained pairing expiry as unavailable without consuming the
         ])
       );
       const response = yield* handleWebAuthentication({
+        loginEmail: Effect.die("Unexpected login email"),
         request: new Request("https://api.fidyapp.com/web/pairings/redeem", {
           method: "POST",
           headers: { "content-type": "application/json" },

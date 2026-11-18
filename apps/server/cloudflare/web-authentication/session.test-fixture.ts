@@ -18,6 +18,7 @@ export const sessionRequest = ({
   db: D1Database;
   logout: boolean;
 }>): WebAuthenticationRequest => ({
+  loginEmail: Effect.die("Unexpected login email"),
   request: new Request(`https://api.fidyapp.com${logout ? "/web/session/logout" : "/user"}`, {
     method: logout ? "POST" : "GET",
     headers: { cookie: `__Host-fidy_session=${sessionToken}` },

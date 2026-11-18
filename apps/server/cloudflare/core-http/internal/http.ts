@@ -77,10 +77,7 @@ import {
   hostedTurnInput,
 } from "../../agent/contract";
 
-import {
-  dispatchBrowserPairingEmail,
-  dispatchEmailReplacement,
-} from "../../email-authentication/runtime";
+import { dispatchEmailReplacement } from "../../email-authentication/runtime";
 
 import { listCategoriesPath } from "../../../src/shell/categories/contract";
 import { MemoryId, RememberInput, ReviseInput } from "../../../src/core/memory/contract";
@@ -188,7 +185,7 @@ const ReleaseConfiguration = Schema.Struct({
   RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(gitRevisionPattern)),
 });
 
-type PublicationKind = "browserPairing" | "emailReplacement" | "billing" | "whatsapp";
+type PublicationKind = "emailReplacement" | "billing" | "whatsapp";
 type PublishAcceptedWork = (kind: PublicationKind, id: string) => void;
 
 const publicationActivities = (
@@ -204,14 +201,6 @@ const publicationActivities = (
             queue: environment.HOSTED_WHATSAPP_QUEUE,
             userId: Option.map(identity, (id) => UserId.make(id)),
           }).pipe(Effect.mapError(() => undefined)),
-    browserPairing: () =>
-      environment.BROWSER_PAIRING_EMAIL_QUEUE === undefined
-        ? Effect.void
-        : dispatchBrowserPairingEmail({
-            DB: environment.DB,
-            BROWSER_PAIRING_EMAIL_QUEUE: environment.BROWSER_PAIRING_EMAIL_QUEUE,
-            identity,
-          }),
     emailReplacement: () =>
       environment.EMAIL_REPLACEMENT_QUEUE === undefined
         ? Effect.void
@@ -1979,6 +1968,7 @@ const dispatchCoreHttp = ({
         request,
 
         db: environment.DB,
+        loginEmail: routeBootstrapRequest({ request, environment }),
         support: nativeSupportRecovery({
           request,
           config: environment,

@@ -3,8 +3,6 @@ import type { ScheduledOperation } from "../contract";
 const minuteMs = 60_000;
 
 const cadenceMinutes: Partial<Record<ScheduledOperation, number>> = {
-  "browserPairing.email.dispatch": 5,
-  "browserPairing.email.reconcile": 5,
   "emailReplacement.dispatch": 5,
   "emailReplacement.reconcile": 5,
   "billing.renewal.dispatch": 15,

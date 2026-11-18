@@ -25,7 +25,12 @@ import {
   recoverLocalPATExpiry,
   repairLocalPATExpiry,
 } from "../tokens/operations";
-import { deliverPendingReplacement } from "../email-authentication/runtime";
+import {
+  deliverPendingReplacement,
+  localLoginEmailRequest,
+  offerLoginEmail,
+  repairLoginAlarm,
+} from "../email-authentication/runtime";
 import {
   localSupportApproval,
   recoverRotations,
@@ -40,6 +45,13 @@ import {
   localRecoveryCheckUrl,
   localSupportUrl,
 } from "../directory/contract";
+import {
+  type NativeLoginEmailWork,
+  loginCheckUrl,
+  loginDeliverUrl,
+  loginStartUrl,
+  loginVerifyUrl,
+} from "../email-authentication/contract";
 import { repairReplacementAlarm, replacementRequest } from "../email-authentication/operations";
 import {
   emailReplacementCompletionPath,
@@ -113,6 +125,7 @@ type UserStoreEnvironment = WompiBindings &
   Readonly<{
     BROWSER_ORIGIN: string;
     RESEND_API_KEY: string;
+    BROWSER_PAIRING_EMAIL_QUEUE: Queue<typeof NativeLoginEmailWork.Type>;
     DIRECTORY: DurableObjectNamespace;
     USER_STORE: DurableObjectNamespace;
     MAINTENANCE: DurableObjectNamespace;
@@ -191,6 +204,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return this.runtime.runPromise(
       Effect.flatMap(Clock.currentTimeMillis, (current) => {
         const families = [
+          offerLoginEmail(this.env.BROWSER_PAIRING_EMAIL_QUEUE, this.ctx.storage).pipe(
+            Effect.mapError((cause) => new Cause.UnknownError(cause))
+          ),
           deliverPendingReplacement(this.env, this.ctx.storage, this.owns).pipe(
             Effect.mapError((cause) => new Cause.UnknownError(cause))
           ),
@@ -347,6 +363,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         const current = yield* Clock.currentTimeMillis;
         const inspections = yield* Effect.all(
           [
+            repairLoginAlarm(current, storage),
             repairReplacementAlarm(current, storage),
             repairRecoveryAlarm(current, storage),
             repairReceiptAlarm(current, storage),
@@ -460,6 +477,16 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         Effect.Services<Parameters<typeof this.runtime.runPromise>[0]>
       >
     ): Option.Option<Promise<Response>> => Option.some(this.runtime.runPromise(effect));
+    if ([loginCheckUrl, loginDeliverUrl, loginVerifyUrl, loginStartUrl].includes(request.url)) {
+      return respond(
+        localLoginEmailRequest({
+          request,
+          environment: this.env,
+          storage: this.ctx.storage,
+          owns,
+        }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+      );
+    }
     if ([emailReplacementPath, emailReplacementCompletionPath].includes(path)) {
       return respond(
         replacementRequest({ request, environment: this.env, owns, storage: this.ctx.storage })

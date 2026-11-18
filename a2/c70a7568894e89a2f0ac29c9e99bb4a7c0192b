@@ -1,0 +1,33 @@
+infra/cloudflare/workers.test.ts
+  s_a1be23a656acf0::t_018acb67f447f2 1028-1039,1052,1059,1062
+infra/cloudflare/local-emulation.test.ts
+  s_a1be23a656acf0::t_018acb67f447f2 82-85
+apps/server/cloudflare/oauth-agents/native-allowance.test.ts
+  s_a1be23a656acf0::t_018acb67f447f2 83-87
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_018acb67f447f2 117
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_018acb67f447f2 5
+apps/server/cloudflare/oauth-agents/native-grant.test.ts
+  s_a1be23a656acf0::t_018acb67f447f2 92-94,303-305
+apps/server/cloudflare/tokens/native-pairing.test.ts
+  s_a1be23a656acf0::t_018acb67f447f2 311-322
+apps/server/cloudflare/tokens/native-authority.test.ts
+  s_a1be23a656acf0::t_018acb67f447f2 86-89,91-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a2c70a7568894e89a2f0ac29c9e99bb4a7c0192b",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

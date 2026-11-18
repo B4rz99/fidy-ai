@@ -1,0 +1,34 @@
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_82729b1eac6874 1061
+  s_a1be23a656acf0::t_47fb20580385e4 1
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_82729b1eac6874 11,412,656
+apps/server/cloudflare/erasure-worker.test-fixture.ts
+  s_a1be23a656acf0::t_82729b1eac6874 57-68
+  s_a1be23a656acf0::t_a215a7895dceca 56,69
+apps/server/cloudflare/audit/contract.ts
+  s_a1be23a656acf0::t_82729b1eac6874 8
+  s_a1be23a656acf0::t_51a5c4239c3b2b 1-7,9-13
+apps/server/cloudflare/audit/native-retention.test.ts
+  s_a1be23a656acf0::t_82729b1eac6874 3-130
+  s_a1be23a656acf0::t_ff57f6c7d80475 1-2
+apps/server/cloudflare/audit/operations.ts
+  s_a1be23a656acf0::t_82729b1eac6874 2-58
+  s_a1be23a656acf0::t_5a7875b86d507c 1,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e0141e014884c6b3ef6e932c98cb18ceb625d70f",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

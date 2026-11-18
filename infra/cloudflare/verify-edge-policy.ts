@@ -797,9 +797,6 @@ const securityArtifacts = [
     new URL("../../apps/server/cloudflare/erasure/internal/registry-value.ts", import.meta.url)
   ).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/routing/runtime.ts", import.meta.url)
-  ).text(),
-  await Bun.file(
     new URL("../../apps/server/src/shell/browser-transport/contract.ts", import.meta.url)
   ).text(),
   await Bun.file(

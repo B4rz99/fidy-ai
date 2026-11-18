@@ -12,7 +12,6 @@ import {
   withErasureRecovery,
   withErasureRegistry,
 } from "./erasure/runtime";
-import { sharedStorageRead } from "./routing/runtime";
 import type { ProviderEnvironment } from "./provider-authentication/contract";
 import type { ProactivityDeliveryWork, ProactivityEnvironment } from "./insights/contract";
 import {
@@ -344,10 +343,6 @@ const makeRegistryCoordinator = (
   if (sql === undefined || transactionSync === undefined || sync === undefined) {
     return { fetch: () => Promise.resolve(new Response(null, { status: 503 })) };
   }
-  const read = makeCoreHttp({
-    telemetry: cloudflareWorkerTelemetry,
-    institutions: registeredConnectionInstitutionIds,
-  });
   return makeErasureRegistryOwner({
     state: {
       id: { name: erasureRegistryName },
@@ -358,14 +353,7 @@ const makeRegistryCoordinator = (
       },
     },
     environment,
-    read: (request, bound) =>
-      sharedStorageRead(request)
-        ? read(
-            request,
-            bound,
-            state.waitUntil === undefined ? undefined : { waitUntil: state.waitUntil.bind(state) }
-          )
-        : Promise.resolve(new Response(null, { status: 404 })),
+    read: () => Promise.resolve(new Response(null, { status: 404 })),
   });
 };
 

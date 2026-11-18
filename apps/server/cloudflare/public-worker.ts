@@ -55,8 +55,6 @@ import {
 import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
-import { type ErasureRegistryNamespace, erasureRegistryName } from "./erasure/contract";
-import { sharedStorageRead } from "./routing/runtime";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
 import { connectionCallbackPath } from "./connections/contract";
 import { recoveryIsolationResponse } from "./release-isolation/operations";
@@ -72,7 +70,6 @@ type PublicEnvironment = WorkerTelemetryEnvironment & {
       RECOVERY_ISOLATION: string;
       CONTRACT_DIGEST: string;
       CF_VERSION_METADATA: { readonly id: string };
-      ERASURE_REGISTRY_COORDINATOR: ErasureRegistryNamespace;
     }>
   >;
 
@@ -820,18 +817,20 @@ const projectCoreSmokeResponse = (
     );
   });
 
-const readTarget = (request: Request, environment: PublicEnvironment): Pick<Fetcher, "fetch"> =>
-  sharedStorageRead(request) && environment.ERASURE_REGISTRY_COORDINATOR !== undefined
-    ? environment.ERASURE_REGISTRY_COORDINATOR.getByName(erasureRegistryName, {
-        locationHint: "enam",
-      })
-    : environment.CORE;
+const hasMixedQueryCredentials = (request: Request): boolean =>
+  request.method === "GET" &&
+  request.headers.has("authorization") &&
+  request.headers.has("cookie") &&
+  canonicalRoute(new URL(request.url).pathname);
 
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
   { origin, telemetry }: Readonly<{ origin: Option.Option<string>; telemetry: TelemetryService }>
 ): Effect.Effect<Response> => {
+  if (hasMixedQueryCredentials(request)) {
+    return Effect.succeed(applyApiPolicy(unauthenticated(), environment.BROWSER_ORIGIN, origin));
+  }
   if (rejectsMcpIngress(request, environment.BROWSER_ORIGIN)) {
     return Effect.succeed(
       applyApiPolicy(
@@ -853,7 +852,7 @@ const routeOwnedRequest = (
       forwarded.headers.set(workerInternalTraceHeader, encodeTraceParent(trace.value));
     }
     const response = yield* Effect.tryPromise({
-      try: (signal) => readTarget(forwarded, environment).fetch(forwarded, { signal }),
+      try: (signal) => environment.CORE.fetch(forwarded, { signal }),
       catch: () => undefined,
     });
     return yield* projectCoreSmokeResponse(response, request, environment);

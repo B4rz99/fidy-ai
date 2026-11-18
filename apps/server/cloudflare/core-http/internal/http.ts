@@ -55,7 +55,6 @@ import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 import { initialBrowserSessionBindingResponse } from "./browser-entry";
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
 import { processingConsentTransport } from "../../../src/shell/processing-consent/runtime";
-import { handleProcessingConsentRequest } from "../../consent/runtime";
 import { connectionBrowserTransport } from "../../../src/shell/connections/runtime";
 import { connectionCallbackPath } from "../../connections/contract";
 import {} from "../../connections/runtime";
@@ -1641,12 +1640,6 @@ const dedicatedBrowserResponse = (
   environment: CoreHttpEnvironment,
   path: string
 ): Option.Option<Effect.Effect<Response>> => {
-  const input = {
-    coordinator: environment.USER_TRANSACTION_COORDINATOR,
-    request,
-    db: environment.DB,
-    browserOrigin: environment.BROWSER_ORIGIN,
-  };
   if (path === connectionCallbackPath) {
     if (request.method !== "GET") {
       return Option.some(
@@ -1669,7 +1662,7 @@ const dedicatedBrowserResponse = (
     );
   }
   if (Option.isSome(processingConsentTransport(path))) {
-    return Option.some(handleProcessingConsentRequest(input));
+    return Option.some(routeSessionRequest({ request, environment }));
   }
   if (Option.isSome(connectionBrowserTransport(path))) {
     if (request.headers.get("origin") !== environment.BROWSER_ORIGIN) {

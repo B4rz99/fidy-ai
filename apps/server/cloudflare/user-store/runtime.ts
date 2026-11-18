@@ -1,3 +1,5 @@
+import { handleLocalProcessingConsent } from "../consent/runtime";
+import { processingConsentTransport } from "../../src/shell/processing-consent/runtime";
 import { inspectUncertainty, retainedWork } from "./internal/retained-work";
 import { createStorageControl } from "../storage-operations/runtime";
 import { pendingExecutionRecoveryMs } from "../agent/contract";
@@ -733,7 +735,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     }
     return Option.none();
   }
-  private browserRequest(
+  private privacyRequest(
     request: Request,
     command: string,
     owns: (id: string) => boolean
@@ -761,6 +763,22 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         )
       );
     }
+    if (Option.isSome(processingConsentTransport(new URL(request.url).pathname))) {
+      return Option.some(
+        this.runtime.runPromise(
+          handleLocalProcessingConsent(request, this.env.BROWSER_ORIGIN, owns)
+        )
+      );
+    }
+    return Option.none();
+  }
+  private browserRequest(
+    request: Request,
+    command: string,
+    owns: (id: string) => boolean
+  ): Option.Option<Promise<Response>> {
+    const privacy = this.privacyRequest(request, command, owns);
+    if (Option.isSome(privacy)) return privacy;
     if (isBrowserObservation(command, request)) {
       return Option.some(this.runtime.runPromise(browserSessionRequest(request, owns)));
     }

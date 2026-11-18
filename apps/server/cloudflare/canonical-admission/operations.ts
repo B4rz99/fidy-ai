@@ -13,6 +13,8 @@ import {
   canonicalAdmissionUnavailable as unavailable,
 } from "./internal/responses";
 import {
+  isNativeAccountQuery as accountQuery,
+  readNativeAccountQuery as accountQueryResult,
   admitLocalRequest as admitLocal,
   externalRead,
   repairReceiptAlarm as inspectReceipts,
@@ -1333,6 +1335,10 @@ export const repairReceiptAlarm = Effect.fnUntraced(function* (
 
 export const localPreparationSubject: typeof localPreparationSubjectOwned = (...args) =>
   localPreparationSubjectOwned(...args);
+
+export const isNativeAccountQuery: typeof accountQuery = (operation) => accountQuery(operation);
+export const readNativeAccountQuery: typeof accountQueryResult = (...args) =>
+  accountQueryResult(...args);
 
 export const dispatchNativeExternalRead: typeof externalRead = (input) => externalRead(input);
 

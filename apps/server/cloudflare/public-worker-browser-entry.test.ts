@@ -4,7 +4,6 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { expect, vi } from "vitest";
 import publicWorker from "./public-worker";
-import { erasureRegistryName } from "./erasure/contract";
 
 it.effect.each([false, true])(
   "preserves the initial-context query, browser Origin and cookie through the public gateway",
@@ -21,14 +20,9 @@ it.effect.each([false, true])(
         expect(request.headers.has("authorization")).toBe(false);
         return Promise.resolve(Response.json({ binding: null }));
       });
-      const core = vi.fn(() => Promise.resolve(new Response(null, { status: 503 })));
-      const target = vi.fn(
-        (name: string, options?: DurableObjectNamespaceGetDurableObjectOptions) => {
-          expect(name).toBe(erasureRegistryName);
-          expect(options?.locationHint).toBe("enam");
-          return { fetch: forward };
-        }
-      );
+      const target = vi.fn(() => {
+        throw new Error("User reads must go to Core");
+      });
       const response = yield* Effect.tryPromise(() =>
         publicWorker.fetch(
           new Request("https://api.fidyapp.com/web/session/binding?context=application", {
@@ -44,22 +38,20 @@ it.effect.each([false, true])(
             LOCAL_CANONICAL_READ_BEARER: "",
             PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
             RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-            CORE: { fetch: independent ? core : forward },
+            CORE: { fetch: forward },
             ...(independent ? { ERASURE_REGISTRY_COORDINATOR: { getByName: target } } : {}),
           }
         )
       );
       expect(response.status).toBe(200);
       expect(forward).toHaveBeenCalledTimes(1);
-      expect(core).not.toHaveBeenCalled();
-      expect(target).toHaveBeenCalledTimes(independent ? 1 : 0);
+      expect(target).not.toHaveBeenCalled();
     })
 );
 
-it.effect("rejects an unapproved browser Origin before selecting the metadata read executor", () =>
+it.effect("rejects an unapproved browser Origin before forwarding to Core", () =>
   Effect.gen(function* () {
     const fetch = vi.fn(() => Promise.resolve(new Response()));
-    const getByName = vi.fn(() => ({ fetch }));
     const response = yield* Effect.tryPromise(() =>
       publicWorker.fetch(
         new Request("https://api.fidyapp.com/web/session/binding?context=application", {
@@ -74,12 +66,10 @@ it.effect("rejects an unapproved browser Origin before selecting the metadata re
           PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
           CORE: { fetch },
-          ERASURE_REGISTRY_COORDINATOR: { getByName },
         }
       )
     );
     expect(response.status).toBe(403);
     expect(fetch).not.toHaveBeenCalled();
-    expect(getByName).not.toHaveBeenCalled();
   })
 );

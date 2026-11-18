@@ -23,9 +23,11 @@ import {
   admitCanonicalOperation,
   canonicalAdmissionUnavailable,
   commitLocalWrite,
+  isNativeAccountQuery,
   localCanonicalArguments,
   prepareHostedBatch,
   prepareLocalWrite,
+  readNativeAccountQuery,
   runLocalBatch,
   runLocalMutation,
 } from "../canonical-admission/operations";
@@ -751,6 +753,7 @@ export const executeCanonicalQuery = ({
 /** Native batch dispatch and the individual keyword and group-correction entry points. */
 const successfulMutationStatus = 200;
 export const isLocalBatchRoute = (id: string): boolean =>
+  isNativeAccountQuery(id) ||
   id.startsWith("connections.") ||
   id === atomicBatchOperation ||
   id === "identity.updateUserPreferences" ||
@@ -829,6 +832,15 @@ const pendingPageResponse = Effect.fn(function* (unit: LocalBatchRoute) {
   return reply;
 });
 const localBatchQuery = Effect.fn(function* (unit: LocalBatchRoute) {
+  if (isNativeAccountQuery(unit.operation.id)) {
+    return Option.some(
+      yield* runLocalMutation({
+        ...unit,
+        input: Effect.succeedSome(true),
+        work: (_input, user, current) => readNativeAccountQuery(unit.operation.id, user, current),
+      })
+    );
+  }
   if (unit.operation.id.startsWith("connections.") && unit.operation.policy.kind === "query") {
     return Option.some(
       yield* runLocalMutation({
@@ -905,6 +917,8 @@ export const localOAuthReviewBinding: typeof localReviewBinding = (...args) =>
 /** The hosted channel may only project operations its independent canonical caller policy permits. */
 const defaultReviewPageSize = 50;
 const parameterizedReads = [
+  "categories.listCategories",
+  "quota.getQuota",
   "connections.listInstitutions",
   "connections.listConnections",
   "connections.getConnection",
@@ -992,9 +1006,10 @@ export const prepareHostedOwner = Effect.fn(function* (
     return Option.some(
       prepareLocalWrite({
         targets: [],
-        commit: readParameter(operation, input, context).pipe(
-          Effect.mapError((cause) => new Cause.UnknownError(cause))
-        ),
+        commit: (isNativeAccountQuery(operation.id)
+          ? readNativeAccountQuery(operation.id, context.user, context.current)
+          : readParameter(operation, input, context)
+        ).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
       })
     );
   }

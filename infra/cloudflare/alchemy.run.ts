@@ -2,7 +2,7 @@ import type { ErasureRegistryInitialization } from "../../apps/server/cloudflare
 import { prepareLocalErasureRegistry } from "../../apps/server/cloudflare/erasure/operations";
 import { ErasureUnavailable } from "../../apps/server/cloudflare/erasure-store/contract";
 import * as Alchemy from "alchemy";
-import * as Output from "alchemy/Output";
+import type * as Output from "alchemy/Output";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -734,17 +734,6 @@ export default Alchemy.Stack(
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: production ? productionTopology.ingress.workersDev : true,
-    });
-
-    yield* ingress.bind`erasure-registry`({
-      bindings: [
-        Output.map(core.workerName, (scriptName) => ({
-          type: "durable_object_namespace" as const,
-          name: "ERASURE_REGISTRY_COORDINATOR",
-          className: "UserTransactionCoordinator",
-          scriptName,
-        })),
-      ],
     });
 
     const web = yield* Cloudflare.Website.StaticSite("Web", {

@@ -614,36 +614,42 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
   );
 });
 
-/** Route external calls through current native admission even before an operation's User owner is installed. */
+export const isNativeAccountQuery = (operation: string): boolean =>
+  operation === "categories.listCategories" || operation === "quota.getQuota";
+
+export const readNativeAccountQuery = Effect.fn(function* (
+  operation: string,
+  user: UserId,
+  current: number
+) {
+  if (operation === "categories.listCategories") {
+    return {
+      status: 200,
+      outcome: "success" as const,
+      body: { data: [...listLaunchCategories()], next: [] },
+    };
+  }
+  if (operation === "quota.getQuota") {
+    const standing = yield* localStanding(user, current);
+    return {
+      status: 200,
+      outcome: "success" as const,
+      body: {
+        data: yield* Schema.encodeEffect(Schema.toCodecJson(QuotaStatus))(standing),
+        next: [],
+      },
+    };
+  }
+  return yield* new CanonicalAdmissionUnavailable({ cause: "unsupported account query" });
+});
+
 export const externalRead = Effect.fn(function* (
   unit: Pick<Mutation<boolean, never>, "request" | "operation" | "owns" | "storage">
 ) {
   return yield* runLocalMutation({
     ...unit,
     input: Effect.succeedSome(true),
-    work: Effect.fn(function* (_input: boolean, user: UserId, current: number) {
-      if (unit.operation.id === "categories.listCategories") {
-        return {
-          status: 200,
-          outcome: "success" as const,
-          body: { data: [...listLaunchCategories()], next: [] },
-        };
-      }
-      if (unit.operation.id === "quota.getQuota") {
-        const standing = yield* localStanding(user, current);
-        return {
-          status: 200,
-          outcome: "success" as const,
-          body: {
-            data: yield* Schema.encodeEffect(Schema.toCodecJson(QuotaStatus))(standing),
-            next: [],
-          },
-        };
-      }
-      return yield* new CanonicalAdmissionUnavailable({
-        cause: "native operation owner unavailable",
-      });
-    }),
+    work: (_input, user, current) => readNativeAccountQuery(unit.operation.id, user, current),
   }).pipe(
     Effect.catchCause(() =>
       Effect.succeed(

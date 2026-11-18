@@ -196,6 +196,30 @@ export const routeBrowserSession = Effect.fn(
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
 
+/** Fence ancillary routes carrying a mounted cookie before contacting the independent owner. */
+export const currentMountedBinding = Effect.fn(
+  function* (
+    request: Request,
+    environment: Partial<UserStoreBindings> & { BROWSER_ORIGIN: string }
+  ) {
+    if (!includesMountedSession(request)) return Option.none<Response>();
+    const expected = request.headers.get(browserSessionBindingHeader);
+    if (expected === null || expected === "") return Option.some(noAuthority());
+    const reply = yield* routeBrowserSession(
+      new Request(new URL("/web/session/binding", request.url), { headers: request.headers }),
+      environment
+    );
+    if (!reply.ok) return Option.some(reply);
+    const proof = yield* Effect.tryPromise(() => reply.json()).pipe(
+      Effect.flatMap(
+        Schema.decodeUnknownEffect(Schema.Struct({ binding: Schema.NullOr(Schema.String) }))
+      )
+    );
+    return proof.binding === expected ? Option.none<Response>() : Option.some(noAuthority());
+  },
+  Effect.catchCause(() => Effect.succeed(Option.some(canonicalAdmissionUnavailable())))
+);
+
 export const reserveExternalEventRoute = Effect.fn(function* (
   directory: ExternalEventNamespace,
   route: typeof ExternalEventRoute.Type

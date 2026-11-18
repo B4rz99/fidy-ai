@@ -1,6 +1,6 @@
 import { retainedPlanningWork } from "../retained-planning.test-fixture";
 import { NodeFileSystem } from "@effect/platform-node";
-import { nativeCorrectionPlatform } from "../user-store.test-fixture";
+import { nativeClockPlatform } from "../user-store.test-fixture";
 import {
   alice,
   makeNativeTransactionJourney,
@@ -2715,7 +2715,7 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
   (ordering) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* makeNativeTransactionJourney(undefined, nativeCorrectionPlatform);
+        const db = yield* makeNativeTransactionJourney(undefined, nativeClockPlatform);
         const owner = users[0] ?? "";
         const visible = "30000000-0000-4000-8000-000000000a01";
         const suppressed = "30000000-0000-4000-8000-000000000a02";
@@ -2786,9 +2786,9 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
         expect(DateTime.formatIso(effective.occurredAt)).toBe("2025-01-05T12:00:00.000Z");
         const instant = vi.getRealSystemTime() + 1000;
         yield* fromTestPromise(() =>
-          db.exec("CREATE TABLE correction_clock(instant INTEGER NOT NULL)")
+          db.exec("CREATE TABLE fixture_clock(instant INTEGER NOT NULL)")
         );
-        yield* fromTestPromise(() => db.exec("INSERT INTO correction_clock VALUES (?)", instant));
+        yield* fromTestPromise(() => db.exec("INSERT INTO fixture_clock VALUES (?)", instant));
         const firstDate = "2025-01-07T12:00:00.000Z";
         const secondDate = "2025-01-08T12:00:00.000Z";
         for (const [id, occurredAt] of [
@@ -2797,7 +2797,7 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
         ] as const) {
           const offset = ordering === "one-millisecond-newer" && id === visible ? 1 : 0;
           yield* fromTestPromise(() =>
-            db.exec("UPDATE correction_clock SET instant=?", instant + offset)
+            db.exec("UPDATE fixture_clock SET instant=?", instant + offset)
           );
           const correctedMember = yield* nativeBrowserWrite(db)(alice, {
             method: "PUT",
@@ -2807,9 +2807,7 @@ it.each(["same-instant", "one-millisecond-newer"] as const)(
           expect(correctedMember.status).toBe(200);
           yield* fromTestPromise(() => correctedMember.arrayBuffer());
         }
-        yield* fromTestPromise(() =>
-          db.exec("UPDATE correction_clock SET instant=?", instant + 1000)
-        );
+        yield* fromTestPromise(() => db.exec("UPDATE fixture_clock SET instant=?", instant + 1000));
         const expectedDate = ordering === "same-instant" ? secondDate : firstDate;
         const expectedSource = [{ occurred_at_ms: Date.parse(expectedDate) }];
         expect(

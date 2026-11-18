@@ -1,3 +1,5 @@
+import { webAuthenticationEndpoints } from "../../../src/shell/web-authentication/contract";
+import { supportRecoveryPath } from "../../recovery/contract";
 import { handleSampleReview } from "../../ingestion/runtime";
 import { nativeSupportRecovery } from "../../recovery/operations";
 import {
@@ -5,19 +7,15 @@ import {
   emailReplacementPath,
 } from "../../../src/shell/email-authentication/contract";
 import {
-  isLocalForwardingOperation,
-  isLocalReviewOperation,
   prepareBoundReviewItem,
   prepareBoundReviewMaterial,
   prepareBoundReviewPageContext,
   prepareBoundReviewWorkspace,
   validationFailed,
 } from "../../ingestion/operations";
+import { executeCanonicalHttpQuery } from "../../canonical-operations/operations";
 import {
-  executeCanonicalHttpQuery,
-  isLocalBatchRoute,
-} from "../../canonical-operations/operations";
-import {
+  currentMountedBinding,
   routeBootstrapRequest,
   routeBrowserSession,
   routeConnectionCallback,
@@ -27,13 +25,9 @@ import {
 
 import { coordinatorErasureStoreIds } from "../../transactions/runtime";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
-import {
-  isLocalRecurringPlan,
-  prepareBoundRecurringWorkspace,
-} from "../../recurring-plans/operations";
+import { prepareBoundRecurringWorkspace } from "../../recurring-plans/operations";
 import {
   browseDashboard,
-  isLocalDashboardOperation,
   prepareBoundDashboardCatalog,
   prepareBoundDashboardView,
 } from "../../dashboard/operations";
@@ -52,7 +46,7 @@ import { ReviewCommand, sampleReviewPath } from "../../../src/core/ingestion/con
 import { RecurringCommand } from "../../../src/core/recurring-plans/contract";
 import { handleErasureOperator } from "../../erasure/runtime";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
-import { initialBrowserSessionBindingResponse } from "./browser-entry";
+
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
 import { processingConsentTransport } from "../../../src/shell/processing-consent/runtime";
 import { connectionBrowserTransport } from "../../../src/shell/connections/runtime";
@@ -70,8 +64,6 @@ import {
 } from "../../canonical-admission/operations";
 import { isLocalHostedPath } from "../../agent/runtime";
 
-import { dispatchEmailReplacement } from "../../email-authentication/runtime";
-
 import { listCategoriesPath } from "../../../src/shell/categories/contract";
 import { MemoryId, RememberInput, ReviseInput } from "../../../src/core/memory/contract";
 import { type TelemetryService } from "../../../src/shell/observability/contract";
@@ -79,17 +71,12 @@ import { observeCanonicalResponse } from "../../runtime/application-observation/
 import { type Cause, Clock, Duration, Effect, Exit, Option, Schema } from "effect";
 import {
   correctionInput,
-  isLocalTransactionOperation,
   transactionInput,
   transactionPairInput,
 } from "../../transactions/operations";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
-import {
-  budgetRefusal,
-  isLocalBudgetOperation,
-  prepareBoundBudgetWorkspace,
-} from "../../budgets/operations";
+import { budgetRefusal, prepareBoundBudgetWorkspace } from "../../budgets/operations";
 
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 import {
@@ -103,16 +90,9 @@ import {
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody, pathId, rawPathId } from "../../http/operations";
 
-import {
-  handleWebAuthentication,
-  ownsWebAuthenticationPath,
-} from "../../web-authentication/operations";
+import { ownsWebAuthenticationPath, supportResponse } from "../../web-authentication/operations";
 import { pricePublicationPath } from "../../subscription/contract";
-import {
-  isLocalSubscriptionRead,
-  prepareBoundSubscriptionRead,
-  refundSupportRoute,
-} from "../../subscription/operations";
+import { prepareBoundSubscriptionRead, refundSupportRoute } from "../../subscription/operations";
 import { paymentEnrollmentTransport } from "../../../src/shell/subscription/runtime";
 import {
   handlePricePublication,
@@ -172,58 +152,6 @@ const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
   RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(gitRevisionPattern)),
 });
-
-type PublicationKind = "emailReplacement";
-type PublishAcceptedWork = (kind: PublicationKind, id: string) => void;
-
-const publicationActivities = (
-  environment: CoreHttpEnvironment,
-  identity: Option.Option<string>
-): Record<PublicationKind, () => Effect.Effect<void, void>> => {
-  const publishers: Record<PublicationKind, () => Effect.Effect<void, void>> = {
-    emailReplacement: () =>
-      environment.EMAIL_REPLACEMENT_QUEUE === undefined
-        ? Effect.void
-        : dispatchEmailReplacement({
-            DB: environment.DB,
-            EMAIL_REPLACEMENT_QUEUE: environment.EMAIL_REPLACEMENT_QUEUE,
-            identity,
-          }),
-  };
-  return publishers;
-};
-
-/** Publication is an acceleration only; committed D1 intent remains recoverable by cron. */
-export const acceptedWorkPublisher =
-  ({
-    environment,
-    context,
-  }: Readonly<{
-    environment: CoreHttpEnvironment;
-    context: Option.Option<Pick<ExecutionContext, "waitUntil">>;
-  }>): PublishAcceptedWork =>
-  (kind, id) => {
-    if (Option.isNone(context)) return;
-    const identity = Option.some(id);
-    const publishers = publicationActivities(environment, identity);
-    Effect.runSync(
-      Effect.try(() =>
-        context.value.waitUntil(
-          Effect.suspend(publishers[kind]).pipe(
-            Effect.timeout("2 seconds"),
-            Effect.catchCause(() =>
-              Effect.logWarning({
-                component: "outbox-publication",
-                operation: kind,
-                outcome: "failed",
-              })
-            ),
-            Effect.runPromise
-          )
-        )
-      ).pipe(Effect.ignore)
-    );
-  };
 
 const jsonHeaders = {
   "cache-control": "no-store",
@@ -1533,21 +1461,6 @@ export const browserCanonicalResponse = ({
     })
   );
 
-const isUserStoreOperation = (id: string): boolean =>
-  [
-    isLocalPATManagement,
-    isLocalPATGrant,
-    isLocalBatchRoute,
-    isLocalForwardingOperation,
-    isLocalReviewOperation,
-    isLocalSubscriptionRead,
-    isLocalTransactionOperation,
-    isLocalDashboardOperation,
-    isLocalRecurringPlan,
-    isLocalBudgetOperation,
-  ].some((matches) => matches(id)) ||
-  ["recurring.listRecurringSeries", "subscription.cancelSubscription"].includes(id);
-
 const authorizedCanonicalResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
@@ -1557,9 +1470,7 @@ const authorizedCanonicalResponse = (
   if (request.headers.has("authorization")) {
     return routePATRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id));
   }
-  return isUserStoreOperation(operation.id)
-    ? routeSessionRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id))
-    : browserCanonicalResponse({ request, environment, operation });
+  return routeSessionRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id));
 };
 
 const healthResponse = (environment: CoreHttpEnvironment): Response => {
@@ -1575,6 +1486,15 @@ const healthResponse = (environment: CoreHttpEnvironment): Response => {
   );
 };
 
+const mounted = <E, R>(
+  request: Request,
+  environment: CoreHttpEnvironment,
+  work: Effect.Effect<Response, E, R>
+): Effect.Effect<Response, E, R> =>
+  currentMountedBinding(request, environment).pipe(
+    Effect.flatMap(Option.match({ onNone: () => work, onSome: Effect.succeed }))
+  );
+
 const canonicalOrHealthResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
@@ -1584,7 +1504,7 @@ const canonicalOrHealthResponse = (
   if (Option.isSome(operation)) {
     return authorizedCanonicalResponse(request, environment, operation.value);
   }
-  return withBrowserBinding(
+  return mounted(
     request,
     environment,
     Effect.succeed(
@@ -1600,7 +1520,6 @@ type RequestExecution = Readonly<{
   request: Request;
   environment: CoreHttpEnvironment;
   telemetry: TelemetryService;
-  publish: PublishAcceptedWork;
 }>;
 
 const smokeResponse = (
@@ -1747,11 +1666,13 @@ const reservedBindingResponse = <E, R>(
   environment: CoreHttpEnvironment,
   work: Effect.Effect<Response, E, R>
 ): Effect.Effect<Response, E, R> =>
+  ownsProviderAuthenticationPath(new URL(request.url).pathname) ||
+  isPairingRequest(request) ||
   Option.isSome(processingConsentTransport(new URL(request.url).pathname)) ||
   Option.isSome(connectionBrowserTransport(new URL(request.url).pathname)) ||
   new URL(request.url).pathname === connectionCallbackPath
     ? work
-    : withBrowserBinding(request, environment, work);
+    : mounted(request, environment, work);
 
 const isPairingRequest = (request: Request): boolean =>
   request.method === "POST" &&
@@ -1769,13 +1690,13 @@ const dispatchVerifiedCoreHttp = ({
   request,
   environment,
   telemetry,
-  publish,
 }: RequestExecution): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   const url = new URL(request.url);
   const bound = <R>(work: Effect.Effect<Response, never, R>): Effect.Effect<Response, never, R> =>
-    withBrowserBinding(request, environment, work);
+    mounted(request, environment, work);
   if (Object.values(oauthPaths).some((path) => path === url.pathname)) {
-    return routeBootstrapRequest({ request, environment });
+    const work = routeBootstrapRequest({ request, environment });
+    return request.headers.has("fidy-session-binding") ? bound(work) : work;
   }
   const reserved = reservedCoreResponse({ request, environment, bankAuthentication }, url.pathname);
   if (Option.isSome(reserved)) return reservedBindingResponse(request, environment, reserved.value);
@@ -1787,6 +1708,15 @@ const dispatchVerifiedCoreHttp = ({
   }
   const directPath = directPathResponse(request);
   if (Option.isSome(directPath)) return directPath.value;
+  return nativeAuthenticationOrCanonical(request, environment, telemetry);
+};
+
+const nativeAuthenticationOrCanonical = (
+  request: Request,
+  environment: CoreHttpEnvironment,
+  telemetry: TelemetryService
+): Effect.Effect<Response, never, HttpClient.HttpClient> => {
+  const url = new URL(request.url);
   const patListing = canonicalOperation({ method: request.method, path: url.pathname }).pipe(
     Option.filter(
       (operation) => isLocalPATManagement(operation.id) || isLocalPATGrant(operation.id)
@@ -1795,22 +1725,33 @@ const dispatchVerifiedCoreHttp = ({
   if (Option.isSome(patListing)) {
     return authorizedCanonicalResponse(request, environment, patListing.value);
   }
-  if (ownsWebAuthenticationPath(url.pathname)) {
-    return bound(
-      handleWebAuthentication({
+  if (url.pathname === supportRecoveryPath) {
+    return mounted(
+      request,
+      environment,
+      supportResponse({
         request,
-
-        db: environment.DB,
-        loginEmail: routeBootstrapRequest({ request, environment }),
+        telemetry,
         support: nativeSupportRecovery({
           request,
           config: environment,
           directory: Option.fromUndefinedOr(environment.DIRECTORY),
         }),
-        telemetry,
-        publish,
       })
     );
+  }
+  if (
+    [
+      webAuthenticationEndpoints.startEmail.path,
+      webAuthenticationEndpoints.completeEmail.path,
+    ].some((path) => path === url.pathname)
+  ) {
+    return request.method === "POST"
+      ? routeBootstrapRequest({ request, environment })
+      : Effect.succeed(methodNotAllowed());
+  }
+  if (ownsWebAuthenticationPath(url.pathname) && !canonicalRoute(url.pathname)) {
+    return Effect.succeed(methodNotAllowed());
   }
   return canonicalOrHealthResponse(request, environment, url.pathname);
 };
@@ -1854,16 +1795,4 @@ const nativeIdentityResponse = (
 export const executeCoreHttp = (
   input: RequestExecution
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
-  nativeIdentityResponse(input).pipe(
-    Option.getOrElse(() =>
-      initialBrowserSessionBindingResponse({
-        request: input.request,
-        db: input.environment.DB,
-        browserOrigin: input.environment.BROWSER_ORIGIN,
-      }).pipe(
-        Effect.flatMap(
-          Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed })
-        )
-      )
-    )
-  );
+  nativeIdentityResponse(input).pipe(Option.getOrElse(() => dispatchCoreHttp(input)));

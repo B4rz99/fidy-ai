@@ -10,7 +10,7 @@ import {
   ConnectionInstitutions,
   type registeredConnectionInstitutionIds,
 } from "../../src/shell/connections/contract";
-import { measureErasureRecovery, withErasureRecovery } from "../erasure/runtime";
+
 import type { CoreRejectionBoundary } from "../runtime/operational-health/contract";
 import { makeCoreRejectionObserver } from "../runtime/operational-health/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
@@ -20,7 +20,7 @@ import { decodeTraceParent } from "../../src/shell/observability/operations";
 import { workerInternalTraceHeader } from "../runtime/telemetry/contract";
 import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { CoreHttpEnvironment, CoreHttpHandler } from "./contract";
-import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
+import { executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
 import { recoveryIsolationResponse } from "../release-isolation/operations";
 
@@ -76,7 +76,7 @@ const storageProbe = Effect.fn(function* (request: Request, environment: CoreHtt
 
 export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
-  return (request, environment, context) =>
+  return (request, environment) =>
     Effect.gen(function* () {
       const isolated = recoveryIsolationResponse({
         request,
@@ -88,22 +88,14 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
       if (Option.isSome(isolated)) return isolated.value;
       const storage = yield* storageProbe(request, environment);
       if (Option.isSome(storage)) return storage.value;
-      const recovery = measureErasureRecovery(environment);
       const clients = yield* Layer.build(OutboundHttpLive).pipe(
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
       );
       const response = yield* executeCoreHttp({
         bankAuthentication: verifyBancolombiaSandboxAuthentication(environment),
         request,
-        environment:
-          new URL(request.url).pathname === "/internal/titular-erasure"
-            ? environment
-            : recovery.environment,
+        environment,
         telemetry,
-        publish: acceptedWorkPublisher({
-          environment: withErasureRecovery(environment),
-          context: Option.fromUndefinedOr(context),
-        }),
       }).pipe(
         Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
       );
@@ -112,7 +104,7 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         boundary: rejectionBoundary(request),
         now: yield* Clock.currentTimeMillis,
       });
-      return recovery.respond(response);
+      return response;
     }).pipe(
       Effect.provideService(ConnectionInstitutions, institutions),
       Effect.provideService(ConnectionSandboxAdmission, bancolombiaSandboxAdmission(environment)),

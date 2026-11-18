@@ -67,11 +67,15 @@ const methodNotAllowed = (): Response =>
     }
   );
 
-const supportResponse = ({
+export const supportResponse = ({
   request,
   support,
   telemetry,
-}: WebAuthenticationRequest): Effect.Effect<Response, never, HttpClient.HttpClient> => {
+}: Pick<WebAuthenticationRequest, "request" | "support" | "telemetry">): Effect.Effect<
+  Response,
+  never,
+  HttpClient.HttpClient
+> => {
   if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
   return telemetry.rootSpan(
     {

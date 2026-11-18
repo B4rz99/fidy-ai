@@ -219,11 +219,7 @@ const categoryAuthorizationFailure = (
   ) {
     return Option.none();
   }
-  if (
-    request.headers.get("authorization")?.startsWith("Bearer ") === true ||
-    (environment.LOCAL_CANONICAL_READ_BEARER.length > 0 &&
-      request.headers.get("authorization") === `Bearer ${environment.LOCAL_CANONICAL_READ_BEARER}`)
-  ) {
+  if (request.headers.get("authorization")?.startsWith("Bearer ") === true) {
     return Option.none();
   }
   return Option.some(unauthenticated());

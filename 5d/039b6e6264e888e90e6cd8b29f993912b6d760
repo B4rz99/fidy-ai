@@ -1,0 +1,43 @@
+apps/server/cloudflare/directory/internal/reservations.ts
+  s_a1be23a656acf0::t_d106bdd6638593 35-48
+apps/server/cloudflare/browser-login/internal/local-pairing.ts
+  s_c5af74b6cecdfe::t_f34a376adbadf7 1,10,96-110,143-151,165-170
+apps/server/cloudflare/directory/contract.ts
+  s_c5af74b6cecdfe::t_9aa80b1008645c 56
+apps/server/cloudflare/directory/runtime.ts
+  s_c5af74b6cecdfe::t_50f2d826e008d9 24,57,252,257
+apps/server/cloudflare/email-authentication/native-login.test-fixture.ts
+  s_c5af74b6cecdfe::t_ddcc3437be043d 1-123
+apps/server/cloudflare/email-authentication/native-login.test.ts
+  s_c5af74b6cecdfe::t_3c145892bde9f1 5,8-10,171-182,253,259
+apps/server/cloudflare/email-authentication/native-redemption.test.ts
+  s_c5af74b6cecdfe::t_f410aa0ae70496 1-264
+apps/server/cloudflare/login-email-worker.test-fixture.ts
+  s_c5af74b6cecdfe::t_024f9ff0954d07 2-3,11-65,74-89
+apps/server/cloudflare/onboarding/browser-authentication.test.ts
+  s_c5af74b6cecdfe::t_36b75a95cf93be 8,476-484,509,511
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5d039b6e6264e888e90e6cd8b29f993912b6d760",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c5af74b6cecdfe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eec3-6c98-7e12-a0b9-2e194c97087d",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

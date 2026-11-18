@@ -1,0 +1,77 @@
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_5381b5ee0460bb 1,305-307,727-729
+  s_a1be23a656acf0::t_e3a20f3f855405 304
+  s_a1be23a656acf0::t_9a26653e118858 301-303
+apps/server/cloudflare/insights/runtime.ts
+  s_a1be23a656acf0::t_9a26653e118858 498
+  s_a1be23a656acf0::t_f6e82166a24c3c 499
+  s_a1be23a656acf0::t_c612c9488bb406 500,503
+apps/server/cloudflare/agent/internal/local-turn.ts
+  s_a1be23a656acf0::t_5381b5ee0460bb 2-5,7
+  s_a1be23a656acf0::t_f6e82166a24c3c 1,6,8
+  s_a1be23a656acf0::t_dddfcbfdc69c32 9-22
+apps/server/cloudflare/agent/user-store.test.ts
+  s_a1be23a656acf0::t_5381b5ee0460bb 66
+  s_a1be23a656acf0::t_c61c5bf4e03be1 108-112,155,204-230
+  s_a1be23a656acf0::t_f6e82166a24c3c 67
+  s_a1be23a656acf0::t_13abcaf32e6fb7 68,231-232,246
+apps/server/cloudflare/agent/internal/local-hosted.ts
+  s_a1be23a656acf0::t_5381b5ee0460bb 1,14,49-53,66-73,80
+  s_a1be23a656acf0::t_f6e82166a24c3c 2
+apps/server/cloudflare/agent/internal/local-challenge.ts
+  s_a1be23a656acf0::t_f6e82166a24c3c 47,50-51
+  s_a1be23a656acf0::t_dddfcbfdc69c32 8
+  s_a1be23a656acf0::t_5c51ec7cd70a9c 52
+apps/server/cloudflare/agent/internal/local-whatsapp.ts
+  s_a1be23a656acf0::t_f6e82166a24c3c 2
+  s_a1be23a656acf0::t_5381b5ee0460bb 1,92-95,105,120-123,125
+apps/server/cloudflare/agent/internal/local-compaction.ts
+  s_a1be23a656acf0::t_dddfcbfdc69c32 14-15
+  s_a1be23a656acf0::t_f6e82166a24c3c 4-7,19-22,24,42-48,63
+  s_a1be23a656acf0::t_3d58a9533b3fdc 3
+apps/server/cloudflare/agent/internal/local-turn-store.ts
+  s_a1be23a656acf0::t_dddfcbfdc69c32 169
+  s_a1be23a656acf0::t_c61c5bf4e03be1 193,211,225-229
+  s_a1be23a656acf0::t_5381b5ee0460bb 1,159-162
+apps/server/cloudflare/insights/internal/local-reminder-choice.ts
+  s_a1be23a656acf0::t_9a26653e118858 237
+  s_a1be23a656acf0::t_6dd612cb1c8796 235,243,253-265
+apps/server/cloudflare/agent/internal/local-recovery.ts
+  s_a1be23a656acf0::t_dddfcbfdc69c32 6-7
+  s_a1be23a656acf0::t_5381b5ee0460bb 58-60
+  s_a1be23a656acf0::t_c61c5bf4e03be1 17
+apps/server/cloudflare/agent/internal/local-history.ts
+  s_a1be23a656acf0::t_dddfcbfdc69c32 8
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_c61c5bf4e03be1 940-944
+  s_a1be23a656acf0::t_9a26653e118858 949,951-957,965-968
+  s_a1be23a656acf0::t_5381b5ee0460bb 963-964,969-974
+  s_a1be23a656acf0::t_dddfcbfdc69c32 933-939
+apps/server/cloudflare/agent/internal/local-inference.ts
+  s_a1be23a656acf0::t_5381b5ee0460bb 35,37,71-95,201-203
+  s_a1be23a656acf0::t_f6e82166a24c3c 31,41
+  s_a1be23a656acf0::t_dddfcbfdc69c32 30
+apps/server/cloudflare/agent/internal/local-tool.ts
+  s_a1be23a656acf0::t_dddfcbfdc69c32 25-26
+apps/server/cloudflare/user-store/internal/hosted-schema.ts
+  s_a1be23a656acf0::t_5381b5ee0460bb 3-6,8-10,12-17,19,21-25,28-31,33-34,36-43,45-48,50-53,55-61,63-66
+apps/server/cloudflare/agent/internal/local-document-reply.ts
+  s_a1be23a656acf0::t_5381b5ee0460bb 65-66,75-76
+  s_a1be23a656acf0::t_dddfcbfdc69c32 6-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "04228854784235e1318ccb69b076bf1802fbfa9a",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+apps/server/cloudflare/insights/internal/native-weekly-summary.ts
+  s_a1be23a656acf0::t_118606725e0aeb 159
+apps/server/cloudflare/maintenance/monitoring-isolation.test.ts
+  s_a1be23a656acf0::t_1f92c8ebe7d546 19-30,32-34,36-95,97-121
+  s_a1be23a656acf0::t_0daf131cdd21d6 1-7,9-18,122-162
+apps/server/cloudflare/insights/internal/local-reminder.ts
+  s_a1be23a656acf0::t_118606725e0aeb 131
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_1f92c8ebe7d546 660-689,696
+  s_a1be23a656acf0::t_60cee6a356709b 1-4,6,254-255,1202-1204
+apps/server/cloudflare/core-worker.ts
+  s_a1be23a656acf0::t_1f92c8ebe7d546 163
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_1f92c8ebe7d546 520
+  s_a1be23a656acf0::t_0047946f88a751 245,326,352,448,500,512,582
+apps/server/cloudflare/insights/internal/local-category-messages.ts
+  s_a1be23a656acf0::t_118606725e0aeb 64
+apps/server/cloudflare/maintenance/native-monitor.test-fixture.ts
+  s_a1be23a656acf0::t_1f92c8ebe7d546 11-63
+  s_a1be23a656acf0::t_4ae4939cf58b45 1-10,64-77
+apps/server/cloudflare/maintenance/operations.ts
+  s_a1be23a656acf0::t_118606725e0aeb 94-97,100
+  s_a1be23a656acf0::t_5d0f70d1be69ad 98-99
+apps/server/cloudflare/runtime/operational-health/operations.ts
+  s_a1be23a656acf0::t_1f92c8ebe7d546 281-289,334-335
+  s_a1be23a656acf0::t_118606725e0aeb 272-276,278-280,302-304,309-311,319,326,330-333
+  s_a1be23a656acf0::t_178395e84af675 1-4,22,277,336-373
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_118606725e0aeb 1114-1120,1123
+  s_a1be23a656acf0::t_4eee880e18a978 1121-1122,1124-1131
+apps/server/cloudflare/maintenance/internal/watchdog.ts
+  s_a1be23a656acf0::t_118606725e0aeb 80-83,85-86,115,228-229,306,340
+  s_a1be23a656acf0::t_1f92c8ebe7d546 22,120-122
+  s_a1be23a656acf0::t_481bd0d0301d1d 84,226-227
+.oxlintrc.json
+  s_a1be23a656acf0::t_c0e9b2aaae31d3 326
+apps/server/cloudflare/insights/internal/native-work-observation.ts
+  s_a1be23a656acf0::t_fe828bb55ec37d 1-42
+apps/server/cloudflare/insights/operations.ts
+  s_a1be23a656acf0::t_dbef5e82eed688 1,462-464
+apps/server/cloudflare/runtime/operational-health/internal/health-inspection.ts
+  s_a1be23a656acf0::t_e7cd2e6a46fcb9 103,106-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fd4ae64c78c67a600855b399118d579170dcadab",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

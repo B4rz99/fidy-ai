@@ -40,7 +40,6 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "provider-authentication/whatsapp-association.test.ts": 6.07,
   "ingestion/statement-staging.test.ts": 5.94,
   "agent/hosted-retention.test.ts": 5.76,
-  "d1-test-fixture.test.ts": 5.54,
   "insights/recurring-digest.test.ts": 5.04,
   "subscription/payment-method-guards.test.ts": 4.99,
   "runtime/runtime.test.ts": 4.69,

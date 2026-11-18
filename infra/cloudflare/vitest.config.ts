@@ -8,7 +8,6 @@ const nativeFileMilliseconds: Readonly<Record<string, number>> = {
   "openai-conformance-script.test.ts": 14_800,
   "release-controller.test.ts": 13_200,
   "diagnose-smoke-routing.test.ts": 7_600,
-  "d1-migrations.test.ts": 7_100,
 };
 class InfrastructureTestSequencer extends BaseSequencer {
   override sort(files: TestSpecification[]): Promise<TestSpecification[]> {

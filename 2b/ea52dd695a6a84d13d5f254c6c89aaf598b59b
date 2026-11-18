@@ -1,0 +1,25 @@
+apps/web/src/transport/wompi-daviplata.ts
+  s_a1be23a656acf0::t_e009529c523b59 511
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_55349fdd45a662 5
+scripts/dev-browser.ts
+  s_a1be23a656acf0::t_f367be127d482c 151
+apps/server/cloudflare/mcp/runtime.ts
+  s_a1be23a656acf0::t_e009529c523b59 931-934
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2bea52dd695a6a84d13d5f254c6c89aaf598b59b",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

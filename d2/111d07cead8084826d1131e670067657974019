@@ -1,0 +1,182 @@
+apps/server/cloudflare/ingestion/internal/local-review-edit.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-121
+apps/server/cloudflare/directory/contract.ts
+  s_a1be23a656acf0::t_ad13e1b3ac806c 220-239
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 218-219
+apps/server/cloudflare/ingestion/internal/forwarded-email-processing.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 15,76,141-147,199
+apps/server/cloudflare/ingestion/internal/oauth-review.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-5,131,192-265
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 15,26,30,32,560-571,1914-1920,2505-2511,2517-2526,2531,2534-2535,2537-2556,2558-2573,2578,2581-2601,3455,3460-3462,3521,3538,3763,3765,3769,3772-3778,3780-3785,3788-3803,3805,3808-3811,3814-3843
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1,921
+apps/server/cloudflare/ingestion/private-email.test-fixture.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1,3-46,50,63
+  s_a1be23a656acf0::t_0e48e5d2919dee 2,47-49,51-62,64-65
+apps/server/cloudflare/oauth-agents/native-ingestion-confirmation.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-159
+apps/server/cloudflare/ingestion/internal/review-page-context.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 30,32,90,157,178-184
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 355-356
+apps/server/cloudflare/directory/internal/whatsapp.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 146-155
+apps/server/cloudflare/ingestion/internal/local-statement-decision.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-146
+apps/server/cloudflare/ingestion/native-email.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 2-3,5,15-17,20-21,23-26,29-279,304,317-408
+  s_a1be23a656acf0::t_9c1ac3756cabc1 1,4,6-14,18-19,22,27-28,280-303,305-316
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_0711c0f786ae96 5
+  s_a1be23a656acf0::t_ce9c17e972af67 7-66
+apps/server/cloudflare/ingestion/internal/local-document.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-104,106-125,127-243,248-307,309-314,319-328
+  s_a1be23a656acf0::t_c4188e57c7c6c6 105,126,244-247,308,315-318
+apps/server/cloudflare/ingestion/operations.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1,5-6,8-17,309-326
+apps/server/cloudflare/queue/statement-owner.test-fixture.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-34
+apps/server/cloudflare/dashboard/user-store.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 889
+apps/server/cloudflare/ingestion/internal/local-retention.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-70,72-101,103-104,106-174,176-181
+  s_a1be23a656acf0::t_39d11d34b8a294 71,102,105,175
+apps/server/cloudflare/ingestion/internal/local-email.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-91,93-151,153-203,205-248,253-360,362-365,367-375,377-378,380-417,419,422-423,428-442
+  s_a1be23a656acf0::t_c0a54b6c1138ab 92
+  s_a1be23a656acf0::t_4b20e21746cd14 152
+  s_a1be23a656acf0::t_2f15f2505358cc 204
+  s_a1be23a656acf0::t_72a17230237475 249-252
+  s_a1be23a656acf0::t_cd5dc9314411ed 361
+  s_a1be23a656acf0::t_b2df17188c066e 366
+  s_a1be23a656acf0::t_a0aaf4fc672c20 376
+  s_a1be23a656acf0::t_6d8156ac93af7c 379
+  s_a1be23a656acf0::t_bf1e53f5fb7a18 418
+  s_a1be23a656acf0::t_e9ef65d0e1a672 420-421
+  s_a1be23a656acf0::t_48a6ad6ce6566e 424-427
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-17,106-111,125,146,241-250,335-338,407,424-481,619-622
+apps/server/cloudflare/queue/recovery-worker.fixture.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 2,121
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 234,323,331
+apps/server/cloudflare/private-objects/operations.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 121-153
+apps/server/cloudflare/ingestion/internal/statement-delivery.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 105-156,160,172,188
+apps/server/cloudflare/http/operations.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 157,162,174-181,188-197
+  s_a1be23a656acf0::t_72e39421d99bd5 198
+apps/server/cloudflare/ingestion/native-review-authority.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-183
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 8,1141-1143,1146-1148,1151-1153,1734,1747,1965-1967
+apps/server/cloudflare/transactions/internal/sqlite-capture.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 43-102,104-105,118-125,150,152,156,160-174
+apps/server/cloudflare/ingestion/native-ingestion-batch.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-114
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-2,284-319,395-397
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1299,1304
+apps/server/cloudflare/ingestion/internal/local-review-list.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-84
+apps/server/cloudflare/ingestion/native-document.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-621
+apps/server/cloudflare/directory/schema/operations.ts
+  s_a1be23a656acf0::t_ad13e1b3ac806c 101-109
+apps/server/cloudflare/canonical-admission/internal/local-batch.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 25,69-78,93-95,145,150,152-154,158-165,168,350-373,378,383-386,401,437,439
+apps/server/cloudflare/ingestion/contract.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-6,9,155-167,169-171,173-184
+  s_a1be23a656acf0::t_ad13e1b3ac806c 168
+  s_a1be23a656acf0::t_118470abf72d40 172
+apps/server/cloudflare/ingestion/internal/native-forwarding.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-6,20,78-79,139-168
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 2-3,45-47,75-117
+apps/server/cloudflare/ingestion/native-review.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-123
+apps/server/cloudflare/canonical-operations/internal/local-owners.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 23-28,76-98
+apps/server/cloudflare/ingestion/email-worker.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1,26
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 262-278,284,288-289,296-299
+apps/server/cloudflare/ingestion/internal/local-review-snapshot.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-48
+apps/server/cloudflare/user-store/internal/ingestion-schema.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1,6-117,119-138
+  s_a1be23a656acf0::t_ad13e1b3ac806c 2-5
+  s_a1be23a656acf0::t_fb0bbb78921e60 118
+apps/server/cloudflare/ingestion/internal/statement-review.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 30,47,73,92-98,203,210
+apps/server/cloudflare/whatsapp/contract.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 251
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 123-152
+apps/server/cloudflare/directory/internal/email-capacity.ts
+  s_a1be23a656acf0::t_ad13e1b3ac806c 1-76,93-97
+  s_a1be23a656acf0::t_a6b23563b7d00d 77-79,90-92
+  s_642f0a94779497::t_161be1595585f6 80-89
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 83-89,92-97,242-251,264-270,278,317
+  s_a1be23a656acf0::t_b7b9badd2a7b0b 70-78,90-91,252-263
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-4,18-21,68,747-750,752-758,768-774,776-781
+apps/server/cloudflare/ingestion/internal/local-statement-work.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-286
+apps/server/cloudflare/ingestion/internal/local-review-material.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-80
+apps/server/cloudflare/queue/failure-isolation.test.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 7,167-172,292-293,295-297,355-358,381,406,469,539,590-593
+apps/server/cloudflare/ingestion/internal/forwarded-email.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 60,63-68,77-79,134
+  s_a1be23a656acf0::t_165ee7e99408d3 1,243,246
+apps/server/cloudflare/ingestion/runtime.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-20,30,147,155,176-187,208-225
+apps/server/cloudflare/ingestion/internal/local-review.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1-156
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 28,44,237,239,278
+  s_a1be23a656acf0::t_ad13e1b3ac806c 11,38,166-169
+apps/server/cloudflare/ingestion/internal/review-store.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 67,74,77,140,146,148
+apps/server/cloudflare/ingestion/internal/statement-staging.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 1512-1552,1568,1573
+apps/server/cloudflare/transactions/operations.ts
+  s_a1be23a656acf0::t_33ebbf5df5fbf2 39,493-494,501-503
+apps/server/cloudflare/directory/internal/expiry.ts
+  s_a1be23a656acf0::t_ad13e1b3ac806c 13,40
+.oxlintrc.json
+  s_a1be23a656acf0::t_6462089a9b2610 322
+apps/server/cloudflare/directory/operations.ts
+  s_a1be23a656acf0::t_0584d10c3a8a79 4,12,218-227
+apps/server/cloudflare/ingestion/internal/email-capacity.ts
+  s_a1be23a656acf0::t_a7e6b873e1267f 1-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d2111d07cead8084826d1131e670067657974019",
+  "prompts": {},
+  "sessions": {
+    "s_642f0a94779497": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1ecee-1dab-7381-93a7-4490f82565a4",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

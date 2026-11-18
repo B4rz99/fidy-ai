@@ -12,7 +12,7 @@ import {
   CategoryTaxonomyRelease,
   categoryIds,
 } from "../../src/core/categories/contract";
-import { native } from "../user-store.test-fixture";
+import { native, workerManifest } from "../user-store.test-fixture";
 
 const alice = "10000000-0000-4000-8000-000000000051";
 const bob = "10000000-0000-4000-8000-000000000052";
@@ -79,6 +79,7 @@ const start = Effect.fn(function* (
   const [owner, reader] = yield* Effect.all([bundle(input.owner), bundle(input.reader)], {
     concurrency: 2,
   });
+  const registry = yield* workerManifest("./core-worker.ts");
   const runtime = yield* Effect.acquireRelease(
     Effect.sync(
       () =>
@@ -96,11 +97,30 @@ const start = Effect.fn(function* (
                 env: {
                   SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: "1000000000" },
                   CF_VERSION_METADATA: { type: "version-metadata" },
+                  MAINTENANCE: {
+                    type: "durable-object",
+                    worker: "registry",
+                    exportName: "Maintenance",
+                  },
                   USER_STORE: {
                     type: "durable-object",
                     worker: "core",
                     exportName: "CategoryProbe",
                   },
+                },
+              },
+            },
+            {
+              config: {
+                type: "worker",
+                name: "registry",
+                compatibilityDate: "2026-09-08",
+                compatibilityFlags: ["nodejs_compat"],
+                manifest: registry,
+                exports: { Maintenance: { type: "durable-object", storage: "sqlite" } },
+                env: {
+                  CF_VERSION_METADATA: { type: "version-metadata" },
+                  SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: "1000000000" },
                 },
               },
             },
@@ -149,7 +169,19 @@ const start = Effect.fn(function* (
         headers: { cookie: "__Host-fidy_session=" + bearer, "Fidy-Session-Binding": session },
       })
     );
-  return { capture, local, interpret, observer, history };
+  const link = (): Effect.Effect<Pick<Response, "json" | "status">> =>
+    native(() =>
+      store.getByName(alice).fetch("https://api.fidyapp.com/transactions/link", {
+        method: "POST",
+        headers: {
+          cookie: "__Host-fidy_session=" + bearer,
+          "Fidy-Session-Binding": session,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ firstTransactionId: first, secondTransactionId: second }),
+      })
+    );
+  return { capture, local, interpret, observer, history, link };
 });
 
 const categorizeUnderOriginalRelease = Effect.fn(function* (path: string) {
@@ -267,27 +299,32 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             second
           )
         );
-        yield* native(() =>
-          local.exec(
-            "INSERT INTO transaction_reconciliation_decisions VALUES (?,?,?,'linked',?,2)",
-            alice,
-            first,
-            second,
-            first
-          )
-        );
-        yield* native(() =>
-          local.exec(
-            "UPDATE transactions SET reconciliation_first_id=?,reconciliation_second_id=? WHERE user_id=?",
-            first,
-            second,
-            alice
-          )
-        );
+        const linked = yield* runtime.link();
+        expect(linked.status).toBe(200);
+        expect(yield* native(() => linked.json())).toMatchObject({
+          data: { id: first, categoryId: added },
+        });
         const effective = yield* runtime.history();
         expect(yield* native(() => effective.json())).toMatchObject({
           data: [{ id: first, categoryId: added }],
         });
+        // Exercise an unreadable revision in each source the owner can select.
+        expect(
+          yield* native(() =>
+            local.exec(
+              "UPDATE transaction_projection_leaf SET category_revision='co-9' WHERE user_id=? AND id=? RETURNING id",
+              alice,
+              first
+            )
+          )
+        ).toEqual([{ id: first }]);
+        expect((yield* runtime.history()).status).toBe(503);
+        yield* native(() =>
+          local.exec(
+            "UPDATE transaction_projection_state SET readiness='rebuilding' WHERE user_id=?",
+            alice
+          )
+        );
         yield* native(() =>
           local.exec("UPDATE transactions SET category_revision='co-9' WHERE id=?", second)
         );

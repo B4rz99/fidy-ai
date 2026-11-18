@@ -1,0 +1,25 @@
+.oxlintrc.json
+  s_a1be23a656acf0::t_b85aa435e0322a 323
+apps/server/cloudflare/transactions/correction-clock.test-fixture.ts
+  s_a1be23a656acf0::t_c756e8646fdc3b 1-25
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a1be23a656acf0::t_7077a4627f6adf 3-10,2718,2787,2789-2811,2813-2824,2842
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_ee154d0d8f3ca6 235,318,569
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "088067c2c9d3e79ffd984d5b359033073f988888",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

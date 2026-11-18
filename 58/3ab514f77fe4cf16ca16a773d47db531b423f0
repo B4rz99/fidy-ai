@@ -1,0 +1,27 @@
+apps/server/cloudflare/runtime/release-smoke/internal/protocol.ts
+  s_a1be23a656acf0::t_97553af51e7685 18-22
+apps/server/cloudflare/runtime/release-smoke/operations.ts
+  s_a1be23a656acf0::t_4c780248d536ee 25,64,90,95-96,98,154-159
+apps/server/cloudflare/runtime/release-smoke/runtime.ts
+  s_a1be23a656acf0::t_ea176caadffc1a 4,41-44,47
+infra/cloudflare/smoke-schema.test.ts
+  s_a1be23a656acf0::t_97bf8af473afc6 114-118,172-177
+infra/cloudflare/workers.test.ts
+  s_a1be23a656acf0::t_93853a251c9d07 4-6,19-20,140-236,295-299,752-793
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "583ab514f77fe4cf16ca16a773d47db531b423f0",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

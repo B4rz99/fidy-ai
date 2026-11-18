@@ -276,7 +276,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const bucket = yield* native(() => runtime.getR2Bucket("SAMPLE_BUCKET", "core"));
         yield* native(() => bucket.delete(key));
         yield* owner.exec(
-          "INSERT INTO erasure_requests VALUES('synthetic-erasure',?,'requested')",
+          "INSERT INTO erasure_requests(id,user_id,state) VALUES('synthetic-erasure',?,'requested')",
           alice.user
         );
         yield* owner.exec("DROP TRIGGER stop_sample_reservation");

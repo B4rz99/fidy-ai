@@ -2,8 +2,131 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "d806192f2010184b0a68075c23d68086331002cf66b47b4e06602dff189a2f31";
+const expectedEdgePolicyDigest = "670439663788a37c9d2b59112632964a3f6bec079d8e6b06a3cf207d10355b9b";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/categories/internal/oauth-review.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/dashboard/internal/oauth-review.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/schema/credential-schema.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/internal/approval.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/internal/bootstrap.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/internal/discovery.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/internal/exchange.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/internal/native-access.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/oauth-agents/internal/native-admission.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/internal/native-browser.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/oauth-agents/internal/native-directory.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/oauth-agents/internal/native-management.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/oauth-agents/internal/native-operation.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/oauth-agents/internal/native-registration.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/internal/native-token.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/internal/review.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-agents/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-confirmation/internal/local.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/oauth-confirmation/internal/native-disclosure.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/oauth-confirmation/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/subscription/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/internal/native-claim.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/internal/native-expiry.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/internal/native-grants.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/internal/native-management.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/internal/native-pairing.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/internal/native-routes.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/internal/pat-manual.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/tokens/internal/pat-pairing.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/transactions/internal/oauth-review.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/user-store/internal/credential-schema.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/tokens/operations.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/directory/internal/recovery-rotation.ts", import.meta.url)
   ).text(),

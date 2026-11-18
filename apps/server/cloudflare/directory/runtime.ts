@@ -1,3 +1,8 @@
+import { nativePATDirectoryUrl } from "../tokens/contract";
+import { oauthRouteCommandUrl } from "../oauth-agents/contract";
+import { routeSessionRequest } from "./operations";
+import { oauthPaths } from "../../src/shell/oauth-agents/contract";
+import { handleOAuthRouteCommand, publicOAuthRequest } from "../oauth-agents/operations";
 import {
   PATRoute,
   SessionRoute,
@@ -65,6 +70,7 @@ import {
 import { DurableObject } from "cloudflare:workers";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 
+import { handlePATDirectoryCommand, nativePATPairing } from "../tokens/operations";
 import { directoryHistory } from "./schema/operations";
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { TokenShortId } from "../../src/core/tokens/contract";
@@ -216,6 +222,16 @@ const pairRequest = Effect.fn(function* (request: Request, environment: Director
     ? startPairing
     : pollPairing(request, environment.USER_STORE);
 });
+const routingCommands = new Map<
+  string,
+  typeof handleOAuthRouteCommand | typeof handlePATDirectoryCommand | typeof externalEventRequest
+>([
+  [oauthRouteCommandUrl, handleOAuthRouteCommand],
+  [nativePATDirectoryUrl, handlePATDirectoryCommand],
+  [statusLookupAdmissionUrl, externalEventRequest],
+  [externalLookupUrl, externalEventRequest],
+  [externalReserveUrl, externalEventRequest],
+]);
 const identityRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   switch (request.url) {
     case replaceIdentityUrl:
@@ -231,9 +247,8 @@ const identityRequest = Effect.fn(function* (request: Request, environment: Dire
   }
 });
 const internalRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
-  if ([statusLookupAdmissionUrl, externalLookupUrl, externalReserveUrl].includes(request.url)) {
-    return yield* externalEventRequest(request);
-  }
+  const routing = routingCommands.get(request.url);
+  if (routing !== undefined) return yield* routing(request);
   switch (request.url) {
     case handoffInspectUrl:
     case channelInspectUrl:
@@ -250,16 +265,29 @@ const internalRequest = Effect.fn(function* (request: Request, environment: Dire
       return yield* identityRequest(request, environment);
   }
 });
+const isReadinessRequest = (request: Request): boolean =>
+  request.method === "GET" && request.url === storeReadinessUrl;
 const directoryRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
-  if (request.method === "GET" && request.url === storeReadinessUrl) {
+  if (isReadinessRequest(request)) {
     return yield* storeReadiness({
       history: directoryHistory,
       release: environment.CF_VERSION_METADATA.id,
     });
   }
   const path = new URL(request.url).pathname;
+  if (Object.values(oauthPaths).some((candidate) => candidate === path)) {
+    return yield* publicOAuthRequest({
+      request,
+      browserOrigin: environment.BROWSER_ORIGIN,
+      environment,
+      routeBrowser: () => routeSessionRequest({ request, environment }),
+    });
+  }
   if (ownsProviderAuthenticationPath(path)) return yield* nativeProvider(request, environment);
   if (request.method !== "POST") return new Response(null, { status: 404 });
+  if (["/pat-pairings", "/pat-pairings/claim"].includes(path)) {
+    return yield* nativePATPairing({ request, users: environment.USER_STORE });
+  }
   if (["/web/pairings", "/web/pairings/redeem"].includes(path)) {
     return yield* pairRequest(request, environment);
   }

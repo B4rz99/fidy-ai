@@ -120,6 +120,7 @@ const sharedTestSupport = new Set([
   "cloudflare/financial-user-store.test-fixture.ts",
   "cloudflare/browser-bootstrap.test-fixture.ts",
   "cloudflare/retained-planning.test-fixture.ts",
+  "cloudflare/core-http/retained-credential-owners.test-fixture.ts",
   "cloudflare/d1-test-bridge.test-fixture.ts",
   "cloudflare/d1-test-images.test-fixture.ts",
   "cloudflare/maintenance-performance.test-fixture.ts",

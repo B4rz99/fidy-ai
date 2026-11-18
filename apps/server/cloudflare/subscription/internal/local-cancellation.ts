@@ -198,3 +198,21 @@ export const pendingCancellation = Effect.fnUntraced(function* (
     AND (c.void_started_at_ms IS NOT NULL OR NOT EXISTS (SELECT 1 FROM erasure_requests WHERE user_id=s.user_id))`;
   return rows.length === 1;
 });
+
+export const cancellationReview = Effect.fn(function* (user: string) {
+  const sql = yield* SqliteClient;
+  const [row] =
+    yield* sql`SELECT a.id AS attempt,src.id AS source,src.method,MIN(a.paid_ends_at_ms,COALESCE((SELECT MIN(r.access_ends_at_ms) FROM refund_attempts r WHERE r.billing_attempt_id=a.id),a.paid_ends_at_ms)) AS paid FROM subscriptions s JOIN billing_attempts a ON a.id=s.current_paid_attempt_id AND a.subscription_id=s.id JOIN payment_sources src ON src.id=a.payment_source_id AND src.subscription_id=s.id WHERE s.user_id=${user} AND a.paid_starts_at_ms IS NOT NULL`;
+  const value = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      attempt: Schema.String,
+      source: Schema.String,
+      method: Schema.String,
+      paid: Schema.Int,
+    })
+  )(row);
+  return {
+    revision: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(value),
+    effect: `Cancelar futuras renovaciones de Pro. Conservar acceso pagado hasta ${DateTime.formatIso(DateTime.makeUnsafe(value.paid))}. Desvincular el medio de pago reutilizable.`,
+  };
+});

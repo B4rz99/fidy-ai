@@ -1,3 +1,9 @@
+import { confirmLocalOAuth } from "../../oauth-confirmation/operations";
+import { resolveLocalOAuthCaller } from "../../oauth-agents/operations";
+import { CurrentOAuthInvocation, type LocalOAuthInvocation } from "../../oauth-agents/contract";
+import type { PATScopes } from "../../../src/core/tokens/contract";
+import { recordOAuthCall } from "../../../src/shell/audit/operations";
+import { liveOAuthCommitAuthority } from "../../../src/shell/oauth-agents/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { StoreCapacityUnavailable } from "../../runtime/sqlite/contract";
 import {
@@ -7,18 +13,21 @@ import {
 } from "../../runtime/sqlite/operations";
 import {
   CanonicalRetryKey,
-  type QuotaStatus,
+  QuotaStatus,
   canonicalRetryLifetimeMs,
 } from "../../../src/core/quotas/contract";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { allowancePeriod } from "../../../src/core/quotas/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
+import { grantsRequiredTier } from "../../../src/shell/canonical-operations/operations";
+import { listLaunchCategories } from "../../../src/core/categories/operations";
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
 import { patRouteHeader } from "../../directory/contract";
 import { decodeQuotaStatus, quotaStatusSelection } from "../../quotas/operations";
 import { localPATCredential, patRouteProof } from "../../tokens/operations";
 import {
+  boundSecuritySessionLookup,
   boundSessionLookup,
   readBoundWebSessionProof,
   resolveBoundCanonicalWebSession,
@@ -76,15 +85,25 @@ const bodyResponse = (status: number, body: string): Response =>
     status,
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
-const resolveSession = Effect.fn(function* (
-  proof: Awaited<ReturnType<typeof readBoundWebSessionProof>>,
-  owns: (user: string) => boolean,
-  current: number
-) {
+const resolveSession = Effect.fn(function* ({
+  proof,
+  owns,
+  current,
+  sessionLookup,
+}: {
+  proof: Awaited<ReturnType<typeof readBoundWebSessionProof>>;
+  owns: (user: string) => boolean;
+  current: number;
+  sessionLookup: typeof boundSessionLookup;
+}) {
   if (Option.isNone(proof)) return "unauthenticated" as const;
-  const lookup = boundSessionLookup({ ...proof.value, current });
+  const lookup = sessionLookup({ ...proof.value, current });
   const sql = yield* SqliteClient;
-  const [row] = yield* sql.unsafe(lookup.statement.sql, lookup.statement.params);
+  const [row] = yield* sql.unsafe(
+    lookup.statement.sql +
+      " AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=web_sessions.user_id)",
+    lookup.statement.params
+  );
   const session = resolveBoundCanonicalWebSession({ lookup, row });
   if (Option.isNone(session) || !owns(session.value.userId)) return "unauthenticated" as const;
   return {
@@ -92,7 +111,28 @@ const resolveSession = Effect.fn(function* (
     userId: yield* Schema.decodeEffect(UserId)(session.value.userId),
   };
 });
-export const localProof = Effect.fn(function* (request: Request, owns: (user: string) => boolean) {
+export const localProof = Effect.fn(function* (
+  request: Request,
+  owns: (user: string) => boolean,
+  sessionLookup = boundSessionLookup
+) {
+  const invocation = yield* CurrentOAuthInvocation;
+  if (Option.isSome(invocation)) {
+    const oauth = invocation.value;
+    return Effect.fn(function* (current: number) {
+      if (
+        !owns(oauth.subject.userId) ||
+        oauth.admission.deadlineMilliseconds <= current ||
+        request.signal.aborted
+      ) {
+        return "unauthenticated" as const;
+      }
+      const facts = yield* resolveLocalOAuthCaller({ subject: oauth.subject, current });
+      return Option.isNone(facts)
+        ? ("unauthenticated" as const)
+        : { oauth, userId: oauth.subject.userId, scopes: facts.value.scopes };
+    });
+  }
   if (request.headers.has("authorization")) {
     const candidate = patRouteProof(request);
     const id = Option.fromNullishOr(request.headers.get(patRouteHeader));
@@ -105,7 +145,7 @@ export const localProof = Effect.fn(function* (request: Request, owns: (user: st
   }
   const proof = yield* Effect.tryPromise(() => readBoundWebSessionProof(request));
   return (current: number): ReturnType<typeof resolveSession> =>
-    resolveSession(proof, owns, current);
+    resolveSession({ proof, owns, current, sessionLookup });
 });
 type Mutation<A, E> = Readonly<{
   request: Request;
@@ -122,7 +162,8 @@ type Mutation<A, E> = Readonly<{
 
 type Subject = Exclude<
   | Effect.Success<ReturnType<typeof localPATCredential>>
-  | Effect.Success<ReturnType<typeof resolveSession>>,
+  | Effect.Success<ReturnType<typeof resolveSession>>
+  | { oauth: LocalOAuthInvocation; userId: UserId; scopes: PATScopes },
   string
 >;
 export type Call = Readonly<{
@@ -146,7 +187,16 @@ export const audit = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
   const { userId } = subject;
-  if ("patId" in subject) {
+  if ("oauth" in subject) {
+    const stmt = recordOAuthCall({
+      id: newId(),
+      authority: liveOAuthCommitAuthority({ subject: subject.oauth.subject, current }),
+      operation: operation.id,
+      current,
+      outcome: outcome === "success" ? "accepted" : "rejected",
+    });
+    yield* oneStored(yield* sql.unsafe(stmt.sql + " RETURNING id", stmt.params));
+  } else if ("patId" in subject) {
     yield* oneStored(
       yield* sql`INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,outcome,occurred_at_ms)
       VALUES ('credential_call',${newId()},${userId},${subject.patId},${operation.id},${outcome === "success" ? "accepted" : "rejected"},${current}) RETURNING id`
@@ -155,6 +205,18 @@ export const audit = Effect.fn(function* (
       yield* oneStored(
         yield* sql`UPDATE pats SET last_used_at_ms=${current} WHERE id=${subject.patId} AND user_id=${userId} RETURNING id`
       );
+      const currentProof = yield* localPATCredential({
+        id: subject.patId,
+        shortId: subject.shortId,
+        digest: subject.digest,
+        current: yield* Clock.currentTimeMillis,
+        owns: (user) => user === userId,
+      });
+      if (typeof currentProof === "string" || deniedAccess({ subject: currentProof, operation })) {
+        return yield* new CanonicalAdmissionUnavailable({
+          cause: "PAT authority changed during commit",
+        });
+      }
     }
   } else {
     yield* oneStored(
@@ -250,7 +312,12 @@ export const replay = Effect.fn(function* (call: Call, invocation: Invocation) {
 });
 export const charge = Effect.fn(function* (call: Call) {
   const { subject, current, operation, status } = call;
-  if (!("patId" in subject)) return Option.none<Response>();
+  if (
+    "sessionId" in subject ||
+    ["quota.getQuota", "subscription.getUpgradeUrl"].includes(operation.id)
+  ) {
+    return Option.none<Response>();
+  }
   const meter = status.canonicalCalls;
   if (meter._tag !== "Uncapped" && meter.remaining === 0) {
     return Option.some(yield* reject(call, exhausted(current)));
@@ -262,13 +329,15 @@ export const charge = Effect.fn(function* (call: Call) {
     yield* sql`INSERT INTO commercial_allowance_consumptions(user_id,allowance,identity,period_start_ms,accepted_at_ms,units)
     VALUES(${subject.userId},'canonical_call',${identity},${period},${current},${meter._tag === "Uncapped" ? 0 : 1}) RETURNING identity`
   );
-  yield* oneStored(
-    yield* sql`INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,occurred_at_ms)
+  if ("patId" in subject) {
+    yield* oneStored(
+      yield* sql`INSERT INTO audit_entries(record_type,id,user_id,pat_id,operation,occurred_at_ms)
     VALUES('request_admission',${identity},${subject.userId},${subject.patId},${operation.id},${current}) RETURNING id`
-  );
+    );
+  }
   return Option.none<Response>();
 });
-export const financialGrowth = new Set<string>([
+const financialGrowth = new Set<string>([
   "categories.createKeywordRule",
   "categories.updateKeywordRule",
   "transactions.updateTransactions",
@@ -281,6 +350,10 @@ export const financialGrowth = new Set<string>([
   "transactions.updateTransaction",
   "transactions.linkTransactions",
 ]);
+export const requiresGrowthAdmission = (operation: string): boolean =>
+  financialGrowth.has(operation) ||
+  operation === "pats.createManualPAT" ||
+  operation === "pats.approvePATPairing";
 export const replayableOperations = new Set<string>([
   ...financialGrowth,
   "categories.deleteKeywordRule",
@@ -333,13 +406,16 @@ export const complete = Effect.fn(function* (
   });
 });
 const deniedAccess = (call: Pick<Call, "subject" | "operation">): boolean =>
-  "patId" in call.subject &&
+  !("sessionId" in call.subject) &&
   decideOperationAccess(call.operation.policy.access, {
-    _tag: "PAT",
+    _tag: "oauth" in call.subject ? "OAuthAgent" : "PAT",
     capabilities: call.subject.scopes,
   })._tag !== "Allowed";
-export const localRetryKey = (request: Request): ReturnType<Headers["get"]> =>
-  request.headers.has("authorization") ? request.headers.get("Fidy-Retry-Key") : null;
+export const localRetryKey = Effect.fnUntraced(function* (request: Request) {
+  return request.headers.has("authorization") || Option.isSome(yield* CurrentOAuthInvocation)
+    ? request.headers.get("Fidy-Retry-Key")
+    : null;
+});
 /** Preliminary check before an external reservation. The canonical unit resolves live proof again after the RPC. */
 export const localPreparationSubject = Effect.fn(function* (
   request: Request,
@@ -354,7 +430,7 @@ export const localPreparationSubject = Effect.fn(function* (
 });
 const prepareIdentity = Effect.fn(function* (request: Request, operation: CatalogOperation) {
   const valid = yield* validatedCanonicalInput({ request, operation });
-  const key = operation.method !== "GET" ? localRetryKey(request) : null;
+  const key = operation.method !== "GET" ? yield* localRetryKey(request) : null;
   const validKey = Schema.decodeUnknownOption(CanonicalRetryKey)(key);
   const digest = Option.isSome(validKey)
     ? Option.some(yield* cryptoHash(validKey.value))
@@ -363,6 +439,11 @@ const prepareIdentity = Effect.fn(function* (request: Request, operation: Catalo
     keyValid: key === null || Option.isSome(validKey),
     identity: Option.map(valid, ({ inputHash }): Invocation => ({ inputHash, digest })),
   };
+});
+const confirmCall = Effect.fn(function* (call: Call) {
+  return "oauth" in call.subject && call.operation.policy.agentConfirmation === "required"
+    ? yield* confirmLocalOAuth(call.subject.oauth, call.current, charge(call))
+    : { paid: false, consume: Effect.void };
 });
 const authorizedWork = Effect.fn(function* <E>({
   call,
@@ -375,14 +456,18 @@ const authorizedWork = Effect.fn(function* <E>({
   admission: Effect.Effect<void, StoreCapacityUnavailable>;
   work: () => Effect.Effect<LocalMutationResult, E, SqliteClient>;
 }>) {
+  const confirmation = yield* confirmCall(call);
+  if (confirmation instanceof Response) return attachStanding({ ...call, response: confirmation });
   yield* sweepLocalReceipts(call.current);
   const prior = yield* replay(call, invocation);
   if (Option.isSome(prior)) return prior.value;
-  const refusal = yield* charge(call);
+  const refusal = confirmation.paid ? Option.none<Response>() : yield* charge(call);
   if (Option.isSome(refusal)) return refusal.value;
   yield* admission;
+  const result = yield* work();
+  if (result.status < firstFailureStatus) yield* confirmation.consume;
   return yield* complete(call, invocation, {
-    ...(yield* work()),
+    ...result,
     retain: replayableOperations.has(call.operation.id),
   });
 });
@@ -397,11 +482,38 @@ export const withdrawn = (): Response =>
     },
     { status: 403 }
   );
+const policyRefusal = Effect.fn(function* (call: Call) {
+  if (deniedAccess(call)) return Option.some(yield* reject(call, scopeMissing()));
+  if (
+    grantsRequiredTier({
+      requiredTier: call.operation.policy.requiredTier,
+      callerTier: call.status.accessTier,
+    })
+  ) {
+    return Option.none<Response>();
+  }
+  return Option.some(
+    yield* reject(
+      call,
+      Response.json(
+        {
+          error: { code: "paywall_required", message: "This operation requires Pro access." },
+          next: [],
+        },
+        { status: 402 }
+      )
+    )
+  );
+});
+const sessionLookupFor = (operation: string): typeof boundSessionLookup =>
+  operation === "pats.revokePAT" || operation === "pats.revokeAllPATs"
+    ? boundSecuritySessionLookup
+    : boundSessionLookup;
 export const runLocalMutation = Effect.fn(function* <A, E>(
   { request, storage, operation, owns, input, work }: Mutation<A, E>,
   invalidTarget: Option.Option<LocalMutationResult> = Option.none()
 ) {
-  const resolve = yield* localProof(request, owns);
+  const resolve = yield* localProof(request, owns, sessionLookupFor(operation.id));
   const { keyValid, identity } = yield* prepareIdentity(request, operation);
   const argumentsForOwner = Option.product(yield* input, identity);
   const invalidInput = Option.match(invalidTarget, {
@@ -440,7 +552,8 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
       if ((yield* admitLocalRequest({ user: subject.userId, current })).length !== 1) {
         return attachStanding({ ...call, response: rateLimited() });
       }
-      if (deniedAccess(call)) return yield* reject(call, scopeMissing());
+      const forbidden = yield* policyRefusal(call);
+      if (Option.isSome(forbidden)) return forbidden.value;
       if (prepared.refusal !== undefined) {
         yield* audit(call, prepared.refusal.outcome);
         return attachStanding({ ...call, response: prepared.refusal.response });
@@ -448,13 +561,60 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
       return yield* authorizedWork({
         call,
         invocation: prepared.invocation,
-        admission: financialGrowth.has(operation.id) ? admitGrowth : Effect.void,
+        admission: requiresGrowthAdmission(operation.id) ? admitGrowth : Effect.void,
         work: work.bind(null, prepared.value, subject.userId, current),
       });
     })
   );
 });
 
+/** Route external calls through current native admission even before an operation's User owner is installed. */
+export const externalRead = Effect.fn(function* (
+  unit: Pick<Mutation<boolean, never>, "request" | "operation" | "owns" | "storage">
+) {
+  return yield* runLocalMutation({
+    ...unit,
+    input: Effect.succeedSome(true),
+    work: Effect.fn(function* (_input: boolean, user: UserId, current: number) {
+      if (unit.operation.id === "categories.listCategories") {
+        return {
+          status: 200,
+          outcome: "success" as const,
+          body: { data: [...listLaunchCategories()], next: [] },
+        };
+      }
+      if (unit.operation.id === "quota.getQuota") {
+        const standing = yield* localStanding(user, current);
+        return {
+          status: 200,
+          outcome: "success" as const,
+          body: {
+            data: yield* Schema.encodeEffect(Schema.toCodecJson(QuotaStatus))(standing),
+            next: [],
+          },
+        };
+      }
+      return yield* new CanonicalAdmissionUnavailable({
+        cause: "native operation owner unavailable",
+      });
+    }),
+  }).pipe(
+    Effect.catchCause(() =>
+      Effect.succeed(
+        Response.json(
+          {
+            error: {
+              code: "unavailable",
+              message: "Canonical operation is temporarily unavailable.",
+            },
+            next: [],
+          },
+          { status: 503 }
+        )
+      )
+    )
+  );
+});
 export const repairReceiptAlarm = Effect.fnUntraced(function* (
   current: number,
   storage: DurableObjectStorage

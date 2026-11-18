@@ -100,7 +100,11 @@ export type LocalMutationResult = Readonly<{
 }>;
 
 /** Prepare against the original User snapshot. Only the guarded commit may alter domain state. */
+export type LocalReviewFacts = { effect: string; revision: string };
 export type LocalMutationPlan = Readonly<{
+  review: Option.Option<
+    Effect.Effect<LocalReviewFacts, CanonicalAdmissionUnavailable, SqliteClient>
+  >;
   /** Multiple children may rely on a premise unless another child changes it. */
   premises: ReadonlyArray<string>;
   targets: ReadonlyArray<string>;

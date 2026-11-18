@@ -65,7 +65,7 @@ const invalidReview = (): Response =>
     ),
     status: httpBadRequest,
   });
-const expiredReview = (): Response =>
+export const expiredReview = (): Response =>
   response({
     body: Schema.encodeSync(Schema.toCodecJson(ManualPATReviewExpired))(
       ManualPATReviewExpired.make({
@@ -75,7 +75,7 @@ const expiredReview = (): Response =>
     ),
     status: httpReviewExpired,
   });
-const issuanceLimit = (): Response =>
+export const issuanceLimit = (): Response =>
   response({
     body: Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceRateLimited))(
       ManualPATIssuanceRateLimited.make({
@@ -85,7 +85,7 @@ const issuanceLimit = (): Response =>
     ),
     status: httpTooManyRequests,
   });
-const consumed = (): Response =>
+export const consumed = (): Response =>
   response({
     body: Schema.encodeSync(Schema.toCodecJson(ManualPATIssuanceConsumed))(
       ManualPATIssuanceConsumed.make({
@@ -155,7 +155,7 @@ const commitIssuance = (
     );
     return committed.every((item) => item.meta.changes === 1);
   });
-const issuedResponse = (issue: Issuance): Response => {
+export const issuedResponse = (issue: Issuance): Response => {
   const { input, session, current, expires, patId, shortId, bearer } = issue;
   const pat = patFrom({
     id: patId,
@@ -178,10 +178,13 @@ const issuedResponse = (issue: Issuance): Response => {
   );
 };
 
-const expiryFor = (
-  grant: typeof CreateManualPATPayload.Type.grant,
-  current: number
-): Option.Option<number> => {
+export const expiryFor = ({
+  grant,
+  current,
+}: {
+  grant: typeof CreateManualPATPayload.Type.grant;
+  current: number;
+}): Option.Option<number> => {
   const maximum = current + grant.lifetimeDays * dayMilliseconds;
   const reviewed = DateTime.toEpochMillis(grant.reviewExpiresAt);
   return reviewed > current && reviewed <= maximum && reviewed >= maximum - pairingMilliseconds
@@ -247,7 +250,7 @@ export const createManualPAT = ({
     });
     if (Option.isNone(input)) return invalidReview();
     const current = yield* Clock.currentTimeMillis;
-    const expiry = expiryFor(input.value.grant, current);
+    const expiry = expiryFor({ grant: input.value.grant, current });
     if (Option.isNone(expiry)) return expiredReview();
     const shortId = newShortId();
     const issue = {

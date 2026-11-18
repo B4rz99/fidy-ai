@@ -3,6 +3,11 @@ import { callbackBillingSchema } from "./billing-callback-schema";
 const addressId =
   "lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-8' || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))";
 
+export const issueForwardingAddress =
+  (): string => `CREATE TRIGGER issue_forwarding_address AFTER INSERT ON consent_history WHEN NEW.record_type='processing_grant' BEGIN
+    INSERT INTO forwarding_addresses SELECT ${addressId},NEW.user_id,lower(hex(randomblob(24))),NEW.occurred_at_ms
+    WHERE NOT EXISTS(SELECT 1 FROM forwarding_addresses WHERE user_id=NEW.user_id); END`;
+
 export const externalEventSchema = (): ReadonlyArray<string> =>
   [
     ...callbackBillingSchema,
@@ -19,7 +24,5 @@ export const externalEventSchema = (): ReadonlyArray<string> =>
     local_part TEXT NOT NULL UNIQUE, issued_at_ms INTEGER NOT NULL) STRICT`,
     `INSERT INTO forwarding_addresses SELECT ${addressId},user_id,lower(hex(randomblob(24))),MIN(occurred_at_ms)
     FROM consent_history WHERE record_type='processing_grant' GROUP BY user_id`,
-    `CREATE TRIGGER issue_forwarding_address AFTER INSERT ON consent_history WHEN NEW.record_type='processing_grant' BEGIN
-    INSERT INTO forwarding_addresses SELECT ${addressId},NEW.user_id,lower(hex(randomblob(24))),NEW.occurred_at_ms
-    WHERE NOT EXISTS(SELECT 1 FROM forwarding_addresses WHERE user_id=NEW.user_id); END`,
+    issueForwardingAddress(),
   ] as const;

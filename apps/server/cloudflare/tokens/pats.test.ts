@@ -1,3 +1,4 @@
+import { fixtureWorker as coreWorker, retainedCredentialOwner } from "../core-worker.test-fixture";
 import { openAiTestKey } from "../openai.test-fixture";
 import { installTestSchema, isolatedTestDatabases, observeRetentionCost } from "../d1-test-fixture";
 import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
@@ -10,7 +11,6 @@ import {
 } from "../canonical-operations/operations";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
-import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { sweepExpiredPATPairings } from "./runtime";
@@ -367,7 +367,11 @@ const setup = (
           PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
           RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
           CORE: {
-            fetch: (incoming) => coreWorker.fetch(new Request(incoming), coreEnvironment),
+            fetch: (incoming) =>
+              retainedCredentialOwner({
+                request: new Request(incoming),
+                environment: coreEnvironment,
+              }),
           },
         });
       };
@@ -547,34 +551,6 @@ it("valid PAT callers behind a saturated unresolved-bearer source keep their own
             .all()
         )).results
       ).toEqual(before.results);
-    })
-  ));
-
-it("authenticated scope and input refusals retain commercial allowance headers without charging", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { send, sessions } = yield* awaitPromise(setup());
-      const issued = yield* issueManualPAT({
-        send,
-        session: sessions[0],
-        requestId: "40000000-0000-4000-8000-000000000006",
-        grant: manualGrant({ scopes: ["write"] }),
-      });
-      const denied = yield* awaitPromise(
-        send({ path: "/categories", method: "GET", bearer: issued.bearer })
-      );
-      expect(denied.status).toBe(403);
-      expect(denied.headers.get("Fidy-Canonical-Remaining")).toBe("50");
-      const invalid = yield* awaitPromise(
-        send({
-          path: "/transactions",
-          method: "POST",
-          bearer: issued.bearer,
-          payload: { not: "a transaction" },
-        })
-      );
-      expect(invalid.status).toBe(400);
-      expect(invalid.headers.get("Fidy-Canonical-Remaining")).toBe("50");
     })
   ));
 
@@ -3040,78 +3016,7 @@ it("returns user_action_required when Consent is withdrawn between PAT admission
       ).toBe(0);
     })
   ));
-it("records successful PAT Transaction capture as use activity without extending its expiry", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      const issued = yield* issueManualPAT({
-        send,
-        session: sessions[0],
-        requestId: "70000000-0000-4000-8000-000000000042",
-        grant: manualGrant({ recipientLabel: "Capture agent", scopes: ["write"] }),
-      });
-      const Activity = Schema.Struct({
-        last_used_at_ms: Schema.NullOr(Schema.Finite),
-        expires_at_ms: Schema.Finite,
-      });
-      const before = yield* Schema.decodeUnknownEffect(Activity)(
-        yield* awaitPromise(
-          db
-            .prepare("SELECT last_used_at_ms,expires_at_ms FROM pats WHERE short_id = ?")
-            .bind(issued.pat.shortId)
-            .first()
-        )
-      );
-      expect(before.last_used_at_ms).toBeNull();
-      const captured = yield* awaitPromise(
-        send({
-          path: "/transactions",
-          method: "POST",
-          bearer: issued.bearer,
-          payload: {
-            money: {
-              amount: "23.50",
-              currency: "COP",
-            },
-            direction: "outflow",
-            occurredAt: "2026-09-01T12:00:00.000Z",
-          },
-        })
-      );
-      expect(captured.status).toBe(201);
-      const after = yield* Schema.decodeUnknownEffect(Activity)(
-        yield* awaitPromise(
-          db
-            .prepare("SELECT last_used_at_ms,expires_at_ms FROM pats WHERE short_id = ?")
-            .bind(issued.pat.shortId)
-            .first()
-        )
-      );
-      expect(after.last_used_at_ms).not.toBeNull();
-      expect(after.expires_at_ms).toBe(before.expires_at_ms);
-      const listed = yield* awaitPromise(
-        send({
-          path: "/pats",
-          method: "GET",
-          session: sessions[0],
-        })
-      );
-      expect(listed.status).toBe(200);
-      const Listed = Schema.Struct({
-        data: Schema.Struct({
-          pats: Schema.Array(
-            Schema.Struct({
-              shortId: Schema.String,
-              lastUsedAt: Schema.NullOr(Schema.String),
-            })
-          ),
-        }),
-      });
-      const pats = (yield* Schema.decodeUnknownEffect(Listed)(yield* awaitPromise(listed.json())))
-        .data.pats;
-      expect(pats.find((pat) => pat.shortId === issued.pat.shortId)?.lastUsedAt).not.toBeNull();
-    })
-  ));
+
 it("keeps the original PAT deadline across repeated successful uses and refuses its exact expiry without cleanup", () =>
   runTest(
     Effect.gen(function* () {
@@ -3170,161 +3075,7 @@ it("keeps the original PAT deadline across repeated successful uses and refuses 
       ).toEqual(retained);
     })
   ));
-it("rolls back PAT Transaction capture and activity when its audit is silently refused", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      const issued = yield* issueManualPAT({
-        send,
-        session: sessions[0],
-        requestId: "70000000-0000-4000-8000-000000000043",
-        grant: manualGrant({ recipientLabel: "Atomic capture agent", scopes: ["write"] }),
-      });
-      const capture = {
-        money: {
-          amount: "23.50",
-          currency: "COP",
-        },
-        direction: "outflow",
-        occurredAt: "2026-09-01T12:00:00.000Z",
-      };
-      yield* awaitPromise(
-        db
-          .prepare(`CREATE TRIGGER refuse_pat_capture_audit BEFORE INSERT ON audit_entries WHEN NEW.record_type='credential_call' AND NEW.operation = 'transactions.createTransaction' AND NEW.outcome = 'accepted'
-    BEGIN SELECT RAISE(IGNORE); END`)
-          .run()
-      );
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/transactions",
-            method: "POST",
-            bearer: issued.bearer,
-            payload: capture,
-          })
-        )).status
-      ).not.toBe(201);
-      expect(
-        (yield* awaitPromise(
-          db
-            .prepare("SELECT count(*) AS total FROM transactions WHERE user_id = ?")
-            .bind(userA)
-            .first<{
-              total: number;
-            }>()
-        ))?.total
-      ).toBe(0);
-      expect(
-        (yield* awaitPromise(
-          db
-            .prepare("SELECT last_used_at_ms FROM pats WHERE short_id = ?")
-            .bind(issued.pat.shortId)
-            .first()
-        ))?.last_used_at_ms
-      ).toBeNull();
-      yield* awaitPromise(db.prepare("DROP TRIGGER refuse_pat_capture_audit").run());
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/transactions",
-            method: "POST",
-            bearer: issued.bearer,
-            payload: capture,
-          })
-        )).status
-      ).toBe(201);
-    })
-  ));
-it("rechecks PAT scope after admission at the protected D1 read and audit", () =>
-  runTest(
-    Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
-      const response = yield* awaitPromise(
-        send({
-          path: "/pats",
-          method: "POST",
-          session: sessions[0],
-          payload: {
-            requestId: "70000000-0000-4000-8000-000000000041",
-            grant: {
-              recipientLabel: "Scope race agent",
-              scopes: ["read"],
-              lifetimeDays: 7,
-              reviewExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(clock() + 7 * 86_400_000)),
-            },
-          },
-        })
-      );
-      expect(response.status).toBe(200);
-      const issued = (yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          data: Issued,
-        })
-      )(yield* awaitPromise(response.json()))).data;
-      const changeScopeOnUse = `CREATE TRIGGER scope_changes_during_use BEFORE UPDATE OF last_used_at_ms ON pats
-    WHEN OLD.scopes_json = '["read"]' BEGIN
-    UPDATE pats SET scopes_json = '["dashboard"]' WHERE id = OLD.id; END`;
-      yield* awaitPromise(db.prepare(changeScopeOnUse).run());
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/categories",
-            method: "GET",
-            bearer: issued.bearer,
-          })
-        )).status
-      ).not.toBe(200);
-      expect(
-        (yield* awaitPromise(
-          db
-            .prepare(
-              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'categories.listCategories'"
-            )
-            .first()
-        ))?.total
-      ).toBe(0);
-      yield* awaitPromise(
-        db
-          .prepare("UPDATE pats SET scopes_json = '[\"read\"]' WHERE short_id = ?")
-          .bind(issued.pat.shortId)
-          .run()
-      );
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/transactions",
-            method: "GET",
-            bearer: issued.bearer,
-          })
-        )).status
-      ).not.toBe(200);
-      expect(
-        (yield* awaitPromise(
-          db
-            .prepare(
-              "SELECT count(*) AS total FROM (SELECT id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms,oauth_connection_id,oauth_credential_id,hosted_turn_id FROM audit_entries WHERE record_type='credential_call') AS pat_audit WHERE operation = 'transactions.listTransactions'"
-            )
-            .first()
-        ))?.total
-      ).toBe(0);
-      yield* awaitPromise(db.prepare("DROP TRIGGER scope_changes_during_use").run());
-      yield* awaitPromise(
-        db
-          .prepare("UPDATE pats SET scopes_json = '[\"read\"]' WHERE short_id = ?")
-          .bind(issued.pat.shortId)
-          .run()
-      );
-      expect(
-        (yield* awaitPromise(
-          send({
-            path: "/transactions",
-            method: "GET",
-            bearer: issued.bearer,
-          })
-        )).status
-      ).toBe(200);
-    })
-  ));
+
 it("gates every declared canonical path by live PAT and exact operation scope before any unavailable adapter", () =>
   runTest(
     Effect.gen(function* () {

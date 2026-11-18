@@ -1,6 +1,7 @@
 import { withStoreCapacity } from "../runtime/sqlite/operations";
 import type { LocalMutationResult } from "../canonical-admission/contract";
 import {
+  cancellationReview,
   dispatchCancellations as dispatchLocalCancellations,
   repairCancellationAlarm as inspectCancellation,
   retainCancellation,
@@ -157,3 +158,6 @@ export const cancelLocalSubscription = Effect.fnUntraced(function* (
 export const repairCancellationAlarm = Effect.fnUntraced(function* (storage: DurableObjectStorage) {
   return yield* withStoreCapacity("required")(inspectCancellation(storage));
 });
+
+export const localCancellationReview: typeof cancellationReview = (user) =>
+  cancellationReview(user);

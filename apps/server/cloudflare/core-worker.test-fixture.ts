@@ -1,9 +1,13 @@
+import { oauthPaths } from "../src/shell/oauth-agents/contract";
+import { handleOAuthRequest } from "./oauth-agents/runtime";
+import { retainedWork } from "./core-http/retained-credential-owners.test-fixture";
+import { browserSessionBindingResponse } from "./web-session/operations";
 import type { ErasureRegistryNamespace } from "./erasure/contract";
 import { makeBrowserLoginErasureStores } from "./browser-login/runtime";
 import { makeWebSessionErasureStores } from "./web-session/runtime";
 import type { ErasureStore } from "./erasure-store/contract";
 import { registeredConnectionInstitutionIds } from "../src/shell/connections/contract";
-import { Clock, Context, Effect, Layer } from "effect";
+import { Clock, Context, Effect, Layer, Option } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { OutboundHttpLive } from "./outbound-http/runtime";
 import type { TelemetryService } from "../src/shell/observability/contract";
@@ -115,3 +119,34 @@ export const fixtureBrowserCredentialErasureStores = (
   ...makeWebSessionErasureStores(db),
   ...makeBrowserLoginErasureStores(db),
 ];
+
+/** Isolated D1 owners still under test while peer domain and hosted adapters migrate.
+ * Native credential journeys always enter the production ingress/Core and UserStore bindings. */
+export const retainedCredentialOwner = ({
+  request,
+  environment,
+}: {
+  request: Request;
+  environment: Parameters<typeof coreWorker.fetch>[1];
+}): Promise<Response> => {
+  const path = new URL(request.url).pathname;
+  const work = Object.values(oauthPaths).some((owned) => owned === path)
+    ? Option.some(
+        handleOAuthRequest({
+          request,
+          db: environment.DB,
+          browserOrigin: environment.BROWSER_ORIGIN,
+          coordinator: environment.USER_TRANSACTION_COORDINATOR,
+        })
+      )
+    : retainedWork({ request, environment, path });
+  if (Option.isNone(work)) return coreWorker.fetch(request, environment);
+  if (request.method === "GET" && path === oauthPaths.connections) {
+    return Effect.runPromise(work.value);
+  }
+  return Effect.runPromise(
+    browserSessionBindingResponse({ request, db: environment.DB }).pipe(
+      Effect.flatMap(Option.match({ onNone: () => work.value, onSome: Effect.succeed }))
+    )
+  );
+};

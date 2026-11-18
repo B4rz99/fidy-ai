@@ -182,7 +182,8 @@ const manifests = Effect.all(
 /** Production ingress and Core in separate workerd isolates. SQL inspection belongs to the host fixture only. */
 const createUserPlatform = Effect.fnUntraced(function* (
   withBilling: boolean,
-  withOidc: boolean = false
+  withOidc: boolean = false,
+  ingressOrigin?: string
 ) {
   const fs = yield* FileSystem.FileSystem;
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-user-store-" });
@@ -192,6 +193,7 @@ const createUserPlatform = Effect.fnUntraced(function* (
   const oidc = yield* oidcWorkers(withOidc);
   const create = (ceiling: string, logs: Array<string>): Miniflare =>
     new Miniflare({
+      ...(ingressOrigin === undefined ? {} : { upstream: ingressOrigin }),
       ...(withOidc
         ? {
             handleStructuredLogs: (log: { message: string }) => {
@@ -241,3 +243,6 @@ const createUserPlatform = Effect.fnUntraced(function* (
 export const nativeBrowserPlatform = createUserPlatform(false, true);
 export const nativeUserPlatform = createUserPlatform(false);
 export const nativeBillingPlatform = createUserPlatform(true);
+
+/** Preserve the public hostname across Miniflare's loopback HTTP bridge for MCP Host validation. */
+export const nativeOAuthPlatform = createUserPlatform(false, false, "https://api.fidyapp.com");

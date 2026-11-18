@@ -1,3 +1,4 @@
+import { retainedCredentialOwner } from "../core-worker.test-fixture";
 import { openAiTestKey } from "../openai.test-fixture";
 import { categoryIds } from "../../src/core/categories/contract";
 import { Clock, Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
@@ -310,7 +311,7 @@ export const setup = Effect.fnUntraced(function* () {
         CORE: {
           fetch: (incoming) => {
             const forwarded = incoming instanceof Request ? incoming : new Request(incoming);
-            return coreWorker.fetch(forwarded, environment).then((response) => {
+            return retainedCredentialOwner({ request: forwarded, environment }).then((response) => {
               const location = response.headers.get("location");
               // Cloudflare's HTTP binding follows redirects on newly constructed Requests.
               // Keep the redirect target inside this isolated Core, never on the network.

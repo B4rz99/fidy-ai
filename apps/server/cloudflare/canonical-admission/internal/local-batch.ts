@@ -1,3 +1,4 @@
+import { confirmLocalOAuth } from "../../oauth-confirmation/operations";
 import { recurringDiscoveryIntervalMs } from "../../recurring/contract";
 import type { StoreCapacityUnavailable } from "../../runtime/sqlite/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
@@ -36,13 +37,13 @@ import {
   audit,
   charge,
   complete,
-  financialGrowth,
   localProof,
   localRetryKey,
   localStanding,
   reject,
   replay,
   replayableOperations,
+  requiresGrowthAdmission,
   sweepLocalReceipts,
   withdrawn,
 } from "./local-mutation";
@@ -80,13 +81,15 @@ type Unit = {
   operation: CatalogOperation;
   storage: DurableObjectStorage;
 };
-type Child = {
+type SelectedChild<Owner> = {
   callId: string;
   operation: CatalogOperation;
   input: Schema.Json;
   index: number;
-  prepare: Prepare;
+  prepare: Owner;
 };
+type Child = SelectedChild<Prepare>;
+type ReservedOwner<E, R> = { reserve: (input: Schema.Json) => Effect.Effect<Prepare, E, R> };
 type Refusal = { operation: CatalogOperation; index: number; code: ErrorCode; message: string };
 class ChildRefused extends Data.TaggedError("ChildRefused")<Refusal> {}
 const failed = ({ index, operation, code, message }: Refusal): LocalMutationResult => ({
@@ -103,7 +106,10 @@ const childFailure = (child: Child, outcome: LocalMutationResult): ChildRefused 
   )(outcome.body);
   return new ChildRefused({ ...child, ...decoded.error });
 };
-type Selection = { children: ReadonlyArray<Child> } | { refusal: Refusal } | { invalid: true };
+type Selection<Owner> =
+  | { children: ReadonlyArray<SelectedChild<Owner>> }
+  | { refusal: Refusal }
+  | { invalid: true };
 const invalidTarget = (operation: CatalogOperation, input: Schema.Json): boolean => {
   if (
     ![
@@ -140,14 +146,14 @@ const invalidChildFailure = (
   invalidTarget(operation, input)
     ? { code: "not_found", message: "The requested record is unavailable." }
     : { code: "validation_failed", message: "Invalid canonical child input." };
-const selectChildren = (
+const selectChildren = <Owner>(
   calls: ReadonlyArray<Schema.Json>,
-  owners: ReadonlyMap<string, Prepare>
-): Selection => {
+  owners: ReadonlyMap<string, Owner>
+): Selection<Owner> => {
   const catalog = getBoundOperationCatalog();
   const eligible = new Set(atomicBatchChildOperations(catalog).map((op) => op.id));
   const ids = new Set<string>();
-  const children: Child[] = [];
+  const children: SelectedChild<Owner>[] = [];
   for (const [index, raw] of calls.entries()) {
     const named = Schema.decodeUnknownOption(Schema.Struct({ operation: Schema.String }))(raw);
     const operation = Option.getOrUndefined(
@@ -155,7 +161,7 @@ const selectChildren = (
     );
     if (operation === undefined) return { invalid: true } as const;
     const child = Schema.decodeUnknownOption(childEnvelope, { onExcessProperty: "error" })(raw);
-    const refusal = (code: ErrorCode, message: string): Selection =>
+    const refusal = (code: ErrorCode, message: string): Selection<Owner> =>
       ({ refusal: { index, operation, code, message } }) as const;
     if (!eligible.has(operation.id) || Option.isNone(child)) {
       return refusal(
@@ -179,18 +185,20 @@ const selectChildren = (
   return { children } as const;
 };
 
-const childAccess = Effect.fn(function* (call: Call, children: ReadonlyArray<Child>) {
-  const { subject, current, status } = call;
+const childCaller = Effect.fn(function* ({ subject, current }: Call) {
+  if ("oauth" in subject) return { _tag: "OAuthAgent" as const, capabilities: subject.scopes };
+  if ("patId" in subject) return { _tag: "PAT" as const, capabilities: subject.scopes };
   const sql = yield* SqliteClient;
-  const caller =
-    "patId" in subject
-      ? { _tag: "PAT" as const, capabilities: subject.scopes }
-      : {
-          _tag: "WebSession" as const,
-          fresh:
-            (yield* sql`SELECT 1 FROM web_sessions WHERE id=${subject.sessionId} AND user_id=${subject.userId} AND fresh_until_ms>${current}`)
-              .length === 1,
-        };
+  return {
+    _tag: "WebSession" as const,
+    fresh:
+      (yield* sql`SELECT 1 FROM web_sessions WHERE id=${subject.sessionId} AND user_id=${subject.userId} AND fresh_until_ms>${current}`)
+        .length === 1,
+  };
+});
+const childAccess = Effect.fn(function* (call: Call, children: ReadonlyArray<Child>) {
+  const { status } = call;
+  const caller = yield* childCaller(call);
   for (const child of children) {
     if (decideOperationAccess(child.operation.policy.access, caller)._tag !== "Allowed") {
       yield* audit({ ...call, operation: child.operation }, "validation_failed");
@@ -284,6 +292,11 @@ const applyChildren = Effect.fn(function* (call: Call, children: ReadonlyArray<C
     );
 });
 
+const batchConfirmation = Effect.fn(function* (call: Call) {
+  return "oauth" in call.subject
+    ? yield* confirmLocalOAuth(call.subject.oauth, call.current, charge(call))
+    : { paid: false, consume: Effect.void };
+});
 const commitAuthorizedBatch = Effect.fn(function* (
   call: Call,
   {
@@ -298,39 +311,64 @@ const commitAuthorizedBatch = Effect.fn(function* (
 ) {
   const denied = yield* childAccess(call, children);
   if (Option.isSome(denied)) return denied.value;
+  const confirmation = yield* batchConfirmation(call);
+  if (confirmation instanceof Response) return attachStanding({ ...call, response: confirmation });
   yield* sweepLocalReceipts(call.current);
   const prior = yield* replay(call, invocation);
   if (Option.isSome(prior)) return prior.value;
-  const refused = yield* charge(call);
+  const refused = confirmation.paid ? Option.none<Response>() : yield* charge(call);
   if (Option.isSome(refused)) return refused.value;
-  if (children.some((child) => financialGrowth.has(child.operation.id))) yield* admitGrowth;
+  if (children.some((child) => requiresGrowthAdmission(child.operation.id))) yield* admitGrowth;
   const outcome = yield* applyChildren(call, children);
+  if (outcome.status < firstFailureStatus) yield* confirmation.consume;
   return yield* complete(call, invocation, {
     ...outcome,
     retain: children.every((child) => replayableOperations.has(child.operation.id)),
   });
 });
 
+const prepareBatch = Effect.fn(function* <E, R>(
+  unit: Unit,
+  owners: ReadonlyMap<string, Prepare | ReservedOwner<E, R>>
+) {
+  const input = yield* boundedJsonBody({
+    request: unit.request,
+    policy: bodyPolicy,
+    schema: envelope,
+  });
+  const rawKey = yield* localRetryKey(unit.request);
+  const key = Schema.decodeUnknownOption(CanonicalRetryKey)(rawKey);
+  const validInput = Option.filter(input, () => rawKey === null || Option.isSome(key));
+  const digest = yield* Effect.forEach(Option.toArray(key), cryptoHash).pipe(
+    Effect.map((values) => Option.fromUndefinedOr(values[0]))
+  );
+  const inputHash = Option.isSome(input)
+    ? yield* cryptoHash(
+        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(normalized(input.value))
+      )
+    : "";
+  const selected = Option.isSome(validInput)
+    ? selectChildren(validInput.value.calls, owners)
+    : ({ invalid: true } as const);
+  const resolved =
+    "children" in selected
+      ? yield* Effect.forEach(selected.children, (child) =>
+          Effect.gen(function* () {
+            const prepare =
+              typeof child.prepare === "function"
+                ? child.prepare
+                : yield* child.prepare.reserve(child.input);
+            return { ...child, prepare };
+          })
+        )
+      : [];
+  return { validInput, selected, resolved, inputHash, digest };
+});
 /** Fresh credential, each child's policy, one commercial call and all owner effects share this native transaction. */
 export const runLocalBatch = Effect.fn(
-  function* (unit: Unit, owners: ReadonlyMap<string, Prepare>) {
+  function* <E, R>(unit: Unit, owners: ReadonlyMap<string, Prepare | ReservedOwner<E, R>>) {
     const resolve = yield* localProof(unit.request, unit.owns);
-    const input = yield* boundedJsonBody({
-      request: unit.request,
-      policy: bodyPolicy,
-      schema: envelope,
-    });
-    const rawKey = localRetryKey(unit.request);
-    const key = Schema.decodeUnknownOption(CanonicalRetryKey)(rawKey);
-    const validInput = Option.filter(input, () => rawKey === null || Option.isSome(key));
-    const digest = yield* Effect.forEach(Option.toArray(key), cryptoHash).pipe(
-      Effect.map((values) => Option.fromUndefinedOr(values[0]))
-    );
-    const inputHash = Option.isSome(input)
-      ? yield* cryptoHash(
-          yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(normalized(input.value))
-        )
-      : "";
+    const { validInput, selected, resolved, inputHash, digest } = yield* prepareBatch(unit, owners);
     return yield* withStoreAdmission((admitGrowth) =>
       Effect.gen(function* () {
         const current = yield* Clock.currentTimeMillis;
@@ -349,7 +387,6 @@ export const runLocalBatch = Effect.fn(
         if (Option.isNone(validInput)) {
           return yield* reject(call, invalid("Invalid batch envelope or retry key."));
         }
-        const selected = selectChildren(validInput.value.calls, owners);
         if ("invalid" in selected) {
           return yield* reject(call, invalid("Unknown canonical child operation."));
         }
@@ -364,9 +401,8 @@ export const runLocalBatch = Effect.fn(
             response: Response.json(failed(selected.refusal).body, { status: 400 }),
           });
         }
-        const { children } = selected;
         return yield* commitAuthorizedBatch(call, {
-          children,
+          children: resolved,
           invocation: { inputHash, digest },
           admitGrowth,
         });

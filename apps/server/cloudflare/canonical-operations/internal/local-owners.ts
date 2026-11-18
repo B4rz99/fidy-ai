@@ -1,3 +1,8 @@
+import { userOwnedAgentCapability } from "../../../src/shell/canonical-policy/contract";
+import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/contract";
+import type { OAuthCanonicalAdmission } from "../../../src/shell/mcp/contract";
+import type { OAuthReviewBinding } from "../../oauth-confirmation/contract";
+import { repairLocalPATExpiry, stageLocalPATGrant } from "../../tokens/operations";
 import { prepareLocalPreferences } from "../../identity/operations";
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect, Option, Schema } from "effect";
@@ -15,7 +20,7 @@ import { prepareLocalBudget, prepareLocalBudgetDeletion } from "../../budgets/op
 import { prepareLocalRecurringEdit } from "../../recurring-plans/operations";
 import { prepareLocalDashboard } from "../../dashboard/operations";
 import { newKeywordRuleId, prepareLocalKeywordRule } from "../../categories/operations";
-import { cancelLocalSubscription } from "../../subscription/operations";
+import { cancelLocalSubscription, localCancellationReview } from "../../subscription/operations";
 import {
   CanonicalAdmissionUnavailable,
   type LocalMutationPlan,
@@ -45,6 +50,21 @@ const owner = <Id extends OperationId, E>(
       Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
     ),
 ];
+const groupReview = Effect.fn(function* (plans: ReadonlyArray<LocalMutationPlan>) {
+  const facts = yield* Effect.forEach(plans, (plan) =>
+    Option.match(plan.review, {
+      onSome: (review) => review,
+      onNone: () =>
+        Effect.fail(new CanonicalAdmissionUnavailable({ cause: "unreviewed correction" })),
+    })
+  );
+  return {
+    effect: facts.map((fact) => fact.effect).join("\n"),
+    revision: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(
+      facts.map((fact) => fact.revision)
+    ),
+  };
+});
 /** Only local, transaction-composable commands. Catalog policy controls eligibility and disclosure. */
 export const localBatchOwners = new Map<string, Prepare>([
   owner("identity.updateUserPreferences", ({ payload }, { user }) =>
@@ -79,6 +99,7 @@ export const localBatchOwners = new Map<string, Prepare>([
       }
       return prepareLocalWrite({
         targets: plans.flatMap((plan) => plan.targets),
+        review: groupReview(plans),
         commit: Effect.gen(function* () {
           for (const plan of plans) {
             const value = yield* plan.commit;
@@ -136,8 +157,80 @@ export const localBatchOwners = new Map<string, Prepare>([
     Effect.succeed(
       prepareLocalWrite({
         targets: ["subscription"],
+        review: localCancellationReview(user),
         commit: cancelLocalSubscription({ userId: user, current, storage }),
       })
     )
   ),
 ]);
+
+/** Reserve credential destinations outside the transaction. Each resulting command still checks the current subject and its exact grant at commit. */
+type GrantUnit = Pick<Parameters<typeof stageLocalPATGrant>[0], "request" | "directory" | "owns">;
+const reserveGrant = Effect.fn(function* (unit: GrantUnit, operation: string, input: Schema.Json) {
+  const { payload } = yield* Schema.decodeUnknownEffect(Schema.Struct({ payload: Schema.Json }))(
+    input
+  );
+  const staged = yield* stageLocalPATGrant({ ...unit, operation, payload });
+  const prepare: Prepare = (_input, { user, current, storage }) =>
+    Effect.succeed(
+      prepareLocalWrite({
+        targets: staged.targets,
+        commit: staged
+          .commit(user, current)
+          .pipe(
+            Effect.tap((result) =>
+              result.outcome === "success" ? repairLocalPATExpiry(current, storage) : Effect.void
+            )
+          ),
+      })
+    );
+  return prepare;
+});
+type ReservedGrant = { reserve: (input: Schema.Json) => ReturnType<typeof reserveGrant> };
+export const batchOwnersFor = (unit: GrantUnit): ReadonlyMap<string, Prepare | ReservedGrant> => {
+  const owners = new Map<string, Prepare | ReservedGrant>(localBatchOwners);
+  for (const id of ["pats.createManualPAT", "pats.approvePATPairing", "pats.inspectPATPairing"]) {
+    owners.set(id, { reserve: (input) => reserveGrant(unit, id, input) });
+  }
+  return owners;
+};
+
+const reviewCalls = Effect.fn(function* (admission: OAuthCanonicalAdmission) {
+  return admission.operation === "operations.executeAtomicBatch"
+    ? (yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          payload: Schema.Struct({
+            calls: Schema.Array(Schema.Struct({ operation: Schema.String, input: Schema.Json })),
+          }),
+        })
+      )(admission.input)).payload.calls
+    : [{ operation: admission.operation, input: admission.input }];
+});
+/** Every sensitive child supplies a fresh owner snapshot. Ordinary siblings still bind their exact position, operation and required scope. */
+export const localReviewBinding = Effect.fn(
+  function* (admission: OAuthCanonicalAdmission, context: Context) {
+    const catalog = getBoundOperationCatalog(),
+      binding: Array<OAuthReviewBinding[number]> = [];
+    const calls = yield* reviewCalls(admission);
+    let sensitive = false;
+    for (const child of calls) {
+      const operation = catalog.byId.get(child.operation);
+      if (operation === undefined) return Option.none<OAuthReviewBinding>();
+      const scope = Option.getOrNull(userOwnedAgentCapability(operation.policy.access));
+      if (operation.policy.agentConfirmation !== "required") {
+        binding.push({ operation: operation.id, scope, effect: "", revision: "" });
+        continue;
+      }
+      sensitive = true;
+      const prepare = localBatchOwners.get(operation.id);
+      if (prepare === undefined) return Option.none<OAuthReviewBinding>();
+      const plan = yield* prepare(child.input, context);
+      if (!("commit" in plan) || Option.isNone(plan.review)) {
+        return Option.none<OAuthReviewBinding>();
+      }
+      binding.push({ operation: operation.id, scope, ...(yield* plan.review.value) });
+    }
+    return Option.some(sensitive ? binding : []);
+  },
+  Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+);

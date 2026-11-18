@@ -1,3 +1,4 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { Effect, Option, Schema } from "effect";
 import { Currency } from "../../../src/core/_shared/money";
@@ -210,3 +211,26 @@ export const discloseTransactions = (
   transactions: ReadonlyArray<typeof TransactionOutput.Type>
 ): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Array(TransactionOutput)))(transactions);
+
+/** Compare both the retained and effective reconciliation facts again when native review resumes. */
+export const localCorrectionReview = Effect.fn(function* (
+  user: string,
+  id: string,
+  after: Option.Option<string>
+) {
+  const sql = yield* SqliteClient;
+  const [row] = yield* sql.unsafe(snapshotSql, [id, id, user, id, id, user, user, user]);
+  const { snapshot } = yield* Schema.decodeUnknownEffect(SnapshotRow)(row);
+  const original = discloseTransactions(yield* decodeFacts(snapshot.retained)),
+    effective = discloseTransactions(yield* decodeFacts(snapshot.effective));
+  const revision = yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot))(snapshot);
+  return {
+    revision,
+    effect: Option.match(after, {
+      onNone: () =>
+        `Eliminar permanentemente la Transacción ${id}: ${original}. No se puede restaurar; se conservan las SourceAttestations.`,
+      onSome: (value) =>
+        `Corregir la Transacción original ${id}. Hechos originales antes: ${original}. Hechos después: ${value}. Transacciones efectivas actuales: ${effective}. Se conserva la Reconciliación y se recalculan los hechos efectivos.`,
+    }),
+  };
+});

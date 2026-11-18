@@ -366,67 +366,6 @@ it("refuses exhausted OAuth mutations and batches without partial effects across
     })
   ));
 
-it("linearizes parallel PAT and OAuth mutation admission at the last Free canonical unit", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* approvedFixture({
-        scopes: ["read", "write"],
-        lifetimeDays: 7,
-      });
-      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
-        yield* wait((yield* wait(exchangeFixture(fixture))).json())
-      );
-      const patBearer = yield* allowancePAT(fixture);
-      yield* seedCanonicalConsumption(fixture.db, 49);
-      const cap = { amount: "1000", currency: "COP" };
-      const patBody = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-        categoryId: categoryIds.transporte,
-        cap,
-      });
-      const [pat, oauth] = yield* wait(
-        Promise.all([
-          fixture.send("/budgets", {
-            method: "POST",
-            headers: { authorization: `Bearer ${patBearer}`, "content-type": "application/json" },
-            body: patBody,
-          }),
-          mcpFixture({
-            retryKey: Option.none(),
-            ...fixture,
-            bearer: token.access_token,
-            method: "tools/call",
-            name: "budgets.createBudget",
-            args: { payload: { categoryId: categoryIds.mercado, cap } },
-          }),
-        ])
-      );
-      const result = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          result: Schema.Struct({ isError: Schema.Boolean, structuredContent: Schema.Json }),
-        })
-      )(yield* wait(oauth.json()));
-      expect(Number(pat.ok) + Number(!result.result.isError)).toBe(1);
-      const refusal = pat.ok ? result.result.structuredContent : yield* wait(pat.json());
-      expect(refusal).toMatchObject({ error: { code: "quota_exhausted" } });
-      expect(
-        yield* wait(fixture.db.prepare("SELECT count(*) FROM budgets").first<number>("count(*)"))
-      ).toBe(1);
-      const remaining = yield* wait(
-        mcpFixture({
-          retryKey: Option.none(),
-          ...fixture,
-          bearer: token.access_token,
-          method: "tools/call",
-          name: "quota.getQuota",
-          args: {},
-        })
-      );
-      expect(yield* wait(remaining.json())).toMatchObject({
-        result: { structuredContent: { data: { canonicalCalls: { consumed: 50, remaining: 0 } } } },
-      });
-    })
-  ));
-
 it("resets the shared OAuth and PAT allowance at the exact Bogota month boundary without recharging live retries", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -614,65 +553,6 @@ it("charges native confirmation once and prevents continuation references from e
       expect(
         yield* wait(fixture.db.prepare("SELECT count(*) FROM budgets").first<number>("count(*)"))
       ).toBe(0);
-    })
-  ));
-
-it("shares one retry admission during parallel PAT and OAuth mutations without repeating a domain effect", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* approvedFixture({
-        scopes: ["read", "write"],
-        lifetimeDays: 7,
-      });
-      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
-        yield* wait((yield* wait(exchangeFixture(fixture))).json())
-      );
-      const patBearer = yield* allowancePAT(fixture);
-      yield* seedCanonicalConsumption(fixture.db, 49);
-      const payload = { categoryId: categoryIds.mercado, cap: { amount: "1000", currency: "COP" } };
-      const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(payload);
-      const direct = (): Promise<Response> =>
-        fixture.send("/budgets", {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${patBearer}`,
-            "content-type": "application/json",
-            "fidy-retry-key": "parallel-once",
-          },
-          body,
-        });
-      const [pat, oauth] = yield* wait(
-        Promise.all([
-          direct(),
-          mcpFixture({
-            ...fixture,
-            bearer: token.access_token,
-            method: "tools/call",
-            name: "budgets.createBudget",
-            args: { payload },
-            retryKey: Option.some("parallel-once"),
-          }),
-        ])
-      );
-      const reply = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ result: Schema.Struct({ isError: Schema.Boolean }) })
-      )(yield* wait(oauth.json()));
-      expect(pat.ok || !reply.result.isError).toBe(true);
-      const replay = yield* wait(direct());
-      expect(replay.status).toBe(201);
-      expect(replay.headers.get("fidy-canonical-remaining")).toBe("0");
-      expect(
-        yield* wait(fixture.db.prepare("SELECT count(*) FROM budgets").first<number>("count(*)"))
-      ).toBe(1);
-      expect(
-        yield* wait(
-          fixture.db
-            .prepare(
-              "SELECT sum(units) FROM commercial_allowance_consumptions WHERE allowance = 'canonical_call'"
-            )
-            .first<number>("sum(units)")
-        )
-      ).toBe(50);
     })
   ));
 

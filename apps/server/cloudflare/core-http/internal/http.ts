@@ -60,15 +60,12 @@ import {
 import type { HttpClient } from "effect/http";
 import { ownsProviderAuthenticationPath } from "../../provider-authentication/operations";
 import { oauthPaths } from "../../../src/shell/oauth-agents/contract";
-import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
 
 import {
   protectCanonicalBrowserRequest,
   protectCanonicalBrowserSnapshot,
   protectCanonicalBrowserSource,
-  protectCanonicalRequest,
-  protectCanonicalSource,
 } from "../../canonical-admission/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import { HostedTurnProgressRequest } from "../../../src/shell/agent/contract";
@@ -85,8 +82,6 @@ import {
   dispatchEmailReplacement,
 } from "../../email-authentication/runtime";
 
-import { UserActionRequired } from "../../../src/shell/public-http/contract";
-import { categoryUnavailable } from "../../../src/shell/categories/operations";
 import { listCategoriesPath } from "../../../src/shell/categories/contract";
 import { MemoryId, RememberInput, ReviseInput } from "../../../src/core/memory/contract";
 import { type TelemetryService } from "../../../src/shell/observability/contract";
@@ -135,7 +130,12 @@ import {
   receiveWompiBillingEvent,
 } from "../../subscription/runtime";
 
-import { prepareBoundPATList, resolveCanonicalPATCredential } from "../../tokens/operations";
+import {
+  isLocalPATGrant,
+  isLocalPATManagement,
+  patDirectRoute,
+  prepareBoundPATList,
+} from "../../tokens/operations";
 import { rejectMemoryMutation } from "../../memory/operations";
 
 import { canonicalOperation, canonicalRoute } from "../../routing/operations";
@@ -272,7 +272,6 @@ const jsonHeaders = {
 const HTTP_OK = 200;
 const HTTP_ACCEPTED = 202;
 const HTTP_NOT_FOUND = 404;
-const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_METHOD_NOT_ALLOWED = 405;
 const HTTP_SERVICE_UNAVAILABLE = 503;
@@ -629,22 +628,6 @@ const ownedCorePath = (path: string): boolean =>
   transactionPath(path) ||
   ownsWebAuthenticationPath(path) ||
   canonicalRoute(path);
-
-const consentRevokedResponse = (): Response =>
-  jsonResponse(
-    JSON.stringify(
-      Schema.encodeSync(Schema.toCodecJson(UserActionRequired))(
-        UserActionRequired.make({
-          error: {
-            code: "user_action_required",
-            message: "Return to Fidy to review your withdrawn Consent.",
-          },
-          next: [],
-        })
-      )
-    ),
-    HTTP_FORBIDDEN
-  );
 
 const unavailableCanonicalAdapter = (): Response =>
   jsonResponse(
@@ -1534,7 +1517,7 @@ const reviewQueryBucket = (
       ? environment.EMAIL_BUCKET
       : environment.STATEMENT_STAGING_BUCKET
   );
-const executeCanonicalWork = (
+export const executeCanonicalWork = (
   input: Readonly<{
     request: Request;
     environment: CoreHttpEnvironment;
@@ -1582,20 +1565,6 @@ const executeCanonicalWork = (
   if (Option.isSome(ingestion)) return ingestion.value;
   return Effect.succeed(unavailableCanonicalAdapter());
 };
-
-const executeProtectedCanonicalWork = (
-  input: Parameters<typeof executeCanonicalWork>[0] & Readonly<{ current: number }>
-): Effect.Effect<Response> =>
-  protectCanonicalRequest({
-    db: input.environment.DB,
-    request: input.request,
-    operation: input.operation,
-    current: input.current,
-    caller: isPATCaller(input.subject)
-      ? { _tag: "PAT", value: input.subject }
-      : { _tag: "WebSession", value: input.subject },
-    work: executeCanonicalWork(input),
-  });
 
 const withBrowserBinding = <E, R>(
   request: Request,
@@ -1713,11 +1682,15 @@ const preparedBrowserSource = (
     : Option.none();
 };
 
-const browserCanonicalResponse = (
-  request: Request,
-  environment: CoreHttpEnvironment,
-  operation: CatalogOperation
-): Effect.Effect<Response> =>
+export const browserCanonicalResponse = ({
+  request,
+  environment,
+  operation,
+}: {
+  request: Request;
+  environment: CoreHttpEnvironment;
+  operation: CatalogOperation;
+}): Effect.Effect<Response> =>
   Clock.currentTimeMillis.pipe(
     Effect.flatMap((current) => {
       const source = preparedBrowserSource(operation, request, environment);
@@ -1757,70 +1730,29 @@ const browserCanonicalResponse = (
   );
 
 const isUserStoreOperation = (id: string): boolean =>
-  isLocalBatchRoute(id) ||
-  isLocalForwardingOperation(id) ||
-  isLocalTransactionOperation(id) ||
-  isLocalDashboardOperation(id) ||
-  isLocalRecurringPlan(id) ||
-  id === "recurring.listRecurringSeries" ||
-  isLocalBudgetOperation(id) ||
-  id === "subscription.cancelSubscription";
+  [
+    isLocalPATManagement,
+    isLocalPATGrant,
+    isLocalBatchRoute,
+    isLocalForwardingOperation,
+    isLocalTransactionOperation,
+    isLocalDashboardOperation,
+    isLocalRecurringPlan,
+    isLocalBudgetOperation,
+  ].some((matches) => matches(id)) ||
+  ["recurring.listRecurringSeries", "subscription.cancelSubscription"].includes(id);
 
 const authorizedCanonicalResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
-  if (isUserStoreOperation(operation.id)) {
-    const route = request.headers.has("authorization") ? routePATRequest : routeSessionRequest;
-    return route({ request, environment }).pipe(observeCanonicalResponse(operation.id));
+  if (request.headers.has("authorization")) {
+    return routePATRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id));
   }
-  if (!request.headers.has("authorization")) {
-    return browserCanonicalResponse(request, environment, operation);
-  }
-  return withBrowserBinding(
-    request,
-    environment,
-    Effect.gen(function* () {
-      const current = yield* Clock.currentTimeMillis;
-      return yield* resolveCanonicalPATCredential({ request, db: environment.DB, operation }).pipe(
-        Effect.match({
-          onFailure: () =>
-            jsonResponse(
-              JSON.stringify({ error: categoryUnavailable().error, next: [] }),
-              HTTP_SERVICE_UNAVAILABLE
-            ),
-          onSuccess: (authorized) => {
-            if (typeof authorized === "object") return authorized;
-            if (authorized === "user_action_required") return consentRevokedResponse();
-            return jsonResponse(
-              '{"error":{"code":"unauthenticated","message":"Present a valid credential and retry."},"next":[]}',
-              HTTP_UNAUTHORIZED
-            );
-          },
-        }),
-        Effect.filterOrElse(
-          (result): result is Response => result instanceof Response,
-          (subject) =>
-            executeProtectedCanonicalWork({
-              completion: Option.none(),
-              request,
-              environment,
-              operation,
-              current,
-              subject,
-            })
-        ),
-        Effect.filterOrElse(
-          (response) => response.status !== HTTP_UNAUTHORIZED,
-          (response) =>
-            protectCanonicalSource({ db: environment.DB, request, current }).pipe(
-              Effect.map((failure) => (Option.isSome(failure) ? failure.value : response))
-            )
-        )
-      );
-    })
-  );
+  return isUserStoreOperation(operation.id)
+    ? routeSessionRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id))
+    : browserCanonicalResponse({ request, environment, operation });
 };
 
 const healthResponse = (environment: CoreHttpEnvironment): Response => {
@@ -1934,7 +1866,11 @@ const reservedCoreResponse = (
   if (Option.isSome(browser)) {
     return browser;
   }
-  if (ownsProviderAuthenticationPath(path) || isPairingRequest(request)) {
+  if (
+    ownsProviderAuthenticationPath(path) ||
+    isPairingRequest(request) ||
+    (request.method === "POST" && patDirectRoute(path))
+  ) {
     return Option.some(routeBootstrapRequest({ request, environment }));
   }
   if (path === smokePath) {
@@ -2003,22 +1939,6 @@ const reservedBindingResponse = <E, R>(
     ? work
     : withBrowserBinding(request, environment, work);
 
-/** OAuth listing owns its exact mounted-cookie lookup; other OAuth paths keep ingress binding. */
-const dispatchOAuthRequest = (
-  request: Request,
-  environment: CoreHttpEnvironment
-): Effect.Effect<Response> => {
-  const work = handleOAuthRequest({
-    request,
-    db: environment.DB,
-    browserOrigin: environment.BROWSER_ORIGIN,
-    coordinator: environment.USER_TRANSACTION_COORDINATOR,
-  });
-  return request.method === "GET" && new URL(request.url).pathname === oauthPaths.connections
-    ? work
-    : withBrowserBinding(request, environment, work);
-};
-
 const isPairingRequest = (request: Request): boolean =>
   request.method === "POST" &&
   ["/web/pairings", "/web/pairings/redeem"].includes(new URL(request.url).pathname);
@@ -2033,7 +1953,7 @@ const dispatchCoreHttp = ({
   const bound = <R>(work: Effect.Effect<Response, never, R>): Effect.Effect<Response, never, R> =>
     withBrowserBinding(request, environment, work);
   if (Object.values(oauthPaths).some((path) => path === url.pathname)) {
-    return dispatchOAuthRequest(request, environment);
+    return routeBootstrapRequest({ request, environment });
   }
   const reserved = reservedCoreResponse({ request, environment, bankAuthentication }, url.pathname);
   if (Option.isSome(reserved)) return reservedBindingResponse(request, environment, reserved.value);
@@ -2046,7 +1966,9 @@ const dispatchCoreHttp = ({
   const directPath = directPathResponse(request, environment);
   if (Option.isSome(directPath)) return bound(directPath.value);
   const patListing = canonicalOperation({ method: request.method, path: url.pathname }).pipe(
-    Option.filter((operation) => operation.id === "pats.listPATs")
+    Option.filter(
+      (operation) => isLocalPATManagement(operation.id) || isLocalPATGrant(operation.id)
+    )
   );
   if (Option.isSome(patListing)) {
     return authorizedCanonicalResponse(request, environment, patListing.value);

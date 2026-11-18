@@ -1,4 +1,5 @@
-import { externalEventSchema } from "./internal/external-event-schema";
+import { oauthUserSchema, userPATSchema } from "./internal/credential-schema";
+import { externalEventSchema, issueForwardingAddress } from "./internal/external-event-schema";
 import { registerUserLifetime as registerReservedLifetime } from "./internal/registration";
 import { Effect, Exit, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
@@ -898,6 +899,11 @@ export const userStoreHistory: StoreHistory = {
         "DROP TABLE pre_rotation_audit",
         "CREATE TRIGGER audit_entries_immutable BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_immutable'); END",
       ],
+    },
+    {
+      version: 15,
+      id: "native-cli-credentials",
+      statements: [...userPATSchema(), issueForwardingAddress(), ...oauthUserSchema()],
     },
   ],
 };

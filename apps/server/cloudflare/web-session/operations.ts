@@ -46,16 +46,20 @@ export const readBoundWebSessionProof = (
   );
 };
 
-/** Construct expiry, exact ownership and Consent conditions using the transaction's clock. */
-export const boundSessionLookup = (
-  input: Readonly<{ digest: Uint8Array; binding: WebSessionId; current: number }>
-): BoundWebSessionLookup =>
+type BoundProof = Readonly<{ digest: Uint8Array; binding: WebSessionId; current: number }>;
+const lookupBoundProof = (input: BoundProof, requireConsent: boolean): BoundWebSessionLookup =>
   sessionDigestLookup({
     ...input,
     binding: Option.some(input.binding),
     freshness: "live",
-    requireConsent: true,
+    requireConsent,
   });
+/** Apply current processing Consent to an exact mounted credential. */
+export const boundSessionLookup = (input: BoundProof): BoundWebSessionLookup =>
+  lookupBoundProof(input, true);
+/** Account security controls remain usable with withdrawn processing Consent. */
+export const boundSecuritySessionLookup = (input: BoundProof): BoundWebSessionLookup =>
+  lookupBoundProof(input, false);
 
 export const prepareBoundCanonicalWebSession = (
   input: Readonly<{ request: Request; current: number }>

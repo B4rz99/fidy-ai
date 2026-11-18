@@ -1,3 +1,4 @@
+import { localRuleReview } from "./oauth-review";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect, Option, Schema } from "effect";
 import {
@@ -79,6 +80,11 @@ const keywordRemoval = ({
 }): LocalMutationPlan =>
   prepareLocalWrite({
     targets: [target],
+    review: localRuleReview(user, {
+      _tag: "KeywordRule",
+      operation: "categories.deleteKeywordRule",
+      ruleId,
+    }),
     commit: Effect.gen(function* () {
       const sql = yield* SqliteClient;
       const removed =
@@ -102,6 +108,18 @@ const selectedCategory = Effect.fnUntraced(function* (
     Effect.asSome,
     Effect.catchTag("CategoryNotFound", () => Effect.succeedNone)
   );
+});
+const savedKeyword = Effect.fn(function* (row: unknown, create: boolean) {
+  const saved = keywordRuleFromRows(row);
+  if (Option.isNone(saved)) return yield* new CategoriesUnavailable();
+  return {
+    status: create ? createdStatus : updatedStatus,
+    outcome: "success" as const,
+    body: {
+      data: yield* Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(saved.value),
+      next: [],
+    },
+  };
 });
 export const prepareLocalKeywordRule = Effect.fn(function* (
   command: Command,
@@ -130,6 +148,13 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
   const fields = sql`id,keyword,category_id AS categoryId,created_at_ms AS createdAt,updated_at_ms AS updatedAt`;
   return prepareLocalWrite({
     targets: [target, "keyword:" + keyword],
+    review: localRuleReview(user, {
+      _tag: "KeywordRule",
+      operation: change.operation,
+      ruleId,
+      keyword,
+      categoryId: payload.categoryId,
+    }),
     commit: Effect.gen(function* () {
       yield* retainLocalCategory(reference.value);
       const create = operation === "categories.createKeywordRule";
@@ -144,16 +169,7 @@ export const prepareLocalKeywordRule = Effect.fn(function* (
         }
         return yield* new CategoriesUnavailable();
       }
-      const saved = keywordRuleFromRows(changed[0]);
-      if (Option.isNone(saved)) return yield* new CategoriesUnavailable();
-      return {
-        status: create ? createdStatus : updatedStatus,
-        outcome: "success",
-        body: {
-          data: yield* Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(saved.value),
-          next: [],
-        },
-      };
+      return yield* savedKeyword(changed[0], create);
     }),
   });
 });

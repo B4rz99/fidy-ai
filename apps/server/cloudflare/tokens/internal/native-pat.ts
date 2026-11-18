@@ -57,5 +57,11 @@ export const localPATCredential = Effect.fn(function* ({
   if (live.length !== 1) return "consent_revoked" as const;
   const scopes = scopesFrom(credential.scopes);
   if (Option.isNone(scopes)) return "unauthenticated" as const;
-  return { userId: credential.userId, patId: credential.patId, scopes: scopes.value };
+  return {
+    userId: credential.userId,
+    patId: credential.patId,
+    scopes: scopes.value,
+    digest,
+    shortId,
+  };
 });

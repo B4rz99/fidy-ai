@@ -1,3 +1,30 @@
+import { localPATClaimUrl } from "../tokens/contract";
+import { type McpResidency, localProtocolAdmission, makeMcpResidency } from "../mcp/runtime";
+import {
+  denyMcpAccess,
+  handleLocalOAuthManagement,
+  handleOAuthReview,
+  handleOAuthToken,
+  localOAuthAccessSubject,
+  localOAuthCanonicalRequest,
+  resolveLocalOAuthCaller,
+} from "../oauth-agents/operations";
+import {
+  CurrentOAuthInvocation,
+  OAuthMcpCallerUnavailable,
+  oauthTokenDestinationUrl,
+} from "../oauth-agents/contract";
+import { oauthPaths } from "../../src/shell/oauth-agents/contract";
+
+import {
+  claimLocalPAT,
+  dispatchLocalPATGrant,
+  dispatchLocalPATManagement,
+  isLocalPATGrant,
+  isLocalPATManagement,
+  recoverLocalPATExpiry,
+  repairLocalPATExpiry,
+} from "../tokens/operations";
 import { deliverPendingReplacement } from "../email-authentication/runtime";
 import {
   localSupportApproval,
@@ -22,7 +49,11 @@ import {
 import { applyIdentityChange } from "./internal/identity-change";
 
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
-import { dispatchLocalBatchRoute, isLocalBatchRoute } from "../canonical-operations/operations";
+import {
+  dispatchLocalBatchRoute,
+  isLocalBatchRoute,
+  localOAuthReviewBinding,
+} from "../canonical-operations/operations";
 import {
   dispatchLocalRecurringSeries,
   recoverLocalRecurringSeries,
@@ -62,6 +93,7 @@ import { canonicalOperation } from "../routing/operations";
 import { dispatchLocalTransaction, isLocalTransactionOperation } from "../transactions/operations";
 import {
   canonicalAdmissionUnavailable,
+  dispatchNativeExternalRead,
   recoverLocalReceipts,
   repairReceiptAlarm,
   runLocalMutation,
@@ -79,6 +111,7 @@ const uncertainCheckStatus = 503;
 type UserStoreEnvironment = WompiBindings &
   StoreReleaseEnvironment &
   Readonly<{
+    BROWSER_ORIGIN: string;
     RESEND_API_KEY: string;
     DIRECTORY: DurableObjectNamespace;
     USER_STORE: DurableObjectNamespace;
@@ -90,6 +123,54 @@ const isBrowserObservation = (command: string, request: Request): boolean =>
   (command === "GET /user" && !request.headers.has("authorization"));
 export class UserStore extends DurableObject<UserStoreEnvironment> {
   private readonly runtime;
+  private mcp?: McpResidency;
+  private protocol(request: Request, owns: (id: string) => boolean): Promise<Response> {
+    return this.runtime.runPromise(
+      Effect.gen({ self: this }, function* () {
+        const credential = yield* localOAuthAccessSubject(request, owns);
+        if (Option.isNone(credential)) return denyMcpAccess();
+        const admission = yield* localProtocolAdmission(request, credential.value);
+        this.mcp ??= makeMcpResidency({
+          userId: admission.userId,
+          resolveCaller: (input) =>
+            Effect.tryPromise({
+              try: () => this.runtime.runPromise(resolveLocalOAuthCaller(input)),
+              catch: () => new OAuthMcpCallerUnavailable(),
+            }),
+          enqueueCanonicalWork: ({ admission: call, signal }) =>
+            Effect.gen({ self: this }, function* () {
+              const prepared = yield* localOAuthCanonicalRequest(call, signal);
+              if (prepared instanceof Response) return prepared;
+              const answer = this.mutation(prepared.request, owns, prepared.operation);
+              const work = Option.getOrElse(answer, () =>
+                dispatchNativeExternalRead({
+                  request: prepared.request,
+                  owns,
+                  operation: prepared.operation,
+                  storage: this.ctx.storage,
+                })
+              );
+              const localized = work.pipe(
+                Effect.provideService(
+                  CurrentOAuthInvocation,
+                  Option.some({
+                    ...prepared.oauth,
+                    review: (current) =>
+                      localOAuthReviewBinding(call, {
+                        user: call.userId,
+                        current,
+                        storage: this.ctx.storage,
+                      }),
+                  })
+                )
+              );
+              return yield* Effect.tryPromise(() => this.runtime.runPromise(localized));
+            }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))),
+        });
+        return yield* this.mcp.handle({ admission, signal: request.signal });
+      }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+    );
+  }
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
     super(state, env);
     this.runtime = createStoreRuntime({
@@ -108,8 +189,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     Readonly<{ failedFamilies: number; attempted: number; failedOffers: number }>
   > {
     return this.runtime.runPromise(
-      Effect.flatMap(Clock.currentTimeMillis, (current) =>
-        recoverUserWork([
+      Effect.flatMap(Clock.currentTimeMillis, (current) => {
+        const families = [
           deliverPendingReplacement(this.env, this.ctx.storage, this.owns).pipe(
             Effect.mapError((cause) => new Cause.UnknownError(cause))
           ),
@@ -118,13 +199,16 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           ),
           recoverLocalRecurringSeries(current, this.ctx.storage, this.owns),
           recoverLocalReceipts(current, this.ctx.storage),
+          recoverLocalPATExpiry(current, this.ctx.storage),
           offerDueSourceCancellations({
             current,
             storage: this.ctx.storage,
             queue: this.env.BILLING_COLLECTION_QUEUE,
           }),
-        ])
-      )
+        ] as const;
+        type Work = (typeof families)[number];
+        return recoverUserWork<Effect.Error<Work>, Effect.Services<Work>>(families);
+      })
     );
   }
 
@@ -138,73 +222,77 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
-  private subscriptionCancellation(
-    request: Request,
-    owns: (id: string) => boolean,
-    operation: CatalogOperation
-  ): Promise<Response> {
-    return this.runtime.runPromise(
-      runLocalMutation({
-        request,
-        storage: this.ctx.storage,
-        operation,
-        owns,
-        input: Effect.succeedSome(true),
-        work: (_input, userId, current) =>
-          cancelLocalSubscription({ userId, current, storage: this.ctx.storage }),
-      }).pipe(
-        Effect.tap((response) =>
-          Effect.sync(() => {
-            if (response.ok) this.ctx.waitUntil(this.alarm());
-          })
-        ),
-        Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
-      )
-    );
-  }
-
-  private mutation(
-    request: Request,
-    owns: (userId: string) => boolean,
-    selected: CatalogOperation
-  ): Option.Option<Promise<Response>> {
-    const unit = { request, owns, operation: selected, storage: this.ctx.storage };
-    if (isLocalBatchRoute(selected.id)) {
-      return Option.some(this.runtime.runPromise(dispatchLocalBatchRoute(unit)));
-    }
-    if (selected.id === "subscription.cancelSubscription") {
-      return Option.some(this.subscriptionCancellation(request, owns, selected));
-    }
-    if (selected.id === "recurring.listRecurringSeries") {
-      return Option.some(this.runtime.runPromise(dispatchLocalRecurringSeries(unit)));
-    }
-    if (isLocalRecurringPlan(selected.id)) {
-      return Option.some(this.runtime.runPromise(dispatchLocalRecurringPlans(unit)));
-    }
-    if (isLocalDashboardOperation(selected.id)) {
-      return Option.some(this.runtime.runPromise(dispatchLocalDashboard(unit)));
-    }
-    if (isLocalBudgetOperation(selected.id)) {
-      return Option.some(this.runtime.runPromise(dispatchLocalBudget(unit)));
-    }
-    return this.financialOperation(unit);
-  }
-  private financialOperation(unit: {
-    request: Request;
-    owns: (id: string) => boolean;
-    operation: CatalogOperation;
-    storage: DurableObjectStorage;
-  }): Option.Option<Promise<Response>> {
-    const selected = unit.operation;
-    if (isLocalForwardingOperation(selected.id)) {
+  private patOperation(
+    unit: Parameters<typeof dispatchLocalPATManagement>[0]
+  ): Option.Option<ReturnType<typeof dispatchLocalBudget>> {
+    const onFailure = Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()));
+    if (isLocalPATManagement(unit.operation.id)) {
       return Option.some(
-        this.runtime.runPromise(dispatchLocalForwarding({ ...unit, directory: this.env.DIRECTORY }))
+        dispatchLocalPATManagement(unit).pipe(
+          Effect.flatMap((plan) => runLocalMutation(plan)),
+          onFailure
+        )
       );
     }
-    if (isLocalTransactionOperation(selected.id)) {
-      return Option.some(this.runtime.runPromise(dispatchLocalTransaction(unit)));
+    if (isLocalPATGrant(unit.operation.id)) {
+      return Option.some(
+        dispatchLocalPATGrant({ ...unit, directory: this.env.DIRECTORY }).pipe(
+          Effect.flatMap((plan) => runLocalMutation(plan)),
+          onFailure
+        )
+      );
     }
     return Option.none();
+  }
+  private mutation(
+    request: Request,
+    owns: (user: string) => boolean,
+    operation: CatalogOperation
+  ): Option.Option<ReturnType<typeof dispatchLocalBudget>> {
+    const unit = { request, owns, operation, storage: this.ctx.storage };
+    const directory = this.env.DIRECTORY;
+    const onFailure = Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()));
+    const pat = this.patOperation(unit);
+    if (Option.isSome(pat)) return pat;
+    if (isLocalBatchRoute(operation.id)) {
+      return Option.some(dispatchLocalBatchRoute({ ...unit, directory }));
+    }
+    if (operation.id === "subscription.cancelSubscription") {
+      return Option.some(
+        runLocalMutation({
+          ...unit,
+          input: Effect.succeedSome(true),
+          work: (_input, userId, current) =>
+            cancelLocalSubscription({ userId, current, storage: unit.storage }),
+        }).pipe(
+          Effect.tap((response) =>
+            Effect.sync(() => {
+              if (response.ok) this.ctx.waitUntil(this.alarm());
+            })
+          ),
+          onFailure
+        )
+      );
+    }
+    for (const [matches, dispatch] of [
+      [
+        (id: string): boolean => id === "recurring.listRecurringSeries",
+        dispatchLocalRecurringSeries,
+      ],
+      [
+        isLocalForwardingOperation,
+        () => dispatchLocalForwarding({ ...unit, directory: this.env.DIRECTORY }),
+      ],
+      [isLocalRecurringPlan, dispatchLocalRecurringPlans],
+      [isLocalDashboardOperation, dispatchLocalDashboard],
+      [isLocalBudgetOperation, dispatchLocalBudget],
+      [isLocalTransactionOperation, dispatchLocalTransaction],
+    ] as const) {
+      if (matches(operation.id)) return Option.some(dispatch(unit));
+    }
+    return request.headers.has("authorization")
+      ? Option.some(dispatchNativeExternalRead(unit))
+      : Option.none();
   }
 
   private isReleaseProbe(request: Request): boolean {
@@ -262,6 +350,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             repairReplacementAlarm(current, storage),
             repairRecoveryAlarm(current, storage),
             repairReceiptAlarm(current, storage),
+            repairLocalPATExpiry(current, storage),
             repairCancellationAlarm(storage),
             repairLocalRecurringAlarm(current, storage, ownsUser),
           ],
@@ -277,6 +366,87 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
+  private readonly retireMcp = (connection: Option.Option<string>): Effect.Effect<void> =>
+    this.mcp?.retireConnections(connection) ?? Effect.void;
+
+  private credentialRequest(
+    request: Request,
+    path: string,
+    owns: (id: string) => boolean
+  ): Option.Option<Promise<Response>> {
+    if (
+      [oauthPaths.connections, oauthPaths.revoke, oauthPaths.revokeAll].some(
+        (candidate) => candidate === path
+      )
+    ) {
+      return Option.some(
+        this.runtime.runPromise(
+          handleLocalOAuthManagement({
+            request,
+            owns,
+            origin: this.env.BROWSER_ORIGIN,
+            retire: this.retireMcp,
+          })
+        )
+      );
+    }
+    if (path === oauthPaths.mcp) return Option.some(this.protocol(request, owns));
+    if (request.url === oauthTokenDestinationUrl && request.method === "POST") {
+      return Option.some(
+        this.runtime.runPromise(
+          handleOAuthToken(request, { directory: this.env.DIRECTORY, owns, retire: this.retireMcp })
+        )
+      );
+    }
+    if (
+      [oauthPaths.review, oauthPaths.connect, oauthPaths.cancel].some(
+        (candidate) => candidate === path
+      )
+    ) {
+      return Option.some(
+        this.runtime.runPromise(
+          handleOAuthReview({
+            request,
+            directory: this.env.DIRECTORY,
+            owns,
+            origin: this.env.BROWSER_ORIGIN,
+          })
+        )
+      );
+    }
+    return Option.none();
+  }
+  private browserRequest(
+    request: Request,
+    command: string,
+    owns: (id: string) => boolean
+  ): Option.Option<Promise<Response>> {
+    if (isBrowserObservation(command, request)) {
+      return Option.some(this.runtime.runPromise(browserSessionRequest(request, owns)));
+    }
+    if (["POST /browser/channel-caller", "POST /browser/channel-approval"].includes(command)) {
+      return Option.some(
+        this.runtime.runPromise(
+          localChannelRequest(request, this.env.DIRECTORY, owns).pipe(
+            Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+          )
+        )
+      );
+    }
+    if (request.method === "POST" && request.url === localPATClaimUrl) {
+      return Option.some(this.runtime.runPromise(claimLocalPAT(request, this.env.DIRECTORY, owns)));
+    }
+    if (command === "POST /browser/redeem") {
+      return Option.some(
+        this.runtime.runPromise(
+          redeemLocalPairing(request, this.env.DIRECTORY, owns).pipe(
+            Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+          )
+        )
+      );
+    }
+    return Option.none();
+  }
   private identityRequest(
     request: Request,
     owns: (id: string) => boolean
@@ -354,28 +524,15 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     const owns = (userId: string): boolean => registered && this.owns(userId);
     const identity = this.identityRequest(request, owns);
     if (Option.isSome(identity)) return identity.value;
-    if (isBrowserObservation(command, request)) {
-      return this.runtime.runPromise(browserSessionRequest(request, owns));
-    }
-    if (["POST /browser/channel-caller", "POST /browser/channel-approval"].includes(command)) {
-      return this.runtime.runPromise(
-        localChannelRequest(request, this.env.DIRECTORY, owns).pipe(
-          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
-        )
-      );
-    }
-    if (command === "POST /browser/redeem") {
-      return this.runtime.runPromise(
-        redeemLocalPairing(request, this.env.DIRECTORY, owns).pipe(
-          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
-        )
-      );
-    }
+    const credential = this.credentialRequest(request, path, owns);
+    if (Option.isSome(credential)) return credential.value;
+    const browser = this.browserRequest(request, command, owns);
+    if (Option.isSome(browser)) return browser.value;
     const operation = canonicalOperation({ method: request.method, path });
     const mutation = Option.flatMap(operation, (selected) =>
       this.mutation(request, owns, selected)
     );
-    if (Option.isSome(mutation)) return mutation.value;
+    if (Option.isSome(mutation)) return this.runtime.runPromise(mutation.value);
     if (
       ["POST /work/source-cancellation/pending", "POST /work/source-cancellation/observe"].includes(
         command

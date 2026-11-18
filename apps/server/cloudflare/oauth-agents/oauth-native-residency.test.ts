@@ -1,3 +1,4 @@
+import { retainedCredentialOwner } from "../core-worker.test-fixture";
 import { openAiTestKey } from "../openai.test-fixture";
 import {
   type Cause,
@@ -22,7 +23,6 @@ import { secretDigest } from "../secret-material/operations";
 import { makeMutationCommitGate } from "./mutation-commit.test-fixture";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import publicWorker from "../public-worker";
-import coreWorker from "../core-worker";
 
 const decodeResponseJson = (response: Response): Promise<Schema.Json> =>
   response.json().then((body: unknown) => Schema.decodeUnknownSync(Schema.Json)(body));
@@ -337,10 +337,10 @@ describe("native2025 residency integration", () => {
             PAT_ADMISSION_KEY: "test-only-source-admission-key-32-bytes",
             CORE: {
               fetch: (incoming): Promise<Response> =>
-                coreWorker.fetch(
-                  incoming instanceof Request ? incoming : new Request(incoming),
-                  environment
-                ),
+                retainedCredentialOwner({
+                  request: incoming instanceof Request ? incoming : new Request(incoming),
+                  environment,
+                }),
             },
           }
         );

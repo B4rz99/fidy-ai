@@ -1,3 +1,4 @@
+import { localCorrectionReview } from "./oauth-review";
 import { CategoryReference } from "../../../src/core/categories/contract";
 import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
@@ -165,6 +166,7 @@ export const prepareLocalCorrection = Effect.fn(function* (
   const evidence = yield* correctionEvidence({ previous, updated, changes: input.changes });
   return prepareLocalWrite({
     targets: correctionTargets(id, owned.value),
+    review: localCorrectionReview(user, id, Option.some(evidence.after)),
     commit: Effect.gen(function* () {
       if (input.changes.categoryId !== undefined) {
         yield* retainLocalCategory({
@@ -315,6 +317,7 @@ export const prepareLocalDeletion = Effect.fn(function* (
   const sql = yield* SqliteClient;
   return prepareLocalWrite({
     targets: ["transaction:" + id],
+    review: localCorrectionReview(user, id, Option.none()),
     commit: Effect.gen(function* () {
       const changed =
         yield* sql`UPDATE transactions SET deleted_at_ms=${current} WHERE user_id=${user} AND id=${id} AND revision=${owned.value.record.revision} AND deleted_at_ms IS NULL AND reconciliation_first_id IS NULL RETURNING id`;

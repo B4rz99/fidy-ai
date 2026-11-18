@@ -124,6 +124,11 @@ export const prepareLocalRecurringEdit = Effect.fn(function* (
   if (Option.isNone(next) || !(yield* validReferences(user, command, next.value))) return invalid;
   return prepareLocalWrite({
     targets: ["recurring-document"],
+    review: Effect.succeed({
+      revision: String(base.revision),
+      effect:
+        "Actualizar el seguimiento recurrente según la decisión explícita siguiente. No mueve dinero ni cancela servicios.",
+    }),
     commit: Effect.gen(function* () {
       yield* writeLocalDocument(user, base, next.value);
       return success(

@@ -1,6 +1,6 @@
 import { readLocalProfile } from "../identity/operations";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
-import { localBatchOwners } from "./internal/local-owners";
+import { batchOwnersFor, localBatchOwners, localReviewBinding } from "./internal/local-owners";
 import { keywordRuleIdFromPath, localKeywordRules } from "../categories/operations";
 import {
   admitCanonicalOperation,
@@ -740,13 +740,14 @@ export const isLocalBatchRoute = (id: string): boolean =>
   ].includes(id);
 export const dispatchLocalBatchRoute = Effect.fn(
   function* (unit: {
+    directory: Pick<DurableObjectNamespace, "getByName">;
     operation: CatalogOperation;
     request: Request;
     storage: DurableObjectStorage;
     owns: (id: string) => boolean;
   }) {
     if (unit.operation.id === atomicBatchOperation) {
-      return yield* runLocalBatch(unit, localBatchOwners);
+      return yield* runLocalBatch(unit, batchOwnersFor(unit));
     }
     if (unit.operation.id === "identity.getCurrentUser") {
       return yield* runLocalMutation({
@@ -795,3 +796,6 @@ export const dispatchLocalBatchRoute = Effect.fn(
   },
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
+
+export const localOAuthReviewBinding: typeof localReviewBinding = (...args) =>
+  localReviewBinding(...args);

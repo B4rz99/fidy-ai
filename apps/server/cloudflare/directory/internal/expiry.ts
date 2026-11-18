@@ -1,3 +1,4 @@
+import { oauthClientIdleMs } from "../../oauth-agents/contract";
 import { Effect, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 
@@ -19,6 +20,13 @@ export const drainBootstrapExpiry = Effect.fn(function* (now: number) {
     `DELETE FROM whatsapp_invitations WHERE id IN(SELECT id FROM (${settledInvitations}) WHERE expires_at_ms<=? ORDER BY expires_at_ms LIMIT ?)`,
     [now - retentionAfterExpiryMs, pageSize]
   );
+  yield* sql`DELETE FROM oauth_public_clients WHERE id IN(SELECT id FROM oauth_public_clients WHERE last_used_at_ms<=${now - oauthClientIdleMs} ORDER BY last_used_at_ms LIMIT ${pageSize})`;
+  yield* sql`DELETE FROM oauth_review_requests WHERE id IN(SELECT id FROM oauth_review_requests WHERE expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
+  yield* sql`DELETE FROM oauth_routes WHERE rowid IN(SELECT rowid FROM oauth_routes WHERE expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
+  yield* sql`DELETE FROM oauth_leases WHERE expires_at_ms<=${now}`;
+  yield* sql`DELETE FROM pat_source_windows WHERE source IN (SELECT source FROM pat_source_windows WHERE ends<=${now} ORDER BY ends LIMIT ${pageSize})`;
+  yield* sql`DELETE FROM pat_routes WHERE short_id IN (SELECT short_id FROM pat_routes WHERE expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
+  yield* sql`DELETE FROM pat_bootstrap WHERE id IN (SELECT id FROM pat_bootstrap WHERE expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
   yield* sql`DELETE FROM bootstrap_admissions WHERE id IN(SELECT id FROM bootstrap_admissions WHERE expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
 });
 
@@ -31,11 +39,18 @@ export const directoryDeadline = Effect.gen(function* () {
       ((SELECT min(hard_expires_at_ms) FROM session_routes)),
       ((SELECT min(expires_at_ms) FROM recovery_rotations WHERE state<>'reserved')),
       ((SELECT min(virtual_at_ms) FROM unresolved_source_buckets)),
+      ((SELECT min(last_used_at_ms)+? FROM oauth_public_clients)),
+      ((SELECT min(expires_at_ms) FROM oauth_routes)),
+      ((SELECT min(expires_at_ms) FROM oauth_review_requests)),
+      ((SELECT min(expires_at_ms) FROM oauth_leases)),
+      ((SELECT min(ends) FROM pat_source_windows)),
+      ((SELECT min(expires_at_ms) FROM pat_routes)),
+      ((SELECT min(expires_at_ms) FROM pat_bootstrap)),
       ((SELECT min(expires_at_ms) FROM bootstrap_admissions)),
       ((SELECT min(expires_at_ms) FROM (${settledPairings}))),
       ((SELECT min(expires_at_ms)+? FROM (${settledInvitations})))
     )`,
-    [retentionAfterExpiryMs]
+    [oauthClientIdleMs, retentionAfterExpiryMs]
   );
   return yield* Schema.decodeUnknownEffect(
     Schema.Struct({ deadline: Schema.OptionFromNullOr(Schema.Int) })

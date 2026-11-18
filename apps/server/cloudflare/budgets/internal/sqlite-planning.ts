@@ -300,6 +300,48 @@ const budgetCategory = Effect.fnUntraced(function* (user: UserId, input: UpdateB
   );
 });
 
+const budgetReview = Effect.fn(function* ({
+  user,
+  id,
+  action,
+  members,
+}: {
+  user: UserId;
+  id: BudgetId;
+  action: "Cambiar" | "Eliminar";
+  members: ReadonlyArray<string>;
+}) {
+  const sql = yield* SqliteClient;
+  const [budget] = (yield* plannedBudgets(user, Option.none(), Option.some(id))).budgets;
+  if (budget === undefined) return yield* budgetUnavailable();
+  const keys = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(
+    members
+  );
+  const group =
+    yield* sql`SELECT id,group_name,updated_at_ms FROM budgets WHERE user_id=${user} AND category_id IN (SELECT value FROM json_each(${keys})) ORDER BY id`;
+  const revision = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+    budget: yield* Schema.encodeEffect(Schema.toCodecJson(Budget))(budget),
+    group,
+  });
+  return {
+    revision,
+    effect: `${action} ${members.length === 0 ? "el presupuesto" : "el grupo de " + members.length + " categorías y el presupuesto"} ${id}, categoría ${budget.categoryId}, límite actual ${encodeMoneyAmount(budget.cap.amount)} ${budget.cap.currency}.`,
+  };
+});
+const changeReview = (
+  { id, input }: SaveInput,
+  user: UserId
+): {} | { review: ReturnType<typeof budgetReview> } =>
+  Option.isSome(id)
+    ? {
+        review: budgetReview({
+          user,
+          id: id.value,
+          action: "Cambiar",
+          members: input.groupCategoryIds ?? [],
+        }),
+      }
+    : {};
 export const prepareLocalBudget = Effect.fn(function* (
   save: SaveInput,
   user: UserId,
@@ -313,6 +355,7 @@ export const prepareLocalBudget = Effect.fn(function* (
   const client = yield* SqliteClient;
   const plan = prepareLocalWrite({
     targets: budgetTargets(save),
+    ...changeReview(save, user),
     commit: client
       .withTransaction(
         Effect.gen(function* () {
@@ -365,6 +408,7 @@ export const prepareLocalBudgetDeletion = Effect.fn(function* (id: BudgetId, use
   }
   return prepareLocalWrite({
     targets: ["budget:" + id],
+    review: budgetReview({ user, id, action: "Eliminar", members: [] }),
     commit: Effect.gen(function* () {
       const removed =
         yield* sql`DELETE FROM budgets WHERE id=${id} AND user_id=${user} RETURNING id`;

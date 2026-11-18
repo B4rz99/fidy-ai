@@ -1,3 +1,4 @@
+import { describeDashboardEffect } from "./oauth-review";
 import {
   canonicalAdmissionUnavailable,
   commitLocalWrite,
@@ -107,6 +108,15 @@ export const prepareDashboardDocument = Effect.fn(function* (
   const document = result.success;
   return prepareLocalWrite({
     targets: ["dashboard-document"],
+    review: Effect.gen(function* () {
+      return {
+        revision: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+          revision: Option.isSome(stored) ? stored.value.revision : 0,
+          document: yield* Schema.encodeEffect(documentJson)(base),
+        }),
+        effect: describeDashboardEffect({ edit, firstEdit: Option.isNone(stored) }),
+      };
+    }),
     commit: Effect.gen(function* () {
       if (Option.isNone(stored) || Option.isSome(edit)) {
         const encoded = yield* Schema.encodeEffect(documentJson)(document);

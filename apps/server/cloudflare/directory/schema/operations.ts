@@ -1,3 +1,4 @@
+import { publicDirectorySchema } from "./credential-schema";
 import { externalRoutesSchema } from "./external-events";
 import type { StoreHistory } from "../../runtime/sqlite/contract";
 
@@ -70,6 +71,23 @@ export const directoryHistory: StoreHistory = {
         "CREATE TABLE identity_replacements(id TEXT PRIMARY KEY,kind TEXT NOT NULL,scope TEXT NOT NULL,prior_key TEXT NOT NULL,next_key TEXT NOT NULL,occurred_at_ms INTEGER NOT NULL,expires_at_ms INTEGER NOT NULL,expected_user TEXT,user_id TEXT NOT NULL,revision INTEGER NOT NULL,prior_reservation TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('reserved','committed','cancelled'))) STRICT",
         "CREATE INDEX replacement_deadline ON identity_replacements(expires_at_ms)",
         "CREATE INDEX session_route_expiry ON session_routes(hard_expires_at_ms)",
+      ],
+    },
+    {
+      version: 6,
+      id: "cli-and-mcp-credentials",
+      statements: [
+        ...publicDirectorySchema(),
+        `CREATE TABLE pat_bootstrap(id TEXT PRIMARY KEY,public_code TEXT NOT NULL UNIQUE,proof_digest TEXT NOT NULL CHECK(length(proof_digest)=64),
+      recipient_label TEXT NOT NULL,scopes_json TEXT NOT NULL,lifetime_days INTEGER NOT NULL,
+      expires_at_ms INTEGER NOT NULL,wrong_attempts INTEGER NOT NULL DEFAULT 0,last_poll_at_ms INTEGER,
+      minimum_poll_seconds INTEGER NOT NULL DEFAULT 5,user_id TEXT) STRICT`,
+        "CREATE TABLE pat_source_windows(source TEXT PRIMARY KEY,ends INTEGER NOT NULL,used INTEGER NOT NULL) STRICT",
+        "CREATE INDEX pat_route_expiry ON pat_routes(expires_at_ms)",
+        "CREATE INDEX pat_source_expiry ON pat_source_windows(ends)",
+        "CREATE TABLE pat_reservation_context(short_id TEXT PRIMARY KEY REFERENCES pat_routes(short_id) ON DELETE CASCADE,context TEXT NOT NULL) STRICT",
+        "CREATE UNIQUE INDEX pat_route_operation ON pat_routes(user_id,reservation_id)",
+        "CREATE INDEX pat_bootstrap_expiry ON pat_bootstrap(expires_at_ms)",
       ],
     },
   ],

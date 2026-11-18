@@ -13,6 +13,7 @@ import {
 } from "./internal/responses";
 import {
   admitLocalRequest as admitLocal,
+  externalRead,
   repairReceiptAlarm as inspectReceipts,
   localPreparationSubject as localPreparationSubjectOwned,
   runLocalMutation as mutateLocal,
@@ -1288,16 +1289,30 @@ export const sweepLocalReceipts: typeof sweepReceipts = (current) => sweepReceip
 export const recoverLocalReceipts: typeof recoverReceipts = (current, storage) =>
   recoverReceipts(current, storage);
 
-export const prepareLocalWrite = <E>({
-  targets,
-  commit,
-}: {
+type LocalWrite<E> = {
   targets: ReadonlyArray<string>;
   commit: Effect.Effect<LocalMutationResult, E, SqliteClient>;
-}): LocalMutationPlan => ({
+};
+export const prepareLocalWrite = <E, Failure = never>(
+  write:
+    | LocalWrite<E>
+    | (LocalWrite<E> & {
+        review: Effect.Effect<{ effect: string; revision: string }, Failure, SqliteClient>;
+      })
+): LocalMutationPlan => ({
   premises: [],
-  targets,
-  commit: commit.pipe(Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))),
+  targets: write.targets,
+  review:
+    "review" in write
+      ? Option.some(
+          write.review.pipe(
+            Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+          )
+        )
+      : Option.none(),
+  commit: write.commit.pipe(
+    Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+  ),
 });
 export const commitLocalWrite = (
   preparation: LocalMutationPreparation
@@ -1316,3 +1331,5 @@ export const repairReceiptAlarm = Effect.fnUntraced(function* (
 
 export const localPreparationSubject: typeof localPreparationSubjectOwned = (...args) =>
   localPreparationSubjectOwned(...args);
+
+export const dispatchNativeExternalRead: typeof externalRead = (input) => externalRead(input);

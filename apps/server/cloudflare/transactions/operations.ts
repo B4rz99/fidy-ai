@@ -1,3 +1,4 @@
+import { CurrentOAuthInvocation } from "../oauth-agents/contract";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
 import type { LocalMutationResult } from "../canonical-admission/contract";
 import { preserveStoreAlarm } from "../runtime/sqlite/operations";
@@ -342,7 +343,8 @@ type LocalTransactionRequest = Readonly<{
   owns: (userId: string) => boolean;
 }>;
 const historyResponse = Effect.fn(function* (unit: LocalTransactionRequest) {
-  return yield* unit.request.headers.has("authorization")
+  return yield* Option.isSome(yield* CurrentOAuthInvocation) ||
+  unit.request.headers.has("authorization")
     ? runLocalMutation({
         ...unit,
         input: Effect.succeedSome(unit.request),

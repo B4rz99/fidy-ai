@@ -37,7 +37,7 @@ type ManagementInput = Readonly<{
   ) => Effect.Effect<ReadonlyArray<D1Result>, BootstrapUnavailable>;
 }>;
 type AuthorizedInput = ManagementInput & Readonly<{ session: FreshSessionSubject }>;
-const ConnectionRow = Schema.Struct({
+export const ConnectionRow = Schema.Struct({
   id: OAuthConnectionId,
   claimed_client_name: OAuthRegistration.fields.client_name,
   scopes_json: Schema.String,
@@ -57,11 +57,15 @@ const connectionState = (
   if (Option.isSome(row.revoked_at_ms)) return "revoked";
   return DateTime.toEpochMillis(row.expires_at_ms) <= current ? "expired" : "active";
 };
-const projectConnection = (
-  input: AuthorizedInput,
-  row: typeof ConnectionRow.Type,
-  recentActivity: OAuthRecentActivity
-): Effect.Effect<OAuthConnectionMetadata, AuditUnavailable | Schema.SchemaError> =>
+export const projectConnection = ({
+  current,
+  row,
+  recentActivity,
+}: {
+  current: number;
+  row: typeof ConnectionRow.Type;
+  recentActivity: OAuthRecentActivity;
+}): Effect.Effect<OAuthConnectionMetadata, AuditUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
     const scopes = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(row.scopes_json);
     return yield* Schema.decodeUnknownEffect(Schema.toType(OAuthConnectionMetadata))({
@@ -70,7 +74,7 @@ const projectConnection = (
       scopes,
       permissions: scopes.map(permissionCopy),
       expiresAt: row.expires_at_ms,
-      state: connectionState(row, input.current),
+      state: connectionState(row, current),
       recentActivity,
     });
   });
@@ -117,7 +121,7 @@ const listConnections = (
       const recent = activities.get(row.id);
       return recent === undefined
         ? Effect.fail(new AuditUnavailable())
-        : projectConnection(input, row, recent);
+        : projectConnection({ current: input.current, row, recentActivity: recent });
     });
     const body = yield* Schema.decodeEffect(Schema.toType(OAuthConnectionList))({
       connections,

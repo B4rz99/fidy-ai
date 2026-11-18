@@ -1,0 +1,26 @@
+apps/server/cloudflare/ingestion/native-statement-retention.test.ts
+  s_a1be23a656acf0::t_657043459fadd6 15-18
+  s_a1be23a656acf0::t_64aa09f39b7c7d 1-14,19-205
+apps/server/cloudflare/agent/internal/local-recovery.ts
+  s_a1be23a656acf0::t_55abca68a626cc 30,34-42,45-61,65
+apps/server/cloudflare/ingestion/internal/local-retention.ts
+  s_a1be23a656acf0::t_58ea560326c7a4 12,50-63,95-125
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_319c62efeee0cf 1093-1100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "64ca2611fc9d021d85f5d5e2cecc5c02d40e386d",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

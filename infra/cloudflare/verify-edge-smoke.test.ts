@@ -369,7 +369,7 @@ it.effect("rejects unavailable OAuth discovery during native release verificatio
   Effect.gen(function* () {
     const outcome = yield* verifyEdgeSmoke({
       candidate: Option.none(),
-      probe: (request) => Effect.succeed({ status: 503, headers: new Headers() }),
+      probe: () => Effect.succeed({ status: 503, headers: new Headers() }),
     }).pipe(Effect.result);
     expect(outcome._tag).toBe("Failure");
   })

@@ -227,7 +227,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           occurredMs,
         };
         const replies = yield* Effect.all([send(accept), send(deny)], { concurrency: 2 });
-        expect([...replies].sort()).toEqual([200, 409]);
+        expect([...replies].sort((left, right) => left - right)).toEqual([200, 409]);
         const confirmed = replies[0] === 200;
         const row = {
           decision: confirmed ? "confirmed" : "denied",

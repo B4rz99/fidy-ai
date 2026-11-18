@@ -88,8 +88,6 @@ export const readLocalReport = Effect.fn(function* (
   if (
     event.kind !== "new-recurring-series" ||
     report.insightEventId !== event.id ||
-    report.locale !== event.locale ||
-    report.serviceMarket !== event.serviceMarket ||
     report.payload.confirmationDay.timeZone !== event.timeZone ||
     report.scheduledAt.epochMilliseconds !== event.scheduledAt.epochMilliseconds
   ) {

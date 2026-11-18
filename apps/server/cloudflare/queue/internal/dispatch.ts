@@ -7,7 +7,7 @@ import {
   LocalSourceCancellationWork,
   WompiBillingEvent,
 } from "../../subscription/contract";
-import { offerNativeBillingWork, receiveLocalSourceCancellation } from "../../subscription/runtime";
+import { receiveBillingHandoff } from "../../subscription/runtime";
 import { workTraceParent } from "../../runtime/telemetry/operations";
 import { Telemetry } from "../../../src/shell/observability/operations";
 import {
@@ -268,10 +268,7 @@ const deliverCallback = Effect.fn(function* (packet: unknown, environment: CoreQ
     ? environment.BILLING_REFUND_WORKFLOW
     : environment.BILLING_COLLECTION_WORKFLOW;
   if (workflow === undefined) return yield* deliveryFailure("Billing workflow unavailable");
-  if (Schema.is(LocalSourceCancellationWork)(body)) {
-    return yield* receiveLocalSourceCancellation({ environment, workflow, work: body });
-  }
-  yield* offerNativeBillingWork(workflow, body);
+  yield* receiveBillingHandoff({ environment, workflow, body });
 });
 const receiveCallbackBatch = ({
   batch,

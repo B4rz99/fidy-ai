@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type DateTime, Effect, Option, Schema } from "effect";
 import {
   BudgetCrossing,
   BudgetMonthLatch,
@@ -20,9 +20,7 @@ import {
   formatWhatsAppDate,
   formatWhatsAppMoney,
 } from "../../../src/shell/channels/whatsapp/operations";
-import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
 import { newId } from "../../secret-material/operations";
-import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
 import { readLocalTransactionAggregate } from "../../transactions/operations";
 import { assembleBudgetReport } from "./budget-report";
 import { budgetPeriod } from "./budget-queries";
@@ -128,15 +126,11 @@ const evaluate = Effect.fn(function* (
   yield* sql`INSERT INTO category_alert_groups VALUES(${group},${grantId.value},${message},${budgetAlertDeadline({ detectedAt: now, monthEnd: period.to }).epochMilliseconds},${now.epochMilliseconds})`;
   return true;
 });
-export const retainLocalBudgetThresholds = Effect.fn(
-  function* (user: UserId, current: number, storage: DurableObjectStorage) {
-    const now = DateTime.makeUnsafe(current),
-      held = yield* currentCaps(user, now);
-    if (Option.isNone(held)) return;
-    const pending = yield* Effect.forEach(held.value.statuses, (status) =>
-      evaluate(status, { user, context: held.value.context, now })
-    );
-    if (pending.includes(true)) yield* preserveStoreAlarm(storage, current);
-  },
-  Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
-);
+export const detectLocalThresholds = Effect.fn(function* (user: UserId, now: DateTime.Utc) {
+  const held = yield* currentCaps(user, now);
+  if (Option.isNone(held)) return false;
+  const pending = yield* Effect.forEach(held.value.statuses, (status) =>
+    evaluate(status, { user, context: held.value.context, now })
+  );
+  return pending.includes(true);
+});

@@ -1,3 +1,6 @@
+import { detectLocalThresholds } from "./internal/native-thresholds";
+import { CanonicalAdmissionUnavailable } from "../canonical-admission/contract";
+import { preserveStoreAlarm } from "../runtime/sqlite/operations";
 import { queryLocalBudget } from "./internal/sqlite-workspace";
 import {
   dispatchLocalBudget as dispatchBudget,
@@ -869,4 +872,11 @@ export const prepareLocalBudgetDeletion: typeof prepareDeletionInStore = (id, us
 
 export const readLocalBudget: typeof queryLocalBudget = (...args) => queryLocalBudget(...args);
 
-export { retainLocalBudgetThresholds } from "./internal/native-thresholds";
+export const retainLocalBudgetThresholds = Effect.fn(
+  function* (user: UserId, current: number, storage: DurableObjectStorage) {
+    if (yield* detectLocalThresholds(user, DateTime.makeUnsafe(current))) {
+      yield* preserveStoreAlarm(storage, current);
+    }
+  },
+  Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+);

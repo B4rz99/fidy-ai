@@ -9,7 +9,6 @@ import { submitCorrection, verifyCardVoid } from "./wompi-refund-client";
 import type { WompiTransportFactory } from "./wompi-runtime";
 import type { WompiBindings } from "../contract";
 
-const cooldown = 60000;
 const maximumChecks = 8;
 const pageSize = 32;
 const Due = Schema.Struct({ user_id: UserId, id: RefundAttemptId, verification: Schema.Int });

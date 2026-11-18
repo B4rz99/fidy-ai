@@ -101,7 +101,10 @@ import {
   isBillingCollectionWork as recognizesWork,
   runBillingCollectionWorkflow as runWorkflow,
 } from "./internal/billing-workflow";
-import { reconcileBillingCandidates as reconcile } from "./internal/billing-observation";
+import {
+  receiveLocalSourceCancellation,
+  reconcileBillingCandidates as reconcile,
+} from "./internal/billing-observation";
 import { sweepExpiredEnrollmentAdmission as sweep } from "./internal/enrollment-admission";
 
 import {
@@ -576,4 +579,16 @@ export const handleNativeRefundWork = Effect.fnUntraced(function* (
   return new Response(null, { status: 204 });
 });
 
-export { receiveLocalSourceCancellation } from "./internal/billing-observation";
+export const receiveBillingHandoff = Effect.fn(function* ({
+  environment,
+  workflow,
+  body,
+}: {
+  environment: BillingWorkRouting;
+  workflow: BillingObservationWorkflow;
+  body: typeof LocalSourceCancellationWork.Type | Parameters<typeof offerNativeBillingWork>[1];
+}) {
+  return yield* Schema.is(LocalSourceCancellationWork)(body)
+    ? receiveLocalSourceCancellation({ environment, workflow, work: body })
+    : offerNativeBillingWork(workflow, body);
+});

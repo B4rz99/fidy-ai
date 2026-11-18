@@ -1,4 +1,4 @@
-import { backgroundWorkAllowed } from "../release-isolation/operations";
+import { runInstalledBackgroundRequest } from "../release-isolation/runtime";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import { reportWatchdog, runWatchdog } from "./internal/watchdog";
 import type { SharedBindings } from "../storage-bootstrap/contract";
@@ -36,9 +36,10 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
     }
   }
   private watchdog(request: Request): Promise<Response> {
-    return Effect.runPromise(backgroundWorkAllowed(this.env)).then((allowed) =>
-      allowed ? this.watchdogTick(request) : new Response(null, { status: 403 })
-    );
+    return runInstalledBackgroundRequest({
+      settings: this.env,
+      run: () => this.watchdogTick(request),
+    });
   }
   private watchdogTick(request: Request): Promise<Response> {
     const raw = request.headers.get("x-maintenance-scheduled-at");

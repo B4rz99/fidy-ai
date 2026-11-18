@@ -7,7 +7,7 @@ import { native, nativeBillingPlatform } from "../user-store.test-fixture";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 
-const setup = Effect.fn(function* (bsuid = "CO.13491208655302741918") {
+const setup = Effect.fn(function* (bsuid: string = "CO.13491208655302741918") {
   const runtime = yield* (yield* nativeBillingPlatform)(),
     owner = yield* seed(runtime, alice, false),
     other = yield* seed(runtime, bob, false);

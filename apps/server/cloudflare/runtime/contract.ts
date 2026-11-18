@@ -3,6 +3,8 @@ import { Data, type Effect, type Option } from "effect";
 import type { ProactivityEnvironment } from "../insights/contract";
 import type { OpenAiEnvironment } from "../ai/contract";
 
+export const smokePath = "/internal/release-smoke";
+
 /** Platform-owned scheduled work exposes completion only, never diagnostic or provider details. */
 export class PlatformMaintenanceUnavailable extends Data.TaggedError(
   "PlatformMaintenanceUnavailable"

@@ -69,20 +69,15 @@ export const nativeOperatorRequest = (input: OperatorCall): Effect.Effect<Respon
     const erasure = input.environment.ERASURE;
     if (erasure === undefined) return Effect.succeed(reply(unavailableStatus));
     const command = admission.command;
-    switch (command.action) {
-      case "CustodyEvidence":
-      case "CustodyScope":
-      case "Continue":
-      case "Receipt":
-        return forwardCommand({
-          ...admission,
-          command,
-          request: input.request,
-          target: () => erasure.getByName(erasureRegistryName),
-        });
-      default:
-        return Effect.succeed(reply(invalidStatus));
+    if ("userId" in command) {
+      return forwardCommand({
+        ...admission,
+        command,
+        request: input.request,
+        target: () => erasure.getByName(erasureRegistryName),
+      });
     }
+    return Effect.succeed(reply(invalidStatus));
   });
 export const operatorRequest = (
   input: OperatorCall & { environment: ErasureOperatorEnvironment; storeIds: ReadonlyArray<string> }

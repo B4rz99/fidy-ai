@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { smokePath } from "../runtime/release-smoke/contract";
+import { smokePath } from "../runtime/contract";
 
 export const compatibilityQuery = "?storage=compatibility";
 export const isStorageCompatibility = (request: Request): boolean => {

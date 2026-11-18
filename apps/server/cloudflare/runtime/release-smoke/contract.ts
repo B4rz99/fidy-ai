@@ -3,7 +3,7 @@ import type { BancolombiaSandboxEnvironment } from "../../bancolombia-authentica
 import { Schema } from "effect";
 import { contractDigestPattern, gitRevisionPattern } from "../contract";
 
-export const smokePath = "/internal/release-smoke";
+export { smokePath } from "../contract";
 export const smokeVersionHeader = "cloudflare-workers-version-overrides";
 export const smokeProofHeader = "x-fidy-smoke-proof";
 const smokeSecretPattern = /^[0-9a-f]{64}$/u;

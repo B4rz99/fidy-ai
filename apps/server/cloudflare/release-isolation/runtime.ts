@@ -1,6 +1,8 @@
+import type { AcceptanceWindowBindings } from "./contract";
+import { backgroundWorkAllowed } from "./operations";
 import { deploymentPhase } from "./internal/deployment";
 import { env } from "cloudflare:workers";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 const Fixture = Schema.declare<Pick<Fetcher, "fetch">>(
   (value): value is Pick<Fetcher, "fetch"> =>
@@ -55,4 +57,15 @@ export const fetchForInstalledRelease = ({
         }
       },
     }
+  );
+
+export const runInstalledBackgroundRequest = ({
+  settings,
+  run,
+}: {
+  settings: AcceptanceWindowBindings;
+  run: () => Promise<Response>;
+}): Promise<Response> =>
+  Effect.runPromise(backgroundWorkAllowed(settings)).then((allowed) =>
+    allowed ? run() : new Response(null, { status: 403 })
   );

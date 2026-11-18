@@ -1,0 +1,37 @@
+apps/server/cloudflare/browser-login/internal/local-pairing.ts
+  s_a1be23a656acf0::t_dced218f79163b 1,10,96-110,143-151,165-170
+apps/server/cloudflare/directory/contract.ts
+  s_a1be23a656acf0::t_ff06553c44b522 56
+apps/server/cloudflare/directory/internal/reservations.ts
+  s_a1be23a656acf0::t_58575f55e95b7d 35-48
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_3a96fe5d650e31 21,54,239,244
+apps/server/cloudflare/email-authentication/native-login.test-fixture.ts
+  s_a1be23a656acf0::t_182f8d2605d2a9 1-123
+apps/server/cloudflare/email-authentication/native-login.test.ts
+  s_a1be23a656acf0::t_06cc5cc1ccf2db 5,8-10,253,259
+apps/server/cloudflare/email-authentication/native-redemption.test.ts
+  s_a1be23a656acf0::t_051a70493ba444 1-264
+apps/server/cloudflare/login-email-worker.test-fixture.ts
+  s_a1be23a656acf0::t_f8f901d231c7c0 2-3,11-65,74-89
+apps/server/cloudflare/onboarding/browser-authentication.test.ts
+  s_a1be23a656acf0::t_1349f64cbc0bbc 8,476-484,509,511
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_727729bee805ee 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8f4b09ec770daa254cd227164f11d5bf3dbd4ca1",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

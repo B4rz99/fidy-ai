@@ -80,6 +80,15 @@ const start = Effect.fn(function* (
     concurrency: 2,
   });
   const registry = yield* workerManifest("./core-worker.ts");
+  const bindings = {
+    SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: "1000000000" },
+    CF_VERSION_METADATA: { type: "version-metadata" },
+    USER_STORE: { type: "durable-object", worker: "core", exportName: "CategoryProbe" },
+    DIRECTORY: { type: "durable-object", worker: "registry", exportName: "Directory" },
+    PRICING: { type: "durable-object", worker: "registry", exportName: "Pricing" },
+    ERASURE: { type: "durable-object", worker: "registry", exportName: "Erasure" },
+    MAINTENANCE: { type: "durable-object", worker: "registry", exportName: "Maintenance" },
+  } as const;
   const runtime = yield* Effect.acquireRelease(
     Effect.sync(
       () =>
@@ -94,20 +103,7 @@ const start = Effect.fn(function* (
                 compatibilityDate: "2026-09-08",
                 manifest: owner,
                 exports: { CategoryProbe: { type: "durable-object", storage: "sqlite" } },
-                env: {
-                  SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: "1000000000" },
-                  CF_VERSION_METADATA: { type: "version-metadata" },
-                  MAINTENANCE: {
-                    type: "durable-object",
-                    worker: "registry",
-                    exportName: "Maintenance",
-                  },
-                  USER_STORE: {
-                    type: "durable-object",
-                    worker: "core",
-                    exportName: "CategoryProbe",
-                  },
-                },
+                env: bindings,
               },
             },
             {
@@ -117,11 +113,13 @@ const start = Effect.fn(function* (
                 compatibilityDate: "2026-09-08",
                 compatibilityFlags: ["nodejs_compat"],
                 manifest: registry,
-                exports: { Maintenance: { type: "durable-object", storage: "sqlite" } },
-                env: {
-                  CF_VERSION_METADATA: { type: "version-metadata" },
-                  SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: "1000000000" },
+                exports: {
+                  Directory: { type: "durable-object", storage: "sqlite" },
+                  Pricing: { type: "durable-object", storage: "sqlite" },
+                  Erasure: { type: "durable-object", storage: "sqlite" },
+                  Maintenance: { type: "durable-object", storage: "sqlite" },
                 },
+                env: bindings,
               },
             },
             {

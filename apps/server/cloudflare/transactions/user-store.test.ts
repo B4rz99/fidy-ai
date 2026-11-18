@@ -1,10 +1,10 @@
 import { NodeFileSystem } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import type { Miniflare } from "miniflare";
 import { browserOrigins, productionTopology } from "../runtime/contract";
-import { native, nativeUserPlatform } from "../user-store.test-fixture";
+import { native, nativeCapacityPlatform, nativeUserPlatform } from "../user-store.test-fixture";
 
 import {
   alice,
@@ -20,6 +20,14 @@ import {
 
 const jsonBody = (response: Pick<Response, "json">): Effect.Effect<unknown> =>
   native(() => response.json());
+const userStoreBytes = Effect.fn(function* (runtime: Miniflare, userId: string) {
+  const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+  const response = yield* native(() =>
+    users.getByName(userId).fetch("https://fixture.invalid/database-size")
+  );
+  expect(response.status).toBe(200);
+  return yield* Schema.decodeUnknownEffect(Schema.Int)(yield* native(() => response.json()));
+});
 const capturePayload = {
   money: { amount: "31.77", currency: "USD" },
   direction: "outflow",
@@ -319,19 +327,38 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     "recovers an existing receipt under capacity pressure, while new growth rolls back its admission",
     () =>
       Effect.gen(function* () {
-        const create = yield* nativeUserPlatform;
-        const runtime = yield* create("2000000");
+        const ceiling = 4 * 1024 * 1024;
+        const create = yield* nativeCapacityPlatform;
+        const runtime = yield* create(String(ceiling));
         const owner = yield* seed(runtime, alice);
         const bearer = yield* provisionPAT(owner, alice, {
           id: "20000000-0000-4000-8000-000000000001",
           shortId: "abcdefgh",
         });
+        const initialBytes = yield* userStoreBytes(runtime, alice.user);
+        expect(initialBytes).toBeLessThan(ceiling * 0.7);
         expect((yield* patCapture(runtime, bearer, "existing")).status).toBe(201);
-        yield* owner.exec(
-          "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<3000) INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms,notes) SELECT printf('31000000-0000-4000-8000-%012d',i),?,'500','COP','outflow',?,i,i,printf('%0800d',i) FROM n",
-          alice.user,
-          category
-        );
+        yield* owner.exec("CREATE TABLE storage_pressure (padding BLOB)");
+        const healthyBytes = yield* userStoreBytes(runtime, alice.user);
+        expect(healthyBytes).toBeLessThan(ceiling * 0.7);
+        const target = Math.ceil(ceiling * 0.85);
+        const chunk = 256 * 1024;
+        for (let remaining = target - healthyBytes; remaining > 0; remaining -= chunk) {
+          yield* owner.exec(
+            "INSERT INTO storage_pressure VALUES(zeroblob(?))",
+            Math.min(chunk, remaining)
+          );
+        }
+        const pressureBytes = yield* userStoreBytes(runtime, alice.user);
+        expect(pressureBytes).toBeGreaterThanOrEqual(ceiling * 0.8);
+        expect(pressureBytes).toBeLessThan(ceiling);
+        const measured = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+          initialBytes,
+          healthyBytes,
+          pressureBytes,
+          ceilingBytes: ceiling,
+        });
+        process.stdout.write(`TRANSACTION_CAPACITY ${measured}\n`);
         expect((yield* patCapture(runtime, bearer, "existing")).status).toBe(201);
         expect((yield* patCapture(runtime, bearer, "new")).status).toBe(503);
         expect(

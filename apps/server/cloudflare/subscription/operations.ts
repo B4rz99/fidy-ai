@@ -1,3 +1,4 @@
+import { CanonicalAdmissionUnavailable } from "../canonical-admission/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { SqlClient } from "effect/sql";
 
@@ -169,7 +170,41 @@ export const repairCancellationAlarm = Effect.fnUntraced(function* (storage: Dur
 });
 
 export const isLocalSubscriptionRead = (id: string): boolean =>
-  ["subscription.listSubscriptionOffers", "subscription.getSubscriptionStatus"].includes(id);
+  [
+    "subscription.listSubscriptionOffers",
+    "subscription.getSubscriptionStatus",
+    "subscription.getUpgradeUrl",
+  ].includes(id);
+
+export const readLocalSubscriptionOffers = Effect.fnUntraced(function* (
+  pricing: Pick<DurableObjectNamespace, "getByName">
+) {
+  const response = yield* Effect.tryPromise(() =>
+    pricing.getByName(pricingName).fetch("https://pricing.internal/offers")
+  );
+  if (!response.ok)
+    {return yield* new CanonicalAdmissionUnavailable({ cause: "pricing_unavailable" });}
+  return yield* Effect.tryPromise(() => response.json()).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(SubscriptionOffers)),
+    Effect.flatMap(Schema.encodeEffect(SubscriptionOffers))
+  );
+});
+export const readLocalSubscriptionStatus = Effect.fn(function* (
+  user: Parameters<typeof getSubscriptionStatus>[0]
+) {
+  const { data } = yield* getSubscriptionStatus(user).pipe(
+    Effect.provideService(SqlClient.SqlClient, yield* SqliteClient)
+  );
+  return yield* Schema.encodeEffect(Schema.toCodecJson(SubscriptionStatus))(data);
+});
+export const subscriptionReadResult = (data: Schema.Json): LocalMutationResult => ({
+  status: 200,
+  outcome: "success",
+  body: { data, next: [] },
+});
+export const upgradeLocation = (origin: string): { url: string } => ({
+  url: new URL("/upgrade", origin).href,
+});
 
 export const observeLocalSubscription = Effect.fn(
   function* (
@@ -177,32 +212,21 @@ export const observeLocalSubscription = Effect.fn(
       Parameters<typeof runLocalMutation>[0],
       "owns" | "storage" | "request" | "operation"
     >,
-    pricing: DurableObjectNamespace
+    env: { PRICING: DurableObjectNamespace; BROWSER_ORIGIN: string }
   ) {
-    const offers = unit.operation.id === "subscription.listSubscriptionOffers";
-    const data = offers
-      ? yield* Effect.tryPromise(() =>
-          pricing
-            .getByName(pricingName)
-            .fetch("https://pricing.internal/offers")
-            .then((response) => response.json())
-        ).pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(SubscriptionOffers)),
-          Effect.flatMap(Schema.encodeEffect(SubscriptionOffers))
-        )
-      : null;
+    const selection = unit.operation.id;
+    const offers =
+      selection === "subscription.listSubscriptionOffers"
+        ? Option.some(yield* readLocalSubscriptionOffers(env.PRICING))
+        : Option.none();
     return yield* runLocalMutation({
       ...unit,
       input: Effect.succeedSome(true),
       work: Effect.fn(function* (_, user) {
-        const body =
-          data ??
-          (yield* Schema.encodeEffect(Schema.toCodecJson(SubscriptionStatus))(
-            (yield* getSubscriptionStatus(user).pipe(
-              Effect.provideService(SqlClient.SqlClient, yield* SqliteClient)
-            )).data
-          ));
-        return { status: 200, outcome: "success" as const, body: { data: body, next: [] } };
+        if (Option.isSome(offers)) return subscriptionReadResult(offers.value);
+        if (selection === "subscription.getUpgradeUrl")
+          {return subscriptionReadResult(upgradeLocation(env.BROWSER_ORIGIN));}
+        return subscriptionReadResult(yield* readLocalSubscriptionStatus(user));
       }),
     });
   },

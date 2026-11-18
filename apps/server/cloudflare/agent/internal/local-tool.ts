@@ -33,6 +33,7 @@ import { AgentUnavailable } from "../contract";
 
 type Action = { turn: LocalTurn; iteration: number; storage: DurableObjectStorage } & Partial<{
   confirmed: LocalReviewFacts;
+  commercial: { origin: string; offers: Option.Option<Schema.Json> };
 }>;
 const failure = (code: string): CanonicalToolOutcome => ({
   _tag: "CanonicalOperationFailed",
@@ -124,6 +125,7 @@ const ownerForTool = Effect.fnUntraced(function* (
     user: turn.user_id,
     current: now,
     storage: action.storage,
+    ...(action.commercial === undefined ? {} : { commercial: action.commercial }),
     ...channelContext(turn),
   };
   return operation.id === "operations.executeAtomicBatch"

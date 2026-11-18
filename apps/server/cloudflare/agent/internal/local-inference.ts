@@ -1,3 +1,4 @@
+import { readLocalSubscriptionOffers } from "../../subscription/operations";
 import { reserveBatchForwarding } from "../../ingestion/operations";
 import { getAtomicBatchInputSchema } from "../../../src/shell/operations/contract";
 import { captureWithoutCommit } from "./capture-reply";
@@ -35,7 +36,11 @@ import { type LocalTurn, channelAuthority } from "./local-turn";
 import { channelReply, channelStatus, liveTurn, propose, unavailable } from "./local-turn-store";
 import { applyTool } from "./local-tool";
 
-type Environment = OpenAiEnvironment & { DIRECTORY: Pick<DurableObjectNamespace, "getByName"> };
+type Environment = OpenAiEnvironment & {
+  DIRECTORY: Pick<DurableObjectNamespace, "getByName">;
+  PRICING: Pick<DurableObjectNamespace, "getByName">;
+  BROWSER_ORIGIN: string;
+};
 const contextFor = Effect.fn(function* (turn: LocalTurn, state: "queued" | "running" = "running") {
   const sql = yield* SqliteClient;
   const user = yield* liveTurn(turn, yield* Clock.currentTimeMillis, state);
@@ -212,16 +217,26 @@ const reserveToolRoutes = Effect.fn(function* (
 const runTools = Effect.fn(function* (
   calls: ReadonlyArray<HostedTextToolCall>,
   round: ToolRound,
-  directory: Environment["DIRECTORY"]
+  env: Environment
 ) {
   const { turn, iteration, storage } = round;
   const catalog = localHostedCatalog(channelAuthority(turn));
   if (invalidToolGroup(calls, catalog)) return yield* new AgentUnavailable();
   const actions: ToolResult[] = [];
   for (const tool of calls) {
-    yield* reserveToolRoutes(tool, turn, directory);
+    yield* reserveToolRoutes(tool, turn, env.DIRECTORY);
+    const offers =
+      tool.operation === "subscription.listSubscriptionOffers"
+        ? yield* readLocalSubscriptionOffers(env.PRICING).pipe(Effect.option)
+        : Option.none();
+
     const applied = yield* Effect.gen(function* () {
-      const event = yield* applyTool(tool, { turn, iteration, storage });
+      const event = yield* applyTool(tool, {
+        turn,
+        iteration,
+        storage,
+        commercial: { origin: env.BROWSER_ORIGIN, offers },
+      });
       const challenge = yield* visibleChallenge(turn.id, yield* Clock.currentTimeMillis);
       if (Option.isSome(challenge)) {
         yield* present(turn, { text: challenge.value.effect, iteration }, storage);
@@ -243,7 +258,7 @@ const runTools = Effect.fn(function* (
 const runRounds = Effect.fn(function* (
   inference: HostedInferenceService,
   turn: LocalTurn,
-  { storage, directory }: { storage: DurableObjectStorage; directory: Environment["DIRECTORY"] }
+  { storage, env }: { storage: DurableObjectStorage; env: Environment }
 ) {
   const context = yield* contextFor(turn).pipe(withStoreCapacity("required"));
   const catalog = localHostedCatalog(channelAuthority(turn));
@@ -274,7 +289,7 @@ const runRounds = Effect.fn(function* (
     if (result.finishReason !== "tool-calls" || total > maximumToolCallsPerTurn) {
       return yield* new AgentUnavailable();
     }
-    const events = yield* runTools(result.toolCalls, { turn, iteration, storage }, directory);
+    const events = yield* runTools(result.toolCalls, { turn, iteration, storage }, env);
     if (Option.isNone(events)) return;
     prepared = yield* result.continuation.prepare(events.value);
   }
@@ -296,5 +311,5 @@ export const executeTurn = Effect.fn(function* (
   }
   const inference = yield* modelFor(env, turn);
   yield* compact(turn, inference).pipe(Effect.ignore);
-  yield* runRounds(inference, turn, { storage, directory: env.DIRECTORY });
+  yield* runRounds(inference, turn, { storage, env });
 });

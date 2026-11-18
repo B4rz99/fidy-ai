@@ -59,6 +59,9 @@ const financialQueries = [
   ["recurringPlans__getRecurringWorkspace", { query: { month: "2026-10", view: "compact" } }],
 ] as const;
 const accountQueries = [
+  ["subscription__getSubscriptionStatus", {}],
+  ["subscription__getUpgradeUrl", {}],
+  ["subscription__listSubscriptionOffers", {}],
   ["ingestion__getEmailForwarding", {}],
   ["ingestion__getReviewWorkspace", { query: {} }],
   ["ingestion__getReviewItem", { params: { id: alice.user } }],
@@ -130,6 +133,11 @@ const verifyQueryTools = Effect.fnUntraced(function* (
     if (mode === "account") {
       expect(
         yield* owner.exec(
+          "SELECT json_extract(entry_json,'$.outcome.output.data.url') AS url FROM hosted_transcript WHERE json_extract(entry_json,'$.operation')='subscription.getUpgradeUrl' AND json_extract(entry_json,'$._tag')='CanonicalToolResultEntry'"
+        )
+      ).toEqual([{ url: "https://app.fidyapp.com/upgrade" }]);
+      expect(
+        yield* owner.exec(
           "SELECT operation,outcome FROM audit_entries WHERE hosted_turn_id IS NOT NULL AND user_id=? ORDER BY operation",
           alice.user
         )
@@ -173,6 +181,10 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     BANCOLOMBIA_SANDBOX_CONSENT_PROFILE: yield* nativeConnectionProfile,
   });
   const owner = yield* seed(runtime, alice);
+  yield* owner.exec(
+    "UPDATE users SET trial_started_at_ms=created_at_ms,trial_ends_at_ms=created_at_ms+604800000 WHERE id=?",
+    alice.user
+  );
   yield* seed(runtime, bob);
   const disclosure = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
     currentDisclosureFor()

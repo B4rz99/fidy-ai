@@ -480,7 +480,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         isLocalForwardingOperation,
         () => dispatchLocalForwarding({ ...unit, directory: this.env.DIRECTORY }),
       ],
-      [isLocalSubscriptionRead, () => observeLocalSubscription(unit, this.env.PRICING)],
+      [isLocalSubscriptionRead, () => observeLocalSubscription(unit, this.env)],
       [
         isLocalReviewOperation,
         () => dispatchLocalReview({ ...unit, bucket: this.env.EMAIL_BUCKET }),

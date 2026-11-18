@@ -15,6 +15,7 @@ const observedListings = [
   ["ingestion.getReviewWorkspace", ""],
   ["pats.listPATs", ""],
   ["recurringPlans.getRecurringWorkspace", "?month=2026-10&view=compact"],
+  ["subscription.getUpgradeUrl", ""],
   ["subscription.getSubscriptionStatus", ""],
   ["subscription.listSubscriptionOffers", ""],
   ["quota.getQuota", ""],

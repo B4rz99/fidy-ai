@@ -52,7 +52,13 @@ import {
   readLocalReviewItem,
   readLocalReviewWorkspace,
 } from "../../ingestion/operations";
-import { cancelLocalSubscription, localCancellationReview } from "../../subscription/operations";
+import {
+  cancelLocalSubscription,
+  localCancellationReview,
+  readLocalSubscriptionStatus,
+  subscriptionReadResult,
+  upgradeLocation,
+} from "../../subscription/operations";
 import {
   CanonicalAdmissionUnavailable,
   type LocalMutationPlan,
@@ -65,6 +71,7 @@ const firstFailureStatus = 400;
 type Context = { user: UserId; current: number; storage: DurableObjectStorage } & Partial<{
   hostedTurn: string;
   accountability: { turnId: string; sessionId: string };
+  commercial: { origin: string; offers: Option.Option<Schema.Json> };
 }>;
 type Prepare = (
   input: unknown,
@@ -162,6 +169,24 @@ const credentialMetadata = Effect.fnUntraced(function* ({
   };
 });
 export const hostedQueryOwners = new Map<string, Prepare>([
+  readOwner("subscription.getSubscriptionStatus", (_, { user }) =>
+    readLocalSubscriptionStatus(user).pipe(Effect.map(subscriptionReadResult))
+  ),
+  readOwner("subscription.listSubscriptionOffers", (_, { commercial }) =>
+    Effect.gen(function* () {
+      if (commercial === undefined || Option.isNone(commercial.offers))
+        {return yield* new CanonicalAdmissionUnavailable({ cause: "pricing_unavailable" });}
+      return subscriptionReadResult(commercial.offers.value);
+    })
+  ),
+  readOwner("subscription.getUpgradeUrl", (_, { commercial }) =>
+    Effect.gen(function* () {
+      if (commercial === undefined)
+        {return yield* new CanonicalAdmissionUnavailable({ cause: "browser_origin_unavailable" });}
+      return subscriptionReadResult(upgradeLocation(commercial.origin));
+    })
+  ),
+
   readOwner("ingestion.getReviewWorkspace", ({ query }, { user, current, hostedTurn }) =>
     readLocalReviewWorkspace(query, user, {
       context: false,

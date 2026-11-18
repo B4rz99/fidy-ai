@@ -1,12 +1,8 @@
-import { Clock, Effect, Exit, Schema } from "effect";
+import { registerUserLifetime as registerReservedLifetime } from "./internal/registration";
+import { Effect, Exit, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { UserId } from "../../src/core/identity/contract";
-import {
-  UserRegistrationUnavailable,
-  maintenanceName,
-  registerLifetimeUrl,
-  registrationAcceptedStatus,
-} from "../maintenance/contract";
+
 import type { StoreHistory } from "../runtime/sqlite/contract";
 
 /** Initial User-store schema. Schema creation grants no identity, credential or Consent. */
@@ -739,6 +735,31 @@ export const userStoreHistory: StoreHistory = {
     },
     { version: 8, id: "monthly-budget-planning", statements: budgetPlanningMigration },
     { version: 9, id: "native-dashboard", statements: dashboardSchema },
+    {
+      version: 10,
+      id: "browser-bootstrap-and-proof-outcomes",
+      statements: [
+        `CREATE TABLE provider_credentials(issuer TEXT NOT NULL,subject TEXT NOT NULL,user_id TEXT NOT NULL REFERENCES users(id),contact_email TEXT,established_at_ms INTEGER NOT NULL,PRIMARY KEY(issuer,subject)) STRICT`,
+        `CREATE TABLE backup_recovery_credentials(user_id TEXT PRIMARY KEY REFERENCES users(id),code_digest BLOB NOT NULL UNIQUE CHECK(length(code_digest)=32),created_at_ms INTEGER NOT NULL,consumed_at_ms INTEGER,revision INTEGER NOT NULL) STRICT`,
+        `ALTER TABLE consent_history ADD COLUMN disclosure_json TEXT`,
+        `ALTER TABLE consent_history ADD COLUMN disclosure_message_id TEXT`,
+        `ALTER TABLE consent_history ADD COLUMN decision_message_id TEXT`,
+        `ALTER TABLE consent_history ADD COLUMN decision_received_at_ms INTEGER`,
+        "ALTER TABLE audit_entries RENAME TO pre_bootstrap_audit",
+        `CREATE TABLE audit_entries(id TEXT PRIMARY KEY NOT NULL,user_id TEXT NOT NULL REFERENCES users(id),record_type TEXT NOT NULL,session_id TEXT REFERENCES web_sessions(id),pat_id TEXT REFERENCES pats(id),
+        operation TEXT,outcome TEXT,occurred_at_ms INTEGER NOT NULL,CHECK((record_type='identity_read' AND session_id IS NOT NULL AND pat_id IS NULL AND operation IS NULL AND outcome IS NULL) OR
+        (operation IS NOT NULL AND ((record_type='session_call' AND session_id IS NOT NULL AND pat_id IS NULL AND outcome IS NOT NULL AND outcome IN ('success','validation_failed','not_found')) OR
+        (record_type='credential_call' AND pat_id IS NOT NULL AND session_id IS NULL AND outcome IS NOT NULL AND outcome IN ('accepted','rejected')) OR
+        (record_type='request_admission' AND pat_id IS NOT NULL AND session_id IS NULL AND outcome IS NULL))))) STRICT`,
+        "INSERT INTO audit_entries SELECT * FROM pre_bootstrap_audit",
+        "DROP TABLE pre_bootstrap_audit",
+        "CREATE TRIGGER audit_entries_immutable BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_immutable'); END",
+        `CREATE TABLE browser_handoffs(id TEXT PRIMARY KEY,pairing_id TEXT NOT NULL UNIQUE,user_id TEXT NOT NULL,ordinal INTEGER NOT NULL UNIQUE,
+        verifier_digest TEXT NOT NULL,expires_at_ms INTEGER NOT NULL,wrong_attempts INTEGER NOT NULL,last_poll_ms INTEGER,minimum_poll_seconds INTEGER NOT NULL,
+        evidence_json TEXT CHECK(evidence_json IS NULL OR json_valid(evidence_json)),recovery_generation INTEGER NOT NULL DEFAULT 0,claim_id TEXT,claim_at_ms INTEGER,outcome TEXT NOT NULL CHECK(outcome IN ('pending','committed','cancelled')),state TEXT NOT NULL CHECK(state IN ('pending_approval','invalidated','ready','consumed'))) STRICT`,
+        "CREATE INDEX ready_browser_pairings ON browser_handoffs(ordinal) WHERE state='ready'",
+      ],
+    },
   ],
 };
 
@@ -768,24 +789,6 @@ export const recoverUserWork = <E, R>(
     })
   );
 
-/** Register outside the User transaction, before committing activation or accepting work. */
-export const registerUserLifetime = Effect.fn(function* (
-  maintenance: Pick<DurableObjectNamespace, "getByName">,
-  userId: UserId
-) {
-  const issuedAt = yield* Clock.currentTimeMillis;
-  const response = yield* Effect.tryPromise((signal) =>
-    maintenance.getByName(maintenanceName).fetch(registerLifetimeUrl, {
-      method: "POST",
-      headers: { "fidy-user-id": userId, "fidy-registration-issued-ms": String(issuedAt) },
-      signal,
-    })
-  );
-  if (response.status !== registrationAcceptedStatus) {
-    return yield* new UserRegistrationUnavailable();
-  }
-});
-
 /** An empty store has no work. Its reserved bootstrap registers independently before creating the User. */
 export const observeUserRegistration = Effect.fn(function* (
   maintenance: Pick<DurableObjectNamespace, "getByName">,
@@ -807,3 +810,7 @@ export const observeUserRegistration = Effect.fn(function* (
     AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=${user.id}) RETURNING id`;
   return confirmed.length === 1 ? ("registered" as const) : ("unavailable" as const);
 });
+
+/** Register a reserved lifetime before any enrollment can activate locally. */
+export const registerUserLifetime: typeof registerReservedLifetime = (maintenance, userId) =>
+  registerReservedLifetime(maintenance, userId);

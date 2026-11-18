@@ -1,6 +1,6 @@
 import type { AuthenticationProvider } from "../../../src/shell/provider-authentication/contract";
 import { browserOrigins } from "../../runtime/contract";
-import type { ProviderEnvironment } from "../contract";
+import type { ProviderConfiguration } from "../contract";
 
 const bindingNames = {
   google: {
@@ -23,7 +23,7 @@ export const providerConfiguration = ({
   environment,
   provider,
 }: Readonly<{
-  environment: ProviderEnvironment;
+  environment: ProviderConfiguration;
   provider: AuthenticationProvider;
 }>): Readonly<{
   clientId: string;

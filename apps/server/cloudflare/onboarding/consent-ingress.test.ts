@@ -2,6 +2,7 @@ import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import {
   disposeLegacyConsent,
   receiveLegacyConsent,
+  registeredChatDirectory,
 } from "../provider-authentication/legacy-disclosure.test-fixture";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { DisclosureSnapshot, maxWhatsAppWebhookBytes } from "../../src/shell/consent/contract";
@@ -56,7 +57,8 @@ const setup = (
   coordinator: Option.Option<
     (userId: string, request: Request) => Promise<Response>
   > = Option.none(),
-  preparedDatabase: Option.Option<D1Database> = Option.none()
+  preparedDatabase: Option.Option<D1Database> = Option.none(),
+  registeredUser?: string
 ): Promise<{
   readonly db: D1Database;
   readonly sweep: () => Promise<void>;
@@ -172,6 +174,15 @@ const setup = (
                       CONTRACT_DIGEST:
                         "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
                       DB: db,
+                      ...(registeredUser === undefined
+                        ? {}
+                        : {
+                            DIRECTORY: registeredChatDirectory({
+                              userId: registeredUser,
+                              portfolio,
+                              bsuid,
+                            }),
+                          }),
                       HOSTED_AI_MODEL: approvedOpenAiModel,
                       BROWSER_ORIGIN: "https://app.fidyapp.com",
                       WOMPI_ENVIRONMENT: "",
@@ -208,7 +219,8 @@ const setup = (
               })
             )
           )(body);
-          return eventName === "whatsapp.message.received" &&
+          return registeredUser === undefined &&
+            eventName === "whatsapp.message.received" &&
             Option.isSome(parsed) &&
             parsed.value.message?.type === "text"
             ? receiveLegacyConsent({
@@ -402,7 +414,8 @@ it.each([
               expect(name).toBe(userId);
               return coordinator.fetch(request);
             }),
-            Option.some(db)
+            Option.some(db),
+            userId
           )
         );
         vi.stubGlobal(
@@ -471,8 +484,11 @@ it("preserves a contextual reply identity across the Core-to-coordinator wire co
           calls.push(body);
           return new Response(null, { status: 202 });
         });
-      const { db, send } = yield* Effect.tryPromise(() => setup(Option.some(coordinator)));
-      yield* Effect.tryPromise(() => seedVoiceUser(db, "10000000-0000-4000-8000-000000000071"));
+      const userId = "10000000-0000-4000-8000-000000000071";
+      const { db, send } = yield* Effect.tryPromise(() =>
+        setup(Option.some(coordinator), Option.none(), userId)
+      );
+      yield* Effect.tryPromise(() => seedVoiceUser(db, userId));
       const reply = encodeJson({
         message: {
           id: "wamid.contextual-reply",

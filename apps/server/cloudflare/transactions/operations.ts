@@ -1,23 +1,35 @@
 import { readLocalTransactionAggregate as localAggregate } from "./internal/sqlite-aggregate";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { dashboardListStatement, decodeDashboardTransactions } from "./internal/dashboard-query";
-import { TransactionAggregatesUnavailable } from "./contract";
-import { TransactionId } from "../../src/core/transactions/contract";
+import {
+  type BudgetContributionCursor,
+  type DashboardTransactionRead,
+  type PrivacyTransactionsRead,
+  type RecurringFactPage,
+  type RecurringFactSnapshot,
+  type RecurringFactsUnavailable,
+  TransactionAggregatesUnavailable,
+} from "./contract";
+import {
+  type CompletePeriodAggregates,
+  TransactionId,
+  type TransactionPeriod,
+} from "../../src/core/transactions/contract";
 import {
   correctLocalTransaction,
   inspectLocalTransaction,
   missingLocalTransaction,
   reconcileLocalTransactions,
 } from "./internal/sqlite-corrections";
-import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
+import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-admission/operations";
 import { rawPathId } from "../http/operations";
 import { captureLocalTransaction as captureNative } from "./internal/sqlite-capture";
 import { prepareGroupCorrection as ownerPrepareGroupCorrection } from "./internal/group-correction";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
 import {
+  readLocalTransactionPage as nativeReadLocalTransactionPage,
   readUserHistory as readLocalHistory,
-  readLocalTransactionPage,
 } from "./internal/sqlite-history";
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
 import {
@@ -26,17 +38,9 @@ import {
   revisionGuard,
   revisionProjection,
 } from "./internal/recurring-query";
-import type { UserId } from "../../src/core/identity/contract";
-import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import { type UserId } from "../../src/core/identity/contract";
+import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 import { Effect, Option, Schema } from "effect";
-import type {
-  BudgetContributionCursor,
-  DashboardTransactionRead,
-  PrivacyTransactionsRead,
-  RecurringFactPage,
-  RecurringFactSnapshot,
-  RecurringFactsUnavailable,
-} from "./contract";
 import { readDashboardTransactions as ownerReadDashboardTransactions } from "./internal/dashboard-read";
 import {
   prepareBoundPlanningTransactions as ownerPrepareBoundPlanningTransactions,
@@ -53,10 +57,6 @@ import {
   periodAggregateGuard,
   readPeriodAggregates,
 } from "./internal/dashboard-projection";
-import type {
-  CompletePeriodAggregates,
-  TransactionPeriod,
-} from "../../src/core/transactions/contract";
 import {
   browseTransactions as ownerBrowseTransactions,
   findTransaction as ownerFindCapturedTransaction,
@@ -416,3 +416,6 @@ export const readLocalDashboardTransactions = Effect.fn(function* (
   );
   return { lists, ranges };
 });
+
+export const readLocalTransactionPage: typeof nativeReadLocalTransactionPage = (...args) =>
+  nativeReadLocalTransactionPage(...args);

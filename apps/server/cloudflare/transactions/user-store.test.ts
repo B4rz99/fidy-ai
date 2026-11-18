@@ -325,7 +325,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const create = yield* nativeUserPlatform;
-        const runtime = yield* create("600000");
+        const runtime = yield* create("1000000");
         const owner = yield* seed(runtime, alice);
         const bearer = yield* provisionPAT(owner, alice, {
           id: "20000000-0000-4000-8000-000000000001",
@@ -333,7 +333,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         });
         expect((yield* patCapture(runtime, bearer, "existing")).status).toBe(201);
         yield* owner.exec(
-          "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<240) INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms,notes) SELECT printf('31000000-0000-4000-8000-%012d',i),?,'500','COP','outflow',?,i,i,printf('%0800d',i) FROM n",
+          "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<1200) INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms,notes) SELECT printf('31000000-0000-4000-8000-%012d',i),?,'500','COP','outflow',?,i,i,printf('%0800d',i) FROM n",
           alice.user,
           category
         );

@@ -1,4 +1,10 @@
-import { routePATRequest, routeSessionRequest } from "../../directory/operations";
+import {
+  routeBootstrapRequest,
+  routeBrowserSession,
+  routePATRequest,
+  routeSessionRequest,
+} from "../../directory/operations";
+
 import { coordinatorErasureStoreIds } from "../../transactions/runtime";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { prepareBoundRecurringWorkspace } from "../../recurring-plans/operations";
@@ -39,15 +45,7 @@ import {
   handleConnectionCallback,
 } from "../../connections/runtime";
 import type { HttpClient } from "effect/http";
-import { completeProviderOnboarding } from "../../onboarding/operations";
-import {
-  microsoftProviderPaths,
-  providerPaths,
-} from "../../../src/shell/provider-authentication/contract";
-import {
-  handleProviderAuthentication,
-  ownsProviderAuthenticationPath,
-} from "../../provider-authentication/operations";
+import { ownsProviderAuthenticationPath } from "../../provider-authentication/operations";
 import { oauthPaths } from "../../../src/shell/oauth-agents/contract";
 import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
@@ -1921,18 +1919,8 @@ const reservedCoreResponse = (
   if (Option.isSome(browser)) {
     return browser;
   }
-  if (
-    [providerPaths.complete, microsoftProviderPaths.complete].some((owned) => owned === path) &&
-    request.method === "POST"
-  ) {
-    return Option.some(
-      Effect.tryPromise(() => completeProviderOnboarding({ db: environment.DB, request })).pipe(
-        Effect.orElseSucceed(unavailable)
-      )
-    );
-  }
-  if (ownsProviderAuthenticationPath(path)) {
-    return Option.some(handleProviderAuthentication({ request, environment }));
+  if (ownsProviderAuthenticationPath(path) || isPairingRequest(request)) {
+    return Option.some(routeBootstrapRequest({ request, environment }));
   }
   if (path === smokePath) {
     return Option.some(smokeResponse(request, environment, bankAuthentication));
@@ -2016,6 +2004,9 @@ const dispatchOAuthRequest = (
     : withBrowserBinding(request, environment, work);
 };
 
+const isPairingRequest = (request: Request): boolean =>
+  request.method === "POST" &&
+  ["/web/pairings", "/web/pairings/redeem"].includes(new URL(request.url).pathname);
 const dispatchCoreHttp = ({
   bankAuthentication,
   request,
@@ -2066,10 +2057,16 @@ const dispatchCoreHttp = ({
 export const executeCoreHttp = (
   input: RequestExecution
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
-  initialBrowserSessionBindingResponse({
-    request: input.request,
-    db: input.environment.DB,
-    browserOrigin: input.environment.BROWSER_ORIGIN,
-  }).pipe(
-    Effect.flatMap(Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed }))
-  );
+  (input.request.method === "GET" &&
+    ["/web/session/binding", "/user"].includes(new URL(input.request.url).pathname)) ||
+  (input.request.method === "POST" && new URL(input.request.url).pathname === "/web/session/logout")
+    ? routeBrowserSession(input.request, input.environment)
+    : initialBrowserSessionBindingResponse({
+        request: input.request,
+        db: input.environment.DB,
+        browserOrigin: input.environment.BROWSER_ORIGIN,
+      }).pipe(
+        Effect.flatMap(
+          Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed })
+        )
+      );

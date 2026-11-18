@@ -1,195 +1,150 @@
-import { afterAll, expect, it } from "vitest";
+import publicWorker from "../public-worker";
+import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { Clock, Effect, Schema } from "effect";
-import {
-  microsoftProviderPaths,
-  providerPaths,
-} from "../../src/shell/provider-authentication/contract";
-import { disposeJourneys, setup } from "./journey.test-fixture";
-import { sweepProviderAuthentication } from "./runtime";
+import { expect } from "vitest";
+import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
+import { browser } from "../browser-bootstrap.test-fixture";
+import { webSignupDisclosure } from "../../src/shell/consent/operations";
 
-afterAll(disposeJourneys);
-const Count = Schema.Struct({ count: Schema.Int });
-const count = (db: D1Database, table: string): Promise<number> =>
-  db
-    .prepare(`SELECT count(*) AS count FROM ${table}`)
-    .first()
-    .then(Schema.decodeUnknownSync(Count))
-    .then((row) => row.count);
-
-it("shares a durable source budget across every provider route and ignores forged source keys", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send, pairing } = yield* Effect.tryPromise(() => setup());
-      const responses = yield* Effect.tryPromise(() =>
-        Promise.all(
-          Array.from({ length: 125 }, (_, index) =>
-            send(providerPaths.disclosure, undefined, {
-              "x-provider-source": String(index).padStart(64, "0"),
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "applies shared source and expensive-request limits before provider work and ignores client-supplied source keys",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* (yield* nativeBrowserPlatform)();
+        const context = browser(runtime);
+        const proof = yield* context.pair;
+        const directory = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+        );
+        const deadline = (yield* Clock.currentTimeMillis) + 60000;
+        const send = (): ReturnType<typeof context.post> =>
+          native(() =>
+            runtime.dispatchFetch(context.api + "/web/providers/disclosure", {
+              headers: { ...context.headers, "x-provider-source": "f".repeat(64) },
             })
-          )
-        )
-      );
-      expect(responses.filter((response) => response.status === 200)).toHaveLength(120);
-      expect(responses.filter((response) => response.status === 429)).toHaveLength(5);
-      for (const paths of [providerPaths, microsoftProviderPaths]) {
-        for (const path of [paths.start, paths.status, paths.complete]) {
-          const response = yield* Effect.tryPromise(() =>
-            send(path, { ...pairing, intent: "login", consentRevision: "" })
           );
-          expect(response.status).toBe(429);
-          expect(response.headers.get("retry-after")).toBe("60");
+        const first = yield* send();
+        expect(first.status).toBe(200);
+        yield* native(() => first.arrayBuffer());
+        yield* native(() =>
+          directory.exec(
+            "WITH RECURSIVE sequence(n) AS(VALUES(1) UNION ALL SELECT n+1 FROM sequence WHERE n<118) INSERT INTO bootstrap_admissions(scope,expires_at_ms) SELECT (SELECT scope FROM bootstrap_admissions WHERE scope LIKE 'source:%' LIMIT 1),? FROM sequence",
+            deadline
+          )
+        );
+        const limited = yield* send();
+        expect(limited.status).toBe(429);
+        yield* native(() => limited.arrayBuffer());
+        yield* native(() => directory.exec("DELETE FROM bootstrap_admissions"));
+        yield* native(() =>
+          directory.exec(
+            "WITH RECURSIVE sequence(n) AS(VALUES(1) UNION ALL SELECT n+1 FROM sequence WHERE n<300) INSERT INTO bootstrap_admissions(scope,expires_at_ms) SELECT 'exchanges',? FROM sequence",
+            deadline
+          )
+        );
+        const expensive = yield* context.post("/web/providers/google/start", {
+          ...proof,
+          intent: "signup",
+          consentRevision: webSignupDisclosure().revision,
+        });
+        expect(expensive.status).toBe(429);
+        yield* native(() => expensive.arrayBuffer());
+        expect(
+          yield* native(() => directory.exec("SELECT count(*) AS n FROM provider_attempts"))
+        ).toEqual([{ n: 0 }]);
+      })
+  );
+  test.effect(
+    "atomically admits only the remaining global slot, sweeps expired windows, and reports unavailable admission storage",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* (yield* nativeBrowserPlatform)();
+        const context = browser(runtime);
+        yield* context.pair;
+        const directory = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+        );
+        yield* native(() => directory.exec("DELETE FROM bootstrap_admissions"));
+        const deadline = (yield* Clock.currentTimeMillis) + 60000;
+        yield* native(() =>
+          directory.exec(
+            "WITH RECURSIVE seq(n) AS(VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n<1199) INSERT INTO bootstrap_admissions(scope,expires_at_ms) SELECT 'global',? FROM seq",
+            deadline
+          )
+        );
+        yield* native(() =>
+          directory.exec(
+            "INSERT INTO bootstrap_admissions(scope,expires_at_ms) VALUES('expired',0)"
+          )
+        );
+        const send = (source: string): ReturnType<typeof context.post> =>
+          native(() =>
+            runtime.dispatchFetch(context.api + "/web/providers/disclosure", {
+              headers: { ...context.headers, "CF-Connecting-IP": source },
+            })
+          );
+        const results = yield* Effect.all([send("192.0.2.3"), send("192.0.2.4")], {
+          concurrency: 2,
+        });
+        expect(
+          results.map((response) => response.status).sort((left, right) => left - right)
+        ).toEqual([200, 429]);
+        for (const response of results) yield* native(() => response.arrayBuffer());
+        expect(
+          yield* native(() =>
+            directory.exec("SELECT count(*) AS n FROM bootstrap_admissions WHERE scope='expired'")
+          )
+        ).toEqual([{ n: 0 }]);
+        yield* native(() =>
+          directory.exec("ALTER TABLE bootstrap_admissions RENAME TO offline_admission")
+        );
+        const offline = yield* send("192.0.2.5");
+        expect(offline.status).toBe(503);
+        yield* native(() => offline.arrayBuffer());
+      })
+  );
+  test.effect(
+    "shares five polls per private verifier across sources and refuses missing source evidence",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* (yield* nativeBrowserPlatform)();
+        const context = browser(runtime);
+        const proof = yield* context.pair;
+        const payload = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(proof);
+        for (let index = 0; index < 6; index++) {
+          const response = yield* native(() =>
+            runtime.dispatchFetch(context.api + "/web/providers/google/status", {
+              method: "POST",
+              headers: { ...context.headers, "CF-Connecting-IP": "192.0.2." + index },
+              body: payload,
+            })
+          );
+          expect(response.status).toBe(index === 5 ? 429 : 400);
+          yield* native(() => response.arrayBuffer());
         }
-        expect((yield* Effect.tryPromise(() => send(paths.callback))).status).toBe(429);
-      }
-      expect(yield* Effect.tryPromise(() => count(db, "provider_authentication_attempts"))).toBe(0);
-      expect(yield* Effect.tryPromise(() => count(db, "users"))).toBe(0);
-    })
-  ));
-
-it("caps expensive invalid requests separately before admitting another provider attempt", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send, pairing } = yield* Effect.tryPromise(() => setup());
-      const responses = yield* Effect.tryPromise(() =>
-        Promise.all(
-          Array.from({ length: 32 }, (_, index) =>
-            send(index % 2 === 0 ? providerPaths.start : microsoftProviderPaths.complete, {})
+        const headers = new Headers(context.headers);
+        headers.set("CF-Connecting-IP", "");
+        headers.set("x-provider-source", "f".repeat(64));
+        const missing = yield* native(() =>
+          publicWorker.fetch(
+            new Request(context.api + "/web/providers/google/status", {
+              method: "POST",
+              headers,
+              body: payload,
+            }),
+            {
+              RELEASE_GIT_SHA: "f".repeat(40),
+              CORE: { fetch: () => Promise.reject(new Error("No trusted source may reach Core")) },
+              BROWSER_ORIGIN: context.headers.origin ?? "",
+              LOCAL_CANONICAL_READ_BEARER: "",
+              PAT_ADMISSION_KEY: "key-long-enough-for-this-workerd-fixture",
+            }
           )
-        )
-      );
-      expect(responses.filter((response) => response.status === 400)).toHaveLength(30);
-      expect(responses.filter((response) => response.status === 429)).toHaveLength(2);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(microsoftProviderPaths.start, { ...pairing, intent: "login", consentRevision: "" })
-        )).status
-      ).toBe(429);
-      expect(yield* Effect.tryPromise(() => count(db, "provider_authentication_attempts"))).toBe(0);
-      expect(yield* Effect.tryPromise(() => count(db, "users"))).toBe(0);
-    })
-  ));
-
-it("bounds proof-bearing polling across changing sources without consuming or changing the pairing", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send, pairing } = yield* Effect.tryPromise(() => setup());
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(providerPaths.start, { ...pairing, intent: "login", consentRevision: "" })
-        )).status
-      ).toBe(200);
-      const responses = yield* Effect.tryPromise(() =>
-        Promise.all(
-          Array.from({ length: 8 }, (_, index) =>
-            send(providerPaths.status, pairing, { "cf-connecting-ip": `192.0.2.${index + 1}` })
-          )
-        )
-      );
-      expect(responses.filter((response) => response.status === 200)).toHaveLength(5);
-      expect(responses.filter((response) => response.status === 429)).toHaveLength(3);
-      const state = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT state FROM provider_authentication_attempts").first()
-      );
-      expect(state).toEqual({ state: "pending" });
-      expect(yield* Effect.tryPromise(() => count(db, "users"))).toBe(0);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE resource_admission_events SET expires_at_epoch_ms=admitted_at_epoch_ms-1000, admitted_at_epoch_ms=admitted_at_epoch_ms-60000"
-          )
-          .run()
-      );
-      expect((yield* Effect.tryPromise(() => send(providerPaths.status, pairing))).status).toBe(
-        200
-      );
-    })
-  ));
-
-it("atomically enforces global capacity across distinct sources and fails closed without admission storage", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send, pairing } = yield* Effect.tryPromise(() => setup());
-      const now = yield* Clock.currentTimeMillis;
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db
-            .prepare(
-              `INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) VALUES ('fixture','provider.global.v1','operation','all','rolling_window',1199,?,?,?,NULL)`
-            )
-            .bind(now, now - 60000, now + 60000),
-          db.prepare("INSERT INTO resource_admission_grants VALUES ('fixture',?,1)").bind(now),
-        ])
-      );
-      const responses = yield* Effect.tryPromise(() =>
-        Promise.all(
-          [1, 2].map((source) =>
-            send(providerPaths.start, {}, { "cf-connecting-ip": `192.0.2.${source}` })
-          )
-        )
-      );
-      expect(
-        responses.map((response) => response.status).sort((left, right) => left - right)
-      ).toEqual([400, 429]);
-      expect(yield* Effect.tryPromise(() => count(db, "provider_authentication_attempts"))).toBe(0);
-      yield* Effect.tryPromise(() => db.prepare("DROP TABLE resource_admission_events").run());
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(providerPaths.start, { ...pairing, intent: "login", consentRevision: "" })
-        )).status
-      ).toBe(503);
-      expect(yield* Effect.tryPromise(() => count(db, "provider_authentication_attempts"))).toBe(0);
-    })
-  ));
-
-it("removes only expired provider admission evidence during owner maintenance", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      yield* Effect.tryPromise(() => send(providerPaths.disclosure));
-      const now = yield* Clock.currentTimeMillis;
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          db
-            .prepare(
-              `INSERT INTO resource_admission_events(grant_id,policy_key,dimension,scope_key,policy_kind,units,admitted_at_epoch_ms,window_start_epoch_ms,expires_at_epoch_ms,released_at_epoch_ms) VALUES ('foreign','foreign','operation','all','rolling_window',1,?,?,?,NULL)`
-            )
-            .bind(now - 120000, now - 180000, now - 60000),
-          db
-            .prepare("INSERT INTO resource_admission_grants VALUES ('foreign',?,1)")
-            .bind(now - 120000),
-        ])
-      );
-      yield* sweepProviderAuthentication({ db, current: now });
-      expect(yield* Effect.tryPromise(() => count(db, "resource_admission_grants"))).toBe(2);
-      yield* sweepProviderAuthentication({ db, current: now + 61000 });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT id FROM resource_admission_grants")
-            .all()
-            .then((result) => result.results)
-        )
-      ).toEqual([{ id: "foreign" }]);
-    })
-  ));
-
-it("rejects missing trusted source evidence before Core admission or domain writes", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send, pairing } = yield* Effect.tryPromise(() => setup());
-      const response = yield* Effect.tryPromise(() =>
-        send(
-          providerPaths.start,
-          { ...pairing, intent: "login", consentRevision: "" },
-          new Headers({
-            origin: "https://app.fidyapp.com",
-            "content-type": "application/json",
-            "x-provider-source": "a".repeat(64),
-          })
-        )
-      );
-      expect(response.status).toBe(503);
-      expect(yield* Effect.tryPromise(() => count(db, "resource_admission_grants"))).toBe(0);
-      expect(yield* Effect.tryPromise(() => count(db, "provider_authentication_attempts"))).toBe(0);
-    })
-  ));
+        );
+        expect(missing.status).toBe(503);
+        yield* native(() => missing.arrayBuffer());
+      })
+  );
+});

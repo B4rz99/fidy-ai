@@ -1,3 +1,4 @@
+import { type UserStoreBindings, directoryName, whatsappBootstrapUrl } from "../directory/contract";
 import { type Digest, type SecureRandom } from "effect/crypto";
 import {
   type Cause,
@@ -15,14 +16,28 @@ import { makeConsentIngress } from "../consent/ingress/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { authenticateWhatsAppInbound } from "../../src/shell/channels/whatsapp/operations";
 import { Sha256Digest } from "../../src/shell/consent/contract";
-import type { WhatsAppInboundEvent } from "../../src/shell/channels/whatsapp/contract";
+import { maxWhatsAppFutureTimestampMinutes } from "../../src/shell/channels/whatsapp/contract";
+import { receiveHandoffText } from "./internal/whatsapp-handoff";
+import { makeProviderHandoffSender } from "../../src/shell/provider-authentication/runtime";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
 import { newId } from "../secret-material/operations";
-import type { Journey } from "./journey.test-fixture";
+
+export type Journey = Readonly<{
+  sandboxPhoneNumberId: string;
+  db: D1Database;
+  send: (
+    path: string,
+    body?: unknown,
+    headers?: Readonly<Record<string, string>> | Headers
+  ) => Promise<Response>;
+}>;
 
 const successStatus = 200;
 const unavailableStatus = 503;
-const invitationLifetimeMs = 600000;
+const dayMilliseconds = 86_400_000;
+const minuteMilliseconds = 60_000;
+const maximumInitiatingAgeMs =
+  dayMilliseconds - maxWhatsAppFutureTimestampMinutes * minuteMilliseconds;
 const millisecondsPerSecond = 1000;
 const hexadecimalRadix = 16;
 const Json = Schema.fromJsonString(Schema.Unknown);
@@ -36,44 +51,6 @@ type LegacyRequest = Readonly<{
   deliveryKey: string;
   native: () => Promise<Response>;
 }>;
-const seedLegacyInvitation = (
-  input: LegacyRequest,
-  event: WhatsAppInboundEvent,
-  { current, id }: Readonly<{ current: number; id: string }>
-): Promise<D1Result> =>
-  input.db
-    .prepare(`INSERT INTO whatsapp_signup_invitations(id,source_portfolio_id,source_bsuid,source_phone_number_id,source_message_id,created_at_ms,expires_at_ms)
- SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM whatsapp_signup_invitations WHERE source_portfolio_id=? AND source_bsuid=? AND expires_at_ms>?)`)
-    .bind(
-      id,
-      event.caller.businessPortfolioId,
-      event.caller.businessScopedUserId,
-      event.businessPhoneNumberId,
-      event.messageEvidence.providerMessageId,
-      current,
-      current + invitationLifetimeMs,
-      event.caller.businessPortfolioId,
-      event.caller.businessScopedUserId,
-      current
-    )
-    .run();
-
-const findLegacyExchange = (
-  input: LegacyRequest,
-  event: WhatsAppInboundEvent,
-  current: number
-): Promise<unknown> =>
-  input.db
-    .prepare(
-      "SELECT id FROM pending_consent_exchanges WHERE portfolio_id=? AND bsuid=? AND phone_number_id=? AND expires_at_ms>? LIMIT 1"
-    )
-    .bind(
-      event.caller.businessPortfolioId,
-      event.caller.businessScopedUserId,
-      event.businessPhoneNumberId,
-      current
-    )
-    .first();
 const legacyConsent = (
   input: LegacyRequest
 ): Effect.Effect<
@@ -91,47 +68,52 @@ const legacyConsent = (
       businessPortfolioId: input.portfolio,
       receivedAt: DateTime.makeUnsafe(current),
     }).pipe(Effect.option);
-    if (Option.isNone(authenticated)) return yield* Effect.tryPromise(input.native);
-    const event = authenticated.value.events[0];
-    if (event.content._tag !== "Text") return yield* Effect.tryPromise(input.native);
-    const pending = yield* Effect.tryPromise(() => findLegacyExchange(input, event, current));
-    const invitationId = newId();
-    if (pending === null) {
-      yield* Effect.tryPromise(() =>
-        seedLegacyInvitation(input, event, { current, id: invitationId })
-      );
+    if (Option.isNone(authenticated) || authenticated.value.events.length !== 1) {
+      return yield* Effect.tryPromise(input.native);
     }
-
-    const native = yield* Effect.tryPromise(input.native);
-    yield* Effect.tryPromise(() =>
-      input.db
-        .prepare("DELETE FROM whatsapp_signup_invitations WHERE id=?")
-        .bind(invitationId)
-        .run()
-    );
-    if (pending !== null || native.status !== successStatus) return native;
+    const event = authenticated.value.events[0];
+    if (
+      event.content._tag !== "Text" ||
+      DateTime.toEpochMillis(event.occurredAt) + maximumInitiatingAgeMs <= current
+    ) {
+      return yield* Effect.tryPromise(input.native);
+    }
     const digest = yield* Schema.decodeEffect(Sha256Digest)(
       new Bun.CryptoHasher("sha256").update(input.rawBody).digest("hex")
     );
-    return yield* makeConsentIngress({
+    const inbound = {
+      event: { ...event, content: event.content },
+      deliveryKey: authenticated.value.deliveryKey,
+      digest,
+      receivedAtMs: current,
+    };
+    const httpClient = yield* HttpClient.HttpClient;
+    const consent = yield* makeConsentIngress({
       environment: {
         DB: input.db,
         KAPSO_API_KEY: "test-kapso-key",
         WHATSAPP_SANDBOX_PHONE_NUMBER_ID: input.sandboxPhoneNumberId,
       },
-      httpClient: yield* HttpClient.HttpClient,
-    })({
-      event: { ...event, content: event.content },
-      deliveryKey: authenticated.value.deliveryKey,
-      digest,
-      receivedAtMs: current,
+      httpClient,
+    })(inbound);
+    if (consent.status !== successStatus) return consent;
+    const next = yield* receiveHandoffText({
+      db: input.db,
+      browserOrigin: "https://app.fidyapp.com",
+      inbound,
+      send: makeProviderHandoffSender({
+        httpClient,
+        apiKey: Redacted.make("test-kapso-key"),
+        sandboxPhoneNumberId: Option.fromNullishOr(input.sandboxPhoneNumberId),
+      }),
     });
+    return Option.getOrElse(next, () => consent);
   });
 
 const legacyRuntime = ManagedRuntime.make(Layer.mergeAll(OutboundHttpLive, TestCrypto));
 export const disposeLegacyConsent = (): Promise<void> => legacyRuntime.dispose();
 
-/** Rehearse an already-issued chat disclosure through its owner while preserving native ingress replay admission. */
+/** Exercise the retained disclosure and delivery owners with authenticated test messages. */
 export const receiveLegacyConsent = (input: LegacyRequest): Promise<Response> =>
   legacyRuntime.runPromise(
     Effect.scoped(legacyConsent(input)).pipe(
@@ -195,4 +177,32 @@ export const discloseLegacyChat = Effect.fn(function* (
         }),
     })
   );
+});
+
+/** Supply an already resolved caller to tests of the downstream hosted Turn. */
+export const registeredChatDirectory = ({
+  userId,
+  portfolio,
+  bsuid,
+}: Readonly<{
+  userId: string;
+  portfolio: string;
+  bsuid: string;
+}>): UserStoreBindings["DIRECTORY"] => ({
+  getByName: (name) => ({
+    fetch: (input, init) => {
+      const request = new Request(input, init);
+      if (name !== directoryName || request.url !== whatsappBootstrapUrl) {
+        return Promise.resolve(new Response(null, { status: 404 }));
+      }
+      return request.json().then((body: unknown) => {
+        const caller = Schema.decodeUnknownSync(
+          Schema.Struct({ portfolio: Schema.String, bsuid: Schema.String })
+        )(body);
+        return caller.portfolio === portfolio && caller.bsuid === bsuid
+          ? Response.json({ userId })
+          : new Response(null, { status: 404 });
+      });
+    },
+  }),
 });

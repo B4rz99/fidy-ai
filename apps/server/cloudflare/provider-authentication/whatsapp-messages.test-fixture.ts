@@ -1,10 +1,10 @@
 import { vi } from "vitest";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { newId } from "../secret-material/operations";
-import type { setup } from "./journey.test-fixture";
+import type { Journey } from "./legacy-disclosure.test-fixture";
 
 const sendPacket = (
-  journey: Awaited<ReturnType<typeof setup>>,
+  journey: Journey,
   body: unknown,
   options: Readonly<{ signature: Option.Option<string>; event: string }>
 ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
@@ -34,7 +34,7 @@ const sendPacket = (
     );
   });
 const sendChat = (
-  journey: Awaited<ReturnType<typeof setup>>,
+  journey: Journey,
   text: string,
   options: Partial<
     Readonly<{

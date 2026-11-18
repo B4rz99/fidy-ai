@@ -1,3 +1,4 @@
+import type { UserStoreBindings } from "../directory/contract";
 import {
   type HostedAgentSessionId,
   TranscriptText,
@@ -13,6 +14,7 @@ import { type Sha256Digest } from "../../src/shell/consent/contract";
 import {
   HostedDeliveryCorrelationToken,
   type InsightTemplateSender,
+  type ProactivityTemplateSender,
   WhatsAppBusinessPhoneNumberId,
   type WhatsAppDeliveryKey,
   WhatsAppDocument,
@@ -24,7 +26,7 @@ import { Data, type DateTime, type Option, Schema } from "effect";
 import { type ConsentRecordId } from "../../src/core/consent/contract";
 import { type IanaTimeZone } from "../../src/core/_shared/context";
 import { type InsightEventId } from "../../src/core/insights/contract";
-import type { ProactivityTemplateSender } from "../../src/shell/channels/whatsapp/contract";
+
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 
 /** Owner-supplied report and category guards. Some queuedAdmission projects user_id for the exact unfinished, unexpired native item admitted under active Consent; None requires current Consent. A transport payload grants no authority. */
@@ -245,18 +247,19 @@ export type WhatsAppAuthenticatedInbound = Readonly<{
 }>;
 
 /** Binding and callbacks required by the authenticated Consent ingress composition. */
-export type WhatsAppIngressEnvironment = Readonly<{
-  readonly BROWSER_ORIGIN: string;
-  readonly DB: D1Database;
-  readonly KAPSO_API_KEY: string;
-  readonly KAPSO_WEBHOOK_SECRET: string;
-  readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
-  readonly WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
-  readonly onHostedText: (
-    admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission
-  ) => Promise<Response>;
-  readonly onHostedStatus: (admission: WhatsAppStatusAdmission) => Promise<Response>;
-}>;
+export type WhatsAppIngressEnvironment = Partial<Pick<UserStoreBindings, "DIRECTORY">> &
+  Readonly<{
+    readonly BROWSER_ORIGIN: string;
+    readonly DB: D1Database;
+    readonly KAPSO_API_KEY: string;
+    readonly KAPSO_WEBHOOK_SECRET: string;
+    readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
+    readonly WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
+    readonly onHostedText: (
+      admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission
+    ) => Promise<Response>;
+    readonly onHostedStatus: (admission: WhatsAppStatusAdmission) => Promise<Response>;
+  }>;
 
 /** Bounded operational sample containing no User identity, exact text, routing or provider evidence. */
 export type WhatsAppOperationalSignal =

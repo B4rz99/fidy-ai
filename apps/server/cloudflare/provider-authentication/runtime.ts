@@ -1,3 +1,6 @@
+import { directoryName, whatsappBootstrapUrl } from "../directory/contract";
+import { UserId } from "../../src/core/identity/contract";
+import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -9,7 +12,9 @@ import type {
 import { HttpClient } from "effect/http";
 import { receiveHandoffText } from "./internal/whatsapp-handoff";
 import { ProviderAuthenticationRetentionUnavailable } from "./contract";
-import { Effect, Option, Redacted } from "effect";
+
+const noContentStatus = 204;
+const okStatus = 200;
 
 const admissionWindowMs = 60_000;
 const maximumSweepRows = 500;
@@ -78,3 +83,48 @@ export const makeProviderAuthenticationErasureStores = (
   db: D1Database
 ): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+/** Send only after the Directory atomically admits the exact authenticated chat and claims its invitation. */
+export const routeNativeInvitation = Effect.fn(
+  function* (environment: WhatsAppIngressEnvironment, inbound: WhatsAppAuthenticatedInbound) {
+    const { event } = inbound;
+    if (event.content._tag !== "Text" || environment.DIRECTORY === undefined) {
+      return new Response(null, { status: 503 });
+    }
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+      portfolio: event.caller.businessPortfolioId,
+      bsuid: event.caller.businessScopedUserId,
+      endpoint: event.businessPhoneNumberId,
+      message: event.messageEvidence.providerMessageId,
+      phone: Option.getOrNull(event.caller.phoneNumber),
+      text: event.content.text,
+      receivedAt: inbound.receivedAtMs,
+      occurredAt: DateTime.toEpochMillis(event.occurredAt),
+    });
+    const owner = environment.DIRECTORY.getByName(directoryName);
+    const response = yield* Effect.tryPromise((signal) =>
+      owner.fetch(whatsappBootstrapUrl, { method: "POST", body, signal })
+    );
+    if (!response.ok || response.status === noContentStatus) {
+      return new Response(null, { status: response.ok ? okStatus : response.status });
+    }
+    const result = yield* Schema.decodeUnknownEffect(
+      Schema.Union([
+        Schema.Struct({ userId: UserId }),
+        Schema.Struct({ invitation: Schema.String }),
+      ])
+    )(yield* Effect.tryPromise(() => response.json()));
+    if ("userId" in result) return result.userId;
+    const send = makeProviderHandoffSender({
+      apiKey: Redacted.make(environment.KAPSO_API_KEY),
+      httpClient: yield* HttpClient.HttpClient,
+      sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
+    });
+    yield* send({
+      event,
+      text: `¡Hola! Para usar Fidy, acepta la política e inicia sesión con Google o Microsoft:\n${environment.BROWSER_ORIGIN}/login?handoff=${result.invitation}\nAl terminar, volverás a este chat.`,
+    });
+    return new Response(null, { status: 200 });
+  },
+  Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+);

@@ -1,16 +1,19 @@
 import { Effect } from "effect";
 import { HttpClient } from "effect/http";
-import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import type { BackupRecoveryCode } from "../../src/core/recovery/contract";
-import type {
-  InitialRecoveryEnrollment,
-  RecoveryRequest,
-  SupportRecoveryRequest,
+import { type OwnedStatement } from "../../src/shell/owner-write/contract";
+import { type BackupRecoveryCode } from "../../src/core/recovery/contract";
+import {
+  type InitialRecoveryEnrollment,
+  type RecoveryRequest,
+  type SupportRecoveryRequest,
 } from "./contract";
 import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
-import { recoveryCodeDigest, sampleRecoveryCode } from "./internal/material";
 import { rotateBackupRecoveryCode as rotate } from "./internal/rotation";
 import { handleSupportRecovery as handleSupport } from "./internal/support-recovery";
+import {
+  recoveryCodeDigest as nativeRecoveryCodeDigest,
+  sampleRecoveryCode as nativeSampleRecoveryCode,
+} from "./internal/material";
 
 /**
  * Generate emergency proof for this verified new User, disclosing it only after the caller's
@@ -62,3 +65,8 @@ export const retainedRecoveryPairingsQuery = (): OwnedStatement => ({
   sql: "SELECT pairing_id AS pairingId FROM support_recovery_cases",
   params: [],
 });
+
+export const recoveryCodeDigest: typeof nativeRecoveryCodeDigest = (...args) =>
+  nativeRecoveryCodeDigest(...args);
+export const sampleRecoveryCode: typeof nativeSampleRecoveryCode = (...args) =>
+  nativeSampleRecoveryCode(...args);

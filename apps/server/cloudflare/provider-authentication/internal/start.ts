@@ -11,7 +11,7 @@ import { provePendingBrowserPairing } from "../../browser-login/operations";
 import { digestBytes, newId, newSecret } from "../../secret-material/operations";
 import { boundedJsonBody } from "../../http/operations";
 import { RequestBodyPolicy } from "../../http/contract";
-import type { ProviderEnvironment } from "../contract";
+import type { ProviderConfiguration, ProviderEnvironment } from "../contract";
 
 const invalidStatus = 400;
 const unavailableStatus = 503;
@@ -39,7 +39,7 @@ const authorizationUrl = ({
   nonce,
   challenge,
 }: Readonly<{
-  environment: ProviderEnvironment;
+  environment: ProviderConfiguration;
   provider: AuthenticationProvider;
   state: string;
   nonce: string;
@@ -63,7 +63,7 @@ const authorizationUrl = ({
   }).toString();
   return authorization.href;
 };
-const prepareAttempt = (
+export const prepareAttempt = (
   disclosure: DisclosureSnapshot
 ): Effect.Effect<
   Readonly<{
@@ -87,7 +87,7 @@ const prepareAttempt = (
     );
     return { current, state, verifier, nonce, challenge, snapshot };
   });
-const startedResponse = ({
+export const startedResponse = ({
   environment,
   provider,
   state,
@@ -95,7 +95,7 @@ const startedResponse = ({
   challenge,
   verifier,
 }: Readonly<{
-  environment: ProviderEnvironment;
+  environment: ProviderConfiguration;
   provider: AuthenticationProvider;
   state: string;
   nonce: string;

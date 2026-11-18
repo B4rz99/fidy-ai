@@ -4,7 +4,7 @@ import { whatsappMessages } from "./whatsapp-messages.test-fixture";
 import { Clock, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { recoverPendingDisclosures } from "../consent/ingress/runtime";
-import { disposeJourneys, setup, setupWhatsApp } from "./journey.test-fixture";
+import { disposeJourneys, setupWhatsApp } from "./journey.test-fixture";
 
 afterAll(() => Promise.all([disposeJourneys(), disposeLegacyConsent()]));
 afterEach(() => vi.restoreAllMocks());
@@ -176,16 +176,16 @@ it("isolates sandbox receipt lookup to the originating caller and bounds repeate
         })).status
       ).toBe(200);
       expect(reads).toHaveLength(0);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", { phone: "573001234567" })).status
-      ).toBe(409);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", { phone: "573001234567" })).status
-      ).toBe(409);
+      expect((yield* discloseLegacyChat(journey, "Acepto", { phone: "573001234567" })).status).toBe(
+        409
+      );
+      expect((yield* discloseLegacyChat(journey, "Acepto", { phone: "573001234567" })).status).toBe(
+        409
+      );
       expect(reads).toHaveLength(1);
       expect(reads[0]).toContain("/messages/wamid.disclosure.1");
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", {
+        (yield* discloseLegacyChat(journey, "Acepto", {
           caller: "CO.Person2",
           phone: "573009876543",
         })).status
@@ -274,7 +274,7 @@ it.each([
       yield* whatsappMessages.advanceClock(consentCooldownMilliseconds);
       const acceptedAt = yield* Clock.currentTimeMillis;
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", {
+        (yield* discloseLegacyChat(journey, "Acepto", {
           timestamp: Math.floor(acceptedAt / 1000) + 299,
           phone: "573001234567",
         })).status
@@ -337,11 +337,11 @@ it("cannot open A's Consent decision with B's delivered provider correlation", (
         })).status
       ).toBe(200);
       deliveredAt = yield* Clock.currentTimeMillis;
+      expect((yield* discloseLegacyChat(journey, "Acepto", { phone: "573001234567" })).status).toBe(
+        409
+      );
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", { phone: "573001234567" })).status
-      ).toBe(409);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", {
+        (yield* discloseLegacyChat(journey, "Acepto", {
           caller: "CO.Person2",
           phone: "573009876543",
         })).status
@@ -349,13 +349,13 @@ it("cannot open A's Consent decision with B's delivered provider correlation", (
       yield* whatsappMessages.advanceClock(consentCooldownMilliseconds);
       const now = yield* Clock.currentTimeMillis;
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", {
+        (yield* discloseLegacyChat(journey, "Acepto", {
           timestamp: Math.floor(now / 1000) + 299,
           phone: "573001234567",
         })).status
       ).toBe(409);
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", {
+        (yield* discloseLegacyChat(journey, "Acepto", {
           caller: "CO.Person2",
           timestamp: Math.floor(now / 1000) + 299,
           phone: "573009876543",
@@ -451,12 +451,12 @@ it.each(["callback", "missing_callback"])(
           expect(receipts?.total).toBe(1);
         }
         expect(
-          (yield* whatsappMessages.sendChat(journey, "Acepto", { phone: "573001234567" })).status
+          (yield* discloseLegacyChat(journey, "Acepto", { phone: "573001234567" })).status
         ).toBe(409);
         yield* whatsappMessages.advanceClock(consentCooldownMilliseconds);
         const acceptedAt = yield* Clock.currentTimeMillis;
         expect(
-          (yield* whatsappMessages.sendChat(journey, "Acepto", {
+          (yield* discloseLegacyChat(journey, "Acepto", {
             timestamp: Math.floor(acceptedAt / 1000) + 299,
             phone: "573001234567",
           })).status
@@ -594,30 +594,5 @@ it("isolates two callers during interrupted sandbox disclosure recovery and neve
       ).toHaveLength(1);
       expect(outbound.filter((body) => body.includes('"to":"573001234567"'))).toHaveLength(1);
       expect(outbound.filter((body) => body.includes('"to":"573009876543"'))).toHaveLength(1);
-    })
-  ));
-
-it("refuses an unknown WhatsApp handoff instead of silently starting web-only signup", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(setup);
-      const response = yield* Effect.tryPromise(() => journey.send("/web/providers/disclosure"));
-      const disclosure = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ revision: Schema.String })
-      )(yield* Effect.tryPromise(() => response.json()));
-      const result = yield* Effect.tryPromise(() =>
-        journey.send("/web/providers/google/start", {
-          ...journey.pairing,
-          intent: "signup",
-          consentRevision: disclosure.revision,
-          handoffReference: "00000000-0000-4000-8000-000000000001",
-        })
-      );
-      expect(result.status).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT id FROM provider_authentication_attempts").all()
-        )).results
-      ).toEqual([]);
     })
   ));

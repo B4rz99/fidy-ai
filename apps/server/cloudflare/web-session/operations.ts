@@ -1,21 +1,20 @@
-import { sessionCookie, sessionDigest } from "./internal/credentials";
 import { browserSessionBindingHeader } from "~/shell/browser-transport/contract";
 import { prepareBrowserMetadata as prepareMetadata, readMetadata } from "./internal/metadata";
 import { bindingResponse } from "./internal/binding";
 import { type Effect, Option, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
-import type {
-  FreshSessionSubject,
-  WebSessionAuthority,
+import {
+  type FreshSessionSubject,
+  type WebSessionAuthority,
 } from "../../src/shell/web-session/contract";
 import { completePairing, logout } from "./internal/lifecycle";
 import { currentUser } from "./internal/current-user";
-import type {
-  AuthenticatedWebSession,
-  BoundWebSessionLookup,
-  WebSessionAuthentication,
-  WebSessionEstablishment,
-  WebSessionRequest,
+import {
+  type AuthenticatedWebSession,
+  type BoundWebSessionLookup,
+  type WebSessionAuthentication,
+  type WebSessionEstablishment,
+  type WebSessionRequest,
 } from "./contract";
 import {
   authenticate,
@@ -25,6 +24,11 @@ import {
   prepareBrowserEntryLookup as prepareEntryLookup,
   sessionDigestLookup,
 } from "./internal/authentication";
+import {
+  sessionCookie as nativeSessionCookie,
+  sessionDigest as nativeSessionDigest,
+  sessionSetCookie as nativeSessionSetCookie,
+} from "./internal/credentials";
 
 /** Digest the one cookie and decode its mounted binding before entering the local transaction. */
 export const readBoundWebSessionProof = (
@@ -175,3 +179,30 @@ export const prepareBrowserSessionLookup: typeof prepareBrowserLookup = (input) 
 /** Prepare exact entry binding and credential-only signed-out classification in one snapshot. */
 export const prepareBrowserEntryLookup: typeof prepareEntryLookup = (input) =>
   prepareEntryLookup(input);
+
+export const sessionSetCookie: typeof nativeSessionSetCookie = (...args) =>
+  nativeSessionSetCookie(...args);
+export const sessionCookie: typeof nativeSessionCookie = (...args) => nativeSessionCookie(...args);
+export const sessionDigest: typeof nativeSessionDigest = (...args) => nativeSessionDigest(...args);
+
+export const absentSessionResponse = (path: string): Response => {
+  if (path === "/web/session/binding") {
+    return Response.json({ binding: null }, { headers: { "cache-control": "no-store" } });
+  }
+  if (path === "/web/session/logout") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "set-cookie": "__Host-fidy_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+        "cache-control": "no-store",
+      },
+    });
+  }
+  return Response.json(
+    {
+      error: { code: "unauthenticated", message: "Present a valid credential and retry." },
+      next: [],
+    },
+    { status: 401 }
+  );
+};

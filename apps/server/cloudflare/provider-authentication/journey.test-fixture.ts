@@ -1,5 +1,5 @@
+import { type Journey, registeredChatDirectory } from "./legacy-disclosure.test-fixture";
 import { openAiTestKey } from "../openai.test-fixture";
-import { type SignJWT } from "jose";
 import { Effect, Option, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import publicWorker from "../public-worker";
@@ -8,26 +8,6 @@ import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 
 const databases = isolatedTestDatabases();
 const Json = Schema.fromJsonString(Schema.Unknown);
-const Pairing = Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String });
-export type Journey = Readonly<{
-  sandboxPhoneNumberId: string;
-  db: D1Database;
-  send: (
-    path: string,
-    body?: unknown,
-    headers?: Readonly<Record<string, string>> | Headers
-  ) => Promise<Response>;
-  pairing: typeof Pairing.Type;
-}>;
-/** Keep real public/Core routing while a test controls native D1 completion ordering. */
-export const withJourneyDatabase = ({
-  journey,
-  db,
-}: Readonly<{ journey: Journey; db: D1Database }>): Journey => ({
-  ...journey,
-  db,
-  send: sendThroughWorkers(db, journey.sandboxPhoneNumberId, Option.none()),
-});
 const gitRevisionLength = 40;
 const admissionKeyLength = 43;
 const contractDigestLength = 64;
@@ -40,12 +20,13 @@ const requestHeaders = (overrides: Readonly<Record<string, string>>): Headers =>
   for (const [name, value] of Object.entries(overrides)) headers.set(name, value);
   return headers;
 };
+type Hosted = Readonly<{
+  userId: string;
+  coordinatorFetch: (request: Request) => Promise<Response>;
+}>;
+type JourneyOptions = Readonly<{ sandboxPhoneNumberId: string; hosted: Option.Option<Hosted> }>;
 const sendThroughWorkers =
-  (
-    db: D1Database,
-    sandboxPhoneNumberId: string = "",
-    coordinatorFetch: Option.Option<(request: Request) => Promise<Response>>
-  ): Journey["send"] =>
+  (db: D1Database, { sandboxPhoneNumberId, hosted }: JourneyOptions): Journey["send"] =>
   (
     path: string,
     body?: unknown,
@@ -66,23 +47,25 @@ const sendThroughWorkers =
           fetch: (request): Promise<Response> =>
             coreWorker.fetch(new Request(request), {
               DB: db,
+              ...(Option.isSome(hosted)
+                ? {
+                    DIRECTORY: registeredChatDirectory({
+                      userId: hosted.value.userId,
+                      portfolio: "portfolio",
+                      bsuid: "CO.Person1",
+                    }),
+                  }
+                : {}),
               OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("unused")) }),
               CONTRACT_DIGEST: "a".repeat(contractDigestLength),
               RELEASE_GIT_SHA: "a".repeat(gitRevisionLength),
               HOSTED_AI_MODEL: approvedOpenAiModel,
               BROWSER_ORIGIN: "https://app.fidyapp.com",
-              MICROSOFT_CLIENT_ID: "test-client",
-              MICROSOFT_CLIENT_SECRET: "test-secret",
-              MICROSOFT_REDIRECT_URI: "https://api.fidyapp.com/providers/microsoft/callback",
-              GOOGLE_CLIENT_ID: "test-client",
-              GOOGLE_CLIENT_SECRET: "test-secret",
-              GOOGLE_REDIRECT_URI: "https://api.fidyapp.com/providers/google/callback",
               USER_TRANSACTION_COORDINATOR: {
                 getByName: () => ({
-                  fetch: Option.getOrElse(
-                    coordinatorFetch,
-                    () => () => Promise.reject(new Error("unused"))
-                  ),
+                  fetch: Option.isSome(hosted)
+                    ? hosted.value.coordinatorFetch
+                    : () => Promise.reject(new Error("unused")),
                 }),
               },
               KAPSO_API_KEY: "test-kapso-key",
@@ -100,86 +83,27 @@ const sendThroughWorkers =
       }
     );
 
-const setupJourney = (
-  options: Readonly<{
-    whatsapp: boolean;
-    sandboxPhoneNumberId: string;
-    coordinatorFetch: Option.Option<(request: Request) => Promise<Response>>;
-  }>
-): Promise<Journey> =>
+const setupJourney = (options: JourneyOptions): Promise<Journey> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() => installTestSchema({ db }));
-      const send = sendThroughWorkers(db, options.sandboxPhoneNumberId, options.coordinatorFetch);
-      const response = yield* Effect.tryPromise(() => send("/web/pairings", {}));
-      const pairing = yield* Schema.decodeUnknownEffect(Pairing)(
-        yield* Effect.tryPromise(() => response.json())
-      );
-      return { db, send, pairing, sandboxPhoneNumberId: options.sandboxPhoneNumberId };
+      const send = sendThroughWorkers(db, options);
+      return { db, send, sandboxPhoneNumberId: options.sandboxPhoneNumberId };
     })
   );
 export const disposeJourneys = (): Promise<void> => databases.dispose();
 
-export const setup = (): Promise<Journey> =>
-  setupJourney({ whatsapp: false, sandboxPhoneNumberId: "", coordinatorFetch: Option.none() });
 export const setupWhatsApp = (sandboxPhoneNumberId: string = ""): Promise<Journey> =>
-  setupJourney({ whatsapp: true, sandboxPhoneNumberId, coordinatorFetch: Option.none() });
+  setupJourney({ sandboxPhoneNumberId, hosted: Option.none() });
 export const setupHostedWhatsApp = (
   options: Readonly<{
+    userId: string;
     sandboxPhoneNumberId: string;
     coordinatorFetch: (request: Request) => Promise<Response>;
   }>
 ): Promise<Journey> =>
   setupJourney({
-    ...options,
-    whatsapp: true,
-    coordinatorFetch: Option.some(options.coordinatorFetch),
+    sandboxPhoneNumberId: options.sandboxPhoneNumberId,
+    hosted: Option.some(options),
   });
-
-export const delayedProviderTokenResponse = ({
-  token,
-  key,
-}: Readonly<{
-  token: string;
-  key: Parameters<SignJWT["sign"]>[0];
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.sleep("1100 millis");
-      const { SignJWT, decodeJwt } = yield* Effect.tryPromise(() => import("jose"));
-      const idToken = yield* Effect.tryPromise(() =>
-        new SignJWT(decodeJwt(token))
-          .setIssuedAt()
-          .setProtectedHeader({ alg: "RS256", kid: "test" })
-          .sign(key)
-      );
-      return Response.json({ id_token: idToken });
-    })
-  );
-
-export const onboardingRefusals = [
-  {
-    description: "completion error",
-    clause:
-      "BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'fixture_rollback'); END",
-  },
-  {
-    description: "zero-row completion",
-    clause:
-      "BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL BEGIN SELECT RAISE(IGNORE); END",
-  },
-  {
-    description: "missing recovery credential",
-    clause: "BEFORE INSERT ON backup_recovery_credentials BEGIN SELECT RAISE(IGNORE); END",
-  },
-  {
-    description: "missing provider credential",
-    clause: "BEFORE INSERT ON provider_credentials BEGIN SELECT RAISE(IGNORE); END",
-  },
-  {
-    description: "missing Consent",
-    clause:
-      "BEFORE INSERT ON consent_history WHEN NEW.record_type='processing_grant' BEGIN SELECT RAISE(IGNORE); END",
-  },
-];

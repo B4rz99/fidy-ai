@@ -1,7 +1,7 @@
 import { Digest, SecureRandom } from "effect/crypto";
 import { OutboundHttpLive } from "../../outbound-http/runtime";
 import { makeStatusLookupAdmission } from "./status-admission";
-import { receiveWhatsAppProviderHandoff } from "../../provider-authentication/runtime";
+import { routeNativeInvitation } from "../../provider-authentication/runtime";
 import { TranscriptText } from "../../../src/core/agent/contract";
 import { Sha256Digest } from "../../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -31,9 +31,7 @@ import {
 import { Hex } from "effect/encoding";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { type UserId } from "../../../src/core/identity/contract";
-import { approveBrowserPairing } from "../../browser-login/operations";
 import { recordConsentDelivery } from "../../consent/ingress/operations";
-import { makeConsentIngress } from "../../consent/ingress/runtime";
 import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
 import {
   captureObservedProviderFetch,
@@ -219,14 +217,18 @@ const refuseVoice = (
 
 const routeHostedInbound = (
   environment: Environment,
-  input: WebhookInbound
+  input: WebhookInbound,
+  resolved?: UserId
 ): Effect.Effect<Option.Option<Response>, void, HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    const known = yield* findWhatsAppUser({
-      db: environment.DB,
-      portfolioId: input.event.caller.businessPortfolioId,
-      bsuid: input.event.caller.businessScopedUserId,
-    }).pipe(Effect.mapError(() => undefined));
+    const known =
+      resolved !== undefined
+        ? Option.some(resolved)
+        : yield* findWhatsAppUser({
+            db: environment.DB,
+            portfolioId: input.event.caller.businessPortfolioId,
+            bsuid: input.event.caller.businessScopedUserId,
+          }).pipe(Effect.mapError(() => undefined));
     if (Option.isNone(known)) {
       return input.event.content._tag === "Image"
         ? Option.some(answer(HTTP_UNAVAILABLE))
@@ -273,44 +275,12 @@ const routeTextInbound = (
   Digest.Digest | SecureRandom.SecureRandom | HttpClient.HttpClient
 > =>
   Effect.gen(function* () {
-    const approval =
-      /^Aprueba el código de inicio de sesión ([BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4})$/u.exec(
-        input.event.content.text.trim()
-      );
-    if (approval !== null) {
-      const code = approval[1];
-      if (code === undefined) return answer(HTTP_CONFLICT);
-      return yield* approveBrowserPairing({
-        db: environment.DB,
-        input: {
-          portfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
-          bsuid: input.event.caller.businessScopedUserId,
-          messageId: input.event.messageEvidence.providerMessageId,
-          publicCode: code,
-          occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
-          receivedAtMs: input.receivedAtMs,
-        },
-      });
-    }
-    if (
-      /^(?:(Confirmo|Rechazo) asociación |(?:Vincular|No vincular) (?:Google|Microsoft): )/u.test(
-        input.event.content.text.trim()
-      )
-    ) {
-      const confirmation = yield* receiveWhatsAppProviderHandoff({ environment, inbound: input });
-      return Option.getOrElse(confirmation, () => answer(HTTP_CONFLICT));
-    }
-    const hosted = yield* routeHostedInbound(environment, input);
-    if (Option.isSome(hosted)) return hosted.value;
-    const handoff = yield* receiveWhatsAppProviderHandoff({ environment, inbound: input });
-    if (Option.isSome(handoff)) return handoff.value;
-    const httpClient = yield* HttpClient.HttpClient;
-    const consent = yield* makeConsentIngress({ environment, httpClient })(input);
-    if (consent.status !== HTTP_OK) return consent;
-    const next = yield* receiveWhatsAppProviderHandoff({ environment, inbound: input });
-    return Option.getOrElse(next, () => consent);
+    const selected = yield* routeNativeInvitation(environment, input);
+    if (selected instanceof Response) return selected;
+    return Option.getOrElse(yield* routeHostedInbound(environment, input, selected), () =>
+      answer(HTTP_CONFLICT)
+    );
   });
-
 const handleInbound = (
   base: WebhookBase,
   request: Request,

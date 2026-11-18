@@ -1,3 +1,9 @@
+import {
+  absentSessionResponse,
+  readBoundWebSessionProof,
+  sessionCookie,
+  sessionDigest,
+} from "../web-session/operations";
 import { patRouteProof } from "../tokens/operations";
 
 import { Effect, Option, Schema } from "effect";
@@ -6,7 +12,7 @@ import {
   noAuthority,
   rateLimited,
 } from "../canonical-admission/operations";
-import { readBoundWebSessionProof } from "../web-session/operations";
+
 import {
   PATRoute,
   SessionRoute,
@@ -17,6 +23,8 @@ import {
   sessionRouteUrl,
   sourcePressureUrl,
 } from "./contract";
+
+const missingStatus = 404;
 
 const missingRouteStatus = 404;
 const unauthorizedStatus = 401;
@@ -93,6 +101,70 @@ export const routePATRequest = Effect.fn(
       USER_STORE.getByName(route.userId).fetch(new Request(request, { headers, signal }))
     );
     return response.status === unauthorizedStatus ? yield* refused : response;
+  },
+  Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+);
+
+/** Forward a declared independent proof path to the unique pre-User owner. */
+export const routeBootstrapRequest = ({
+  request,
+  environment,
+}: Readonly<{
+  request: Request;
+  environment: Partial<UserStoreBindings>;
+}>): Effect.Effect<Response> =>
+  Effect.tryPromise((signal) => {
+    if (environment.DIRECTORY === undefined) throw new Error("Directory unavailable");
+    return environment.DIRECTORY.getByName(directoryName).fetch(new Request(request, { signal }));
+  }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())));
+
+const browserContextRefusal = ({
+  request,
+  url,
+  origin,
+}: Readonly<{ request: Request; url: URL; origin: string }>): Option.Option<Response> => {
+  if (url.searchParams.size > 0) {
+    if (request.headers.get("origin") !== origin) {
+      return Option.some(new Response(null, { status: 403 }));
+    }
+    if (
+      url.searchParams.size !== 1 ||
+      !["application", "transactions"].includes(url.searchParams.get("context") ?? "")
+    ) {
+      return Option.some(new Response(null, { status: 400 }));
+    }
+  }
+  return Option.none();
+};
+/** Resolve the bearer for bootstrap and logout. The named User checks the exact current cookie and optional mounted binding. */
+export const routeBrowserSession = Effect.fn(
+  function* (
+    request: Request,
+    environment: Partial<UserStoreBindings> & Readonly<{ BROWSER_ORIGIN: string }>
+  ) {
+    const url = new URL(request.url);
+    const rejected = browserContextRefusal({ request, url, origin: environment.BROWSER_ORIGIN });
+    if (Option.isSome(rejected)) return rejected.value;
+    const cookie = sessionCookie(request);
+    if (Option.isNone(cookie)) return absentSessionResponse(url.pathname);
+    const { DIRECTORY, USER_STORE } = environment;
+    if (DIRECTORY === undefined || USER_STORE === undefined) return canonicalAdmissionUnavailable();
+    const digest = yield* Effect.tryPromise(() => sessionDigest(cookie.value));
+    const response = yield* Effect.tryPromise((signal) =>
+      DIRECTORY.getByName(directoryName).fetch(sessionRouteUrl, {
+        method: "POST",
+        body: new Uint8Array(digest).buffer,
+        signal,
+      })
+    );
+    if (response.status === missingStatus) return absentSessionResponse(url.pathname);
+    if (!response.ok) return canonicalAdmissionUnavailable();
+    const route = yield* Schema.decodeUnknownEffect(SessionRoute)(
+      yield* Effect.tryPromise(() => response.json())
+    );
+    return yield* Effect.tryPromise((signal) =>
+      USER_STORE.getByName(route.userId).fetch(new Request(request, { signal }))
+    );
   },
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );

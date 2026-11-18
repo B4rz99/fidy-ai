@@ -560,6 +560,13 @@ const forwardCandidateVersionOverride = (
   const override = request.headers.get(smokeVersionHeader);
   if (override !== null) headers.set(smokeVersionHeader, override);
 };
+const needsProviderSource = (path: string): boolean =>
+  [
+    "/web/pairings",
+    "/web/pairings/redeem",
+    ...Object.values(providerPaths),
+    ...Object.values(microsoftProviderPaths),
+  ].some((owned) => owned === path);
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -572,11 +579,7 @@ const coreRequest = (
     forwardCandidateVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     headers.delete("x-provider-source");
-    if (
-      [...Object.values(providerPaths), ...Object.values(microsoftProviderPaths)].some(
-        (owned) => owned === path
-      )
-    ) {
+    if (needsProviderSource(path)) {
       headers.set(
         "x-provider-source",
         yield* deriveAnonymousSource({

@@ -66,7 +66,7 @@ it.each([
       );
       expect(response.status).toBe(fault === "pending_sent" ? 200 : 401);
       expect(reads).toBe(fault === "bad_signature" ? 0 : 1);
-      expect((yield* whatsappMessages.sendChat(journey, "Acepto")).status).toBe(409);
+      expect((yield* discloseLegacyChat(journey, "Acepto")).status).toBe(409);
       expect(outbound).toHaveLength(1);
       if (fault !== "pending_sent") return;
       const correlation = yield* Schema.decodeEffect(
@@ -98,7 +98,7 @@ it.each([
       yield* whatsappMessages.advanceClock(301_100);
       const acceptedAt = yield* Clock.currentTimeMillis;
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Acepto", {
+        (yield* discloseLegacyChat(journey, "Acepto", {
           timestamp: Math.floor(acceptedAt / 1000) + 1,
         })).status
       ).toBe(200);

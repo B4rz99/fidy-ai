@@ -14,7 +14,7 @@ import { makeGoogleOutboundHttp } from "../../../src/shell/outbound-http/operati
 import type { ProviderOidcHttpService } from "../../../src/shell/outbound-http/contract";
 import { loadGoogleClientSecret } from "../../../src/shell/secret-material/operations";
 
-import type { ProviderEnvironment } from "../contract";
+import type { ProviderConfiguration } from "../contract";
 import {
   ProviderVerificationFailure,
   type Validation,
@@ -69,7 +69,7 @@ const validClaims = ({
   return Effect.void;
 };
 const googleHttp = (
-  environment: ProviderEnvironment
+  environment: ProviderConfiguration
 ): Effect.Effect<
   ReturnType<typeof makeGoogleOutboundHttp>,
   Config.ConfigError,

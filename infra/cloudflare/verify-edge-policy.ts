@@ -2,8 +2,107 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "22a379208234cc8f23955cf52084e82804785a68adb188d748eebad8f9912086";
+const expectedEdgePolicyDigest = "777b7715c956c6ac28ae12da0007802aca1ab8dbe5bb31c6aa39f462942692a6";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/browser-login/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/browser-login/internal/local-pairing.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/browser-login/internal/proof.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/browser-login/internal/pairing.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/browser-login/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/admission.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/channel.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/expiry.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/pairing.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/provider.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/reservations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/whatsapp.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/provider-authentication/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/provider-authentication/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/provider-authentication/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/provider-authentication/internal/callback.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/provider-authentication/internal/configuration.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/provider-authentication/internal/google-token.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/provider-authentication/internal/microsoft-token.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/provider-authentication/internal/start.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/provider-authentication/internal/token-contract.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/internal/registration.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/internal/bootstrap.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/internal/browser-session.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/whatsapp/internal/ingress.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/web-session/internal/credentials.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recovery/internal/material.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/subscription/internal/local-cancellation.ts",

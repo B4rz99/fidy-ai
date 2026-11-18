@@ -1,3 +1,36 @@
+import { directoryDeadline, drainBootstrapExpiry } from "./internal/expiry";
+import { unavailable } from "../browser-login/operations";
+import { channelApprovalEvidence } from "./internal/channel";
+import {
+  PATRoute,
+  SessionRoute,
+  channelInspectUrl,
+  directoryName,
+  handoffCancelUrl,
+  handoffInspectUrl,
+  patRouteUrl,
+  registerSessionUrl,
+  reserveRecoveryUrl,
+  sessionRouteUrl,
+  sourcePressureUrl,
+  whatsappBootstrapUrl,
+} from "./contract";
+import { whatsappBootstrap } from "./internal/whatsapp";
+
+import { admitBootstrap } from "./internal/admission";
+import {
+  cancelFrozenHandoff,
+  registerBrowserSession,
+  registerRecoveryCredential,
+} from "./internal/reservations";
+
+import { inspectHandoff, providerRequest } from "./internal/provider";
+
+import { ownsProviderAuthenticationPath } from "../provider-authentication/operations";
+import type { ProviderConfiguration } from "../provider-authentication/contract";
+import { OutboundHttpLive } from "../outbound-http/runtime";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { pollPairing, startPairing } from "./internal/pairing";
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 import {
   createStoreRuntime,
@@ -17,20 +50,13 @@ import { DurableObject } from "cloudflare:workers";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 
 import { directoryHistory } from "./schema/operations";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { TokenShortId } from "../../src/core/tokens/contract";
 import { canonicalRequestProtection } from "../canonical-admission/contract";
-import {
-  PATRoute,
-  SessionRoute,
-  directoryName,
-  patRouteUrl,
-  sessionRouteUrl,
-  sourcePressureUrl,
-} from "./contract";
 
 type DirectoryEnvironment = StoreReleaseEnvironment &
-  Readonly<{ DIRECTORY: DurableObjectNamespace }>;
+  ProviderConfiguration &
+  Readonly<{ DIRECTORY: DurableObjectNamespace; USER_STORE: DurableObjectNamespace }>;
 
 const digestBytes = 32;
 const sourceExpiryPageSize = 32;
@@ -67,15 +93,12 @@ const inspectPressure = Effect.fnUntraced(function* (
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       if (drain) {
+        yield* drainBootstrapExpiry(now);
         yield* sql`DELETE FROM unresolved_source_buckets WHERE subject IN (SELECT subject FROM unresolved_source_buckets WHERE virtual_at_ms<=${now} ORDER BY virtual_at_ms LIMIT ${sourceExpiryPageSize})`;
       }
-      const [row] =
-        yield* sql`SELECT virtual_at_ms FROM unresolved_source_buckets ORDER BY virtual_at_ms LIMIT 1`;
-      if (row === undefined) return false;
-      const next = yield* Schema.decodeUnknownEffect(Schema.Struct({ virtual_at_ms: Schema.Int }))(
-        row
-      );
-      return yield* preserveStoreAlarm(storage, Math.max(next.virtual_at_ms, now));
+      const { deadline } = yield* directoryDeadline;
+      if (Option.isNone(deadline)) return false;
+      return yield* preserveStoreAlarm(storage, Math.max(deadline.value, now));
     })
   );
 });
@@ -107,50 +130,103 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
         inspectPressure(this.ctx.storage, false).pipe(Effect.map(ownerCheckResponse))
       );
     }
-    if (request.method === "GET" && request.url === storeReadinessUrl) {
-      return this.runtime.runPromise(
-        storeReadiness({ history: directoryHistory, release: this.env.CF_VERSION_METADATA.id })
-      );
-    }
-    if (
-      request.method !== "POST" ||
-      ![sessionRouteUrl, patRouteUrl, sourcePressureUrl].includes(request.url)
-    ) {
-      return Promise.resolve(new Response(null, { status: 404 }));
-    }
     return this.runtime.runPromise(
-      Effect.gen(function* () {
-        yield* (yield* StoreCapacity).observe;
-        const sql = yield* SqliteClient;
-        if (request.url === sourcePressureUrl) {
-          const source = yield* Effect.tryPromise(() => request.text());
-          if (!/^[0-9a-f]{64}$/u.test(source)) return new Response(null, { status: 400 });
-          return yield* admitUnresolved(source);
-        }
-        if (request.url === patRouteUrl) {
-          const shortId = yield* Schema.decodeEffect(TokenShortId)(
-            yield* Effect.tryPromise(() => request.text())
-          );
-          const current = yield* Clock.currentTimeMillis;
-          const [row] =
-            yield* sql`SELECT user_id AS userId,pat_id AS patId FROM pat_routes WHERE short_id=${shortId} AND expires_at_ms>${current}`;
-          return row === undefined
-            ? new Response(null, { status: 404 })
-            : Response.json(yield* Schema.decodeUnknownEffect(PATRoute)(row));
-        }
-        const digest = new Uint8Array(yield* Effect.tryPromise(() => request.arrayBuffer()));
-        if (digest.byteLength !== digestBytes) return new Response(null, { status: 400 });
-        return yield* sql.withTransaction(
-          Effect.gen(function* () {
-            const current = yield* Clock.currentTimeMillis;
-            const rows =
-              yield* sql`SELECT user_id AS userId,session_id AS sessionId FROM session_routes
-          WHERE token_digest=${digest} AND hard_expires_at_ms>${current}`;
-            if (rows.length === 0) return new Response(null, { status: 404 });
-            return Response.json(yield* Schema.decodeUnknownEffect(SessionRoute)(rows[0]));
-          })
-        );
-      }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
+      directoryRequest(request, this.env).pipe(
+        Effect.catchCause(() => Effect.succeed(unavailable()))
+      )
     );
   }
 }
+
+const credentialLookup = Effect.fn(function* (request: Request) {
+  yield* (yield* StoreCapacity).observe;
+  const sql = yield* SqliteClient;
+  if (request.url === sourcePressureUrl) {
+    const source = yield* Effect.tryPromise(() => request.text());
+    if (!/^[0-9a-f]{64}$/u.test(source)) return new Response(null, { status: 400 });
+    return yield* admitUnresolved(source);
+  }
+  if (request.url === patRouteUrl) {
+    const shortId = yield* Schema.decodeEffect(TokenShortId)(
+      yield* Effect.tryPromise(() => request.text())
+    );
+    const current = yield* Clock.currentTimeMillis;
+    const [row] =
+      yield* sql`SELECT user_id AS userId,pat_id AS patId FROM pat_routes WHERE short_id=${shortId} AND expires_at_ms>${current}`;
+    return row === undefined
+      ? new Response(null, { status: 404 })
+      : Response.json(yield* Schema.decodeUnknownEffect(PATRoute)(row));
+  }
+  const digest = new Uint8Array(yield* Effect.tryPromise(() => request.arrayBuffer()));
+  if (digest.byteLength !== digestBytes) return new Response(null, { status: 400 });
+  return yield* sql.withTransaction(
+    Effect.gen(function* () {
+      const current = yield* Clock.currentTimeMillis;
+      const rows = yield* sql`SELECT user_id AS userId,session_id AS sessionId FROM session_routes
+          WHERE token_digest=${digest} AND hard_expires_at_ms>${current}`;
+      if (rows.length === 0) return new Response(null, { status: 404 });
+      return Response.json(yield* Schema.decodeUnknownEffect(SessionRoute)(rows[0]));
+    })
+  );
+});
+const nativeProvider = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
+  const refusal = yield* admitBootstrap(request);
+  if (Option.isSome(refusal)) return refusal.value;
+  return yield* Effect.scoped(
+    Effect.flatMap(Layer.build(OutboundHttpLive), (clients) =>
+      providerRequest(request, environment).pipe(
+        Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
+      )
+    )
+  ).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
+});
+const evidenceResponse = Effect.fn(function* (request: Request) {
+  const id = yield* Effect.tryPromise(() => request.text());
+  const evidence =
+    request.url === handoffInspectUrl
+      ? yield* inspectHandoff(id)
+      : yield* channelApprovalEvidence(id);
+  return evidence === null ? new Response(null, { status: 404 }) : Response.json(evidence);
+});
+const pairRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
+  const refusal = yield* admitBootstrap(request);
+  if (Option.isSome(refusal)) return refusal.value;
+  return yield* new URL(request.url).pathname === "/web/pairings"
+    ? startPairing
+    : pollPairing(request, environment.USER_STORE);
+});
+const internalRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
+  switch (request.url) {
+    case handoffInspectUrl:
+    case channelInspectUrl:
+      return yield* evidenceResponse(request);
+    case registerSessionUrl:
+      return yield* registerBrowserSession(request);
+    case reserveRecoveryUrl:
+      return yield* registerRecoveryCredential(request);
+    case handoffCancelUrl:
+      return yield* cancelFrozenHandoff(request, environment.USER_STORE);
+    case whatsappBootstrapUrl:
+      return yield* whatsappBootstrap(request, environment.USER_STORE);
+    default:
+      return new Response(null, { status: 404 });
+  }
+});
+const directoryRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
+  if (request.method === "GET" && request.url === storeReadinessUrl) {
+    return yield* storeReadiness({
+      history: directoryHistory,
+      release: environment.CF_VERSION_METADATA.id,
+    });
+  }
+  const path = new URL(request.url).pathname;
+  if (ownsProviderAuthenticationPath(path)) return yield* nativeProvider(request, environment);
+  if (request.method !== "POST") return new Response(null, { status: 404 });
+  if (["/web/pairings", "/web/pairings/redeem"].includes(path)) {
+    return yield* pairRequest(request, environment);
+  }
+  if ([sessionRouteUrl, sourcePressureUrl, patRouteUrl].includes(request.url)) {
+    return yield* credentialLookup(request);
+  }
+  return yield* internalRequest(request, environment);
+});

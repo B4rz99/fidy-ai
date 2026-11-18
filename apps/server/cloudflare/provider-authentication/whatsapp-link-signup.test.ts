@@ -1,1005 +1,339 @@
-import { fixtureBrowserCredentialErasureStores } from "../core-worker.test-fixture";
-import { makeProviderAuthenticationErasureStores, sweepProviderAuthentication } from "./runtime";
-import { authenticateChatProvider } from "./whatsapp-provider.test-fixture";
-import { Clock, Effect, Option, Schema } from "effect";
-import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { disposeJourneys, setupWhatsApp, withJourneyDatabase } from "./journey.test-fixture";
-import { whatsappMessages } from "./whatsapp-messages.test-fixture";
+import { it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
+import { NodeFileSystem } from "@effect/platform-node";
+import { expect } from "vitest";
+import { browser, chatWith, signedChat } from "../browser-bootstrap.test-fixture";
+import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
+import { webSignupDisclosure } from "../../src/shell/consent/operations";
+import { UserId } from "../../src/core/identity/contract";
 
-afterAll(disposeJourneys);
-afterEach(() => vi.restoreAllMocks());
-
-it("offers one signup link without treating the first WhatsApp message as Consent or identity", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
-      const outbound: Array<string> = [];
-      vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
-        new Request(input, init).text().then((body) => {
-          outbound.push(body);
-          return Response.json({
-            messaging_product: "whatsapp",
-            messages: [{ id: "wamid.signup-link" }],
-          });
-        })
-      );
-      const timestamp = Math.floor((yield* Clock.currentTimeMillis) / 1000);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", {
-          message: "wamid.signup-start",
-          timestamp,
-        })).status
-      ).toBe(200);
-      expect(outbound).toHaveLength(1);
-      expect(outbound[0]).toContain("/login?handoff=");
-      expect(outbound[0]).not.toContain("Responde");
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-      ).toEqual([]);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare("SELECT id FROM consent_history WHERE record_type='processing_grant'")
-            .all()
-        )).results
-      ).toEqual([]);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", {
-          message: "wamid.signup-start",
-          timestamp,
-        })).status
-      ).toBe(200);
-      expect(outbound).toHaveLength(1);
-    })
-  ));
-
-it("requires browser Consent before binding a signup invitation to one private provider attempt", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        Response.json({
-          messaging_product: "whatsapp",
-          messages: [{ id: "wamid.signup-link" }],
-        })
-      );
-      expect((yield* whatsappMessages.sendChat(journey, "Hola")).status).toBe(200);
-      const invitation = yield* Effect.tryPromise(() =>
-        journey.db.prepare("SELECT id FROM whatsapp_signup_invitations").first<{ id: string }>()
-      );
-      expect(invitation).not.toBeNull();
-      const request = { ...journey.pairing, intent: "signup", handoffReference: invitation?.id };
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/start", {
-            ...request,
-            consentRevision: "",
-          })
-        )).status
-      ).toBe(400);
-      const disclosure = yield* Effect.tryPromise(() =>
-        journey
-          .send("/web/providers/disclosure")
-          .then((response) => response.json())
-          .then(Schema.decodeUnknownPromise(Schema.Struct({ revision: Schema.String })))
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/start", {
-            ...request,
-            consentRevision: disclosure.revision,
-          })
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-      ).toEqual([]);
-    })
-  ));
-
-it("links only after the original chat sends its prepared provider-account confirmation", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
-      vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        Response.json({
-          messaging_product: "whatsapp",
-          messages: [{ id: "wamid.signup-link" }],
-        })
-      );
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { phone: "573001234567" })).status
-      ).toBe(200);
-      const invitation = yield* Effect.tryPromise(() =>
-        journey.db.prepare("SELECT id FROM whatsapp_signup_invitations").first<{ id: string }>()
-      );
-      yield* authenticateChatProvider(journey, invitation?.id ?? "");
-      const response = yield* Effect.tryPromise(() =>
-        journey.send("/web/providers/google/status", journey.pairing)
-      );
-      const review = yield* Effect.tryPromise(() =>
-        response.json().then(
-          Schema.decodeUnknownPromise(
-            Schema.Struct({
-              status: Schema.String,
-              associationCode: Schema.String,
-              confirmationText: Schema.String,
-              accountLabel: Schema.String,
-              whatsappPhone: Schema.NullOr(Schema.String),
-            })
-          )
-        )
-      );
-      expect(review.status).toBe("awaiting_association");
-      expect(review.accountLabel).toBe("person@example.test");
-      expect(review.whatsappPhone).toBe("+573001234567");
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/complete", journey.pairing)
-        )).status
-      ).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/complete", {
-            ...journey.pairing,
-            associationCode: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-          })
-        )).status
-      ).toBe(400);
-      yield* whatsappMessages.advanceClock(2000);
-      expect((yield* whatsappMessages.sendChat(journey, review.confirmationText)).status).toBe(200);
-      const completed = yield* Effect.tryPromise(() =>
-        journey.send("/web/providers/google/complete", {
-          ...journey.pairing,
-          associationCode: review.associationCode,
-        })
-      );
-      expect(completed.status).toBe(200);
-      const result = yield* Effect.tryPromise(() =>
-        completed
-          .json()
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({ status: Schema.String, whatsappReturnUrl: Schema.String })
+const caller = "CO.Original";
+const complete = "/web/providers/google/complete";
+const start = "/web/providers/google/start";
+const Review = Schema.Struct({ confirmationText: Schema.String, associationCode: Schema.String });
+const invitation = Effect.fn(function* (
+  runtime: Effect.Success<ReturnType<Effect.Success<typeof nativeBrowserPlatform>>>,
+  source: string
+) {
+  const first = yield* signedChat(runtime, "Hola", source);
+  expect(first.status).toBe(200);
+  yield* native(() => first.arrayBuffer());
+  const directory = yield* native(() =>
+    runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+  );
+  const [record] = yield* Schema.decodeUnknownEffect(
+    Schema.Array(Schema.Struct({ id: Schema.String }))
+  )(
+    yield* native(() => directory.exec("SELECT id FROM whatsapp_invitations WHERE bsuid=?", source))
+  );
+  if (record === undefined) return yield* Effect.die("Missing invitation");
+  return { id: record.id, directory };
+});
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "keeps the invitation private to one pairing and requires exact reviewed text from its source and endpoint",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* (yield* nativeBrowserPlatform)();
+        const { id, directory } = yield* invitation(runtime, caller);
+        const again = yield* invitation(runtime, caller);
+        expect(again.id).toBe(id);
+        const context = browser(runtime);
+        const actual = yield* context.verified("whatsapp", id);
+        const review = yield* Schema.decodeUnknownEffect(Review)(actual.review);
+        const different = yield* context.pair;
+        const unknown = yield* context.post(start, {
+          ...different,
+          intent: "signup",
+          consentRevision: webSignupDisclosure().revision,
+          handoffReference: "00000000-0000-4000-8000-000000000001",
+        });
+        expect(unknown.status).toBe(400);
+        yield* native(() => unknown.arrayBuffer());
+        expect(
+          yield* native(() =>
+            directory.exec(
+              "SELECT count(*) AS n FROM provider_attempts WHERE pairing_id=?",
+              different.pairingId
             )
           )
-      );
-      expect(result.status).toBe("created");
-      expect(result.whatsappReturnUrl).toBe("https://wa.me/12056871742");
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT whatsapp_portfolio_id,whatsapp_bsuid FROM users").all()
-        )).results
-      ).toEqual([{ whatsapp_portfolio_id: "portfolio", whatsapp_bsuid: "CO.Person1" }]);
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/pairings/redeem", journey.pairing)))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/complete", {
-            ...journey.pairing,
-            associationCode: review.associationCode,
+        ).toEqual([{ n: 0 }]);
+        const takeover = yield* context.post(start, {
+          ...different,
+          intent: "signup",
+          consentRevision: webSignupDisclosure().revision,
+          handoffReference: id,
+        });
+        expect(takeover.status).toBe(400);
+        yield* native(() => takeover.arrayBuffer());
+        const before = yield* context.post(complete, {
+          ...actual.proof,
+          associationCode: review.associationCode,
+        });
+        expect(before.status).toBe(400);
+        yield* native(() => before.arrayBuffer());
+        yield* Effect.sleep("1100 millis");
+        for (const change of [
+          { text: " " + review.confirmationText },
+          { text: review.confirmationText + " " },
+          { text: review.confirmationText.replace("Google", "Microsoft") },
+          { caller: "CO.Other" },
+          { endpoint: "999999999999999" },
+          { occurredMs: 1 },
+          { secret: "incorrect" },
+        ]) {
+          const refused = yield* chatWith(runtime, {
+            caller,
+            text: review.confirmationText,
+            ...change,
+          });
+          expect(refused.ok).toBe(false);
+          yield* native(() => refused.arrayBuffer());
+        }
+        const declined = yield* signedChat(
+          runtime,
+          review.confirmationText.replace(/^Vincular /u, "No vincular "),
+          caller
+        );
+        expect(declined.status).toBe(200);
+        yield* native(() => declined.arrayBuffer());
+        const status = yield* context.post("/web/providers/google/status", actual.proof);
+        expect(yield* native(() => status.json())).toEqual({ status: "rejected" });
+        const denied = yield* context.post(complete, {
+          ...actual.proof,
+          associationCode: review.associationCode,
+        });
+        expect(denied.status).toBe(400);
+        yield* native(() => denied.arrayBuffer());
+        expect(
+          yield* native(() => directory.exec("SELECT count(*) AS n FROM whatsapp_routes"))
+        ).toEqual([{ n: 0 }]);
+      })
+  );
+  test.effect(
+    "links an existing provider User once with no second enrollment, then verifies the established caller before Browser Login approval",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* (yield* nativeBrowserPlatform)();
+        const context = browser(runtime);
+        const existing = yield* context.verified("existing");
+        const created = yield* context.post(complete, existing.proof);
+        expect(yield* native(() => created.json())).toMatchObject({ status: "created" });
+        const { id, directory } = yield* invitation(runtime, caller);
+        const flow = yield* context.verified("existing", id);
+        const review = yield* Schema.decodeUnknownEffect(Review)(flow.review);
+        yield* Effect.sleep("1100 millis");
+        const accepted = yield* signedChat(runtime, review.confirmationText, caller);
+        expect(accepted.status).toBe(200);
+        yield* native(() => accepted.arrayBuffer());
+        const [user] = yield* Schema.decodeUnknownEffect(
+          Schema.Array(Schema.Struct({ user_id: UserId }))
+        )(yield* native(() => directory.exec("SELECT user_id FROM provider_routes")));
+        if (user === undefined) return yield* Effect.die("Missing association");
+        const store = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "UserStore", { name: user.user_id })
+        );
+        yield* native(() =>
+          store.exec(
+            "CREATE TRIGGER interrupt_link BEFORE UPDATE OF outcome ON browser_handoffs WHEN NEW.outcome='committed' BEGIN SELECT RAISE(IGNORE); END"
+          )
+        );
+        const interrupted = yield* context.post(complete, {
+          ...flow.proof,
+          associationCode: review.associationCode,
+        });
+        expect(interrupted.status).toBe(503);
+        yield* native(() => interrupted.arrayBuffer());
+        expect(yield* native(() => store.exec("SELECT whatsapp_bsuid FROM users"))).toEqual([
+          { whatsapp_bsuid: null },
+        ]);
+        expect(
+          yield* native(() => directory.exec("SELECT established FROM whatsapp_routes"))
+        ).toEqual([{ established: 0 }]);
+        yield* native(() => store.exec("DROP TRIGGER interrupt_link"));
+        const linked = yield* context.post(complete, {
+          ...flow.proof,
+          associationCode: review.associationCode,
+        });
+        expect(yield* native(() => linked.json())).toEqual({
+          status: "approved",
+          whatsappReturnUrl: "https://wa.me/12056871742",
+        });
+        expect(
+          yield* native(() =>
+            store.exec(
+              "SELECT (SELECT count(*) FROM consent_history) AS consent,(SELECT revision FROM backup_recovery_credentials) AS recovery,(SELECT whatsapp_bsuid FROM users) AS caller"
+            )
+          )
+        ).toEqual([{ consent: 1, recovery: 1, caller }]);
+        const otherCaller = "CO.Replacement";
+        const otherInvitation = yield* invitation(runtime, otherCaller);
+        const other = yield* context.verified("existing", otherInvitation.id);
+        const otherReview = yield* Schema.decodeUnknownEffect(Review)(other.review);
+        yield* Effect.sleep("1100 millis");
+        const confirmation = yield* signedChat(runtime, otherReview.confirmationText, otherCaller);
+        expect(confirmation.status).toBe(200);
+        yield* native(() => confirmation.arrayBuffer());
+        const conflict = yield* context.post(complete, {
+          ...other.proof,
+          associationCode: otherReview.associationCode,
+        });
+        expect(conflict.status).toBe(400);
+        yield* native(() => conflict.arrayBuffer());
+        expect(yield* native(() => store.exec("SELECT whatsapp_bsuid FROM users"))).toEqual([
+          { whatsapp_bsuid: caller },
+        ]);
+        const newPair = yield* context.post("/web/pairings", {});
+        const pairing = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            publicCode: Schema.String,
+            pairingId: Schema.String,
+            privateVerifier: Schema.String,
           })
-        )).status
-      ).toBe(400);
-    })
-  ));
-
-const reviewedInvitation = Effect.fn(function* (confirm: boolean = true) {
-  const journey = yield* Effect.tryPromise(() => setupWhatsApp());
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(
-    Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.invitation" }] })
+        )(yield* native(() => newPair.json()));
+        const text = "Aprueba el código de inicio de sesión " + pairing.publicCode;
+        const wrong = yield* signedChat(runtime, text, "CO.Foreign");
+        expect(wrong.ok).toBe(false);
+        yield* native(() => wrong.arrayBuffer());
+        const approved = yield* signedChat(runtime, text, caller);
+        expect(approved.status).toBe(200);
+        yield* native(() => approved.arrayBuffer());
+        const redeem = yield* context.post("/web/pairings/redeem", pairing);
+        expect(redeem.headers.get("set-cookie")).toContain("__Host-fidy_session=");
+        yield* native(() => redeem.arrayBuffer());
+      })
   );
-  expect(
-    (yield* whatsappMessages.sendChat(journey, "Hola", { phone: "573001234567" })).status
-  ).toBe(200);
-  const invitation = yield* Effect.tryPromise(() =>
-    journey.db.prepare("SELECT id FROM whatsapp_signup_invitations").first<{ id: string }>()
-  );
-  yield* authenticateChatProvider(journey, invitation?.id ?? "");
-  const review = yield* Effect.tryPromise(() =>
-    journey
-      .send("/web/providers/google/status", journey.pairing)
-      .then((response) => response.json())
-      .then(
-        Schema.decodeUnknownPromise(
-          Schema.Struct({ associationCode: Schema.String, confirmationText: Schema.String })
-        )
-      )
-  );
-  if (confirm) {
-    yield* whatsappMessages.advanceClock(2000);
-    expect((yield* whatsappMessages.sendChat(journey, review.confirmationText)).status).toBe(200);
-  }
-  return {
-    journey,
-    reference: invitation?.id ?? "",
-    proof: { ...journey.pairing, associationCode: review.associationCode },
-    confirmationText: review.confirmationText,
-  };
 });
 
-/** Schedule a real native delivery after the real D1 read, preserving its earlier snapshot. */
-const settleAfterInvitationRead = (db: D1Database, settle: () => Promise<void>): D1Database => {
-  let scheduled = false;
-  const wrap = (statement: D1PreparedStatement): D1PreparedStatement =>
-    new Proxy(statement, {
-      get(native, method): unknown {
-        if (method === "bind") {
-          return (...values: unknown[]): D1PreparedStatement => wrap(native.bind(...values));
-        }
-        if (method === "first" || method === "all") {
-          return (): Promise<unknown> => native[method]().then((row) => settle().then(() => row));
-        }
-        const value: unknown = Reflect.get(native, method, native);
-        return typeof value === "function" ? value.bind(native) : value;
-      },
-    });
-  return new Proxy(db, {
-    get(native, method): unknown {
-      if (method === "prepare") {
-        return (sql: string): D1PreparedStatement => {
-          const statement = native.prepare(sql);
-          if (scheduled || !sql.startsWith("SELECT i.review_code,")) return statement;
-          scheduled = true;
-          return wrap(statement);
-        };
-      }
-      const value: unknown = Reflect.get(native, method, native);
-      return typeof value === "function" ? value.bind(native) : value;
-    },
-  });
-};
-
-const expectNativeDelivery = (response: Response): void => {
-  expect(response.status).toBe(200);
-};
-
-it.each([
-  { decision: "confirmed", status: "verified", completion: 200, redemption: 200 },
-  { decision: "denied", status: "rejected", completion: 400, redemption: 202 },
-])("preserves a $decision native decision settling during the browser status read", (scenario) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { journey, proof, confirmationText } = yield* reviewedInvitation(false);
-      yield* whatsappMessages.advanceClock(2000);
-      const context = yield* Effect.context<never>();
-      const database = settleAfterInvitationRead(journey.db, () =>
-        Effect.runPromiseWith(context)(
-          whatsappMessages
-            .sendChat(
-              journey,
-              scenario.decision === "confirmed"
-                ? confirmationText
-                : confirmationText.replace(/^Vincular /u, "No vincular ")
-            )
-            .pipe(Effect.map(expectNativeDelivery))
-        )
-      );
-      const controlled = withJourneyDatabase({ journey, db: database });
-      const response = yield* Effect.tryPromise(() =>
-        controlled.send("/web/providers/google/status", journey.pairing)
-      );
-      expect(response.status).toBe(200);
-      expect(yield* Effect.tryPromise(() => response.json())).toEqual({ status: scenario.status });
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)))
-          .status
-      ).toBe(scenario.completion);
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/pairings/redeem", journey.pairing)))
-          .status
-      ).toBe(scenario.redemption);
-    })
-  )
-);
-
-it.each(["foreign browser", "wrong provider", "expired"])(
-  "refuses %s invitation completion without partial onboarding",
-  (fault) =>
-    Effect.runPromise(
+it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "supersedes old account reviews and refuses a late or expired handoff before creating any User",
+    () =>
       Effect.gen(function* () {
-        const { journey, proof } = yield* reviewedInvitation();
-        const before = yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare(
-              "SELECT pairing_id,approved_at_ms,consumed_at_ms FROM whatsapp_signup_invitations"
-            )
-            .all()
-        );
-        let submitted = proof;
-        if (fault === "foreign browser") submitted = { ...proof, privateVerifier: "a".repeat(43) };
-        if (fault === "expired") yield* whatsappMessages.advanceClock(600001);
-        expect(
-          (yield* Effect.tryPromise(() =>
-            journey.send(
-              `/web/providers/${fault === "wrong provider" ? "microsoft" : "google"}/complete`,
-              submitted
-            )
-          )).status
-        ).toBe(400);
-        expect(
-          (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-        ).toEqual([]);
-        expect(
-          (yield* Effect.tryPromise(() =>
-            journey.db.prepare("SELECT user_id FROM provider_credentials").all()
-          )).results
-        ).toEqual([]);
-        expect(
-          (yield* Effect.tryPromise(() =>
-            journey.db
-              .prepare("SELECT id FROM consent_history WHERE record_type='processing_grant'")
-              .all()
-          )).results
-        ).toEqual([]);
-        expect(
-          (yield* Effect.tryPromise(() =>
-            journey.db
-              .prepare(
-                "SELECT pairing_id,approved_at_ms,consumed_at_ms FROM whatsapp_signup_invitations"
-              )
-              .all()
-          )).results
-        ).toEqual(before.results);
-      })
-    )
-);
-
-it("refuses a first claimant of a forwarded invitation without originating-chat approval", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      // This pairing is the first browser to claim the public reference, not a later impostor.
-      const { journey, proof } = yield* reviewedInvitation(false);
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)))
-          .status
-      ).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-      ).toEqual([]);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT user_id FROM provider_credentials").all()
-        )).results
-      ).toEqual([]);
-    })
-  ));
-
-it.each([
-  "foreign caller",
-  "foreign endpoint",
-  "altered account",
-  "pre-review message",
-  "bad signature",
-  "denied",
-  "replaced attempt",
-])("does not link after %s confirmation", (fault) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { journey, proof, reference, confirmationText } = yield* reviewedInvitation(false);
-      const queuedAt = Math.floor((yield* Clock.currentTimeMillis) / 1000) - 1;
-      yield* whatsappMessages.advanceClock(2000);
-      if (fault === "replaced attempt") {
-        yield* authenticateChatProvider(journey, reference);
-        expect(
-          (yield* Effect.tryPromise(() =>
-            journey.send("/web/providers/google/status", journey.pairing)
-          )).status
-        ).toBe(200);
-      }
-      let text = confirmationText;
-      if (fault === "altered account") {
-        text = confirmationText.replace("person@example.test", "attacker@example.test");
-      }
-      if (fault === "denied") text = confirmationText.replace(/^Vincular /u, "No vincular ");
-      const reply =
-        fault === "foreign endpoint"
-          ? yield* whatsappMessages.sendPacket(
-              journey,
-              {
-                message: {
-                  id: "wamid.wrong-endpoint",
-                  timestamp: String(Math.floor((yield* Clock.currentTimeMillis) / 1000)),
-                  type: "text",
-                  from_user_id: "CO.Person1",
-                  text: { body: text },
-                },
-                conversation: { business_scoped_user_id: "CO.Person1" },
-                phone_number_id: "999999999999999",
-              },
-              { signature: Option.none(), event: "whatsapp.message.received" }
-            )
-          : yield* whatsappMessages.sendChat(journey, text, {
-              ...(fault === "foreign caller" ? { caller: "CO.Attacker" } : {}),
-              ...(fault === "pre-review message" ? { timestamp: queuedAt } : {}),
-              ...(fault === "bad signature" ? { signature: "invalid" } : {}),
-            });
-      expect(reply.status).not.toBe(503);
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)))
-          .status
-      ).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-      ).toEqual([]);
-    })
-  )
-);
-
-it("refuses surrounding whitespace in the exact prepared invitation confirmation", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { journey, proof, confirmationText } = yield* reviewedInvitation(false);
-      yield* whatsappMessages.advanceClock(2000);
-      expect((yield* whatsappMessages.sendChat(journey, ` ${confirmationText} `)).status).toBe(409);
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)))
-          .status
-      ).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-      ).toEqual([]);
-    })
-  ));
-
-it("refuses a second private browser claiming an already bound invitation", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { journey, reference } = yield* reviewedInvitation();
-      const another = yield* Effect.tryPromise(() =>
-        journey
-          .send("/web/pairings", {})
-          .then((response) => response.json())
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
-            )
-          )
-      );
-      const disclosure = yield* Effect.tryPromise(() =>
-        journey
-          .send("/web/providers/disclosure")
-          .then((response) => response.json())
-          .then(Schema.decodeUnknownPromise(Schema.Struct({ revision: Schema.String })))
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/start", {
-            ...another,
-            intent: "signup",
-            consentRevision: disclosure.revision,
-            handoffReference: reference,
+        const runtime = yield* (yield* nativeBrowserPlatform)();
+        const context = browser(runtime);
+        const { id, directory } = yield* invitation(runtime, caller);
+        const flow = yield* context.verified("first", id);
+        const original = yield* Schema.decodeUnknownEffect(Review)(flow.review);
+        const replacement = yield* context.post(start, {
+          ...flow.proof,
+          intent: "signup",
+          consentRevision: webSignupDisclosure().revision,
+          handoffReference: id,
+        });
+        const cookie = replacement.headers.get("set-cookie")?.split(";")[0] ?? "";
+        const authorized = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ authorizationUrl: Schema.String })
+        )(yield* native(() => replacement.json()));
+        const url = new URL(authorized.authorizationUrl);
+        const callback = new URL("/providers/google/callback", context.api);
+        callback.search = new URLSearchParams({
+          state: url.searchParams.get("state") ?? "",
+          code: (url.searchParams.get("nonce") ?? "") + ".second.valid",
+        }).toString();
+        const response = yield* native(() =>
+          runtime.dispatchFetch(callback.href, {
+            headers: { ...context.headers, cookie },
+            redirect: "manual",
           })
-        )).status
-      ).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-      ).toEqual([]);
-    })
-  ));
-
-it.each(["approval", "association", "completion", "consumption"])(
-  "rolls back the entire signup if %s cannot commit",
-  (fault) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const { journey, proof } = yield* reviewedInvitation();
-        const refusal = {
-          approval:
-            "BEFORE UPDATE OF approved_at_ms ON whatsapp_signup_invitations WHEN NEW.approved_at_ms IS NOT NULL",
-          association:
-            "BEFORE UPDATE OF whatsapp_bsuid ON users WHEN NEW.whatsapp_bsuid IS NOT NULL",
-          completion:
-            "BEFORE UPDATE OF completed_at_ms ON provider_authentication_attempts WHEN NEW.completed_at_ms IS NOT NULL",
-          consumption:
-            "BEFORE UPDATE OF consumed_at_ms ON whatsapp_signup_invitations WHEN NEW.consumed_at_ms IS NOT NULL",
-        }[fault];
-        yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare(`CREATE TRIGGER fixture_refusal ${refusal} BEGIN SELECT RAISE(IGNORE); END`)
-            .run()
         );
-        expect(
-          (yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)))
-            .status
-        ).toBe(400);
-        for (const table of [
-          "users",
-          "provider_credentials",
-          "backup_recovery_credentials",
-          "(SELECT id FROM consent_history WHERE record_type='processing_grant')",
-        ]) {
-          expect(
-            (yield* Effect.tryPromise(() =>
-              journey.db
-                .prepare(`SELECT count(*) AS total FROM ${table}`)
-                .first<{ total: number }>()
-            ))?.total
-          ).toBe(0);
-        }
-        expect(
-          yield* Effect.tryPromise(() =>
-            journey.db
-              .prepare("SELECT approved_at_ms,consumed_at_ms FROM whatsapp_signup_invitations")
-              .first()
-          )
-        ).toEqual({ approved_at_ms: null, consumed_at_ms: null });
-      })
-    )
-);
-
-it("links an existing provider User without replacing Consent, TrialPeriod or recovery", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
-      yield* authenticateChatProvider(journey, "");
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/complete", journey.pairing)
-        )).status
-      ).toBe(200);
-      const before = yield* Effect.tryPromise(() =>
-        journey.db.prepare("SELECT id,trial_started_at_ms FROM users").all()
-      );
-      const recovery = yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare("SELECT user_id,created_at_ms,code_digest FROM backup_recovery_credentials")
-          .all()
-      );
-      const consent = yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare("SELECT * FROM consent_history WHERE record_type='processing_grant'")
-          .all()
-      );
-      const pairing = yield* Effect.tryPromise(() =>
-        journey
-          .send("/web/pairings", {})
-          .then((response) => response.json())
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
-            )
-          )
-      );
-      const next = { ...journey, pairing };
-      expect(
-        (yield* whatsappMessages.sendChat(next, "Hola", { phone: "573001234567" })).status
-      ).toBe(200);
-      const invitation = yield* Effect.tryPromise(() =>
-        journey.db.prepare("SELECT id FROM whatsapp_signup_invitations").first<{ id: string }>()
-      );
-      yield* authenticateChatProvider(next, invitation?.id ?? "");
-      const review = yield* Effect.tryPromise(() =>
-        next
-          .send("/web/providers/google/status", pairing)
-          .then((response) => response.json())
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({ associationCode: Schema.String, confirmationText: Schema.String })
-            )
-          )
-      );
-      yield* whatsappMessages.advanceClock(2000);
-      expect((yield* whatsappMessages.sendChat(next, review.confirmationText)).status).toBe(200);
-      const response = yield* Effect.tryPromise(() =>
-        next.send("/web/providers/google/complete", {
-          ...pairing,
+        yield* native(() => response.arrayBuffer());
+        const updated = yield* context.post("/web/providers/google/status", flow.proof);
+        const review = yield* Schema.decodeUnknownEffect(Review)(
+          yield* native(() => updated.json())
+        );
+        expect(review.associationCode).not.toBe(original.associationCode);
+        const late = yield* signedChat(runtime, original.confirmationText, caller);
+        expect(late.ok).toBe(false);
+        yield* native(() => late.arrayBuffer());
+        yield* native(() =>
+          directory.exec("UPDATE whatsapp_invitations SET expires_at_ms=0 WHERE id=?", id)
+        );
+        const denied = yield* context.post(complete, {
+          ...flow.proof,
           associationCode: review.associationCode,
-        })
-      );
-      expect(response.status).toBe(200);
-      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
-        status: "approved",
-        whatsappReturnUrl: "https://wa.me/12056871742",
-      });
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT id,trial_started_at_ms FROM users").all()
-        )).results
-      ).toEqual(before.results);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare("SELECT user_id,created_at_ms,code_digest FROM backup_recovery_credentials")
-            .all()
-        )).results
-      ).toEqual(recovery.results);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare("SELECT * FROM consent_history WHERE record_type='processing_grant'")
-            .all()
-        )).results
-      ).toEqual(consent.results);
-      expect(
-        (yield* Effect.tryPromise(() => next.send("/web/pairings/redeem", pairing))).status
-      ).toBe(200);
-    })
-  ));
-
-it("allows only one completion under concurrent approval", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { journey, proof } = yield* reviewedInvitation();
-      const responses = yield* Effect.all(
-        [
-          Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)),
-          Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)),
-        ],
-        { concurrency: "unbounded" }
-      );
-      expect(
-        responses.map((response) => response.status).sort((left, right) => left - right)
-      ).toEqual([200, 400]);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT count(*) AS total FROM users").first<{ total: number }>()
-        ))?.total
-      ).toBe(1);
-    })
-  ));
-
-it.each(["awaiting", "confirmed", "denied"] as const)(
-  "invalidates the prior %s review when the same private browser retries provider authentication",
-  (decision) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const { journey, reference, proof, confirmationText } = yield* reviewedInvitation(false);
-        const original = yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare("SELECT expires_at_ms FROM whatsapp_signup_invitations WHERE id=?")
-            .bind(reference)
-            .first()
-        );
-        if (decision !== "awaiting") {
-          yield* whatsappMessages.advanceClock(2000);
-          expect(
-            (yield* whatsappMessages.sendChat(
-              journey,
-              decision === "confirmed"
-                ? confirmationText
-                : confirmationText.replace(/^Vincular /u, "No vincular ")
-            )).status
-          ).toBe(200);
-        }
-        yield* authenticateChatProvider(journey, reference);
-        const review = yield* Effect.tryPromise(() =>
-          journey
-            .send("/web/providers/google/status", journey.pairing)
-            .then((response) => response.json())
-            .then(
-              Schema.decodeUnknownPromise(
-                Schema.Struct({
-                  status: Schema.String,
-                  associationCode: Schema.String,
-                  confirmationText: Schema.String,
-                })
-              )
-            )
-        );
-        expect(review.status).toBe("awaiting_association");
-        expect(review.associationCode).not.toBe(proof.associationCode);
+        });
+        expect(denied.status).toBe(400);
+        yield* native(() => denied.arrayBuffer());
         expect(
-          yield* Effect.tryPromise(() =>
-            journey.db
-              .prepare("SELECT expires_at_ms FROM whatsapp_signup_invitations WHERE id=?")
-              .bind(reference)
-              .first()
-          )
-        ).toEqual(original);
-        yield* whatsappMessages.advanceClock(2000);
-        expect((yield* whatsappMessages.sendChat(journey, confirmationText)).status).toBe(409);
-        expect((yield* whatsappMessages.sendChat(journey, review.confirmationText)).status).toBe(
-          200
-        );
-        expect(
-          (yield* Effect.tryPromise(() =>
-            journey.send("/web/providers/google/complete", {
-              ...journey.pairing,
-              associationCode: review.associationCode,
-            })
-          )).status
-        ).toBe(200);
+          yield* native(() => directory.exec("SELECT count(*) AS n FROM provider_routes"))
+        ).toEqual([{ n: 0 }]);
       })
-    )
-);
-
-it("does not replace an established WhatsAppIdentity when a different chat requests linking", () =>
-  Effect.runPromise(
+  );
+  test.effect("refuses invitation egress when source, spend or storage admission fails", () =>
     Effect.gen(function* () {
-      const { journey, proof } = yield* reviewedInvitation();
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)))
-          .status
-      ).toBe(200);
-      const before = yield* Effect.tryPromise(() =>
-        journey.db.prepare("SELECT * FROM users").all()
+      const runtime = yield* (yield* nativeBrowserPlatform)();
+      yield* browser(runtime).pair;
+      const directory = yield* native(() =>
+        runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
       );
-      const pairing = yield* Effect.tryPromise(() =>
-        journey
-          .send("/web/pairings", {})
-          .then((response) => response.json())
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
-            )
+      const caller = "CO.Limited";
+      for (const [scope, limit] of [
+        ["wa:9:portfolio" + caller, 6],
+        ["whatsapp-sends", 1000],
+      ] as const) {
+        yield* native(() =>
+          directory.exec(
+            "WITH RECURSIVE n(i) AS(VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO bootstrap_admissions(scope,expires_at_ms) SELECT ?,4102444800000 FROM n",
+            limit,
+            scope
           )
-      );
-      const next = { ...journey, pairing };
-      expect(
-        (yield* whatsappMessages.sendChat(next, "Hola", {
-          caller: "CO.Person2",
-          phone: "573009876543",
-        })).status
-      ).toBe(200);
-      const invitation = yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare("SELECT id FROM whatsapp_signup_invitations WHERE source_bsuid='CO.Person2'")
-          .first<{ id: string }>()
-      );
-      yield* authenticateChatProvider(next, invitation?.id ?? "");
-      const review = yield* Effect.tryPromise(() =>
-        next
-          .send("/web/providers/google/status", pairing)
-          .then((response) => response.json())
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({ associationCode: Schema.String, confirmationText: Schema.String })
-            )
-          )
-      );
-      yield* whatsappMessages.advanceClock(2000);
-      expect(
-        (yield* whatsappMessages.sendChat(next, review.confirmationText, {
-          caller: "CO.Person2",
-          phone: "573009876543",
-        })).status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          next.send("/web/providers/google/complete", {
-            ...pairing,
-            associationCode: review.associationCode,
-          })
-        )).status
-      ).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT * FROM users").all())).results
-      ).toEqual(before.results);
-      expect(
-        yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare(
-              "SELECT decision,approved_at_ms,consumed_at_ms FROM whatsapp_signup_invitations WHERE source_bsuid='CO.Person2'"
-            )
-            .first()
-        )
-      ).toEqual({ decision: "confirmed", approved_at_ms: null, consumed_at_ms: null });
-    })
-  ));
-
-it("retains an ambiguous send claim until expiry without repeating delivery", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
-      const provider = vi
-        .spyOn(globalThis, "fetch")
-        .mockRejectedValueOnce(new Error("uncertain transport"))
-        .mockResolvedValue(
-          Response.json({
-            messaging_product: "whatsapp",
-            messages: [{ id: "wamid.next-invitation" }],
-          })
         );
-      expect((yield* whatsappMessages.sendChat(journey, "Hola")).status).toBe(503);
-      expect((yield* whatsappMessages.sendChat(journey, "Hola")).status).toBe(200);
-      expect(provider).toHaveBeenCalledTimes(1);
-      yield* whatsappMessages.advanceClock(600001);
-      expect((yield* whatsappMessages.sendChat(journey, "Hola")).status).toBe(200);
-      expect(provider).toHaveBeenCalledTimes(2);
-      expect(
-        (yield* Effect.tryPromise(() => journey.db.prepare("SELECT id FROM users").all())).results
-      ).toEqual([]);
-    })
-  ));
-
-it("sweeps only invitations past their one-day retention cutoff", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
-      vi.spyOn(globalThis, "fetch").mockImplementation(() =>
-        Promise.resolve(
-          Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.retention" }] })
+        const refused = yield* signedChat(runtime, "Hola", caller);
+        expect(refused.status).toBe(429);
+        yield* native(() => refused.arrayBuffer());
+        yield* native(() =>
+          directory.exec("DELETE FROM bootstrap_admissions WHERE scope=?", scope)
+        );
+      }
+      yield* native(() =>
+        directory.exec(
+          "CREATE TRIGGER refuse_invitation BEFORE INSERT ON whatsapp_invitations BEGIN SELECT RAISE(ABORT,'offline'); END"
         )
       );
-      expect((yield* whatsappMessages.sendChat(journey, "Hola")).status).toBe(200);
-      const expired = yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare("SELECT expires_at_ms FROM whatsapp_signup_invitations")
-          .first()
-          .then(Schema.decodeUnknownPromise(Schema.Struct({ expires_at_ms: Schema.Int })))
-      );
-      yield* whatsappMessages.advanceClock(660000);
+      const offline = yield* signedChat(runtime, "Hola", caller);
+      expect(offline.status).toBe(503);
+      yield* native(() => offline.arrayBuffer());
       expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { caller: "CO.Person2" })).status
-      ).toBe(200);
-      yield* sweepProviderAuthentication({
-        db: journey.db,
-        current: expired.expires_at_ms + 86400000 + 1,
-      });
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT source_bsuid FROM whatsapp_signup_invitations").all()
-        )).results
-      ).toEqual([{ source_bsuid: "CO.Person2" }]);
+        yield* native(() => directory.exec("SELECT count(*) AS n FROM whatsapp_invitations"))
+      ).toEqual([{ n: 0 }]);
     })
-  ));
-
-it("erases superseded signup evidence only for its associated User and fences unpermitted deletion", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { journey, proof } = yield* reviewedInvitation();
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/providers/google/complete", proof)))
-          .status
-      ).toBe(200);
-      const user = yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare("SELECT id FROM users")
-          .first()
-          .then(Schema.decodeUnknownPromise(Schema.Struct({ id: Schema.String })))
-      );
-      expect(
-        (yield* whatsappMessages.sendChat(journey, "Hola", { caller: "CO.Person2" })).status
-      ).toBe(200);
-      const foreignPairing = yield* Effect.tryPromise(() =>
-        journey
-          .send("/web/pairings", {})
-          .then((response) => response.json())
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
-            )
-          )
-      );
-      const foreignJourney = { ...journey, pairing: foreignPairing };
-      const foreignInvitation = yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare("SELECT id FROM whatsapp_signup_invitations WHERE source_bsuid='CO.Person2'")
-          .first<{ id: string }>()
-      );
-      yield* authenticateChatProvider(
-        foreignJourney,
-        foreignInvitation?.id ?? "",
-        "foreign-provider-user"
-      );
-      const foreignReview = yield* Effect.tryPromise(() =>
-        journey
-          .send("/web/providers/google/status", foreignPairing)
-          .then((response) => response.json())
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({ associationCode: Schema.String, confirmationText: Schema.String })
-            )
-          )
-      );
-      yield* whatsappMessages.advanceClock(2000);
-      expect(
-        (yield* whatsappMessages.sendChat(journey, foreignReview.confirmationText, {
-          caller: "CO.Person2",
-        })).status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.send("/web/providers/google/complete", {
-            ...foreignPairing,
-            associationCode: foreignReview.associationCode,
-          })
-        )).status
-      ).toBe(200);
-      const foreignEvidence = yield* Effect.tryPromise(() =>
-        journey.db
-          .prepare("SELECT * FROM whatsapp_signup_invitations WHERE source_bsuid='CO.Person2'")
-          .all()
-      );
-      const newer = yield* Effect.tryPromise(() =>
-        journey
-          .send("/web/pairings", {})
-          .then((response) => response.json())
-          .then(
-            Schema.decodeUnknownPromise(
-              Schema.Struct({
-                pairingId: Schema.String,
-                privateVerifier: Schema.String,
-                publicCode: Schema.String,
-              })
-            )
-          )
-      );
-      yield* whatsappMessages.advanceClock(2000);
-      expect(
-        (yield* whatsappMessages.sendChat(
-          journey,
-          `Aprueba el código de inicio de sesión ${newer.publicCode}`
-        )).status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/pairings/redeem", proof))).status
-      ).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() => journey.send("/web/pairings/redeem", newer))).status
-      ).toBe(200);
-      const reference = "15310000-0000-4000-8000-000000000002";
-      yield* Effect.tryPromise(() =>
-        journey.db.batch([
-          journey.db
-            .prepare(
-              "INSERT INTO erasure_requests(id,user_id,requested_at_ms,state) VALUES(?,?,1,'Draining')"
-            )
-            .bind(reference, user.id),
-          ...[
-            "provider_authentication_attempts",
-            "whatsapp_signup_invitations",
-            "web_sessions",
-            "browser_login_pairings",
-          ].map((store) =>
-            journey.db
-              .prepare("INSERT INTO erasure_steps(request_id,store_id) VALUES(?,?)")
-              .bind(reference, store)
-          ),
-          journey.db
-            .prepare("UPDATE erasure_requests SET state='Erasing' WHERE id=?")
-            .bind(reference),
-        ])
-      );
-      yield* Effect.tryPromise(() =>
+  );
+  test.effect(
+    "holds an ambiguous invitation send until its original expiry and removes stale unbound chat evidence in bounded work",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* (yield* nativeBrowserPlatform)();
+        const source = "CO.Uncertain";
+        const first = yield* chatWith(runtime, {
+          text: "Hola",
+          caller: source,
+          phone: "573001234598",
+        });
+        expect(first.status).toBe(503);
+        yield* native(() => first.arrayBuffer());
+        const repeat = yield* chatWith(runtime, {
+          text: "Hola",
+          caller: source,
+          phone: "573001234598",
+        });
+        expect(repeat.status).toBe(200);
+        yield* native(() => repeat.arrayBuffer());
+        const directory = yield* native(() =>
+          runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: "directory-v1" })
+        );
         expect(
-          journey.db
-            .prepare("DELETE FROM whatsapp_signup_invitations WHERE pairing_id=?")
-            .bind(proof.pairingId)
-            .run()
-        ).rejects.toThrow("erasure_fenced")
-      );
-      const stores = [
-        ...makeProviderAuthenticationErasureStores(journey.db),
-        ...fixtureBrowserCredentialErasureStores(journey.db),
-      ];
-      for (const id of ["provider_authentication_attempts", "whatsapp_signup_invitations"]) {
-        const store = stores.find((item) => item.id === id);
-        if (store === undefined) throw Error("Missing invitation erasure owner");
+          yield* native(() =>
+            directory.exec("SELECT count(*) AS n FROM whatsapp_invitations WHERE bsuid=?", source)
+          )
+        ).toEqual([{ n: 1 }]);
+        yield* native(() =>
+          directory.exec("UPDATE whatsapp_invitations SET expires_at_ms=0 WHERE bsuid=?", source)
+        );
+        yield* invitation(runtime, "CO.Retained");
         expect(
-          (yield* Effect.result(
-            store.remove({ reference, userId: "15310000-0000-4000-8000-000000000099" })
-          ))._tag
-        ).toBe("Failure");
-        expect(yield* store.remove({ reference, userId: user.id })).toBe(true);
-      }
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT source_bsuid FROM whatsapp_signup_invitations").all()
-        )).results
-      ).toEqual([{ source_bsuid: "CO.Person2" }]);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare("SELECT * FROM whatsapp_signup_invitations WHERE source_bsuid='CO.Person2'")
-            .all()
-        )).results
-      ).toEqual(foreignEvidence.results);
-      for (const id of ["web_sessions", "browser_login_pairings"]) {
-        const store = stores.find((item) => item.id === id);
-        if (store === undefined) throw Error("Missing pairing erasure owner");
-        expect(yield* store.remove({ reference, userId: user.id })).toBe(true);
-      }
-      expect(
-        (yield* Effect.tryPromise(() =>
-          journey.db
-            .prepare("SELECT id FROM browser_login_pairings WHERE id IN (?,?)")
-            .bind(proof.pairingId, newer.pairingId)
-            .all()
-        )).results
-      ).toEqual([]);
-    })
-  ));
+          yield* native(() => directory.exec("SELECT bsuid FROM whatsapp_invitations"))
+        ).toEqual([{ bsuid: "CO.Retained" }]);
+      })
+  );
+});

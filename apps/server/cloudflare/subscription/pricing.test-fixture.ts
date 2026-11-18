@@ -1,7 +1,6 @@
 import type { StoreReleaseEnvironment } from "../runtime/sqlite/contract";
 import { Pricing } from "./runtime";
 
-const pricingTestCeiling = 131072;
 const restrictAt = 0.8;
 const unavailable = 503;
 const unexpected = 500;
@@ -9,9 +8,11 @@ const unexpected = 500;
 /** Interrupt the native transaction at its final statement, or discard its committed response. */
 export class PricingFixture extends Pricing {
   private readonly storage: DurableObjectStorage;
+  private readonly ceilingBytes: number;
   constructor(state: DurableObjectState, env: StoreReleaseEnvironment) {
     super(state, env);
     this.storage = state.storage;
+    this.ceilingBytes = Number(env.SQLITE_STORE_CAPACITY_BYTES);
   }
   private inspectRecovery(): Promise<Response> {
     const rows = this.storage.sql
@@ -49,10 +50,10 @@ export class PricingFixture extends Pricing {
     switch (new URL(request.url).pathname) {
       case "/fixture/restrict-growth": {
         return request.arrayBuffer().then(() => {
-          const bytes = pricingTestCeiling;
           const sql = this.storage.sql;
+          const healthyBytes = sql.databaseSize;
           let index = 0;
-          while (sql.databaseSize < bytes * restrictAt) {
+          while (sql.databaseSize < this.ceilingBytes * restrictAt) {
             const id =
               "98000000-0000-4000-8000-" + String(++index).padStart("000000000000".length, "0");
             sql.exec(
@@ -61,7 +62,11 @@ export class PricingFixture extends Pricing {
               id
             );
           }
-          return Response.json({ usedBytes: sql.databaseSize, ceilingBytes: bytes });
+          return Response.json({
+            healthyBytes,
+            pressureBytes: sql.databaseSize,
+            ceilingBytes: this.ceilingBytes,
+          });
         });
       }
       case "/fixture/fail-before-receipt":

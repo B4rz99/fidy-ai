@@ -30,6 +30,7 @@ const makePublication = Effect.map(Clock.currentTimeMillis, (now) => ({
   },
   price,
 }));
+const pricingTestCeiling = 256 * 1024;
 const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
   const fs = yield* FileSystem.FileSystem;
@@ -56,7 +57,7 @@ const platform = Effect.fnUntraced(function* (routeUsers: boolean = false) {
             name: "pricing-test",
             compatibilityDate: "2026-09-08",
             env: {
-              SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: "131072" },
+              SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: String(pricingTestCeiling) },
               CF_VERSION_METADATA: { type: "version-metadata" },
               ...(routeUsers
                 ? {
@@ -230,7 +231,20 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const accepted = yield* request("register", enrollment);
         expect(accepted.status).toBe(200);
         const before = yield* request("offers");
-        expect((yield* request("fixture/restrict-growth", {})).status).toBe(200);
+        const filled = yield* request("fixture/restrict-growth", {});
+        expect(filled.status).toBe(200);
+        const measurement = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            healthyBytes: Schema.Int,
+            pressureBytes: Schema.Int,
+            ceilingBytes: Schema.Int,
+          })
+        )(filled.body);
+        expect(measurement.ceilingBytes).toBe(pricingTestCeiling);
+        expect(measurement.healthyBytes).toBeLessThan(pricingTestCeiling * 0.7);
+        expect(measurement.pressureBytes).toBeGreaterThanOrEqual(pricingTestCeiling * 0.8);
+        expect(measurement.pressureBytes).toBeLessThan(pricingTestCeiling);
+        process.stdout.write(`PRICING_CAPACITY ${encode(measurement)}\n`);
         expect((yield* request("publish", publication)).status).toBe(503);
         expect(yield* request("offers")).toEqual(before);
         expect(yield* request("register", enrollment)).toEqual(accepted);

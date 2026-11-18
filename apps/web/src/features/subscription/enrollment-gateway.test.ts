@@ -1270,3 +1270,46 @@ it.each(["storage", "billing-email"] as const)(
       })
     )
 );
+
+it("opens current offers for review when the Price changes on an open form", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const container = document.createElement("div");
+      const root = createRoot(container);
+      const enrollment = prepared(yield* Clock.currentTimeMillis);
+      try {
+        yield* reactAct(() =>
+          root.render(
+            createElement(PaymentDetails, {
+              offer: presentSubscriptionOffer(enrollment.price),
+              gateway: Option.none(),
+              method: "card",
+              onDaviplataSubmitted: () => undefined,
+              onDaviplataUncertain: () => undefined,
+              enrollment: Option.some({
+                _tag: "PaymentSubmission",
+                value: {
+                  status: "refused",
+                  reason: "terms-changed",
+                  enrollmentId: enrollment.enrollmentId,
+                },
+                canReplaceCard: false,
+              } as const),
+              busy: false,
+              failed: false,
+              needsRecovery: false,
+              awaitingObservation: false,
+              prepare: () => undefined,
+              submit: () => undefined,
+              refresh: () => undefined,
+            })
+          )
+        );
+        expect(container.querySelector("a")?.getAttribute("href")).toBe("/upgrade");
+        expect(container.textContent).toContain("Revisar las condiciones actuales");
+      } finally {
+        yield* reactAct(() => root.unmount());
+      }
+    })
+  ));

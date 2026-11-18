@@ -118,11 +118,13 @@ import {
   ownsWebAuthenticationPath,
 } from "../../web-authentication/operations";
 import { pricePublicationPath } from "../../subscription/contract";
-import { prepareBoundSubscriptionRead, refundSupportRoute } from "../../subscription/operations";
+import {
+  isLocalSubscriptionRead,
+  prepareBoundSubscriptionRead,
+  refundSupportRoute,
+} from "../../subscription/operations";
 import { paymentEnrollmentTransport } from "../../../src/shell/subscription/runtime";
 import {
-  dispatchBillingCollection,
-  handlePaymentEnrollment,
   handlePricePublication,
   handleRefundSupport,
   receiveWompiBillingEvent,
@@ -186,7 +188,7 @@ const ReleaseConfiguration = Schema.Struct({
   RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(gitRevisionPattern)),
 });
 
-type PublicationKind = "emailReplacement" | "billing" | "whatsapp";
+type PublicationKind = "emailReplacement" | "whatsapp";
 type PublishAcceptedWork = (kind: PublicationKind, id: string) => void;
 
 const publicationActivities = (
@@ -210,14 +212,6 @@ const publicationActivities = (
             EMAIL_REPLACEMENT_QUEUE: environment.EMAIL_REPLACEMENT_QUEUE,
             identity,
           }),
-    billing: () =>
-      environment.BILLING_COLLECTION_QUEUE === undefined
-        ? Effect.void
-        : dispatchBillingCollection({
-            DB: environment.DB,
-            BILLING_COLLECTION_QUEUE: environment.BILLING_COLLECTION_QUEUE,
-            identity,
-          }).pipe(Effect.mapError(() => undefined)),
   };
   return publishers;
 };
@@ -1732,6 +1726,7 @@ const isUserStoreOperation = (id: string): boolean =>
     isLocalBatchRoute,
     isLocalForwardingOperation,
     isLocalReviewOperation,
+    isLocalSubscriptionRead,
     isLocalTransactionOperation,
     isLocalDashboardOperation,
     isLocalRecurringPlan,
@@ -1905,28 +1900,6 @@ const supportCoreResponse = (
   return Option.none();
 };
 
-const paymentEnrollmentResponse = (
-  request: Request,
-  environment: CoreHttpEnvironment,
-  publish: PublishAcceptedWork
-): Effect.Effect<Response> => {
-  const work = Effect.tryPromise({
-    try: () =>
-      handlePaymentEnrollment({
-        request,
-        environment: { ...environment, onAccepted: (id) => publish("billing", id) },
-      }),
-    catch: () => undefined,
-  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.payment-enrollment"));
-  const transport = paymentEnrollmentTransport(new URL(request.url).pathname);
-  return Option.exists(
-    transport,
-    (value) => value.operation === "availability" && request.method === value.method
-  )
-    ? work
-    : withBrowserBinding(request, environment, work);
-};
-
 /** Consent combines expected binding with its live subject lookup; its protected work rechecks authority. */
 const reservedBindingResponse = <E, R>(
   request: Request,
@@ -1959,7 +1932,7 @@ const dispatchCoreHttp = ({
     return bound(providerCallbackEffect(request, environment, publish));
   }
   if (enrollmentCorePath(url.pathname)) {
-    return paymentEnrollmentResponse(request, environment, publish);
+    return routeSessionRequest({ request, environment });
   }
   const directPath = directPathResponse(request, environment);
   if (Option.isSome(directPath)) {
@@ -1998,6 +1971,9 @@ const nativeIdentityResponse = (
 ): Option.Option<Effect.Effect<Response>> => {
   const { request, environment } = input;
   const path = new URL(request.url).pathname;
+  if (Option.isSome(paymentEnrollmentTransport(path))) {
+    return Option.some(routeSessionRequest({ request, environment }));
+  }
   if (
     request.method === "POST" &&
     ["/recovery/backup-code/rotate", emailReplacementPath, emailReplacementCompletionPath].includes(

@@ -51,5 +51,17 @@ export const pricingHistory: StoreHistory = {
         ]),
       ],
     },
+    {
+      version: 2,
+      id: "registration-outcomes",
+      statements: [
+        "ALTER TABLE price_registrations ADD COLUMN outcome TEXT CHECK(outcome IN('committed','cancelled'))",
+        "ALTER TABLE price_registrations ADD COLUMN next_check_ms INTEGER",
+        "CREATE INDEX pricing_check_due ON price_registrations(next_check_ms) WHERE outcome IS NULL",
+        "CREATE TABLE enrollment_allowances(id INTEGER PRIMARY KEY,user_id TEXT NOT NULL,at_ms INTEGER NOT NULL) STRICT",
+        "CREATE INDEX enrollment_allowance_time ON enrollment_allowances(at_ms)",
+        "CREATE INDEX enrollment_allowance_user ON enrollment_allowances(user_id,at_ms)",
+      ],
+    },
   ],
 };

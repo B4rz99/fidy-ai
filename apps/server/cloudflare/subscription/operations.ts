@@ -1,3 +1,9 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import { SqlClient } from "effect/sql";
+
+import { getSubscriptionStatus } from "../../src/shell/subscription/operations";
+import { canonicalAdmissionUnavailable, runLocalMutation } from "../canonical-admission/operations";
+
 import { withStoreCapacity } from "../runtime/sqlite/operations";
 import type { LocalMutationResult } from "../canonical-admission/contract";
 import {
@@ -18,6 +24,8 @@ import {
   type RefundAttempt,
   type RefundStartFailure,
   SubscriptionCancellation,
+  SubscriptionOffers,
+  SubscriptionStatus,
 } from "../../src/core/subscription/contract";
 import {
   type RefundReadCall,
@@ -25,6 +33,7 @@ import {
   RefundSupportAdmission,
   type SubscriptionQueryInput,
   SubscriptionRenewalAdmission,
+  pricingName,
   refundSupportBasePath,
   refundSupportReadPath,
 } from "./contract";
@@ -158,6 +167,47 @@ export const cancelLocalSubscription = Effect.fnUntraced(function* (
 export const repairCancellationAlarm = Effect.fnUntraced(function* (storage: DurableObjectStorage) {
   return yield* withStoreCapacity("required")(inspectCancellation(storage));
 });
+
+export const isLocalSubscriptionRead = (id: string): boolean =>
+  ["subscription.listSubscriptionOffers", "subscription.getSubscriptionStatus"].includes(id);
+
+export const observeLocalSubscription = Effect.fn(
+  function* (
+    unit: Pick<
+      Parameters<typeof runLocalMutation>[0],
+      "owns" | "storage" | "request" | "operation"
+    >,
+    pricing: DurableObjectNamespace
+  ) {
+    const offers = unit.operation.id === "subscription.listSubscriptionOffers";
+    const data = offers
+      ? yield* Effect.tryPromise(() =>
+          pricing
+            .getByName(pricingName)
+            .fetch("https://pricing.internal/offers")
+            .then((response) => response.json())
+        ).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(SubscriptionOffers)),
+          Effect.flatMap(Schema.encodeEffect(SubscriptionOffers))
+        )
+      : null;
+    return yield* runLocalMutation({
+      ...unit,
+      input: Effect.succeedSome(true),
+      work: Effect.fn(function* (_, user) {
+        const body =
+          data ??
+          (yield* Schema.encodeEffect(Schema.toCodecJson(SubscriptionStatus))(
+            (yield* getSubscriptionStatus(user).pipe(
+              Effect.provideService(SqlClient.SqlClient, yield* SqliteClient)
+            )).data
+          ));
+        return { status: 200, outcome: "success" as const, body: { data: body, next: [] } };
+      }),
+    });
+  },
+  Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+);
 
 export const localCancellationReview: typeof cancellationReview = (user) =>
   cancellationReview(user);

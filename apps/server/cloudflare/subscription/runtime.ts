@@ -24,11 +24,16 @@ import {
   pricingName,
 } from "./contract";
 import { nativeBillingRequest } from "./internal/native-billing";
-import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
+import {
+  createStoreRuntime,
+  openSqliteStore,
+  storeReadiness,
+  withStoreCapacity,
+} from "../runtime/sqlite/operations";
 import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
 
 import { pricingHistory } from "./pricing/operations";
-import { pricingResponse } from "./internal/pricing-object";
+import { pricingResponse, recoverPricing } from "./internal/pricing-object";
 import { observeCancellation, pendingCancellation } from "./internal/local-cancellation";
 import { RequestBodyPolicy } from "../http/contract";
 import { boundedJsonBody } from "../http/operations";
@@ -74,6 +79,34 @@ import {
 import { reconcileBillingCandidates as reconcile } from "./internal/billing-observation";
 import { sweepExpiredEnrollmentAdmission as sweep } from "./internal/enrollment-admission";
 
+import {
+  type BillingRecovery,
+  billingWake as inspectBillingAlarm,
+  answerRegistration as readRegistration,
+  recoverLocalBilling,
+} from "./internal/local-billing-work";
+import { nativeEnrollment } from "./internal/native-enrollment";
+import type { EnrollmentContext } from "./internal/enrollment-session";
+
+export const offerLocalBilling = Effect.fn(function* (context: Omit<BillingRecovery, "transport">) {
+  return yield* recoverLocalBilling({ ...context, transport: wompiOutboundHttp });
+});
+export const handleLocalEnrollment = Effect.fn(function* (
+  request: Request,
+  context: Omit<EnrollmentContext, "transport">,
+  owns: (id: string) => boolean
+) {
+  return yield* nativeEnrollment({ ...context, transport: wompiOutboundHttp }, request, owns);
+});
+export const answerRegistration = Effect.fn(function* (
+  request: Request,
+  owns: (id: string) => boolean
+) {
+  return yield* readRegistration(request, owns);
+});
+export const billingWake = Effect.fn(function* (storage: DurableObjectStorage) {
+  return yield* withStoreCapacity("required")(inspectBillingAlarm(storage));
+});
 /** Construct the native provider transport at the Subscription composition boundary. */
 export const wompiOutboundHttp = (
   environment: WompiBindings
@@ -270,9 +303,14 @@ export const makeSubscriptionErasureStores = (db: D1Database): ReadonlyArray<Era
 export class Pricing {
   private readonly version: string;
   private readonly state: DurableObjectState;
+  private readonly users: Option.Option<DurableObjectNamespace>;
   private readonly runtime;
-  constructor(state: DurableObjectState, env: StoreReleaseEnvironment) {
+  constructor(
+    state: DurableObjectState,
+    env: StoreReleaseEnvironment & Partial<Readonly<{ USER_STORE: DurableObjectNamespace }>>
+  ) {
     this.state = state;
+    this.users = Option.fromUndefinedOr(env.USER_STORE);
     this.version = env.CF_VERSION_METADATA.id;
     this.runtime = createStoreRuntime({
       storage: state.storage,
@@ -288,6 +326,13 @@ export class Pricing {
     }
   }
 
+  alarm(): Promise<void> {
+    return Option.match(this.users, {
+      onNone: () => Promise.resolve(),
+      onSome: (users) =>
+        this.runtime.runPromise(recoverPricing(this.state.storage, users)).then(() => undefined),
+    });
+  }
   fetch(request: Request): Promise<Response> {
     if (this.state.id.name !== pricingName) {
       return Promise.resolve(new Response(null, { status: 404 }));
@@ -298,7 +343,7 @@ export class Pricing {
       );
     }
     return this.runtime.runPromise(
-      pricingResponse(request).pipe(
+      pricingResponse(request, this.state.storage).pipe(
         Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
       )
     );
@@ -353,11 +398,9 @@ export const handleSourceCancellationWork = Effect.fnUntraced(function* (
 });
 
 export const handleNativeBillingCallback = Effect.fn(function* (
-  request: Request,
-  env: Parameters<typeof nativeBillingRequest>[0]["env"],
-  owns: (id: string) => boolean
+  input: Omit<Parameters<typeof nativeBillingRequest>[0], "transport">
 ) {
-  return yield* nativeBillingRequest({ request, env, owns, transport: wompiOutboundHttp });
+  return yield* nativeBillingRequest({ ...input, transport: wompiOutboundHttp });
 });
 const callbackWorkflowId = Effect.fn(function* (event: typeof WompiBillingEvent.Type) {
   const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(WompiBillingEvent))(event);

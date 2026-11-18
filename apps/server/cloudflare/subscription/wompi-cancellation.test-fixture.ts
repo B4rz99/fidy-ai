@@ -1,13 +1,25 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { Clock, DateTime, Effect, Schedule } from "effect";
+import { Clock, DateTime, Effect, Schedule, Schema } from "effect";
 import { Hex } from "effect/encoding";
 
 type Environment = Readonly<{ PROVIDER_STATE: D1Database }>;
 
 const chargeFixture = Effect.fn(function* (request: Request, env: Environment, path: string) {
   if (request.method === "POST" && path === "/v1/transactions") {
+    const charge = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        amount_in_cents: Schema.Int,
+        currency: Schema.String,
+        reference: Schema.String,
+        payment_source_id: Schema.Int,
+      })
+    )(yield* Effect.tryPromise(() => request.json()));
     yield* Effect.tryPromise(() =>
-      env.PROVIDER_STATE.prepare("INSERT INTO charge_posts DEFAULT VALUES").run()
+      env.PROVIDER_STATE.prepare(
+        "INSERT INTO charge_posts(reference,amount,currency,source) VALUES(?,?,?,?)"
+      )
+        .bind(charge.reference, charge.amount_in_cents, charge.currency, charge.payment_source_id)
+        .run()
     );
     const released = Effect.tryPromise(() =>
       env.PROVIDER_STATE.prepare("SELECT released FROM charge_control").first()
@@ -36,6 +48,67 @@ const chargeFixture = Effect.fn(function* (request: Request, env: Environment, p
   }
   return new Response(null, { status: 404 });
 });
+const hashLength = 64;
+const syntheticSources = { NEQUI: 5102, CARD: 5101 } as const;
+const isEnrollmentPath = (path: string): boolean =>
+  path.startsWith("/v1/merchants/") ||
+  path.startsWith("/v1/tokens/") ||
+  ["/v1/payment_sources", "/v1/payment_sources/5101", "/v1/payment_sources/5102"].includes(path);
+const enrollmentProvider = Effect.fn(function* (request: Request, path: string) {
+  if (path.startsWith("/v1/tokens/nequi/")) {
+    return Response.json({
+      data: {
+        id: path.split("/").at(-1),
+        status: path.endsWith("_approved") ? "APPROVED" : "PENDING",
+      },
+    });
+  }
+  if (path === "/v1/payment_sources/5102") {
+    return Response.json({
+      data: { id: 5102, type: "NEQUI", status: "AVAILABLE", customer_email: "payer@example.com" },
+    });
+  }
+  if (path.startsWith("/v1/merchants/")) {
+    const accepted = (name: string): { permalink: string; acceptance_token: string } => {
+      const permalink = "https://wompi.example/" + name + ".pdf";
+      return {
+        permalink,
+        acceptance_token:
+          "header." +
+          btoa(JSON.stringify({ permalink, file_hash: "a".repeat(hashLength) }))
+            .replaceAll("+", "-")
+            .replaceAll("/", "_")
+            .replace(/=+$/u, "") +
+          ".signature",
+      };
+    };
+    return Response.json({
+      data: {
+        presigned_acceptance: accepted("terms"),
+        presigned_personal_data_auth: accepted("personal"),
+      },
+    });
+  }
+  if (path === "/v1/payment_sources" && request.method === "POST") {
+    const charge = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ type: Schema.Literals(["NEQUI", "CARD"]) })
+    )(yield* Effect.tryPromise(() => request.json()));
+    return Response.json({
+      data: { id: syntheticSources[charge.type], status: "AVAILABLE" },
+    });
+  }
+  if (path === "/v1/payment_sources/5101") {
+    return Response.json({
+      data: {
+        id: 5101,
+        status: "AVAILABLE",
+        type: "CARD",
+        customer_email: "payer@example.com",
+      },
+    });
+  }
+  return new Response(null, { status: 404 });
+});
 /** Local outbound Worker only. Accept a void and lose its response, then expose the independent provider state. */
 export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
   override fetch(request: Request): Promise<Response> {
@@ -46,14 +119,18 @@ export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
           return yield* Effect.tryPromise(() => statementProvider(request));
         }
         const path = new URL(request.url).pathname;
+        if (isEnrollmentPath(path)) {
+          return yield* enrollmentProvider(request, path);
+        }
         if (path.startsWith("/v1/transactions")) return yield* chargeFixture(request, env, path);
-        if (request.method === "PUT" && path === "/v1/payment_sources/78001/void") {
+        const command = request.method + " " + path;
+        if (command === "PUT /v1/payment_sources/78001/void") {
           yield* Effect.tryPromise(() =>
             env.PROVIDER_STATE.prepare("INSERT INTO received_voids(source) VALUES (78001)").run()
           );
           return new Response(null, { status: 503 });
         }
-        if (request.method === "GET" && path === "/v1/payment_sources/78001") {
+        if (command === "GET /v1/payment_sources/78001") {
           const present = yield* Effect.tryPromise(() =>
             env.PROVIDER_STATE.prepare(
               "SELECT 1 FROM received_voids WHERE source=78001 LIMIT 1"

@@ -3,7 +3,10 @@ import { type WompiEnvironment } from "../../src/shell/secret-material/contract"
 import { UserId } from "../../src/core/identity/contract";
 import {
   BillingAttemptId,
+  BillingPeriod,
+  PaymentEnrollmentId,
   Price,
+  PriceId,
   type RefundAttemptId,
   StartRefundInput,
 } from "../../src/core/subscription/contract";
@@ -274,3 +277,19 @@ export const LocalBillingCollection = Schema.TaggedStruct("CollectUserBillingAtt
 });
 export const collectUserBillingUrl = "https://user.invalid/work/billing/collect";
 export const settleUserBillingUrl = "https://user.invalid/work/billing/observe";
+
+export const BillingRegistration = Schema.Struct({
+  userId: UserId,
+  operationId: Schema.String.check(Schema.isUUID()),
+  admission: Schema.Union([
+    Schema.Struct({ kind: Schema.Literal("renewal"), previousPaidAttemptId: BillingAttemptId }),
+    Schema.Struct({
+      kind: Schema.Literal("enrollment"),
+      enrollmentId: PaymentEnrollmentId,
+      acceptedPriceId: PriceId,
+    }),
+  ]),
+  inputsDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+  billingPeriod: BillingPeriod,
+  deadlineMs: Schema.Int,
+});

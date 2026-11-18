@@ -5,7 +5,7 @@ import { BillingAttemptId, renewalGraceMs } from "../../../src/core/subscription
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { type ExternalEventBindings } from "../../directory/contract";
 import { lookupExternalEventRoute, reserveExternalEventRoute } from "../../directory/operations";
-import { withStoreCapacity } from "../../runtime/sqlite/operations";
+import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 import {
   LocalBillingCollection,
   type WompiBillingEvent,
@@ -69,7 +69,10 @@ const admitGeneration = Effect.fn(function* (observation: typeof Observation.Typ
   }
   return true;
 });
-const observe = Effect.fn(function* (observation: typeof Observation.Type) {
+const observe = Effect.fn(function* (
+  observation: typeof Observation.Type,
+  storage: DurableObjectStorage
+) {
   const sql = yield* SqliteClient;
   const captured = yield* readAttempt(observation);
   if (Option.isNone(captured)) return absent();
@@ -104,9 +107,47 @@ const observe = Effect.fn(function* (observation: typeof Observation.Type) {
   })) {
     yield* sql.unsafe(statement.text, statement.params);
   }
-  const [attempt] =
-    yield* sql`SELECT status FROM billing_attempts WHERE id=${observation.attemptId}`;
-  return attempt?.status === "pending" ? new Response(null, { status: pendingStatus }) : absent();
+  return yield* scheduleObservation({
+    id: observation.attemptId,
+    candidate: found.transactionId,
+    storage,
+  });
+});
+const lookupCooldown = 60000;
+const maximumChecks = 8;
+const auditedObservation = Effect.fn(function* (id: BillingAttemptId) {
+  const sql = yield* SqliteClient;
+  const [attempt] = yield* sql`SELECT status,followup_due_at_ms,
+    status='pending' OR EXISTS(SELECT 1 FROM billing_transition_audit a WHERE a.attempt_id=b.id AND a.transition=b.status) AS accounted
+    FROM billing_attempts b WHERE id=${id}`;
+  if (attempt?.accounted === 0) return yield* Effect.fail("billing-audit-unavailable" as const);
+  return attempt;
+});
+const scheduleObservation = Effect.fn(function* ({
+  id,
+  candidate,
+  storage,
+}: {
+  id: BillingAttemptId;
+  candidate: WompiTransactionId;
+  storage: DurableObjectStorage;
+}) {
+  const sql = yield* SqliteClient;
+  const attempt = yield* auditedObservation(id);
+  if (typeof attempt?.followup_due_at_ms === "number") {
+    yield* preserveStoreAlarm(storage, attempt.followup_due_at_ms);
+  }
+  if (attempt?.status !== "pending") {
+    yield* sql`UPDATE billing_provider_transactions SET next_check_ms=NULL WHERE attempt_id=${id}`;
+    return absent();
+  }
+  const next = (yield* Clock.currentTimeMillis) + lookupCooldown;
+  const scheduled =
+    yield* sql`UPDATE billing_provider_transactions SET next_check_ms=coalesce(next_check_ms,${next}) WHERE transaction_id=${candidate} AND attempt_id=${id} AND checks<${maximumChecks} RETURNING next_check_ms`;
+  if (scheduled.length === 1) {
+    yield* preserveStoreAlarm(storage, Number(scheduled[0]?.next_check_ms));
+  }
+  return new Response(null, { status: pendingStatus });
 });
 const observationFor = (
   found: WompiTransaction
@@ -127,6 +168,7 @@ const claim = Effect.fn(function* (work: Work, captured: typeof Snapshot.Type, n
     statement: {
       sql: `UPDATE billing_attempts SET collection_state='sent',collection_sent_at_ms=? WHERE id=? AND collection_state='armed' AND status='pending' AND wompi_environment=? AND wompi_reference=?
       AND EXISTS(SELECT 1 FROM billing_attempt_context a WHERE a.id=billing_attempts.id AND a.user_id=?)
+      AND EXISTS(SELECT 1 FROM payment_sources p WHERE p.id=billing_attempts.payment_source_id AND p.retired_at_ms IS NULL AND NOT EXISTS(SELECT 1 FROM subscription_cancellations c WHERE c.payment_source_id=p.id))
       AND NOT EXISTS(SELECT 1 FROM erasure_requests WHERE user_id=?)
       AND (previous_paid_attempt_id IS NULL OR (period_starts_at_ms+?>? AND EXISTS(SELECT 1 FROM subscription_standing s WHERE s.user_id=? AND s.attempt_id=billing_attempts.previous_paid_attempt_id)
         AND NOT EXISTS(SELECT 1 FROM subscription_renewal_fences WHERE user_id=?)))`,
@@ -150,12 +192,14 @@ const claim = Effect.fn(function* (work: Work, captured: typeof Snapshot.Type, n
 const retainCandidate = Effect.fn(function* (
   work: Work,
   captured: typeof Snapshot.Type,
-  candidate: WompiTransactionId
+  input: { candidate: WompiTransactionId; storage: DurableObjectStorage }
 ) {
+  const { candidate, storage } = input;
   const sql = yield* SqliteClient;
   yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       yield* sql`INSERT INTO billing_provider_transactions(transaction_id,attempt_id) SELECT ${candidate},a.id FROM billing_attempt_context a WHERE a.id=${work.attemptId} AND a.user_id=${work.userId} AND a.collection_state='sent' AND NOT EXISTS(SELECT 1 FROM erasure_requests) ON CONFLICT DO NOTHING`;
+      yield* scheduleObservation({ id: work.attemptId, candidate, storage });
       if (captured.method === "card" && Option.isNone(captured.previous_paid_attempt_id)) {
         yield* sql`UPDATE billing_attempts SET checkout_transaction_id=${candidate} WHERE id=${work.attemptId} AND checkout_transaction_id IS NULL AND EXISTS(SELECT 1 FROM billing_provider_transactions WHERE transaction_id=${candidate} AND attempt_id=${work.attemptId})`;
       }
@@ -176,11 +220,19 @@ const registerAttempt = Effect.fn(function* (
     operationId: work.attemptId,
   });
 });
-const collect = Effect.fn(function* (
-  work: Work,
-  env: WompiBindings & Pick<ExternalEventBindings, "DIRECTORY">,
-  transport: WompiTransportFactory
-) {
+const recordSubmissionFailure = Effect.fn(function* (work: Work, now: number, certainty: string) {
+  const sql = yield* SqliteClient;
+  if (certainty === "rejected") {
+    yield* sql`UPDATE billing_attempts SET collection_state='rejected' WHERE id=${work.attemptId} AND collection_state='sent' AND collection_sent_at_ms=${now} AND NOT EXISTS(SELECT 1 FROM billing_provider_transactions WHERE attempt_id=${work.attemptId})`;
+  }
+  return absent();
+});
+type CollectionContext = {
+  env: WompiBindings & Pick<ExternalEventBindings, "DIRECTORY">;
+  transport: WompiTransportFactory;
+  storage: DurableObjectStorage;
+};
+const collect = Effect.fn(function* (work: Work, { env, transport, storage }: CollectionContext) {
   const retained = yield* readAttempt(work);
   if (Option.isNone(retained)) return absent();
   const captured = retained.value;
@@ -204,12 +256,8 @@ const collect = Effect.fn(function* (
       method: captured.method,
     })
   );
-  const sql = yield* SqliteClient;
   if (Result.isFailure(sent)) {
-    if (sent.failure.certainty === "rejected") {
-      yield* sql`UPDATE billing_attempts SET collection_state='rejected' WHERE id=${work.attemptId} AND collection_state='sent' AND collection_sent_at_ms=${now} AND NOT EXISTS(SELECT 1 FROM billing_provider_transactions WHERE attempt_id=${work.attemptId})`;
-    }
-    return absent();
+    return yield* recordSubmissionFailure(work, now, sent.failure.certainty);
   }
   if (
     !matchesSnapshot({
@@ -224,14 +272,17 @@ const collect = Effect.fn(function* (
     return absent();
   }
   const candidate = sent.success.transactionId;
-  yield* retainCandidate(work, captured, candidate);
+  yield* retainCandidate(work, captured, { candidate, storage });
   const verified = yield* client.findTransaction(candidate);
   if (verified.transactionId !== candidate) return blocked();
-  return yield* observe({
-    ...work,
-    environment: client.environment,
-    ...observationFor(verified),
-  }).pipe(withStoreCapacity("required"));
+  return yield* observe(
+    {
+      ...work,
+      environment: client.environment,
+      ...observationFor(verified),
+    },
+    storage
+  ).pipe(withStoreCapacity("required"));
 });
 
 export const nativeBillingRequest = Effect.fn(function* ({
@@ -239,20 +290,22 @@ export const nativeBillingRequest = Effect.fn(function* ({
   env,
   owns,
   transport,
+  storage,
 }: {
   request: Request;
   env: WompiBindings & Pick<ExternalEventBindings, "DIRECTORY">;
   owns: (id: string) => boolean;
   transport: WompiTransportFactory;
+  storage: DurableObjectStorage;
 }) {
   const body: unknown = yield* Effect.tryPromise(() => request.json());
   if (request.url === collectUserBillingUrl) {
     const work = yield* Schema.decodeUnknownEffect(LocalBillingCollection)(body);
-    return owns(work.userId) ? yield* collect(work, env, transport) : absent();
+    return owns(work.userId) ? yield* collect(work, { env, transport, storage }) : absent();
   }
   const evidence = yield* Schema.decodeUnknownEffect(Observation)(body);
   return owns(evidence.userId) && evidence.environment === env.WOMPI_ENVIRONMENT
-    ? yield* observe(evidence).pipe(withStoreCapacity("required"))
+    ? yield* observe(evidence, storage).pipe(withStoreCapacity("required"))
     : absent();
 });
 
@@ -293,4 +346,55 @@ export const routeBillingEvent = Effect.fn(function* (
   if (!reply.ok || reply.status === pendingStatus) {
     return yield* Effect.fail("billing-callback-unavailable" as const);
   }
+});
+
+export const reconcileLocalCandidates = Effect.fn(function* (context: {
+  env: WompiBindings;
+  transport: WompiTransportFactory;
+  storage: DurableObjectStorage;
+  owns: (id: string) => boolean;
+}) {
+  const { env, transport, storage, owns } = context;
+  const sql = yield* SqliteClient;
+  const now = yield* Clock.currentTimeMillis;
+  const due = yield* withStoreCapacity("required")(
+    Effect.gen(function* () {
+      const rows =
+        yield* sql`UPDATE billing_provider_transactions SET checks=checks+1,next_check_ms=CASE WHEN checks+1<${maximumChecks} THEN ${now + lookupCooldown} END WHERE transaction_id IN (SELECT t.transaction_id FROM billing_provider_transactions t JOIN billing_attempt_context a ON a.id=t.attempt_id WHERE t.next_check_ms<=${now} AND NOT EXISTS(SELECT 1 FROM erasure_requests) AND a.wompi_environment=${env.WOMPI_ENVIRONMENT} AND a.status='pending' ORDER BY next_check_ms LIMIT 16) RETURNING transaction_id,attempt_id,(SELECT user_id FROM billing_attempt_context a WHERE a.id=billing_provider_transactions.attempt_id) AS user_id`;
+      if (rows.length > 0) yield* preserveStoreAlarm(storage, now + lookupCooldown);
+      return yield* Schema.decodeUnknownEffect(
+        Schema.Array(
+          Schema.Struct({
+            transaction_id: WompiTransactionId,
+            attempt_id: BillingAttemptId,
+            user_id: UserId,
+          })
+        )
+      )(rows);
+    })
+  );
+  if (due.length === 0) return;
+  const client = makeWompiBillingClient({
+    environment: env.WOMPI_ENVIRONMENT,
+    outboundHttp: yield* transport(env),
+  });
+  yield* Effect.forEach(
+    due,
+    (row) =>
+      Effect.gen(function* () {
+        if (!owns(row.user_id)) return;
+        const found = yield* client.findTransaction(row.transaction_id);
+        if (found.transactionId !== row.transaction_id) return;
+        yield* observe(
+          {
+            ...observationFor(found),
+            userId: row.user_id,
+            attemptId: row.attempt_id,
+            environment: env.WOMPI_ENVIRONMENT,
+          },
+          storage
+        ).pipe(withStoreCapacity("required"));
+      }).pipe(Effect.result),
+    { concurrency: 4 }
+  );
 });

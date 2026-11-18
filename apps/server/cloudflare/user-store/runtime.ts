@@ -97,12 +97,21 @@ import {
 } from "../whatsapp/contract";
 import { nativeDeliveryRequest } from "../whatsapp/runtime";
 import {
+  type LocalBillingCollection,
   type LocalSourceCancellationWork,
   type WompiBindings,
   collectUserBillingUrl,
   settleUserBillingUrl,
 } from "../subscription/contract";
-import { handleNativeBillingCallback, handleSourceCancellationWork } from "../subscription/runtime";
+import { paymentEnrollmentTransport } from "../../src/shell/subscription/runtime";
+import {
+  answerRegistration,
+  billingWake,
+  handleLocalEnrollment,
+  handleNativeBillingCallback,
+  handleSourceCancellationWork,
+  offerLocalBilling,
+} from "../subscription/runtime";
 import {
   dispatchLocalForwarding,
   dispatchLocalReview,
@@ -117,6 +126,8 @@ import { completeLocalBootstrap } from "./internal/bootstrap";
 
 import {
   cancelLocalSubscription,
+  isLocalSubscriptionRead,
+  observeLocalSubscription,
   offerDueSourceCancellations,
   repairCancellationAlarm,
 } from "../subscription/operations";
@@ -146,13 +157,16 @@ type UserStoreEnvironment = WompiBindings &
   LocalIngestionEnvironment &
   StoreReleaseEnvironment &
   Readonly<{
+    PRICING: DurableObjectNamespace;
     BROWSER_ORIGIN: string;
     RESEND_API_KEY: string;
     BROWSER_PAIRING_EMAIL_QUEUE: Queue<typeof NativeLoginEmailWork.Type>;
     DIRECTORY: DurableObjectNamespace;
     USER_STORE: DurableObjectNamespace;
     MAINTENANCE: DurableObjectNamespace;
-    BILLING_COLLECTION_QUEUE: Queue<typeof LocalSourceCancellationWork.Type>;
+    BILLING_COLLECTION_QUEUE: Queue<
+      typeof LocalSourceCancellationWork.Type | typeof LocalBillingCollection.Type
+    >;
   }>;
 const isBrowserObservation = (command: string, request: Request): boolean =>
   ["GET /web/session/binding", "POST /web/session/logout"].includes(command) ||
@@ -231,6 +245,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             Effect.mapError((cause) => new Cause.UnknownError(cause))
           ),
           deliverPendingReplacement(this.env, this.ctx.storage, this.owns).pipe(
+            Effect.mapError((cause) => new Cause.UnknownError(cause))
+          ),
+          offerLocalBilling({ env: this.env, storage: this.ctx.storage, owns: this.owns }).pipe(
             Effect.mapError((cause) => new Cause.UnknownError(cause))
           ),
           recoverRotations(current, this.env.DIRECTORY, this.ctx.storage).pipe(
@@ -332,6 +349,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         isLocalForwardingOperation,
         () => dispatchLocalForwarding({ ...unit, directory: this.env.DIRECTORY }),
       ],
+      [isLocalSubscriptionRead, () => observeLocalSubscription(unit, this.env.PRICING)],
       [
         isLocalReviewOperation,
         () => dispatchLocalReview({ ...unit, bucket: this.env.EMAIL_BUCKET }),
@@ -407,6 +425,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             repairLocalIngestionAlarm(current, storage),
             repairLocalPATExpiry(current, storage),
             repairCancellationAlarm(storage),
+            billingWake(storage),
             repairLocalRecurringAlarm(current, storage, ownsUser),
           ],
           { mode: "result", concurrency: 1 }
@@ -637,18 +656,53 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       [collectUserBillingUrl, settleUserBillingUrl].includes(request.url)
     ) {
       return this.runtime.runPromise(
-        handleNativeBillingCallback(request, this.env, owns).pipe(
-          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
-        )
+        handleNativeBillingCallback({
+          request,
+          env: this.env,
+          owns,
+          storage: this.ctx.storage,
+        }).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
       );
     }
     return this.dispatch(request, registered);
   }
 
+  private enrollmentRequest(
+    request: Request,
+    owns: (id: string) => boolean
+  ): Option.Option<Promise<Response>> {
+    const path = new URL(request.url).pathname;
+    const command = request.method + " " + path;
+    if (
+      ["POST /billing/registration-outcome", "POST /billing/registration-cancel"].includes(command)
+    ) {
+      return Option.some(
+        this.runtime.runPromise(
+          answerRegistration(request, owns).pipe(
+            Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+          )
+        )
+      );
+    }
+    if (Option.isSome(paymentEnrollmentTransport(path))) {
+      const work = this.runtime.runPromise(
+        handleLocalEnrollment(request, { env: this.env, storage: this.ctx.storage }, owns).pipe(
+          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+        )
+      );
+      if (command.endsWith("/submit")) {
+        this.ctx.waitUntil(work.then((response) => (response.ok ? this.alarm() : undefined)));
+      }
+      return Option.some(work);
+    }
+    return Option.none();
+  }
   private dispatch(request: Request, registered: boolean): Promise<Response> {
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
     const owns = (userId: string): boolean => registered && this.owns(userId);
+    const billing = this.enrollmentRequest(request, owns);
+    if (Option.isSome(billing)) return billing.value;
     const identity = this.identityRequest(request, owns);
     if (Option.isSome(identity)) return identity.value;
     const credential = this.credentialRequest(request, path, owns);

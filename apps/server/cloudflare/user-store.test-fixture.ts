@@ -110,11 +110,11 @@ const billingBindings = {
     exportName: "BillingCollectionWorkflowV1",
   },
   WOMPI_ENVIRONMENT: { type: "text" as const, value: "sandbox" },
-  WOMPI_PUBLIC_KEY: { type: "text" as const, value: "pub_test_fixture" },
-  WOMPI_PRIVATE_KEY: { type: "text" as const, value: "prv_test_fixture" },
+  WOMPI_PUBLIC_KEY: { type: "text" as const, value: "pub_test_nativefixture" },
+  WOMPI_PRIVATE_KEY: { type: "text" as const, value: "prv_test_nativefixture" },
   WOMPI_INTEGRITY_SECRET: {
     type: "text" as const,
-    value: "test_integrity_fixture",
+    value: "test_integrity_nativefixture",
   },
 };
 
@@ -238,6 +238,19 @@ const fixtureWorkers = (
   ingressOptions: mode === "oauth" ? { upstream: "https://api.fidyapp.com" } : {},
 });
 
+const textBindings = (
+  deployment: Readonly<Record<string, string>>
+): Record<string, { type: "text"; value: string }> =>
+  Object.fromEntries(
+    Object.entries(deployment).map(([key, value]) => [key, { type: "text" as const, value }])
+  );
+const captureLogs = (
+  logs: Array<string>
+): { handleStructuredLogs: (log: { message: string }) => void } => ({
+  handleStructuredLogs: (log) => {
+    logs.push(log.message);
+  },
+});
 /** Production ingress and Core in separate workerd isolates. SQL inspection belongs to the host fixture only. */
 const privateEmailWorker = Effect.fnUntraced(function* (withBilling: boolean) {
   const emailFixture = withBilling
@@ -277,16 +290,14 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   const provider = yield* billingProvider(withBilling);
   const emailFixture = yield* privateEmailWorker(withBilling);
   const oidc = yield* oidcWorkers(withOidc);
-  const create = (ceiling: string, logs: Array<string>): Miniflare =>
+  const create = (
+    ceiling: string,
+    logs: Array<string>,
+    deployment: Readonly<Record<string, string>>
+  ): Miniflare =>
     new Miniflare({
       ...ingressOptions,
-      ...(withOidc
-        ? {
-            handleStructuredLogs: (log: { message: string }) => {
-              logs.push(log.message);
-            },
-          }
-        : {}),
+      ...(withOidc ? captureLogs(logs) : {}),
       unsafeInspectDurableObjects: true,
       resourcePersistencePath: directory,
       workers: [
@@ -309,6 +320,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
               CF_VERSION_METADATA: { type: "version-metadata" },
               SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: ceiling },
               ...(withBilling ? billingBindings : {}),
+              ...textBindings(deployment),
               ...nativeOwnerBindings,
             },
           },
@@ -320,10 +332,11 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
     });
   return (
     ceiling = "1000000000",
-    logs: Array<string> = []
+    logs: Array<string> = [],
+    deployment: Readonly<Record<string, string>> = {}
   ): Effect.Effect<Miniflare, never, Scope.Scope> =>
     Effect.acquireRelease(
-      Effect.sync(() => create(ceiling, logs)),
+      Effect.sync(() => create(ceiling, logs, deployment)),
       (runtime) => native(() => runtime.dispose())
     );
 });

@@ -1,4 +1,5 @@
 import { ingestionSchema } from "./internal/ingestion-schema";
+import { billingAdmissionSchema } from "./internal/billing-admission-schema";
 import { oauthUserSchema, userPATSchema } from "./internal/credential-schema";
 import { externalEventSchema, issueForwardingAddress } from "./internal/external-event-schema";
 import { registerUserLifetime as registerReservedLifetime } from "./internal/registration";
@@ -919,6 +920,7 @@ export const userStoreHistory: StoreHistory = {
       ],
     },
     { version: 17, id: "retained-ingestion", statements: ingestionSchema() },
+    { version: 18, id: "immutable-billing-admissions", statements: billingAdmissionSchema() },
   ],
 };
 

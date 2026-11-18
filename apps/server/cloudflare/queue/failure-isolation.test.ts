@@ -33,7 +33,7 @@ const body = (owner: Owner, index: number): Readonly<Record<string, unknown>> =>
     case "statement":
       return { version: 1, userId, submissionId: id };
     case "billing":
-      return { version: 1, attemptId: id };
+      return { _tag: "CollectUserBillingAttempt", userId, attemptId: id };
     case "pairing":
       return { version: 2, kind: "browser-pairing-email", userId, id };
     case "replacement":
@@ -48,9 +48,6 @@ const seed = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
         db.prepare(`CREATE TABLE statement_submissions (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, status TEXT NOT NULL,
       retention_expires_at_ms INTEGER NOT NULL) STRICT`),
-        db.prepare(`CREATE TABLE billing_attempts (
-      id TEXT PRIMARY KEY, collection_state TEXT NOT NULL,collection_sent_at_ms INTEGER,collection_last_attempt_at_ms INTEGER) STRICT`),
-        db.prepare("CREATE VIEW billing_attempt_context AS SELECT rowid,* FROM billing_attempts"),
         db.prepare(`CREATE TABLE browser_login_pairings (
       email_work_id TEXT PRIMARY KEY, email_address TEXT NOT NULL,
       email_expires_at_ms INTEGER NOT NULL, email_state TEXT NOT NULL) STRICT`),
@@ -65,9 +62,6 @@ const seed = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
           db
             .prepare("INSERT INTO statement_submissions VALUES (?, ?, 'queued', ?)")
             .bind(identity(index), userId, now + 600_000),
-          db
-            .prepare("INSERT INTO billing_attempts(id,collection_state) VALUES (?,'armed')")
-            .bind(identity(index)),
           db
             .prepare(
               "INSERT INTO browser_login_pairings VALUES (?,'test@example.com',?,'awaiting_delivery')"
@@ -147,9 +141,11 @@ it.each(
         let failedCreates = 0;
         let failedLookups = 0;
         let coordinatorCalls = 0;
+        const workflowId = (index: number): string =>
+          owner === "billing" ? "collect-" + userId + "-" + identity(index) : identity(index);
         const workflow: Workflow = {
           create: ({ id } = {}) => {
-            if (id === identity(poison)) {
+            if (id === workflowId(poison)) {
               failedCreates += 1;
               return unused();
             }
@@ -192,19 +188,11 @@ it.each(
           .filter((message) => message.index !== poison)
           .map((message) => message.index);
         expect([...acknowledged].toSorted((left, right) => left - right)).toEqual(healthy);
-        expect(created.toSorted()).toEqual(healthy.map(identity).toSorted());
+        expect(created.toSorted()).toEqual(healthy.map(workflowId).toSorted());
         expect(deliveryReads).toBe(13);
         expect(failedCreates).toBe(4);
         expect(failedLookups).toBe(4);
         expect(coordinatorCalls).toBe(0);
-        const unchanged = yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT rowid,id AS attempt_id,collection_state AS state,collection_sent_at_ms AS sent_at_ms,collection_last_attempt_at_ms AS last_attempt_at_ms FROM billing_attempts WHERE collection_state IS NOT NULL) AS billing_collection_work WHERE state = 'armed'"
-            )
-            .first("count")
-        );
-        expect(unchanged).toBe(10);
       })
     )
 );
@@ -243,7 +231,10 @@ it("keeps malformed shared billing work retryable without blocking valid collect
         ).rejects.toBeDefined()
       );
       expect([...acknowledged]).toEqual([1, 2]);
-      expect(created).toEqual([identity(1), `refund-v1-${identity(2)}`]);
+      expect(created).toEqual([
+        "collect-" + userId + "-" + identity(1),
+        `refund-v1-${identity(2)}`,
+      ]);
       expect(coordinatorCalls).toBe(0);
     })
   ));

@@ -37,13 +37,9 @@ import {
   reconcileEmailReplacement,
 } from "../email-authentication/runtime";
 import {
-  dispatchBillingCollection,
   dispatchRefunds,
   dispatchSubscriptionCancellations,
-  dispatchSubscriptionRenewals,
   dispatchVoidVerification,
-  reconcileBillingCandidates,
-  sweepExpiredEnrollmentAdmission,
 } from "../subscription/runtime";
 import {
   dispatchForwardedEmail,
@@ -87,7 +83,6 @@ const emailActivities = (environment: CoreMaintenanceInput): ReadonlyArray<Sched
 ];
 
 const billingActivities = (environment: CoreMaintenanceInput): ReadonlyArray<ScheduledActivity> => [
-  activity("billing.renewal.dispatch", dispatchSubscriptionRenewals(environment)),
   activity(
     "billing.cancellation.dispatch",
     Option.match(environment.BILLING_COLLECTION_QUEUE, {
@@ -109,26 +104,6 @@ const billingActivities = (environment: CoreMaintenanceInput): ReadonlyArray<Sch
     Option.match(environment.BILLING_COLLECTION_QUEUE, {
       onNone: () => Effect.void,
       onSome: (queue) => dispatchRefunds({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),
-    })
-  ),
-  activity(
-    "billing.collection.dispatch",
-    Option.match(environment.BILLING_COLLECTION_QUEUE, {
-      onNone: () => Effect.void,
-      onSome: (queue) =>
-        dispatchBillingCollection({
-          DB: environment.DB,
-          BILLING_COLLECTION_QUEUE: queue,
-          identity: Option.none(),
-        }),
-    })
-  ),
-  activity(
-    "billing.collection.reconcile",
-    Option.match(environment.BILLING_COLLECTION_WORKFLOW, {
-      onNone: () => Effect.void,
-      onSome: (workflow) =>
-        reconcileBillingCandidates({ DB: environment.DB, BILLING_COLLECTION_WORKFLOW: workflow }),
     })
   ),
 ];
@@ -205,10 +180,6 @@ const admissionActivities = (
   activity(
     "agent.openAiAdmissionSweep",
     sweepExpiredOpenAiAdmission({ db: environment.DB, now: nowEpochMs })
-  ),
-  activity(
-    "billing.cardPreparationAdmissionSweep",
-    sweepExpiredEnrollmentAdmission({ db: environment.DB, now: nowEpochMs })
   ),
   activity(
     "provider.authenticationRetention",

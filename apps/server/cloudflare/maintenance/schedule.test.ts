@@ -16,7 +16,10 @@ it.effect("keeps fast checks running while dispatch and cleanup wait for their d
         operation: "emailReplacement.dispatch",
         work: Effect.sync(() => completed.push("email")),
       },
-      { operation: "billing.renewal.dispatch", work: Effect.sync(() => completed.push("renewal")) },
+      {
+        operation: "billing.cancellation.dispatch",
+        work: Effect.sync(() => completed.push("cancellation")),
+      },
       {
         operation: "dashboard.projectionRepair",
         work: Effect.sync(() => completed.push("dashboard")),
@@ -27,10 +30,10 @@ it.effect("keeps fast checks running while dispatch and cleanup wait for their d
     for (const [minute, expected] of [
       [1, ["health"]],
       [5, ["health", "email"]],
-      [15, ["health", "email", "renewal", "dashboard"]],
-      [60, ["health", "email", "renewal", "dashboard", "media"]],
+      [15, ["health", "email", "cancellation", "dashboard"]],
+      [60, ["health", "email", "cancellation", "dashboard", "media"]],
       [1_439, ["health"]],
-      [1_440, ["health", "email", "renewal", "dashboard", "media", "audit"]],
+      [1_440, ["health", "email", "cancellation", "dashboard", "media", "audit"]],
     ] as const) {
       completed.length = 0;
       yield* executeDueSchedule({ activities, nowEpochMs: minute * 60_000 + 5_000 });
@@ -72,7 +75,7 @@ it.effect("contains typed failures and defects in bounded logs and one failed Wo
     });
     const result = yield* executeSchedule([
       { operation: "emailReplacement.dispatch", work: Effect.fail(privateDetail) },
-      { operation: "billing.collection.dispatch", work: Effect.die(new Error(privateDetail)) },
+      { operation: "billing.refund.dispatch", work: Effect.die(new Error(privateDetail)) },
       {
         operation: "audit.retention",
         work: Effect.sync(() => {
@@ -102,7 +105,7 @@ it.effect("contains typed failures and defects in bounded logs and one failed Wo
       [
         {
           component: "scheduled-work",
-          operation: "billing.collection.dispatch",
+          operation: "billing.refund.dispatch",
           outcome: "failed",
         },
       ],

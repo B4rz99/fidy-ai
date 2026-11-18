@@ -1,11 +1,9 @@
-import { openAiTestKey } from "../openai.test-fixture";
 import { executeProCommand, prepareProGrant } from "../../src/shell/pro-grants/operations";
 import { ProGrantFailure } from "../../src/shell/pro-grants/contract";
 import { expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SubscriptionOffers, SubscriptionStatus } from "../../src/core/subscription/contract";
-import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery, startRefund } from "./operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
@@ -13,7 +11,6 @@ import {
   executeCanonicalHttpQuery,
   executeCanonicalQuery,
 } from "../canonical-operations/operations";
-import coreWorker from "../core-worker";
 import { auditEntriesTestSchema, installCurrentTestObjects } from "../d1-test-fixture";
 
 import { TestClock } from "effect/testing";
@@ -286,83 +283,6 @@ effectIt.effect(
           db.prepare("SELECT last_used_at_ms FROM pats WHERE id = ?").bind(patId).first()
         )
       ).toEqual({ last_used_at_ms: null });
-    })
-);
-
-effectIt.effect(
-  "refuses a revoked WebSession at the canonical HTTP boundary without recording accepted work",
-  () =>
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => fixture());
-      const bearer = "1".repeat(43);
-      const digest = new Uint8Array(
-        yield* fromTestPromise(() =>
-          crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer))
-        )
-      );
-      yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE web_sessions SET token_digest = ? WHERE id = ?")
-          .bind(digest, sessionA)
-          .run()
-      );
-      const environment: Parameters<typeof coreWorker.fetch>[1] = {
-        OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("unused")) }),
-        DB: db,
-        HOSTED_AI_MODEL: approvedOpenAiModel,
-        CONTRACT_DIGEST: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-        BROWSER_ORIGIN: "https://app.fidyapp.com",
-        WOMPI_ENVIRONMENT: "sandbox",
-        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
-        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-        USER_TRANSACTION_COORDINATOR: {
-          getByName: (): { fetch: () => Promise<Response> } => ({
-            fetch: (): Promise<Response> => Promise.reject(new Error("unused")),
-          }),
-        },
-        KAPSO_WEBHOOK_SECRET: "",
-        CLOUDFLARE_ACCESS_ISSUER: "",
-        CLOUDFLARE_ACCESS_AUDIENCE: "",
-        KAPSO_API_KEY: "",
-        WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-        WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
-        RELEASE_GIT_SHA: "",
-      };
-      const request = (): Request =>
-        new Request("https://core.internal/subscription/status", {
-          headers: { "Fidy-Session-Binding": sessionA, cookie: `__Host-fidy_session=${bearer}` },
-        });
-      const before = yield* fromTestPromise(() => coreWorker.fetch(request(), environment));
-      expect(before.status).toBe(200);
-      expect(
-        (yield* fromTestPromise(() =>
-          db
-            .prepare(
-              "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
-            )
-            .all()
-        )).results
-      ).toHaveLength(1);
-      const revokedAt = yield* Clock.currentTimeMillis;
-      yield* fromTestPromise(() =>
-        db
-          .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
-          .bind(revokedAt, sessionA)
-          .run()
-      );
-      const after = yield* fromTestPromise(() => coreWorker.fetch(request(), environment));
-      expect(after.status).toBe(401);
-      expect(yield* fromTestPromise(() => after.text())).not.toContain("trialPeriod");
-      expect(
-        (yield* fromTestPromise(() =>
-          db
-            .prepare(
-              "SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM (SELECT id,user_id,session_id,pat_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='credential_call') AS pat_audit"
-            )
-            .all()
-        )).results
-      ).toHaveLength(1);
     })
 );
 

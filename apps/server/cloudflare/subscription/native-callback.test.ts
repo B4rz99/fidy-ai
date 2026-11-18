@@ -39,7 +39,7 @@ const callbackFixture = Effect.fn(function* () {
   const db = yield* native(() => runtime.getD1Database("PROVIDER_STATE", "wompi-fixture"));
   yield* native(() =>
     db.exec(
-      "CREATE TABLE charge_posts(id INTEGER PRIMARY KEY); CREATE TABLE charge_control(released INTEGER,reference TEXT,amount INTEGER,source INTEGER)"
+      "CREATE TABLE charge_posts(reference TEXT,amount INTEGER,currency TEXT,source INTEGER); CREATE TABLE charge_control(released INTEGER,reference TEXT,amount INTEGER,source INTEGER)"
     )
   );
   yield* native(() =>
@@ -195,6 +195,17 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           status: "APPROVED",
           generation: { signedAt: 100, signedStatus: "APPROVED" },
         };
+        yield* owner.exec(
+          "CREATE TRIGGER suppress_settlement_audit BEFORE INSERT ON billing_transition_audit BEGIN SELECT RAISE(IGNORE); END"
+        );
+        expect(yield* observe(approved)).toBe(503);
+        expect(yield* owner.exec("SELECT status FROM billing_attempts")).toEqual([
+          { status: "pending" },
+        ]);
+        expect(yield* owner.exec("SELECT current_paid_attempt_id FROM subscriptions")).toEqual([
+          { current_paid_attempt_id: null },
+        ]);
+        yield* owner.exec("DROP TRIGGER suppress_settlement_audit");
         expect(yield* observe(approved)).toBe(204);
         expect(yield* observe(work)).toBe(204);
         expect(yield* observe(approved)).toBe(204);

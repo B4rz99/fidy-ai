@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "f945f76188f9687321cc3ff6b14c307fc794a15e8b90d2122495d88d9f9f8e18";
+const expectedEdgePolicyDigest = "1145deb54721e8bc1f5b8d5b0705c6d2a1877361b7fd9564a2daef79dced9c87";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/directory/internal/email-capacity.ts", import.meta.url)
@@ -424,6 +424,60 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/whatsapp/internal/registered-send.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/subscription/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/enrollment-policy.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/enrollment-session.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/local-billing-admission.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/local-billing-work.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/local-enrollment-form.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/local-enrollment-submit.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/subscription/internal/local-renewal.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/native-enrollment.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/user-store/internal/billing-admission-schema.ts",
+      import.meta.url
+    )
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/subscription/internal/native-billing.ts", import.meta.url)

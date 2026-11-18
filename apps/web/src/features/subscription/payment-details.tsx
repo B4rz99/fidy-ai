@@ -590,6 +590,16 @@ const TerminalPaymentFeedback = ({
   busy: boolean;
   prepare: (replaceFailedSource?: boolean) => void;
 }>): JSX.Element => {
+  if (current.value.status === "refused" && current.value.reason === "terms-changed") {
+    return (
+      <PaymentFeedback tone="refused" title="Cambiaron las condiciones del pago">
+        <p role="alert">Revisa el precio y las condiciones vigentes antes de autorizar el pago.</p>
+        <Button render={<a href="/upgrade" aria-label="Revisar las condiciones actuales" />}>
+          Revisar las condiciones actuales
+        </Button>
+      </PaymentFeedback>
+    );
+  }
   const canRetry =
     current.value.status === "refused" ||
     (current.value.status === "payment-pending" &&

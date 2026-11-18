@@ -1,0 +1,21 @@
+docs/operations/production-benchmark-budget.md
+  s_a1be23a656acf0::t_b5bbe942076b18 100-102
+scripts/infra-performance/reference/run.py
+  s_a1be23a656acf0::t_0086176692bed1 19,58-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3c0d131b407d7edcecfcb40945db3a1d6dd8cffe",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

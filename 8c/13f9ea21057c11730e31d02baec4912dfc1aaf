@@ -1,0 +1,51 @@
+apps/server/cloudflare/connections/internal/sqlite-activation.ts
+  s_a1be23a656acf0::t_c3f6dee27441c3 162-163
+  s_a1be23a656acf0::t_4064fe67033b75 1,55,88,147,170
+apps/server/cloudflare/connections/internal/synchronization.ts
+  s_a1be23a656acf0::t_c3f6dee27441c3 206,229-230
+  s_a1be23a656acf0::t_24a45e02313390 8,24-26,31,132
+apps/server/cloudflare/user-store/internal/connection-schema.ts
+  s_a1be23a656acf0::t_c3f6dee27441c3 134
+  s_a1be23a656acf0::t_b18ff3898e965f 2,140-141
+apps/server/cloudflare/oauth-agents/native-grant.test-fixture.ts
+  s_a1be23a656acf0::t_c3f6dee27441c3 115-118
+  s_a1be23a656acf0::t_b33f5da0c7b553 119
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_c3f6dee27441c3 311-313
+  s_a1be23a656acf0::t_43821e4a8fa820 1,227-294,297
+apps/server/cloudflare/oauth-agents/native-connections.test.ts
+  s_a1be23a656acf0::t_c3f6dee27441c3 8-21,24,26-54
+  s_a1be23a656acf0::t_812a5a7eb99278 1-7,22-23,25,55
+.oxlintrc.json
+  s_a1be23a656acf0::t_54058e2da46136 320
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_d964ed72cec9fc 16
+apps/server/cloudflare/connection-worker.test-fixture.ts
+  s_a1be23a656acf0::t_7612d09f94abab 3-7,9-10
+apps/server/cloudflare/connections/internal/sqlite-browser.ts
+  s_a1be23a656acf0::t_24fa73c3aad9a9 2,19,46,55-57,60-68,131,157-165,170-174,179-190,196,199-203,213,229,253,276,305-307
+apps/server/cloudflare/connections/native-connections.test.ts
+  s_a1be23a656acf0::t_9233fa4b6038bf 3,15-38,97,121,235-241,249,266-284
+apps/server/cloudflare/connections/runtime.ts
+  s_a1be23a656acf0::t_9e0815c2e72b1a 10,54-57
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_2ccd95094a68ef 3,959
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_d2e2fee52dc3ac 5,7-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8c13f9ea21057c11730e31d02baec4912dfc1aaf",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

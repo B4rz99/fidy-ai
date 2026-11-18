@@ -29,7 +29,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* sql(
           "UPDATE web_sessions SET created_at_ms=?,fresh_until_ms=?,idle_expires_at_ms=?,hard_expires_at_ms=? WHERE id=?",
           created,
-          idle,
+          created + 600000,
           idle,
           hard,
           alice.session

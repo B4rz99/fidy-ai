@@ -1,0 +1,128 @@
+apps/server/cloudflare/email-authentication/contract.ts
+  s_a1be23a656acf0::t_15ad9a50de884b 17-25,29-32
+  s_a1be23a656acf0::t_2a8e4c454aa39f 1
+  s_a1be23a656acf0::t_0b266c0f439d2c 28
+  s_a1be23a656acf0::t_73f5c144cb7712 7-12
+  s_a1be23a656acf0::t_f9e5737806fb1e 2,6,13-16,26-27,33
+apps/server/cloudflare/email-authentication/native-login.test.ts
+  s_a1be23a656acf0::t_ee10fd176a066c 63,66,69-76,86-95,111-112,120-134,300,364,386
+  s_a1be23a656acf0::t_73f5c144cb7712 6-8,28-31,44-47,56-59,77-85,96-110,113-118,153-156,158-162,164-299,301-335,337-341,343-348,350-363,365-385,387-409,415-421
+  s_a1be23a656acf0::t_b06db25d3bca78 434-436
+  s_a1be23a656acf0::t_40c089f6da540e 157,163,349
+  s_a1be23a656acf0::t_8f72007279023c 5,12,426
+  s_a1be23a656acf0::t_0b266c0f439d2c 336,342
+  s_a1be23a656acf0::t_1c520d31ae8dce 1-2,4,9-11,13,119,463
+  s_a1be23a656acf0::t_15ad9a50de884b 3,14-27,32-43,48-55,60-62,64-65,67-68,135,410-414,422-425,427-433,437-462
+  s_a1be23a656acf0::t_390e65615cc615 136-152
+apps/server/cloudflare/directory/internal/login-email.ts
+  s_a1be23a656acf0::t_73f5c144cb7712 5,10-13,31-37,47-58,60-75,77,79-81,88-100,113
+  s_a1be23a656acf0::t_2a8e4c454aa39f 44,82,102
+  s_a1be23a656acf0::t_15ad9a50de884b 1-4,6-9,14-30,38-43,45-46,59,103-112,114-124
+  s_a1be23a656acf0::t_ee10fd176a066c 76,78,83-87,101
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_73f5c144cb7712 97-108,196-199,263-267
+  s_a1be23a656acf0::t_8f72007279023c 205-206,210,234
+  s_a1be23a656acf0::t_15ad9a50de884b 110-116
+  s_a1be23a656acf0::t_1331180c7a99ca 200
+apps/server/cloudflare/directory/internal/expiry.ts
+  s_a1be23a656acf0::t_2a8e4c454aa39f 6
+apps/server/cloudflare/queue/failure-isolation.test.ts
+  s_a1be23a656acf0::t_b06db25d3bca78 38
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_15ad9a50de884b 903-905,911
+  s_a1be23a656acf0::t_2a8e4c454aa39f 906-907
+  s_a1be23a656acf0::t_aa17e3584cc23d 902,908-910,912-913
+apps/server/cloudflare/directory/schema/operations.ts
+  s_a1be23a656acf0::t_15ad9a50de884b 75-82
+apps/server/cloudflare/email-authentication/internal/native-mail-delivery.ts
+  s_a1be23a656acf0::t_15ad9a50de884b 20-27,41
+  s_a1be23a656acf0::t_1083857a525445 28
+apps/server/cloudflare/web-authentication/operations.test.ts
+  s_a1be23a656acf0::t_2b927ff469c947 37,102,127,183
+apps/server/cloudflare/email-authentication/runtime.ts
+  s_a1be23a656acf0::t_73f5c144cb7712 1-2,18,22,73-90,92,95
+  s_a1be23a656acf0::t_15ad9a50de884b 9-10,19-21,23,71-72,97,100,104-105,109-110
+  s_a1be23a656acf0::t_5038ab5864a1af 98
+  s_a1be23a656acf0::t_1ad7e3a8da301c 96
+  s_a1be23a656acf0::t_b06db25d3bca78 11-17,91,93-94,108
+apps/server/cloudflare/directory/internal/replacement.ts
+  s_a1be23a656acf0::t_d3aae88932c62a 122
+  s_a1be23a656acf0::t_4738ea82ec1b21 106-107,113
+  s_a1be23a656acf0::t_15ad9a50de884b 108-112,123
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_ee10fd176a066c 26
+  s_a1be23a656acf0::t_1ad7e3a8da301c 319
+  s_a1be23a656acf0::t_15ad9a50de884b 1,4-6,21,25,27,95,126-128,278
+  s_a1be23a656acf0::t_73f5c144cb7712 2-3,22-24,310-318
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_a1be23a656acf0::t_1ad7e3a8da301c 26
+  s_a1be23a656acf0::t_15ad9a50de884b 28,156-171
+apps/server/cloudflare/maintenance/schedule.test.ts
+  s_a1be23a656acf0::t_73f5c144cb7712 16,46,74,98,142,202
+apps/server/cloudflare/onboarding/browser-authentication.test.ts
+  s_a1be23a656acf0::t_2b927ff469c947 459
+  s_a1be23a656acf0::t_73f5c144cb7712 14,605,616-619,623-624
+apps/server/cloudflare/web-authentication/session.test-fixture.ts
+  s_a1be23a656acf0::t_2b927ff469c947 21
+apps/server/cloudflare/email-authentication/internal/login-completion.ts
+  s_a1be23a656acf0::t_72d4934f2cace1 8,49
+  s_a1be23a656acf0::t_15ad9a50de884b 1-7,9-48
+apps/server/cloudflare/email-authentication/internal/login-delivery.ts
+  s_a1be23a656acf0::t_73f5c144cb7712 95,111,113
+  s_a1be23a656acf0::t_2a8e4c454aa39f 22,37
+  s_a1be23a656acf0::t_0b266c0f439d2c 1-5,44,51,92,103,105
+  s_a1be23a656acf0::t_15ad9a50de884b 6-21,23-36,38-43,45-50,52-91,93-94,96-102,104,106-110,112,114-124
+apps/server/cloudflare/login-email-worker.test-fixture.ts
+  s_a1be23a656acf0::t_390e65615cc615 2,4,7,9-13,17-39
+  s_a1be23a656acf0::t_5f9ee39f869ffa 6,16,40
+  s_a1be23a656acf0::t_ee10fd176a066c 3,5
+  s_a1be23a656acf0::t_c52526e45c30ad 1
+  s_a1be23a656acf0::t_f421f6084d2abc 8,14-15
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_c52526e45c30ad 16
+.oxlintrc.json
+  s_a1be23a656acf0::t_ee10fd176a066c 319
+apps/server/cloudflare/browser-login/operations.test.ts
+  s_a1be23a656acf0::t_2b927ff469c947 463,509
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_b06db25d3bca78 83,188,2049
+apps/server/cloudflare/email-authentication/internal/login-admission.ts
+  s_a1be23a656acf0::t_15ad9a50de884b 1-4,6-7,11-15,17-28,30-42,45,48-54,56,58-60,62-75,79,108-113,115,117-123,128
+  s_a1be23a656acf0::t_73f5c144cb7712 5,8-9,16,55,57,76-78,80-107,114,116,124-125
+  s_a1be23a656acf0::t_6181b97041278b 10,29,43,47,61,129
+  s_a1be23a656acf0::t_2a8e4c454aa39f 44,46,126-127
+apps/server/cloudflare/web-authentication/contract.ts
+  s_a1be23a656acf0::t_b06db25d3bca78 6
+  s_a1be23a656acf0::t_2b927ff469c947 16
+apps/server/cloudflare/browser-login/internal/local-pairing.ts
+  s_a1be23a656acf0::t_1ad7e3a8da301c 55
+  s_a1be23a656acf0::t_73f5c144cb7712 41-42
+  s_a1be23a656acf0::t_15ad9a50de884b 77,79-86
+  s_a1be23a656acf0::t_daca19ab3c78da 78,87
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_73f5c144cb7712 223-224,267,269
+  s_a1be23a656acf0::t_15ad9a50de884b 268
+  s_a1be23a656acf0::t_6b79488fca98c3 25-26
+apps/server/cloudflare/web-authentication/operations.ts
+  s_a1be23a656acf0::t_2b927ff469c947 24-25
+apps/server/cloudflare/directory/internal/reservations.ts
+  s_a1be23a656acf0::t_02e2e447428847 26
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_153489afe773bd 5,7-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1b7ce103bd20577ecee05fe03f2ae04b49ef1c88",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

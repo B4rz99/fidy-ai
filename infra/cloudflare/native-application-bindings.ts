@@ -59,7 +59,7 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
     );
   const shared = {
     RECOVERY_ISOLATION: closed ? "isolated" : "",
-    NATIVE_STORAGE_ADMISSION: admission,
+    NATIVE_STORAGE_ADMISSION: development ? "open" : admission,
     [storageReleaseBinding]: storage,
     BROWSER_ORIGIN: origin.browser,
     RELEASE_GIT_SHA: release.gitRevision,

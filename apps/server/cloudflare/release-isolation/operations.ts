@@ -57,11 +57,12 @@ const liveAddress = (
   boundary: AcceptanceBoundary
 ): boolean => {
   const origin = new URL(request.url).origin;
+  if (boundary === "core") return true;
+  if (environment.BROWSER_ORIGIN === browserOrigins.local)
+    {return ["http://127.0.0.1:8787", "http://localhost:8787"].includes(origin);}
   return (
-    boundary === "core" ||
-    origin === installedOrigins.production.api ||
-    (environment.BROWSER_ORIGIN === browserOrigins.local &&
-      ["http://127.0.0.1:8787", "http://localhost:8787"].includes(origin))
+    environment.BROWSER_ORIGIN === installedOrigins.production.browser &&
+    origin === installedOrigins.production.api
   );
 };
 export const isAcceptanceWindow = (request: Request): boolean => {

@@ -1,0 +1,26 @@
+apps/server/cloudflare/directory/internal/recovery-rotation.ts
+  s_a1be23a656acf0::t_d39a73da04a3ed 4,53
+  s_a1be23a656acf0::t_06ab8ad7c97021 54,56-58
+  s_a1be23a656acf0::t_66a01d6f21d713 59-61,72-77
+apps/server/cloudflare/directory/internal/replacement.ts
+  s_a1be23a656acf0::t_06ab8ad7c97021 50-52
+  s_a1be23a656acf0::t_0c617f7eec1f43 53-55,84-86
+apps/server/cloudflare/recovery/native-rotation.test.ts
+  s_a1be23a656acf0::t_06ab8ad7c97021 3,126-155,163-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f773110a5cb1665dc850ca3d7a4f5bfb5cc759be",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

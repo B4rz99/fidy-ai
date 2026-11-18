@@ -1,0 +1,52 @@
+apps/server/cloudflare/transactions/operations.ts
+  s_a1be23a656acf0::t_3249f3943b1e7f 1,347,363
+apps/server/cloudflare/recurring/recurring.test.ts
+  s_a1be23a656acf0::t_3249f3943b1e7f 7,219-221,236
+  s_a1be23a656acf0::t_0d2c49e0559b67 214-218,223-235
+  s_a1be23a656acf0::t_768105d1675390 1,151-178,222,262,292-305,308,340-368,370-373,375-379,393-394,616
+apps/server/cloudflare/financial-user-store.test-fixture.ts
+  s_a1be23a656acf0::t_7b2e34e3655976 111,117
+  s_a1be23a656acf0::t_3249f3943b1e7f 1
+  s_a1be23a656acf0::t_768105d1675390 108-110,115-116,118,177
+  s_a1be23a656acf0::t_0d2c49e0559b67 114
+apps/server/cloudflare/dashboard/user-store.test.ts
+  s_a1be23a656acf0::t_0d2c49e0559b67 69-72,86,1062-1112
+  s_a1be23a656acf0::t_0c5efca5ef2e05 1113
+apps/server/cloudflare/recurring/operations.ts
+  s_a1be23a656acf0::t_3249f3943b1e7f 2,21,313
+  s_a1be23a656acf0::t_a236ae3529fb34 1,314-320
+apps/server/cloudflare/recurring/internal/sqlite-series.ts
+  s_a1be23a656acf0::t_0d2c49e0559b67 69-73
+  s_a1be23a656acf0::t_7b2e34e3655976 13
+  s_a1be23a656acf0::t_3249f3943b1e7f 55,57-65,67-68,75-90,92,100,102-105,109-110
+apps/server/cloudflare/recurring/contract.ts
+  s_a1be23a656acf0::t_3249f3943b1e7f 47-49
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_01c633838c60e0 7-33
+apps/server/cloudflare/recurring-plans/user-store.test.ts
+  s_a1be23a656acf0::t_0d2c49e0559b67 3,141-143,303,305-320
+  s_a1be23a656acf0::t_768105d1675390 304
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_373416bc62a8b0 91-92
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_7dd48708154849 21,162-172,185-208,213-230
+  s_a1be23a656acf0::t_a236ae3529fb34 1-5
+  s_a1be23a656acf0::t_7b2e34e3655976 10,12
+  s_a1be23a656acf0::t_f12b95c1d9382a 231-232,251
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91bd155e1fa1b87ddd9f597863472268befbb7b3",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

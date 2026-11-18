@@ -1,0 +1,26 @@
+apps/server/cloudflare/erasure/restore.test.ts
+  s_a1be23a656acf0::t_cc2acfc707ef8f 633-635
+  s_a1be23a656acf0::t_7ec0b3bfd7d396 496-509,595,607-623,636-652,686
+apps/server/cloudflare/erasure/contract.ts
+  s_a1be23a656acf0::t_979f8de19e8515 120
+apps/server/cloudflare/erasure/internal/operator-request.ts
+  s_a1be23a656acf0::t_ee56fd3265d44e 52-54
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_6b02b61606eaea 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b118744b1c32d07f719c057bc58719eaca2b8ec9",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { runBillingCollectionWorkflow } from "./subscription/historical-collection.test-fixture";
 import { makeConnectionFixture } from "./browser-acceptance-connections.test-fixture";
 import { captureWhatsApp, whatsappOperator } from "./browser-acceptance-whatsapp";
 import {
@@ -9,11 +10,7 @@ import {
 } from "./browser-acceptance-clock.test-fixture";
 import { Array, Clock, Effect, Option, Schema } from "effect";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
-import {
-  UserTransactionCoordinator,
-  makeCoreWorker,
-  runBillingCollectionWorkflow,
-} from "./browser-acceptance-core-module";
+import { UserTransactionCoordinator, makeCoreWorker } from "./browser-acceptance-core-module";
 import { browserAcceptanceTopologies } from "./browser-acceptance/contract";
 import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";

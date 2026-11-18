@@ -13,7 +13,14 @@ import {
   workTraceParent,
   workerRelease,
 } from "../runtime/telemetry/operations";
-import { BillingCollectionFailure } from "./contract";
+import {
+  BillingCollectionFailure,
+  type BillingRuntime,
+  LocalBillingCollection,
+  LocalSourceCancellationWork,
+  WompiBillingEvent,
+} from "./contract";
+import { runBillingObservation } from "./internal/billing-observation";
 
 const attempt = <Value>(
   run: () => Promise<Value>
@@ -31,9 +38,24 @@ const workflowRetention = { successRetention: "3 days", errorRetention: "3 days"
 const ArmState = Schema.Struct({ state: Schema.Literals(["armed", "sent", "rejected"]) });
 
 /** Exercise older enrollment and renewal producers in isolation while their retained effects move in #2248. */
-export const runBillingCollectionWorkflow: typeof executeNative = (input) => {
+export const runBillingCollectionWorkflow = (
+  input: Parameters<typeof executeNative>[0] & { environment: BillingRuntime }
+): Promise<void> => {
   const work = Schema.decodeUnknownOption(CollectionMessage)(input.payload);
-  if (Option.isNone(work)) return executeNative(input);
+  if (Option.isNone(work)) {
+    if (
+      Schema.is(
+        Schema.Union([WompiBillingEvent, LocalBillingCollection, LocalSourceCancellationWork])
+      )(input.payload)
+    ) {
+      return executeNative(input);
+    }
+    return runBillingObservation({
+      ...input,
+      observe: "observe" in input ? Option.some(input.observe) : Option.none(),
+      wompiHttp: wompiOutboundHttp,
+    });
+  }
   const options = { retries: { limit: 0, delay: "1 second" } } as const;
   const runActivity = <E>(activity: Effect.Effect<void, E>): Promise<void> =>
     activity.pipe(

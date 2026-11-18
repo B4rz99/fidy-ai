@@ -63,7 +63,6 @@ import { observeCancellation, pendingCancellation } from "./internal/local-cance
 import { RequestBodyPolicy } from "../http/contract";
 import { boundedJsonBody } from "../http/operations";
 import { publishPrice } from "./internal/publish-price";
-import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -80,7 +79,7 @@ import {
 } from "./internal/refund-workflow";
 import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { type Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   makeAccessSigningKeysOutboundHttp,
@@ -275,12 +274,18 @@ export const sweepExpiredEnrollmentAdmission = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> => sweep(input);
 
-export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
+export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<
+  Omit<BillingRuntime, "DB"> & Partial<Readonly<{ RECOVERY_ISOLATION: string }>>,
+  unknown
+> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
+    if (this.env.RECOVERY_ISOLATION === "isolated") {
+      return Promise.reject(Error("Billing execution is closed"));
+    }
     return observeWorkerPromise(
       () =>
         runBillingCollectionWorkflow({
-          environment: withErasureRecovery(this.env),
+          environment: this.env,
           payload: event.payload,
           activity: (name, options, activity) => step.do(name, options, activity),
           sleep: (name, duration) => step.sleep(name, duration),
@@ -299,7 +304,7 @@ export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRunti
 /** Execute one versioned billing Workflow through its bounded, no-retry activity seam. */
 export const runBillingCollectionWorkflow = (
   input: Readonly<{
-    environment: BillingRuntime;
+    environment: Omit<BillingRuntime, "DB">;
     payload: unknown;
     sleep: (name: string, duration: number) => Promise<void>;
   }> &
@@ -548,3 +553,5 @@ export const handleNativeRefundWork = Effect.fnUntraced(function* (
   yield* runOwnerRefund(work, { ...context, transport: wompiOutboundHttp });
   return new Response(null, { status: 204 });
 });
+
+export { receiveLocalSourceCancellation } from "./internal/billing-observation";

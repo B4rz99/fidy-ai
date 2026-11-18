@@ -143,7 +143,7 @@ type StatementCoordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher
 
 /** Cloudflare stores only the bounded work identity and the named activity outcome. */
 export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
-  Readonly<{ USER_STORE: StatementCoordinator; DB: D1Database }>,
+  Readonly<{ USER_STORE: StatementCoordinator }>,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {

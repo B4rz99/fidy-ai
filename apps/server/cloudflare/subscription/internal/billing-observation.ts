@@ -194,7 +194,7 @@ type BillingObservationExecution = Readonly<{
 /** Execute retained observation work; identities never replace live eligibility or provider evidence. */
 export const runBillingObservation = (input: BillingObservationExecution): Promise<void> => {
   const local = Schema.decodeUnknownOption(LocalSourceCancellationWork)(input.payload);
-  if (Option.isSome(local)) return runLocalCancellationLoop(input, local.value);
+  if (Option.isSome(local)) return runLocalCancellationLoop({ ...input, work: local.value });
   const work = Schema.decodeUnknownOption(
     Schema.Union([
       LookupWork,
@@ -242,9 +242,11 @@ export const runBillingObservation = (input: BillingObservationExecution): Promi
   return runObservationLoop({ input, work: retained, runActivity });
 };
 
-const runLocalCancellationLoop = (
-  input: BillingObservationExecution,
-  work: typeof LocalSourceCancellationWork.Type
+export const runLocalCancellationLoop = (
+  input: Pick<BillingObservationExecution, "sleep" | "observe"> & {
+    environment: BillingWorkRouting;
+    work: typeof LocalSourceCancellationWork.Type;
+  }
 ): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -261,7 +263,7 @@ const runLocalCancellationLoop = (
           observe.value(
             `verify-source-cancellation-v3-${index}`,
             { retries: { limit: 0, delay: "1 second" } },
-            () => run(callCancellationOwner(input.environment, work, "observe"))
+            () => run(callCancellationOwner(input.environment, input.work, "observe"))
           )
         );
         if (!pending) return;

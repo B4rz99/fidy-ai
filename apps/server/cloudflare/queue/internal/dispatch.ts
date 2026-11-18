@@ -4,15 +4,10 @@ import { receiveWhatsAppWork, routeWhatsAppStatus } from "../../whatsapp/runtime
 import {
   LocalBillingCollection,
   LocalRefundWork,
+  LocalSourceCancellationWork,
   WompiBillingEvent,
 } from "../../subscription/contract";
-import {
-  isBillingCollectionWork,
-  isRefundWork,
-  offerNativeBillingWork,
-  receiveBillingCollection,
-  receiveRefunds,
-} from "../../subscription/runtime";
+import { offerNativeBillingWork, receiveLocalSourceCancellation } from "../../subscription/runtime";
 import { workTraceParent } from "../../runtime/telemetry/operations";
 import { Telemetry } from "../../../src/shell/observability/operations";
 import {
@@ -204,40 +199,6 @@ const receiveCanaryBatch = ({
     return yield* nativeDelivery(() => receiveCanary({ workflow, payload: message.body, now }));
   });
 
-const receiveBillingQueue = ({
-  batch,
-  environment,
-}: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> =>
-  Effect.gen(function* () {
-    const refunds = batch.messages.filter((message) => isRefundWork(message.body));
-    const charges = batch.messages.filter((message) => isBillingCollectionWork(message.body));
-    if (refunds.length + charges.length !== batch.messages.length) {
-      return yield* deliveryFailure("Invalid billing work");
-    }
-    if (refunds.length > 0) {
-      if (environment.BILLING_REFUND_WORKFLOW === undefined) {
-        return yield* deliveryFailure("Billing refunds unavailable");
-      }
-      yield* receiveRefunds({
-        environment: { BILLING_REFUND_WORKFLOW: environment.BILLING_REFUND_WORKFLOW },
-        batch: { messages: refunds },
-      });
-    }
-    if (charges.length > 0) {
-      if (environment.BILLING_COLLECTION_WORKFLOW === undefined) {
-        return yield* deliveryFailure("Billing collection unavailable");
-      }
-      yield* receiveBillingCollection({
-        environment: {
-          DB: environment.DB,
-          BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
-          ...(environment.USER_STORE === undefined ? {} : { USER_STORE: environment.USER_STORE }),
-        },
-        batch: { messages: charges },
-      });
-    }
-  }).pipe(Effect.mapError(deliveryFailure));
-
 const receiveIdentityOnlyQueue = ({
   batch,
   environment,
@@ -308,15 +269,12 @@ const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryU
       statementHandoffConcurrency
     ).pipe(Effect.mapError(deliveryFailure));
   }
-  return batch.messages.some(
-    (message) => isBillingCollectionWork(message.body) || isRefundWork(message.body)
-  )
-    ? receiveWorkflowBatch(batch, (entry) => receiveBillingQueue({ batch: entry, environment }))
-    : receiveEmailQueue(input);
+  return receiveEmailQueue(input);
 };
 
 const CallbackWork = Schema.Union([
   LocalRefundWork,
+  LocalSourceCancellationWork,
   WhatsAppLifecycleWork,
   WompiBillingEvent,
   LocalBillingCollection,
@@ -339,6 +297,9 @@ const deliverCallback = Effect.fn(function* (packet: unknown, environment: CoreQ
     ? environment.BILLING_REFUND_WORKFLOW
     : environment.BILLING_COLLECTION_WORKFLOW;
   if (workflow === undefined) return yield* deliveryFailure("Billing workflow unavailable");
+  if (Schema.is(LocalSourceCancellationWork)(body)) {
+    return yield* receiveLocalSourceCancellation({ environment, workflow, work: body });
+  }
   yield* offerNativeBillingWork(workflow, body);
 });
 const receiveCallbackBatch = ({

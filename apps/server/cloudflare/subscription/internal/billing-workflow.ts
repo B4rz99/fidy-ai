@@ -23,7 +23,7 @@ import {
 import {
   receiveLocalSourceCancellation,
   receiveSourceCancellation,
-  runBillingObservation,
+  runLocalCancellationLoop,
 } from "./billing-observation";
 
 type CollectionQueue = Readonly<{
@@ -201,7 +201,7 @@ export const receiveWompiBillingEvent = (
   });
 
 type BillingWorkflowExecution = Readonly<{
-  environment: BillingRuntime;
+  environment: Omit<BillingRuntime, "DB">;
   payload: unknown;
   activity: BillingWorkflowActivity;
   observe: Option.Option<BillingWorkflowActivity<boolean>>;
@@ -251,5 +251,8 @@ export const runBillingCollectionWorkflow = (input: BillingWorkflowExecution): P
       }
     );
   }
-  return runBillingObservation(input);
+  const cancellation = Schema.decodeUnknownOption(LocalSourceCancellationWork)(input.payload);
+  return Option.isSome(cancellation)
+    ? runLocalCancellationLoop({ ...input, work: cancellation.value })
+    : Promise.reject(Error("Unknown native billing work"));
 };

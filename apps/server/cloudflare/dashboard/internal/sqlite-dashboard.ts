@@ -199,3 +199,14 @@ export const prepareLocalDashboard = Effect.fnUntraced(function* (
     Effect.flatMap((stored) => prepareDashboardDocument(user, stored, edit))
   );
 });
+
+export const readDashboard = Effect.fnUntraced(function* (
+  operation:
+    | "dashboard.getDashboard"
+    | "dashboard.getDashboardView"
+    | "dashboard.listDashboardCatalog",
+  user: UserId,
+  current: number
+) {
+  return yield* runDashboard({ operation, edit: Option.none() }, user, current);
+});

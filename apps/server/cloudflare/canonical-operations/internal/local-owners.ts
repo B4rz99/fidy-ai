@@ -21,9 +21,17 @@ import {
   prepareLocalDeletion,
   prepareLocalPair,
 } from "../../transactions/operations";
-import { prepareLocalBudget, prepareLocalBudgetDeletion } from "../../budgets/operations";
-import { prepareLocalRecurringEdit } from "../../recurring-plans/operations";
-import { prepareLocalDashboard } from "../../dashboard/operations";
+import {
+  prepareLocalBudget,
+  prepareLocalBudgetDeletion,
+  readLocalBudget,
+} from "../../budgets/operations";
+import {
+  prepareLocalRecurringEdit,
+  readLocalRecurringWorkspace,
+} from "../../recurring-plans/operations";
+import { readLocalRecurringSeries } from "../../recurring/operations";
+import { prepareLocalDashboard, readLocalDashboard } from "../../dashboard/operations";
 import { newKeywordRuleId, prepareLocalKeywordRule } from "../../categories/operations";
 import {
   localHostedStatementOrigin,
@@ -37,6 +45,7 @@ import {
   CanonicalAdmissionUnavailable,
   type LocalMutationPlan,
   type LocalMutationPreparation,
+  type LocalMutationResult,
 } from "../../canonical-admission/contract";
 import { prepareLocalWrite } from "../../canonical-admission/operations";
 
@@ -105,6 +114,47 @@ const wakeAfterCapture = (
       }
     : plan;
 /** Only local, transaction-composable commands. Catalog policy controls eligibility and disclosure. */
+const readOwner = <Id extends OperationId, E>(
+  id: Id,
+  read: (
+    input: CanonicalInput<Id>,
+    context: Context
+  ) => Effect.Effect<LocalMutationResult, E, SqliteClient>
+): readonly [string, Prepare] =>
+  owner(id, (input, context) =>
+    Effect.succeed(
+      prepareLocalWrite({
+        targets: [],
+        commit: read(input, context),
+      })
+    )
+  );
+
+export const hostedQueryOwners = new Map<string, Prepare>([
+  readOwner("budgets.getBudget", ({ params }, { user, current }) =>
+    readLocalBudget({ id: Option.some(params.id), query: Option.none() }, user, current)
+  ),
+  readOwner("budgets.listBudgets", (_, { user, current }) =>
+    readLocalBudget({ id: Option.none(), query: Option.none() }, user, current)
+  ),
+  readOwner("budgets.getBudgetStatus", ({ query }, { user, current }) =>
+    readLocalBudget({ id: Option.none(), query: Option.some(query) }, user, current)
+  ),
+  ...(
+    [
+      "dashboard.getDashboard",
+      "dashboard.getDashboardView",
+      "dashboard.listDashboardCatalog",
+    ] as const
+  ).map((id) => readOwner(id, (_, { user, current }) => readLocalDashboard(id, user, current))),
+  readOwner("recurring.listRecurringSeries", ({ query }, { user }) =>
+    readLocalRecurringSeries(Option.fromUndefinedOr(query.cursor), user)
+  ),
+  readOwner("recurringPlans.getRecurringWorkspace", ({ query }, { user, current }) =>
+    readLocalRecurringWorkspace(query, user, current)
+  ),
+]);
+
 export const localBatchOwners = new Map<string, Prepare>([
   owner("insights.markInsightDelivered", ({ params, payload }, { user }) =>
     prepareLocalInsight({ id: params.id, target: "delivered", evidence: payload }, user)

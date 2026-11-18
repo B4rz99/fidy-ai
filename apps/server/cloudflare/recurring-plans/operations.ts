@@ -273,3 +273,6 @@ export const prepareLocalRecurringEdit: typeof sqlitePlans.prepareLocalRecurring
   user,
   current
 ) => sqlitePlans.prepareLocalRecurringEdit(command, user, current);
+
+export const readLocalRecurringWorkspace: typeof sqlitePlans.workspace = (...args) =>
+  sqlitePlans.workspace(...args);

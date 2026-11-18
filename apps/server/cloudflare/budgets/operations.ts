@@ -1,3 +1,4 @@
+import { queryLocalBudget } from "./internal/sqlite-workspace";
 import {
   dispatchLocalBudget as dispatchBudget,
   isLocalBudgetOperation as localBudget,
@@ -865,3 +866,5 @@ export const prepareLocalBudget: typeof prepareBudget = (save, user, current) =>
   prepareBudget(save, user, current);
 export const prepareLocalBudgetDeletion: typeof prepareDeletionInStore = (id, user) =>
   prepareDeletionInStore(id, user);
+
+export const readLocalBudget: typeof queryLocalBudget = (...args) => queryLocalBudget(...args);

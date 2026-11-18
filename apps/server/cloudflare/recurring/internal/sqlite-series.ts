@@ -173,3 +173,8 @@ export const dispatchSeries = Effect.fn(
   },
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
+
+export const readSeries = Effect.fn(function* (cursor: Option.Option<string>, user: UserId) {
+  const selected = decodeCursor(cursor);
+  return Option.isNone(selected) ? invalid : yield* browse(selected.value, user);
+});

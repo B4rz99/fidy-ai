@@ -46,16 +46,23 @@ export class HostedProviderControl extends DurableObject {
   private waiting = false;
   private rounds = 0;
   private mode = "/recall";
-  private connection = false;
+  private requested: ReadonlyArray<{ name: string; arguments: string }> = [];
+  private available: ReadonlyArray<string> = [];
   private sends = 0;
   private correlation = "";
   private readonly inference = Effect.fn({ self: this }, function* (request: Request) {
     const input = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ response_format: Schema.optionalKey(Schema.Unknown) })
+      Schema.Struct({
+        response_format: Schema.optionalKey(Schema.Unknown),
+        tools: Schema.optionalKey(
+          Schema.Array(Schema.Struct({ function: Schema.Struct({ name: Schema.String }) }))
+        ),
+      })
     )(yield* Effect.tryPromise(() => request.json()));
     if (input.response_format !== undefined) {
       return completion('{"compactedConversation":"Resumen anterior."}');
     }
+    this.available = input.tools?.map((tool) => tool.function.name) ?? [];
     this.rounds += 1;
     if (this.rounds !== 1) return completion("Listo.");
     this.waiting = true;
@@ -64,29 +71,20 @@ export class HostedProviderControl extends DurableObject {
     const message = {
       role: "assistant",
       content: null,
-      tool_calls: this.connection
-        ? [
-            {
-              id: "discover-bank",
+      tool_calls:
+        this.requested.length > 0
+          ? this.requested.map((tool, index) => ({
+              id: "query-" + index,
               type: "function",
-              function: { name: "connections__listInstitutions", arguments: "{}" },
-            },
-            {
-              id: "connect-bank",
-              type: "function",
-              function: {
-                name: "connections__connectInstitution",
-                arguments: '{"payload":{"institutionId":"bancolombia"}}',
+              function: tool,
+            }))
+          : [
+              {
+                id: "first-call",
+                type: "function",
+                function: fixtureTool(this.mode),
               },
-            },
-          ]
-        : [
-            {
-              id: "first-call",
-              type: "function",
-              function: fixtureTool(this.mode),
-            },
-          ],
+            ],
     };
     return Response.json({
       choices: [{ message, finish_reason: "tool_calls" }],
@@ -94,11 +92,28 @@ export class HostedProviderControl extends DurableObject {
     });
   });
   override fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname === "/tools") {
+      if (request.method !== "POST") return Promise.resolve(Response.json(this.available));
+      return Effect.runPromise(
+        Effect.gen({ self: this }, function* () {
+          this.requested = yield* Schema.decodeUnknownEffect(
+            Schema.Array(Schema.Struct({ name: Schema.String, arguments: Schema.String }))
+          )(yield* Effect.tryPromise(() => request.json()));
+          return new Response(null, { status: 204 });
+        })
+      );
+    }
     return Effect.runPromise(
       Effect.gen({ self: this }, function* () {
         const path = new URL(request.url).pathname;
         if (path === "/connect") {
-          this.connection = true;
+          this.requested = [
+            { name: "connections__listInstitutions", arguments: "{}" },
+            {
+              name: "connections__connectInstitution",
+              arguments: '{"payload":{"institutionId":"bancolombia"}}',
+            },
+          ];
           return new Response(null, { status: 204 });
         }
         if (["/batch", "/forget"].includes(path)) {

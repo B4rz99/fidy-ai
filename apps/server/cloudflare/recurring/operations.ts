@@ -1,5 +1,10 @@
 import { withStoreCapacity } from "../runtime/sqlite/operations";
-import { dispatchSeries, recoverSeries, repairSeriesAlarm } from "./internal/sqlite-series";
+import {
+  dispatchSeries,
+  readSeries,
+  recoverSeries,
+  repairSeriesAlarm,
+} from "./internal/sqlite-series";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { RecurringConfirmationId } from "../../src/core/recurring/contract";
@@ -318,3 +323,5 @@ export const repairLocalRecurringAlarm = Effect.fnUntraced(function* (
 ) {
   return yield* withStoreCapacity("required")(repairSeriesAlarm(current, storage, owns));
 });
+
+export const readLocalRecurringSeries: typeof readSeries = (...args) => readSeries(...args);

@@ -17,7 +17,12 @@ import {
 import { queryLocalConnections } from "../connections/operations";
 import { readLocalProfile } from "../identity/operations";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
-import { batchOwnersFor, localBatchOwners, localReviewBinding } from "./internal/local-owners";
+import {
+  batchOwnersFor,
+  hostedQueryOwners,
+  localBatchOwners,
+  localReviewBinding,
+} from "./internal/local-owners";
 import { keywordRuleIdFromPath, localKeywordRules } from "../categories/operations";
 import {
   admitCanonicalOperation,
@@ -936,6 +941,7 @@ export const localHostedCatalog = (
   operationCatalog.operations.filter(
     (operation) =>
       (operation.id === atomicBatchOperation ||
+        hostedQueryOwners.has(operation.id) ||
         localBatchOwners.has(operation.id) ||
         localReads.has(operation.id) ||
         parameterizedReads.includes(operation.id)) &&
@@ -1024,7 +1030,7 @@ export const prepareHostedOwner = Effect.fn(function* (
       })
     );
   }
-  const owner = localBatchOwners.get(operation.id);
+  const owner = hostedQueryOwners.get(operation.id) ?? localBatchOwners.get(operation.id);
   if (owner === undefined) return Option.none();
   return Option.some(yield* owner(input, context));
 });

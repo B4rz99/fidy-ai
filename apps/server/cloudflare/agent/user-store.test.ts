@@ -48,8 +48,96 @@ const checkBatchEffects = Effect.fnUntraced(function* (
   }
 });
 
+const financialQueries = [
+  ["budgets__listBudgets", {}],
+  ["budgets__getBudget", { params: { id: alice.user } }],
+  ["budgets__getBudgetStatus", { query: { timeZone: "America/Bogota" } }],
+  ["dashboard__listDashboardCatalog", {}],
+  ["dashboard__getDashboard", {}],
+  ["dashboard__getDashboardView", {}],
+  ["recurring__listRecurringSeries", { query: {} }],
+  ["recurringPlans__getRecurringWorkspace", { query: { month: "2026-10", view: "compact" } }],
+] as const;
+type HostedRuntime = Parameters<typeof seed>[0];
+type HostedProvider = ReturnType<
+  Awaited<ReturnType<HostedRuntime["getDurableObjectNamespace"]>>["getByName"]
+>;
+const prepareQueries = Effect.fnUntraced(function* (
+  mode: string,
+  runtime: HostedRuntime,
+  provider: HostedProvider
+) {
+  if (mode !== "planning") return;
+  const initialized = yield* native(() =>
+    runtime.dispatchFetch("https://api.fidyapp.com/dashboard/initialize", {
+      method: "POST",
+      headers: {
+        origin: "https://app.fidyapp.com",
+        cookie: "__Host-fidy_session=" + alice.bearer,
+        "Fidy-Session-Binding": alice.session,
+      },
+    })
+  );
+  expect(initialized.status).toBe(200);
+  yield* native(() => initialized.arrayBuffer());
+  yield* native(() =>
+    provider.fetch("https://fixture.invalid/tools", {
+      method: "POST",
+      body: JSON.stringify(
+        financialQueries.map(([name, args]) => ({ name, arguments: JSON.stringify(args) }))
+      ),
+    })
+  );
+});
+const verifyQueryTools = Effect.fnUntraced(function* (
+  mode: string,
+  proposal: typeof HostedTurnProposal.Type,
+  { owner, provider }: { owner: Effect.Success<ReturnType<typeof seed>>; provider: HostedProvider }
+) {
+  if (mode === "planning") {
+    const listing = yield* native(() => provider.fetch("https://fixture.invalid/tools"));
+    expect(yield* native(() => listing.json())).toEqual(
+      expect.arrayContaining(financialQueries.map(([name]) => name))
+    );
+    const results = yield* owner.exec(
+      "SELECT operation,outcome FROM hosted_tool_calls ORDER BY operation"
+    );
+    expect(results).toEqual(
+      financialQueries
+        .map(([name]) => ({
+          operation: name.replace("__", "."),
+          outcome: name === "budgets__getBudget" ? "CanonicalOperationFailed" : "Succeeded",
+        }))
+        .sort((left, right) => left.operation.localeCompare(right.operation, "en-US"))
+    );
+    return true;
+  }
+  if (mode === "connection") {
+    expect(proposal.text).toMatch(/https:\/\/app\.fidyapp\.com\/connections\/continue\?attempt=/u);
+    expect(yield* owner.exec("SELECT public_reference FROM connection_attempts")).toEqual([
+      { public_reference: proposal.text.split("attempt=")[1] },
+    ]);
+    expect(
+      yield* owner.exec(
+        "SELECT json_extract(entry_json,'$.outcome.output.data[0].availability') AS availability FROM hosted_transcript WHERE json_extract(entry_json,'$.operation')='connections.listInstitutions' AND json_extract(entry_json,'$._tag')='CanonicalToolResultEntry'"
+      )
+    ).toEqual([{ availability: "available" }]);
+    const state = yield* native(() => provider.fetch("https://fixture.invalid/waiting"));
+    expect(yield* native(() => state.json())).toMatchObject({ rounds: 1 });
+    return true;
+  }
+  return false;
+});
 const nativeTurnJourney = Effect.fnUntraced(function* (
-  mode: "ordinary" | "confirm" | "stale" | "withdraw" | "connection" | "batch" | "batch-stale"
+  mode:
+    | "planning"
+    | "ordinary"
+    | "confirm"
+    | "stale"
+    | "withdraw"
+    | "connection"
+    | "batch"
+    | "batch-stale"
 ) {
   const create = yield* nativeHostedPlatform;
   const runtime = yield* create(undefined, [], {
@@ -88,6 +176,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
   );
   const provider = controls.getByName("provider");
   const providerPath = {
+    planning: "waiting",
     connection: "connect",
     batch: "batch",
     "batch-stale": "batch",
@@ -97,6 +186,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     ordinary: "waiting",
   }[mode];
   yield* native(() => provider.fetch("https://fixture.invalid/" + providerPath));
+  yield* prepareQueries(mode, runtime, provider);
   const id = "22460000-0000-4000-8000-000000000020";
 
   if (["confirm", "stale", "batch", "batch-stale"].includes(mode)) {
@@ -160,20 +250,7 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
     receipt: proposal.receipt,
   });
   expect(delivered.status).toBe(200);
-  if (mode === "connection") {
-    expect(proposal.text).toMatch(/https:\/\/app\.fidyapp\.com\/connections\/continue\?attempt=/u);
-    expect(yield* owner.exec("SELECT public_reference FROM connection_attempts")).toEqual([
-      { public_reference: proposal.text.split("attempt=")[1] },
-    ]);
-    expect(
-      yield* owner.exec(
-        "SELECT json_extract(entry_json,'$.outcome.output.data[0].availability') AS availability FROM hosted_transcript WHERE json_extract(entry_json,'$.operation')='connections.listInstitutions' AND json_extract(entry_json,'$._tag')='CanonicalToolResultEntry'"
-      )
-    ).toEqual([{ availability: "available" }]);
-    const state = yield* native(() => provider.fetch("https://fixture.invalid/waiting"));
-    expect(yield* native(() => state.json())).toMatchObject({ rounds: 1 });
-    return;
-  }
+  if (yield* verifyQueryTools(mode, proposal, { owner, provider })) return;
   if (mode === "withdraw") {
     expect(yield* owner.exec("SELECT outcome FROM hosted_tool_calls")).toEqual([
       { outcome: "CanonicalOperationFailed" },
@@ -267,6 +344,10 @@ const nativeTurnJourney = Effect.fnUntraced(function* (
 });
 
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "serves financial queries from a hosted Turn through the caller's native owners",
+    () => nativeTurnJourney("planning")
+  );
   test.effect(
     "uses the same User-gated Connection owners for institution discovery and the browser handoff in a hosted Turn",
     () => nativeTurnJourney("connection")

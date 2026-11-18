@@ -148,7 +148,7 @@ export const editLocalRecurringPlan = Effect.fnUntraced(function* (
     Effect.flatMap(commitLocalWrite)
   );
 });
-const workspace = Effect.fn(function* (
+export const workspace = Effect.fn(function* (
   query: typeof RecurringWorkspaceQuery.Type,
   user: UserId,
   current: number

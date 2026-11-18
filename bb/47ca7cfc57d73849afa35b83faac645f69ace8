@@ -1,0 +1,25 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_beca898c5d5a16 5
+apps/web/package.json
+  s_a1be23a656acf0::t_beca898c5d5a16 57
+apps/server/cloudflare/web-authentication/bound-user.test.ts
+  s_a1be23a656acf0::t_beca898c5d5a16 3,61-67
+bun.lock
+  s_a1be23a656acf0::t_be23c5a5fb7fc3 140,2096
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb47ca7cfc57d73849afa35b83faac645f69ace8",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

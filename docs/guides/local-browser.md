@@ -1,9 +1,6 @@
 # Local browser testing on macOS
 
-Run the real API/Core/D1 browser fixture with Vite hot reload through one persistent local service.
-Install repository dependencies first. This uses synthetic test identities and disposable financial
-records; restarting resets the fixture database and requires a fresh browser login. No live provider
-account or WhatsApp message is needed.
+The persistent local service runs Vite with the native Ingress, Core and SQLite Durable Objects in workerd. Install the repository dependencies before starting. The loopback fixture registers one synthetic WhatsApp identity. Restarting creates fresh owner storage and requires a new browser login.
 
 Once per worktree:
 
@@ -30,8 +27,7 @@ shown public pairing code using the loopback test operator:
 curl --fail --request POST 'http://127.0.0.1:4175/approve?code=ABCD-EFGH&recurring=true'
 ```
 
-Replace the example with the displayed code. The ordinary browser verifier, approval, and Core
-session redemption still run; the operator substitutes the external WhatsApp approval only.
+Replace the example with the displayed code. The local operator submits a signed synthetic WhatsApp callback through Ingress. Directory verifies the association and Core redeems the browser verifier against its User.
 After sign-in, open <https://127.0.0.1:4173/app/recurring>.
 
 ```sh

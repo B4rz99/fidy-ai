@@ -218,9 +218,13 @@ const oidcWorkers = Effect.fnUntraced(function* (enabled: boolean) {
 
 const origin = { type: "text", value: browserOrigins.production } as const;
 const apiFlags = ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"];
-const ingressWorker = (
-  ingress: Effect.Success<ReturnType<typeof workerManifest>>
-): Readonly<{ config: MiniflareWorkerConfig }> => ({
+const ingressWorker = ({
+  ingress,
+  deployment,
+}: {
+  ingress: Effect.Success<ReturnType<typeof workerManifest>>;
+  deployment: Readonly<Record<string, string>>;
+}): Readonly<{ config: MiniflareWorkerConfig }> => ({
   config: {
     type: "worker" as const,
     name: "ingress",
@@ -228,7 +232,7 @@ const ingressWorker = (
     compatibilityFlags: apiFlags,
     manifest: ingress,
     env: {
-      BROWSER_ORIGIN: origin,
+      BROWSER_ORIGIN: { type: "text", value: deployment.BROWSER_ORIGIN ?? origin.value },
       PAT_ADMISSION_KEY: {
         type: "text" as const,
         value: "test-only-admission-key-with-32-bytes",
@@ -530,7 +534,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
       unsafeInspectDurableObjects: true,
       resourcePersistencePath: directory,
       workers: [
-        ingressWorker(ingress),
+        ingressWorker({ ingress, deployment }),
         {
           ...hostedPlatform.outbound,
           ...(withBilling ? providerOnlyOutbound : {}),

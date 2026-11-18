@@ -1,0 +1,71 @@
+tools/depcruise/boundaries.mjs
+  s_a1be23a656acf0::t_fb91e31e1fc97a 121
+apps/server/cloudflare/tokens/native-pairing.test.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 323-331
+apps/server/cloudflare/ingestion/native-document.test.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 417-429,431-493
+apps/server/cloudflare/canonical-operations/internal/local-owners.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 1-2,89-106,148,159-162
+apps/server/cloudflare/dashboard/internal/sqlite-dashboard.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 115-117
+apps/server/cloudflare/canonical-admission/internal/local-batch-plans.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 1-140
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 382-392
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 1,1338-1340
+apps/server/cloudflare/agent/internal/confirmation-description.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 52-53,523-527,542,596,792-798
+apps/server/cloudflare/agent/provider.test-fixture.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 10-43,48,87,104-105
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_fb91e31e1fc97a 94-99
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 27,924-925,980-984
+  s_a1be23a656acf0::t_6f8c162121fe56 985
+apps/server/cloudflare/canonical-operations/user-store.test.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 13,269-284,303-312,328-335,337-338,340-342
+apps/cli/src/canonical/operations.test.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 58-83
+apps/server/cloudflare/agent/internal/local-tool.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 1,24-28,74-75,85-136,159
+apps/server/cloudflare/canonical-admission/internal/local-batch.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 2-12,15,29,36-37,50,146-162,173,176,189-191,201,216-217,219-231,253-259,261-264,298,312-316,318-325,357
+apps/server/cloudflare/canonical-admission/internal/local-hosted-batch.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 1-129
+apps/server/cloudflare/ingestion/clarification.test-fixture.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 54-72,76,116-119,129
+apps/server/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_fb91e31e1fc97a 17
+apps/server/cloudflare/oauth-agents/native-allowance.test.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 54,101-148
+  s_a1be23a656acf0::t_5fc0b2c92651a6 149
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 990-997
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 5,7-24
+apps/server/cloudflare/agent/user-store.test.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 18-50,52,92-93,102,184,189,192-197,212,214,217-223,277-283
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 177-195,207-208
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 2902,2904,5227-5235,5334
+apps/server/cloudflare/agent/internal/local-inference.ts
+  s_a1be23a656acf0::t_fb91e31e1fc97a 1-2,191-215,221,245,276,298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4b9c702e41eaddac49f163d8d2a7c9dea6714340",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

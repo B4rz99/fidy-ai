@@ -148,9 +148,7 @@ const start = Effect.fn(function* () {
     "Could not register the local browser service."
   );
   requireSuccess(["launchctl", "kickstart", target], "Could not start the local browser service.");
-  yield* waitReady().pipe(
-    Effect.onExit((exit) => (exit._tag === "Failure" ? stop() : Effect.void))
-  );
+  yield* waitReady().pipe(Effect.onError(() => stop()));
   print(
     `Ready: ${app}/app/recurring\nTest login: ${app}/login\nLogs: ${directory}/server.log\nStop: bun run dev:browser stop`
   );

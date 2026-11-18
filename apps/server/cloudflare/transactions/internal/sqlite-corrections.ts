@@ -257,3 +257,22 @@ export const reconcileLocalTransactions = Effect.fn(function* (
   const work = { user, current, first, second, left: left.value, right: right.value };
   return yield* link ? linkPair(work) : unlinkPair(work);
 });
+
+/** Removing visibility retains source evidence and updates the financial projections together. */
+export const deleteLocalTransaction = Effect.fn(function* (
+  id: string,
+  user: UserId,
+  current: number
+) {
+  const owned = yield* retained(user, id);
+  if (Option.isNone(owned)) return missingLocalTransaction();
+  if (owned.value.reconciliation_first_id !== null) {
+    return invalid("Unlink the Transaction pair before deleting either original Transaction.");
+  }
+  const sql = yield* SqliteClient;
+  const changed =
+    yield* sql`UPDATE transactions SET deleted_at_ms=${current} WHERE user_id=${user} AND id=${id} AND revision=${owned.value.record.revision} AND deleted_at_ms IS NULL AND reconciliation_first_id IS NULL RETURNING id`;
+  if (changed.length !== 1) return yield* unavailable("transaction_delete");
+  yield* refresh(user, { first: id, second: id }, 0);
+  return success(id);
+});

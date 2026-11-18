@@ -717,6 +717,95 @@ ON CONFLICT(user_id) DO UPDATE SET version=1,readiness='ready',cursor_id=''`,
   `INSERT INTO transaction_projection_leaf(user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision) SELECT user_id,id,amount,currency,direction,category_id,category_revision,counterparty,notes,occurred_at_ms,created_at_ms,revision FROM transaction_effective_source`,
 ] as const;
 
+const recurringSchema = [
+  `ALTER TABLE canonical_request_receipts RENAME TO receipts_before_recurring`,
+  `CREATE TABLE canonical_request_receipts (
+    user_id TEXT NOT NULL REFERENCES users(id),retry_key_digest TEXT NOT NULL CHECK(length(retry_key_digest)=64),
+    operation TEXT NOT NULL,input_digest TEXT NOT NULL CHECK(length(input_digest)=64),
+    accepted_at_ms INTEGER NOT NULL,status INTEGER NOT NULL CHECK(status BETWEEN 200 AND 499),
+    body TEXT, PRIMARY KEY(user_id,retry_key_digest),
+    CHECK(body IS NULL OR (operation IN ('subscription.cancelSubscription','transactions.createTransaction','transactions.updateTransaction','transactions.linkTransactions','transactions.unlinkTransactions','budgets.createBudget','budgets.updateBudget','budgets.deleteBudget','dashboard.initializeDashboard','dashboard.applyDashboardEdit','recurringPlans.applyRecurringEdit','transactions.deleteTransaction') AND json_valid(body)))
+  ) STRICT`,
+  `INSERT INTO canonical_request_receipts SELECT * FROM receipts_before_recurring`,
+  `DROP TABLE receipts_before_recurring`,
+  `CREATE INDEX canonical_receipt_expiry ON canonical_request_receipts(accepted_at_ms)`,
+  `CREATE TRIGGER deleted_transaction_no_link BEFORE UPDATE OF reconciliation_first_id,reconciliation_second_id ON transactions WHEN NEW.reconciliation_first_id IS NOT NULL AND NEW.deleted_at_ms IS NOT NULL BEGIN SELECT RAISE(ABORT,'transaction_deleted'); END`,
+  `CREATE TRIGGER deleted_transaction_no_update BEFORE UPDATE ON transactions
+WHEN (NEW.id IS NOT OLD.id OR NEW.user_id IS NOT OLD.user_id OR NEW.amount IS NOT OLD.amount OR NEW.currency IS NOT OLD.currency OR NEW.direction IS NOT OLD.direction OR NEW.counterparty IS NOT OLD.counterparty OR NEW.category_id IS NOT OLD.category_id OR NEW.notes IS NOT OLD.notes OR NEW.occurred_at_ms IS NOT OLD.occurred_at_ms OR NEW.created_at_ms IS NOT OLD.created_at_ms OR NEW.revision IS NOT OLD.revision OR NEW.user_decisions IS NOT OLD.user_decisions OR NEW.deleted_at_ms IS NOT OLD.deleted_at_ms) AND OLD.deleted_at_ms IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'transaction_deleted'); END`,
+  `CREATE TABLE recurring_receipt_parts(user_id TEXT NOT NULL,retry_key_digest TEXT NOT NULL,position INTEGER NOT NULL CHECK(position>=0),part TEXT NOT NULL,PRIMARY KEY(user_id,retry_key_digest,position), FOREIGN KEY(user_id,retry_key_digest) REFERENCES canonical_request_receipts(user_id,retry_key_digest) ON DELETE CASCADE) STRICT`,
+  `CREATE TRIGGER recurring_receipt_parts_parent BEFORE INSERT ON recurring_receipt_parts
+    WHEN NOT EXISTS(SELECT 1 FROM canonical_request_receipts WHERE user_id=NEW.user_id AND retry_key_digest=NEW.retry_key_digest AND operation='recurringPlans.applyRecurringEdit' AND json_type(body)='integer')
+    BEGIN SELECT RAISE(ABORT,'invalid_recurring_receipt'); END`,
+  `CREATE TABLE "recurring_evaluation_records" (
+ user_id TEXT NOT NULL REFERENCES users(id),
+ kind TEXT NOT NULL CHECK(kind IN ('fact','proposal','progress')),
+ id TEXT NOT NULL,
+ group_key TEXT,
+ occurred_at_ms INTEGER,
+ fact_json TEXT,
+ proposal_json TEXT,
+ revision INTEGER,
+ phase TEXT CHECK(phase IN ('scan','detect','complete')),
+ cursor_at_ms INTEGER,
+ cursor_id TEXT,
+ evaluated_at_ms INTEGER,
+ evaluated_revision INTEGER,
+ first_captured_at_ms INTEGER,
+ time_zone TEXT,
+ CHECK((kind='fact' AND group_key IS NOT NULL AND occurred_at_ms IS NOT NULL AND fact_json IS NOT NULL AND proposal_json IS NULL)
+ OR(kind='proposal' AND group_key IS NULL AND occurred_at_ms IS NULL AND fact_json IS NULL AND proposal_json IS NOT NULL)
+ OR(kind='progress' AND id='progress' AND group_key IS NOT NULL AND occurred_at_ms IS NULL AND fact_json IS NULL AND proposal_json IS NULL)),
+ CHECK((kind='progress' AND revision IS NOT NULL AND phase IS NOT NULL AND cursor_id IS NOT NULL AND ((cursor_at_ms IS NULL AND cursor_id='') OR (cursor_at_ms IS NOT NULL AND cursor_id IS NOT NULL AND cursor_id<>'')) AND evaluated_revision IS NOT NULL AND first_captured_at_ms IS NOT NULL AND time_zone IS NOT NULL)
+ OR(kind<>'progress' AND revision IS NULL AND phase IS NULL AND cursor_at_ms IS NULL AND cursor_id IS NULL AND evaluated_at_ms IS NULL AND evaluated_revision IS NULL AND first_captured_at_ms IS NULL AND time_zone IS NULL)),
+ PRIMARY KEY(user_id,kind,id)
+) STRICT`,
+  `CREATE INDEX recurring_facts_by_group_typed ON recurring_evaluation_records(user_id, group_key, occurred_at_ms, id) WHERE kind='fact'`,
+  `CREATE TRIGGER transaction_fact_attestation AFTER INSERT ON source_attestations BEGIN
+  UPDATE transaction_projection_state SET fact_revision = fact_revision + 1,
+    time_zone = CASE WHEN NEW.transaction_id = (SELECT id FROM transactions WHERE user_id = NEW.user_id ORDER BY created_at_ms, id LIMIT 1)
+      AND (SELECT count(*) FROM source_attestations WHERE user_id = NEW.user_id AND transaction_id = NEW.transaction_id) = 1
+      THEN NEW.time_zone ELSE time_zone END
+  WHERE user_id = NEW.user_id AND fact_revision IS NOT NULL;
+END`,
+  `CREATE TRIGGER transaction_fact_insert AFTER INSERT ON transactions BEGIN
+  INSERT INTO transaction_projection_state(user_id,version,readiness,fact_revision,first_captured_at_ms,time_zone)
+  SELECT NEW.user_id,0,'dirty',1,NEW.created_at_ms,time_zone FROM users WHERE id=NEW.user_id
+  ON CONFLICT(user_id) DO UPDATE SET fact_revision=coalesce(fact_revision,0)+1,
+    first_captured_at_ms=coalesce(first_captured_at_ms,excluded.first_captured_at_ms),
+    time_zone=coalesce(transaction_projection_state.time_zone,excluded.time_zone);
+END`,
+  `UPDATE transaction_projection_state AS state SET fact_revision=1,
+ first_captured_at_ms=(SELECT min(created_at_ms) FROM transactions WHERE user_id=state.user_id),
+ time_zone=coalesce((SELECT source.time_zone FROM transactions movement LEFT JOIN source_attestations source ON source.transaction_id=movement.id AND source.user_id=movement.user_id WHERE movement.user_id=state.user_id ORDER BY movement.created_at_ms,movement.id,source.created_at_ms,source.id LIMIT 1),(SELECT time_zone FROM users WHERE id=state.user_id))
+ WHERE fact_revision IS NULL AND EXISTS (SELECT 1 FROM transactions WHERE user_id=state.user_id)`,
+  `CREATE TABLE recurring_series (
+  user_id TEXT NOT NULL REFERENCES users(id),
+  id TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  counterparty_key TEXT NOT NULL,
+  series_json TEXT NOT NULL,
+  evidence_json TEXT NOT NULL,
+  reference_json TEXT NOT NULL,
+  valid INTEGER NOT NULL CHECK(valid IN (0, 1)), confirmation_id TEXT, confirmed_at_ms INTEGER, confirmation_context_json TEXT, confirmation_json TEXT, digest_excluded INTEGER CHECK(digest_excluded IN(0,1)), confirmation_sequence INTEGER CHECK(
+ (confirmation_id IS NULL AND confirmed_at_ms IS NULL AND confirmation_context_json IS NULL
+  AND confirmation_json IS NULL AND digest_excluded IS NULL AND confirmation_sequence IS NULL)
+ OR (confirmation_id IS NOT NULL AND confirmed_at_ms IS NOT NULL AND confirmation_context_json IS NOT NULL
+  AND confirmation_json IS NOT NULL AND digest_excluded IS NOT NULL AND confirmation_sequence IS NOT NULL
+  AND confirmation_sequence>0)),
+  PRIMARY KEY(user_id, id)
+) STRICT`,
+  `CREATE TABLE recurring_plans (user_id TEXT NOT NULL REFERENCES users(id), id TEXT NOT NULL, position INTEGER NOT NULL CHECK(position>=0), pauses_json TEXT NOT NULL CHECK(json_valid(pauses_json)), stopped_on TEXT, PRIMARY KEY(user_id,id)) STRICT`,
+  `CREATE TABLE recurring_plan_revisions (user_id TEXT NOT NULL, plan_id TEXT NOT NULL, position INTEGER NOT NULL CHECK(position>=0), from_date TEXT NOT NULL, plan_json TEXT NOT NULL CHECK(json_valid(plan_json)), PRIMARY KEY(user_id,plan_id,from_date), FOREIGN KEY(user_id,plan_id) REFERENCES recurring_plans(user_id,id)) STRICT`,
+  `CREATE TABLE recurring_plan_exceptions (user_id TEXT NOT NULL, plan_id TEXT NOT NULL, position INTEGER NOT NULL CHECK(position>=0), local_date TEXT NOT NULL, skipped INTEGER NOT NULL CHECK(skipped IN(0,1)), replacement_json TEXT CHECK(replacement_json IS NULL OR json_valid(replacement_json)), PRIMARY KEY(user_id,plan_id,local_date), FOREIGN KEY(user_id,plan_id) REFERENCES recurring_plans(user_id,id)) STRICT`,
+  `CREATE TABLE recurring_plan_fulfillments (user_id TEXT NOT NULL, id TEXT NOT NULL, plan_id TEXT NOT NULL, position INTEGER NOT NULL CHECK(position>=0), local_date TEXT NOT NULL, actual_date TEXT NOT NULL, amount TEXT NOT NULL, currency TEXT NOT NULL, settled INTEGER NOT NULL CHECK(settled IN(0,1)), automatic INTEGER CHECK(automatic IS NULL OR automatic IN(0,1)), transaction_id TEXT, PRIMARY KEY(user_id,id), FOREIGN KEY(user_id,plan_id) REFERENCES recurring_plans(user_id,id)) STRICT`,
+  `CREATE INDEX recurring_plans_ordered ON recurring_plans(user_id,position)`,
+  `CREATE INDEX recurring_plan_revisions_ordered ON recurring_plan_revisions(user_id,position)`,
+  `CREATE INDEX recurring_plan_exceptions_ordered ON recurring_plan_exceptions(user_id,position)`,
+  `CREATE INDEX recurring_plan_fulfillments_ordered ON recurring_plan_fulfillments(user_id,position)`,
+  `CREATE INDEX recurring_series_by_order ON recurring_series(user_id, currency, counterparty_key, id)`,
+] as const;
+
 export const userStoreHistory: StoreHistory = {
   owner: "user",
   steps: [
@@ -760,6 +849,7 @@ export const userStoreHistory: StoreHistory = {
         "CREATE INDEX ready_browser_pairings ON browser_handoffs(ordinal) WHERE state='ready'",
       ],
     },
+    { version: 11, id: "native-recurring", statements: recurringSchema },
   ],
 };
 

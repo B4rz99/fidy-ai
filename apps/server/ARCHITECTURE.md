@@ -84,6 +84,13 @@ that commits its Audit. Capture, Correction, linked SourceAttestations and Recon
 the effective leaves and their exact per-Currency minute and day contributions in the financial
 write. A failed write or incomplete projection withholds the view.
 
+Browser and PAT Recurring reads and edits use the same UserStore. Its planning ledger keeps
+individual plan revisions, exceptions and fulfillments. The workspace selects effective financial
+facts and plan history in one transaction. Historical series evaluation advances through bounded
+User-local checkpoints under current Processing Consent. Financial changes invalidate the observed
+revision and schedule discovery within an hour. The User alarm advances due evaluation.
+Maintenance checks the retained revision and repairs the alarm when needed.
+
 The Core minute Cron calls Maintenance to traverse the lifetime registry and check Directory,
 Pricing and independent Erasure. A private check inspects retained owner work and repairs the
 earliest required alarm. Owner alarms execute the continuation. Maintenance persists its cursor

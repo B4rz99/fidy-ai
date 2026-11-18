@@ -1,3 +1,7 @@
+import { recurringDiscoveryIntervalMs } from "../recurring/contract";
+import type { LocalMutationResult } from "../canonical-admission/contract";
+import { preserveStoreAlarm } from "../runtime/sqlite/operations";
+import * as planningFacts from "./internal/planning-read";
 import { readLocalTransactionAggregate as localAggregate } from "./internal/sqlite-aggregate";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { dashboardListStatement, decodeDashboardTransactions } from "./internal/dashboard-query";
@@ -17,6 +21,7 @@ import {
 } from "../../src/core/transactions/contract";
 import {
   correctLocalTransaction,
+  deleteLocalTransaction as deleteNative,
   inspectLocalTransaction,
   missingLocalTransaction,
   reconcileLocalTransactions,
@@ -34,13 +39,15 @@ import {
 import { prepareDeletion as ownerPrepareDeletion } from "./internal/transaction-deletion";
 import {
   findSnapshot,
+  localFactPage,
+  localFactSnapshot,
   readFacts,
   revisionGuard,
   revisionProjection,
 } from "./internal/recurring-query";
 import { type UserId } from "../../src/core/identity/contract";
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
-import { Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { readDashboardTransactions as ownerReadDashboardTransactions } from "./internal/dashboard-read";
 import {
   prepareBoundPlanningTransactions as ownerPrepareBoundPlanningTransactions,
@@ -310,6 +317,7 @@ export const isLocalTransactionOperation = (id: string): boolean =>
     "transactions.searchTransactions",
     "transactions.listTransactions",
     "transactions.updateTransaction",
+    "transactions.deleteTransaction",
     "transactions.getTransaction",
     "transactions.linkTransactions",
     "transactions.unlinkTransactions",
@@ -336,36 +344,58 @@ const historyResponse = Effect.fn(function* (unit: LocalTransactionRequest) {
       })
     : readUserHistory(unit.request, unit.owns);
 });
+
+const wakeForFacts = <A, E>(
+  storage: DurableObjectStorage,
+  work: (
+    input: A,
+    user: UserId,
+    current: number
+  ) => Effect.Effect<LocalMutationResult, E, SqliteClient>
+): ((
+  input: A,
+  user: UserId,
+  current: number
+) => Effect.Effect<LocalMutationResult, E | Cause.UnknownError, SqliteClient>) =>
+  Effect.fn(function* (input: A, user: UserId, current: number) {
+    const outcome = yield* work(input, user, current);
+    if (outcome.outcome === "success") {
+      yield* preserveStoreAlarm(storage, current + recurringDiscoveryIntervalMs);
+    }
+    return outcome;
+  });
 const dispatchTransaction = Effect.fn(function* (unit: LocalTransactionRequest) {
   const { request, operation } = unit;
   const id = rawPathId({ request });
   const invalidTarget = invalidTransactionTarget(id);
   switch (operation.id) {
-    case "transactions.listTransactions":
-    case "transactions.searchTransactions":
-      return yield* historyResponse(unit);
     case "transactions.createTransaction":
       return yield* runLocalMutation({
         ...unit,
         input: transactionInput(request),
-        work: captureLocalTransaction,
+        work: wakeForFacts(unit.storage, captureLocalTransaction),
       });
     case "transactions.updateTransaction":
       return yield* runLocalMutation(
         {
           ...unit,
           input: correctionInput(request).pipe(Effect.map(Option.map((input) => ({ id, input })))),
-          work: correctLocalTransaction,
+          work: wakeForFacts(unit.storage, correctLocalTransaction),
+        },
+        invalidTarget
+      );
+    case "transactions.deleteTransaction":
+      return yield* runLocalMutation(
+        {
+          ...unit,
+          input: Effect.succeedSome(id),
+          work: wakeForFacts(unit.storage, deleteLocalTransaction),
         },
         invalidTarget
       );
     case "transactions.getTransaction":
       return yield* runLocalMutation(
-        {
-          ...unit,
-          input: Effect.succeedSome(id),
-          work: inspectLocalTransaction,
-        },
+        { ...unit, input: Effect.succeedSome(id), work: inspectLocalTransaction },
         invalidTarget
       );
     case "transactions.linkTransactions":
@@ -376,7 +406,7 @@ const dispatchTransaction = Effect.fn(function* (unit: LocalTransactionRequest) 
         input: transactionPairInput(request).pipe(
           Effect.map(Option.map((input) => ({ input, link })))
         ),
-        work: reconcileLocalTransactions,
+        work: wakeForFacts(unit.storage, reconcileLocalTransactions),
       });
     }
     default:
@@ -384,12 +414,19 @@ const dispatchTransaction = Effect.fn(function* (unit: LocalTransactionRequest) 
   }
 });
 
-export const dispatchLocalTransaction = (
-  unit: LocalTransactionRequest
-): Effect.Effect<Response, never, Effect.Services<ReturnType<typeof runLocalMutation>>> =>
-  dispatchTransaction(unit).pipe(
-    Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
-  );
+export const dispatchLocalTransaction = Effect.fn(
+  function* (unit: LocalTransactionRequest) {
+    if (
+      ["transactions.listTransactions", "transactions.searchTransactions"].includes(
+        unit.operation.id
+      )
+    ) {
+      return yield* historyResponse(unit);
+    }
+    return yield* dispatchTransaction(unit);
+  },
+  Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+);
 
 export const readLocalTransactionAggregate: typeof localAggregate = (user, from, toExclusive) =>
   localAggregate(user, from, toExclusive);
@@ -419,3 +456,30 @@ export const readLocalDashboardTransactions = Effect.fn(function* (
 
 export const readLocalTransactionPage: typeof nativeReadLocalTransactionPage = (...args) =>
   nativeReadLocalTransactionPage(...args);
+
+/** Read Effective Transactions in the calling UserStore transaction. */
+export const readLocalPlanningRange: typeof planningFacts.localPlanningRange = (user, range) =>
+  planningFacts.localPlanningRange(user, range);
+export const readLocalPlanningReferences: typeof planningFacts.localPlanningReferences = (
+  user,
+  ids
+) => planningFacts.localPlanningReferences(user, ids);
+export const readLocalPlanningMonths = Effect.fn(function* (
+  user: string,
+  from: string,
+  through: string
+) {
+  const sql = yield* SqliteClient;
+  const rows =
+    yield* sql`SELECT DISTINCT substr(occurred_at,1,7) AS month FROM transaction_effective_source WHERE user_id=${user} AND occurred_at_ms>=${DateTime.makeUnsafe(from).epochMilliseconds} AND occurred_at_ms<${DateTime.makeUnsafe(through).epochMilliseconds} ORDER BY month LIMIT 1201`;
+  const decoded = yield* Schema.decodeUnknownEffect(Schema.Array(PlanningMonthRow))(rows);
+  return decoded.length <= maximumMonths
+    ? Option.some(decoded.map((row) => row.month))
+    : Option.none<ReadonlyArray<string>>();
+});
+
+export const readLocalFactSnapshot: typeof localFactSnapshot = (user) => localFactSnapshot(user);
+export const readLocalFactPage: typeof localFactPage = (user, cursor) =>
+  localFactPage(user, cursor);
+export const deleteLocalTransaction: typeof deleteNative = (id, user, current) =>
+  deleteNative(id, user, current);

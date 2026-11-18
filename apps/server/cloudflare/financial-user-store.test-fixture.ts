@@ -1,3 +1,4 @@
+import { ownerCheckUrl } from "./maintenance/contract";
 import { newId } from "./secret-material/operations";
 import { Clock, Effect } from "effect";
 import { expect } from "vitest";
@@ -104,6 +105,17 @@ export const seed = Effect.fn(function* (
   return { exec, digest, directory, now, local };
 });
 
+const nativeWorkCheck = (
+  runtime: Miniflare,
+  user: string
+): Promise<{ status: number; repaired: string }> =>
+  runtime
+    .getDurableObjectNamespace("USER_STORE", "core")
+    .then((namespace) => namespace.getByName(user).fetch(ownerCheckUrl, { method: "POST" }))
+    .then((response) => ({
+      status: response.status,
+      repaired: response.headers.get("fidy-alarm-repaired") ?? "unreported",
+    }));
 /** Production ingress and two isolated User stores; only fixture setup and invariant probes see SQL. */
 export const makeNativeTransactionJourney = Effect.fn(function* (ceiling?: string) {
   const create = yield* nativeUserPlatform;
@@ -162,6 +174,7 @@ export const makeNativeTransactionJourney = Effect.fn(function* (ceiling?: strin
     send,
     browser,
     directory: first.directory,
+    checkWork: (user: string): ReturnType<typeof nativeWorkCheck> => nativeWorkCheck(runtime, user),
   };
 });
 

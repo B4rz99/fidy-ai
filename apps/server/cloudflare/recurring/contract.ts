@@ -44,3 +44,6 @@ export const RecurringDigestSourcePage = Schema.Struct({
 export type RecurringDigestSourcePage = typeof RecurringDigestSourcePage.Type;
 /** Persistence, malformed retained values and exhausted detection budgets fail closed without content. */
 export class RecurringUnavailable extends Data.TaggedError("RecurringUnavailable") {}
+
+/** Deadline for discovering newly captured financial history. */
+export const recurringDiscoveryIntervalMs = 3_600_000;

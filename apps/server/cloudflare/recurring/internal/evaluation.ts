@@ -16,17 +16,18 @@ import {
 } from "../../../src/core/recurring/operations";
 import { UtcTimestamp } from "../../../src/core/_shared/time";
 import { Money } from "../../../src/core/_shared/money";
-import {
-  type RecurringFactSnapshot,
-  prepareRecurringFactGuard,
-  readRecurringFacts,
-} from "../../transactions/operations";
+import type {
+  BudgetContributionCursor,
+  RecurringFactPage,
+  RecurringFactSnapshot,
+} from "../../transactions/contract";
+import { prepareRecurringFactGuard, readRecurringFacts } from "../../transactions/operations";
 import { prepareUserContext } from "../../identity/user-context/operations";
 import { transactionId } from "../../canonical-work/operations";
 import { RecurringUnavailable } from "../contract";
 import {
   Evidence,
-  type Progress,
+  Progress,
   Proposal,
   StoredSeries,
   StringRow,
@@ -34,7 +35,54 @@ import {
   maximumSeries,
 } from "./models";
 
-type Work = Readonly<{ db: D1Database; userId: UserId }>;
+type Statement = Readonly<{ sql: string; params: ReadonlyArray<SqlStorageValue> }>;
+const statement = (sql: string, ...params: Statement["params"]): Statement => ({ sql, params });
+export type EvaluationStore = Readonly<{
+  userId: UserId;
+  select: (
+    sql: string,
+    values: ReadonlyArray<string | number>
+  ) => Effect.Effect<ReadonlyArray<unknown>, RecurringUnavailable>;
+  commit: (
+    revision: number,
+    statements: ReadonlyArray<Statement>
+  ) => Effect.Effect<void, RecurringUnavailable>;
+  facts: (
+    revision: number,
+    cursor: BudgetContributionCursor
+  ) => Effect.Effect<Option.Option<RecurringFactPage>, RecurringUnavailable>;
+  context: Effect.Effect<UserContext, RecurringUnavailable>;
+}>;
+type Work = EvaluationStore;
+export const databaseEvaluation = (work: { db: D1Database; userId: UserId }): EvaluationStore => ({
+  userId: work.userId,
+  select: (sql, values) => query({ db: work.db, sql, values }),
+  commit: (revision, statements) =>
+    batch({
+      db: work.db,
+      statements: [
+        prepareRecurringFactGuard({ ...work, revision }),
+        ...statements.map(({ sql, params }) => work.db.prepare(sql).bind(...params)),
+      ],
+    }),
+  facts: (revision, cursor) =>
+    readRecurringFacts({ ...work, revision, cursor }).pipe(
+      Effect.mapError(() => new RecurringUnavailable())
+    ),
+  context: Effect.tryPromise(() =>
+    prepareUserContext({
+      ...work,
+      statement: {
+        sql: "SELECT serviceMarket,locale,timeZone FROM identity_user_context WHERE userId=?",
+        params: [work.userId],
+      },
+    }).all()
+  ).pipe(
+    Effect.flatMap((rows) => decode({ schema: UserContext, input: rows.results[0] })),
+    Effect.mapError(() => new RecurringUnavailable())
+  ),
+});
+
 const jsonCodec = <Shape extends Schema.Top>(
   schema: Shape
 ): Schema.fromJsonString<Schema.toCodecJson<Shape>> =>
@@ -84,59 +132,42 @@ export const initialize = ({
   void,
   RecurringUnavailable
 > =>
-  batch({
-    db: work.db,
-    statements: [
-      prepareRecurringFactGuard({ ...work, revision: snapshot.revision }),
-      work.db
-        .prepare(
-          "DELETE FROM recurring_evaluation_records WHERE kind IN ('fact','proposal') AND user_id = ?"
-        )
-        .bind(work.userId),
-      work.db
-        .prepare(
-          `INSERT INTO recurring_evaluation_records (kind,id,user_id,revision,phase,first_captured_at_ms,time_zone,cursor_at_ms,cursor_id,group_key,evaluated_revision) VALUES ('progress','progress',?,?,'scan',?,?,NULL,'','',0) ON CONFLICT(user_id,kind,id) DO UPDATE SET revision = excluded.revision, phase = 'scan', cursor_at_ms = NULL, cursor_id = '', group_key = '', first_captured_at_ms = excluded.first_captured_at_ms, time_zone = excluded.time_zone`
-        )
-        .bind(
-          work.userId,
-          snapshot.revision,
-          snapshot.firstCapturedAt.epochMilliseconds,
-          snapshot.timeZone
-        ),
-    ],
-  });
+  work.commit(snapshot.revision, [
+    statement(
+      "DELETE FROM recurring_evaluation_records WHERE kind IN ('fact','proposal') AND user_id = ?",
+      work.userId
+    ),
+    statement(
+      `INSERT INTO recurring_evaluation_records (kind,id,user_id,revision,phase,first_captured_at_ms,time_zone,cursor_at_ms,cursor_id,group_key,evaluated_revision) VALUES ('progress','progress',?,?,'scan',?,?,NULL,'','',0) ON CONFLICT(user_id,kind,id) DO UPDATE SET revision = excluded.revision, phase = 'scan', cursor_at_ms = NULL, cursor_id = '', group_key = '', first_captured_at_ms = excluded.first_captured_at_ms, time_zone = excluded.time_zone`,
+      work.userId,
+      snapshot.revision,
+      snapshot.firstCapturedAt.epochMilliseconds,
+      snapshot.timeZone
+    ),
+  ]);
 export const scan = ({
   work,
   progress,
 }: Readonly<{ work: Work; progress: Progress }>): Effect.Effect<void, RecurringUnavailable> =>
   Effect.gen(function* () {
-    const read = yield* readRecurringFacts({
-      ...work,
-      revision: progress.revision,
-      cursor: {
-        occurredAt: progress.cursor_at_ms === null ? "" : DateTime.formatIso(progress.cursor_at_ms),
-        transactionId: progress.cursor_id,
-      },
+    const read = yield* work.facts(progress.revision, {
+      occurredAt: progress.cursor_at_ms === null ? "" : DateTime.formatIso(progress.cursor_at_ms),
+      transactionId: progress.cursor_id,
     });
     if (Option.isNone(read)) return yield* new RecurringUnavailable();
-    const statements: D1PreparedStatement[] = [
-      prepareRecurringFactGuard({ ...work, revision: progress.revision }),
-    ];
+    const statements: Statement[] = [];
     for (const fact of read.value.facts) {
       if (Option.isNone(fact.counterparty)) continue;
       const encoded = yield* Schema.encodeEffect(jsonCodec(RecurringTransactionFact))(fact);
       statements.push(
-        work.db
-          .prepare(
-            "INSERT INTO recurring_evaluation_records (kind,user_id,id,group_key,occurred_at_ms,fact_json) VALUES ('fact',?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO NOTHING"
-          )
-          .bind(
-            work.userId,
-            fact.id,
-            `${fact.money.currency}|${normalizeCounterparty(fact.counterparty.value)}`,
-            fact.occurredAt.epochMilliseconds,
-            encoded
-          )
+        statement(
+          "INSERT INTO recurring_evaluation_records (kind,user_id,id,group_key,occurred_at_ms,fact_json) VALUES ('fact',?,?,?,?,?) ON CONFLICT(user_id,kind,id) DO NOTHING",
+          work.userId,
+          fact.id,
+          `${fact.money.currency}|${normalizeCounterparty(fact.counterparty.value)}`,
+          fact.occurredAt.epochMilliseconds,
+          encoded
+        )
       );
     }
     const cursorAt =
@@ -145,19 +176,16 @@ export const scan = ({
         : (yield* decode({ schema: UtcTimestamp, input: read.value.cursor.occurredAt }))
             .epochMilliseconds;
     statements.push(
-      work.db
-        .prepare(
-          "UPDATE recurring_evaluation_records SET cursor_at_ms = ?, cursor_id = ?, phase = ? WHERE kind='progress' AND user_id = ? AND revision = ?"
-        )
-        .bind(
-          cursorAt,
-          read.value.cursor.transactionId,
-          read.value.complete ? "detect" : "scan",
-          work.userId,
-          progress.revision
-        )
+      statement(
+        "UPDATE recurring_evaluation_records SET cursor_at_ms = ?, cursor_id = ?, phase = ? WHERE kind='progress' AND user_id = ? AND revision = ?",
+        cursorAt,
+        read.value.cursor.transactionId,
+        read.value.complete ? "detect" : "scan",
+        work.userId,
+        progress.revision
+      )
     );
-    yield* batch({ db: work.db, statements });
+    yield* work.commit(progress.revision, statements);
   }).pipe(Effect.mapError(() => new RecurringUnavailable()));
 
 export const processGroup = ({
@@ -169,39 +197,38 @@ export const processGroup = ({
   RecurringUnavailable
 > =>
   Effect.gen(function* () {
-    const raw = yield* query({
-      db: work.db,
-      sql: `SELECT fact_json AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at_ms,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key = ? ORDER BY occurred_at_ms, id LIMIT ${maximumGroupFacts + 1}`,
-      values: [work.userId, group],
-    });
+    const raw = yield* work.select(
+      `SELECT fact_json AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at_ms,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key = ? ORDER BY occurred_at_ms, id LIMIT ${maximumGroupFacts + 1}`,
+      [work.userId, group]
+    );
     if (raw.length > maximumGroupFacts) return yield* new RecurringUnavailable();
     const rows = yield* decode({ schema: Schema.Array(StringRow), input: raw });
     const facts = yield* Effect.forEach(rows, (row) =>
       decode({ schema: jsonCodec(RecurringTransactionFact), input: row.value })
     );
     const proposals = detectMonthlySeries({ facts, timeZone: progress.time_zone });
-    const statements: D1PreparedStatement[] = [
-      prepareRecurringFactGuard({ ...work, revision: progress.revision }),
-    ];
+    const statements: Statement[] = [];
     for (const proposal of proposals) {
       const encoded = yield* Schema.encodeEffect(jsonCodec(Proposal))(proposal);
       const key = `${group}|${DateTime.formatIso(proposal.firstOccurredAt)}`;
       statements.push(
-        work.db
-          .prepare(
-            "INSERT INTO recurring_evaluation_records (kind,user_id,id,proposal_json) VALUES ('proposal',?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET proposal_json = excluded.proposal_json"
-          )
-          .bind(work.userId, key, encoded)
+        statement(
+          "INSERT INTO recurring_evaluation_records (kind,user_id,id,proposal_json) VALUES ('proposal',?,?,?) ON CONFLICT(user_id,kind,id) DO UPDATE SET proposal_json = excluded.proposal_json",
+          work.userId,
+          key,
+          encoded
+        )
       );
     }
     statements.push(
-      work.db
-        .prepare(
-          "UPDATE recurring_evaluation_records SET group_key = ? WHERE kind='progress' AND user_id = ? AND revision = ?"
-        )
-        .bind(group, work.userId, progress.revision)
+      statement(
+        "UPDATE recurring_evaluation_records SET group_key = ? WHERE kind='progress' AND user_id = ? AND revision = ?",
+        group,
+        work.userId,
+        progress.revision
+      )
     );
-    yield* batch({ db: work.db, statements });
+    yield* work.commit(progress.revision, statements);
   }).pipe(Effect.mapError(() => new RecurringUnavailable()));
 
 type Retained = Readonly<{
@@ -211,11 +238,10 @@ type Retained = Readonly<{
 }>;
 const retainedSeries = (work: Work): Effect.Effect<ReadonlyArray<Retained>, RecurringUnavailable> =>
   Effect.gen(function* () {
-    const rows = yield* query({
-      db: work.db,
-      sql: `SELECT series_json, evidence_json, reference_json FROM recurring_series WHERE user_id = ? LIMIT ${maximumSeries + 1}`,
-      values: [work.userId],
-    });
+    const rows = yield* work.select(
+      `SELECT series_json, evidence_json, reference_json FROM recurring_series WHERE user_id = ? LIMIT ${maximumSeries + 1}`,
+      [work.userId]
+    );
     if (rows.length > maximumSeries) return yield* new RecurringUnavailable();
     const stored = yield* decode({ schema: Schema.Array(StoredSeries), input: rows });
     return yield* Effect.forEach(stored, (row) =>
@@ -273,7 +299,7 @@ const makeSeries = ({ proposal, progress, current, retained }: SeriesInput): Rec
 const seriesStatement = (
   work: Work,
   input: SeriesInput & Readonly<{ context: UserContext }>
-): Effect.Effect<D1PreparedStatement, RecurringUnavailable> =>
+): Effect.Effect<Statement, RecurringUnavailable> =>
   Effect.gen(function* () {
     const { proposal, progress, retained, context } = input;
     const series = makeSeries(input);
@@ -300,29 +326,28 @@ const seriesStatement = (
           });
     const contextJson =
       eventId === null ? null : yield* Schema.encodeEffect(jsonCodec(UserContext))(context);
-    return work.db
-      .prepare(`INSERT INTO recurring_series (
+    return statement(
+      `INSERT INTO recurring_series (
       user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,
       confirmation_id,confirmed_at_ms,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence
     ) VALUES (?,?,?,?,?,?,?,1,?,?,?,?,?,
       CASE WHEN ? IS NOT NULL THEN (SELECT coalesce(max(confirmation_sequence),0)+1 FROM recurring_series WHERE confirmation_sequence IS NOT NULL) END)
     ON CONFLICT(user_id,id) DO UPDATE SET series_json=excluded.series_json,
-      evidence_json=excluded.evidence_json,reference_json=excluded.reference_json,valid=1`)
-      .bind(
-        work.userId,
-        series.id,
-        series.money.currency,
-        normalizeCounterparty(series.counterparty),
-        encoded,
-        evidence,
-        reference,
-        eventId,
-        eventId === null ? null : series.confirmedAt.epochMilliseconds,
-        contextJson,
-        confirmation,
-        eventId === null ? null : 0,
-        eventId
-      );
+      evidence_json=excluded.evidence_json,reference_json=excluded.reference_json,valid=1`,
+      work.userId,
+      series.id,
+      series.money.currency,
+      normalizeCounterparty(series.counterparty),
+      encoded,
+      evidence,
+      reference,
+      eventId,
+      eventId === null ? null : series.confirmedAt.epochMilliseconds,
+      contextJson,
+      confirmation,
+      eventId === null ? null : 0,
+      eventId
+    );
   }).pipe(Effect.mapError(() => new RecurringUnavailable()));
 
 const retainedAssignments = ({
@@ -358,11 +383,10 @@ export const cutover = ({
   progress,
 }: Readonly<{ work: Work; progress: Progress }>): Effect.Effect<void, RecurringUnavailable> =>
   Effect.gen(function* () {
-    const rows = yield* query({
-      db: work.db,
-      sql: `SELECT proposal_json AS value FROM (SELECT rowid,user_id,id AS proposal_key,proposal_json FROM recurring_evaluation_records WHERE kind='proposal') WHERE user_id = ? ORDER BY proposal_key LIMIT ${maximumSeries + 1}`,
-      values: [work.userId],
-    });
+    const rows = yield* work.select(
+      `SELECT proposal_json AS value FROM (SELECT rowid,user_id,id AS proposal_key,proposal_json FROM recurring_evaluation_records WHERE kind='proposal') WHERE user_id = ? ORDER BY proposal_key LIMIT ${maximumSeries + 1}`,
+      [work.userId]
+    );
     if (rows.length > maximumSeries) return yield* new RecurringUnavailable();
     const stored = yield* decode({ schema: Schema.Array(StringRow), input: rows });
     const proposals = yield* Effect.forEach(stored, (row) =>
@@ -370,22 +394,10 @@ export const cutover = ({
     );
     const retained = yield* retainedSeries(work);
     const assignments = yield* retainedAssignments({ proposals, retained });
-    const contextRows = yield* Effect.tryPromise({
-      try: () =>
-        prepareUserContext({
-          ...work,
-          statement: {
-            sql: "SELECT serviceMarket, locale, timeZone FROM identity_user_context WHERE userId = ?",
-            params: [work.userId],
-          },
-        }).all(),
-      catch: () => new RecurringUnavailable(),
-    });
-    const context = yield* decode({ schema: UserContext, input: contextRows.results[0] });
+    const context = yield* work.context;
     const current = yield* DateTime.now;
-    const statements: D1PreparedStatement[] = [
-      prepareRecurringFactGuard({ ...work, revision: progress.revision }),
-      work.db.prepare("UPDATE recurring_series SET valid = 0 WHERE user_id = ?").bind(work.userId),
+    const statements: Statement[] = [
+      statement("UPDATE recurring_series SET valid = 0 WHERE user_id = ?", work.userId),
     ];
     for (const { proposal, retained: old } of assignments) {
       statements.push(
@@ -393,16 +405,49 @@ export const cutover = ({
       );
     }
     statements.push(
-      work.db
-        .prepare(
-          "UPDATE recurring_evaluation_records SET phase = 'complete', evaluated_at_ms = ?, evaluated_revision = revision WHERE kind='progress' AND user_id = ? AND revision = ?"
-        )
-        .bind(current.epochMilliseconds, work.userId, progress.revision),
-      work.db
-        .prepare(
-          "DELETE FROM recurring_evaluation_records WHERE kind IN ('fact','proposal') AND user_id = ?"
-        )
-        .bind(work.userId)
+      statement(
+        "UPDATE recurring_evaluation_records SET phase = 'complete', evaluated_at_ms = ?, evaluated_revision = revision WHERE kind='progress' AND user_id = ? AND revision = ?",
+        current.epochMilliseconds,
+        work.userId,
+        progress.revision
+      ),
+      statement(
+        "DELETE FROM recurring_evaluation_records WHERE kind IN ('fact','proposal') AND user_id = ?",
+        work.userId
+      )
     );
-    yield* batch({ db: work.db, statements });
+    yield* work.commit(progress.revision, statements);
   });
+
+export const advanceEvaluation = ({
+  work,
+  snapshot,
+}: {
+  work: EvaluationStore;
+  snapshot: RecurringFactSnapshot;
+}): Effect.Effect<void, RecurringUnavailable> =>
+  Effect.gen(function* () {
+    const rows = yield* work.select(
+      "SELECT revision, phase, cursor_at_ms, cursor_id, group_key, evaluated_at_ms, first_captured_at_ms, time_zone FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id = ?",
+      [work.userId]
+    );
+    const first = rows[0];
+    if (first === undefined) return yield* initialize({ work, snapshot });
+    const progress = yield* decode({ schema: Progress, input: first });
+    if (progress.revision !== snapshot.revision) {
+      return yield* initialize({ work, snapshot });
+    }
+    if (progress.phase === "scan") return yield* scan({ work, progress });
+    if (progress.phase === "complete") return;
+    const groups = yield* work.select(
+      "SELECT group_key AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at_ms,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key > ? GROUP BY group_key ORDER BY group_key LIMIT 1",
+      [work.userId, progress.group_key]
+    );
+    const group = groups[0];
+    if (group === undefined) return yield* cutover({ work, progress });
+    return yield* processGroup({
+      work,
+      progress,
+      group: (yield* decode({ schema: StringRow, input: group })).value,
+    });
+  }).pipe(Effect.mapError(() => new RecurringUnavailable()));

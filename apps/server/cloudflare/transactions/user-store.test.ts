@@ -216,11 +216,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
       const money = { amount: "9007199254740993.15", currency: "USD" };
       const correction = { expectedRevision: 0, changes: { counterparty: "corrected" } };
-      yield* owner.exec(
-        "UPDATE transaction_projection_state SET fact_revision=1,first_captured_at_ms=?2,time_zone='America/Bogota' WHERE user_id=?1",
-        alice.user,
-        instant
-      );
       const corrected = yield* call(transaction, "PUT", correction);
       expect(corrected.status).toBe(200);
       expect(yield* jsonBody(corrected)).toMatchObject({
@@ -286,7 +281,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         ],
       });
       expect(yield* owner.exec("SELECT fact_revision FROM transaction_projection_state")).toEqual([
-        { fact_revision: 4 },
+        { fact_revision: 6 },
       ]);
       expect(
         yield* owner.exec("SELECT id,kind,interpretation_revision FROM source_attestations")

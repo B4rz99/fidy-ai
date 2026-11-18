@@ -66,7 +66,10 @@ const setup = (): typeof nativeTransactionJourney => nativeTransactionJourney;
 const send = (
   store: Journey,
   index: number,
-  call: string | { path: string; method: "POST" | "PUT"; body: object }
+  call:
+    | string
+    | { path: string; method: "POST" | "PUT"; body: object }
+    | { path: string; method: "DELETE" }
 ): Promise<Response> =>
   Bun.sleep(canonicalRequestProtection.intervalMs).then(() => {
     if (typeof call === "string") return store.browser(index, call);
@@ -80,7 +83,7 @@ const send = (
           cookie: "__Host-fidy_session=" + subject.bearer,
           "content-type": "application/json",
         },
-        body: JSON.stringify(call.body),
+        ...("body" in call ? { body: JSON.stringify(call.body) } : {}),
       })
     );
   });
@@ -1055,4 +1058,56 @@ scenario(
       })
     ),
   30000
+);
+
+scenario("removes a deleted Transaction from exact Dashboard and Budget totals", () =>
+  runNative(
+    Effect.gen(function* () {
+      const store = yield* initializedSetup();
+      const categoryId = "10000000-0000-4000-8000-000000000016";
+      const money = { amount: "9007199254740993.15", currency: "COP" };
+      const occurredAt = DateTime.formatIso(yield* DateTime.now);
+      const month = DateTime.formatIsoDate(
+        DateTime.makeZonedUnsafe(occurredAt, { timeZone: "America/Bogota" })
+      ).slice(0, 7);
+      const budget = yield* native(() =>
+        send(store, 0, {
+          path: "/budgets",
+          method: "POST",
+          body: { categoryId, cap: money, month },
+        })
+      );
+      expect(budget.status).toBe(201);
+      const captured = yield* native(() =>
+        send(store, 0, {
+          path: "/transactions",
+          method: "POST",
+          body: { categoryId, money, direction: "outflow", occurredAt },
+        })
+      );
+      expect(captured.status).toBe(201);
+      const { data } = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
+      )(yield* native(() => captured.json()));
+      const observe = Effect.fn(function* (expected: ReadonlyArray<string>, spent: string) {
+        expect(yield* metricTotals(yield* native(() => send(store, 0, "/dashboard/view")))).toEqual(
+          expected
+        );
+        const status = yield* native(() =>
+          send(store, 0, "/budget-status?timeZone=America%2FBogota&month=" + month)
+        );
+        expect(status.status).toBe(200);
+        expect(yield* native(() => status.json())).toMatchObject({
+          data: { statuses: [{ spent: { amount: spent, currency: "COP" } }] },
+        });
+      });
+      yield* observe([money.amount], money.amount);
+      expect(
+        (yield* native(() =>
+          send(store, 0, { path: "/transactions/" + data.id, method: "DELETE" })
+        )).status
+      ).toBe(200);
+      yield* observe([], "0");
+    })
+  )
 );

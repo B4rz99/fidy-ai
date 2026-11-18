@@ -1,3 +1,6 @@
+import { withStoreCapacity } from "../runtime/sqlite/operations";
+import { dispatchSeries, recoverSeries, repairSeriesAlarm } from "./internal/sqlite-series";
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { RecurringConfirmationId } from "../../src/core/recurring/contract";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
@@ -15,19 +18,12 @@ import {
   type RecurringDigestSourcePage,
   RecurringUnavailable,
   maximumDigestCheckpointLength,
+  recurringDiscoveryIntervalMs,
 } from "./contract";
-import { Progress, StringRow, pageSize } from "./internal/models";
+import { pageSize } from "./internal/models";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
 
-import {
-  batch,
-  cutover,
-  decode,
-  initialize,
-  processGroup,
-  query,
-  scan,
-} from "./internal/evaluation";
+import { advanceEvaluation, batch, databaseEvaluation, decode, query } from "./internal/evaluation";
 import { Cursor, Row, consentGuard, decodeRow, evaluationGuard } from "./internal/confirmations";
 import {
   Cursor as QueryCursor,
@@ -76,35 +72,9 @@ export const evaluateRecurringSeries = (work: Work): Effect.Effect<void, Recurri
   Effect.gen(function* () {
     const snapshot = yield* findRecurringSnapshot(work);
     if (Option.isNone(snapshot)) return yield* new RecurringUnavailable();
-    const rows = yield* query({
-      db: work.db,
-      sql: "SELECT revision, phase, cursor_at_ms, cursor_id, group_key, evaluated_at_ms, first_captured_at_ms, time_zone FROM (SELECT rowid,user_id,revision,phase,cursor_at_ms,cursor_id,group_key,evaluated_at_ms,evaluated_revision,first_captured_at_ms,time_zone FROM recurring_evaluation_records WHERE kind='progress') WHERE user_id = ?",
-      values: [work.userId],
-    });
-    const first = rows[0];
-    if (first === undefined) return yield* initialize({ work, snapshot: snapshot.value });
-    const progress = yield* decode({ schema: Progress, input: first });
-    if (progress.revision !== snapshot.value.revision) {
-      return yield* initialize({ work, snapshot: snapshot.value });
-    }
-    if (progress.phase === "scan") return yield* scan({ work, progress });
-    if (progress.phase === "complete") return;
-    const groups = yield* query({
-      db: work.db,
-      sql: "SELECT group_key AS value FROM (SELECT rowid,user_id,id,group_key,occurred_at_ms,fact_json FROM recurring_evaluation_records WHERE kind='fact') WHERE user_id = ? AND group_key > ? GROUP BY group_key ORDER BY group_key LIMIT 1",
-      values: [work.userId, progress.group_key],
-    });
-    const group = groups[0];
-    if (group === undefined) return yield* cutover({ work, progress });
-    return yield* processGroup({
-      work,
-      progress,
-      group: (yield* decode({ schema: StringRow, input: group })).value,
-    });
+    yield* advanceEvaluation({ work: databaseEvaluation(work), snapshot: snapshot.value });
   }).pipe(Effect.mapError(() => new RecurringUnavailable()));
-
 const recurringWeekMs = 604800000;
-const recurringDiscoveryIntervalMs = 3600000;
 const recurringWorkBatchSize = 4;
 const DiscoverySchedule = Schema.Struct({ next_discovery_at_ms: Schema.Int });
 const discoveryOrder = `ORDER BY (userId > (SELECT last_user FROM recurring_dispatch WHERE id=1)) DESC,userId LIMIT ${recurringWorkBatchSize}`;
@@ -329,3 +299,22 @@ export const ownsRecurringSeries = ({
     Effect.map((row) => row !== null),
     Effect.orElseSucceed(() => false)
   );
+
+export const ownsLocalRecurringSeries = Effect.fn(function* (user: UserId, id: string) {
+  const sql = yield* SqliteClient;
+  return (
+    (yield* sql`SELECT 1 FROM recurring_series WHERE user_id=${user} AND id=${id}`).length === 1
+  );
+});
+
+export const dispatchLocalRecurringSeries: typeof dispatchSeries = (unit) => dispatchSeries(unit);
+export const recoverLocalRecurringSeries: typeof recoverSeries = (current, storage, owns) =>
+  recoverSeries(current, storage, owns);
+
+export const repairLocalRecurringAlarm = Effect.fnUntraced(function* (
+  current: number,
+  storage: DurableObjectStorage,
+  owns: (id: string) => boolean
+) {
+  return yield* withStoreCapacity("required")(repairSeriesAlarm(current, storage, owns));
+});

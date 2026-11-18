@@ -129,17 +129,17 @@ const statusOf = (
 };
 class RecurringCursorChanged extends Data.TaggedError("RecurringCursorChanged") {}
 const statusResultPosition = -2;
-const readStatus = (
+export const readStatus = (
   raw: unknown
 ): Effect.Effect<Option.Option<typeof Status.Type>, Schema.SchemaError> =>
   raw === undefined
     ? Effect.succeedNone
     : Schema.decodeUnknownEffect(Status)(raw).pipe(Effect.asSome);
-const pageResponse = ({
+export const pageData = ({
   raw,
   status,
 }: Readonly<{ raw: unknown; status: Option.Option<typeof Status.Type> }>): Effect.Effect<
-  Response,
+  Schema.Json,
   Schema.SchemaError
 > =>
   Effect.gen(function* () {
@@ -167,7 +167,7 @@ const pageResponse = ({
       evaluation: statusOf(status),
       cursor: nextCursor,
     });
-    return Response.json({ data, next: [] }, { headers: { "cache-control": "no-store" } });
+    return data;
   });
 const pageStatements = (
   call: Call,
@@ -214,7 +214,7 @@ export const readPage = ({
     if (Option.isSome(cursor) && cursor.value.revision !== revision) {
       return yield* new RecurringCursorChanged();
     }
-    const response = yield* pageResponse({ raw: results.at(-1)?.results, status });
+    const data = yield* pageData({ raw: results.at(-1)?.results, status });
     yield* Effect.tryPromise({
       try: () =>
         db.batch([
@@ -238,7 +238,7 @@ export const readPage = ({
           ? new RecurringCursorChanged()
           : new RecurringUnavailable(),
     });
-    return response;
+    return Response.json({ data, next: [] }, { headers: { "cache-control": "no-store" } });
   }).pipe(
     Effect.catchTag("RecurringCursorChanged", () => invalidCursor(call)),
     Effect.orElseSucceed(transactionUnavailable)

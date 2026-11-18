@@ -1,3 +1,5 @@
+import { understoodCategory } from "./sqlite-history";
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { readFinalizedSnapshot } from "./read-finalization";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { UtcTimestamp } from "../../../src/core/_shared/time";
@@ -9,7 +11,7 @@ import type {
 } from "../contract";
 import type { Transaction } from "../../../src/core/transactions/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { effectiveHistoryPage, selectedEffectiveHistoryPage } from "./effective-transaction";
+import { type effectiveHistoryPage, selectedEffectiveHistoryPage } from "./effective-transaction";
 import { decodeTransactionRow } from "./transaction-history";
 
 const maximumSelection = 128;
@@ -24,46 +26,85 @@ const decodeFacts = (rows: ReadonlyArray<unknown>): Option.Option<PlanningTransa
     })
   );
 
-const idsStatement = ({
-  db,
-  userId,
-  ids,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  ids: ReadonlyArray<string>;
-}>): D1PreparedStatement => {
-  const query = effectiveHistoryPage({
-    userId,
+const idsPage = (
+  userId: string,
+  ids: ReadonlyArray<string>,
+  taxonomyRevision = false
+): ReturnType<typeof effectiveHistoryPage> =>
+  selectedEffectiveHistoryPage({
+    userSelection: { sql: "SELECT ? AS userId", params: [userId] },
+    taxonomyRevision,
     where: "user_id = ? AND id IN (SELECT value FROM json_each(?))",
     bindings: [userId, Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)))(ids)],
     limit: maximumSelection + 1,
   });
-  return db.prepare(query.sql).bind(...query.bindings);
+const rangePage = Effect.fn(function* (
+  userId: string,
+  range: PlanningTransactionRange,
+  taxonomyRevision: boolean
+) {
+  return selectedEffectiveHistoryPage({
+    userSelection: { sql: "SELECT ? AS userId", params: [userId] },
+    taxonomyRevision,
+    where: "user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?",
+    bindings: [
+      userId,
+      DateTime.toEpochMillis(yield* Schema.decodeEffect(UtcTimestamp)(range.from)),
+      DateTime.toEpochMillis(yield* Schema.decodeEffect(UtcTimestamp)(range.through)),
+    ],
+    limit: maximumSelection + 1,
+  });
+});
+const idsStatement = ({
+  db,
+  userId,
+  ids,
+}: {
+  db: D1Database;
+  userId: string;
+  ids: ReadonlyArray<string>;
+}): D1PreparedStatement => {
+  const page = idsPage(userId, ids);
+  return db.prepare(page.sql).bind(...page.bindings);
 };
-
-const rangeStatement = ({
+const rangeStatement = Effect.fn(function* ({
   db,
   userId,
   range,
-}: Readonly<{
+}: {
   db: D1Database;
   userId: string;
   range: PlanningTransactionRange;
-}>): Effect.Effect<D1PreparedStatement, Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const query = effectiveHistoryPage({
-      userId,
-      where: "user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?",
-      bindings: [
-        userId,
-        DateTime.toEpochMillis(yield* Schema.decodeEffect(UtcTimestamp)(range.from)),
-        DateTime.toEpochMillis(yield* Schema.decodeEffect(UtcTimestamp)(range.through)),
-      ],
-      limit: maximumSelection + 1,
-    });
-    return db.prepare(query.sql).bind(...query.bindings);
-  });
+}) {
+  const page = yield* rangePage(userId, range, false);
+  return db.prepare(page.sql).bind(...page.bindings);
+});
+const localFacts = Effect.fn(function* (page: ReturnType<typeof effectiveHistoryPage>) {
+  const sql = yield* SqliteClient;
+  const rows = yield* sql.unsafe(page.sql, page.bindings);
+  const facts = rows.every(understoodCategory)
+    ? decodeFacts(rows)
+    : Option.none<PlanningTransactionFacts>();
+  return yield* Effect.fromOption(facts);
+});
+export const localPlanningRange = Effect.fn(function* (
+  user: string,
+  range: PlanningTransactionRange
+) {
+  return yield* localFacts(yield* rangePage(user, range, true));
+});
+export const localPlanningReferences = Effect.fn(function* (
+  user: string,
+  ids: ReadonlyArray<string>
+) {
+  const transactions: Transaction[] = [];
+  for (let offset = 0; offset < ids.length; offset += maximumSelection) {
+    const page = idsPage(user, ids.slice(offset, offset + maximumSelection), true);
+    const found = yield* localFacts(page);
+    transactions.push(...found.transactions);
+  }
+  return transactions;
+});
 
 /** Bounded same-User effective facts; the canonical coordinator owns live authority. */
 export const readPlanningTransactions = ({

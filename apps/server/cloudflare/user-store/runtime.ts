@@ -1,3 +1,9 @@
+import {
+  dispatchLocalRecurringSeries,
+  recoverLocalRecurringSeries,
+  repairLocalRecurringAlarm,
+} from "../recurring/operations";
+import { dispatchLocalRecurringPlans, isLocalRecurringPlan } from "../recurring-plans/operations";
 import { dispatchLocalDashboard, isLocalDashboardOperation } from "../dashboard/operations";
 import { dispatchLocalBudget, isLocalBudgetOperation } from "../budgets/operations";
 import { browserSessionRequest } from "./internal/browser-session";
@@ -12,12 +18,7 @@ import {
 import { handleSourceCancellationWork } from "../subscription/runtime";
 import type { LocalSourceCancellationWork, WompiBindings } from "../subscription/contract";
 import { DurableObject } from "cloudflare:workers";
-import {
-  createStoreRuntime,
-  openSqliteStore,
-  storeReadiness,
-  withStoreCapacity,
-} from "../runtime/sqlite/operations";
+import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
 import { Clock, Effect, Option, Result } from "effect";
 import { canonicalOperation } from "../routing/operations";
 import { dispatchLocalTransaction, isLocalTransactionOperation } from "../transactions/operations";
@@ -67,6 +68,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return this.runtime.runPromise(
       Effect.flatMap(Clock.currentTimeMillis, (current) =>
         recoverUserWork([
+          recoverLocalRecurringSeries(current, this.ctx.storage, this.owns),
           recoverLocalReceipts(current, this.ctx.storage),
           offerDueSourceCancellations({
             current,
@@ -117,6 +119,12 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           )
         )
       );
+    }
+    if (selected.id === "recurring.listRecurringSeries") {
+      return Option.some(this.runtime.runPromise(dispatchLocalRecurringSeries(unit)));
+    }
+    if (isLocalRecurringPlan(selected.id)) {
+      return Option.some(this.runtime.runPromise(dispatchLocalRecurringPlans(unit)));
     }
     if (isLocalDashboardOperation(selected.id)) {
       return Option.some(this.runtime.runPromise(dispatchLocalDashboard(unit)));
@@ -174,6 +182,30 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
+  private inspectWork(): Promise<Response> {
+    const storage = this.ctx.storage;
+    const ownsUser = this.owns;
+    return this.runtime.runPromise(
+      Effect.gen(function* () {
+        const current = yield* Clock.currentTimeMillis;
+        const inspections = yield* Effect.all(
+          [
+            repairReceiptAlarm(current, storage),
+            repairCancellationAlarm(storage),
+            repairLocalRecurringAlarm(current, storage, ownsUser),
+          ],
+          { mode: "result", concurrency: 1 }
+        );
+        if (inspections.some(Result.isFailure)) {
+          return new Response(null, { status: uncertainCheckStatus });
+        }
+        return ownerCheckResponse(
+          inspections.some((result) => Result.isSuccess(result) && result.success)
+        );
+      })
+    );
+  }
+
   private dispatch(request: Request, registered: boolean): Promise<Response> {
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
@@ -212,23 +244,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       );
     }
     if (ownerCheckRequest(request)) {
-      if (!registered) return Promise.resolve(ownerCheckResponse());
-      const storage = this.ctx.storage;
-      return this.runtime.runPromise(
-        Effect.gen(function* () {
-          const current = yield* Clock.currentTimeMillis;
-          const inspections = yield* Effect.forEach(
-            [repairReceiptAlarm(current, storage), repairCancellationAlarm(storage)],
-            (inspection) => Effect.result(withStoreCapacity("required")(inspection))
-          );
-          if (inspections.some(Result.isFailure)) {
-            return new Response(null, { status: uncertainCheckStatus });
-          }
-          return ownerCheckResponse(
-            inspections.some((result) => Result.isSuccess(result) && result.success)
-          );
-        })
-      );
+      return registered ? this.inspectWork() : Promise.resolve(ownerCheckResponse());
     }
     return Promise.resolve(new Response(null, { status: 404 }));
   }

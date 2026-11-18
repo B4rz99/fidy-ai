@@ -2,8 +2,35 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "777b7715c956c6ac28ae12da0007802aca1ab8dbe5bb31c6aa39f462942692a6";
+const expectedEdgePolicyDigest = "5de23de4e0b427132b3cd73608e12b0b58a4303e082d94c7aad8589aa5e08c8d";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recurring/internal/sqlite-series.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recurring/internal/evaluation.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/recurring-plans/internal/sqlite-plans.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recurring-plans/internal/store.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recurring-plans/internal/mutation.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/transactions/internal/planning-read.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/transactions/internal/recurring-query.ts",
+      import.meta.url
+    )
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/browser-login/contract.ts", import.meta.url)
   ).text(),

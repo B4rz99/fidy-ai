@@ -1,7 +1,10 @@
-import { openAiTestKey } from "../openai.test-fixture";
+import { canonicalRetryLifetimeMs } from "../../src/core/quotas/contract";
+import { canonicalRequestProtection } from "../canonical-admission/contract";
+import { NodeFileSystem } from "@effect/platform-node";
+import { alice, nativeTransactionJourney } from "../financial-user-store.test-fixture";
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schedule, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { UserId } from "../../src/core/identity/contract";
 import { Money } from "../../src/core/_shared/money";
@@ -21,43 +24,7 @@ import { advanceRecurringWork } from "./runtime";
 import { makeCoordinators, sendBackground } from "./recurring.test-fixture";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
-import coreWorker from "../core-worker";
-import publicWorker from "../public-worker";
-import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 
-const contractDigestLength = 64;
-const unusedAI = (): Promise<never> =>
-  Promise.reject(new Error("Inference is not part of recurring detection"));
-const coreEnvironment = (db: D1Database): Parameters<typeof coreWorker.fetch>[1] => ({
-  DB: db,
-  OPENAI_API_KEY: openAiTestKey({ run: unusedAI }),
-  HOSTED_AI_MODEL: approvedOpenAiModel,
-  CONTRACT_DIGEST: "a".repeat(contractDigestLength),
-  RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-  BROWSER_ORIGIN: "https://app.fidyapp.com",
-  WOMPI_ENVIRONMENT: "",
-  WOMPI_PUBLIC_KEY: "",
-  WOMPI_PRIVATE_KEY: "",
-  WOMPI_INTEGRITY_SECRET: "",
-  KAPSO_API_KEY: "",
-  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-  KAPSO_WEBHOOK_SECRET: "",
-  WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
-  CLOUDFLARE_ACCESS_ISSUER: "",
-  CLOUDFLARE_ACCESS_AUDIENCE: "",
-  USER_TRANSACTION_COORDINATOR: makeCoordinators(db),
-});
-const sendPublic = ({
-  db,
-  request,
-}: Readonly<{ db: D1Database; request: Request }>): Promise<Response> =>
-  publicWorker.fetch(request, {
-    BROWSER_ORIGIN: "https://app.fidyapp.com",
-    LOCAL_CANONICAL_READ_BEARER: "",
-    PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
-    RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-    CORE: { fetch: (input) => coreWorker.fetch(new Request(input), coreEnvironment(db)) },
-  });
 const fromPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
 const databases = isolatedTestDatabases();
@@ -181,145 +148,252 @@ const evaluate = (db: D1Database, steps = 6): Effect.Effect<void> =>
     }
   });
 
-it.effect(
-  "public capture, correction and deletion invalidate and repair the same historical pattern",
-  () =>
-    Effect.gen(function* () {
-      const db = yield* setup();
-      const bearer = "2".repeat(43);
-      const tokenDigest = new Uint8Array(
-        yield* fromPromise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer)))
-      );
-      yield* fromPromise(() =>
-        db
-          .prepare("UPDATE web_sessions SET token_digest=? WHERE id=?")
-          .bind(tokenDigest, sessionId)
-          .run()
-      );
-      const request = (path: string, method = "GET", payload?: unknown): Effect.Effect<Response> =>
-        fromPromise(() => Bun.sleep(1000)).pipe(
-          Effect.andThen(
-            fromPromise(() =>
-              sendPublic({
-                db,
-                request: new Request(`https://api.fidyapp.com${path}`, {
-                  method,
-                  headers: {
-                    origin: "https://app.fidyapp.com",
-                    "content-type": "application/json",
-                    "Fidy-Session-Binding": sessionId,
-                    cookie: `__Host-fidy_session=${bearer}`,
-                  },
-                  ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-                }),
-              })
-            )
-          )
-        );
-      const read = (): Effect.Effect<typeof RecurringSeriesPage.Type> =>
-        Effect.gen(function* () {
-          const response = yield* request("/recurring-series");
-          expect(response.status).toBe(200);
-          return (yield* Schema.decodeUnknownEffect(
-            Schema.toCodecJson(Schema.Struct({ data: RecurringSeriesPage }))
-          )(yield* fromPromise(() => response.json())).pipe(Effect.orDie)).data;
-        });
-      const created: Array<Transaction> = [];
-      for (const month of [1, 2, 3]) {
-        const response = yield* request("/transactions", "POST", {
-          money: { amount: "30000.25", currency: "COP" },
-          counterparty: "Netflix",
-          direction: "outflow",
-          categoryId: "10000000-0000-4000-8000-000000000016",
-          occurredAt: `2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`,
-        });
-        expect(response.status).toBe(201);
-        created.push(
-          (yield* Schema.decodeUnknownEffect(
-            Schema.toCodecJson(Schema.Struct({ data: Transaction }))
-          )(yield* fromPromise(() => response.json())).pipe(Effect.orDie)).data
-        );
-      }
-      yield* evaluate(db);
-      const initial = yield* read();
-      expect(initial.evaluation.kind).toBe("current");
-      expect(initial.series).toHaveLength(1);
-      const original = initial.series[0];
-      const middle = created[1];
-      if (original === undefined || middle === undefined) {
-        return yield* Effect.die("Missing captured pattern");
-      }
-      const correction = yield* request(`/transactions/${middle.id}`, "PUT", {
-        expectedRevision: 0,
-        changes: { counterparty: null },
-      });
-      expect(correction.status).toBe(200);
-      expect((yield* read()).evaluation.kind).toBe("updating");
-      yield* evaluate(db);
-      expect((yield* read()).series).toHaveLength(0);
-      const restored = yield* request(`/transactions/${middle.id}`, "PUT", {
-        expectedRevision: 1,
-        changes: { counterparty: "Netflix" },
-      });
-      expect(restored.status).toBe(200);
-      yield* evaluate(db);
-      expect((yield* read()).series).toEqual([original]);
-      const deleted = yield* request(`/transactions/${middle.id}`, "DELETE");
-      expect(deleted.status).toBe(200);
-      yield* evaluate(db);
-      expect((yield* read()).series).toHaveLength(0);
-    }),
-  { timeout: 30_000 }
-);
+// Bracket the alarm using the watchdog's real receipt deadlines. An equal deadline must already
+// exist after capture, and a deadline one millisecond earlier must require repair.
+const verifyCaptureWake = Effect.fn(function* (
+  db: Effect.Success<typeof nativeTransactionJourney>
+) {
+  yield* fromPromise(() =>
+    db.exec(
+      "INSERT INTO canonical_request_receipts SELECT user_id,?,'transactions.createTransaction',?,min(created_at_ms)+3600000-?,200,NULL FROM transactions WHERE user_id=?",
+      "a".repeat(64),
+      "b".repeat(64),
+      canonicalRetryLifetimeMs,
+      alice.user
+    )
+  );
+  expect(yield* fromPromise(() => db.checkWork(alice.user))).toEqual({
+    status: 204,
+    repaired: "0",
+  });
+  yield* fromPromise(() =>
+    db.exec("UPDATE canonical_request_receipts SET accepted_at_ms=accepted_at_ms-1")
+  );
+  expect(yield* fromPromise(() => db.checkWork(alice.user))).toEqual({
+    status: 204,
+    repaired: "1",
+  });
+  yield* fromPromise(() => db.exec("DELETE FROM canonical_request_receipts"));
+});
 
-it.effect("serves the same canonical result through public HTTP and hosted query execution", () =>
-  Effect.gen(function* () {
-    const db = yield* setup();
-    for (const month of [1, 2, 3]) yield* capture(db, month);
-    yield* evaluate(db);
-    const bearer = "1".repeat(43);
-    const tokenDigest = new Uint8Array(
-      yield* fromPromise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer)))
+const historicalPatternJourney = Effect.gen(function* () {
+  const db = yield* nativeTransactionJourney.pipe(TestClock.withLive);
+  yield* fromPromise(() =>
+    db.exec(
+      "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES(?,?,'processing_grant',0)",
+      alice.session,
+      alice.user
+    )
+  );
+  const request = (path: string, method = "GET", payload?: unknown): Effect.Effect<Response> =>
+    TestClock.withLive(Effect.sleep(canonicalRequestProtection.intervalMs)).pipe(
+      Effect.andThen(
+        fromPromise(() =>
+          db.send(
+            new Request(`https://api.fidyapp.com${path}`, {
+              method,
+              headers: {
+                origin: "https://app.fidyapp.com",
+                "content-type": "application/json",
+                "Fidy-Session-Binding": alice.session,
+                cookie: `__Host-fidy_session=${alice.bearer}`,
+              },
+              ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+            })
+          )
+        )
+      )
+    );
+  const evaluateDue = Effect.fn(function* () {
+    // Move the last completed evaluation beyond its weekly discovery deadline.
+    yield* fromPromise(() =>
+      db.exec(
+        "UPDATE recurring_evaluation_records SET evaluated_at_ms=0 WHERE kind='progress' AND phase='complete'"
+      )
     );
     yield* fromPromise(() =>
-      db
-        .prepare("UPDATE web_sessions SET token_digest = ? WHERE id = ?")
-        .bind(tokenDigest, sessionId)
-        .run()
+      db.exec(
+        "UPDATE transaction_projection_state SET first_captured_at_ms=0 WHERE fact_revision IS NOT NULL"
+      )
     );
-    const response = yield* fromPromise(() =>
-      sendPublic({
-        db,
-        request: new Request("https://api.fidyapp.com/recurring-series", {
-          headers: {
-            origin: "https://app.fidyapp.com",
-            "Fidy-Session-Binding": sessionId,
-            cookie: `__Host-fidy_session=${bearer}`,
-          },
+    // Drive the production watchdog and wait for the asynchronous User alarm to commit each checkpoint.
+    yield* TestClock.withLive(
+      Effect.gen(function* () {
+        expect((yield* fromPromise(() => db.checkWork(alice.user))).status).toBe(204);
+        return yield* fromPromise(() =>
+          db.exec(
+            "SELECT 1 AS ready FROM recurring_evaluation_records p JOIN transaction_projection_state f USING(user_id) WHERE p.kind='progress' AND p.phase='complete' AND p.evaluated_revision=f.fact_revision"
+          )
+        );
+      }).pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 1,
+          schedule: Schedule.spaced("50 millis"),
         }),
-      })
+        Effect.timeout("10 seconds"),
+        Effect.orDie
+      )
     );
-    expect(response.status).toBe(200);
+  });
+  const read = (): Effect.Effect<typeof RecurringSeriesPage.Type> =>
+    Effect.gen(function* () {
+      const response = yield* request("/recurring-series");
+      expect(response.status).toBe(200);
+      return (yield* Schema.decodeUnknownEffect(
+        Schema.toCodecJson(Schema.Struct({ data: RecurringSeriesPage }))
+      )(yield* fromPromise(() => response.json())).pipe(Effect.orDie)).data;
+    });
+  const created: Array<Transaction> = [];
+  for (const month of [1, 2, 3]) {
+    const response = yield* request("/transactions", "POST", {
+      money: { amount: "30000.25", currency: "COP" },
+      counterparty: "Netflix",
+      direction: "outflow",
+      categoryId: "10000000-0000-4000-8000-000000000016",
+      occurredAt: `2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`,
+    });
+    expect(response.status).toBe(201);
+    created.push(
+      (yield* Schema.decodeUnknownEffect(Schema.toCodecJson(Schema.Struct({ data: Transaction })))(
+        yield* fromPromise(() => response.json())
+      ).pipe(Effect.orDie)).data
+    );
+  }
+  yield* verifyCaptureWake(db);
+  yield* evaluateDue();
+  const initial = yield* read();
+  expect(initial.evaluation.kind).toBe("current");
+  expect(initial.series).toHaveLength(1);
+  const original = initial.series[0];
+  const middle = created[1];
+  if (original === undefined || middle === undefined) {
+    return yield* Effect.die("Missing captured pattern");
+  }
+  const correction = yield* request(`/transactions/${middle.id}`, "PUT", {
+    expectedRevision: 0,
+    changes: { counterparty: null },
+  });
+  expect(correction.status).toBe(200);
+  expect((yield* read()).evaluation.kind).toBe("updating");
+  yield* evaluateDue();
+  expect((yield* read()).series).toHaveLength(0);
+  const restored = yield* request(`/transactions/${middle.id}`, "PUT", {
+    expectedRevision: 1,
+    changes: { counterparty: "Netflix" },
+  });
+  expect(restored.status).toBe(200);
+  yield* evaluateDue();
+  expect((yield* read()).series).toEqual([original]);
+  const deleted = yield* request(`/transactions/${middle.id}`, "DELETE");
+  expect(deleted.status).toBe(200);
+  yield* evaluateDue();
+  expect((yield* read()).series).toHaveLength(0);
+});
+const seriesCount = 33;
+const prefix = 30_000_000;
+const seedPagedSeries = Effect.fn(function* (db: D1Database) {
+  const statements = Array.from({ length: seriesCount }, (_, index) =>
+    [1, 2, 3].map((month) =>
+      captureStatement(db, month, {
+        counterparty: `Merchant ${String(index).padStart(2, "0")}`,
+        idPrefix: String(prefix + index),
+      })
+    )
+  ).flat();
+  yield* fromPromise(() => db.batch(statements));
+  yield* evaluate(db, seriesCount + 3);
+});
+const hostedSeriesParity = Effect.gen(function* () {
+  const db = yield* setup();
+  yield* seedPagedSeries(db);
+  const bearer = "1".repeat(43);
+  const tokenDigest = new Uint8Array(
+    yield* fromPromise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(bearer)))
+  );
+  yield* fromPromise(() =>
+    db
+      .prepare("UPDATE web_sessions SET token_digest = ? WHERE id = ?")
+      .bind(tokenDigest, sessionId)
+      .run()
+  );
+  const local = yield* nativeTransactionJourney.pipe(TestClock.withLive);
+  // The two transports observe equivalent retained evidence, including random series identities.
+  for (const table of ["recurring_series", "recurring_evaluation_records"] as const) {
+    const rows = yield* fromPromise(() =>
+      db.prepare(`SELECT * FROM ${table} WHERE user_id=?`).bind(userId).raw()
+    );
+    for (const row of rows) {
+      const values = yield* Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Union([Schema.Finite, Schema.String, Schema.Null]))
+      )(row);
+      yield* fromPromise(() =>
+        local.exec(`INSERT INTO ${table} VALUES(${values.map(() => "?").join(",")})`, ...values)
+      );
+    }
+  }
+  yield* fromPromise(() =>
+    local.exec(
+      "UPDATE transaction_projection_state SET fact_revision=(SELECT evaluated_revision FROM recurring_evaluation_records WHERE kind='progress'),first_captured_at_ms=0,time_zone='America/Bogota' WHERE user_id=?",
+      userId
+    )
+  );
+  const compare = Effect.fn(function* (cursor?: string) {
+    const path =
+      "/recurring-series" + (cursor === undefined ? "" : "?cursor=" + encodeURIComponent(cursor));
+    const response = yield* fromPromise(() => local.browser(0, path));
     const hosted = Option.getOrThrow(
       yield* executeCanonicalQuery({
         db,
         subject: { id: sessionId, userId, digest: tokenDigest },
         operation: CanonicalOperationId.make("recurring.listRecurringSeries"),
-        input: { query: {} },
+        input: { query: cursor === undefined ? {} : { cursor } },
         bucket: Option.none(),
       })
     );
+    expect(response.status).toBe(200);
     expect(hosted.status).toBe(200);
-    expect(yield* fromPromise(() => hosted.json())).toEqual(
-      yield* fromPromise(() => response.json())
-    );
-    const anonymous = yield* fromPromise(() =>
-      sendPublic({ db, request: new Request("https://api.fidyapp.com/recurring-series") })
-    );
-    expect(anonymous.status).toBe(401);
-  })
-);
-
+    const json = yield* fromPromise(() => response.json());
+    expect(yield* fromPromise(() => hosted.json())).toEqual(json);
+    return (yield* Schema.decodeUnknownEffect(
+      Schema.toCodecJson(Schema.Struct({ data: RecurringSeriesPage }))
+    )(json)).data;
+  });
+  const first = yield* compare();
+  const cursor = Option.getOrThrow(first.cursor);
+  expect(first.series).toHaveLength(32);
+  const second = yield* compare(cursor);
+  expect(second.series).toHaveLength(1);
+  expect(second.cursor).toEqual(Option.none());
+  expect(new Set([...first.series, ...second.series].map((item) => item.id)).size).toBe(
+    seriesCount
+  );
+  yield* fromPromise(() =>
+    local.exec(
+      "UPDATE recurring_evaluation_records SET evaluated_revision=evaluated_revision+1 WHERE kind='progress'"
+    )
+  );
+  expect(
+    (yield* fromPromise(() =>
+      local.browser(0, "/recurring-series?cursor=" + encodeURIComponent(cursor))
+    )).status
+  ).toBe(400);
+  const anonymous = yield* fromPromise(() =>
+    local.send(new Request("https://api.fidyapp.com/recurring-series"))
+  );
+  expect(anonymous.status).toBe(401);
+});
+it.layer(NodeFileSystem.layer)((nativeTest) => {
+  nativeTest.effect(
+    "public capture, correction and deletion invalidate and repair the same historical pattern",
+    () => historicalPatternJourney,
+    { timeout: 30_000 }
+  );
+  nativeTest.effect(
+    "serves the same canonical result through public HTTP and hosted query execution",
+    () => hostedSeriesParity,
+    { timeout: 30_000 }
+  );
+});
 it.effect(
   "rejects a foreign User in private recurring work before retaining evaluation progress",
   () =>
@@ -539,18 +613,7 @@ it.effect(
 it.effect("paginates confirmed patterns without dropping rows or mixing completed revisions", () =>
   Effect.gen(function* () {
     const db = yield* setup();
-    const seriesCount = 33;
-    const prefix = 30_000_000;
-    const statements = Array.from({ length: seriesCount }, (_, index) =>
-      [1, 2, 3].map((month) =>
-        captureStatement(db, month, {
-          counterparty: `Merchant ${String(index).padStart(2, "0")}`,
-          idPrefix: String(prefix + index),
-        })
-      )
-    ).flat();
-    yield* fromPromise(() => db.batch(statements));
-    yield* evaluate(db, seriesCount + 3);
+    yield* seedPagedSeries(db);
     const first = yield* query(db);
     expect(first.series).toHaveLength(32);
     expect(Option.isSome(first.cursor)).toBe(true);

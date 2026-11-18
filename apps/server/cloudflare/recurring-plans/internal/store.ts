@@ -1,3 +1,4 @@
+import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { QueryCaller } from "../../canonical-work/contract";
 import { callerAuthority } from "../../canonical-work/operations";
 import {
@@ -71,7 +72,7 @@ type PlanningRows = Readonly<{
 }>;
 type StoredSelection = Readonly<{
   document: Option.Option<Readonly<{ encoded: string; revision: number }>>;
-  related: ReadonlyArray<D1Result>;
+  related: ReadonlyArray<Readonly<{ results: ReadonlyArray<unknown> }>>;
 }>;
 const decodeRows = (
   snapshot: StoredSelection
@@ -370,11 +371,11 @@ const chunks = (values: ReadonlyArray<string>): ReadonlyArray<string> => {
   return result;
 };
 const collectionWrites = (
-  work: CanonicalPreparationWork,
+  user: string,
   collection: Collection,
   documents: Readonly<{ before: EncodedDocument; after: EncodedDocument }>
-): ReadonlyArray<D1PreparedStatement> => {
-  const statements: D1PreparedStatement[] = [];
+): ReadonlyArray<OwnedStatement> => {
+  const statements: OwnedStatement[] = [];
   const oldRows = new Map(
     collection.rows(documents.before).map((entry) => [entry.key, entry.encoded])
   );
@@ -384,13 +385,10 @@ const collectionWrites = (
   for (const keys of chunks(
     removed.map((key) => Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(key))
   )) {
-    statements.push(
-      work.db
-        .prepare(
-          `DELETE FROM ${collection.table} WHERE user_id=? AND ${collection.key} IN(SELECT value FROM json_each(?))`
-        )
-        .bind(work.subject.userId, keys)
-    );
+    statements.push({
+      sql: `DELETE FROM ${collection.table} WHERE user_id=? AND ${collection.key} IN(SELECT value FROM json_each(?))`,
+      params: [user, keys],
+    });
   }
   for (const changed of chunks(
     nextRows
@@ -401,13 +399,10 @@ const collectionWrites = (
       .split(",")
       .map((column) => `${column}=excluded.${column}`)
       .join(",");
-    statements.push(
-      work.db
-        .prepare(
-          `INSERT INTO ${collection.table}(user_id,${collection.columns}) SELECT ?,${collection.values} FROM json_each(?) WHERE true ON CONFLICT DO UPDATE SET ${updates}`
-        )
-        .bind(work.subject.userId, changed)
-    );
+    statements.push({
+      sql: `INSERT INTO ${collection.table}(user_id,${collection.columns}) SELECT ?,${collection.values} FROM json_each(?) WHERE true ON CONFLICT DO UPDATE SET ${updates}`,
+      params: [user, changed],
+    });
   }
   return statements;
 };
@@ -437,10 +432,67 @@ export const writeDocument = ({
           prepareChangedRowAssertion({ db: work.db, scope: "recurring_plan" }),
         ];
         for (const collection of collections) {
-          statements.push(...collectionWrites(work, collection, { before, after }));
+          statements.push(
+            ...collectionWrites(work.subject.userId, collection, { before, after }).map((entry) =>
+              work.db.prepare(entry.sql).bind(...entry.params)
+            )
+          );
         }
         return statements;
       },
       catch: () => new RecurringPlanningUnavailable(),
     });
   }).pipe(Effect.mapError(() => new RecurringPlanningUnavailable()));
+
+const LocalRoot = Schema.Struct({ encoded: Schema.String, revision: Schema.Int });
+const localStoredSelection = Effect.fn(function* (
+  user: string,
+  revisions: Option.Option<OwnedStatement>
+) {
+  const sql = yield* SqliteClient;
+  const [root] =
+    yield* sql`SELECT document_json AS encoded, revision FROM user_documents WHERE user_id=${user} AND kind='recurring-plan'`;
+  const document =
+    root === undefined
+      ? Option.none()
+      : Option.some(yield* Schema.decodeUnknownEffect(LocalRoot)(root));
+  const related = yield* Effect.forEach(selections, (selection, index) => {
+    const query =
+      index === 1 && Option.isSome(revisions)
+        ? revisions.value
+        : { sql: selection, params: [user] };
+    return sql.unsafe(query.sql, query.params).pipe(Effect.map((results) => ({ results })));
+  });
+  return { document, related };
+});
+export const readLocalDocument = Effect.fn(function* (user: string) {
+  return yield* decodeDocument(yield* localStoredSelection(user, Option.none()));
+});
+export const readLocalCompactProjection = Effect.fn(function* (
+  user: string,
+  revisions: OwnedStatement,
+  now: DateTime.Utc
+) {
+  const rows = yield* decodeRows(yield* localStoredSelection(user, Option.some(revisions)));
+  return yield* decodeReadProjection({ rows, now });
+});
+
+export const writeLocalDocument = Effect.fn(function* (
+  user: string,
+  base: RecurringDocument,
+  document: RecurringDocument
+) {
+  const sql = yield* SqliteClient;
+  const root = yield* Schema.encodeEffect(RootJson)(document);
+  const stored =
+    yield* sql`INSERT INTO user_documents(user_id,kind,document_json,revision) VALUES(${user},'recurring-plan',${root},${document.revision})
+    ON CONFLICT(user_id,kind) DO UPDATE SET document_json=excluded.document_json,revision=excluded.revision WHERE revision=${base.revision} RETURNING revision`;
+  if (stored.length !== 1) return yield* new RecurringPlanningUnavailable();
+  const before = yield* Schema.encodeEffect(RecurringDocument)(base);
+  const after = yield* Schema.encodeEffect(RecurringDocument)(document);
+  for (const collection of collections) {
+    for (const statement of collectionWrites(user, collection, { before, after })) {
+      yield* sql.unsafe(statement.sql, statement.params);
+    }
+  }
+});

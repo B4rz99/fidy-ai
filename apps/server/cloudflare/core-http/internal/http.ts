@@ -7,7 +7,10 @@ import {
 
 import { coordinatorErasureStoreIds } from "../../transactions/runtime";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
-import { prepareBoundRecurringWorkspace } from "../../recurring-plans/operations";
+import {
+  isLocalRecurringPlan,
+  prepareBoundRecurringWorkspace,
+} from "../../recurring-plans/operations";
 import {
   prepareBoundReviewItem,
   prepareBoundReviewMaterial,
@@ -1748,6 +1751,8 @@ const browserCanonicalResponse = (
 const isUserStoreOperation = (id: string): boolean =>
   isLocalTransactionOperation(id) ||
   isLocalDashboardOperation(id) ||
+  isLocalRecurringPlan(id) ||
+  id === "recurring.listRecurringSeries" ||
   isLocalBudgetOperation(id) ||
   id === "subscription.cancelSubscription";
 

@@ -6,7 +6,7 @@ import type {
 import { RecurringPlanningUnavailable } from "../contract";
 import type { CanonicalPreparationWork } from "../../canonical-operations/contract";
 import { readPlanningTransactionMonths } from "../../transactions/operations";
-import { automaticProjection } from "./query";
+import { type AutomaticProjection, automaticProjection } from "./query";
 
 const monthWidth = 7;
 
@@ -22,36 +22,61 @@ export const snapshotCompletions = ({
   document: RecurringDocument;
   command: RecurringCommand;
 }>): Effect.Effect<RecurringDocument, RecurringPlanningUnavailable> =>
+  retainCompletions({
+    document,
+    command,
+    now: DateTime.makeUnsafe(work.current),
+    months: (from, through) =>
+      readPlanningTransactionMonths({ db: work.db, userId: work.subject.userId, from, through }),
+    project: (document, month, now) =>
+      automaticProjection({
+        db: work.db,
+        userId: work.subject.userId,
+        document,
+        month,
+        now,
+        finalization: Option.none(),
+      }),
+  });
+
+export const retainCompletions = <E, R>({
+  document,
+  command,
+  now,
+  months: selectMonths,
+  project,
+}: Readonly<{
+  document: RecurringDocument;
+  command: RecurringCommand;
+  now: DateTime.Utc;
+  months: (
+    from: string,
+    through: string
+  ) => Effect.Effect<Option.Option<ReadonlyArray<string>>, E, R>;
+  project: (
+    document: RecurringDocument,
+    month: string,
+    now: DateTime.Utc
+  ) => Effect.Effect<AutomaticProjection, E, R>;
+}>): Effect.Effect<RecurringDocument, E | RecurringPlanningUnavailable, R> =>
   Effect.gen(function* () {
     if (document.plans.length === 0 || command.edit.kind === "reverse") return document;
-    const now = DateTime.makeUnsafe(work.current);
     const through = DateTime.formatIsoDateUtc(DateTime.add(now, { days: 4 })).slice(0, monthWidth);
     const first = document.plans.reduce(
       (date, plan) => (plan.revisions[0].from < date ? plan.revisions[0].from : date),
       `${through}-01`
     );
-    const months = yield* readPlanningTransactionMonths({
-      db: work.db,
-      userId: work.subject.userId,
-      from: DateTime.formatIso(DateTime.subtract(DateTime.makeUnsafe(first), { days: 4 })),
-      through: DateTime.formatIso(
-        DateTime.add(DateTime.makeUnsafe(`${through}-01`), { months: 1 })
-      ),
-    });
+    const months = yield* selectMonths(
+      DateTime.formatIso(DateTime.subtract(DateTime.makeUnsafe(first), { days: 4 })),
+      DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(`${through}-01`), { months: 1 }))
+    );
     if (Option.isNone(months)) return yield* new RecurringPlanningUnavailable();
     const candidates = completionMonths(months.value).filter(
       (month) => month >= first.slice(0, monthWidth) && month <= through
     );
     let retained = document;
     for (const month of candidates) {
-      const projection = yield* automaticProjection({
-        finalization: Option.none(),
-        db: work.db,
-        userId: work.subject.userId,
-        document: retained,
-        month,
-        now,
-      });
+      const projection = yield* project(retained, month, now);
       // Incomplete reads cannot establish a safe allocation boundary for an edit.
       if (!projection.complete) return yield* new RecurringPlanningUnavailable();
       const extra = projection.document.fulfillments.filter(

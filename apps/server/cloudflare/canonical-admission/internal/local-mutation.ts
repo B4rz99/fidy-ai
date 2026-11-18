@@ -181,6 +181,40 @@ export const sweepLocalReceipts = Effect.fn(function* (current: number) {
     SELECT rowid FROM canonical_request_receipts WHERE accepted_at_ms<=${current - canonicalRetryLifetimeMs}
       ORDER BY accepted_at_ms LIMIT ${receiptCleanupPageSize})`;
 });
+// The complete Recurring ledger can exceed a single SQLite row. Keep its original JSON bytes
+// under the same receipt key and expiry. Every other response keeps its reviewed replay policy.
+const largeReceiptOperation = "recurringPlans.applyRecurringEdit";
+const receiptPartCharacters = 200_000;
+const ReceiptPart = Schema.Struct({ position: Schema.Int, part: Schema.String });
+const fullReceiptBody = Effect.fn(function* ({
+  body,
+  operation,
+  user,
+  digest,
+}: {
+  body: string;
+  operation: string;
+  user: UserId;
+  digest: string;
+}) {
+  if (operation !== largeReceiptOperation || body.startsWith("{")) return body;
+  const length = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Int))(body);
+  const sql = yield* SqliteClient;
+  const parts = yield* Schema.decodeUnknownEffect(Schema.Array(ReceiptPart))(
+    yield* sql`SELECT position,part FROM recurring_receipt_parts WHERE user_id=${user} AND retry_key_digest=${digest} ORDER BY position`
+  );
+  let next = 0;
+  for (const { position, part } of parts) {
+    if (position !== next) {
+      return yield* new CanonicalAdmissionUnavailable({ cause: "incomplete_receipt" });
+    }
+    next += part.length;
+  }
+  if (next !== length) {
+    return yield* new CanonicalAdmissionUnavailable({ cause: "incomplete_receipt" });
+  }
+  return parts.map((row) => row.part).join("");
+});
 const replay = Effect.fn(function* (call: Call, invocation: Invocation) {
   if (Option.isNone(invocation.digest)) return Option.none<Response>();
   const sql = yield* SqliteClient;
@@ -200,12 +234,16 @@ const replay = Effect.fn(function* (call: Call, invocation: Invocation) {
       yield* reject(call, invalid("This completed operation cannot replay its one-time result."))
     );
   }
-  const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(receipt.body);
+  const body = yield* fullReceiptBody({
+    body: receipt.body,
+    operation: operation.id,
+    user: subject.userId,
+    digest: invocation.digest.value,
+  });
+  const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(body);
   yield* validateOutput(operation, receipt.status, decoded);
   yield* audit(call, receipt.status < firstFailureStatus ? "success" : "validation_failed");
-  return Option.some(
-    attachStanding({ ...call, response: bodyResponse(receipt.status, receipt.body) })
-  );
+  return Option.some(attachStanding({ ...call, response: bodyResponse(receipt.status, body) }));
 });
 const charge = Effect.fn(function* (call: Call) {
   const { subject, current, operation, status } = call;
@@ -228,6 +266,7 @@ const charge = Effect.fn(function* (call: Call) {
   return Option.none<Response>();
 });
 const financialGrowth = new Set<string>([
+  "recurringPlans.applyRecurringEdit",
   "dashboard.initializeDashboard",
   "dashboard.applyDashboardEdit",
   "budgets.createBudget",
@@ -241,7 +280,22 @@ const replayableOperations = new Set<string>([
   "budgets.deleteBudget",
   "subscription.cancelSubscription",
   "transactions.unlinkTransactions",
+  "transactions.deleteTransaction",
 ]);
+const highSurrogateStart = 0xd800;
+const highSurrogateEnd = 0xdbff;
+const writeReceiptParts = Effect.fn(function* (body: string, user: UserId, digest: string) {
+  const sql = yield* SqliteClient;
+  let start = 0;
+  while (start < body.length) {
+    let end = Math.min(start + receiptPartCharacters, body.length);
+    // SQLite text parameters must never split a Unicode scalar.
+    const tail = body.charCodeAt(end - 1);
+    if (tail >= highSurrogateStart && tail <= highSurrogateEnd && end < body.length) end -= 1;
+    yield* sql`INSERT INTO recurring_receipt_parts(user_id,retry_key_digest,position,part) VALUES(${user},${digest},${start},${body.slice(start, end)})`;
+    start = end;
+  }
+});
 const complete = Effect.fn(function* (
   call: Call,
   invocation: Invocation,
@@ -255,11 +309,14 @@ const complete = Effect.fn(function* (
     const sql = yield* SqliteClient;
     yield* preserveStoreAlarm(call.storage, current + canonicalRetryLifetimeMs);
     yield* sql`DELETE FROM canonical_request_receipts WHERE user_id=${subject.userId} AND retry_key_digest=${invocation.digest.value} AND accepted_at_ms<=${current - canonicalRetryLifetimeMs}`;
+    const large = operation.id === largeReceiptOperation && body.length > receiptPartCharacters;
+    const value = large ? String(body.length) : body;
     // A positive allowlist keeps future one-time responses out of storage until explicitly reviewed.
     yield* oneStored(
       yield* sql`INSERT INTO canonical_request_receipts(user_id,retry_key_digest,operation,input_digest,accepted_at_ms,status,body)
-      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${replayableOperations.has(operation.id) ? body : null}) RETURNING status`
+      VALUES(${subject.userId},${invocation.digest.value},${operation.id},${invocation.inputHash},${current},${outcome.status},${replayableOperations.has(operation.id) ? value : null}) RETURNING status`
     );
+    if (large) yield* writeReceiptParts(body, subject.userId, invocation.digest.value);
   }
   return attachStanding({
     response: bodyResponse(outcome.status, body),

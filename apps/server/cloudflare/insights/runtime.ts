@@ -1,6 +1,6 @@
 import { recordReminderReply } from "./internal/local-reminder-attention";
 import { withStoreCapacity } from "../runtime/sqlite/operations";
-import { handleChoice } from "./internal/local-reminder-choice";
+import { activeChoiceText, handleChoice } from "./internal/local-reminder-choice";
 import { dispatchDisclosure } from "./internal/local-disclosure";
 import type { WhatsAppTurnAdmission } from "../whatsapp/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
@@ -487,15 +487,11 @@ export const observedReminderChoice = Effect.fn(function* (
   storage: DurableObjectStorage
 ) {
   yield* recordReminderReply(event).pipe(withStoreCapacity("required"));
-  if (
-    !/^(?:(?:re)?activar (?:los )?recordatorios$|p:manual-entry-reminder:|s[ií]$|no$|desactivar$)/iu.test(
-      event.text.trim()
-    )
-  ) {
+  if (!activeChoiceText(event.text)) {
     return Option.none<Response>();
   }
   const privacyChoice =
-    /^(?:no|desactivar)$|^p:manual-entry-reminder:[0-9a-f-]{36}:(?:decline|revoke)$/iu.test(
+    /^(?:no|desactivar)$|^p:(?:manual-entry-reminder|budget-threshold|new-recurring-series):[0-9a-f-]{36}:(?:decline|revoke)$/iu.test(
       event.text.trim()
     );
   if (privacyChoice || environment.PROACTIVITY_ENABLED !== "enabled") {

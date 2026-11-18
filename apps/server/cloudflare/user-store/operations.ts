@@ -1059,6 +1059,14 @@ export const userStoreHistory: StoreHistory = {
       ],
     },
     { version: 30, id: "user-audit-retention", statements: auditRetentionSchema },
+    {
+      version: 31,
+      id: "category-disclosure-purpose",
+      statements: [
+        "ALTER TABLE reminder_disclosures ADD COLUMN kind TEXT NOT NULL DEFAULT 'manual-entry-reminder' CHECK(kind IN ('manual-entry-reminder','budget-threshold','new-recurring-series','weekly-summary'))",
+        "CREATE INDEX native_disclosure_purpose ON reminder_disclosures(user_id,kind,expires_ms)",
+      ],
+    },
   ],
 };
 

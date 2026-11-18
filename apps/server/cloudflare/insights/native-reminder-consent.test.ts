@@ -4,10 +4,17 @@ import { Clock, Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, seed } from "../financial-user-store.test-fixture";
 import { native, nativeHostedPlatform } from "../user-store.test-fixture";
-import { DisclosureSnapshot } from "../../src/shell/consent/contract";
+import { DisclosureSnapshot, type ProactivityOptInKind } from "../../src/shell/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 
-const signedReminderJourney = Effect.fnUntraced(function* () {
+const commands: Record<ProactivityOptInKind, string> = {
+  "manual-entry-reminder": "Activar recordatorios",
+  "budget-threshold": "Activar alertas de presupuesto",
+  "new-recurring-series": "Activar avisos de cargos recurrentes",
+};
+const signedReminderJourney = Effect.fnUntraced(function* (
+  kind: ProactivityOptInKind = "manual-entry-reminder"
+) {
   const runtime = yield* (yield* nativeHostedPlatform)(),
     owner = yield* seed(runtime, alice);
   const portfolio = "123456789012345",
@@ -67,7 +74,7 @@ const signedReminderJourney = Effect.fnUntraced(function* () {
       },
     });
   });
-  expect((yield* say("wamid.request", "Activar recordatorios")).status).toBe(202);
+  expect((yield* say("wamid.request", commands[kind])).status).toBe(202);
   const [claim] = yield* owner
     .exec(
       "SELECT correlation,operation_id FROM whatsapp_deliveries WHERE family='disclosure' AND started_ms IS NOT NULL"
@@ -81,8 +88,7 @@ const signedReminderJourney = Effect.fnUntraced(function* () {
     );
   if (claim === undefined) return yield* Effect.die("missing disclosure claim");
   const qualified =
-    "p:manual-entry-reminder:" +
-    (yield* Schema.decodeUnknownEffect(Schema.String)(claim.operation_id));
+    "p:" + kind + ":" + (yield* Schema.decodeUnknownEffect(Schema.String)(claim.operation_id));
   expect((yield* say("wamid.early", qualified + ":accept")).status).toBe(422);
   const providerMessage = "wamid.reminder-disclosure";
   expect(
@@ -115,21 +121,37 @@ const signedReminderJourney = Effect.fnUntraced(function* () {
   );
   expect((yield* say("wamid.optin", "Sí", providerMessage)).status).toBe(200);
   expect((yield* say("wamid.optin", "Sí", providerMessage)).status).toBe(200);
-  expect(
-    yield* owner.exec(
-      "SELECT revision,json_extract(snapshot_json,'$.timing.hour') AS hour FROM reminder_schedules"
-    )
-  ).toEqual([{ revision: 1, hour: 18 }]);
+  if (kind === "manual-entry-reminder") {
+    expect(
+      yield* owner.exec(
+        "SELECT revision,json_extract(snapshot_json,'$.timing.hour') AS hour FROM reminder_schedules"
+      )
+    ).toEqual([{ revision: 1, hour: 18 }]);
+  }
   expect(
     yield* owner.exec(
       "SELECT json_extract(record_json,'$.evidence.decisionMessage.providerMessageId') AS message FROM proactive_grants"
     )
   ).toEqual([{ message: "wamid.optin" }]);
+  expect(
+    yield* owner.exec("SELECT kind FROM proactive_grants WHERE revoked_at_ms IS NULL")
+  ).toEqual([{ kind }]);
+  if (kind !== "manual-entry-reminder") {
+    expect(yield* owner.exec("SELECT count(*) n FROM reminder_schedules")).toEqual([{ n: 0 }]);
+    expect(yield* owner.exec("SELECT portfolio,bsuid,endpoint FROM reminder_channels")).toEqual([
+      { portfolio, bsuid, endpoint },
+    ]);
+    expect(
+      (yield* say("wamid.cross-kind", qualified.replace(kind, "manual-entry-reminder") + ":revoke"))
+        .status
+    ).toBe(422);
+  }
   expect((yield* say("wamid.revoke", qualified + ":revoke")).status).toBe(200);
   expect(
     yield* owner.exec("SELECT count(*) AS active FROM proactive_grants WHERE revoked_at_ms IS NULL")
   ).toEqual([{ active: 0 }]);
   expect(yield* owner.exec("SELECT count(*) AS turns FROM hosted_turns")).toEqual([{ turns: 0 }]);
+  if (kind !== "manual-entry-reminder") return;
   const chat = yield* say("wamid.chat", "¿Qué recuerdas?");
   expect(chat.status).toBe(202);
   const controls = yield* native(() =>
@@ -191,6 +213,10 @@ const signedReminderJourney = Effect.fnUntraced(function* () {
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect(
     "activates a Reminder only from a signed explicit reply to the delivered original disclosure and revokes the same grant",
-    signedReminderJourney
+    () => signedReminderJourney()
+  );
+  test.effect.each(["budget-threshold", "new-recurring-series"] as const)(
+    "requires the delivered opt-in for %s and refuses a different grant kind",
+    (kind) => signedReminderJourney(kind)
   );
 });

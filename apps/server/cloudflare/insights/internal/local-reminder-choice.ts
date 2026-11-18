@@ -1,3 +1,4 @@
+import { ProactivityOptInKind } from "../../../src/shell/consent/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
@@ -22,8 +23,7 @@ import type { WhatsAppTurnAdmission } from "../../whatsapp/contract";
 import { digestBytes, newId } from "../../secret-material/operations";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
 
-const kind = "manual-entry-reminder",
-  life = 600000,
+const life = 600000,
   day = 86400000,
   drift = 300000,
   precision = 1000;
@@ -61,10 +61,34 @@ const available = Effect.fn(function* (
       });
   return (yield* sql.unsafe(guard.sql, guard.params)).length === 1;
 });
+const commands = new Map<string, ProactivityOptInKind>([
+  ["recordatorios", "manual-entry-reminder"],
+  ["alertas de presupuesto", "budget-threshold"],
+  ["avisos de cargos recurrentes", "new-recurring-series"],
+]);
+const requestedKind = (text: string): Option.Option<ProactivityOptInKind> =>
+  Option.fromUndefinedOr(commands.get(/^(?:re)?activar (?:los )?(.+)$/u.exec(text)?.[1] ?? ""));
+const qualifiedChoice =
+  /^p:(manual-entry-reminder|budget-threshold|new-recurring-series):([0-9a-f-]{36}):(accept|decline|revoke)$/u;
+export const activeChoiceText = (input: string): boolean => {
+  const text = input.trim().toLowerCase();
+  return (
+    Option.isSome(requestedKind(text)) ||
+    qualifiedChoice.test(text) ||
+    /^(?:s[ií]|no|desactivar)$/u.test(text)
+  );
+};
 const offer = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
-  sender: ProactivityTemplateSender,
-  storage: DurableObjectStorage
+  {
+    sender,
+    kind,
+    storage,
+  }: {
+    sender: ProactivityTemplateSender;
+    kind: ProactivityOptInKind;
+    storage: DurableObjectStorage;
+  }
 ) {
   const sql = yield* SqliteClient,
     now = yield* Clock.currentTimeMillis;
@@ -86,13 +110,17 @@ const offer = Effect.fn(function* (
   );
   const expires = event.occurredAtMs + life;
   if (expires <= now) return refused();
-  yield* sql`INSERT INTO reminder_disclosures(id,user_id,portfolio,bsuid,endpoint,request_message,created_ms,expires_ms,attempt_ms,correlation,disclosure,body,digest,grant_id)
-    SELECT ${newId()},${event.userId},${event.portfolioId},${event.bsuid},${event.businessPhoneNumberId},${event.messageId},${event.occurredAtMs},${expires},${now},${newId()},${serialized},${body},${digest},${typeof grant?.id === "string" ? grant.id : null}
-    WHERE (SELECT count(*) FROM reminder_disclosures WHERE user_id=${event.userId} AND created_ms>${now - day})<8 AND NOT EXISTS(SELECT 1 FROM reminder_disclosures o WHERE o.user_id=${event.userId} AND o.expires_ms>${now} AND NOT EXISTS(SELECT 1 FROM reminder_choices c WHERE c.offer_id=o.id)) ON CONFLICT DO NOTHING`;
+  yield* sql`INSERT INTO reminder_disclosures(id,user_id,portfolio,bsuid,endpoint,request_message,created_ms,expires_ms,attempt_ms,correlation,disclosure,body,digest,grant_id,kind)
+    SELECT ${newId()},${event.userId},${event.portfolioId},${event.bsuid},${event.businessPhoneNumberId},${event.messageId},${event.occurredAtMs},${expires},${now},${newId()},${serialized},${body},${digest},${typeof grant?.id === "string" ? grant.id : null},${kind}
+    WHERE (SELECT count(*) FROM reminder_disclosures WHERE user_id=${event.userId} AND created_ms>${now - day})<8 AND NOT EXISTS(SELECT 1 FROM reminder_disclosures o WHERE o.user_id=${event.userId} AND o.kind=${kind} AND o.expires_ms>${now} AND NOT EXISTS(SELECT 1 FROM reminder_choices c WHERE c.offer_id=o.id)) ON CONFLICT DO NOTHING`;
   yield* preserveStoreAlarm(storage, now);
   return new Response(null, { status: 202 });
 });
-const activation = Effect.fn(function* (event: WhatsAppTurnAdmission, grant: string, now: number) {
+const activation = Effect.fn(function* (
+  event: WhatsAppTurnAdmission,
+  { grant, kind, now }: { grant: string; kind: ProactivityOptInKind; now: number }
+) {
+  if (kind !== "manual-entry-reminder") return now;
   const sql = yield* SqliteClient;
   const [old] =
     yield* sql`SELECT snapshot_json FROM reminder_schedules WHERE user_id=${event.userId}`;
@@ -121,7 +149,6 @@ const activation = Effect.fn(function* (event: WhatsAppTurnAdmission, grant: str
   const saved = yield* Schema.encodeEffect(codec)(schedule);
   yield* sql`INSERT INTO reminder_schedules(user_id,id,revision,snapshot_json,next_at_ms,grant_id) VALUES(${event.userId},${schedule.id},${schedule.version},${saved},${schedule.nextScheduledAt.epochMilliseconds},${grant}) ON CONFLICT(user_id) DO UPDATE SET grant_id=excluded.grant_id,revision=excluded.revision,snapshot_json=excluded.snapshot_json,next_at_ms=excluded.next_at_ms,retry_at_ms=0`;
   yield* sql`INSERT INTO reminder_revisions VALUES(${schedule.id},${schedule.version},${saved})`;
-  yield* sql`INSERT INTO reminder_channels VALUES(${grant},${event.portfolioId},${event.bsuid},${event.businessPhoneNumberId}) ON CONFLICT(grant_id) DO NOTHING`;
   return schedule.nextScheduledAt.epochMilliseconds;
 });
 type Decision = "accept" | "decline" | "revoke";
@@ -132,6 +159,7 @@ const decisionFor = (text: string): Option.Option<Decision> => {
 };
 const disclosureRow = Schema.Struct({
   id: Schema.String,
+  kind: ProactivityOptInKind,
   expires_ms: Schema.Int,
   disclosure: Schema.fromJsonString(DisclosureSnapshot),
   provider_message_id: WhatsAppProviderMessageId,
@@ -180,7 +208,7 @@ const legalDecision = Effect.fn(function* (
     disclosure: held.disclosure,
     event: revoke
       ? { _tag: "Revoked", grantId: Option.getOrThrow(held.live_id) }
-      : { _tag: "Granted", grant: { _tag: "InsightDelivery", insightKind: kind } },
+      : { _tag: "Granted", grant: { _tag: "InsightDelivery", insightKind: held.kind } },
     evidence: {
       _tag: "ProviderQualifiedMessages",
       disclosureMessage: {
@@ -214,8 +242,10 @@ const retainDecision = Effect.fn(function* (
     if (changed.length !== 1) return refused();
   } else if (newGrant) {
     if (Option.isSome(held.grant_id)) return refused();
-    yield* sql`INSERT INTO proactive_grants(user_id,kind,id,record_json) VALUES(${event.userId},${kind},${id},${jsonRecord})`;
-    yield* preserveStoreAlarm(action.storage, yield* activation(event, id, now));
+    yield* sql`INSERT INTO proactive_grants(user_id,kind,id,record_json) VALUES(${event.userId},${held.kind},${id},${jsonRecord})`;
+    yield* sql`INSERT INTO reminder_channels VALUES(${id},${event.portfolioId},${event.bsuid},${event.businessPhoneNumberId})`;
+    const wake = yield* activation(event, { grant: id, kind: held.kind, now });
+    yield* preserveStoreAlarm(action.storage, wake);
   }
   if (choice === "accept") {
     yield* sql`UPDATE reminder_attention SET unanswered=0,last_reply_ms=${now},question_id=NULL,question_delivered_ms=NULL WHERE grant_id=${Option.getOrNull(held.live_id)} AND grant_id=${Option.getOrNull(held.grant_id)}`;
@@ -229,19 +259,33 @@ const deliveredOffer = Effect.fn(function* (
 ) {
   const sql = yield* SqliteClient;
   const [raw] =
-    yield* sql`SELECT o.id,o.expires_ms,o.disclosure,o.grant_id,g.id AS live_id,w.provider_message_id FROM reminder_disclosures o JOIN whatsapp_deliveries w ON w.user_id=o.user_id AND w.operation_id=o.id AND w.family='disclosure' AND w.correlation=o.correlation AND w.state='delivered' AND w.delivered_at_ms<=${event.occurredAtMs + precision - 1} LEFT JOIN proactive_grants g ON g.user_id=o.user_id AND g.kind=${kind} AND g.revoked_at_ms IS NULL WHERE o.user_id=${event.userId} AND o.portfolio=${event.portfolioId} AND o.bsuid=${event.bsuid} AND o.endpoint=${event.businessPhoneNumberId} AND ((${Option.getOrNull(offerId)} IS NULL AND w.provider_message_id=${Option.getOrNull(event.replyToMessageId)}) OR o.id=${Option.getOrNull(offerId)})`;
+    yield* sql`SELECT o.id,o.kind,o.expires_ms,o.disclosure,o.grant_id,g.id AS live_id,w.provider_message_id FROM reminder_disclosures o JOIN whatsapp_deliveries w ON w.user_id=o.user_id AND w.operation_id=o.id AND w.family='disclosure' AND w.correlation=o.correlation AND w.state='delivered' AND w.delivered_at_ms<=${event.occurredAtMs + precision - 1} LEFT JOIN proactive_grants g ON g.user_id=o.user_id AND g.kind=o.kind AND g.revoked_at_ms IS NULL WHERE o.user_id=${event.userId} AND o.portfolio=${event.portfolioId} AND o.bsuid=${event.bsuid} AND o.endpoint=${event.businessPhoneNumberId} AND ((${Option.getOrNull(offerId)} IS NULL AND w.provider_message_id=${Option.getOrNull(event.replyToMessageId)}) OR o.id=${Option.getOrNull(offerId)})`;
   return raw;
 });
+const choiceFor = (
+  text: string
+): {
+  kind: Option.Option<string>;
+  choice: Option.Option<Decision>;
+  offer: Option.Option<string>;
+} => {
+  const parts = qualifiedChoice.exec(text);
+  return {
+    kind: Option.fromUndefinedOr(parts?.[1]),
+    choice: decisionFor(parts === null ? text : String(parts[3])),
+    offer: Option.fromUndefinedOr(parts?.[2]),
+  };
+};
 const resolveReply = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
   { text, enabled, storage }: { text: string; enabled: boolean; storage: DurableObjectStorage }
 ) {
-  const parts = /^p:manual-entry-reminder:([0-9a-f-]{36}):(accept|decline|revoke)$/u.exec(text);
-
-  const choice = decisionFor(parts === null ? text : String(parts[2]));
+  const { kind, choice, offer } = choiceFor(text);
   if (Option.isNone(choice)) return Option.none<Response>();
-  const raw = yield* deliveredOffer(event, Option.fromUndefinedOr(parts?.[1]));
-  if (raw === undefined) return parts === null ? Option.none<Response>() : Option.some(refused());
+  const raw = yield* deliveredOffer(event, offer);
+  if (raw === undefined)
+    {return Option.isNone(kind) ? Option.none<Response>() : Option.some(refused());}
+  if (Option.isSome(kind) && kind.value !== raw.kind) return Option.some(refused());
   if (choice.value === "accept" && !enabled) return Option.some(refused());
   return Option.some(
     yield* decide(event, yield* Schema.decodeUnknownEffect(disclosureRow)(raw), {
@@ -256,9 +300,12 @@ export const handleChoice = Effect.fn(function* (
   storage: DurableObjectStorage
 ) {
   const text = event.text.trim().toLowerCase();
-  if (/^(?:activar|reactivar) (?:los )?recordatorios$/u.test(text)) {
+  const kind = requestedKind(text);
+  if (Option.isSome(kind)) {
     return Option.some(
-      Option.isSome(sender) ? yield* offer(event, sender.value, storage) : refused()
+      Option.isSome(sender)
+        ? yield* offer(event, { sender: sender.value, storage, kind: kind.value })
+        : refused()
     );
   }
   return yield* resolveReply(event, { text, enabled: Option.isSome(sender), storage });

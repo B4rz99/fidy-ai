@@ -98,5 +98,14 @@ export const directoryHistory: StoreHistory = {
         "CREATE TABLE login_email_window(singleton INTEGER PRIMARY KEY CHECK(singleton=1),reset_at_ms INTEGER NOT NULL,used INTEGER NOT NULL CHECK(used BETWEEN 1 AND 1000)) STRICT",
       ],
     },
+    {
+      version: 8,
+      id: "forwarded-email-capacity",
+      statements: [
+        "CREATE TABLE email_capacity_slots(slot INTEGER PRIMARY KEY CHECK(slot BETWEEN 1 AND 10000),generation INTEGER NOT NULL,receipt TEXT,expires_at_ms INTEGER,state TEXT CHECK(state IN ('outstanding','retained'))) STRICT",
+        "CREATE INDEX email_capacity_outstanding ON email_capacity_slots(state,expires_at_ms)",
+        "CREATE INDEX email_capacity_expiry ON email_capacity_slots(expires_at_ms) WHERE receipt IS NOT NULL",
+      ],
+    },
   ],
 };

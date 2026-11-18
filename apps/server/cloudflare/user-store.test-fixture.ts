@@ -67,10 +67,34 @@ const billingTrigger = {
       maxRetries: 2,
       retryDelay: 0,
     },
+    ...["statement-test-queue", "forwarded-email-test-queue"].map((name) => ({
+      type: "queue" as const,
+      name,
+      maxBatchSize: 10,
+      maxBatchTimeout: 0,
+      maxRetries: 3,
+      retryDelay: 0,
+      deadLetterQueue: "ingestion-dead-letters",
+    })),
   ],
 };
 
 const billingBindings = {
+  PRIVATE_EMAIL: {
+    type: "worker" as const,
+    worker: "private-email-fixture",
+    exportName: "PrivateEmailFixture",
+  },
+  STATEMENT_STAGING_BUCKET: { type: "r2" as const, name: "statements" },
+  EMAIL_BUCKET: { type: "r2" as const, name: "forwarded-email" },
+  STATEMENT_EXTRACTION_QUEUE: { type: "queue" as const, name: "statement-test-queue" },
+  FORWARDED_EMAIL_QUEUE: { type: "queue" as const, name: "forwarded-email-test-queue" },
+  STATEMENT_EXTRACTION_WORKFLOW: {
+    type: "workflow" as const,
+    name: "statement-test",
+    worker: "core",
+    exportName: "StatementExtractionWorkflowV1",
+  },
   WOMPI_EVENT_SECRET: { type: "text" as const, value: "test_events_callback_fixture" },
   HOSTED_WHATSAPP_QUEUE: { type: "queue" as const, name: "billing-test" },
   WHATSAPP_BUSINESS_PORTFOLIO_ID: { type: "text" as const, value: "123456789012345" },
@@ -215,6 +239,35 @@ const fixtureWorkers = (
 });
 
 /** Production ingress and Core in separate workerd isolates. SQL inspection belongs to the host fixture only. */
+const privateEmailWorker = Effect.fnUntraced(function* (withBilling: boolean) {
+  const emailFixture = withBilling
+    ? [
+        {
+          config: {
+            type: "worker" as const,
+            name: "private-email-fixture",
+            exports: { PrivateEmailFixture: { type: "worker" as const } },
+            compatibilityDate: "2026-09-08",
+            compatibilityFlags: ["nodejs_compat"],
+            env: {
+              ...nativeOwnerBindings,
+              QUEUE_DIAGNOSTICS: { type: "r2" as const, name: "ingestion-dead-letters" },
+            },
+            triggers: [
+              {
+                type: "queue" as const,
+                name: "ingestion-dead-letters",
+                maxBatchSize: 1,
+                maxBatchTimeout: 0,
+              },
+            ],
+            manifest: yield* workerManifest("./ingestion/private-email.test-fixture.ts"),
+          },
+        },
+      ]
+    : [];
+  return emailFixture;
+});
 const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   const { withBilling, withOidc, coreModule, ingressOptions } = fixtureWorkers(mode);
   const fs = yield* FileSystem.FileSystem;
@@ -222,6 +275,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   const [ingress, core] = yield* manifests(coreModule);
 
   const provider = yield* billingProvider(withBilling);
+  const emailFixture = yield* privateEmailWorker(withBilling);
   const oidc = yield* oidcWorkers(withOidc);
   const create = (ceiling: string, logs: Array<string>): Miniflare =>
     new Miniflare({
@@ -260,6 +314,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
           },
         },
         ...provider,
+        ...emailFixture,
         ...oidc,
       ],
     });

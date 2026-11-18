@@ -20,6 +20,12 @@ import { prepareLocalBudget, prepareLocalBudgetDeletion } from "../../budgets/op
 import { prepareLocalRecurringEdit } from "../../recurring-plans/operations";
 import { prepareLocalDashboard } from "../../dashboard/operations";
 import { newKeywordRuleId, prepareLocalKeywordRule } from "../../categories/operations";
+import {
+  prepareLocalForwardingEnable,
+  prepareLocalReviewEdit,
+  prepareLocalStatementAbandonment,
+  prepareLocalStatementDecision,
+} from "../../ingestion/operations";
 import { cancelLocalSubscription, localCancellationReview } from "../../subscription/operations";
 import {
   CanonicalAdmissionUnavailable,
@@ -67,6 +73,29 @@ const groupReview = Effect.fn(function* (plans: ReadonlyArray<LocalMutationPlan>
 });
 /** Only local, transaction-composable commands. Catalog policy controls eligibility and disclosure. */
 export const localBatchOwners = new Map<string, Prepare>([
+  owner("ingestion.enableEmailForwarding", (_input, { user }) =>
+    prepareLocalForwardingEnable(user)
+  ),
+  owner("ingestion.skipNeedsReviewItem", ({ params }, { user, current }) =>
+    prepareLocalStatementDecision(params.id, Option.none(), {
+      user,
+      current,
+      origin: Option.none(),
+    })
+  ),
+  owner("ingestion.resolveNeedsReviewItem", ({ params, payload }, { user, current }) =>
+    prepareLocalStatementDecision(params.id, Option.some(payload.extraction), {
+      user,
+      current,
+      origin: Option.none(),
+    })
+  ),
+  owner("ingestion.abandonStatementSubmission", ({ params }, { user, current }) =>
+    prepareLocalStatementAbandonment(params.id, { user, current, origin: Option.none() })
+  ),
+  owner("ingestion.applyReviewEdit", ({ payload }, { user, current }) =>
+    prepareLocalReviewEdit(payload, user, current)
+  ),
   owner("identity.updateUserPreferences", ({ payload }, { user }) =>
     Effect.succeed(prepareLocalPreferences({ user, preferences: payload }))
   ),

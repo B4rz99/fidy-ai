@@ -10,6 +10,7 @@ const settledInvitations = `SELECT i.id,i.expires_at_ms FROM whatsapp_invitation
 /** Release expired comparison material while leaving every uncertain reservation fenced. */
 export const drainBootstrapExpiry = Effect.fn(function* (now: number) {
   const sql = yield* SqliteClient;
+  yield* sql`UPDATE email_capacity_slots SET receipt=NULL,state=NULL,expires_at_ms=NULL WHERE slot IN (SELECT slot FROM email_capacity_slots WHERE receipt IS NOT NULL AND expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
   yield* sql`DELETE FROM session_routes WHERE token_digest IN(SELECT token_digest FROM session_routes WHERE hard_expires_at_ms<=${now} ORDER BY hard_expires_at_ms LIMIT ${pageSize})`;
   yield* sql`DELETE FROM recovery_rotations WHERE id IN(SELECT id FROM recovery_rotations WHERE state<>'reserved' AND expires_at_ms<=${now} ORDER BY expires_at_ms LIMIT ${pageSize})`;
   yield* sql.unsafe(
@@ -36,6 +37,7 @@ export const directoryDeadline = Effect.gen(function* () {
   const [row] = yield* sql.unsafe(
     `SELECT min(column1) AS deadline FROM (VALUES
       ((SELECT min(expires_at_ms) FROM identity_replacements)),
+      ((SELECT min(expires_at_ms) FROM email_capacity_slots WHERE receipt IS NOT NULL)),
       ((SELECT min(hard_expires_at_ms) FROM session_routes)),
       ((SELECT min(expires_at_ms) FROM recovery_rotations WHERE state<>'reserved')),
       ((SELECT min(virtual_at_ms) FROM unresolved_source_buckets)),

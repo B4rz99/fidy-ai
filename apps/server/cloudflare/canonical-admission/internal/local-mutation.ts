@@ -352,6 +352,8 @@ const financialGrowth = new Set<string>([
 ]);
 export const requiresGrowthAdmission = (operation: string): boolean =>
   financialGrowth.has(operation) ||
+  operation === "ingestion.applyReviewEdit" ||
+  operation === "ingestion.resolveNeedsReviewItem" ||
   operation === "pats.createManualPAT" ||
   operation === "pats.approvePATPairing";
 export const replayableOperations = new Set<string>([

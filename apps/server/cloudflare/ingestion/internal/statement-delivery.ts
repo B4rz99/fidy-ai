@@ -102,10 +102,62 @@ export const dispatchStatementExtraction = (
     if (failed) return yield* new StatementDeliveryUnavailable({ cause: "queue_unavailable" });
   }).pipe(Effect.withSpan("ingestion.statementDispatch"));
 
+type StatementReceiveEnvironment = Readonly<{ STATEMENT_EXTRACTION_WORKFLOW: StatementWorkflow }> &
+  ({ DB: D1Database } | { USER_STORE: StatementCoordinator });
+const pendingWork = Effect.fn(function* (
+  environment: StatementReceiveEnvironment,
+  work: typeof Work.Type,
+  now: number
+) {
+  if ("USER_STORE" in environment) {
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Work))(work).pipe(
+      Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
+    );
+    const response = yield* attempt(() =>
+      environment.USER_STORE.getByName(work.userId).fetch(
+        "https://user.invalid/ingestion/statement/pending",
+        { method: "POST", body }
+      )
+    );
+    if (response.status === missingWorkStatus) return false;
+    if (!response.ok) return yield* new StatementDeliveryUnavailable({ cause: "statement_owner" });
+    return true;
+  }
+  const raw = yield* attempt(() =>
+    environment.DB.prepare(
+      "SELECT status FROM statement_submissions WHERE id=? AND user_id=? AND retention_expires_at_ms>?"
+    )
+      .bind(work.submissionId, work.userId, now)
+      .first()
+  );
+  if (raw === null) return false;
+  const item = yield* Schema.decodeUnknownEffect(SubmissionState)(raw).pipe(
+    Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
+  );
+  return item.status === "queued" || item.status === "processing";
+});
+const reconcileExistingWorkflow = Effect.fn(function* (
+  environment: StatementReceiveEnvironment,
+  work: typeof Work.Type
+) {
+  if ("USER_STORE" in environment) {
+    const state = yield* workflowState(
+      environment.STATEMENT_EXTRACTION_WORKFLOW,
+      work.submissionId
+    );
+    if (["errored", "terminated", "complete"].includes(state.status)) {
+      const owner = environment.USER_STORE;
+      yield* attempt(() => coordinatedStatementStep(owner, work, "StatementFailed"));
+    }
+  } else {
+    yield* attempt(() => environment.STATEMENT_EXTRACTION_WORKFLOW.get(work.submissionId));
+  }
+});
+const missingWorkStatus = 404;
 /** Decode before looking up authority; forged and stale work cannot start an extraction. */
 export const receiveStatementExtraction = (
   input: Readonly<{
-    environment: Readonly<{ DB: D1Database; STATEMENT_EXTRACTION_WORKFLOW: StatementWorkflow }>;
+    environment: StatementReceiveEnvironment;
     messages: ReadonlyArray<Readonly<{ body: unknown; ack: () => void }>>;
   }>
 ): Effect.Effect<void, StatementDeliveryUnavailable> =>
@@ -117,20 +169,7 @@ export const receiveStatementExtraction = (
         message.ack();
         continue;
       }
-      const row = yield* attempt(() =>
-        input.environment.DB.prepare(`SELECT status FROM statement_submissions
-          WHERE id = ? AND user_id = ? AND retention_expires_at_ms > ?`)
-          .bind(work.value.submissionId, work.value.userId, now)
-          .first()
-      );
-      if (row === null) {
-        message.ack();
-        continue;
-      }
-      const submission = yield* Schema.decodeUnknownEffect(SubmissionState)(row).pipe(
-        Effect.mapError((cause) => new StatementDeliveryUnavailable({ cause }))
-      );
-      if (submission.status === "completed" || submission.status === "failed") {
+      if (!(yield* pendingWork(input.environment, work.value, now))) {
         message.ack();
         continue;
       }
@@ -146,9 +185,7 @@ export const receiveStatementExtraction = (
       );
       if (Exit.isFailure(started)) {
         if (Cause.hasInterrupts(started.cause)) return yield* Effect.failCause(started.cause);
-        yield* attempt(() =>
-          input.environment.STATEMENT_EXTRACTION_WORKFLOW.get(work.value.submissionId)
-        );
+        yield* reconcileExistingWorkflow(input.environment, work.value);
       }
       message.ack();
     }

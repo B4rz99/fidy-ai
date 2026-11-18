@@ -8,6 +8,7 @@ import {
   SessionRoute,
   channelInspectUrl,
   directoryName,
+  emailCapacityUrl,
   emailRouteUrl,
   externalLookupUrl,
   externalReserveUrl,
@@ -24,6 +25,7 @@ import {
   supportAdmissionUrl,
   supportApprovalUrl,
   whatsappBootstrapUrl,
+  whatsappOwnerUrl,
 } from "./contract";
 import { directoryIdentityRequest, reconcileIdentityReplacements } from "./internal/replacement";
 
@@ -33,12 +35,13 @@ import { directorySupport } from "./internal/support";
 
 import { recoveryRouteDecision } from "./internal/recovery-rotation";
 
+import { emailCapacityRequest } from "./internal/email-capacity";
 import { directoryDeadline, drainBootstrapExpiry } from "./internal/expiry";
 import { unavailable } from "../browser-login/operations";
 import { channelApprovalEvidence } from "./internal/channel";
 
 import { externalEventRequest } from "./internal/external-events";
-import { whatsappBootstrap } from "./internal/whatsapp";
+import { whatsappBootstrap, whatsappOwner } from "./internal/whatsapp";
 
 import { admitBootstrap } from "./internal/admission";
 import {
@@ -160,9 +163,10 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       );
     }
     return this.runtime.runPromise(
-      directoryRequest(request, this.env).pipe(
-        Effect.catchCause(() => Effect.succeed(unavailable()))
-      )
+      (request.url === emailCapacityUrl
+        ? emailCapacityRequest(request, this.ctx.storage)
+        : directoryRequest(request, this.env)
+      ).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
     );
   }
 }
@@ -230,7 +234,9 @@ const routingCommands = new Map<
   | typeof handlePATDirectoryCommand
   | typeof externalEventRequest
   | typeof credentialLookup
+  | typeof whatsappOwner
 >([
+  [whatsappOwnerUrl, whatsappOwner],
   [sessionRouteUrl, credentialLookup],
   [sourcePressureUrl, credentialLookup],
   [patRouteUrl, credentialLookup],
@@ -269,6 +275,7 @@ const internalRequest = Effect.fn(function* (request: Request, environment: Dire
       return yield* registerRecoveryCredential(request);
     case handoffCancelUrl:
       return yield* cancelFrozenHandoff(request, environment.USER_STORE);
+
     case whatsappBootstrapUrl:
       return yield* whatsappBootstrap(request, environment.USER_STORE);
     default:

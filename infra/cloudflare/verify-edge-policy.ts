@@ -2,8 +2,68 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "5abb9f14b01d37d0a9976e7dc9445d5817863e996a57dc40288d77aa864a1473";
+const expectedEdgePolicyDigest = "f945f76188f9687321cc3ff6b14c307fc794a15e8b90d2122495d88d9f9f8e18";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/email-capacity.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/email-worker.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/email-capacity.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/local-document.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/local-email.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/local-retention.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/local-review.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/local-review-edit.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/local-review-list.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/ingestion/internal/local-review-material.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/ingestion/internal/local-review-snapshot.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/ingestion/internal/local-statement-decision.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/ingestion/internal/local-statement-work.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/private-objects/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/internal/ingestion-schema.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/email-authentication/contract.ts", import.meta.url)
   ).text(),

@@ -1509,6 +1509,47 @@ export const statementAbortRefusal: {
 
 type OwnedSubmissionInput = Readonly<{ userId: string; submissionId: string }>;
 
+export const ownedSubmissionSelection = `SELECT s.id, s.source_format, s.parser_revision,
+           CASE WHEN s.status = 'failed' THEN s.status ELSE
+             CASE WHEN s.clarification_state='awaiting' AND s.needs_review_rows=(SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id=s.id) THEN 'completed' ELSE CASE s.clarification_state WHEN 'awaiting' THEN 'awaiting-clarification' WHEN 'abandoned' THEN 'abandoned' ELSE s.status END END END AS status,
+           s.submitted_at_ms, s.started_at_ms, coalesce(s.clarification_ended_at_ms, s.completed_at_ms) AS completed_at_ms,
+           s.failure_reason, s.input_rows,
+           s.accepted_rows + (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'resolved') AS accepted_rows,
+           s.needs_review_rows - (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id) AS needs_review_rows,
+           (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'skipped') AS skipped_rows,
+           (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'abandoned') AS abandoned_rows
+         FROM statement_submission_context s
+         WHERE s.id = ? AND s.user_id = ?`;
+export const decodeOwnedSubmission = (
+  value: unknown
+): Effect.Effect<Option.Option<StoredStatementSubmission>, StatementStagingUnavailable> =>
+  Schema.decodeUnknownEffect(StoredSubmissionRow)(value).pipe(
+    Effect.flatMap((row) => {
+      const stored: StoredStatementSubmission = {
+        acceptedRows: row.accepted_rows,
+        skippedRows: row.skipped_rows,
+        abandonedRows: row.abandoned_rows,
+        completedAt: row.completed_at_ms,
+        failureReason: row.failure_reason,
+        id: row.id,
+        inputRows: row.input_rows,
+        needsReviewRows: row.needs_review_rows,
+        parserRevision: row.parser_revision,
+        sourceFormat: row.source_format,
+        startedAt: row.started_at_ms,
+        status: row.status,
+        submittedAt: row.submitted_at_ms,
+      };
+      const projection = submissionProjection(stored);
+      return Option.isNone(projection)
+        ? Effect.fail(unavailable())
+        : Schema.decodeEffect(Schema.toType(StatementSubmission))(projection.value).pipe(
+            Effect.as(Option.some(stored)),
+            Effect.mapError(unavailable)
+          );
+    }),
+    Effect.mapError(() => unavailable())
+  );
 export const readOwnedStatementSubmission: {
   (
     input: OwnedSubmissionInput
@@ -1524,52 +1565,12 @@ export const readOwnedStatementSubmission: {
   (config: Pick<StatementStagingConfig, "database">, input: OwnedSubmissionInput) =>
     platformUnavailable(() =>
       config.database
-        .prepare(
-          `SELECT s.id, s.source_format, s.parser_revision,
-           CASE WHEN s.status = 'failed' THEN s.status ELSE
-             CASE WHEN s.clarification_state='awaiting' AND s.needs_review_rows=(SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id=s.id) THEN 'completed' ELSE CASE s.clarification_state WHEN 'awaiting' THEN 'awaiting-clarification' WHEN 'abandoned' THEN 'abandoned' ELSE s.status END END END AS status,
-           s.submitted_at_ms, s.started_at_ms, coalesce(s.clarification_ended_at_ms, s.completed_at_ms) AS completed_at_ms,
-           s.failure_reason, s.input_rows,
-           s.accepted_rows + (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'resolved') AS accepted_rows,
-           s.needs_review_rows - (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id) AS needs_review_rows,
-           (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'skipped') AS skipped_rows,
-           (SELECT count(*) FROM ingestion_statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'abandoned') AS abandoned_rows
-         FROM statement_submission_context s
-         WHERE s.id = ? AND s.user_id = ?`
-        )
+        .prepare(ownedSubmissionSelection)
         .bind(input.submissionId, input.userId)
         .first()
     ).pipe(
       Effect.flatMap((value) =>
-        value === null
-          ? Effect.succeedNone
-          : Schema.decodeUnknownEffect(StoredSubmissionRow)(value).pipe(
-              Effect.flatMap((row) => {
-                const stored: StoredStatementSubmission = {
-                  acceptedRows: row.accepted_rows,
-                  skippedRows: row.skipped_rows,
-                  abandonedRows: row.abandoned_rows,
-                  completedAt: row.completed_at_ms,
-                  failureReason: row.failure_reason,
-                  id: row.id,
-                  inputRows: row.input_rows,
-                  needsReviewRows: row.needs_review_rows,
-                  parserRevision: row.parser_revision,
-                  sourceFormat: row.source_format,
-                  startedAt: row.started_at_ms,
-                  status: row.status,
-                  submittedAt: row.submitted_at_ms,
-                };
-                const projection = submissionProjection(stored);
-                return Option.isNone(projection)
-                  ? Effect.fail(unavailable())
-                  : Schema.decodeEffect(Schema.toType(StatementSubmission))(projection.value).pipe(
-                      Effect.as(Option.some(stored)),
-                      Effect.mapError(unavailable)
-                    );
-              }),
-              Effect.mapError(() => unavailable())
-            )
+        value === null ? Effect.succeedNone : decodeOwnedSubmission(value)
       )
     )
 );

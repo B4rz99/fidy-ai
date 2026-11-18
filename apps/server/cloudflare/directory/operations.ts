@@ -1,6 +1,7 @@
 import { browserSessionBindingHeader } from "../../src/shell/browser-transport/contract";
 import {
   DirectoryWriteUnavailable,
+  EmailCapacityCommand,
   ExternalEventKey,
   type ExternalEventNamespace,
   ExternalEventRoute,
@@ -8,6 +9,7 @@ import {
   SessionRoute,
   type UserStoreBindings,
   directoryName,
+  emailCapacityUrl,
   externalLookupUrl,
   externalReserveUrl,
   patRouteHeader,
@@ -211,5 +213,15 @@ export const lookupExternalEventRoute = Effect.fn(function* (
     yield* Schema.decodeUnknownEffect(ExternalEventRoute)(
       yield* Effect.tryPromise(() => reply.json())
     )
+  );
+});
+
+export const sendEmailCapacity = Effect.fn(function* (
+  directory: ExternalEventNamespace,
+  command: typeof EmailCapacityCommand.Type
+) {
+  const body = yield* Schema.encodeEffect(Schema.fromJsonString(EmailCapacityCommand))(command);
+  return yield* Effect.tryPromise((signal) =>
+    directory.getByName(directoryName).fetch(emailCapacityUrl, { method: "POST", signal, body })
   );
 });

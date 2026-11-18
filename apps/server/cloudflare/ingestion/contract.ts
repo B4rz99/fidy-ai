@@ -1,6 +1,12 @@
+import type { UserStoreBindings } from "../directory/contract";
+import {
+  WhatsAppBusinessPhoneNumberId,
+  type WhatsAppInboundEvent,
+  WhatsAppMediaId,
+} from "../../src/shell/channels/whatsapp/contract";
 import type { ReviewCommand } from "../../src/core/ingestion/contract";
 import type { UserId } from "../../src/core/identity/contract";
-import type { WhatsAppInboundEvent } from "../../src/shell/channels/whatsapp/contract";
+
 import { Data, type Effect, type Option, Schema } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type {
@@ -145,4 +151,34 @@ export type StatementDispatchBindings = Readonly<{
   DB: D1Database;
   STATEMENT_EXTRACTION_QUEUE: StatementQueue;
   STATEMENT_EXTRACTION_WORKFLOW: Option.Option<StatementWorkflow>;
+}>;
+
+export const localDocumentUrl = "https://user.invalid/ingestion/document";
+export const NativeStatementDocument = Schema.Struct({
+  userId: Schema.String.check(Schema.isUUID()),
+  portfolio: Schema.NonEmptyString,
+  bsuid: Schema.NonEmptyString,
+  message: Schema.NonEmptyString,
+  endpoint: WhatsAppBusinessPhoneNumberId,
+  mediaId: WhatsAppMediaId,
+  occurredAt: Schema.Int,
+  receivedAt: Schema.Int,
+});
+export type LocalIngestionEnvironment = Readonly<{
+  DIRECTORY: DurableObjectNamespace;
+  STATEMENT_STAGING_BUCKET: R2Bucket;
+  STATEMENT_EXTRACTION_QUEUE: Queue;
+  EMAIL_BUCKET: R2Bucket;
+  FORWARDED_EMAIL_QUEUE: Queue;
+  KAPSO_API_KEY: string;
+}>;
+
+export const localEmailUrl = "https://user.invalid/ingestion/email";
+export type NativeEmailEnvironment = UserStoreBindings;
+
+export type LocalIngestionRequest = Readonly<{
+  request: Request;
+  env: LocalIngestionEnvironment;
+  owns: (user: string) => boolean;
+  storage: DurableObjectStorage;
 }>;

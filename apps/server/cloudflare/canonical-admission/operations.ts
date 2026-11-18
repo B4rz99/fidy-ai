@@ -1296,11 +1296,12 @@ type LocalWrite<E> = {
 export const prepareLocalWrite = <E, Failure = never>(
   write:
     | LocalWrite<E>
+    | (LocalWrite<E> & { premises: ReadonlyArray<string> })
     | (LocalWrite<E> & {
         review: Effect.Effect<{ effect: string; revision: string }, Failure, SqliteClient>;
       })
 ): LocalMutationPlan => ({
-  premises: [],
+  premises: "premises" in write ? write.premises : [],
   targets: write.targets,
   review:
     "review" in write

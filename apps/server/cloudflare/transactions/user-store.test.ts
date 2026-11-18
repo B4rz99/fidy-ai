@@ -231,7 +231,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         instant + 1000
       );
       yield* owner.exec(
-        "INSERT INTO source_attestations VALUES ('evidence',?,?,'statement-line','CO','es-CO','America/Bogota','statement-v1',?)",
+        "INSERT INTO source_attestations(id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms) VALUES ('evidence',?,?,'statement-line','CO','es-CO','America/Bogota','statement-v1',?)",
         alice.user,
         second,
         instant
@@ -320,7 +320,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     () =>
       Effect.gen(function* () {
         const create = yield* nativeUserPlatform;
-        const runtime = yield* create("1000000");
+        const runtime = yield* create("2000000");
         const owner = yield* seed(runtime, alice);
         const bearer = yield* provisionPAT(owner, alice, {
           id: "20000000-0000-4000-8000-000000000001",
@@ -328,7 +328,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         });
         expect((yield* patCapture(runtime, bearer, "existing")).status).toBe(201);
         yield* owner.exec(
-          "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<1200) INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms,notes) SELECT printf('31000000-0000-4000-8000-%012d',i),?,'500','COP','outflow',?,i,i,printf('%0800d',i) FROM n",
+          "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<3000) INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms,notes) SELECT printf('31000000-0000-4000-8000-%012d',i),?,'500','COP','outflow',?,i,i,printf('%0800d',i) FROM n",
           alice.user,
           category
         );

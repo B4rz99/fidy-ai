@@ -118,3 +118,36 @@ export const eraseObservedPrivateObject = (
     );
     yield* io(() => input.bucket.delete(input.key));
   });
+
+/** Recover the same retained upload after its first placeholder write. A changed or deleted
+ * ETag prevents the late payload from recreating erased bytes. */
+export const resumePrivateUpload = Effect.fn(function* <E, R>(
+  work: PrivateObjectWrite<E, R>,
+  observed: Option.Option<R2Object>
+) {
+  if (
+    Option.isNone(observed) ||
+    observed.value.customMetadata?.purpose !== "private-object-placeholder"
+  ) {
+    return yield* writePrivateObject(work);
+  }
+  yield* validateTarget(work);
+  const metadata = observed.value.customMetadata;
+  if (metadata.sha256 !== work.metadata.sha256 || !(yield* work.authorise)) {
+    return yield* new PrivateObjectUnavailable();
+  }
+  const checksum = Option.match(work.digest, {
+    onNone: () => ({}),
+    onSome: (value) => ({ sha256: Uint8Array.from(value).buffer }),
+  });
+  const written = yield* io(() =>
+    work.bucket.put(work.key, work.bytes, {
+      onlyIf: { etagMatches: observed.value.etag },
+      customMetadata: { ...work.metadata },
+      ...checksum,
+    })
+  );
+  yield* Schema.decodeUnknownEffect(Stored)(written).pipe(
+    Effect.mapError(() => new PrivateObjectUnavailable())
+  );
+});

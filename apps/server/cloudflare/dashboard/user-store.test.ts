@@ -886,7 +886,7 @@ scenario.each(["/dashboard/view", "/dashboard/view?"])(
         expect(yield* chart()).toEqual(before);
         yield* native(() =>
           store.exec(
-            "INSERT INTO source_attestations VALUES('later-statement',?,?,'statement-line','CO','es-CO','America/Bogota','statement-v1',?)",
+            "INSERT INTO source_attestations(id,user_id,transaction_id,kind,service_market,locale,time_zone,interpretation_revision,created_at_ms) VALUES('later-statement',?,?,'statement-line','CO','es-CO','America/Bogota','statement-v1',?)",
             alice.user,
             hidden,
             DateTime.nowUnsafe().epochMilliseconds

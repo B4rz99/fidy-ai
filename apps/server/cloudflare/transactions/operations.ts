@@ -36,6 +36,7 @@ import { rawPathId } from "../http/operations";
 import {
   captureLocalTransaction as captureNative,
   prepareLocalCapture as prepareNativeCapture,
+  prepareSourcedCapture as prepareNativeSourcedCapture,
 } from "./internal/sqlite-capture";
 import { prepareGroupCorrection as ownerPrepareGroupCorrection } from "./internal/group-correction";
 import { effectiveTransactionRelation } from "./internal/effective-transaction";
@@ -489,11 +490,14 @@ export const deleteLocalTransaction: typeof deleteNative = (id, user, current) =
   deleteNative(id, user, current);
 export const readLocalTransactionPage: typeof nativeReadLocalTransactionPage = (...args) =>
   nativeReadLocalTransactionPage(...args);
-export const prepareLocalCapture: typeof prepareNativeCapture = (input, user, current) =>
-  prepareNativeCapture(input, user, current);
+export const prepareLocalCapture: typeof prepareNativeCapture = (...args) =>
+  prepareNativeCapture(...args);
 export const prepareLocalCorrection: typeof prepareNativeCorrection = (input, user, current) =>
   prepareNativeCorrection(input, user, current);
 export const prepareLocalPair: typeof preparePair = (input, user, current) =>
   preparePair(input, user, current);
 export const prepareLocalDeletion: typeof prepareDeletionInStore = (id, user, current) =>
   prepareDeletionInStore(id, user, current);
+
+export const prepareSourcedCapture: typeof prepareNativeSourcedCapture = (...args) =>
+  prepareNativeSourcedCapture(...args);

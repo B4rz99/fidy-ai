@@ -4,7 +4,7 @@ import { TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import type { WorkerTelemetryEvent } from "../runtime/telemetry/contract";
-import { withErasureRecovery } from "../erasure/runtime";
+import { statementOwner } from "./statement-owner.test-fixture";
 import type { CoreQueueEnvironment } from "./contract";
 import { makeCoreQueue } from "./runtime";
 
@@ -164,9 +164,12 @@ it.each(
           createBatch: unused,
           deleteBatch: unused,
         };
-        const env = environment(db, workflow, () => {
-          coordinatorCalls += 1;
-        });
+        const env = {
+          ...environment(db, workflow, () => {
+            coordinatorCalls += 1;
+          }),
+          ...(owner === "statement" ? { USER_STORE: statementOwner(db) } : {}),
+        };
         const acknowledged = new Set<number>();
         const messages = Array.from({ length: 10 }, (_, index) => ({
           index,
@@ -286,12 +289,12 @@ it("retains statement ownership and expiry guards while acknowledging confirmed 
       ];
       const acknowledged = new Set<number>();
       yield* Effect.tryPromise(() =>
-        queue(
-          batch(messages, acknowledged, 1),
-          environment(db, workflow, () => {
+        queue(batch(messages, acknowledged, 1), {
+          ...environment(db, workflow, () => {
             coordinatorCalls += 1;
-          })
-        )
+          }),
+          USER_STORE: statementOwner(db),
+        })
       );
       expect([...acknowledged].toSorted((left, right) => left - right)).toEqual([0, 1, 2, 9, 10]);
       expect(creates).toBe(2);
@@ -349,10 +352,10 @@ it("contains a defective acknowledgement and an ordinary handoff failure in one 
       };
       yield* Effect.tryPromise(() =>
         expect(
-          observedQueue(
-            defective,
-            environment(db, workflow, () => undefined)
-          ).then(
+          observedQueue(defective, {
+            ...environment(db, workflow, () => undefined),
+            USER_STORE: statementOwner(db),
+          }).then(
             () => "resolved",
             () => "rejected"
           )
@@ -375,7 +378,7 @@ const independentHandoffs = [
   { owner: "replacement", limit: 4 },
 ] as const;
 
-it("fails every parallel handoff closed when required recovery configuration is absent", () =>
+it("fails every parallel handoff closed when its User owner binding is absent", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
@@ -400,10 +403,7 @@ it("fails every parallel handoff closed when required recovery configuration is 
               acknowledged,
               1
             ),
-            withErasureRecovery({
-              ...environment(db, workflow, () => undefined),
-              ERASURE_REQUIRED: "true",
-            })
+            environment(db, workflow, () => undefined)
           )
         ).rejects.toBeDefined()
       );
@@ -466,7 +466,7 @@ it.each(independentHandoffs)(
             acknowledged,
             1
           ),
-          environment(db, workflow, () => undefined)
+          { ...environment(db, workflow, () => undefined), USER_STORE: statementOwner(db) }
         );
         yield* Deferred.await(ready).pipe(
           Effect.timeout(5_000),
@@ -536,7 +536,7 @@ it("retains input-order failure selection when independent handoffs fail in reve
               acknowledged,
               1
             ),
-            environment(db, workflow, () => undefined)
+            { ...environment(db, workflow, () => undefined), USER_STORE: statementOwner(db) }
           )
         ).rejects.toMatchObject({ cause: first })
       ).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
@@ -587,10 +587,10 @@ it.each(independentHandoffs)(
           body: body(owner, index),
         }));
         const outcome = yield* Effect.tryPromise(() =>
-          interruptedQueue(
-            batch(messages, acknowledged, 1),
-            environment(db, workflow, () => undefined)
-          )
+          interruptedQueue(batch(messages, acknowledged, 1), {
+            ...environment(db, workflow, () => undefined),
+            USER_STORE: statementOwner(db),
+          })
         ).pipe(Effect.exit, Effect.ensuring(Deferred.succeed(release, undefined)));
         expect(outcome._tag).toBe("Failure");
         expect(creates).toBe(limit);

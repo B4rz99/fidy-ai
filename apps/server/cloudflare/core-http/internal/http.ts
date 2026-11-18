@@ -5,6 +5,7 @@ import {
 } from "../../../src/shell/email-authentication/contract";
 import {
   isLocalForwardingOperation,
+  isLocalReviewOperation,
   prepareBoundReviewItem,
   prepareBoundReviewMaterial,
   prepareBoundReviewPageContext,
@@ -1137,13 +1138,19 @@ const directPathResponse = (
     return Option.some(statementUploadResponse(request));
   }
   if (path === "/web/hosted-turns") {
-    return Option.some(hostedTurnResponse(request, environment));
+    return Option.some(
+      withBrowserBinding(request, environment, hostedTurnResponse(request, environment))
+    );
   }
   if (path === "/web/hosted-turns/delivery") {
-    return Option.some(hostedReceiptResponse(request, environment));
+    return Option.some(
+      withBrowserBinding(request, environment, hostedReceiptResponse(request, environment))
+    );
   }
   if (path === "/web/hosted-turns/progress") {
-    return Option.some(hostedProgressResponse(request, environment));
+    return Option.some(
+      withBrowserBinding(request, environment, hostedProgressResponse(request, environment))
+    );
   }
   return Option.none();
 };
@@ -1724,6 +1731,7 @@ const isUserStoreOperation = (id: string): boolean =>
     isLocalPATGrant,
     isLocalBatchRoute,
     isLocalForwardingOperation,
+    isLocalReviewOperation,
     isLocalTransactionOperation,
     isLocalDashboardOperation,
     isLocalRecurringPlan,
@@ -1736,6 +1744,7 @@ const authorizedCanonicalResponse = (
   environment: CoreHttpEnvironment,
   operation: CatalogOperation
 ): Effect.Effect<Response> => {
+  if (operation.id === "ingestion.submitForExtraction") return statementUploadResponse(request);
   if (request.headers.has("authorization")) {
     return routePATRequest({ request, environment }).pipe(observeCanonicalResponse(operation.id));
   }
@@ -1953,7 +1962,9 @@ const dispatchCoreHttp = ({
     return paymentEnrollmentResponse(request, environment, publish);
   }
   const directPath = directPathResponse(request, environment);
-  if (Option.isSome(directPath)) return bound(directPath.value);
+  if (Option.isSome(directPath)) {
+    return directPath.value;
+  }
   const patListing = canonicalOperation({ method: request.method, path: url.pathname }).pipe(
     Option.filter(
       (operation) => isLocalPATManagement(operation.id) || isLocalPATGrant(operation.id)

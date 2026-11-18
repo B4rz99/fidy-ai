@@ -215,3 +215,25 @@ export const StatusLookupCoordinates = Schema.Struct({
   messageId: callbackIdentifier,
   status: Schema.Literals(["sent", "delivered", "failed"]),
 });
+
+export const whatsappOwnerUrl = "https://directory.invalid/whatsapp/owner";
+
+/** Private shared capacity. A slot generation is spent once; it conveys no User authority. */
+export const emailCapacityUrl = "https://directory.invalid/forwarded-email/capacity";
+export const retainedEmailLimit = 10_000;
+export const outstandingEmailLimit = 1_000;
+export const EmailCapacitySlot = Schema.Struct({
+  slot: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: retainedEmailLimit })),
+  generation: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+const emailCapacityTarget = {
+  ...EmailCapacitySlot.fields,
+  receipt: Schema.String.check(Schema.isUUID()),
+  expires: Schema.Int,
+};
+export const EmailCapacityCommand = Schema.Union([
+  Schema.TaggedStruct("Offer", {}),
+  Schema.TaggedStruct("Claim", emailCapacityTarget),
+  Schema.TaggedStruct("Settle", emailCapacityTarget),
+  Schema.TaggedStruct("Release", emailCapacityTarget),
+]);

@@ -22,7 +22,7 @@ import {
   maximumTransactionInputBytes,
 } from "../../canonical-work/contract";
 import { RequestBodyPolicy } from "../../http/contract";
-import { boundedJsonBody } from "../../http/operations";
+import { boundedJsonBodyWithSize } from "../../http/operations";
 import { preserveStoreAlarm, withStoreAdmission } from "../../runtime/sqlite/operations";
 import {
   type CanonicalAdmissionUnavailable,
@@ -66,6 +66,16 @@ const childEnvelope = Schema.Struct({
   operation: Schema.String,
   input: Schema.Json,
 });
+const ordinaryBatchBytes = maximumAtomicBatchCalls * maximumTransactionInputBytes;
+const withinEnvelopeLimit = (body: typeof envelope.Type, byteLength: number): boolean =>
+  body.calls.some(
+    (call) =>
+      typeof call === "object" &&
+      call !== null &&
+      !Array.isArray(call) &&
+      "operation" in call &&
+      call.operation === "transactions.updateTransactions"
+  ) || byteLength <= ordinaryBatchBytes;
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes:
     maximumTransactionGroupInputBytes + maximumAtomicBatchCalls * maximumTransactionInputBytes,
@@ -80,6 +90,9 @@ type Unit = {
   owns: (id: string) => boolean;
   operation: CatalogOperation;
   storage: DurableObjectStorage;
+  reserveChildRoute: (
+    id: UserId
+  ) => Effect.Effect<void, CanonicalAdmissionUnavailable, SqliteClient>;
 };
 type SelectedChild<Owner> = {
   callId: string;
@@ -129,23 +142,30 @@ const invalidTarget = (operation: CatalogOperation, input: Schema.Json): boolean
     !Schema.is(Schema.String.check(Schema.isUUID()))(params.value.params.id)
   );
 };
-const invalidChildInput = (operation: CatalogOperation, input: Schema.Json): boolean => {
+const exceedsChildLimit = (operation: CatalogOperation, input: Schema.Json): boolean => {
   const limit =
     operation.id === "transactions.updateTransactions"
       ? maximumTransactionGroupInputBytes
       : maximumTransactionInputBytes;
-  return (
-    new TextEncoder().encode(JSON.stringify(input)).length > limit ||
-    Option.isNone(Schema.decodeOption(operation.input, { onExcessProperty: "error" })(input))
-  );
+  return new TextEncoder().encode(JSON.stringify(input)).length > limit;
 };
+const invalidChildInput = (operation: CatalogOperation, input: Schema.Json): boolean =>
+  exceedsChildLimit(operation, input) ||
+  Option.isNone(Schema.decodeOption(operation.input, { onExcessProperty: "error" })(input));
 const invalidChildFailure = (
   operation: CatalogOperation,
   input: Schema.Json
-): Pick<Refusal, "code" | "message"> =>
-  invalidTarget(operation, input)
+): Pick<Refusal, "code" | "message"> => {
+  if (exceedsChildLimit(operation, input)) {
+    return {
+      code: "validation_failed",
+      message: "This child's input exceeds the size an individual call of this operation accepts.",
+    };
+  }
+  return invalidTarget(operation, input)
     ? { code: "not_found", message: "The requested record is unavailable." }
     : { code: "validation_failed", message: "Invalid canonical child input." };
+};
 const selectChildren = <Owner>(
   calls: ReadonlyArray<Schema.Json>,
   owners: ReadonlyMap<string, Owner>
@@ -327,15 +347,43 @@ const commitAuthorizedBatch = Effect.fn(function* (
   });
 });
 
+const reserveRoutes = Effect.fn(function* (
+  unit: Unit,
+  children: Option.Option<Selection<unknown>>,
+  resolve: Effect.Success<ReturnType<typeof localProof>>
+) {
+  if (Option.isSome(children) && "children" in children.value) {
+    const selected = children.value.children.find(
+      (child) => child.operation.id === "ingestion.enableEmailForwarding"
+    );
+    if (selected !== undefined) {
+      const preliminary = yield* resolve(yield* Clock.currentTimeMillis);
+      if (
+        typeof preliminary !== "string" &&
+        (!("patId" in preliminary) ||
+          decideOperationAccess(selected.operation.policy.access, {
+            _tag: "PAT",
+            capabilities: preliminary.scopes,
+          })._tag === "Allowed")
+      ) {
+        yield* unit.reserveChildRoute(preliminary.userId);
+      }
+    }
+  }
+});
 const prepareBatch = Effect.fn(function* <E, R>(
   unit: Unit,
   owners: ReadonlyMap<string, Prepare | ReservedOwner<E, R>>
 ) {
-  const input = yield* boundedJsonBody({
+  const decoded = yield* boundedJsonBodyWithSize({
     request: unit.request,
     policy: bodyPolicy,
     schema: envelope,
   });
+  const input = Option.map(
+    Option.filter(decoded, ({ value, byteLength }) => withinEnvelopeLimit(value, byteLength)),
+    ({ value }) => value
+  );
   const rawKey = yield* localRetryKey(unit.request);
   const key = Schema.decodeUnknownOption(CanonicalRetryKey)(rawKey);
   const validInput = Option.filter(input, () => rawKey === null || Option.isSome(key));
@@ -350,6 +398,7 @@ const prepareBatch = Effect.fn(function* <E, R>(
   const selected = Option.isSome(validInput)
     ? selectChildren(validInput.value.calls, owners)
     : ({ invalid: true } as const);
+  yield* reserveRoutes(unit, Option.some(selected), yield* localProof(unit.request, unit.owns));
   const resolved =
     "children" in selected
       ? yield* Effect.forEach(selected.children, (child) =>
@@ -385,8 +434,9 @@ export const runLocalBatch = Effect.fn(
           return attachStanding({ ...call, response: rateLimited() });
         }
         if (Option.isNone(validInput)) {
-          return yield* reject(call, invalid("Invalid batch envelope or retry key."));
+          return yield* reject(call, invalid("Invalid atomic batch input."));
         }
+
         if ("invalid" in selected) {
           return yield* reject(call, invalid("Unknown canonical child operation."));
         }

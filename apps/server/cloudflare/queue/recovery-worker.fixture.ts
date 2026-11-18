@@ -1,4 +1,5 @@
 import { Clock, Effect, Schema } from "effect";
+import { statementOwner } from "./statement-owner.test-fixture";
 import { makeCoreQueue } from "./runtime";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 
@@ -117,6 +118,7 @@ export default {
             DB: environment.DB,
             RELEASE_GIT_SHA: "synthetic-proof",
             USER_TRANSACTION_COORDINATOR: { getByName: () => ({ fetch: unavailable }) },
+            USER_STORE: statementOwner(environment.DB),
             STATEMENT_EXTRACTION_WORKFLOW: workflow(environment.DB),
           })
         );

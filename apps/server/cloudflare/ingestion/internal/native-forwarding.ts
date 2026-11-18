@@ -1,3 +1,9 @@
+import {
+  canonicalAdmissionUnavailable,
+  localPreparationSubject,
+  prepareLocalWrite,
+  runLocalMutation,
+} from "../../canonical-admission/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import {
@@ -11,11 +17,7 @@ import type { UserId } from "../../../src/core/identity/contract";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { allowanceConsumptionCount } from "../../quotas/operations";
-import {
-  canonicalAdmissionUnavailable,
-  localPreparationSubject,
-  runLocalMutation,
-} from "../../canonical-admission/operations";
+
 import { DirectoryWriteUnavailable, type UserStoreBindings } from "../../directory/contract";
 import { reserveExternalEventRoute } from "../../directory/operations";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
@@ -73,6 +75,8 @@ const registerAddress = Effect.fn(function* (
           family: "forwarding",
         });
 
+        const sql = yield* SqliteClient;
+        yield* sql`UPDATE forwarding_addresses SET route_registered=1 WHERE id=${address.id} AND user_id=${userId} AND local_part=${address.local_part}`;
         return address;
       })
     )
@@ -132,3 +136,33 @@ export const dispatchLocalForwarding = Effect.fn(
   },
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
+
+/** Directory registration precedes the atomic batch. Its route never conveys access to material. */
+export const reserveBatchForwarding = Effect.fn(function* (
+  user: UserId,
+  directory: UserStoreBindings["DIRECTORY"]
+) {
+  yield* registerAddress(Option.some(user), directory);
+});
+export const prepareLocalForwardingEnable = Effect.fn(function* (userId: UserId) {
+  const sql = yield* SqliteClient;
+  const address = yield* addressFor(userId);
+  const [ready] =
+    yield* sql`SELECT 1 FROM forwarding_addresses WHERE user_id=${userId} AND id=${address.id} AND route_registered=1`;
+  if (ready === undefined) return yield* new DirectoryWriteUnavailable();
+  return prepareLocalWrite({
+    targets: ["forwarding"],
+    commit: Effect.succeed({
+      status: 200,
+      outcome: "success",
+      body: {
+        data: {
+          id: address.id,
+          address: address.local_part + "@fidyapp.com",
+          createdAt: DateTime.formatIso(DateTime.makeUnsafe(address.issued_at_ms)),
+        },
+        next: [],
+      },
+    }),
+  });
+});

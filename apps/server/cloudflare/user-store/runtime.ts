@@ -1,3 +1,20 @@
+import { HttpClient } from "effect/http";
+import { Cause, Clock, Context, Effect, Layer, Option, Result } from "effect";
+import { OutboundHttpLive } from "../outbound-http/runtime";
+import {
+  type LocalIngestionEnvironment,
+  localDocumentUrl,
+  localEmailUrl,
+} from "../ingestion/contract";
+import {
+  admitLocalDocument,
+  admitLocalEmail,
+  localPendingStatement,
+  localStatementActivity,
+  processLocalEmail,
+  recoverLocalIngestion,
+  repairLocalIngestionAlarm,
+} from "../ingestion/runtime";
 import { localPATClaimUrl } from "../tokens/contract";
 import { type McpResidency, localProtocolAdmission, makeMcpResidency } from "../mcp/runtime";
 import {
@@ -86,7 +103,12 @@ import {
   settleUserBillingUrl,
 } from "../subscription/contract";
 import { handleNativeBillingCallback, handleSourceCancellationWork } from "../subscription/runtime";
-import { dispatchLocalForwarding, isLocalForwardingOperation } from "../ingestion/operations";
+import {
+  dispatchLocalForwarding,
+  dispatchLocalReview,
+  isLocalForwardingOperation,
+  isLocalReviewOperation,
+} from "../ingestion/operations";
 import { dispatchLocalDashboard, isLocalDashboardOperation } from "../dashboard/operations";
 import { dispatchLocalBudget, isLocalBudgetOperation } from "../budgets/operations";
 import { browserSessionRequest } from "./internal/browser-session";
@@ -100,7 +122,7 @@ import {
 } from "../subscription/operations";
 import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
-import { Cause, Clock, Effect, Option, Result } from "effect";
+
 import { canonicalOperation } from "../routing/operations";
 import { dispatchLocalTransaction, isLocalTransactionOperation } from "../transactions/operations";
 import {
@@ -121,6 +143,7 @@ import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 
 const uncertainCheckStatus = 503;
 type UserStoreEnvironment = WompiBindings &
+  LocalIngestionEnvironment &
   StoreReleaseEnvironment &
   Readonly<{
     BROWSER_ORIGIN: string;
@@ -215,6 +238,16 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           ),
           recoverLocalRecurringSeries(current, this.ctx.storage, this.owns),
           recoverLocalReceipts(current, this.ctx.storage),
+          Effect.scoped(
+            Effect.flatMap(Layer.build(OutboundHttpLive), (clients) =>
+              recoverLocalIngestion(current, this.ctx.storage, this.env).pipe(
+                Effect.provideService(
+                  HttpClient.HttpClient,
+                  Context.get(clients, HttpClient.HttpClient)
+                )
+              )
+            )
+          ).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
           recoverLocalPATExpiry(current, this.ctx.storage),
           offerDueSourceCancellations({
             current,
@@ -299,6 +332,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         isLocalForwardingOperation,
         () => dispatchLocalForwarding({ ...unit, directory: this.env.DIRECTORY }),
       ],
+      [
+        isLocalReviewOperation,
+        () => dispatchLocalReview({ ...unit, bucket: this.env.EMAIL_BUCKET }),
+      ],
       [isLocalRecurringPlan, dispatchLocalRecurringPlans],
       [isLocalDashboardOperation, dispatchLocalDashboard],
       [isLocalBudgetOperation, dispatchLocalBudget],
@@ -367,6 +404,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             repairReplacementAlarm(current, storage),
             repairRecoveryAlarm(current, storage),
             repairReceiptAlarm(current, storage),
+            repairLocalIngestionAlarm(current, storage),
             repairLocalPATExpiry(current, storage),
             repairCancellationAlarm(storage),
             repairLocalRecurringAlarm(current, storage, ownsUser),
@@ -381,6 +419,64 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         );
       })
     );
+  }
+
+  private ingestionRequest(
+    request: Request,
+    owns: (id: string) => boolean
+  ): Option.Option<Promise<Response>> {
+    const unit = { request, env: this.env, owns, storage: this.ctx.storage };
+    switch (request.url) {
+      case localEmailUrl:
+        return Option.some(
+          this.runtime.runPromise(
+            admitLocalEmail(unit).pipe(
+              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+            )
+          )
+        );
+      case "https://coordinator.internal/forwarded-email-work":
+        return Option.some(
+          this.runtime.runPromise(
+            processLocalEmail(request, this.env, owns).pipe(
+              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+            )
+          )
+        );
+      case "https://coordinator.internal/statement-work":
+        return Option.some(
+          this.runtime.runPromise(
+            localStatementActivity(request, this.env.STATEMENT_STAGING_BUCKET, owns).pipe(
+              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+            )
+          )
+        );
+      case "https://user.invalid/ingestion/statement/pending":
+        return Option.some(
+          this.runtime.runPromise(
+            localPendingStatement(request, owns).pipe(
+              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+            )
+          )
+        );
+      case localDocumentUrl:
+        return Option.some(
+          this.runtime.runPromise(
+            Effect.scoped(
+              Effect.flatMap(Layer.build(OutboundHttpLive), (clients) =>
+                admitLocalDocument(unit).pipe(
+                  Effect.provideService(
+                    HttpClient.HttpClient,
+                    Context.get(clients, HttpClient.HttpClient)
+                  )
+                )
+              )
+            ).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+          )
+        );
+      default:
+        return Option.none();
+    }
   }
 
   private readonly retireMcp = (connection: Option.Option<string>): Effect.Effect<void> =>
@@ -520,6 +616,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
   private registeredRequest(request: Request, registered: boolean): Promise<Response> {
     const owns = (userId: string): boolean => registered && this.owns(userId);
+    if (request.method === "POST") {
+      const ingestion = this.ingestionRequest(request, owns);
+      if (Option.isSome(ingestion)) return ingestion.value;
+    }
     if (
       request.method === "POST" &&
       [claimDeliveryUrl, reserveDeliveryUrl, replyDeliveryUrl, statusDeliveryUrl].includes(

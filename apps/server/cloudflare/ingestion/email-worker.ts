@@ -1,3 +1,4 @@
+import { refuseUnverifiedEmail } from "./runtime";
 import { withErasureRecovery } from "../erasure/runtime";
 import { Effect } from "effect";
 import type { TelemetryService } from "../../src/shell/observability/contract";
@@ -22,7 +23,7 @@ type EmailWorker = Readonly<{
  */
 export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
   email: (message, environment) =>
-    Effect.sync(() => message.setReject("Mailbox unavailable")).pipe(
+    refuseUnverifiedEmail(message).pipe(
       observeWorkerExecution({
         telemetry,
         environment: workerRelease(environment),

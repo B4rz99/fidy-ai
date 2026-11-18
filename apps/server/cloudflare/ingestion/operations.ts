@@ -1,7 +1,20 @@
+import { retainDocumentOrigin as retainOrigin } from "./internal/local-document";
 import {
   dispatchLocalForwarding as dispatchLocalForwardingOwned,
   isLocalForwardingOperation as isLocalForwardingOperationOwned,
+  prepareLocalForwardingEnable as prepareAddress,
+  reserveBatchForwarding as reserveBatchAddress,
 } from "./internal/native-forwarding";
+import {
+  prepareLocalAbandon as localAbandon,
+  prepareLocalDecision as localDecision,
+} from "./internal/local-statement-decision";
+import { prepareLocalReviewEdit as localEdit } from "./internal/local-review-edit";
+import {
+  dispatchLocalReview as localReview,
+  isLocalReviewOperation as localReviewOperation,
+} from "./internal/local-review";
+
 import {
   browseReviewPageContext as browseContext,
   prepareBoundReviewPageContext as prepareContext,
@@ -293,3 +306,21 @@ export const dispatchLocalForwarding: typeof dispatchLocalForwardingOwned = (...
   dispatchLocalForwardingOwned(...args);
 export const isLocalForwardingOperation = (id: string): boolean =>
   isLocalForwardingOperationOwned(id);
+
+export const dispatchLocalReview: typeof localReview = (unit) => localReview(unit);
+export const isLocalReviewOperation: typeof localReviewOperation = (id) => localReviewOperation(id);
+
+export const prepareLocalReviewEdit: typeof localEdit = (...args) => localEdit(...args);
+
+export const prepareLocalStatementDecision: typeof localDecision = (...args) =>
+  localDecision(...args);
+export const prepareLocalStatementAbandonment: typeof localAbandon = (...args) =>
+  localAbandon(...args);
+
+export const reserveBatchForwarding: typeof reserveBatchAddress = (...args) =>
+  reserveBatchAddress(...args);
+export const prepareLocalForwardingEnable: typeof prepareAddress = (...args) =>
+  prepareAddress(...args);
+
+export const retainLocalStatementDocumentOrigin: typeof retainOrigin = (input) =>
+  retainOrigin(input);

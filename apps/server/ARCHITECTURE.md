@@ -120,6 +120,36 @@ portfolio, endpoint, recipient, provider message, and event time before recordin
 Verified delivery can resume the Agent’s retained Turn or proactive occurrence through its private
 coordinator. In-flight and rejected effects keep their original identity.
 
+The User stages signed WhatsApp statement documents and eligible private Email in its R2 prefix.
+User SQLite retains each source identity, digest, original deadline, and processing intent. Queue
+messages and Workflow activities carry the User and source IDs. User alarms recover unfinished
+stages and remove expired originals and derived material. A forwarded Email's deadline is 90 days
+from its first receipt. Erasure must drain the User's statement staging and Email prefixes together
+with its SQLite review evidence, materialized rows, and sample candidates.
+
+Forwarded Email capacity is shared in the Directory. It stores up to 10,000 reusable slots with
+opaque receipt IDs, generations, original deadlines and outstanding or retained state. At most
+1,000 receipts can be outstanding. Before R2 staging the User persists an offered slot and
+generation, then claims that exact generation. Repeating an uncertain claim consumes one slot.
+The User settles it after committing the processing outcome. Original expiry releases capacity
+even before physical cleanup. Directory alarms clear expired receipt IDs and preserve only the
+slot generation needed to refuse stale claims.
+
+When disposing of staged Email or erasing a User, fence further local admissions and drain its
+private writers. For each local receipt with a capacity slot, send the private Directory
+`Release` command with its original slot, generation, receipt ID and expiry. Retry the same
+command until acknowledgement before deleting the local receipt. Release also fences an offered
+generation whose claim acknowledgement was lost. A stale release preserves the current holder.
+
+Hosted Agent admission can call `retainLocalStatementDocumentOrigin` in its User transaction
+before staging a document. The retained message, Session, Turn, occurrence and deadline bind later
+statement decisions to that origin. Browser and batch review owners enforce the same boundary.
+
+Eligible Email interpretation can retain a structural IngestSample candidate with its receipt,
+revision, market, parser revision, anonymization revision and expiry. Private human review owns
+approval. Candidate creation records no approval and the User expires the candidate alongside the
+original Email.
+
 Unmigrated paths still use D1. Canonical mutation units commit live authority, owner
 changes, accounting and Audit together. Database guards enforce ownership and revisions alongside
 per-User coordination. Shared reads preserve the same authorization and accountability boundaries.

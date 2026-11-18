@@ -259,33 +259,44 @@ const receiveIdentityOnlyQueue = ({
   return Option.none();
 };
 
+const receiveNativeEmailWork = (
+  batch: QueueInput["batch"],
+  environment: CoreQueueEnvironment
+): Effect.Effect<void, QueueDeliveryUnavailable> => {
+  const owner = environment.USER_STORE;
+  if (environment.EMAIL_BUCKET === undefined || owner === undefined) {
+    return Effect.fail(deliveryFailure(new Error("Email evidence unavailable")));
+  }
+  return Effect.tryPromise({
+    try: () =>
+      receiveForwardedEmailWork({
+        messages: batch.messages,
+        coordinator: owner,
+      }),
+    catch: () => deliveryFailure(new ForwardedEmailDeliveryUnavailable()),
+  }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"));
+};
 const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> => {
   const { batch, environment } = input;
   const identityOnly = receiveIdentityOnlyQueue(input);
   if (Option.isSome(identityOnly)) return identityOnly.value;
   if (batch.messages.some((message) => isForwardedEmailWork(message.body))) {
-    if (environment.EMAIL_BUCKET === undefined) {
-      return Effect.fail(deliveryFailure(new Error("Email evidence unavailable")));
-    }
-    return Effect.tryPromise({
-      try: () =>
-        receiveForwardedEmailWork({
-          messages: batch.messages,
-          coordinator: environment.USER_TRANSACTION_COORDINATOR,
-        }),
-      catch: () => deliveryFailure(new ForwardedEmailDeliveryUnavailable()),
-    }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"));
+    return receiveNativeEmailWork(batch, environment);
   }
   if (batch.messages.some((message) => isStatementExtractionWork(message.body))) {
     const workflow = environment.STATEMENT_EXTRACTION_WORKFLOW;
-    if (workflow === undefined) {
+    const owner = environment.USER_STORE;
+    if (workflow === undefined || owner === undefined) {
       return Effect.fail(deliveryFailure(new Error("Statement extraction unavailable")));
     }
     return receiveWorkflowBatch(
       batch,
       (entry) =>
         receiveStatementExtraction({
-          environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow },
+          environment: {
+            USER_STORE: owner,
+            STATEMENT_EXTRACTION_WORKFLOW: workflow,
+          },
           messages: entry.messages,
         }),
       statementHandoffConcurrency

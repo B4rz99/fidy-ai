@@ -143,3 +143,13 @@ export const whatsappBootstrap = Effect.fn(function* (
   );
   return check.ok ? Response.json({ userId: route }) : check;
 });
+
+export const whatsappOwner = Effect.fn(function* (request: Request) {
+  const { portfolio, bsuid } = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ portfolio: Schema.String, bsuid: Schema.String })
+  )(yield* Effect.tryPromise(() => request.json()));
+  const sql = yield* SqliteClient;
+  const [row] =
+    yield* sql`SELECT user_id AS userId FROM whatsapp_routes WHERE portfolio=${portfolio} AND bsuid=${bsuid} AND established=1`;
+  return row === undefined ? new Response(null, { status: 404 }) : Response.json(row);
+});

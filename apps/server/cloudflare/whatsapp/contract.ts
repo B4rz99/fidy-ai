@@ -248,7 +248,7 @@ export type WhatsAppAuthenticatedInbound = Readonly<{
 
 /** Binding and callbacks required by the authenticated Consent ingress composition. */
 export type WhatsAppIngressEnvironment = Partial<
-  Pick<UserStoreBindings, "DIRECTORY"> &
+  Pick<UserStoreBindings, "DIRECTORY" | "USER_STORE"> &
     Readonly<{
       HOSTED_WHATSAPP_QUEUE: Readonly<{
         send: (event: typeof WhatsAppLifecycleWork.Type) => Promise<unknown>;

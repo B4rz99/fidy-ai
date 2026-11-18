@@ -1,3 +1,7 @@
+import type { UserId } from "../../src/core/identity/contract";
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
+import type { UserStoreBindings } from "../directory/contract";
+import { reserveBatchForwarding, unavailableStatement } from "../ingestion/operations";
 import { readLocalProfile } from "../identity/operations";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
 import { batchOwnersFor, localBatchOwners, localReviewBinding } from "./internal/local-owners";
@@ -11,7 +15,10 @@ import {
   runLocalMutation,
 } from "../canonical-admission/operations";
 import { preserveStoreAlarm } from "../runtime/sqlite/operations";
-import type { CanonicalReadCompletion } from "../canonical-admission/contract";
+import {
+  CanonicalAdmissionUnavailable,
+  type CanonicalReadCompletion,
+} from "../canonical-admission/contract";
 import { requestFor } from "./internal/canonical-request";
 import { observeCanonicalResponse } from "../runtime/application-observation/operations";
 import {
@@ -58,7 +65,7 @@ import { resolveOAuthQueryCaller } from "../oauth-agents/operations";
 import { canonicalHostedStatementQueryOwner, canonicalQueryOwner } from "./internal/query-registry";
 import { matchesRouteTemplate } from "../../src/shell/public-http/operations";
 import { reconcileBudgetThresholds } from "../budgets/operations";
-import { unavailableStatement } from "../ingestion/operations";
+
 import {
   type QueryCaller,
   type TransactionCaller,
@@ -737,7 +744,18 @@ export const isLocalBatchRoute = (id: string): boolean =>
     "categories.updateKeywordRule",
     "categories.deleteKeywordRule",
     "categories.listKeywordRules",
+    "ingestion.applyReviewEdit",
+    "ingestion.abandonStatementSubmission",
+    "ingestion.skipNeedsReviewItem",
+    "ingestion.resolveNeedsReviewItem",
   ].includes(id);
+const reserveForwardingRoute =
+  (directory: UserStoreBindings["DIRECTORY"]) =>
+  (user: UserId): Effect.Effect<void, CanonicalAdmissionUnavailable, SqliteClient> =>
+    reserveBatchForwarding(user, directory).pipe(
+      Effect.asVoid,
+      Effect.mapError((cause) => new CanonicalAdmissionUnavailable({ cause }))
+    );
 export const dispatchLocalBatchRoute = Effect.fn(
   function* (unit: {
     directory: Pick<DurableObjectNamespace, "getByName">;
@@ -747,21 +765,20 @@ export const dispatchLocalBatchRoute = Effect.fn(
     owns: (id: string) => boolean;
   }) {
     if (unit.operation.id === atomicBatchOperation) {
-      return yield* runLocalBatch(unit, batchOwnersFor(unit));
+      return yield* runLocalBatch(
+        {
+          ...unit,
+          reserveChildRoute: reserveForwardingRoute(unit.directory),
+        },
+        batchOwnersFor(unit)
+      );
     }
-    if (unit.operation.id === "identity.getCurrentUser") {
-      return yield* runLocalMutation({
-        ...unit,
-        input: Effect.succeedSome(true),
-        work: (_input, user) => readLocalProfile(user),
-      });
-    }
-    if (unit.operation.id === "categories.listKeywordRules") {
-      return yield* runLocalMutation({
-        ...unit,
-        input: Effect.succeedSome(true),
-        work: (_empty, user) => localKeywordRules(user),
-      });
+    if (["identity.getCurrentUser", "categories.listKeywordRules"].includes(unit.operation.id)) {
+      const args = { ...unit, input: Effect.succeedSome(true) };
+      if (unit.operation.id === "identity.getCurrentUser") {
+        return yield* runLocalMutation({ ...args, work: (_input, user) => readLocalProfile(user) });
+      }
+      return yield* runLocalMutation({ ...args, work: (_input, user) => localKeywordRules(user) });
     }
     const prepare = localBatchOwners.get(unit.operation.id);
     if (prepare === undefined) return canonicalAdmissionUnavailable();

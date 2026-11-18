@@ -1,3 +1,4 @@
+import { outstandingEmailLimit, retainedEmailLimit } from "../../directory/contract";
 import { SecureRandom } from "effect/crypto";
 import { PrivateObjectKey } from "../../private-objects/contract";
 import {
@@ -56,15 +57,15 @@ const authoriseOriginalWrite = (
     );
   });
 
-const maximumRawBytes = 1_048_576;
+export const maximumRawBytes = 1_048_576;
 const millisecondsPerDay = 86_400_000;
 const retentionDays = 90;
-const retentionMs = retentionDays * millisecondsPerDay;
-const maximumOutstandingUser = 100;
-const maximumOutstandingGlobal = 1000;
-const maximumRetainedUser = 1000;
-const maximumRetainedGlobal = 10000;
-const recipientPattern = /^[a-z0-9_-]{24,64}@fidyapp\.com$/u;
+export const retentionMs = retentionDays * millisecondsPerDay;
+export const maximumOutstandingUser = 100;
+
+export const maximumRetainedUser = 1000;
+
+export const recipientPattern = /^[a-z0-9_-]{24,64}@fidyapp\.com$/u;
 const maximumSweep = 100;
 const millisecondsPerMinute = 60_000;
 const minutesPerHour = 60;
@@ -73,9 +74,9 @@ const storingInterruptionMinutes = 15;
 const sweepLookaheadMs = sweepLookaheadHours * minutesPerHour * millisecondsPerMinute;
 const storingInterruptionMs = storingInterruptionMinutes * millisecondsPerMinute;
 const dispatchCooldownMs = 60_000;
-const maximumHeadersSize = 16_384;
-const maximumMimeDepth = 8;
-const maximumNestedMessageDepth = 0;
+export const maximumHeadersSize = 16_384;
+export const maximumMimeDepth = 8;
+export const maximumNestedMessageDepth = 0;
 const hexBase = 16;
 
 const uuid = Schema.String.check(Schema.isUUID());
@@ -130,7 +131,7 @@ const releaseEmailReader = (reader: ReadableStreamDefaultReader<unknown>): Effec
     reader.releaseLock();
   });
 
-const readBounded = Effect.fn(function* (raw: ReadableStream) {
+export const readBounded = Effect.fn(function* (raw: ReadableStream) {
   const chunks: Uint8Array[] = [];
   let size = 0;
   yield* Effect.acquireUseRelease(
@@ -239,10 +240,10 @@ export const receiveForwardedEmail = Effect.fn(function* (
   const available = Schema.decodeUnknownOption(Capacity)(capacity);
   if (Option.isNone(available)) return yield* authorityUnavailable();
   if (
-    available.value.global_count >= maximumOutstandingGlobal ||
+    available.value.global_count >= outstandingEmailLimit ||
     available.value.user_count >= maximumOutstandingUser ||
     available.value.retained_user_count >= maximumRetainedUser ||
-    available.value.retained_global_count >= maximumRetainedGlobal
+    available.value.retained_global_count >= retainedEmailLimit
   ) {
     reject(message);
     return;

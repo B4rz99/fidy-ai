@@ -1,3 +1,4 @@
+import { ingestionSchema } from "./internal/ingestion-schema";
 import { oauthUserSchema, userPATSchema } from "./internal/credential-schema";
 import { externalEventSchema, issueForwardingAddress } from "./internal/external-event-schema";
 import { registerUserLifetime as registerReservedLifetime } from "./internal/registration";
@@ -917,6 +918,7 @@ export const userStoreHistory: StoreHistory = {
         "CREATE INDEX login_email_expiry ON login_email_proofs(expires_at_ms)",
       ],
     },
+    { version: 17, id: "retained-ingestion", statements: ingestionSchema() },
   ],
 };
 

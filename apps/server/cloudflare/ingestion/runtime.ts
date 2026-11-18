@@ -1,3 +1,23 @@
+import {
+  admitLocalEmail as acceptLocalEmail,
+  receivePrivateEmail as acceptPrivateEmail,
+  processLocalEmail as completeLocalEmail,
+} from "./internal/local-email";
+import {
+  type ForwardedEmailEnvironment,
+  type ForwardedEmailMessage,
+  type NativeEmailEnvironment,
+  type ReviewRetentionWork,
+  type ReviewUnavailable,
+  type StatementDeliveryUnavailable,
+  type StatementDispatchBindings,
+} from "./contract";
+import { admitLocalDocument as admitDocument } from "./internal/local-document";
+import {
+  localPendingStatement as pendingStatement,
+  localStatementActivity as statementActivity,
+} from "./internal/local-statement-work";
+import { recoverIngestion, repairIngestionAlarm } from "./internal/local-retention";
 import { SecureRandom } from "effect/crypto";
 import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
 import { projections as erasureProjections } from "./internal/erasure";
@@ -7,14 +27,7 @@ import type { ErasureStore } from "../erasure-store/contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Cause, Effect, Exit, Option } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
-import type {
-  ForwardedEmailEnvironment,
-  ForwardedEmailMessage,
-  ReviewRetentionWork,
-  ReviewUnavailable,
-  StatementDeliveryUnavailable,
-  StatementDispatchBindings,
-} from "./contract";
+
 import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
@@ -131,7 +144,7 @@ type StatementCoordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher
 
 /** Cloudflare stores only the bounded work identity and the named activity outcome. */
 export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
-  Readonly<{ USER_TRANSACTION_COORDINATOR: StatementCoordinator; DB: D1Database }>,
+  Readonly<{ USER_STORE: StatementCoordinator; DB: D1Database }>,
   unknown
 > {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
@@ -139,7 +152,7 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
       () =>
         runStatementExtractionWorkflow({
           payload: event.payload,
-          coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+          coordinator: this.env.USER_STORE,
           activity: (name, options, run) => step.do(name, options, run),
         }),
       {
@@ -160,12 +173,18 @@ export const receiveForwardedEmail = ({
   environment,
 }: Readonly<{
   message: ForwardedEmailMessage;
-  environment: ForwardedEmailEnvironment;
-}>): Effect.Effect<void, Effect.Error<ReturnType<typeof receiveEmail>>> =>
-  receiveEmail(message, environment).pipe(
-    Effect.withSpan("forwarded-email.receive"),
-    Effect.provideService(SecureRandom.SecureRandom, emailSecureRandom)
-  );
+  environment: ForwardedEmailEnvironment | NativeEmailEnvironment;
+}>): Effect.Effect<
+  void,
+  | Effect.Error<ReturnType<typeof receiveEmail>>
+  | Effect.Error<ReturnType<typeof acceptPrivateEmail>>
+> =>
+  "DIRECTORY" in environment
+    ? acceptPrivateEmail(message, environment).pipe(Effect.withSpan("forwarded-email.receive"))
+    : receiveEmail(message, environment).pipe(
+        Effect.withSpan("forwarded-email.receive"),
+        Effect.provideService(SecureRandom.SecureRandom, emailSecureRandom)
+      );
 
 /** Reoffer only retained same-User receipt identities; an offer grants no processing authority. */
 export const dispatchForwardedEmail: typeof dispatchEmail = (environment) =>
@@ -186,3 +205,21 @@ export const sweepReviewDrafts = (
 ): Effect.Effect<void, ReviewUnavailable> => sweepDrafts(input);
 export const makeIngestionErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+export const admitLocalDocument: typeof admitDocument = (...args) => admitDocument(...args);
+export const localPendingStatement: typeof pendingStatement = (...args) =>
+  pendingStatement(...args);
+export const localStatementActivity: typeof statementActivity = (...args) =>
+  statementActivity(...args);
+export const recoverLocalIngestion: typeof recoverIngestion = (...args) =>
+  recoverIngestion(...args);
+export const repairLocalIngestionAlarm: typeof repairIngestionAlarm = (...args) =>
+  repairIngestionAlarm(...args);
+
+export const admitLocalEmail: typeof acceptLocalEmail = (...args) => acceptLocalEmail(...args);
+export const processLocalEmail: typeof completeLocalEmail = (...args) =>
+  completeLocalEmail(...args);
+
+/** Until institution evidence can be verified, the production Email ingress refuses before reading bytes. */
+export const refuseUnverifiedEmail = (message: ForwardedEmailMessage): Effect.Effect<void> =>
+  Effect.sync(() => message.setReject("Mailbox unavailable"));

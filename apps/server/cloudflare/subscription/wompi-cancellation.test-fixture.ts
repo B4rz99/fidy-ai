@@ -1,5 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { Effect, Schedule } from "effect";
+import { Clock, DateTime, Effect, Schedule } from "effect";
+import { Hex } from "effect/encoding";
 
 type Environment = Readonly<{ PROVIDER_STATE: D1Database }>;
 
@@ -41,6 +42,9 @@ export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
     const env = this.env;
     return Effect.runPromise(
       Effect.gen(function* () {
+        if (new URL(request.url).hostname === "api.kapso.ai") {
+          return yield* Effect.tryPromise(() => statementProvider(request));
+        }
         const path = new URL(request.url).pathname;
         if (path.startsWith("/v1/transactions")) return yield* chargeFixture(request, env, path);
         if (request.method === "PUT" && path === "/v1/payment_sources/78001/void") {
@@ -68,3 +72,46 @@ export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
     );
   }
 }
+
+const signedMediaLifetimeMs = 60_000;
+const media = "media_statement_123";
+const mixed = "media_statement_mixed";
+const mixedBytes = new TextEncoder().encode(
+  "fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n2026-08-02,uncertain,COP,Tienda\n"
+);
+const defaultBytes = new TextEncoder().encode("encabezado,valor\nprimero,20\nsegundo,50\n");
+const mediaVariants = new Map([
+  [media, defaultBytes],
+  [mixed, mixedBytes],
+  ["media_statement_pdf", new TextEncoder().encode("%PDF-1.7")],
+]);
+const statementProvider = (request: Request): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const url = new URL(request.url);
+      const id = url.searchParams.get("token") ?? url.pathname.split("/").at(-1) ?? "";
+      const bytes = mediaVariants.get(id);
+      if (bytes === undefined) return new Response(null, { status: 404 });
+      if (url.pathname.endsWith("/" + id)) {
+        return Response.json({
+          id,
+          mime_type: "text/csv",
+          file_size: bytes.length,
+          sha256: Hex.encode(
+            new Uint8Array(yield* Effect.tryPromise(() => crypto.subtle.digest("SHA-256", bytes)))
+          ),
+          download_url: "https://api.kapso.ai/meta/whatsapp/media_download?token=" + id,
+          download_url_expires_at: DateTime.formatIso(
+            DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + signedMediaLifetimeMs)
+          ),
+        });
+      }
+      if (
+        url.pathname === "/meta/whatsapp/media_download" &&
+        url.searchParams.get("token") === id
+      ) {
+        return new Response(bytes);
+      }
+      return new Response(null, { status: 404 });
+    })
+  );

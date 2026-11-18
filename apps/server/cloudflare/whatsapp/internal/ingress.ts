@@ -1,4 +1,5 @@
-import { directoryName, replaceIdentityUrl } from "../../directory/contract";
+import { localDocumentUrl } from "../../ingestion/contract";
+import { directoryName, replaceIdentityUrl, whatsappOwnerUrl } from "../../directory/contract";
 import {
   type WhatsAppIngressEnvironment as Environment,
   type WhatsAppAuthenticatedInbound as WebhookInbound,
@@ -280,6 +281,42 @@ const routeTextInbound = (
       answer(HTTP_CONFLICT)
     );
   });
+const missingRecipient = 404;
+const routeDocument = Effect.fn(function* (
+  environment: Environment,
+  input: WebhookInbound,
+  mediaId: string
+) {
+  const { DIRECTORY: directory, USER_STORE: users } = environment;
+  if (directory === undefined || users === undefined) {
+    return answer(HTTP_UNAVAILABLE);
+  }
+  const { businessPortfolioId: portfolio, businessScopedUserId: bsuid } = input.event.caller;
+  const route = yield* attempt(() =>
+    directory
+      .getByName(directoryName)
+      .fetch(whatsappOwnerUrl, { method: "POST", body: JSON.stringify({ portfolio, bsuid }) })
+  );
+  if (!route.ok) {
+    return answer(route.status === missingRecipient ? HTTP_UNPROCESSABLE : HTTP_UNAVAILABLE);
+  }
+  const target = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ userId: Schema.String.check(Schema.isUUID()) })
+  )(yield* attempt(() => route.json())).pipe(Effect.mapError(() => undefined));
+  const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+    ...target,
+    portfolio,
+    bsuid,
+    message: input.event.messageEvidence.providerMessageId,
+    endpoint: input.event.businessPhoneNumberId,
+    mediaId,
+    occurredAt: DateTime.toEpochMillis(input.event.occurredAt),
+    receivedAt: input.receivedAtMs,
+  }).pipe(Effect.mapError(() => undefined));
+  return yield* attempt(() =>
+    users.getByName(target.userId).fetch(localDocumentUrl, { method: "POST", body })
+  );
+});
 const routeIdentityChange = Effect.fn(function* (base: WebhookBase, environment: Environment) {
   const changes = yield* Effect.exit(
     authenticateIdentityChange({
@@ -355,6 +392,9 @@ const handleInbound = (
       digest,
       receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
     };
+    if (input.event.content._tag === "Document") {
+      return yield* routeDocument(environment, input, input.event.content.mediaId);
+    }
     // Only typed text may operate the pre-User Consent and credential control surface.
     if (input.event.content._tag !== "Text") {
       const hosted = yield* routeHostedInbound(environment, input);

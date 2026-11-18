@@ -1,0 +1,19 @@
+apps/server/cloudflare/whatsapp/native-callback.test.ts
+  s_a1be23a656acf0::t_ea96fc8de3a200 140-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e297a5e8c14356bca219ac454e06cac4a3af63c3",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

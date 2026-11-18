@@ -1,0 +1,32 @@
+apps/server/cloudflare/recovery/native-support.test.ts
+  s_a1be23a656acf0::t_9f01896797b7f5 8,132-142,145-153,156-188,190-193
+  s_a1be23a656acf0::t_3277ca085300e1 143-144,154-155
+apps/server/cloudflare/directory/internal/expiry.ts
+  s_a1be23a656acf0::t_ba4f8e0c5c0aec 6-7,34,52,63
+apps/server/cloudflare/recovery/internal/local-support.ts
+  s_a1be23a656acf0::t_8125e69c71477e 7,10,37-38,62-103
+apps/server/cloudflare/recovery/native-retention.test.ts
+  s_a1be23a656acf0::t_e741c4f96bbc3c 1-65
+apps/server/cloudflare/recovery/operations.ts
+  s_a1be23a656acf0::t_7010418d187e9a 6-10,143-147
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_cab4baf705092b 1265-1273
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_a39528d266bd88 118,122,439,715,1006
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "458359e30bc8693a944d3486d2cb4c295f314159",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

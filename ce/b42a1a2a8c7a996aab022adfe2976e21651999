@@ -1,0 +1,27 @@
+apps/server/cloudflare/transactions/internal/sqlite-history.ts
+  s_a1be23a656acf0::t_893844de5005b4 38
+apps/server/cloudflare/transactions/user-store.test.ts
+  s_a1be23a656acf0::t_b3863bba6921f0 284,323
+apps/server/cloudflare/recurring-plans/user-store.test.ts
+  s_a1be23a656acf0::t_b3863bba6921f0 62-81,185-186
+  s_a1be23a656acf0::t_893844de5005b4 208-214
+  s_a1be23a656acf0::t_3e80d95989e140 8-9,43-61,167-184,187-207,215-220
+apps/server/cloudflare/transactions/internal/planning-read.ts
+  s_a1be23a656acf0::t_893844de5005b4 1,14,31-32,34-36,41-48,82-89,94,102-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ceb42a1a2a8c7a996aab022adfe2976e21651999",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

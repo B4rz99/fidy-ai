@@ -1,0 +1,37 @@
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_a1be23a656acf0::t_36aa100b3a5a9c 57-58
+apps/server/cloudflare/email-authentication/internal/proof-delivery.ts
+  s_a1be23a656acf0::t_501fcdccef1541 1,44
+apps/server/cloudflare/maintenance/global-scan.test-fixture.ts
+  s_a1be23a656acf0::t_00c5860a5613f8 51-52
+apps/server/cloudflare/outbound-http/runtime.ts
+  s_a1be23a656acf0::t_c987e5186b4b0a 1,94-102
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_a1be23a656acf0::t_159bc3677eedd5 2-3
+apps/server/cloudflare/runtime/telemetry/operations.ts
+  s_a1be23a656acf0::t_b91238513b3fd7 422
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_1625f4a88773a2 72,141,188
+apps/server/cloudflare/whatsapp/historical-whatsapp.test-fixture.ts
+  s_a1be23a656acf0::t_b1739736ec0746 1-14
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_a1be23a656acf0::t_ea5210683ed441 11,41,438
+apps/server/cloudflare/whatsapp/whatsapp-work.test.ts
+  s_a1be23a656acf0::t_95d34524e22465 6-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31e20398adc3660729e54c75fd0cd69d430e1425",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

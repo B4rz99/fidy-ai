@@ -1,0 +1,21 @@
+apps/server/cloudflare/subscription/pricing.test-fixture.ts
+  s_a1be23a656acf0::t_45d3a9725afc0a 11,15,54,56,65-69
+apps/server/cloudflare/subscription/pricing.test.ts
+  s_a1be23a656acf0::t_38d6fe2535767b 33,60,234-247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "140fa5793ab1e29613aaf5349849b0378d281432",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

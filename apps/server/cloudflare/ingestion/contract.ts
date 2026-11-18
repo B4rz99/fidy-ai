@@ -164,6 +164,11 @@ export const NativeStatementDocument = Schema.Struct({
   occurredAt: Schema.Int,
   receivedAt: Schema.Int,
 });
+export const localMediaUrl = "https://user.invalid/ingestion/media";
+export const NativeMedia = Schema.Struct({
+  ...NativeStatementDocument.fields,
+  caption: Schema.String,
+});
 export type LocalIngestionEnvironment = Readonly<{
   DIRECTORY: DurableObjectNamespace;
   STATEMENT_STAGING_BUCKET: R2Bucket;

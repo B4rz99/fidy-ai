@@ -221,6 +221,9 @@ export const whatsappOwnerUrl = "https://directory.invalid/whatsapp/owner";
 
 /** Private shared capacity. A slot generation is spent once; it conveys no User authority. */
 export const emailCapacityUrl = "https://directory.invalid/forwarded-email/capacity";
+export const mediaCapacityUrl = "https://directory.invalid/ingestion/media-capacity";
+export const retainedMediaLimit = 2_500;
+export type IngestionCapacity = "email" | "media";
 export const retainedEmailLimit = 10_000;
 export const outstandingEmailLimit = 1_000;
 export const EmailCapacitySlot = Schema.Struct({

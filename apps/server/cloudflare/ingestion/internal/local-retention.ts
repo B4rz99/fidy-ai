@@ -1,9 +1,10 @@
+import { releaseDueMedia } from "./local-media";
 import { captureWorkTrace } from "../../runtime/telemetry/operations";
 import { settleBeforeDisposal } from "./original-writers";
 import { recoverSamples } from "./sample-publication";
 import { recoverDocumentStages, stageRetryMs } from "./local-document";
 import { activateLocalEmail, emailStageRetryMs, recoverEmailStages } from "./local-email";
-import { settleSharedEmailCapacity, updateSharedEmailCapacity } from "./email-capacity";
+import { settleSharedEmailCapacity, updateSharedCapacity } from "./email-capacity";
 import { newId } from "../../secret-material/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -14,6 +15,8 @@ import { erasePrivateObject } from "../../private-objects/operations";
 import type { LocalIngestionEnvironment } from "../contract";
 
 const pageSize = 32;
+const voiceRetentionMs = 604_800_000;
+const accountabilityLifetimeMs = 31_536_000_000;
 const retryMs = 60_000;
 const deferredRetryMs = 3_600_000;
 const row = Schema.Struct({ id: Schema.String, user_id: Schema.String });
@@ -25,6 +28,9 @@ export const repairIngestionAlarm = Effect.fn(function* (
   const [next] = yield* sql`SELECT min(column1) AS due FROM (VALUES
       ((SELECT min(coalesce(work_last_attempt_at_ms+${retryMs},work_published_at_ms)) FROM statement_submissions WHERE work_published_at_ms IS NOT NULL)),
       ((SELECT min(d.last_stage_attempt_at_ms+${stageRetryMs}) FROM statement_documents d WHERE d.last_stage_attempt_at_ms<d.expires_at_ms AND NOT EXISTS(SELECT 1 FROM statement_submissions s WHERE s.id=d.id))),
+      ((SELECT min(due_ms) FROM media_capacity_receipts)),
+      ((SELECT min(accepted_at_ms)+${accountabilityLifetimeMs} FROM media_submissions)),
+      ((SELECT min(claimed_ms)+${voiceRetentionMs} FROM whatsapp_voice_refusals)),
       ((SELECT min(expires_at_ms) FROM media_submissions WHERE capacity_held=1 OR media_id IS NOT NULL OR caption IS NOT NULL)),
       ((SELECT min(retention_expires_at_ms) FROM statement_submissions s WHERE EXISTS(SELECT 1 FROM statement_parts WHERE submission_id=s.id))),
       ((SELECT min(forget_at_ms) FROM statement_document_origins)),
@@ -47,12 +53,16 @@ export const recoverIngestion = Effect.fn(function* (
   env: LocalIngestionEnvironment
 ) {
   const sql = yield* SqliteClient;
+  yield* releaseDueMedia(env.DIRECTORY, current);
   const due = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       yield* sql`DELETE FROM ingest_sample_candidates WHERE id IN(SELECT id FROM ingest_sample_candidates WHERE expires_at_ms<=${current} ORDER BY expires_at_ms LIMIT ${pageSize})`;
       yield* sql`UPDATE statement_submissions SET status='failed',started_at_ms=coalesce(started_at_ms,${current}),completed_at_ms=${current},failure_reason='retention-expired',work_published_at_ms=NULL,work_last_attempt_at_ms=NULL WHERE id IN(SELECT id FROM statement_submissions WHERE retention_expires_at_ms<=${current} AND status IN ('queued','processing') ORDER BY retention_expires_at_ms LIMIT ${pageSize})`;
       yield* sql`DELETE FROM statement_document_origins WHERE rowid IN (SELECT rowid FROM statement_document_origins WHERE forget_at_ms<=${current} ORDER BY forget_at_ms LIMIT ${pageSize})`;
       yield* sql`DELETE FROM statement_parts WHERE rowid IN(SELECT p.rowid FROM statement_parts p JOIN statement_submissions s ON s.id=p.submission_id WHERE s.retention_expires_at_ms<=${current} ORDER BY s.retention_expires_at_ms,p.part LIMIT ${pageSize})`;
+      yield* sql`DELETE FROM whatsapp_voice_refusals WHERE rowid IN(SELECT rowid FROM whatsapp_voice_refusals WHERE claimed_ms<=${current - voiceRetentionMs} ORDER BY claimed_ms LIMIT ${pageSize})`;
+      yield* sql`DELETE FROM ingestion_review_items WHERE source_kind='media' AND media_submission_id IN(SELECT id FROM media_submissions WHERE accepted_at_ms<=${current - accountabilityLifetimeMs} ORDER BY accepted_at_ms,id LIMIT ${pageSize})`;
+      yield* sql`DELETE FROM media_submissions WHERE id IN(SELECT id FROM media_submissions WHERE accepted_at_ms<=${current - accountabilityLifetimeMs} ORDER BY accepted_at_ms,id LIMIT ${pageSize})`;
       yield* sql`UPDATE media_submissions SET caption=NULL,media_id=NULL,capacity_held=0 WHERE id IN(SELECT id FROM media_submissions WHERE expires_at_ms<=${current} AND (capacity_held=1 OR media_id IS NOT NULL OR caption IS NOT NULL) ORDER BY expires_at_ms LIMIT ${pageSize})`;
       yield* sql`UPDATE ingestion_review_items SET original_evidence=NULL,known_money_json=NULL,suggestions_json=NULL,draft_json=NULL,evidence_state=CASE WHEN evidence_state='retained' THEN 'expired' ELSE evidence_state END WHERE rowid IN(SELECT rowid FROM ingestion_review_items WHERE evidence_expires_at_ms<=${current} AND (evidence_state='retained' OR draft_json IS NOT NULL OR suggestions_json IS NOT NULL) ORDER BY evidence_expires_at_ms LIMIT ${pageSize})`;
       yield* sql`DELETE FROM statement_backfill WHERE consumed_at_ms IS NULL AND submission_id IN(SELECT id FROM statement_documents WHERE expires_at_ms<=${current})`;
@@ -123,7 +133,11 @@ const expireEmails = Effect.fn(function* (current: number, env: LocalIngestionEn
       key: target.object_key,
       bucket: env.EMAIL_BUCKET,
     });
-    yield* updateSharedEmailCapacity(env.DIRECTORY, target.id, "Release");
+    yield* updateSharedCapacity(
+      { directory: env.DIRECTORY, purpose: "email" },
+      target.id,
+      "Release"
+    );
     yield* withStoreCapacity("required")(
       Effect.gen(function* () {
         if (target.state === "discarding") {

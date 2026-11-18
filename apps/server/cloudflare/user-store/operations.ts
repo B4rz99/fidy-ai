@@ -7,6 +7,7 @@ import { connectionSchema } from "./internal/connection-schema";
 import {
   connectionAuditSchema,
   hostedMetadataAuditSchema,
+  mediaAuditSchema,
   oauthUserSchema,
   userPATSchema,
 } from "./internal/credential-schema";
@@ -1036,6 +1037,17 @@ export const userStoreHistory: StoreHistory = {
       ],
     },
     { version: 27, id: "native-billing-refunds", statements: refundSchema },
+    {
+      version: 28,
+      id: "signed-whatsapp-media-and-voice",
+      statements: [
+        ...mediaAuditSchema(),
+        `CREATE TABLE media_capacity_receipts(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),portfolio TEXT NOT NULL,message TEXT NOT NULL,input_digest TEXT NOT NULL,accepted_at_ms INTEGER NOT NULL,expires_at_ms INTEGER NOT NULL,due_ms INTEGER NOT NULL,state TEXT NOT NULL CHECK(state IN('storing','discarding','retained')),capacity_slot INTEGER,capacity_generation INTEGER,capacity_claimed INTEGER NOT NULL DEFAULT 0 CHECK(capacity_claimed IN(0,1)),UNIQUE(user_id,portfolio,message)) STRICT`,
+        "CREATE INDEX media_receipt_due ON media_capacity_receipts(due_ms)",
+        `CREATE TABLE whatsapp_voice_refusals(portfolio TEXT NOT NULL,message TEXT NOT NULL,user_id TEXT NOT NULL REFERENCES users(id),claimed_ms INTEGER NOT NULL,outcome TEXT NOT NULL CHECK(outcome IN('started','accepted','failed')),PRIMARY KEY(portfolio,message)) STRICT`,
+        "CREATE INDEX voice_refusal_expiry ON whatsapp_voice_refusals(user_id,claimed_ms)",
+      ],
+    },
   ],
 };
 

@@ -38,11 +38,13 @@ import {
   type LocalIngestionEnvironment,
   localDocumentUrl,
   localEmailUrl,
+  localMediaUrl,
   localSampleReviewUrl,
 } from "../ingestion/contract";
 import {
   admitLocalDocument,
   admitLocalEmail,
+  admitLocalMedia,
   localPendingStatement,
   localSampleReview,
   localStatementActivity,
@@ -148,8 +150,9 @@ import {
   replyDeliveryUrl,
   reserveDeliveryUrl,
   statusDeliveryUrl,
+  voiceRefusalUrl,
 } from "../whatsapp/contract";
-import { nativeDeliveryRequest } from "../whatsapp/runtime";
+import { nativeDeliveryRequest, nativeVoiceRefusal } from "../whatsapp/runtime";
 import {
   type LocalBillingCollection,
   type LocalRefundWork,
@@ -222,7 +225,9 @@ import {
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 
 const uncertainCheckStatus = 503;
-type UserStoreEnvironment = NativeReminderEnvironment &
+type UserStoreEnvironment = {
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
+} & NativeReminderEnvironment &
   WompiBindings &
   LocalIngestionEnvironment &
   BancolombiaSandboxEnvironment &
@@ -656,12 +661,40 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
-  private ingestionRequest(
+  private inboxRequest(
     request: Request,
     owns: (id: string) => boolean
   ): Option.Option<Promise<Response>> {
     const unit = { request, env: this.env, owns, storage: this.ctx.storage };
     switch (request.url) {
+      case voiceRefusalUrl:
+        return Option.some(
+          this.runtime.runPromise(
+            Effect.scoped(
+              Effect.flatMap(Layer.build(OutboundHttpLive), (clients) =>
+                nativeVoiceRefusal({
+                  request,
+                  environment: this.env,
+                  owns,
+                  storage: this.ctx.storage,
+                }).pipe(
+                  Effect.provideService(
+                    HttpClient.HttpClient,
+                    Context.get(clients, HttpClient.HttpClient)
+                  )
+                )
+              )
+            ).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
+          )
+        );
+      case localMediaUrl:
+        return Option.some(
+          this.runtime.runPromise(
+            admitLocalMedia(unit).pipe(
+              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+            )
+          )
+        );
       case localSampleReviewUrl:
       case localEmailUrl:
         return Option.some(
@@ -672,6 +705,16 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             )
           )
         );
+      default:
+        return Option.none();
+    }
+  }
+  private ingestionRequest(
+    request: Request,
+    owns: (id: string) => boolean
+  ): Option.Option<Promise<Response>> {
+    const unit = { request, env: this.env, owns, storage: this.ctx.storage };
+    switch (request.url) {
       case "https://coordinator.internal/forwarded-email-work":
         return Option.some(
           this.runtime.runPromise(
@@ -900,7 +943,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           )
         );
       }
-      const ingestion = this.ingestionRequest(request, owns);
+      const ingestion = this.inboxRequest(request, owns).pipe(
+        Option.orElse(() => this.ingestionRequest(request, owns))
+      );
       if (Option.isSome(ingestion)) return ingestion.value;
     }
     if (

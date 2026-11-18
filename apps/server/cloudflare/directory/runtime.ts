@@ -33,6 +33,7 @@ import {
   externalReserveUrl,
   handoffCancelUrl,
   handoffInspectUrl,
+  mediaCapacityUrl,
   patRouteUrl,
   registerSessionUrl,
   releaseSessionUrl,
@@ -55,7 +56,7 @@ import { directorySupport } from "./internal/support";
 
 import { recoveryRouteDecision } from "./internal/recovery-rotation";
 
-import { emailCapacityRequest } from "./internal/email-capacity";
+import { ingestionCapacityRequest } from "./internal/email-capacity";
 import { directoryDeadline, drainBootstrapExpiry } from "./internal/expiry";
 import { unavailable } from "../browser-login/operations";
 import { channelApprovalEvidence } from "./internal/channel";
@@ -240,8 +241,8 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       );
     }
     return this.runtime.runPromise(
-      (request.url === emailCapacityUrl
-        ? emailCapacityRequest(request, this.ctx.storage)
+      (request.url === emailCapacityUrl || request.url === mediaCapacityUrl
+        ? ingestionCapacityRequest(request, this.ctx.storage)
         : directoryRequest(request, this.env)
       ).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
     );

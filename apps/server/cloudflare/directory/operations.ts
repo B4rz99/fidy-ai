@@ -5,6 +5,7 @@ import {
   ExternalEventKey,
   type ExternalEventNamespace,
   ExternalEventRoute,
+  type IngestionCapacity,
   PATRoute,
   SessionRoute,
   type UserStoreBindings,
@@ -12,6 +13,7 @@ import {
   emailCapacityUrl,
   externalLookupUrl,
   externalReserveUrl,
+  mediaCapacityUrl,
   patRouteHeader,
   patRouteUrl,
   routeIssuedHeader,
@@ -253,12 +255,19 @@ export const lookupExternalEventRoute = Effect.fn(function* (
   );
 });
 
-export const sendEmailCapacity = Effect.fn(function* (
+export const sendIngestionCapacity = Effect.fn(function* (
   directory: ExternalEventNamespace,
-  command: typeof EmailCapacityCommand.Type
+  command: typeof EmailCapacityCommand.Type,
+  purpose: IngestionCapacity
 ) {
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(EmailCapacityCommand))(command);
   return yield* Effect.tryPromise((signal) =>
-    directory.getByName(directoryName).fetch(emailCapacityUrl, { method: "POST", signal, body })
+    directory
+      .getByName(directoryName)
+      .fetch(purpose === "email" ? emailCapacityUrl : mediaCapacityUrl, {
+        method: "POST",
+        signal,
+        body,
+      })
   );
 });

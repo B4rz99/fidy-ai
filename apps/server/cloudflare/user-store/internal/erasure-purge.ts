@@ -113,6 +113,7 @@ export const drainLocalUser = Effect.fn(function* (
       'resend', max(resend,coalesce(json_extract(observed_custody,'$.resend'),0)),
       'wompi', max(wompi,coalesce(json_extract(observed_custody,'$.wompi'),0))) FROM local_erasure_custody) WHERE ${exact} AND state IN('Draining','Sealing') AND handoff_due_ms IS NULL AND NOT EXISTS(SELECT 1 FROM original_writers)
       AND NOT EXISTS(SELECT 1 FROM forwarded_email_receipts WHERE capacity_slot IS NOT NULL)
+      AND NOT EXISTS(SELECT 1 FROM media_capacity_receipts)
       AND NOT EXISTS(SELECT 1 FROM ingest_sample_reservations)
       AND NOT EXISTS(SELECT 1 FROM ingest_sample_decisions WHERE phase IN('approved','removing') OR (phase='published' AND sample_id>erasure_requests.sample_cursor))
       AND NOT EXISTS(SELECT 1 FROM whatsapp_deliveries WHERE started_ms IS NOT NULL AND state NOT IN('delivered','rejected'))

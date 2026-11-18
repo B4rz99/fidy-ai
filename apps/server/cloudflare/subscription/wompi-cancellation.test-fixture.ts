@@ -254,11 +254,31 @@ const mediaVariants = new Map([
   [mixed, mixedBytes],
   ["media_statement_pdf", new TextEncoder().encode("%PDF-1.7")],
 ]);
+const voiceFixture = Effect.fn(function* (request: Request) {
+  if (new URL(request.url).pathname.endsWith("/123456789012345/messages")) {
+    const payload = yield* Effect.tryPromise(() => request.json());
+    if (
+      Schema.is(
+        Schema.Struct({
+          text: Schema.Struct({
+            body: Schema.Literal("No pude procesar la nota de voz. Envíala de nuevo o escríbeme."),
+          }),
+        })
+      )(payload)
+    ) {
+      return Response.json({
+        messaging_product: "whatsapp",
+        messages: [{ id: "wamid.voice-fixture" }],
+      });
+    }
+  }
+  return new Response(null, { status: 503 });
+});
 const statementProvider = (request: Request): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      if (request.method === "POST") return new Response(null, { status: 503 });
       const url = new URL(request.url);
+      if (request.method === "POST") return yield* voiceFixture(request);
       const id = url.searchParams.get("token") ?? url.pathname.split("/").at(-1) ?? "";
       const bytes = mediaVariants.get(id);
       if (bytes === undefined) return new Response(null, { status: 404 });

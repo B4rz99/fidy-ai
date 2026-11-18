@@ -43,7 +43,7 @@ import {
   recipientPattern,
   retentionMs,
 } from "./email-envelope";
-import { claimEmailCapacity, settleSharedEmailCapacity } from "./email-capacity";
+import { claimIngestionCapacity, settleSharedEmailCapacity } from "./email-capacity";
 import { Receipt, anonymizeStructure, decideEmail } from "./forwarded-email-processing";
 
 export const emailStageRetryMs = 60000;
@@ -266,7 +266,15 @@ export const admitLocalEmail = Effect.fn(
       reserveEmail({ userId, id, part }, { digest, size: bytes.length }, storage)
     );
     if (reserved instanceof Response) return reserved;
-    if (!(yield* claimEmailCapacity(env.DIRECTORY, reserved.id, storage))) return refused();
+    if (
+      !(yield* claimIngestionCapacity(
+        { directory: env.DIRECTORY, purpose: "email" },
+        reserved.id,
+        storage
+      ))
+    ) {
+      return refused();
+    }
     const { canWrite } = yield* storeEmail({ env, userId, id, part }, { bytes, digest }, reserved);
     return yield* withStoreCapacity("required")(
       Effect.gen(function* () {

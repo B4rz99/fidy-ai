@@ -1,3 +1,4 @@
+import { refuseVoice } from "./internal/voice-refusal";
 import {
   nativeDeliveryRequest as nativeDeliveryRequestOwned,
   routeWhatsAppStatus as routeWhatsAppStatusOwned,
@@ -41,3 +42,5 @@ export const nativeDeliveryRequest: typeof nativeDeliveryRequestOwned = (...args
   nativeDeliveryRequestOwned(...args);
 export const routeWhatsAppStatus: typeof routeWhatsAppStatusOwned = (...args) =>
   routeWhatsAppStatusOwned(...args);
+
+export const nativeVoiceRefusal: typeof refuseVoice = (input) => refuseVoice(input);

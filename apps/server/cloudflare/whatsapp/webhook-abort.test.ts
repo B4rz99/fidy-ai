@@ -1,14 +1,8 @@
-import { afterAll, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { Effect } from "effect";
-import { isolatedTestDatabases } from "../d1-test-fixture";
 import { receiveWhatsAppWebhook } from "./runtime";
 
-const databases = isolatedTestDatabases();
-afterAll(() => databases.dispose());
-
-const probeInterruptedBody = (
-  db: D1Database
-): Promise<
+const probeInterruptedBody = (): Promise<
   Readonly<{
     observed: "response" | "interrupted" | "pending";
     cancellationStarted: boolean;
@@ -38,7 +32,6 @@ const probeInterruptedBody = (
   });
   const response = Effect.runPromise(
     receiveWhatsAppWebhook({
-      DB: db,
       BROWSER_ORIGIN: "https://app.fidyapp.com",
       KAPSO_API_KEY: "test-key",
       WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
@@ -68,8 +61,7 @@ const probeInterruptedBody = (
 it("settles webhook interruption and releases its reader despite hostile cancellation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
-      const result = yield* Effect.tryPromise(() => probeInterruptedBody(db));
+      const result = yield* Effect.tryPromise(() => probeInterruptedBody());
       expect(result.observed).toBe("interrupted");
       expect(result.cancellationStarted).toBe(true);
       expect(result.locked).toBe(false);

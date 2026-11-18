@@ -196,5 +196,13 @@ export const directoryHistory: StoreHistory = {
         }),
       ],
     },
+    {
+      version: 12,
+      id: "retained-media-capacity",
+      statements: [
+        "CREATE TABLE media_capacity_slots(slot INTEGER PRIMARY KEY CHECK(slot BETWEEN 1 AND 2500),generation INTEGER NOT NULL,receipt TEXT,expires_at_ms INTEGER,state TEXT CHECK(state IN ('outstanding','retained'))) STRICT",
+        "CREATE INDEX media_capacity_expiry ON media_capacity_slots(expires_at_ms) WHERE receipt IS NOT NULL",
+      ],
+    },
   ],
 };

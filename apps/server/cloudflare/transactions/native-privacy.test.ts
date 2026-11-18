@@ -22,6 +22,7 @@ const privacyRequest = Effect.fnUntraced(function* (
       method: "POST",
       headers: {
         origin: browserOrigins.production,
+        connection: "close",
         "content-type": "application/json",
         "fidy-session-binding": alice.session,
         cookie: "__Host-fidy_session=" + alice.bearer,

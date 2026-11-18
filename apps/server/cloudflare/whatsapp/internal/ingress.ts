@@ -1,9 +1,11 @@
-import { localDocumentUrl } from "../../ingestion/contract";
+import { localDocumentUrl, localMediaUrl } from "../../ingestion/contract";
 import { directoryName, replaceIdentityUrl, whatsappOwnerUrl } from "../../directory/contract";
 import {
   type WhatsAppIngressEnvironment as Environment,
+  VoiceRefusal,
   type WhatsAppAuthenticatedInbound as WebhookInbound,
   WhatsAppLifecycleWork,
+  voiceRefusalUrl,
 } from "../contract";
 import { Digest, SecureRandom } from "effect/crypto";
 import { OutboundHttpLive } from "../../outbound-http/runtime";
@@ -11,7 +13,6 @@ import { makeNativeStatusAdmission } from "./registered-send";
 import { routeNativeInvitation } from "../../provider-authentication/runtime";
 import { TranscriptText } from "../../../src/core/agent/contract";
 import { Sha256Digest } from "../../../src/shell/consent/contract";
-import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import {
   type WhatsAppInboundEvent,
   maxWhatsAppFutureTimestampMinutes,
@@ -21,10 +22,7 @@ import {
   authenticateIdentityChange,
   authenticateWhatsAppInbound,
 } from "../../../src/shell/channels/whatsapp/operations";
-import {
-  makeLifecycleVerifier,
-  makeVoiceUnavailableSender,
-} from "../../../src/shell/channels/whatsapp/runtime";
+import { makeLifecycleVerifier } from "../../../src/shell/channels/whatsapp/runtime";
 import {
   Context,
   DateTime,
@@ -39,22 +37,18 @@ import {
 } from "effect";
 import { Hex } from "effect/encoding";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { type UserId } from "../../../src/core/identity/contract";
-import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
+import { UserId } from "../../../src/core/identity/contract";
 import {
   captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
 } from "../../runtime/telemetry/operations";
-import { acceptWhatsAppMedia } from "../../ingestion/operations";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_CONFLICT = 409;
 const HTTP_PAYLOAD_TOO_LARGE = 413;
-const HTTP_RATE_LIMITED = 429;
 const HTTP_UNPROCESSABLE = 422;
 const HTTP_UNAVAILABLE = 503;
-const hourMs = 3_600_000;
 const dayMs = 86_400_000;
 const maxInitiatingEventAgeMs =
   dayMs - Duration.toMillis(Duration.minutes(maxWhatsAppFutureTimestampMinutes));
@@ -116,105 +110,24 @@ type WebhookBase = Readonly<{
   receivedAt: DateTime.Utc;
 }>;
 
-const sendVoiceRefusal = (
+const refuseVoice = Effect.fn(function* (
   environment: Environment,
   input: WebhookInbound,
   userId: UserId
-): Effect.Effect<Response, void, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    const httpClient = yield* HttpClient.HttpClient;
-    const sent = yield* Effect.exit(
-      makeVoiceUnavailableSender({
-        apiKey: Redacted.make(environment.KAPSO_API_KEY),
-        sandboxPhoneNumberId: Option.fromUndefinedOr(
-          environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID
-        ).pipe(Option.filter((id) => id.length > 0)),
-        httpClient,
-      })({ caller: input.event.caller, phoneNumberId: input.event.businessPhoneNumberId })
-    ).pipe(
-      Effect.tap((exit) =>
-        Effect.annotateCurrentSpan("outcome", Exit.isSuccess(exit) ? "succeeded" : "failed")
-      ),
-      Effect.withSpan("whatsapp.voice.refusal")
-    );
-    const settled = yield* attempt(() =>
-      environment.DB.prepare(`UPDATE whatsapp_event_records SET outcome = ?
-        WHERE kind='voice-refusal' AND portfolio_id = ? AND message_id = ? AND user_id = ? AND outcome = 'started'`)
-        .bind(
-          Exit.isSuccess(sent) ? "accepted" : "failed",
-          input.event.caller.businessPortfolioId,
-          input.event.messageEvidence.providerMessageId,
-          userId
-        )
-        .run()
-    );
-    return answer(Exit.isSuccess(sent) && settled.meta.changes === 1 ? HTTP_OK : HTTP_UNAVAILABLE);
-  });
-
-const prepareVoiceRefusal = (
-  environment: Environment,
-  input: WebhookInbound,
-  userId: UserId
-): D1PreparedStatement => {
-  const protectedClaim = protectConsentStatement({
-    subject: { _tag: "User", userId },
-    requirement: "active",
-    statement: {
-      sql: `INSERT INTO whatsapp_event_records
-        (kind,portfolio_id,message_id,user_id,claimed_at_ms,outcome)
-        SELECT 'voice-refusal',?,?,w.userId,?,'started' FROM identity_associations AS w
-        WHERE w.userId = ? AND w.businessPortfolioId = ? AND w.businessScopedUserId = ?
-          AND (SELECT count(*) FROM (SELECT rowid,portfolio_id,message_id,user_id,claimed_at_ms,outcome FROM whatsapp_event_records WHERE kind='voice-refusal')
-            WHERE user_id = w.userId AND claimed_at_ms > ?) < 5`,
-      params: [
-        input.event.caller.businessPortfolioId,
-        input.event.messageEvidence.providerMessageId,
-        input.receivedAtMs,
-        userId,
-        input.event.caller.businessPortfolioId,
-        input.event.caller.businessScopedUserId,
-        input.receivedAtMs - hourMs,
-      ],
-    },
-  });
-  return prepareWhatsAppIdentity({
-    db: environment.DB,
+) {
+  const users = environment.USER_STORE;
+  if (users === undefined) return answer(HTTP_UNAVAILABLE);
+  const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(VoiceRefusal)))({
     userId,
-    statement: {
-      sql: `${protectedClaim.sql} ON CONFLICT (portfolio_id, message_id) WHERE kind='voice-refusal' DO NOTHING`,
-      params: protectedClaim.params,
-    },
-  });
-};
-
-const refuseVoice = (
-  environment: Environment,
-  input: WebhookInbound,
-  userId: UserId
-): Effect.Effect<Response, void, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    if (environment.KAPSO_API_KEY.length === 0) return answer(HTTP_UNAVAILABLE);
-    const claimed = yield* attempt(() => prepareVoiceRefusal(environment, input, userId).run());
-    if (claimed.meta.changes !== 1) {
-      const replay = yield* attempt(() =>
-        environment.DB.prepare(`SELECT outcome FROM (SELECT rowid,portfolio_id,message_id,user_id,claimed_at_ms,outcome FROM whatsapp_event_records WHERE kind='voice-refusal')
-          WHERE portfolio_id = ? AND message_id = ? AND user_id = ?`)
-          .bind(
-            input.event.caller.businessPortfolioId,
-            input.event.messageEvidence.providerMessageId,
-            userId
-          )
-          .first()
-      );
-      if (replay === null) return answer(HTTP_RATE_LIMITED);
-      const outcome = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ outcome: Schema.Literals(["started", "accepted", "failed"]) })
-      )(replay).pipe(Effect.mapError(() => undefined));
-      return answer(outcome.outcome === "accepted" ? HTTP_OK : HTTP_UNAVAILABLE);
-    }
-    return yield* sendVoiceRefusal(environment, input, userId);
-  });
-
+    caller: input.event.caller,
+    message: input.event.messageEvidence.providerMessageId,
+    endpoint: input.event.businessPhoneNumberId,
+    occurredAt: DateTime.toEpochMillis(input.event.occurredAt),
+  }).pipe(Effect.mapError(() => undefined));
+  return yield* attempt(() =>
+    users.getByName(userId).fetch(voiceRefusalUrl, { method: "POST", body })
+  );
+});
 const routeHostedInbound = (
   environment: Environment,
   input: WebhookInbound,
@@ -222,13 +135,8 @@ const routeHostedInbound = (
 ): Effect.Effect<Option.Option<Response>, void, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const known =
-      resolved !== undefined
-        ? Option.some(resolved)
-        : yield* findWhatsAppUser({
-            db: environment.DB,
-            portfolioId: input.event.caller.businessPortfolioId,
-            bsuid: input.event.caller.businessScopedUserId,
-          }).pipe(Effect.mapError(() => undefined));
+      resolved === undefined ? yield* findOwner(environment, input) : Option.some(resolved);
+    if (known instanceof Response) return Option.some(known);
     if (Option.isNone(known)) {
       return input.event.content._tag === "Image"
         ? Option.some(answer(HTTP_UNAVAILABLE))
@@ -236,7 +144,11 @@ const routeHostedInbound = (
     }
     if (input.event.content._tag === "Image") {
       return Option.some(
-        yield* acceptWhatsAppMedia({ db: environment.DB, userId: known.value, event: input.event })
+        yield* routeAttachment(environment, input, {
+          userId: known.value,
+          mediaId: input.event.content.mediaId,
+          caption: Option.some(Option.getOrElse(input.event.content.caption, () => "")),
+        })
       );
     }
     if (input.event.content._tag === "UnusableVoiceTranscript") {
@@ -282,29 +194,33 @@ const routeTextInbound = (
     );
   });
 const missingRecipient = 404;
-const routeDocument = Effect.fn(function* (
-  environment: Environment,
-  input: WebhookInbound,
-  mediaId: string
-) {
-  const { DIRECTORY: directory, USER_STORE: users } = environment;
-  if (directory === undefined || users === undefined) {
-    return answer(HTTP_UNAVAILABLE);
-  }
+const findOwner = Effect.fn(function* (environment: Environment, input: WebhookInbound) {
+  const directory = environment.DIRECTORY;
+  if (directory === undefined) return answer(HTTP_UNAVAILABLE);
   const { businessPortfolioId: portfolio, businessScopedUserId: bsuid } = input.event.caller;
   const route = yield* attempt(() =>
     directory
       .getByName(directoryName)
       .fetch(whatsappOwnerUrl, { method: "POST", body: JSON.stringify({ portfolio, bsuid }) })
   );
-  if (!route.ok) {
-    return answer(route.status === missingRecipient ? HTTP_UNPROCESSABLE : HTTP_UNAVAILABLE);
-  }
-  const target = yield* Schema.decodeUnknownEffect(
-    Schema.Struct({ userId: Schema.String.check(Schema.isUUID()) })
-  )(yield* attempt(() => route.json())).pipe(Effect.mapError(() => undefined));
+  if (route.status === missingRecipient) return Option.none<UserId>();
+  if (!route.ok) return answer(HTTP_UNAVAILABLE);
+  const target = yield* Schema.decodeUnknownEffect(Schema.Struct({ userId: UserId }))(
+    yield* attempt(() => route.json())
+  ).pipe(Effect.mapError(() => undefined));
+  return Option.some(target.userId);
+});
+const routeAttachment = Effect.fn(function* (
+  environment: Environment,
+  input: WebhookInbound,
+  { userId, mediaId, caption }: { userId: UserId; mediaId: string; caption: Option.Option<string> }
+) {
+  const users = environment.USER_STORE;
+  if (users === undefined) return answer(HTTP_UNAVAILABLE);
+  const { businessPortfolioId: portfolio, businessScopedUserId: bsuid } = input.event.caller;
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
-    ...target,
+    userId,
+    ...(Option.isSome(caption) ? { caption: caption.value } : {}),
     portfolio,
     bsuid,
     message: input.event.messageEvidence.providerMessageId,
@@ -314,8 +230,25 @@ const routeDocument = Effect.fn(function* (
     receivedAt: input.receivedAtMs,
   }).pipe(Effect.mapError(() => undefined));
   return yield* attempt(() =>
-    users.getByName(target.userId).fetch(localDocumentUrl, { method: "POST", body })
+    users
+      .getByName(userId)
+      .fetch(Option.isNone(caption) ? localDocumentUrl : localMediaUrl, { method: "POST", body })
   );
+});
+const routeDocument = Effect.fn(function* (
+  environment: Environment,
+  input: WebhookInbound,
+  mediaId: string
+) {
+  const owner = yield* findOwner(environment, input);
+  if (owner instanceof Response) return owner;
+  return Option.isNone(owner)
+    ? answer(HTTP_UNPROCESSABLE)
+    : yield* routeAttachment(environment, input, {
+        userId: owner.value,
+        mediaId,
+        caption: Option.none(),
+      });
 });
 const routeIdentityChange = Effect.fn(function* (base: WebhookBase, environment: Environment) {
   const changes = yield* Effect.exit(

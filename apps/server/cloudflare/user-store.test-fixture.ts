@@ -102,7 +102,6 @@ const billingBindings = {
   KAPSO_WEBHOOK_SECRET: { type: "text" as const, value: "callback-fixture-secret" },
   KAPSO_API_KEY: { type: "text" as const, value: "fixture" },
   WHATSAPP_SANDBOX_PHONE_NUMBER_ID: { type: "text" as const, value: "987654321012345" },
-  DB: { type: "d1" as const, id: "unused-legacy" },
   BILLING_COLLECTION_QUEUE: { type: "queue" as const, name: "billing-test" },
   BILLING_REFUND_WORKFLOW: {
     type: "workflow" as const,

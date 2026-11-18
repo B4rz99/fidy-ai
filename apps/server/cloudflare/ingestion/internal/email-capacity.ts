@@ -1,7 +1,7 @@
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { EmailCapacitySlot } from "../../directory/contract";
-import { sendEmailCapacity } from "../../directory/operations";
+import { EmailCapacitySlot, type IngestionCapacity } from "../../directory/contract";
+import { sendIngestionCapacity } from "../../directory/operations";
 import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 
@@ -18,30 +18,36 @@ const CurrentSlot = Schema.Struct({
   capacity_claimed: Schema.Int,
   state: Schema.String,
 });
-const lookup = Effect.fn(function* (id: string) {
+const receipts = { email: "forwarded_email_receipts", media: "media_capacity_receipts" };
+const lookup = Effect.fn(function* (id: string, purpose: IngestionCapacity) {
   const sql = yield* SqliteClient;
-  const [row] = yield* sql`SELECT * FROM forwarded_email_receipts WHERE id=${id}`;
+  const [row] = yield* sql`SELECT * FROM ${sql(receipts[purpose])} WHERE id=${id}`;
   return row === undefined
     ? Option.none()
     : Option.some(yield* Schema.decodeUnknownEffect(CurrentSlot)(row));
 });
-const discardStoring = Effect.fn(function* (id: string, storage: DurableObjectStorage) {
+const discardStoring = Effect.fn(function* (
+  id: string,
+  storage: DurableObjectStorage,
+  purpose: IngestionCapacity
+) {
   const sql = yield* SqliteClient;
   yield* withStoreCapacity("required")(
     Effect.gen(function* () {
-      yield* sql`UPDATE forwarded_email_receipts SET state='discarding' WHERE id=${id} AND state='storing' AND capacity_claimed=0`;
+      yield* sql`UPDATE ${sql(receipts[purpose])} SET state='discarding' WHERE id=${id} AND state='storing' AND capacity_claimed=0`;
       yield* preserveStoreAlarm(storage, yield* Clock.currentTimeMillis);
     })
   );
 });
 const chooseSlot = Effect.fn(function* (
   directory: DurableObjectNamespace,
-  row: typeof CurrentSlot.Type
+  row: typeof CurrentSlot.Type,
+  purpose: IngestionCapacity
 ) {
   if (row.capacity_slot !== null && row.capacity_generation !== null) {
     return { slot: row.capacity_slot, generation: row.capacity_generation };
   }
-  const offered = yield* sendEmailCapacity(directory, { _tag: "Offer" });
+  const offered = yield* sendIngestionCapacity(directory, { _tag: "Offer" }, purpose);
   if (offered.status === full) return "full" as const;
   if (!offered.ok) return yield* unavailable();
   const offer = yield* Schema.decodeUnknownEffect(EmailCapacitySlot)(
@@ -49,12 +55,13 @@ const chooseSlot = Effect.fn(function* (
   );
   const sql = yield* SqliteClient;
   const saved = yield* withStoreCapacity("required")(
-    sql`UPDATE forwarded_email_receipts SET capacity_slot=${offer.slot},capacity_generation=${offer.generation} WHERE id=${row.id} AND state='storing' AND capacity_slot IS NULL AND NOT EXISTS(SELECT 1 FROM erasure_requests) RETURNING id`
+    sql`UPDATE ${sql(receipts[purpose])} SET capacity_slot=${offer.slot},capacity_generation=${offer.generation} WHERE id=${row.id} AND state='storing' AND capacity_slot IS NULL AND NOT EXISTS(SELECT 1 FROM erasure_requests) RETURNING id`
   );
   return saved.length === 1 ? offer : ("retry" as const);
 });
+type CapacityTarget = { directory: DurableObjectNamespace; purpose: IngestionCapacity };
 const applyClaim = Effect.fn(function* (
-  directory: DurableObjectNamespace,
+  { directory, purpose }: CapacityTarget,
   storage: DurableObjectStorage,
   {
     id,
@@ -64,49 +71,53 @@ const applyClaim = Effect.fn(function* (
   }: { id: string; slot: number; generation: number; expires: number }
 ) {
   const sql = yield* SqliteClient;
-  const claimed = yield* sendEmailCapacity(directory, {
-    _tag: "Claim",
-    slot,
-    generation,
-    receipt: id,
-    expires,
-  });
+  const claimed = yield* sendIngestionCapacity(
+    directory,
+    {
+      _tag: "Claim",
+      slot,
+      generation,
+      receipt: id,
+      expires,
+    },
+    purpose
+  );
   if (claimed.status === full) {
-    yield* discardStoring(id, storage);
+    yield* discardStoring(id, storage, purpose);
     return false;
   }
   if (claimed.status === stale) {
     yield* withStoreCapacity("required")(
-      sql`UPDATE forwarded_email_receipts SET capacity_slot=NULL,capacity_generation=NULL WHERE id=${id} AND state='storing' AND capacity_slot=${slot} AND capacity_generation=${generation} AND capacity_claimed=0`
+      sql`UPDATE ${sql(receipts[purpose])} SET capacity_slot=NULL,capacity_generation=NULL WHERE id=${id} AND state='storing' AND capacity_slot=${slot} AND capacity_generation=${generation} AND capacity_claimed=0`
     );
     return "retry" as const;
   }
   if (claimed.status !== applied) return yield* unavailable();
   const saved = yield* withStoreCapacity("required")(
-    sql`UPDATE forwarded_email_receipts SET capacity_claimed=1 WHERE id=${id} AND state='storing' AND capacity_slot=${slot} AND capacity_generation=${generation} RETURNING id`
+    sql`UPDATE ${sql(receipts[purpose])} SET capacity_claimed=1 WHERE id=${id} AND state='storing' AND capacity_slot=${slot} AND capacity_generation=${generation} RETURNING id`
   );
   return saved.length === 1;
 });
 /** Persist the offered generation before claiming it. Lost replies can retry or fence only that generation. */
-export const claimEmailCapacity = Effect.fn(function* (
-  directory: DurableObjectNamespace,
+export const claimIngestionCapacity = Effect.fn(function* (
+  { directory, purpose }: CapacityTarget,
   id: string,
   storage: DurableObjectStorage
 ) {
   const maxOffers = 4;
   for (let attempt = 0; attempt < maxOffers; attempt++) {
-    const selected = yield* lookup(id);
+    const selected = yield* lookup(id, purpose);
     if (Option.isNone(selected) || selected.value.state !== "storing") return false;
     const row = selected.value;
     if (row.capacity_claimed === 1) return true;
-    const offer = yield* chooseSlot(directory, row);
+    const offer = yield* chooseSlot(directory, row, purpose);
     if (offer === "retry") continue;
     if (offer === "full") {
-      yield* discardStoring(id, storage);
+      yield* discardStoring(id, storage, purpose);
       return false;
     }
     const { slot, generation } = offer;
-    const result = yield* applyClaim(directory, storage, {
+    const result = yield* applyClaim({ directory, purpose }, storage, {
       id,
       slot,
       generation,
@@ -117,12 +128,12 @@ export const claimEmailCapacity = Effect.fn(function* (
   return yield* unavailable();
 });
 /** Release also fences an unacknowledged claim that arrives after disposal or erasure. */
-export const updateSharedEmailCapacity = Effect.fn(function* (
-  directory: DurableObjectNamespace,
+export const updateSharedCapacity = Effect.fn(function* (
+  { directory, purpose }: CapacityTarget,
   id: string,
   action: "Release" | "Settle"
 ) {
-  const selected = yield* lookup(id);
+  const selected = yield* lookup(id, purpose);
   if (Option.isNone(selected)) return;
   const {
     capacity_slot: slot,
@@ -130,13 +141,17 @@ export const updateSharedEmailCapacity = Effect.fn(function* (
     expires_at_ms: expires,
   } = selected.value;
   if (slot === null || generation === null) return;
-  const result = yield* sendEmailCapacity(directory, {
-    _tag: action,
-    slot,
-    generation,
-    receipt: id,
-    expires,
-  });
+  const result = yield* sendIngestionCapacity(
+    directory,
+    {
+      _tag: action,
+      slot,
+      generation,
+      receipt: id,
+      expires,
+    },
+    purpose
+  );
   if (result.status !== applied) return yield* unavailable();
 });
 
@@ -144,7 +159,7 @@ export const settleSharedEmailCapacity = Effect.fn(function* (
   directory: DurableObjectNamespace,
   id: string
 ) {
-  yield* updateSharedEmailCapacity(directory, id, "Settle");
+  yield* updateSharedCapacity({ directory, purpose: "email" }, id, "Settle");
   const sql = yield* SqliteClient;
   yield* withStoreCapacity("required")(
     sql`UPDATE forwarded_email_receipts SET capacity_settled=1 WHERE id=${id} AND outcome IS NOT NULL`

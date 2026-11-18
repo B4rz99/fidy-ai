@@ -1,15 +1,9 @@
-import { afterAll, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { Effect } from "effect";
 import { maxWhatsAppWebhookBytes } from "../../src/shell/channels/whatsapp/contract";
-import { isolatedTestDatabases } from "../d1-test-fixture";
 import { receiveWhatsAppWebhook } from "./runtime";
 
-const databases = isolatedTestDatabases();
-afterAll(() => databases.dispose());
-
-const probeOversizedBody = (
-  db: D1Database
-): Promise<
+const probeOversizedBody = (): Promise<
   Readonly<{
     observed: Response | "pending";
     cancellationStarted: boolean;
@@ -30,7 +24,6 @@ const probeOversizedBody = (
   const request = new Request("https://api.fidyapp.com/webhooks/kapso", { method: "POST", body });
   const response = Effect.runPromise(
     receiveWhatsAppWebhook({
-      DB: db,
       BROWSER_ORIGIN: "https://app.fidyapp.com",
       KAPSO_API_KEY: "test-key",
       WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
@@ -53,8 +46,7 @@ const probeOversizedBody = (
 it("releases an oversized webhook body without waiting for hostile cancellation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
-      const result = yield* Effect.tryPromise(() => probeOversizedBody(db));
+      const result = yield* Effect.tryPromise(() => probeOversizedBody());
       expect(result.observed).not.toBe("pending");
       if (result.observed !== "pending") expect(result.observed.status).toBe(413);
       expect(result.cancellationStarted).toBe(true);

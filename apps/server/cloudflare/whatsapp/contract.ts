@@ -16,6 +16,7 @@ import {
   type InsightTemplateSender,
   type ProactivityTemplateSender,
   WhatsAppBusinessPhoneNumberId,
+  WhatsAppCaller,
   type WhatsAppDeliveryKey,
   WhatsAppDocument,
   type WhatsAppInboundEvent,
@@ -257,7 +258,6 @@ export type WhatsAppIngressEnvironment = Partial<
 > &
   Readonly<{
     readonly BROWSER_ORIGIN: string;
-    readonly DB: D1Database;
     readonly KAPSO_API_KEY: string;
     readonly KAPSO_WEBHOOK_SECRET: string;
     readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
@@ -335,6 +335,14 @@ export const SendReply = Schema.Struct({
   correlation: HostedDeliveryCorrelationToken,
   state: Schema.Literals(["accepted", "rejected", "ambiguous"]),
   message: Schema.NullOr(WhatsAppProviderMessageId),
+});
+export const voiceRefusalUrl = "https://user.invalid/work/whatsapp/voice-refusal";
+export const VoiceRefusal = Schema.Struct({
+  userId: UserId,
+  caller: WhatsAppCaller,
+  message: WhatsAppProviderMessageId,
+  endpoint: WhatsAppBusinessPhoneNumberId,
+  occurredAt: Schema.Int,
 });
 export const reserveDeliveryUrl = "https://user.invalid/work/whatsapp/reserve";
 export const claimDeliveryUrl = "https://user.invalid/work/whatsapp/claim";

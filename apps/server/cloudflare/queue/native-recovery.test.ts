@@ -5,12 +5,10 @@ import { expect, it } from "vitest";
 const userId = "10000000-0000-4000-8000-000000000001";
 const identity = (index: number): string =>
   `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
-const count = (db: D1Database, table: string): Promise<number> =>
-  db
-    .prepare(`SELECT COUNT(*) AS count FROM ${table}`)
-    .first<number>("count")
-    .then((value) => value ?? 0);
-const waitForCount = Effect.fn(function* (db: D1Database, table: string, expected: number) {
+type Store = Awaited<ReturnType<Miniflare["unsafeGetDurableObjectStorage"]>>;
+const count = (db: Store, table: string): Promise<number> =>
+  db.exec(`SELECT count(*) AS n FROM ${table}`).then((rows) => Number(rows[0]?.n));
+const waitForCount = Effect.fn(function* (db: Store, table: string, expected: number) {
   for (let attempt = 0; attempt < 200; attempt += 1) {
     if ((yield* Effect.tryPromise(() => count(db, table))) >= expected) return;
     yield* Effect.sleep(100);
@@ -51,14 +49,20 @@ it(
             Effect.sync(
               () =>
                 new Miniflare({
+                  unsafeInspectDurableObjects: true,
                   workers: [
                     {
                       config: {
                         name: "native-recovery-proof",
                         type: "worker",
                         compatibilityDate: "2026-09-08",
+                        exports: { QueueRecorder: { type: "durable-object", storage: "sqlite" } },
                         env: {
-                          DB: { type: "d1", id: "native-recovery-proof" },
+                          OWNER: {
+                            type: "durable-object",
+                            worker: "native-recovery-proof",
+                            exportName: "QueueRecorder",
+                          },
                           WORK: { type: "queue", name: "recovery-work" },
                         },
                         triggers: [
@@ -90,37 +94,26 @@ it(
             ),
             (value) => Effect.tryPromise(() => value.dispose()).pipe(Effect.orDie)
           );
-          const db = yield* Effect.tryPromise(() => runtime.getD1Database("DB"));
+          const db = yield* Effect.tryPromise(() =>
+            runtime.unsafeGetDurableObjectStorage("native-recovery-proof", "QueueRecorder", {
+              name: userId,
+            })
+          );
           const now = yield* Clock.currentTimeMillis;
           yield* Effect.tryPromise(() =>
-            db.batch([
-              db.prepare(
-                "CREATE TABLE statement_submissions(id TEXT PRIMARY KEY, user_id TEXT NOT NULL, status TEXT NOT NULL, retention_expires_at_ms INTEGER NOT NULL, queued_at_ms INTEGER) STRICT"
-              ),
-              db.prepare("CREATE TABLE blocked(id TEXT PRIMARY KEY) STRICT"),
-              db.prepare(
-                "CREATE TABLE handoffs(id TEXT PRIMARY KEY, completed_at_ms INTEGER NOT NULL) STRICT"
-              ),
-              db.prepare(
-                "CREATE TABLE deliveries(id TEXT NOT NULL, attempt INTEGER NOT NULL) STRICT"
-              ),
-              db.prepare(
-                "CREATE TABLE dead_letters(id TEXT PRIMARY KEY, attempt INTEGER NOT NULL) STRICT"
-              ),
-            ])
+            db.exec(
+              "CREATE TABLE statement_submissions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,status TEXT NOT NULL,retention_expires_at_ms INTEGER NOT NULL,queued_at_ms INTEGER); CREATE TABLE blocked(id TEXT PRIMARY KEY); CREATE TABLE handoffs(id TEXT PRIMARY KEY,completed_at_ms INTEGER NOT NULL); CREATE TABLE deliveries(id TEXT,attempt INTEGER); CREATE TABLE dead_letters(id TEXT PRIMARY KEY,attempt INTEGER)"
+            )
           );
           yield* Effect.tryPromise(() =>
-            db.batch([
-              ...Array.from({ length: backlog }, (_, index) =>
-                db
-                  .prepare(
-                    "INSERT INTO statement_submissions(id,user_id,status,retention_expires_at_ms) VALUES (?, ?, 'queued', ?)"
-                  )
-                  .bind(identity(index), userId, now + 600_000)
-              ),
-              db.prepare("INSERT INTO blocked VALUES (?)").bind(identity(4)),
-            ])
+            db.exec(
+              "WITH RECURSIVE entries(n) AS(VALUES(1) UNION ALL SELECT n+1 FROM entries WHERE n<?) INSERT INTO statement_submissions(id,user_id,status,retention_expires_at_ms) SELECT printf('20000000-0000-4000-8000-%012d',n),?,'queued',? FROM entries",
+              backlog,
+              userId,
+              now + 600000
+            )
           );
+          yield* Effect.tryPromise(() => db.exec("INSERT INTO blocked VALUES(?)", identity(4)));
           const started = performance.now();
           expect(
             (yield* Effect.tryPromise(() =>
@@ -133,21 +126,15 @@ it(
           expect(yield* Effect.tryPromise(() => count(db, "deliveries"))).toBe(backlog + 30);
           expect(
             yield* Effect.tryPromise(() =>
-              db
-                .prepare("SELECT MAX(attempt) AS attempt FROM deliveries WHERE id = ?")
-                .bind(identity(4))
-                .first<number>("attempt")
+              db.exec("SELECT MAX(attempt) AS attempt FROM deliveries WHERE id = ?", identity(4))
             )
-          ).toBe(4);
+          ).toEqual([{ attempt: 4 }]);
           expect(
             yield* Effect.tryPromise(() =>
-              db
-                .prepare("SELECT id FROM dead_letters WHERE id = ?")
-                .bind(identity(4))
-                .first<string>("id")
+              db.exec("SELECT id FROM dead_letters WHERE id = ?", identity(4))
             )
-          ).toBe(identity(4));
-          yield* Effect.tryPromise(() => db.prepare("DELETE FROM blocked").run());
+          ).toEqual([{ id: identity(4) }]);
+          yield* Effect.tryPromise(() => db.exec("DELETE FROM blocked"));
           expect(
             (yield* Effect.tryPromise(() =>
               runtime.dispatchFetch("http://proof/replay", { method: "POST" })
@@ -159,15 +146,13 @@ it(
           expect(performance.now() - started).toBeLessThan(40_000);
           if (measureQueueGrowth) {
             const rows = yield* Effect.tryPromise(() =>
-              db
-                .prepare(
-                  "SELECT h.completed_at_ms-s.queued_at_ms AS delay FROM handoffs h JOIN statement_submissions s ON h.id=s.id ORDER BY delay"
-                )
-                .all()
+              db.exec(
+                "SELECT h.completed_at_ms-s.queued_at_ms AS delay FROM handoffs h JOIN statement_submissions s ON h.id=s.id ORDER BY delay"
+              )
             );
             const delays = yield* Schema.decodeUnknownEffect(
               Schema.Array(Schema.Struct({ delay: Schema.Finite }))
-            )(rows.results);
+            )(rows);
             const quantile = (fraction: number): number =>
               delays[Math.ceil(delays.length * fraction) - 1]?.delay ?? 0;
             const encoded = yield* Schema.encodeEffect(queueMeasurement)({

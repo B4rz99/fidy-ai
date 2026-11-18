@@ -29,7 +29,7 @@ it.skipIf(!measure)(
                         type: "worker",
                         compatibilityDate: "2026-09-08",
                         env: {
-                          DB: { type: "d1", id: "sparse-queue-proof" },
+                          RESULT: { type: "kv", id: "sparse-queue-timing" },
                           WORK: { type: "queue", name: "sparse-work" },
                         },
                         triggers: [
@@ -49,7 +49,7 @@ it.skipIf(!measure)(
                               contents: `export default {
             async fetch(request, env) { await env.WORK.send({version:1}); return new Response(null,{status:202}); },
             async queue(batch, env) {
-              await env.DB.batch(batch.messages.map(message => env.DB.prepare('INSERT INTO deliveries(id) VALUES (?)').bind(message.id)));
+              await Promise.all(batch.messages.map(message => env.RESULT.put(message.id,'delivered')));
               batch.ackAll();
             }
           };`,
@@ -63,10 +63,7 @@ it.skipIf(!measure)(
             ),
             (runtime) => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie)
           );
-          const db = yield* Effect.tryPromise(() => runtime.getD1Database("DB"));
-          yield* Effect.tryPromise(() =>
-            db.prepare("CREATE TABLE deliveries(id TEXT PRIMARY KEY) STRICT").run()
-          );
+          const result = yield* Effect.tryPromise(() => runtime.getKVNamespace("RESULT"));
           const started = performance.now();
           expect(
             (yield* Effect.tryPromise(() =>
@@ -75,10 +72,7 @@ it.skipIf(!measure)(
           ).toBe(202);
           let deliveries = 0;
           for (let attempt = 0; attempt < 200; attempt++) {
-            deliveries =
-              (yield* Effect.tryPromise(() =>
-                db.prepare("SELECT count(*) AS count FROM deliveries").first<number>("count")
-              )) ?? 0;
+            deliveries = (yield* Effect.tryPromise(() => result.list())).keys.length;
             if (deliveries === 1) break;
             yield* Effect.sleep(50);
           }

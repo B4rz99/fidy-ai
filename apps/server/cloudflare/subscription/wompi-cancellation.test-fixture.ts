@@ -4,7 +4,33 @@ import { Hex } from "effect/encoding";
 
 type Environment = { PROVIDER_STATE: DurableObjectNamespace };
 
+const voidedCharge = "12345-1000000000-12345";
+const ambiguousCardVoid = (request: Request, db: SqlStorage, path: string): Response => {
+  if (request.method === "POST" && path.endsWith("/void")) {
+    db.exec("UPDATE card_void_control SET posts=posts+1");
+    return new Response(null, { status: 503 });
+  }
+  if (request.method === "GET" && path === "/v1/transactions/" + voidedCharge) {
+    const row = db
+      .exec("UPDATE card_void_control SET checks=checks+1 RETURNING amount,reference")
+      .one();
+    return Response.json({
+      data: {
+        id: voidedCharge,
+        status: "VOIDED",
+        reference: row.reference,
+        amount_in_cents: row.amount,
+        currency: "COP",
+        payment_source_id: 5101,
+      },
+    });
+  }
+  return new Response(null, { status: 404 });
+};
 const chargeFixture = Effect.fn(function* (request: Request, db: SqlStorage, path: string) {
+  if (path.startsWith("/v1/transactions/" + voidedCharge)) {
+    return ambiguousCardVoid(request, db, path);
+  }
   if (request.method === "POST" && path === "/v1/transactions") {
     const charge = yield* Schema.decodeUnknownEffect(
       Schema.Struct({

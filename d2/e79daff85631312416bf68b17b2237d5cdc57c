@@ -1,0 +1,77 @@
+apps/server/cloudflare/insights/internal/local-reminder-choice.ts
+  s_a1be23a656acf0::t_f1a7c2993b7a81 1,18,23,68-71,73-75,80-83,91,98,102-103,112-113,118-126,134,141,143,184,299,301-303,305-306,314-315,318-320,322,331-333,343,350-355,359
+  s_a1be23a656acf0::t_ad22207c61dfef 72,253-259,279,300,304,321
+apps/server/cloudflare/insights/internal/native-weekly-summary.ts
+  s_a1be23a656acf0::t_81fe28846c3915 1-16,18-19,22-24,26-38,40,50-51,54,56-58,86,91,95,119,121-122,124-129,133-143,145-147,150,155-157,159-162
+  s_a1be23a656acf0::t_0a58decf45a43c 17,20-21,25,39,41-49,52-53,55,59-85,87-90,92-94,96-118,120,123,130-132,144,148-149,151-154,158
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_75e4b6777bbdcb 1109-1110
+  s_a1be23a656acf0::t_f1a7c2993b7a81 1101-1106,1113
+  s_a1be23a656acf0::t_3ea0b392902ff8 1107-1108,1111-1112
+apps/server/cloudflare/insights/contract.ts
+  s_a1be23a656acf0::t_f1a7c2993b7a81 245-251
+  s_a1be23a656acf0::t_6b44577e781c54 1,3,244,254-281
+apps/server/cloudflare/insights/native-reminder-consent.test.ts
+  s_a1be23a656acf0::t_81fe28846c3915 325-378,380-396,398,400-514,519
+  s_a1be23a656acf0::t_e6e003a536a1bb 1,12-14,19-33,35,37,110,165,379,397,399,525-527,588-591
+apps/server/cloudflare/insights/internal/native-pause-notice.ts
+  s_a1be23a656acf0::t_75e4b6777bbdcb 1-3,5-22,24-30
+  s_a1be23a656acf0::t_06f5ef31daa210 4,23
+apps/server/cloudflare/agent/internal/local-turn-store.ts
+  s_a1be23a656acf0::t_75e4b6777bbdcb 281,284
+  s_a1be23a656acf0::t_259482f0ce3e2e 1,167,251,278
+apps/server/cloudflare/insights/operations.ts
+  s_a1be23a656acf0::t_75e4b6777bbdcb 1-5,16,452
+  s_a1be23a656acf0::t_2d041a859ed30c 453-460
+apps/server/cloudflare/insights/internal/native-weekly.ts
+  s_a1be23a656acf0::t_f1a7c2993b7a81 1-4,6-8,10-31,33-41,43,45-48,50-63,65-162
+  s_a1be23a656acf0::t_0ce035bd873b16 5,9,32,42,44,49,64
+apps/server/cloudflare/agent/internal/local-channel-receipt.ts
+  s_a1be23a656acf0::t_ae5c8ec990d4e1 1,34
+apps/server/cloudflare/agent/provider.test-fixture.ts
+  s_a1be23a656acf0::t_91384c19d58439 54,135-146,148-149,184
+apps/server/cloudflare/insights/internal/local-disclosure.ts
+  s_a1be23a656acf0::t_cb5ebf6f32775a 13-14,39,45,47,70-89,98,103,105,117
+apps/server/cloudflare/insights/internal/local-reminder.ts
+  s_a1be23a656acf0::t_84cb9e23ef5b78 25-26,150,162,166-180,184,188,190,236,261-280,283-284,289,305,313
+apps/server/cloudflare/insights/internal/reminder-claim.ts
+  s_a1be23a656acf0::t_6d3604fd3388c9 1,22-25,31,38,84-103,106,116,119,132-139
+apps/server/cloudflare/insights/internal/reminder-governor.ts
+  s_a1be23a656acf0::t_63bb68fc07dda0 14,184
+apps/server/cloudflare/insights/internal/weekly-governor.ts
+  s_a1be23a656acf0::t_0cb02eacbb1e85 9,11
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_a1be23a656acf0::t_28b69a42662af6 183
+apps/server/cloudflare/insights/runtime.ts
+  s_a1be23a656acf0::t_e7f58a1f391ee7 1-8,15-20,28-38,403-404,408,410,412-416,468,472,503-539,545,550-551,555-569,572-580,586-656,663,668-674,680
+apps/server/cloudflare/queue/failure-isolation.test.ts
+  s_a1be23a656acf0::t_698fd2e340fff4 103
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_a1be23a656acf0::t_5aa18b65c356ef 194,258
+apps/server/cloudflare/queue/runtime.test.ts
+  s_a1be23a656acf0::t_b17e6db0eed26a 46
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_72894c25d9aa08 396-405
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_0d6880c7fed2ce 1-2,330-331,657-660,1002-1005,1052
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_a1be23a656acf0::t_6d59fe6069230b 162,187-189,193-196
+apps/server/cloudflare/whatsapp/internal/native-delivery.ts
+  s_a1be23a656acf0::t_672f6bb60a187f 11,95,136-142,150,159,161,179,191-192,201-204,216,221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d2e79daff85631312416bf68b17b2237d5cdc57c",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

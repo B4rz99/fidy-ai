@@ -68,6 +68,13 @@ export class HostedProviderControl extends DurableObject {
     this.waiting = true;
     yield* Deferred.await(this.released);
     this.waiting = false;
+    if (this.mode === "/malformed") {
+      return Response.json({
+        choices: [
+          { message: { role: "assistant", content: { invalid: true } }, finish_reason: "stop" },
+        ],
+      });
+    }
     const message = {
       role: "assistant",
       content: null,
@@ -116,7 +123,7 @@ export class HostedProviderControl extends DurableObject {
           ];
           return new Response(null, { status: 204 });
         }
-        if (["/batch", "/forget"].includes(path)) {
+        if (["/batch", "/forget", "/malformed"].includes(path)) {
           this.mode = path;
           return new Response(null, { status: 204 });
         }

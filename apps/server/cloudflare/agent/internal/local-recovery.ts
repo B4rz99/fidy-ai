@@ -3,28 +3,10 @@ import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Option, Schema } from "effect";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 import { hostedTranscriptRetentionMs } from "../contract";
-import { type LocalTurn, Turn } from "./local-turn";
-import { appendEntry, entryIdentity } from "./local-turn-store";
+import { Turn } from "./local-turn";
+import { finishTurn } from "./local-turn-store";
 import { executeTurn } from "./local-inference";
 
-const finish = Effect.fn(function* (
-  turn: LocalTurn,
-  reason: "interrupted" | "failed",
-  now: number
-) {
-  const sql = yield* SqliteClient;
-  const marked =
-    yield* sql`UPDATE hosted_turns SET state=${reason},terminal_ms=${now},receipt_digest=NULL,receipt_value=NULL,answer=NULL WHERE id=${turn.id} AND user_id=${turn.user_id} AND state IN ('queued','running','proposed') RETURNING id`;
-  if (marked.length === 0) return;
-  const identity = entryIdentity(turn.id)(now);
-  yield* appendEntry(
-    turn.session_id,
-    reason === "interrupted"
-      ? { ...identity, _tag: "InterruptedTurnTranscriptEntry" }
-      : { ...identity, _tag: "FailedTurnTranscriptEntry", reason: "HostedInferenceFailed" }
-  );
-  yield* sql`UPDATE hosted_agent_sessions SET active_ms=${now} WHERE id=${turn.session_id}`;
-});
 export const inspectTurns = Effect.fn(function* (current: number, storage: DurableObjectStorage) {
   const sql = yield* SqliteClient;
   const [active] = yield* sql`SELECT min(at) AS at FROM (
@@ -75,7 +57,7 @@ const claim = Effect.fn(function* (storage: DurableObjectStorage, owns: (id: str
     turn.deadline_ms <= current ||
     (yield* sql`SELECT 1 FROM erasure_requests WHERE user_id=${turn.user_id}`).length === 1
   ) {
-    yield* finish(turn, "interrupted", current);
+    yield* finishTurn({ turnId: turn.id, user: turn.user_id }, "interrupted", current);
     yield* inspectTurns(current, storage);
     return Option.none();
   }
@@ -98,7 +80,9 @@ export const recoverTurns = Effect.fn(function* (
   const attempt = yield* executeTurn(env, held, storage).pipe(Effect.result);
   if (attempt._tag === "Failure") {
     const current = yield* Clock.currentTimeMillis;
-    yield* finish(held, "failed", current).pipe(withStoreCapacity("required"));
+    yield* finishTurn({ turnId: held.id, user: held.user_id }, "failed", current).pipe(
+      withStoreCapacity("required")
+    );
     yield* inspectTurns(current, storage);
   }
   return { attempted: 1, failed: 0 };

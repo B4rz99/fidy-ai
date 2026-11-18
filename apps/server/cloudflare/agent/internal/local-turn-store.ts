@@ -72,6 +72,25 @@ export const entryIdentity =
     turnId,
     occurredAt: DateTime.makeUnsafe(now),
   });
+export const finishTurn = Effect.fn(function* (
+  { turnId, user }: { turnId: TranscriptTurnId; user: string },
+  reason: "interrupted" | "failed",
+  now: number
+) {
+  const sql = yield* SqliteClient;
+  const marked =
+    yield* sql`UPDATE hosted_turns SET state=${reason},terminal_ms=${now},receipt_digest=NULL,receipt_value=NULL,answer=NULL WHERE id=${turnId} AND user_id=${user} AND state IN ('queued','running','proposed') RETURNING session_id`;
+  if (marked.length === 0) return;
+  const session = yield* Schema.decodeUnknownEffect(HostedAgentSessionId)(marked[0]?.session_id);
+  const identity = entryIdentity(turnId)(now);
+  yield* appendEntry(
+    session,
+    reason === "interrupted"
+      ? { ...identity, _tag: "InterruptedTurnTranscriptEntry" }
+      : { ...identity, _tag: "FailedTurnTranscriptEntry", reason: "HostedInferenceFailed" }
+  );
+  yield* sql`UPDATE hosted_agent_sessions SET active_ms=${now} WHERE id=${session}`;
+});
 const basisFor = Effect.fn(function* (user: UserId) {
   const guard = protectConsentStatement({
     statement: {
@@ -183,6 +202,12 @@ const completedReceipt = Effect.fn(function* (
     ? channelReply(channelStatus.ok)({ status: "completed" })
     : channelReply(channelStatus.unauthenticated)({ status: "unauthenticated" });
 });
+const expiredReply = (
+  input: { turnId: TranscriptTurnId } | { turnId: TranscriptTurnId; receipt: string }
+): Response =>
+  "receipt" in input
+    ? channelReply(channelStatus.unauthenticated)({ status: "unauthenticated" })
+    : channelReply(channelStatus.unavailable)({ status: "interrupted" });
 export const observeTurn = Effect.fn(function* (
   actor: { id: string; userId: string },
   input: { turnId: TranscriptTurnId } | { turnId: TranscriptTurnId; receipt: string },
@@ -196,7 +221,8 @@ export const observeTurn = Effect.fn(function* (
   }
   if (row.state === "completed") return yield* completedReceipt(input, row.receipt_digest);
   if (Number(row.deadline_ms) <= now) {
-    return channelReply(channelStatus.unavailable)({ status: "interrupted" });
+    yield* finishTurn({ turnId: input.turnId, user: actor.userId }, "interrupted", now);
+    return expiredReply(input);
   }
   if (["queued", "running"].includes(String(row.state))) {
     return channelReply(channelStatus.accepted)({ status: "processing", turnId: input.turnId });

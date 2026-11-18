@@ -320,6 +320,7 @@ const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean)
 
 const fixtureModules: Partial<Record<NativeFixture, string>> = {
   "lost-read": "./core-http/lost-read.test-fixture.ts",
+  hosted: "./agent/hosted-alarm.test-fixture.ts",
   "addressed-read": "./transactions/addressed-read.test-fixture.ts",
   clock: "./user-clock.test-fixture.ts",
   capacity: "./capacity-worker.test-fixture.ts",

@@ -1,0 +1,33 @@
+.oxlintrc.json
+  s_a1be23a656acf0::t_9c15fbe292a802 327
+apps/server/cloudflare/subscription/cancellation-journey.test.ts
+  s_a1be23a656acf0::t_e16bcc9e802040 27-28,30,300-301
+apps/server/cloudflare/subscription/native-callback.test.ts
+  s_a1be23a656acf0::t_35085f09fa7be1 40-42,48,75-76,152,179-181
+apps/server/cloudflare/subscription/native-enrollment-erasure.test.ts
+  s_a1be23a656acf0::t_8c7fe48b71cc87 24-26,72,74,79,96,110-112
+apps/server/cloudflare/subscription/native-enrollment.test.ts
+  s_a1be23a656acf0::t_b623e19a08998b 147-149,163-165,339-341,464-467,473-480
+apps/server/cloudflare/subscription/native-refund.test.ts
+  s_a1be23a656acf0::t_68b92ed2f8fa7c 52-54,57-59,126-127,165-166
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_ac4d30785f7008 1,5,7,17-23,26-27,35-36,38,59,64-65,78,114,129,137-142,151,156,160-161,167,175-181,192,195,197-198
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_36850df9303dba 32-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2023f3fd8004abc62f0fe293d68f4cd87ab70206",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

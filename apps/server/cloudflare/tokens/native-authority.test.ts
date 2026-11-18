@@ -83,13 +83,21 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* inspect()).toEqual([before]);
         yield* native(() => db.exec("DROP TRIGGER refuse_audit"));
         expect((yield* call("/transactions", capture)).status).toBe(201);
-        expect(yield* inspect()).toEqual([
-          { expires_at_ms: before?.expires_at_ms, last_used_at_ms: expect.any(Number) },
-        ]);
+        const usage = yield* inspect();
+        expect(usage).toHaveLength(1);
+        expect(usage[0]?.expires_at_ms).toBe(before?.expires_at_ms);
+        expect(typeof usage[0]?.last_used_at_ms).toBe("number");
         const listing = yield* native(() => db.browser(0, "/pats"));
-        expect(yield* native(() => listing.json())).toMatchObject({
-          data: { pats: [{ shortId, lastUsedAt: expect.any(String) }] },
-        });
+        const listed = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            data: Schema.Struct({
+              pats: Schema.Tuple([
+                Schema.Struct({ shortId: Schema.String, lastUsedAt: Schema.String }),
+              ]),
+            }),
+          })
+        )(yield* native(() => listing.json()));
+        expect(listed.data.pats[0].shortId).toBe(shortId);
       })
   );
   test.effect("rechecks the PAT before returning protected Category and Transaction reads", () =>

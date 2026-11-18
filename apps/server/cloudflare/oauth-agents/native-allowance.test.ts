@@ -80,9 +80,11 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(first).toMatchObject({
           result: { isError: false, _meta: { "co.fidy/canonicalAllowance": { remaining: "0" } } },
         });
-        expect(yield* native(() => direct.json())).toMatchObject({
-          data: { id: expect.any(String) },
-        });
+        expect(
+          Schema.is(Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }))(
+            yield* native(() => direct.json())
+          )
+        ).toBe(true);
         const retained = yield* post("one-budget");
         expect(retained.status).toBe(201);
         expect(retained.headers.get("fidy-canonical-remaining")).toBe("0");

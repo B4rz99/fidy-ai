@@ -1025,6 +1025,18 @@ describe("Cloudflare Worker topology (continued)", () => {
     Effect.gen(function* () {
       const records: Array<TelemetryWorkRecord> = [];
       const telemetry = collectingTelemetry(records);
+      const directoryRequests: string[] = [];
+      const directoryStub: Pick<Fetcher, "fetch"> = {
+        fetch: (input): Promise<Response> => {
+          directoryRequests.push(new Request(input).url);
+          return failDatabaseOperation();
+        },
+      };
+      const nativeEnvironment = {
+        ...coreEnvironment,
+        DIRECTORY: { getByName: (): typeof directoryStub => directoryStub },
+        USER_STORE: coreEnvironment.USER_TRANSACTION_COORDINATOR,
+      };
       const observedCore = makeCoreWorker(telemetry);
       const observedPublic = makePublicWorker(telemetry);
       const response = yield* Effect.tryPromise(() =>
@@ -1037,20 +1049,17 @@ describe("Cloudflare Worker topology (continued)", () => {
           }),
           makePublicEnvironment({
             CORE: {
-              fetch: (request) =>
-                observedCore.fetch(new Request(request), {
-                  ...coreEnvironment,
-                  DB: failingDatabase,
-                }),
+              fetch: (request) => observedCore.fetch(new Request(request), nativeEnvironment),
             },
           })
         )
       );
       const text = yield* Effect.tryPromise(() => response.text());
 
+      expect(directoryRequests).toHaveLength(1);
       expect(response.status).toBe(503);
       expect(text).toBe(
-        '{"error":{"code":"unavailable","message":"Categories are temporarily unavailable. Retry later."},"next":[]}'
+        '{"error":{"code":"unavailable","message":"The operation is unavailable. Retry later."},"next":[]}'
       );
       expect(text).not.toContain("no such table");
       expect(text).not.toContain("SELECT");

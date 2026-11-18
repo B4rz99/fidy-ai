@@ -89,6 +89,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         const reader = response.body?.getReader();
         if (reader === undefined) return yield* Effect.die("Missing MCP subscription");
         const first = yield* native(() => reader.read());
+        if (!(first.value instanceof Uint8Array)) {
+          return yield* Effect.die("Missing MCP event bytes");
+        }
         expect(new TextDecoder().decode(first.value)).toContain("subscriptions/acknowledged");
         if (reason === "browser revocation") {
           const revoked = yield* session(oauthPaths.revoke, alice, { connectionId });
@@ -297,7 +300,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           refresh_token: credential.refresh_token,
         };
         const responses = yield* Effect.all([exchange(input), exchange(input)], { concurrency: 2 });
-        expect(responses.map((response) => response.status).sort()).toEqual([200, 400]);
+        expect(
+          responses.map((response) => response.status).sort((left, right) => left - right)
+        ).toEqual([200, 400]);
         const success = responses.find((response) => response.status === 200);
         if (success === undefined) return yield* Effect.die("Missing successful refresh");
         const pair = yield* Schema.decodeUnknownEffect(tokenPair)(

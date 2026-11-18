@@ -114,7 +114,7 @@ const resolveSession = Effect.fn(function* ({
 export const localProof = Effect.fn(function* (
   request: Request,
   owns: (user: string) => boolean,
-  sessionLookup = boundSessionLookup
+  sessionLookup: typeof boundSessionLookup = boundSessionLookup
 ) {
   const invocation = yield* CurrentOAuthInvocation;
   if (Option.isSome(invocation)) {

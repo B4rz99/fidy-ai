@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "288b62a927be6ceaf6e6dc45bd8430ff43c80a7344720c628a64ff2e228136aa";
+const expectedEdgePolicyDigest = "5abb9f14b01d37d0a9976e7dc9445d5817863e996a57dc40288d77aa864a1473";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/email-authentication/contract.ts", import.meta.url)

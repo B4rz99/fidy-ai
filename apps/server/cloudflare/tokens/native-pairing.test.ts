@@ -308,9 +308,18 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       const completed = yield* post([issue]);
       expect(completed.status).toBe(200);
       const reply = yield* native(() => completed.json());
-      expect(reply).toMatchObject({
-        data: { results: [{ output: { data: { bearer: expect.stringMatching(/^fin_/u) } } }] },
-      });
+      const result = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({
+            results: Schema.Tuple([
+              Schema.Struct({
+                output: Schema.Struct({ data: Schema.Struct({ bearer: Schema.String }) }),
+              }),
+            ]),
+          }),
+        })
+      )(reply);
+      expect(result.data.results[0].output.data.bearer).toMatch(/^fin_/u);
       const replay = yield* post([issue]);
       expect(replay.status).toBe(400);
       expect(yield* native(() => replay.text())).not.toContain("fin_");

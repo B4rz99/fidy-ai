@@ -79,7 +79,10 @@ layer(LocalEmulationServices, {
         });
         expect(categoriesResponse.status).toBe(401);
         expect(yield* categoriesResponse.json).toEqual({
-          error: { code: "unauthenticated", message: "Present a valid credential and retry." },
+          error: {
+            code: "unauthenticated",
+            message: "Present a currently authorized credential and retry.",
+          },
           next: [],
         });
 

@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+import { verifyIncumbentFence, verifyIncumbentMail } from "./native-incumbent-fence";
 import { readProviderList } from "./native-provider-list";
 import { verifyInstalledWebsite } from "./native-deployed-web";
 import { inspectDeployedEdge } from "./native-deployed-edge";
@@ -16,7 +18,13 @@ import {
   Schedule,
   Schema,
 } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
+import {
+  FetchHttpClient,
+  HttpBody,
+  HttpClient,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/http";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
   SharedStoreMarkers,
@@ -41,7 +49,9 @@ import {
   verifiedStoragePair,
 } from "./storage-release";
 import {
+  type NativeHostMode,
   installationNames,
+  nativeHostPairs,
   nativeIngressHost,
   nativeStack,
   nativeWebHost,
@@ -63,6 +73,9 @@ const {
   rollbackSource,
 } = releaseEvidence;
 const origin = "https://" + nativeIngressHost;
+const hostMode = ReleaseConfig.Literals(["acceptance", "staged"], "NATIVE_STORAGE_HOSTS").pipe(
+  ReleaseConfig.withDefault("acceptance")
+);
 const successStatusStart = 200;
 const recoveryUnavailableStatus = 503;
 const IngressDomainResponse = Schema.Struct({
@@ -161,11 +174,19 @@ const verifyFreshTarget = Effect.fn(function* (
 ) {
   yield* releaseController.requireTrunk(port, env.revision);
   const inventory = yield* firstInstallInventory(env, client);
+  if ((yield* hostMode) !== "acceptance") {
+    return yield* Effect.fail(Error("First install requires unclaimed acceptance hosts"));
+  }
   if (inventory.scripts.some((item) => item.id === "fidy-native-smoke-" + env.revision)) {
     return yield* new ReleaseFailure({ message: "Revision smoke Worker already exists" });
   }
   yield* inspectNativeResources(accountReader(env, client), env.revision, false);
-  yield* inspectDeployedEdge(env, client, { installed: false, bindings: {} });
+  yield* inspectDeployedEdge(env, client, {
+    installed: false,
+    bindings: {},
+    hosts: "acceptance",
+    staging: false,
+  });
   yield* Effect.try({
     try: () => requireAbsentInstallation(inventory),
     catch: () =>
@@ -269,7 +290,11 @@ const requireClosedAdmission = Effect.fn(function* (client: HttpClient.HttpClien
     return yield* new ReleaseFailure({ message: "Normal admission is not closed" });
   }
 });
-const verifySyntheticUsers = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
+const verifySyntheticUsers = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  origins: (typeof installedOrigins)[keyof typeof installedOrigins]
+) {
   const send = Effect.fn(function* (request: Request) {
     const reply = yield* client
       .execute(HttpClientRequest.fromWeb(request))
@@ -285,7 +310,7 @@ const verifySyntheticUsers = Effect.fn(function* (env: Config, client: HttpClien
   const proof = yield* exerciseClosedUsers({
     revision: env.revision,
     proof: Redacted.make(env.smokeProof),
-    origins: installedOrigins.acceptance,
+    origins,
     send,
   });
   const path = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workflows/fidy-native-billing/instances/${proof.callback.workflow}`;
@@ -342,6 +367,8 @@ const verifyInstalledTopology = Effect.fn(function* (
     bindings: Readonly<Record<string, unknown>>;
     publicStable: string;
     coreStable: string;
+    hosts: NativeHostMode;
+    staging: boolean;
   }
 ) {
   const workers = yield* verifyDeployedWorkers(env, client, input.port);
@@ -357,8 +384,13 @@ const verifyInstalledTopology = Effect.fn(function* (
   const edge = yield* inspectDeployedEdge(env, client, {
     installed: true,
     bindings: input.bindings,
+    hosts: input.hosts,
+    staging: input.staging,
   });
-  const website = yield* verifyInstalledWebsite(client, env.revision);
+  const website = yield* Effect.forEach(
+    nativeHostPairs(input.staging ? "acceptance" : input.hosts),
+    (pair) => verifyInstalledWebsite(client, env.revision, pair)
+  );
   return { workers, resources, edge, website };
 });
 const firstInstallWorkers = Effect.fn(function* () {
@@ -373,10 +405,10 @@ const firstInstallWorkers = Effect.fn(function* () {
   }
   return receipts;
 });
-const verifyFirstInstall = Effect.fn(function* (
+const installedRelease = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
-  port: ReleasePort
+  { port, staging }: { port: ReleasePort; staging: boolean }
 ) {
   yield* releaseController.requireTrunk(port, env.revision);
   yield* verifyNativeEdge(env, client, false);
@@ -413,27 +445,162 @@ const verifyFirstInstall = Effect.fn(function* (
   const topology = yield* verifyInstalledTopology(env, client, {
     port,
     bindings: core.bindings,
+    hosts: yield* hostMode,
+    staging,
     publicStable: pair.publicStable,
     coreStable: pair.coreStable,
   });
   const proof = yield* verifyInstalledMarkers({ env, client, pair, storage });
-  const synthetic = yield* verifySyntheticUsers(env, client);
+  return {
+    revision: env.revision,
+    publicVersionId: pair.publicStable,
+    coreVersionId: pair.coreStable,
+    namespaces: storage.namespaces,
+    markers: proof.markers,
+    ...topology,
+    protectedRunUrl: yield* ReleaseConfig.String("RELEASE_RUN_URL"),
+    admission: "closed",
+  };
+});
+const verifyFirstInstall = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  const installed = yield* installedRelease(env, client, { port, staging: false });
+  const synthetic = yield* Effect.forEach(nativeHostPairs(yield* hostMode), (pair) =>
+    verifySyntheticUsers(env, client, pair).pipe(
+      Effect.map((result) => ({ api: pair.api, ...result }))
+    )
+  );
+  if (new Set(synthetic.map((result) => result.callback.workflow)).size !== 1) {
+    return yield* Effect.fail(Error("Staged hosts reached different native payment attempts"));
+  }
+  yield* writeFile(env.smokeAttestationFile, encodeJson({ ...installed, synthetic }));
+});
+
+const coordinateIdentity = (
+  installed: Effect.Success<ReturnType<typeof installedRelease>>
+): Readonly<Record<string, unknown>> => ({
+  revision: installed.revision,
+  namespaces: [...installed.namespaces].sort(),
+  markers: installed.markers,
+  workers: installed.workers,
+  resources: installed.resources,
+  access: installed.edge.access.map((row) => ({ id: row.appId, name: row.name })),
+  zone: installed.edge.zoneId,
+});
+const requiredStaging = Effect.fn(function* () {
+  if (
+    (yield* hostMode) !== "staged" ||
+    (yield* ReleaseConfig.String("NATIVE_STORAGE_ADMISSION")) !== "closed" ||
+    (yield* ReleaseConfig.String("GITHUB_ACTIONS")) !== "true" ||
+    (yield* ReleaseConfig.String("GITHUB_REF")) !== "refs/heads/trunk" ||
+    (yield* ReleaseConfig.String("GITHUB_EVENT_NAME")) !== "workflow_dispatch"
+  ) {
+    return yield* Effect.fail(Error("Requires protected closed host staging"));
+  }
+});
+const inspectHostStage = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  yield* requiredStaging();
+  const installed = yield* installedRelease(env, client, { port, staging: true }),
+    account = accountReader(env, client);
+  const writers = yield* verifyIncumbentFence(account);
+  const zonePath = "https://api.cloudflare.com/client/v4/zones/" + installed.edge.zoneId + "/";
+  yield* verifyIncumbentMail(account, (path) =>
+    providerJson(
+      HttpClientRequest.get(zonePath + path, { headers: { authorization: "Bearer " + env.token } })
+    ).pipe(Effect.provideService(HttpClient.HttpClient, client))
+  );
+  return { installed, writers };
+});
+const captureHostStage = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  const { installed, writers } = yield* inspectHostStage(env, client, port);
   yield* writeFile(
-    env.smokeAttestationFile,
+    env.file + ".before-hosts",
     encodeJson({
-      revision: env.revision,
-      publicVersionId: pair.publicStable,
-      coreVersionId: pair.coreStable,
-      namespaces: storage.namespaces,
-      markers: proof.markers,
-      ...topology,
-      protectedRunUrl: yield* ReleaseConfig.String("RELEASE_RUN_URL"),
-      synthetic,
-      admission: "closed",
+      identity: coordinateIdentity(installed),
+      writers,
+      protectedRunUrl: installed.protectedRunUrl,
     })
   );
 });
-
+const requireSameInstallation = Effect.fn(function* (
+  env: Config,
+  installed: Effect.Success<ReturnType<typeof installedRelease>>
+) {
+  const before = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      identity: Schema.Unknown,
+      protectedRunUrl: Schema.Literal(installed.protectedRunUrl),
+    })
+  )(yield* readFile(env.file + ".before-hosts"));
+  if (!isDeepStrictEqual(before.identity, coordinateIdentity(installed))) {
+    return yield* Effect.fail(Error("Serving application changed during hostname staging"));
+  }
+});
+const attachCanonicalHosts = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  port: ReleasePort
+) {
+  // The application and Access plans are separate. A domain attachment must never upload a new Worker version.
+  for (const host of [
+    new URL(installedOrigins.production.api).hostname,
+    new URL(installedOrigins.production.browser).hostname,
+  ]) {
+    const { installed } = yield* inspectHostStage(env, client, port);
+    yield* requireSameInstallation(env, installed);
+    if (installed.edge.access.some((row) => row.paths.length !== 2)) {
+      return yield* Effect.fail(Error("Canonical Access policies are incomplete"));
+    }
+    const target = installed.edge.hosts.find((row) => row.host === host);
+    if (target === undefined) return yield* Effect.fail(Error("Canonical hostname unavailable"));
+    if (!target.vacant) continue;
+    const data = {
+      hostname: host,
+      service: target.target,
+      zone_id: installed.edge.zoneId,
+      enabled: true,
+      previews_enabled: false,
+    };
+    yield* providerJson(
+      HttpClientRequest.put(
+        "https://api.cloudflare.com/client/v4/accounts/" + env.account + "/workers/domains",
+        {
+          headers: { authorization: "Bearer " + env.token },
+          body: HttpBody.text(encodeJson(data), "application/json"),
+        }
+      )
+    ).pipe(
+      Effect.provideService(HttpClient.HttpClient, client),
+      Effect.flatMap(
+        Schema.decodeUnknownEffect(
+          Schema.Struct({
+            success: Schema.Literal(true),
+            result: Schema.Struct({
+              hostname: Schema.Literal(host),
+              service: Schema.Literal(target.target),
+              zone_id: Schema.Literal(installed.edge.zoneId),
+              enabled: Schema.Literal(true),
+              previews_enabled: Schema.Literal(false),
+            }),
+          })
+        )
+      )
+    );
+  }
+  const verified = yield* installedRelease(env, client, { port, staging: false });
+  yield* requireSameInstallation(env, verified);
+});
 const requireTestedStorage = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient,
@@ -738,6 +905,8 @@ const rollbackNative = Effect.fn(function* (
 });
 
 const commands = {
+  "capture-hosts": captureHostStage,
+  "attach-hosts": attachCanonicalHosts,
   "verify-fresh-target": verifyFreshTarget,
   "prepare-closed-edge": prepareClosedEdge,
   "verify-upload": verifyStorageUpload,
@@ -751,6 +920,8 @@ if (import.meta.main) {
   const program = Effect.gen(function* () {
     const command = yield* Schema.decodeUnknownEffect(
       Schema.Literals([
+        "capture-hosts",
+        "attach-hosts",
         "verify-fresh-target",
         "prepare-closed-edge",
         "verify-upload",

@@ -5,6 +5,8 @@ import {
   type AcceptanceBoundary,
   type AcceptanceEnvironment,
   type AcceptanceWindowBindings,
+  type NativeAcceptanceSettings,
+  acceptanceApiHeader,
   acceptanceLifetimeMs,
   acceptanceReceiptKind,
   acceptanceWindowQuery,
@@ -50,7 +52,30 @@ export const recoveryIsolationResponse = ({
 export const signAcceptanceRequest: typeof signRequest = (input) => signRequest(input);
 export const acceptanceRequestAdmitted: typeof verifyRequest = (input) => verifyRequest(input);
 
-/** Native isolated releases admit only an exact runner proof; authenticated technical smoke and health retain their original scope. */
+/** Ingress selects the browser pair from its TLS endpoint; Core reads only the value the scoped private request signs. */
+export const closedHostEnvironment = <
+  Environment extends NativeAcceptanceSettings & { BROWSER_ORIGIN: string },
+>({
+  request,
+  environment,
+  boundary,
+}: {
+  request: Request;
+  environment: Environment;
+  boundary: AcceptanceBoundary;
+}): Environment => {
+  if (deploymentPhase(environment) !== "closed") return environment;
+  const api =
+    boundary === "ingress" ? new URL(request.url).origin : request.headers.get(acceptanceApiHeader);
+  const pair = Object.values(installedOrigins).find((item) => item.api === api);
+  if (pair === undefined) return environment;
+  return {
+    ...environment,
+    BROWSER_ORIGIN: pair.browser,
+    GOOGLE_REDIRECT_URI: pair.api + "/providers/google/callback",
+    MICROSOFT_REDIRECT_URI: pair.api + "/providers/microsoft/callback",
+  };
+};
 const liveAddress = (
   request: Request,
   environment: AcceptanceEnvironment,
@@ -58,8 +83,9 @@ const liveAddress = (
 ): boolean => {
   const origin = new URL(request.url).origin;
   if (boundary === "core") return true;
-  if (environment.BROWSER_ORIGIN === browserOrigins.local)
-    {return ["http://127.0.0.1:8787", "http://localhost:8787"].includes(origin);}
+  if (environment.BROWSER_ORIGIN === browserOrigins.local) {
+    return ["http://127.0.0.1:8787", "http://localhost:8787"].includes(origin);
+  }
   return (
     environment.BROWSER_ORIGIN === installedOrigins.production.browser &&
     origin === installedOrigins.production.api

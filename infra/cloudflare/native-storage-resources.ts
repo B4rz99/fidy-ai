@@ -1,3 +1,4 @@
+import { requireHostPlan, stagedAccessApplications } from "./native-host-plan";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
 import { requireNativeResourcePlan } from "./native-graph";
@@ -7,8 +8,8 @@ import { releaseCommand } from "./production-release";
 import { resourceFailureMessage } from "./production-resources";
 import { requireNativeBindings } from "./storage-installation";
 
-const Phase = Schema.Literals(["first-install", "upload"]);
-const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
+const Phase = Schema.Literals(["first-install", "upload", "stage-hosts"]);
+const requireProtectedDispatch = Effect.gen(function* () {
   const actions = yield* Config.String("GITHUB_ACTIONS");
   const ref = yield* Config.String("GITHUB_REF");
   const hold = yield* Config.String("NATIVE_STORAGE_ADMISSION");
@@ -21,16 +22,39 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
   ) {
     return yield* Effect.fail(Error("Requires the closed protected native workflow"));
   }
+});
+const releaseChecks = {
+  "first-install": "prepare-closed-edge",
+  upload: "verify-upload",
+  "stage-hosts": "capture-hosts",
+} as const;
+const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
+  yield* requireProtectedDispatch;
   const revision = yield* Config.String("RELEASE_GIT_SHA");
   const profile = yield* Config.String("ALCHEMY_PROFILE");
-  const snapshot = yield* Alchemist.Stack.plan({
+  const hosts = yield* Config.Literals(["acceptance", "staged"], "NATIVE_STORAGE_HOSTS").pipe(
+    Config.withDefault("acceptance")
+  );
+  if (
+    (phase === "stage-hosts" && hosts !== "staged") ||
+    (phase === "first-install" && hosts !== "acceptance")
+  ) {
+    return yield* Effect.fail(Error("Unexpected native host selection"));
+  }
+  const input = {
     target: { entrypoint: "alchemy.storage.ts", stage: "production", profile },
     operation: "deploy",
     updateStateStore: true,
-  }).pipe(Effect.mapError(() => Error("Native resource planning failed")));
+  } as const;
+  const snapshot = yield* (
+    phase === "stage-hosts"
+      ? Alchemist.Stack.plan({ ...input, include: stagedAccessApplications })
+      : Alchemist.Stack.plan(input)
+  ).pipe(Effect.mapError(() => Error("Native resource planning failed")));
   const rows = describePlan(snapshot.native);
   yield* Effect.try(() => {
-    requireNativeBindings({ plan: snapshot.native, revision });
+    if (phase === "stage-hosts") return requireHostPlan(snapshot.native);
+    requireNativeBindings({ plan: snapshot.native, revision, hosts });
     requireNativeResourcePlan({ plan: rows, revision, first: phase === "first-install" });
     if (phase === "first-install") {
       if (
@@ -44,11 +68,7 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
     }
   });
   yield* releaseCommand({
-    args: [
-      "bun",
-      "native-storage-release.ts",
-      phase === "upload" ? "verify-upload" : "prepare-closed-edge",
-    ],
+    args: ["bun", "native-storage-release.ts", releaseChecks[phase]],
     lifetime: phase === "upload" ? "read-only" : "started-write",
   });
   return yield* Apply.apply(snapshot.native, { deletions: "defer" }).pipe(

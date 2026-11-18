@@ -1,4 +1,4 @@
-import { backgroundWorkAllowed } from "../release-isolation/operations";
+import { backgroundWorkAllowed, closedHostEnvironment } from "../release-isolation/operations";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import { scopeDirectoryUrl } from "../erasure/contract";
 import { providerAllowanceUrl } from "../resource-admission/contract";
@@ -252,7 +252,10 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     return this.runtime.runPromise(
       (request.url === emailCapacityUrl || request.url === mediaCapacityUrl
         ? ingestionCapacityRequest(request, this.ctx.storage)
-        : directoryRequest(request, this.env)
+        : directoryRequest(
+            request,
+            closedHostEnvironment({ request, environment: this.env, boundary: "core" })
+          )
       ).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
     );
   }

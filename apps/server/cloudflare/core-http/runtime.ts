@@ -23,6 +23,7 @@ import type { CoreHttpEnvironment, CoreHttpHandler } from "./contract";
 import { executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
 import {
+  closedHostEnvironment,
   fixtureChargeReceipt,
   isAcceptanceReceipt,
   isAcceptanceWindow,
@@ -82,8 +83,13 @@ const storageProbe = Effect.fn(function* (request: Request, environment: CoreHtt
 
 export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): CoreHttpHandler => {
   const observeRejections = makeCoreRejectionObserver();
-  return (request, environment) =>
-    Effect.gen(function* () {
+  return (request, installed) => {
+    const environment = closedHostEnvironment({
+      request,
+      environment: installed,
+      boundary: "core",
+    });
+    return Effect.gen(function* () {
       const admission = yield* releaseAdmission(request, environment, "core");
       if (Option.isSome(admission.denial)) return admission.denial.value;
       if (isAcceptanceReceipt(request)) return yield* fixtureChargeReceipt(request, environment);
@@ -127,4 +133,5 @@ export const makeCoreHttp = ({ telemetry, institutions }: CoreComposition): Core
         ),
       (program) => Effect.runPromise(program, { signal: request.signal })
     );
+  };
 };

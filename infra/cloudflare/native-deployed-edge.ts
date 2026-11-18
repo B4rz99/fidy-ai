@@ -1,8 +1,9 @@
+import { installedOrigins } from "@fidy/server/browser-transport";
 import { inspectNativeAccess } from "./native-deployed-access";
 import { Effect, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { type ProductionReleaseConfig, releaseEvidence } from "./production-release";
-import { installationNames, nativeIngressHost, nativeWebHost } from "./storage-installation";
+import { type NativeHostMode, installationNames, nativeHostPairs } from "./storage-installation";
 
 import { type ProviderRead as Read, readProviderList as readList } from "./native-provider-list";
 
@@ -64,16 +65,19 @@ const domain = Schema.Struct({
   hostname: Schema.NonEmptyString,
   service: Schema.NonEmptyString,
   zone_id: Schema.NonEmptyString,
+  enabled: Schema.Boolean,
+  previews_enabled: Schema.Boolean,
 });
 const record = Schema.Struct({
   name: Schema.NonEmptyString,
   type: Schema.NonEmptyString,
   proxied: Schema.optional(Schema.Boolean),
 });
-const hosts = [
-  [nativeIngressHost, installationNames.Ingress],
-  [nativeWebHost, installationNames.Web],
-] as const;
+const hostWorkers = (mode: NativeHostMode): ReadonlyArray<readonly [string, string]> =>
+  nativeHostPairs(mode).flatMap((pair) => [
+    [new URL(pair.api).hostname, installationNames.Ingress] as const,
+    [new URL(pair.browser).hostname, installationNames.Web] as const,
+  ]);
 const dnsConfirmed = (rows: ReadonlyArray<typeof record.Type>, host: string): boolean =>
   rows.length > 0 &&
   rows.every(
@@ -88,15 +92,25 @@ const attachedTo = (
   rows.length === 1 &&
   rows[0]?.hostname === host &&
   rows[0].service === target.worker &&
-  rows[0].zone_id === target.zone;
+  rows[0].zone_id === target.zone &&
+  rows[0].enabled &&
+  !rows[0].previews_enabled;
+const hostStateAllowed = (state: {
+  expected: boolean;
+  vacant: boolean;
+  installed: boolean;
+  stagingAlias: boolean;
+}): boolean => state.expected || (state.vacant && (!state.installed || state.stagingAlias));
 const inspectHosts = Effect.fn(function* (input: {
   read: Read;
   account: string;
   zone: string;
   zoneId: string;
   installed: boolean;
+  hosts: ReturnType<typeof hostWorkers>;
+  staging: boolean;
 }) {
-  const { read, account, zone, zoneId, installed } = input;
+  const { read, account, zone, zoneId, installed, hosts } = input;
   const routes = yield* readList(
     read,
     zone + "workers/routes",
@@ -121,36 +135,24 @@ const inspectHosts = Effect.fn(function* (input: {
         zone + "dns_records?" + new URLSearchParams({ "name.exact": host }),
         record
       );
-      if (installed) {
-        if (
-          !attachedTo(attachments, host, { worker: target, zone: zoneId }) ||
-          !dnsConfirmed(dns, host)
-        ) {
-          return yield* Effect.fail(
-            Error("Installed DNS or Worker attachment differs for " + host)
-          );
-        }
-      } else if (dns.length !== 0 || attachments.length !== 0) {
-        return yield* Effect.fail(Error("Acceptance hostname already claimed: " + host));
+      const vacant = attachments.length === 0 && dns.length === 0;
+      const canonical = [installedOrigins.production.api, installedOrigins.production.browser].some(
+        (origin) => new URL(origin).hostname === host
+      );
+      const expected =
+        installed &&
+        attachedTo(attachments, host, { worker: target, zone: zoneId }) &&
+        dnsConfirmed(dns, host);
+      if (
+        !hostStateAllowed({ expected, vacant, installed, stagingAlias: input.staging && canonical })
+      ) {
+        return yield* Effect.fail(Error("Unexpected DNS or Worker attachment for " + host));
       }
-      return { host, target, dns: dns.map((item) => item.type) };
+      return { host, target, vacant, dns: dns.map((item) => item.type) };
     })
   );
 });
-/** Verify live account and zone authority using the protected release credential. An unavailable read fails the operation. */
-export const inspectDeployedEdge = Effect.fn(function* (
-  env: ProductionReleaseConfig,
-  client: HttpClient.HttpClient,
-  stage: { installed: boolean; bindings: Readonly<Record<string, unknown>> }
-) {
-  const { installed } = stage;
-  const read: Read = (path) =>
-    releaseEvidence
-      .providerJson(
-        HttpClientRequest.get(api + path, { headers: { authorization: "Bearer " + env.token } })
-      )
-      .pipe(Effect.provideService(HttpClient.HttpClient, client));
-  const account = "accounts/" + env.account + "/";
+const readZone = Effect.fn(function* (read: Read, accountId: string) {
   const {
     result: [zone],
   } = yield* Schema.decodeUnknownEffect(
@@ -161,16 +163,41 @@ export const inspectDeployedEdge = Effect.fn(function* (
           id: Schema.String.check(Schema.isPattern(/^[a-f0-9]{32}$/u)),
           name: Schema.Literal("fidyapp.com"),
           status: Schema.Literal("active"),
-          account: Schema.Struct({ id: Schema.Literal(env.account) }),
+          account: Schema.Struct({ id: Schema.Literal(accountId) }),
         }),
       ]),
     })
-  )(yield* read("zones?name=fidyapp.com&account.id=" + env.account));
+  )(yield* read("zones?name=fidyapp.com&account.id=" + accountId));
+  return zone;
+});
+/** Verify live account and zone authority using the protected release credential. An unavailable read fails the operation. */
+export const inspectDeployedEdge = Effect.fn(function* (
+  env: ProductionReleaseConfig,
+  client: HttpClient.HttpClient,
+  stage: {
+    installed: boolean;
+    bindings: Readonly<Record<string, unknown>>;
+    hosts: NativeHostMode;
+    staging: boolean;
+  }
+) {
+  const { installed } = stage;
+  const read: Read = (path) =>
+    releaseEvidence
+      .providerJson(
+        HttpClientRequest.get(api + path, { headers: { authorization: "Bearer " + env.token } })
+      )
+      .pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const account = "accounts/" + env.account + "/";
+  const zone = yield* readZone(read, env.account);
+  const hosts = hostWorkers(stage.hosts);
   const attached = yield* inspectHosts({
     read,
     account,
     zone: "zones/" + zone.id + "/",
     zoneId: zone.id,
+    hosts,
+    staging: stage.staging === true,
     installed,
   });
   const builds = yield* inspectBuilds(read, account, installed);
@@ -179,7 +206,11 @@ export const inspectDeployedEdge = Effect.fn(function* (
     account,
     zone: "zones/" + zone.id + "/",
     installed,
+    staging: stage.staging === true,
     hosts: hosts.map(([host]) => host),
+    apiHosts: hosts
+      .filter(([, worker]) => worker === installationNames.Ingress)
+      .map(([host]) => host),
     bindings: stage.bindings,
     workers: [
       ...Object.values(installationNames),

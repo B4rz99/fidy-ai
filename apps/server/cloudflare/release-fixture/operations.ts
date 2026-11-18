@@ -20,6 +20,7 @@ const fixtureMac = Effect.fn(function* (secret: string, content: string) {
   );
 });
 type AuthCode = {
+  host: "acceptance" | "production";
   subject: string;
   nonce: string;
   challenge: string;
@@ -27,7 +28,14 @@ type AuthCode = {
   provider: "google" | "microsoft";
 };
 const codeFields = (input: AuthCode): string =>
-  [input.provider, input.subject, input.nonce, input.challenge, String(input.deadline)].join(".");
+  [
+    input.provider,
+    input.host,
+    input.subject,
+    input.nonce,
+    input.challenge,
+    String(input.deadline),
+  ].join(".");
 /** Only the protected driver receives the signing key; a browser carries the single provider code and real PKCE state. */
 export const issueAcceptanceProviderCode = Effect.fn(function* (input: AuthCode, secret: string) {
   const fields = codeFields(input);

@@ -5,7 +5,7 @@ import {
 import { HostedPauseNotice } from "../insights/contract";
 import { localProactivityObservations, nativePauseNotice } from "../insights/operations";
 import { BudgetThresholdEvaluation } from "../budgets/contract";
-import { backgroundWorkAllowed } from "../release-isolation/operations";
+import { backgroundWorkAllowed, closedHostEnvironment } from "../release-isolation/operations";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import {
   cloudflareWorkerTelemetry,
@@ -277,6 +277,9 @@ const completedAlarm = (summary: { failedFamilies: number }): Effect.Effect<void
   summary.failedFamilies > 0 ? Effect.fail(Error("User work discovery unavailable")) : Effect.void;
 
 export class UserStore extends DurableObject<UserStoreEnvironment> {
+  private browserEnvironment(request: Request): UserStoreEnvironment {
+    return closedHostEnvironment({ request, environment: this.env, boundary: "core" });
+  }
   protected connectionAdapters(): ConnectionAdapters {
     return sandboxConnectionAdapters({ environment: this.env, userId: this.ctx.id.name ?? "" });
   }
@@ -506,7 +509,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     operation: CatalogOperation
   ): Option.Option<ReturnType<typeof dispatchLocalBudget>> {
     const unit = { request, owns, operation, storage: this.ctx.storage };
-    const directory = this.env.DIRECTORY;
+    const environment = this.browserEnvironment(request),
+      directory = environment.DIRECTORY;
     const onFailure = Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()));
     const pat = this.patOperation(unit);
     if (Option.isSome(pat)) return pat;
@@ -539,11 +543,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         (id: string): boolean => id === "recurring.listRecurringSeries",
         dispatchLocalRecurringSeries,
       ],
-      [
-        isLocalForwardingOperation,
-        () => dispatchLocalForwarding({ ...unit, directory: this.env.DIRECTORY }),
-      ],
-      [isLocalSubscriptionRead, () => observeLocalSubscription(unit, this.env)],
+      [isLocalForwardingOperation, () => dispatchLocalForwarding({ ...unit, directory })],
+      [isLocalSubscriptionRead, () => observeLocalSubscription(unit, environment)],
       [
         isLocalReviewOperation,
         () => dispatchLocalReview({ ...unit, bucket: this.env.EMAIL_BUCKET }),
@@ -853,7 +854,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           handleLocalOAuthManagement({
             request,
             owns,
-            origin: this.env.BROWSER_ORIGIN,
+            origin: this.browserEnvironment(request).BROWSER_ORIGIN,
             retire: this.retireMcp,
           })
         )
@@ -878,7 +879,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             request,
             directory: this.env.DIRECTORY,
             owns,
-            origin: this.env.BROWSER_ORIGIN,
+            origin: this.browserEnvironment(request).BROWSER_ORIGIN,
           })
         )
       );
@@ -892,7 +893,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   ): Option.Option<Promise<Response>> {
     if (command === "POST /web/privacy/transactions") {
       return Option.some(
-        this.runtime.runPromise(readScopedPrivacyPage(request, this.env.BROWSER_ORIGIN, owns))
+        this.runtime.runPromise(
+          readScopedPrivacyPage(request, this.browserEnvironment(request).BROWSER_ORIGIN, owns)
+        )
       );
     }
     if (command === "POST /web/privacy/erasure") {
@@ -900,7 +903,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         this.runtime.runPromise(
           requestLocalErasure({
             request,
-            origin: this.env.BROWSER_ORIGIN,
+            origin: this.browserEnvironment(request).BROWSER_ORIGIN,
             storage: this.ctx.storage,
             owns,
           }).pipe(
@@ -916,7 +919,11 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if (Option.isSome(processingConsentTransport(new URL(request.url).pathname))) {
       return Option.some(
         this.runtime.runPromise(
-          handleLocalProcessingConsent(request, this.env.BROWSER_ORIGIN, owns)
+          handleLocalProcessingConsent(
+            request,
+            this.browserEnvironment(request).BROWSER_ORIGIN,
+            owns
+          )
         )
       );
     }
@@ -1077,7 +1084,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if (isLocalHostedPath(new URL(request.url).pathname)) {
       return Option.some(
         this.runtime.runPromise(
-          handleLocalHosted(request, owns, { env: this.env, storage: this.ctx.storage }),
+          handleLocalHosted(request, owns, {
+            env: this.browserEnvironment(request),
+            storage: this.ctx.storage,
+          }),
           { signal: request.signal }
         )
       );
@@ -1099,7 +1109,11 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     path: string,
     command: string
   ): Option.Option<Promise<Response>> {
-    const unit = { ...input, storage: this.ctx.storage, environment: this.env };
+    const unit = {
+      ...input,
+      storage: this.ctx.storage,
+      environment: this.browserEnvironment(input.request),
+    };
     if (path === connectionCallbackPath || Option.isSome(connectionBrowserTransport(path))) {
       return Option.some(
         this.runtime.runPromise(
@@ -1150,9 +1164,11 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     }
     if (Option.isSome(paymentEnrollmentTransport(path))) {
       const work = this.runtime.runPromise(
-        handleLocalEnrollment(request, { env: this.env, storage: this.ctx.storage }, owns).pipe(
-          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
-        )
+        handleLocalEnrollment(
+          request,
+          { env: this.browserEnvironment(request), storage: this.ctx.storage },
+          owns
+        ).pipe(Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable())))
       );
       if (command.endsWith("/submit")) {
         this.ctx.waitUntil(work.then((response) => (response.ok ? this.alarm() : undefined)));

@@ -4,7 +4,7 @@ import {
   refundSupportBasePath,
 } from "../../apps/server/cloudflare/subscription/contract";
 import { Clock, DateTime, Effect, Option, Redacted, Schedule, Schema } from "effect";
-import { type installedOrigins } from "@fidy/server/browser-transport";
+import { installedOrigins } from "@fidy/server/browser-transport";
 import { ProcessingAuthorization } from "../../apps/server/src/shell/processing-consent/contract";
 import { webSignupDisclosure } from "../../apps/server/src/shell/consent/operations";
 import { signAcceptanceRequest } from "../../apps/server/cloudflare/release-isolation/operations";
@@ -138,9 +138,13 @@ const boot = Effect.fn(function* (input: Inputs, ordinal: number) {
   const key = new Bun.CryptoHasher("sha256", Redacted.value(input.proof))
     .update(input.revision + "/oidc-code")
     .digest("hex");
+  if (auth.searchParams.get("redirect_uri") !== input.origins.api + "/providers/google/callback") {
+    return yield* Effect.fail(Error("Protected signup selected another callback origin"));
+  }
   const code = yield* issueAcceptanceProviderCode(
     {
       provider: "google",
+      host: input.origins.api === installedOrigins.production.api ? "production" : "acceptance",
       subject,
       nonce: auth.searchParams.get("nonce") ?? "",
       challenge: auth.searchParams.get("code_challenge") ?? "",

@@ -187,7 +187,9 @@ it("requires independent Access scopes, a distinct audience per role and the sol
         inspectNativeAccess({
           account: "account/",
           zone: "zone/",
-          hosts: [apiHost],
+          hosts: [apiHost, "storage-web-acceptance.fidyapp.com"],
+          apiHosts: [apiHost],
+          staging: false,
           workers: [core],
           installed: true,
           bindings,

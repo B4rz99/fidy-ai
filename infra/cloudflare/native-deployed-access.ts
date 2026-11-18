@@ -17,6 +17,7 @@ const App = Schema.Struct({
         type: name,
         uri: Schema.optional(Schema.String),
         worker_id: Schema.optional(Schema.String),
+        overrides: Schema.optional(Schema.Tuple([])),
       })
     )
   ),
@@ -117,6 +118,8 @@ type Input = {
   zone: string;
   installed: boolean;
   hosts: readonly string[];
+  apiHosts: readonly string[];
+  staging: boolean;
   workers: readonly string[];
   bindings: Readonly<Record<string, unknown>>;
 };
@@ -126,11 +129,15 @@ const configuredRole = Effect.fn(function* (
   identities: { idp: string; group: string; reviewer: string }
 ) {
   const { app, role } = selection;
-  const approved = input.hosts.map((host) => host + role.path);
+  const approved = input.apiHosts.map((host) => host + role.path);
   const audience = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ type: Schema.Literal("plain_text"), text: name })
   )(input.bindings[role.binding]);
-  if (app.aud !== audience.text || !appShape(app, approved, identities.idp)) {
+  const paths =
+    input.staging === true && appShape(app, approved.slice(0, 1), identities.idp)
+      ? approved.slice(0, 1)
+      : approved;
+  if (app.aud !== audience.text || !appShape(app, paths, identities.idp)) {
     return yield* Effect.fail(Error("Unexpected Access application for " + role.name));
   }
   const selector =
@@ -152,7 +159,7 @@ const configuredRole = Effect.fn(function* (
   return {
     name: role.name,
     appId: app.id,
-    paths: approved,
+    paths,
     membership: role.binding === "SAMPLE_REVIEW_AUDIENCE" ? identities.reviewer : role.binding,
   };
 });

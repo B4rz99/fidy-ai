@@ -18,6 +18,10 @@ const origins = {
     api: "https://" + productionTopology.ingress.hostname,
   },
 };
+const pairedOrigin = (
+  closed: boolean,
+  hosts: keyof typeof origins
+): (typeof origins)[keyof typeof origins] => (closed ? origins.acceptance : origins[hosts]);
 export const nativeReleaseContext = Effect.fn(function* (development: boolean, stage: string) {
   const config = (name: string): Config.Config<string> =>
     Config.String(name).pipe(Config.withDefault(""));
@@ -48,8 +52,8 @@ export const nativeReleaseContext = Effect.fn(function* (development: boolean, s
     Effect.flatMap(Schema.encodeEffect(storageReleaseCodec)),
     Effect.orDie
   );
-  const origin = origins[hosts],
-    closed = admission === "closed";
+  const closed = admission === "closed",
+    origin = pairedOrigin(closed, hosts);
   const fixtureSecret = (name: string, prefix = ""): Redacted.Redacted<string> =>
     Redacted.make(
       prefix +

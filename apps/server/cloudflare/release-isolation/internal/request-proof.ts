@@ -8,6 +8,7 @@ import {
   type AcceptanceBoundary,
   type AcceptanceEnvironment,
   AcceptanceProofUnavailable,
+  acceptanceApiHeader,
   acceptanceLifetimeMs,
   acceptanceProofHeader,
 } from "../contract";
@@ -26,6 +27,7 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 8_000,
 });
 const relevantHeaders = [
+  acceptanceApiHeader,
   "authorization",
   "cookie",
   "origin",

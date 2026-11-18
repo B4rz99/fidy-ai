@@ -1,3 +1,4 @@
+import { installedOrigins } from "../src/shell/browser-transport/contract";
 import { isStorageProbe } from "./storage-bootstrap/contract";
 import {
   browserSessionBindingHeader,
@@ -58,12 +59,13 @@ import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
 import { connectionCallbackPath } from "./connections/contract";
 import {
+  closedHostEnvironment,
   isAcceptanceReceipt,
   isAcceptanceWindow,
   releaseAdmission,
   signAcceptanceRequest,
 } from "./release-isolation/operations";
-import { acceptanceProofHeader } from "./release-isolation/contract";
+import { acceptanceApiHeader, acceptanceProofHeader } from "./release-isolation/contract";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
@@ -838,7 +840,12 @@ const bindCoreAcceptance = Effect.fn(function* (
   deadline: Option.Option<number>
 ) {
   forwarded.headers.delete(acceptanceProofHeader);
+  forwarded.headers.delete(acceptanceApiHeader);
   if (Option.isSome(deadline)) {
+    const pair = Object.values(installedOrigins).find(
+      (item) => item.browser === environment.BROWSER_ORIGIN
+    );
+    if (pair !== undefined) forwarded.headers.set(acceptanceApiHeader, pair.api);
     forwarded.headers.set(
       acceptanceProofHeader,
       yield* signAcceptanceRequest({
@@ -1010,7 +1017,11 @@ const fetchEffect = (
 export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => ({
   fetch: (request, environment) =>
     Effect.runPromise(
-      fetchEffect(request, environment, telemetry).pipe(
+      fetchEffect(
+        request,
+        closedHostEnvironment({ request, environment, boundary: "ingress" }),
+        telemetry
+      ).pipe(
         Effect.flatMap((response) =>
           Effect.map(telemetry.captureDurableContext, (trace) => {
             const headers = new Headers(response.headers);

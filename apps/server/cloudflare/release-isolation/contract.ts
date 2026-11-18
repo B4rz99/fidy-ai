@@ -1,5 +1,6 @@
 import { Data } from "effect";
 
+export const acceptanceApiHeader = "x-fidy-acceptance-api";
 export const acceptanceProofHeader = "x-fidy-acceptance-proof";
 export const acceptanceLifetimeMs = 60_000;
 export type AcceptanceBoundary = "ingress" | "core";

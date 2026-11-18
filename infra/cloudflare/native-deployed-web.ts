@@ -20,7 +20,7 @@ const requestedFiles = (html: string): ReadonlyArray<string> => {
 };
 const installedHeaders = (
   headers: Readonly<Record<string, string>>,
-  origins: typeof installedOrigins.acceptance
+  origins: (typeof installedOrigins)[keyof typeof installedOrigins]
 ): boolean => {
   const directives = (headers["content-security-policy"] ?? "")
     .split(";")
@@ -37,10 +37,10 @@ const installedHeaders = (
 /** Compare actual TLS-served HTML, deployment metadata and entry assets to the locally built, protected revision. */
 export const verifyInstalledWebsite = Effect.fn(function* (
   client: HttpClient.HttpClient,
-  revision: string
+  revision: string,
+  origins: (typeof installedOrigins)[keyof typeof installedOrigins] = installedOrigins.acceptance
 ) {
-  const origins = installedOrigins.acceptance,
-    verified = yield* Config.String("CONTRACT_DIGEST");
+  const verified = yield* Config.String("CONTRACT_DIGEST");
   const local = (path: string): Effect.Effect<string, Error> =>
     Effect.tryPromise(() => Bun.file(new URL(path, bundle)).text());
   const compare = Effect.fn(function* (path: string, localPath: string) {

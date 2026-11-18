@@ -161,6 +161,7 @@ it("binds each planned Worker to the closed installation before any provider app
   const base = { name: installationNames.Core, workersDev: false, version: { traffic: 0 } };
   expect(() =>
     requireInstallationWorker({
+      hosts: "acceptance",
       logicalId: "Core",
       revision,
       props: { ...base, crons: ["* * * * *"] },
@@ -172,7 +173,12 @@ it("binds each planned Worker to the closed installation before any provider app
     domain: { name: "storage-acceptance.fidyapp.com", aliases: [] },
   };
   expect(() =>
-    requireInstallationWorker({ logicalId: "Ingress", revision, props: ingress })
+    requireInstallationWorker({
+      hosts: "acceptance",
+      logicalId: "Ingress",
+      revision,
+      props: ingress,
+    })
   ).not.toThrow();
   for (const drift of [
     { name: "incumbent" },
@@ -184,11 +190,17 @@ it("binds each planned Worker to the closed installation before any provider app
     { tailConsumers: ["another-worker"] },
   ]) {
     expect(() =>
-      requireInstallationWorker({ logicalId: "Ingress", revision, props: { ...ingress, ...drift } })
+      requireInstallationWorker({
+        hosts: "acceptance",
+        logicalId: "Ingress",
+        revision,
+        props: { ...ingress, ...drift },
+      })
     ).toThrow();
   }
   expect(() =>
     requireInstallationWorker({
+      hosts: "acceptance",
       logicalId: "Core",
       revision,
       props: { ...base, domain: "api.fidyapp.com" },

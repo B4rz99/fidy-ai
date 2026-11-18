@@ -1,3 +1,4 @@
+import { installedOrigins } from "../../../src/shell/browser-transport/contract";
 import { Clock, Effect, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { SignJWT, exportJWK, exportPKCS8, generateKeyPair, importPKCS8 } from "jose";
@@ -52,6 +53,7 @@ const storedKeys = Effect.fn(function* (env: AcceptanceProviderEnvironment) {
 });
 const Code = Schema.Tuple([
   Schema.Literals(["google", "microsoft"]),
+  Schema.Literals(["acceptance", "production"]),
   Schema.NonEmptyString,
   Schema.String.check(Schema.isPattern(ascii)),
   Schema.String.check(Schema.isPattern(ascii)),
@@ -63,11 +65,13 @@ const validLifetime = (deadline: number, now: number): boolean =>
 const validExchange = (
   form: URLSearchParams,
   env: AcceptanceProviderEnvironment,
-  provider: keyof typeof clients
+  { provider, host }: { provider: keyof typeof clients; host: keyof typeof installedOrigins }
 ): boolean =>
   form.get("client_id") === clients[provider].id &&
   form.get("grant_type") === "authorization_code" &&
-  form.get("redirect_uri") === env.ACCEPTANCE_API_ORIGIN + "/providers/" + provider + "/callback" &&
+  env.ACCEPTANCE_API_ORIGIN === installedOrigins.acceptance.api &&
+  form.get("redirect_uri") ===
+    installedOrigins[host].api + "/providers/" + provider + "/callback" &&
   form.get("client_secret") ===
     (provider === "google" ? env.ACCEPTANCE_GOOGLE_SECRET : env.ACCEPTANCE_MICROSOFT_SECRET);
 const validSignature = Effect.fn(function* (parts: readonly string[], secret: string) {
@@ -109,8 +113,10 @@ const codeSubject = Effect.fn(function* (
 ) {
   const form = new URLSearchParams(yield* Effect.tryPromise(() => request.text()));
   const parsed = readCode(form);
-  if (parsed._tag === "None" || !validExchange(form, env, provider)) return;
-  const [kind, subject, nonce, challenge, deadline] = parsed.value,
+  if (parsed._tag === "None" || !validExchange(form, env, { provider, host: parsed.value[1] })) {
+    return;
+  }
+  const [kind, , subject, nonce, challenge, deadline] = parsed.value,
     now = yield* Clock.currentTimeMillis;
   if (
     !validLifetime(Number(deadline), now) ||

@@ -56,20 +56,40 @@ const networkSurface = {
   tailConsumers: Schema.optional(Schema.Never),
   streamingTailConsumers: Schema.optional(Schema.Never),
 };
-const closedDomain = (name: string): Schema.Codec<unknown> =>
+export type NativeHostMode = "acceptance" | "staged";
+export const nativeHostPairs = (
+  mode: NativeHostMode
+): ReadonlyArray<(typeof installedOrigins)[keyof typeof installedOrigins]> =>
+  mode === "staged"
+    ? [installedOrigins.acceptance, installedOrigins.production]
+    : [installedOrigins.acceptance];
+const closedDomain = (role: "Web" | "Ingress", mode: NativeHostMode): Schema.Codec<unknown> =>
   Schema.Struct({
-    name: Schema.Literal(name),
-    aliases: Schema.Tuple([]),
+    name: Schema.Literal(role === "Web" ? nativeWebHost : nativeIngressHost),
+    aliases:
+      mode === "staged"
+        ? Schema.Tuple([
+            Schema.Literal(
+              new URL(
+                role === "Web"
+                  ? installedOrigins.production.browser
+                  : installedOrigins.production.api
+              ).hostname
+            ),
+          ])
+        : Schema.Tuple([]),
     redirects: Schema.optional(Schema.Tuple([])),
   });
 export const requireInstallationWorker = ({
   logicalId,
   props,
   revision,
+  hosts,
 }: {
   logicalId: NativeRole;
   props: unknown;
   revision: string;
+  hosts: NativeHostMode;
 }): void => {
   const external = logicalId === "Ingress" || logicalId === "Web";
   const candidate = logicalId === "Core" || logicalId === "Ingress";
@@ -82,9 +102,7 @@ export const requireInstallationWorker = ({
       version: candidate
         ? Schema.Struct({ traffic: Schema.Literal(0), parent: Schema.optional(Schema.Never) })
         : Schema.optional(Schema.Never),
-      domain: external
-        ? closedDomain(logicalId === "Web" ? nativeWebHost : nativeIngressHost)
-        : Schema.optional(Schema.Never),
+      domain: external ? closedDomain(logicalId, hosts) : Schema.optional(Schema.Never),
       crons:
         logicalId === "Core"
           ? Schema.Tuple([Schema.Literal("* * * * *")])
@@ -106,9 +124,11 @@ const roles = ["Core", "Ingress", "ForwardedEmail", "Web"] as const;
 export const requireNativeBindings = ({
   plan,
   revision,
+  hosts,
 }: {
   plan: Plan;
   revision: string;
+  hosts: NativeHostMode;
 }): void => {
   const resources = Object.values(plan.resources);
   for (const role of [...roles, "Smoke"] as const) {
@@ -116,7 +136,7 @@ export const requireNativeBindings = ({
     const node = resources.find((item) => describeResource(item).logicalId === logicalId);
     if (node === undefined) throw Error("Missing installed native Worker " + role);
     const props: unknown = node.action === "noop" ? node.state.props : node.props;
-    requireInstallationWorker({ logicalId: role, props, revision });
+    requireInstallationWorker({ logicalId: role, props, revision, hosts });
     const bindings = node.bindings.flatMap(
       (binding) => Schema.decodeUnknownSync(ProviderBindings)(binding.data).bindings ?? []
     );

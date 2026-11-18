@@ -1,4 +1,4 @@
-name: Release isolated native storage
+name: Release native application
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-storage-deployment
+  group: production-deployment
   cancel-in-progress: false
 
 jobs:
@@ -23,6 +23,13 @@ jobs:
     timeout-minutes: 30
     environment: production
     env:
+      NATIVE_STORAGE_HOSTS: ${{ vars.NATIVE_STORAGE_HOSTS || 'acceptance' }}
+      CLOUDFLARE_ACCESS_ISSUER: ${{ vars.CLOUDFLARE_ACCESS_ISSUER }}
+      RECOVERY_OPERATOR_EMAIL: ${{ vars.RECOVERY_OPERATOR_EMAIL }}
+      SAMPLE_REVIEWER_EMAIL: ${{ vars.SAMPLE_REVIEWER_EMAIL }}
+      BILLING_SUPPORT_AUDIENCE: ${{ vars.BILLING_SUPPORT_AUDIENCE }}
+      PRICING_PUBLISH_AUDIENCE: ${{ vars.PRICING_PUBLISH_AUDIENCE }}
+      RELEASE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
       NATIVE_STORAGE_ADMISSION: ${{ vars.NATIVE_STORAGE_ADMISSION }}
       RELEASE_GIT_SHA: ${{ github.sha }}
       RELEASE_ATTEMPT_ID: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -43,13 +50,14 @@ jobs:
       - uses: ./.github/actions/configure-alchemy-cloudflare-profile
       - name: Bind evidence to the protected revision
         run: |
+          echo "HOSTED_AI_MODEL=$(bun infra/cloudflare/scripts/print-approved-openai-model.ts)" >> "$GITHUB_ENV"
           echo "CONTRACT_DIGEST=$(bun run --silent --cwd apps/server contracts:digest)" >> "$GITHUB_ENV"
           echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/native-release.json" >> "$GITHUB_ENV"
           echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/native-verification.json" >> "$GITHUB_ENV"
       - name: Check the reviewed release policy
         working-directory: infra/cloudflare
         run: bun verify-edge-policy.ts
-      - name: Install only absent native Workers and their namespaces
+      - name: Install the verified fresh native application
         if: inputs.operation == 'first-install'
         working-directory: infra/cloudflare
         run: bun native-storage-resources.ts first-install
@@ -65,7 +73,7 @@ jobs:
         if: inputs.operation == 'rollout' || inputs.operation == 'rehearse-rollback'
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts promote
-      - name: Verify the installed pair and retained schema markers
+      - name: Verify the installed application and retained schema markers
         id: verify
         working-directory: infra/cloudflare
         run: bun native-storage-release.ts verify

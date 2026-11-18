@@ -1,10 +1,11 @@
 import * as Alchemist from "alchemy/Alchemist";
 import * as Apply from "alchemy/Apply";
+import { requireNativeResourcePlan } from "./native-graph";
 import { describePlan } from "alchemy/Plan";
 import { Cause, Config, Effect, Option, Schema } from "effect";
 import { releaseCommand } from "./production-release";
 import { resourceFailureMessage } from "./production-resources";
-import { requireFreshPlan, requireNativeBindings } from "./storage-installation";
+import { requireNativeBindings } from "./storage-installation";
 
 const Phase = Schema.Literals(["first-install", "upload"]);
 const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
@@ -20,6 +21,7 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
   ) {
     return yield* Effect.fail(Error("Requires the closed protected native workflow"));
   }
+  const revision = yield* Config.String("RELEASE_GIT_SHA");
   const profile = yield* Config.String("ALCHEMY_PROFILE");
   const snapshot = yield* Alchemist.Stack.plan({
     target: { entrypoint: "alchemy.storage.ts", stage: "production", profile },
@@ -28,9 +30,9 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
   }).pipe(Effect.mapError(() => Error("Native resource planning failed")));
   const rows = describePlan(snapshot.native);
   yield* Effect.try(() => {
-    requireNativeBindings(snapshot.native);
+    requireNativeBindings({ plan: snapshot.native, revision });
+    requireNativeResourcePlan({ plan: rows, revision, first: phase === "first-install" });
     if (phase === "first-install") {
-      requireFreshPlan(rows);
       if (
         Object.values(snapshot.native.resources).some(
           (node) =>
@@ -39,12 +41,6 @@ const resourceRelease = Effect.fn(function* (phase: typeof Phase.Type) {
       ) {
         throw Error("Previous state exists");
       }
-    } else if (
-      rows.actions.length !== 0 ||
-      rows.resources.length !== 2 ||
-      rows.resources.some((row) => row.action !== "noop" && row.action !== "update")
-    ) {
-      throw Error("Native rollout refused a resource lifecycle change");
     }
   });
   yield* releaseCommand({

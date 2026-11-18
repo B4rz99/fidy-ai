@@ -1,8 +1,12 @@
 import {
+  nativeBindingInventory,
+  nativeResourceInventory,
+  requireNativeResourcePlan,
+} from "./native-graph";
+import {
   installationNames,
   requireAbsentInstallation,
   requireClosedBindings,
-  requireFreshPlan,
   requireInstallationWorker,
 } from "./storage-installation";
 import { Effect, Schema } from "effect";
@@ -120,28 +124,56 @@ it("refuses to bootstrap an existing target or a plan that can replace or delete
       domains: [{ hostname: "storage-acceptance.fidyapp.com" }],
     })
   ).toThrow();
-  const resources = ["Core", "Ingress"].map((logicalId) => ({
+  const revision = "1".repeat(40);
+  const resources = [...nativeResourceInventory(revision)].map(([logicalId, resourceType]) => ({
     logicalId,
-    resourceType: "Cloudflare.Worker",
+    resourceType,
     action: "create",
   }));
-  expect(() => requireFreshPlan({ resources, actions: [] })).not.toThrow();
+  const plan = (rows: typeof resources, first: boolean): void =>
+    requireNativeResourcePlan({ plan: { resources: rows, actions: [] }, revision, first });
+  expect(resources.length).toBeGreaterThan(40);
+  expect(() => plan(resources, true)).not.toThrow();
+  expect(() =>
+    plan(
+      resources.filter((row) => row.resourceType === "Cloudflare.Worker"),
+      true
+    )
+  ).toThrow();
   for (const action of ["adopted", "update", "noop", "replace", "delete"]) {
     expect(() =>
-      requireFreshPlan({ resources: [resources[0], { ...resources[1], action }], actions: [] })
+      plan(
+        resources.map((row, index) => (index === 0 ? { ...row, action } : row)),
+        true
+      )
     ).toThrow();
   }
+  expect(() =>
+    plan(
+      resources.map((row) => ({ ...row, action: "noop" })),
+      false
+    )
+  ).not.toThrow();
 });
 
 it("binds each planned Worker to the closed installation before any provider apply", () => {
+  const revision = "1".repeat(40);
   const base = { name: installationNames.Core, workersDev: false, version: { traffic: 0 } };
-  expect(() => requireInstallationWorker({ logicalId: "Core", props: base })).not.toThrow();
+  expect(() =>
+    requireInstallationWorker({
+      logicalId: "Core",
+      revision,
+      props: { ...base, crons: ["* * * * *"] },
+    })
+  ).not.toThrow();
   const ingress = {
     ...base,
     name: installationNames.Ingress,
-    domain: "storage-acceptance.fidyapp.com",
+    domain: { name: "storage-acceptance.fidyapp.com", aliases: [] },
   };
-  expect(() => requireInstallationWorker({ logicalId: "Ingress", props: ingress })).not.toThrow();
+  expect(() =>
+    requireInstallationWorker({ logicalId: "Ingress", revision, props: ingress })
+  ).not.toThrow();
   for (const drift of [
     { name: "incumbent" },
     { domain: "api.fidyapp.com" },
@@ -152,21 +184,36 @@ it("binds each planned Worker to the closed installation before any provider app
     { tailConsumers: ["another-worker"] },
   ]) {
     expect(() =>
-      requireInstallationWorker({ logicalId: "Ingress", props: { ...ingress, ...drift } })
+      requireInstallationWorker({ logicalId: "Ingress", revision, props: { ...ingress, ...drift } })
     ).toThrow();
   }
   expect(() =>
-    requireInstallationWorker({ logicalId: "Core", props: { ...base, domain: "api.fidyapp.com" } })
+    requireInstallationWorker({
+      logicalId: "Core",
+      revision,
+      props: { ...base, domain: "api.fidyapp.com" },
+    })
   ).toThrow();
 });
 
 it("rejects open admission and producer bindings before applying either Worker", () => {
   const closed = { name: "RECOVERY_ISOLATION", type: "plain_text", text: "isolated" };
   const core = { name: "CORE", type: "service" };
+  const complete = [...nativeBindingInventory("Ingress")].map(([name, type]) => ({
+    name,
+    type,
+    text:
+      new Map([
+        ["RECOVERY_ISOLATION", "isolated"],
+        ["NATIVE_STORAGE_ADMISSION", "closed"],
+      ]).get(name) ?? "",
+  }));
+  expect(() => requireClosedBindings({ worker: "Ingress", bindings: complete })).not.toThrow();
+  expect(() => requireClosedBindings({ worker: "Ingress", bindings: [closed, core] })).toThrow();
   expect(() =>
-    requireClosedBindings({ worker: "Ingress", bindings: [closed, core] })
-  ).not.toThrow();
-  expect(() => requireClosedBindings({ worker: "Core", bindings: [closed, core] })).toThrow();
+    requireClosedBindings({ worker: "Ingress", bindings: [...complete.slice(1), core] })
+  ).toThrow();
+  expect(() => requireClosedBindings({ worker: "Core", bindings: complete })).toThrow();
   for (const worker of ["Ingress", "Core"] as const) {
     expect(() => requireClosedBindings({ worker, bindings: [] })).toThrow();
     expect(() => requireClosedBindings({ worker, bindings: [{ ...closed, text: "" }] })).toThrow();

@@ -28,6 +28,7 @@ import {
   installationNames,
   nativeIngressHost,
   nativeStack,
+  nativeWebHost,
   requireAbsentInstallation,
 } from "./storage-installation";
 import { smokeHeaders } from "./smoke-exchange";
@@ -53,6 +54,16 @@ const IngressDomainResponse = Schema.Struct({
   result: Schema.Array(
     Schema.Struct({ hostname: Schema.NonEmptyString, service: Schema.NonEmptyString })
   ),
+});
+const installedDomains = Effect.fn(function* (
+  get: (path: string) => Effect.Effect<unknown, Error>
+) {
+  return (yield* Effect.forEach([nativeIngressHost, nativeWebHost], (host) =>
+    get("workers/domains?hostname=" + host).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(IngressDomainResponse)),
+      Effect.map((response) => response.result)
+    )
+  )).flat();
 });
 const firstInstallInventory = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const get = (path: string): Effect.Effect<unknown, Error> =>
@@ -108,9 +119,7 @@ const firstInstallInventory = Effect.fn(function* (env: Config, client: HttpClie
         use_sqlite: Schema.optional(Schema.Boolean),
       })
     ),
-    domains: (yield* Schema.decodeUnknownEffect(IngressDomainResponse)(
-      yield* get(`workers/domains?hostname=${nativeIngressHost}`)
-    )).result,
+    domains: yield* installedDomains(get),
   };
 });
 

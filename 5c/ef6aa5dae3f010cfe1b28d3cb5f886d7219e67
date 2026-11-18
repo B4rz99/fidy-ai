@@ -1,0 +1,52 @@
+.oxlintrc.json
+  h_c6d49c804e0ad2 322
+apps/server/ARCHITECTURE.md
+  h_c6d49c804e0ad2 130-143
+apps/server/cloudflare/directory/contract.ts
+  h_c6d49c804e0ad2 220-239
+apps/server/cloudflare/directory/internal/email-capacity.ts
+  h_c6d49c804e0ad2 1-97
+apps/server/cloudflare/directory/internal/expiry.ts
+  h_c6d49c804e0ad2 13,40
+apps/server/cloudflare/directory/operations.ts
+  h_c6d49c804e0ad2 4,12,218-227
+apps/server/cloudflare/directory/runtime.ts
+  h_c6d49c804e0ad2 11,38,166-169
+apps/server/cloudflare/directory/schema/operations.ts
+  h_c6d49c804e0ad2 101-109
+apps/server/cloudflare/ingestion/contract.ts
+  h_c6d49c804e0ad2 168,172
+apps/server/cloudflare/ingestion/internal/email-capacity.ts
+  h_c6d49c804e0ad2 1-152
+apps/server/cloudflare/ingestion/internal/forwarded-email.ts
+  h_c6d49c804e0ad2 1,65,67,243,246
+apps/server/cloudflare/ingestion/internal/local-document.ts
+  h_c6d49c804e0ad2 42,75,105,126,133,213-224,244-247,308,315-318,320
+apps/server/cloudflare/ingestion/internal/local-email.ts
+  h_c6d49c804e0ad2 45,88,92,152,204,232-240,249-252,262,267-273,340-343,361,366,376,379,382-383,386-392,418,420-427
+apps/server/cloudflare/ingestion/internal/local-retention.ts
+  h_c6d49c804e0ad2 3,29-31,71,83,102,105,112,115-118,130-135,175
+apps/server/cloudflare/ingestion/native-document.test.ts
+  h_c6d49c804e0ad2 208-294
+apps/server/cloudflare/ingestion/native-email.test.ts
+  h_c6d49c804e0ad2 1,4,6-14,18-19,22,27-28,58-60,110-318
+apps/server/cloudflare/ingestion/private-email.test-fixture.ts
+  h_c6d49c804e0ad2 2,4,47-65
+apps/server/cloudflare/user-store.test-fixture.ts
+  h_c6d49c804e0ad2 70-78,90-91,252-263
+apps/server/cloudflare/user-store/internal/ingestion-schema.ts
+  h_c6d49c804e0ad2 2-5,118
+infra/cloudflare/verify-edge-policy.ts
+  h_c6d49c804e0ad2 5,7-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5cef6aa5dae3f010cfe1b28d3cb5f886d7219e67",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

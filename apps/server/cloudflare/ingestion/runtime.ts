@@ -7,7 +7,6 @@ import {
   processLocalEmail as completeLocalEmail,
 } from "./internal/local-email";
 import {
-  type ForwardedEmailEnvironment,
   type ForwardedEmailMessage,
   type NativeEmailEnvironment,
   type ReviewRetentionWork,
@@ -21,7 +20,6 @@ import {
   localStatementActivity as statementActivity,
 } from "./internal/local-statement-work";
 import { recoverIngestion, repairIngestionAlarm } from "./internal/local-retention";
-import { SecureRandom } from "effect/crypto";
 import { sweepReviewDrafts as sweepDrafts } from "./internal/review-retention";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -39,8 +37,6 @@ import {
 } from "../runtime/telemetry/operations";
 import {
   dispatchForwardedEmail as dispatchEmail,
-  emailSecureRandom,
-  receiveForwardedEmail as receiveEmail,
   sweepForwardedEmail as retainEmail,
 } from "./internal/forwarded-email";
 import {
@@ -176,18 +172,9 @@ export const receiveForwardedEmail = ({
   environment,
 }: Readonly<{
   message: ForwardedEmailMessage;
-  environment: ForwardedEmailEnvironment | NativeEmailEnvironment;
-}>): Effect.Effect<
-  void,
-  | Effect.Error<ReturnType<typeof receiveEmail>>
-  | Effect.Error<ReturnType<typeof acceptPrivateEmail>>
-> =>
-  "DIRECTORY" in environment
-    ? acceptPrivateEmail(message, environment).pipe(Effect.withSpan("forwarded-email.receive"))
-    : receiveEmail(message, environment).pipe(
-        Effect.withSpan("forwarded-email.receive"),
-        Effect.provideService(SecureRandom.SecureRandom, emailSecureRandom)
-      );
+  environment: NativeEmailEnvironment;
+}>): ReturnType<typeof acceptPrivateEmail> =>
+  acceptPrivateEmail(message, environment).pipe(Effect.withSpan("forwarded-email.receive"));
 
 /** Reoffer only retained same-User receipt identities; an offer grants no processing authority. */
 export const dispatchForwardedEmail: typeof dispatchEmail = (environment) =>

@@ -1,9 +1,15 @@
+import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
+import {
+  emailSecureRandom,
+  receiveForwardedEmail as receiveStored,
+} from "./internal/forwarded-email";
+import { SecureRandom } from "effect/crypto";
 import { openAiTestKey } from "../openai.test-fixture";
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { ReviewMaterial } from "../../src/shell/ingestion/contract";
-import { DurableTraceContext, TelemetryWorkRecord } from "../../src/shell/observability/contract";
+import { DurableTraceContext, type TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { TestClock } from "effect/testing";
 import { Base64 } from "effect/encoding";
@@ -19,11 +25,7 @@ import { afterAll, afterEach, expect, vi } from "vitest";
 import emailWorker, { makeEmailWorker } from "./email-worker";
 import { runEmailMaintenance } from "../maintenance/runtime";
 import { EmailScheduleUnavailable } from "../maintenance/contract";
-import {
-  dispatchForwardedEmail,
-  receiveForwardedEmail,
-  receiveForwardedEmailWork,
-} from "./runtime";
+import { dispatchForwardedEmail, receiveForwardedEmailWork } from "./runtime";
 import { browseReviewMaterial, listNeedsReviewItems, processForwardedEmail } from "./operations";
 import { currentMillis } from "../runtime/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
@@ -47,10 +49,27 @@ const financialEmailBytes = (): Uint8Array<ArrayBuffer> => {
     `From: bank@example.test\r\nTo: ${localA}@fidyapp.com\r\nSubject: Compra\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${html}`
   );
 };
+const receiveForwardedEmail = ({
+  message,
+  environment,
+}: {
+  message: ForwardedEmailMessage;
+  environment: ForwardedEmailEnvironment;
+}): Effect.Effect<void, Effect.Error<ReturnType<typeof receiveStored>>> =>
+  receiveStored(message, environment).pipe(
+    Effect.provideService(SecureRandom.SecureRandom, emailSecureRandom)
+  );
+const recoverStoredEmail = (
+  controller: typeof scheduledController,
+  environment: ForwardedEmailEnvironment
+): Promise<void> =>
+  Effect.runPromise(
+    runEmailMaintenance({ environment, scheduledAtEpochMs: controller.scheduledTime })
+  );
 // Exercise retained storage/processing independently of the disabled native admission boundary.
 const receiveStoredEmail = (
   message: Parameters<typeof emailWorker.email>[0],
-  environment: Parameters<typeof emailWorker.email>[1]
+  environment: ForwardedEmailEnvironment
 ): Promise<void> => Effect.runPromise(receiveForwardedEmail({ message, environment }));
 const storage = isolatedTestStorage();
 afterAll(() => storage.dispose());
@@ -124,42 +143,6 @@ it.each([localA, localB, "z".repeat(32)])(
     )
 );
 
-it.effect("exports one bounded record for a successful Email schedule", () =>
-  Effect.gen(function* () {
-    const records: TelemetryWorkRecord[] = [];
-    const worker = makeEmailWorker(
-      makeWorkerTelemetry((record) => {
-        records.push(record);
-      })
-    );
-    const { env } = yield* setup();
-
-    yield* wait(() => worker.scheduled(scheduledController, env));
-    expect(records).toHaveLength(1);
-    expect(records[0]).toMatchObject({
-      operation: "worker.email.scheduled",
-      outcome: "succeeded",
-      release: "unknown",
-      attempt: 1,
-    });
-    expect(Object.keys(records[0] ?? {}).sort()).toEqual([
-      "attempt",
-      "latencyMilliseconds",
-      "operation",
-      "outcome",
-      "provider",
-      "release",
-      "spanId",
-      "traceId",
-    ]);
-    const record = yield* Schema.decodeUnknownEffect(TelemetryWorkRecord, {
-      onExcessProperty: "error",
-    })(records[0]);
-    expect(record.traceId).toBeDefined();
-    expect(record.spanId).toBeDefined();
-  })
-);
-
 it.effect("exports only closed metadata for refused financial email", () =>
   Effect.gen(function* () {
     const records: TelemetryWorkRecord[] = [];
@@ -178,24 +161,6 @@ it.effect("exports only closed metadata for refused financial email", () =>
   })
 );
 
-it.effect("observes a failed Email schedule once without exposing authority errors", () =>
-  Effect.gen(function* () {
-    const records: TelemetryWorkRecord[] = [];
-    const worker = makeEmailWorker(
-      makeWorkerTelemetry((record) => {
-        records.push(record);
-      })
-    );
-    const { env, db } = yield* setup();
-    yield* wait(() => db.exec("DROP TABLE forwarded_email_receipts"));
-
-    const environment = { ...env, RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567" };
-    yield* wait(() => expect(worker.scheduled(scheduledController, environment)).rejects.toThrow());
-    expect(records).toHaveLength(1);
-    expect(records[0]).toMatchObject({ operation: "worker.email.scheduled", outcome: "failed" });
-    expect(Object.values(records[0] ?? {}).join(" ")).not.toContain("forwarded_email_receipts");
-  })
-);
 class TestFailure extends Data.TaggedError("TestFailure")<{ readonly cause: unknown }> {}
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) }).pipe(Effect.orDie);
@@ -575,7 +540,7 @@ it("finishes a previously queued financial email after withdrawal with one Trans
           .bind(userA)
           .run()
       );
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       const coordinator = coordinatorFor(db, bucket, userA);
       let acknowledgements = 0;
       const work = {
@@ -616,7 +581,7 @@ it("offers only decoded User and receipt identities to private coordination", ()
     Effect.gen(function* () {
       const { env, jobs } = yield* setup();
       yield* wait(() => receiveStoredEmail(delivery().message, env));
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       const seen: string[] = [];
       let acked = false;
       yield* wait(() =>
@@ -967,7 +932,7 @@ it.each(["before-processing", "during-processing"] as const)(
         yield* wait(() =>
           receiveStoredEmail(delivery(undefined, financialEmailBytes()).message, env)
         );
-        yield* wait(() => emailWorker.scheduled(scheduledController, env));
+        yield* wait(() => recoverStoredEmail(scheduledController, env));
         const job = jobs[0];
         if (job === undefined) return yield* Effect.die("Expected queued email");
         yield* wait(() =>
@@ -1081,7 +1046,7 @@ it("finishes previously queued email after withdrawal while ordinary access stay
           db.prepare("SELECT id AS id FROM ingestion_review_items WHERE source_kind='email'").all()
         )).results
       ).toHaveLength(1);
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
       const review = yield* wait(() =>
         db
@@ -1195,7 +1160,7 @@ it("reserves one receipt and private object on replay and publishes only bounded
       expect(receipts.results).toHaveLength(1);
       expect(receipts.results[0]?.state).toBe("queued");
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       expect(jobs).toHaveLength(1);
       const job = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
@@ -1259,7 +1224,7 @@ it("dispatches previously queued email after Consent withdrawal", () =>
           .bind(userA)
           .run()
       );
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       expect(jobs).toHaveLength(1);
     })
   ));
@@ -1596,7 +1561,7 @@ it("deletes expired private email while keeping a replay tombstone", () =>
           .bind(userA)
           .run()
       );
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       expect(
         (yield* wait(() =>
@@ -1633,7 +1598,7 @@ it("clears near-expiry email before the bounded sweep can exceed its retention d
           .bind(deadline, userA)
           .run()
       );
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       const review = yield* wait(() =>
         db
@@ -1663,7 +1628,7 @@ it("records interrupted reservations visibly before expiring their private bytes
           .run()
       );
       yield* wait(() => bucket.put(key, new Uint8Array([1])));
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       const review = yield* wait(() =>
         db
@@ -1700,7 +1665,7 @@ it("makes an interrupted reservation visible after its bounded write window", ()
           .run()
       );
       yield* wait(() => bucket.put(key, new Uint8Array([1])));
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       const review = yield* wait(() =>
         db
@@ -1736,7 +1701,7 @@ it("does not sweep an interrupted R2 write before the hard retention deadline", 
           .run()
       );
       yield* wait(() => bucket.put(key, new Uint8Array([1])));
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
       expect(
         (yield* wait(() =>
@@ -1770,7 +1735,7 @@ it("keeps retention failure visible and retries private deletion without duplica
       };
       yield* Effect.exit(
         Effect.tryPromise(() =>
-          emailWorker.scheduled(scheduledController, {
+          recoverStoredEmail(scheduledController, {
             ...env,
             EMAIL_BUCKET: unavailableBucket,
           })
@@ -1786,7 +1751,7 @@ it("keeps retention failure visible and retries private deletion without duplica
           .first<{ reason: string }>()
       );
       expect(review?.reason).toBe("processing-interrupted");
-      yield* wait(() => emailWorker.scheduled(scheduledController, env));
+      yield* wait(() => recoverStoredEmail(scheduledController, env));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(0);
       const reviews = yield* wait(() =>
         db
@@ -1813,7 +1778,7 @@ it("does not delete an arbitrary R2 object from a malformed D1 sweep projection"
           .bind(userA)
           .run()
       );
-      yield* Effect.exit(Effect.tryPromise(() => emailWorker.scheduled(scheduledController, env)));
+      yield* Effect.exit(Effect.tryPromise(() => recoverStoredEmail(scheduledController, env)));
       expect((yield* wait(() => bucket.list())).objects).toHaveLength(1);
     })
   ));

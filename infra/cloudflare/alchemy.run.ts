@@ -696,16 +696,7 @@ export default Alchemy.Stack(
       main: "../../apps/server/cloudflare/ingestion/email-worker.ts",
       observability: freeTierWorkerObservability,
       compatibility: { date: "2026-09-08" },
-      crons: ["*/5 * * * *"],
-      env: {
-        DB: database,
-        EMAIL_BUCKET: emailBucket,
-        ERASURE_BUCKET: erasureBucket,
-        ERASURE_REQUIRED: erasureRequired,
-        ERASURE_REGISTRY_TRANSPORT: Cloudflare.WorkerEntrypoint(core, "ErasureRegistryTransport"),
-        EMAIL_QUEUE: emailQueue,
-        RELEASE_GIT_SHA: releaseMetadata.gitRevision,
-      },
+      env: { RELEASE_GIT_SHA: releaseMetadata.gitRevision },
       workersDev: false,
     });
 

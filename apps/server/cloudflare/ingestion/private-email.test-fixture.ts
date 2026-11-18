@@ -1,18 +1,13 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { Effect, Schema } from "effect";
-import { receiveForwardedEmail, refuseUnverifiedEmail } from "./runtime";
+import deliveryWorker from "./email-worker";
+import { receiveForwardedEmail } from "./runtime";
 import { StatementWork } from "./contract";
-import type {
-  ForwardedEmailEnvironment,
-  ForwardedEmailMessage,
-  NativeEmailEnvironment,
-} from "./contract";
+import type { ForwardedEmailMessage, NativeEmailEnvironment } from "./contract";
 
 const rejectedStatus = 422,
   acceptedStatus = 204;
-export class PrivateEmailFixture extends WorkerEntrypoint<
-  NativeEmailEnvironment & ForwardedEmailEnvironment
-> {
+export class PrivateEmailFixture extends WorkerEntrypoint<NativeEmailEnvironment> {
   override fetch(request: Request): Promise<Response> {
     const env = this.env;
     return Effect.runPromise(
@@ -35,7 +30,7 @@ export class PrivateEmailFixture extends WorkerEntrypoint<
           },
         };
         if (new URL(request.url).pathname === "/production") {
-          yield* refuseUnverifiedEmail(message);
+          yield* Effect.tryPromise(() => deliveryWorker.email(message, env));
         } else yield* receiveForwardedEmail({ message, environment: env });
         return new Response(null, {
           status: refusals.length > 0 ? rejectedStatus : acceptedStatus,

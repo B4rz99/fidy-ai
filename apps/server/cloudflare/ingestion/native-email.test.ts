@@ -1,3 +1,4 @@
+import deliveryWorker from "./email-worker";
 import { admitPurge, caseDriver } from "../erasure-purge.test-fixture";
 import type { Miniflare } from "miniflare";
 import { it } from "@effect/vitest";
@@ -66,6 +67,13 @@ const fixtureControl = Effect.fn(function* (
   return yield* native(() => user.fetch("https://fixture.invalid/" + path, { method: "POST" }));
 });
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "uses only native Email Routing events on the Email Worker while User alarms own retained work",
+    () =>
+      Effect.sync(() => {
+        expect(Object.keys(deliveryWorker)).toEqual(["email"]);
+      })
+  );
   test.effect(
     "erasure waits for an issued R2 create, releases the claimed Directory slot and clears native KV and alarm",
     () =>

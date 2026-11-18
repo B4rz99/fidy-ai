@@ -1,0 +1,37 @@
+apps/server/cloudflare/agent/hosted-alarm.test-fixture.ts
+  s_a1be23a656acf0::t_c113227bc22372 46-69,71-72,90-96
+apps/server/cloudflare/budgets/operations.ts
+  s_a1be23a656acf0::t_9b94e20c428708 1,878-882
+apps/server/cloudflare/insights/internal/category-window.ts
+  s_a1be23a656acf0::t_34ddcd83c82cce 1-16
+apps/server/cloudflare/insights/internal/local-disclosure.ts
+  s_a1be23a656acf0::t_3122d63e0c0fd9 1,97-101,109,111
+apps/server/cloudflare/insights/internal/local-reminder-choice.ts
+  s_a1be23a656acf0::t_d3c55bfd58d298 37,95-101,103,126-128,130-147
+apps/server/cloudflare/insights/internal/local-reminder.ts
+  s_a1be23a656acf0::t_409a41140288bb 150
+apps/server/cloudflare/insights/internal/native-category-opportunity.ts
+  s_a1be23a656acf0::t_93afce71a11b06 1-91
+apps/server/cloudflare/insights/native-category-opportunity.test.ts
+  s_a1be23a656acf0::t_94a3bab19c6540 1-167
+apps/server/cloudflare/insights/runtime.ts
+  s_a1be23a656acf0::t_90c2fdfb5b8596 1-4,552-557,607-609,682-683,685-686
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_99490e709dc64b 1255-1264
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "75dd388a6dac220f167057c418ba8bfa6218aeac",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

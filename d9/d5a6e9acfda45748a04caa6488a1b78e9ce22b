@@ -1,0 +1,19 @@
+apps/server/cloudflare/recurring/recurring.test.ts
+  s_a1be23a656acf0::t_b3c06cb7ffe0d4 1,160-175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d9d5a6e9acfda45748a04caa6488a1b78e9ce22b",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

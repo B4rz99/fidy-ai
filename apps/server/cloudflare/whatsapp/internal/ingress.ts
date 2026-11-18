@@ -1,3 +1,4 @@
+import { directoryName, replaceIdentityUrl } from "../../directory/contract";
 import {
   type WhatsAppIngressEnvironment as Environment,
   type WhatsAppAuthenticatedInbound as WebhookInbound,
@@ -15,7 +16,10 @@ import {
   maxWhatsAppFutureTimestampMinutes,
   maxWhatsAppWebhookBytes,
 } from "../../../src/shell/channels/whatsapp/contract";
-import { authenticateWhatsAppInbound } from "../../../src/shell/channels/whatsapp/operations";
+import {
+  authenticateIdentityChange,
+  authenticateWhatsAppInbound,
+} from "../../../src/shell/channels/whatsapp/operations";
 import {
   makeLifecycleVerifier,
   makeVoiceUnavailableSender,
@@ -276,6 +280,45 @@ const routeTextInbound = (
       answer(HTTP_CONFLICT)
     );
   });
+const routeIdentityChange = Effect.fn(function* (base: WebhookBase, environment: Environment) {
+  const changes = yield* Effect.exit(
+    authenticateIdentityChange({
+      ...base,
+      businessPortfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
+    })
+  );
+  if (Exit.isFailure(changes) || changes.value.length !== 1) return answer(HTTP_UNAUTHORIZED);
+  const [change] = changes.value;
+  if (change === undefined) return answer(HTTP_UNPROCESSABLE);
+  const occurred = DateTime.toEpochMillis(change.occurredAt);
+  if (occurred + maxInitiatingEventAgeMs <= DateTime.toEpochMillis(base.receivedAt)) {
+    return answer(HTTP_CONFLICT);
+  }
+  const directory = environment.DIRECTORY?.getByName(directoryName);
+  if (directory === undefined) return answer(HTTP_UNAVAILABLE);
+  const scope = change.previousCaller.businessPortfolioId;
+  const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+    id: yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))([
+      "whatsapp",
+      scope,
+      change.messageEvidence.providerMessageId,
+    ]).pipe(Effect.mapError(() => undefined)),
+    kind: "whatsapp",
+    scope,
+    prior_key: change.previousCaller.businessScopedUserId,
+    next_key: change.replacement.businessScopedUserId,
+    occurred_at_ms: occurred,
+    expires_at_ms: occurred + maxInitiatingEventAgeMs,
+    expected_user: null,
+  }).pipe(Effect.mapError(() => undefined));
+  return yield* attempt(() =>
+    directory.fetch(replaceIdentityUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    })
+  );
+});
 const handleInbound = (
   base: WebhookBase,
   request: Request,
@@ -293,7 +336,7 @@ const handleInbound = (
         businessPortfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
       })
     );
-    if (Exit.isFailure(decoded)) return answer(HTTP_UNAUTHORIZED);
+    if (Exit.isFailure(decoded)) return yield* routeIdentityChange(base, environment);
     // Never partially settle a buffered retry delivery or re-admit stale signed events.
     if (decoded.value.events.length !== 1) return answer(HTTP_UNPROCESSABLE);
     if (

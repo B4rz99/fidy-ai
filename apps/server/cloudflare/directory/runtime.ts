@@ -3,22 +3,34 @@ import {
   SessionRoute,
   channelInspectUrl,
   directoryName,
+  emailRouteUrl,
   externalLookupUrl,
   externalReserveUrl,
   handoffCancelUrl,
   handoffInspectUrl,
   patRouteUrl,
   registerSessionUrl,
+  replaceIdentityUrl,
   reserveRecoveryUrl,
+  rotateRecoveryRouteUrl,
   sessionRouteUrl,
   sourcePressureUrl,
   statusLookupAdmissionUrl,
+  supportAdmissionUrl,
+  supportApprovalUrl,
   whatsappBootstrapUrl,
 } from "./contract";
-import { externalEventRequest } from "./internal/external-events";
+import { directoryIdentityRequest, reconcileIdentityReplacements } from "./internal/replacement";
+
+import { directorySupport } from "./internal/support";
+
+import { recoveryRouteDecision } from "./internal/recovery-rotation";
+
 import { directoryDeadline, drainBootstrapExpiry } from "./internal/expiry";
 import { unavailable } from "../browser-login/operations";
 import { channelApprovalEvidence } from "./internal/channel";
+
+import { externalEventRequest } from "./internal/external-events";
 import { whatsappBootstrap } from "./internal/whatsapp";
 
 import { admitBootstrap } from "./internal/admission";
@@ -123,7 +135,12 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     );
   }
   override alarm(): Promise<void> {
-    return this.runtime.runPromise(inspectPressure(this.ctx.storage, true).pipe(Effect.asVoid));
+    return this.runtime.runPromise(
+      Effect.andThen(
+        reconcileIdentityReplacements(this.env.USER_STORE),
+        inspectPressure(this.ctx.storage, true)
+      ).pipe(Effect.asVoid)
+    );
   }
   override fetch(request: Request): Promise<Response> {
     if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
@@ -199,6 +216,20 @@ const pairRequest = Effect.fn(function* (request: Request, environment: Director
     ? startPairing
     : pollPairing(request, environment.USER_STORE);
 });
+const identityRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
+  switch (request.url) {
+    case replaceIdentityUrl:
+    case emailRouteUrl:
+      return yield* directoryIdentityRequest(request, environment.USER_STORE);
+    case supportAdmissionUrl:
+    case supportApprovalUrl:
+      return yield* directorySupport(request, environment.USER_STORE);
+    case rotateRecoveryRouteUrl:
+      return yield* recoveryRouteDecision(request);
+    default:
+      return new Response(null, { status: 404 });
+  }
+});
 const internalRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
   if ([statusLookupAdmissionUrl, externalLookupUrl, externalReserveUrl].includes(request.url)) {
     return yield* externalEventRequest(request);
@@ -216,7 +247,7 @@ const internalRequest = Effect.fn(function* (request: Request, environment: Dire
     case whatsappBootstrapUrl:
       return yield* whatsappBootstrap(request, environment.USER_STORE);
     default:
-      return new Response(null, { status: 404 });
+      return yield* identityRequest(request, environment);
   }
 });
 const directoryRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {

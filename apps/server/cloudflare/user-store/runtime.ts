@@ -1,3 +1,26 @@
+import { deliverPendingReplacement } from "../email-authentication/runtime";
+import {
+  localSupportApproval,
+  recoverRotations,
+  repairRecoveryAlarm,
+  rotateLocalRecovery,
+} from "../recovery/operations";
+import {
+  bootstrapCancelUrl,
+  bootstrapCompleteUrl,
+  localIdentityCancelUrl,
+  localIdentityCommitUrl,
+  localRecoveryCheckUrl,
+  localSupportUrl,
+} from "../directory/contract";
+import { repairReplacementAlarm, replacementRequest } from "../email-authentication/operations";
+import {
+  emailReplacementCompletionPath,
+  emailReplacementPath,
+} from "../../src/shell/email-authentication/contract";
+
+import { applyIdentityChange } from "./internal/identity-change";
+
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { dispatchLocalBatchRoute, isLocalBatchRoute } from "../canonical-operations/operations";
 import {
@@ -26,7 +49,7 @@ import { dispatchLocalBudget, isLocalBudgetOperation } from "../budgets/operatio
 import { browserSessionRequest } from "./internal/browser-session";
 import { localChannelRequest, redeemLocalPairing } from "../browser-login/operations";
 import { completeLocalBootstrap } from "./internal/bootstrap";
-import { bootstrapCancelUrl, bootstrapCompleteUrl } from "../directory/contract";
+
 import {
   cancelLocalSubscription,
   offerDueSourceCancellations,
@@ -34,7 +57,7 @@ import {
 } from "../subscription/operations";
 import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
-import { Clock, Effect, Option, Result } from "effect";
+import { Cause, Clock, Effect, Option, Result } from "effect";
 import { canonicalOperation } from "../routing/operations";
 import { dispatchLocalTransaction, isLocalTransactionOperation } from "../transactions/operations";
 import {
@@ -56,11 +79,15 @@ const uncertainCheckStatus = 503;
 type UserStoreEnvironment = WompiBindings &
   StoreReleaseEnvironment &
   Readonly<{
+    RESEND_API_KEY: string;
     DIRECTORY: DurableObjectNamespace;
     USER_STORE: DurableObjectNamespace;
     MAINTENANCE: DurableObjectNamespace;
     BILLING_COLLECTION_QUEUE: Queue<typeof LocalSourceCancellationWork.Type>;
   }>;
+const isBrowserObservation = (command: string, request: Request): boolean =>
+  ["GET /web/session/binding", "POST /web/session/logout"].includes(command) ||
+  (command === "GET /user" && !request.headers.has("authorization"));
 export class UserStore extends DurableObject<UserStoreEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
@@ -83,6 +110,12 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return this.runtime.runPromise(
       Effect.flatMap(Clock.currentTimeMillis, (current) =>
         recoverUserWork([
+          deliverPendingReplacement(this.env, this.ctx.storage, this.owns).pipe(
+            Effect.mapError((cause) => new Cause.UnknownError(cause))
+          ),
+          recoverRotations(current, this.env.DIRECTORY, this.ctx.storage).pipe(
+            Effect.mapError((cause) => new Cause.UnknownError(cause))
+          ),
           recoverLocalRecurringSeries(current, this.ctx.storage, this.owns),
           recoverLocalReceipts(current, this.ctx.storage),
           offerDueSourceCancellations({
@@ -226,6 +259,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         const current = yield* Clock.currentTimeMillis;
         const inspections = yield* Effect.all(
           [
+            repairReplacementAlarm(current, storage),
+            repairRecoveryAlarm(current, storage),
             repairReceiptAlarm(current, storage),
             repairCancellationAlarm(storage),
             repairLocalRecurringAlarm(current, storage, ownsUser),
@@ -242,6 +277,50 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
+  private identityRequest(
+    request: Request,
+    owns: (id: string) => boolean
+  ): Option.Option<Promise<Response>> {
+    if (request.method !== "POST") return Option.none();
+    const path = new URL(request.url).pathname;
+    const respond = (
+      effect: Effect.Effect<
+        Response,
+        never,
+        Effect.Services<Parameters<typeof this.runtime.runPromise>[0]>
+      >
+    ): Option.Option<Promise<Response>> => Option.some(this.runtime.runPromise(effect));
+    if ([emailReplacementPath, emailReplacementCompletionPath].includes(path)) {
+      return respond(
+        replacementRequest({ request, environment: this.env, owns, storage: this.ctx.storage })
+      );
+    }
+    if ([localIdentityCommitUrl, localIdentityCancelUrl].includes(request.url)) {
+      return respond(
+        applyIdentityChange(request, owns).pipe(
+          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+        )
+      );
+    }
+    if ([localSupportUrl, localRecoveryCheckUrl].includes(request.url)) {
+      return respond(
+        localSupportApproval(request, owns).pipe(
+          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+        )
+      );
+    }
+    if (path === "/recovery/backup-code/rotate") {
+      return respond(
+        rotateLocalRecovery({
+          request,
+          directory: this.env.DIRECTORY,
+          owns,
+          storage: this.ctx.storage,
+        })
+      );
+    }
+    return Option.none();
+  }
   private registeredRequest(request: Request, registered: boolean): Promise<Response> {
     const owns = (userId: string): boolean => registered && this.owns(userId);
     if (
@@ -273,7 +352,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     const path = new URL(request.url).pathname;
     const command = request.method + " " + path;
     const owns = (userId: string): boolean => registered && this.owns(userId);
-    if (["GET /web/session/binding", "GET /user", "POST /web/session/logout"].includes(command)) {
+    const identity = this.identityRequest(request, owns);
+    if (Option.isSome(identity)) return identity.value;
+    if (isBrowserObservation(command, request)) {
       return this.runtime.runPromise(browserSessionRequest(request, owns));
     }
     if (["POST /browser/channel-caller", "POST /browser/channel-approval"].includes(command)) {
@@ -308,6 +389,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         }).pipe(Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 }))))
       );
     }
+    return this.workStatus(request, registered);
+  }
+  private workStatus(request: Request, registered: boolean): Promise<Response> {
     if (ownerCheckRequest(request)) {
       return registered ? this.inspectWork() : Promise.resolve(ownerCheckResponse());
     }

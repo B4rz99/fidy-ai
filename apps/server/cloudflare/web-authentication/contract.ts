@@ -1,5 +1,6 @@
+import type { Effect } from "effect";
+import type { HttpClient } from "effect/http";
 import type { TelemetryService } from "../../src/shell/observability/contract";
-import type { SupportAccessConfiguration } from "../recovery/contract";
 
 /** Identity-only acceleration after owner commit; the Core runtime retains durable publication. */
 export type PublishAuthenticationWork = (
@@ -15,7 +16,7 @@ export type PublishAuthenticationWork = (
 export type WebAuthenticationRequest = Readonly<{
   request: Request;
   db: D1Database;
-  support: SupportAccessConfiguration;
+  support: Effect.Effect<Response, never, HttpClient.HttpClient>;
   telemetry: TelemetryService;
   publish: PublishAuthenticationWork;
 }>;

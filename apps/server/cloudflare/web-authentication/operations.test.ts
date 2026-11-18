@@ -16,10 +16,7 @@ import { handleWebAuthentication } from "./operations";
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const telemetry = makeTelemetryService(DisabledTelemetryResource.adapter);
-const support = {
-  CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",
-  CLOUDFLARE_ACCESS_AUDIENCE: "support",
-};
+const support = Effect.die("Support recovery is outside this test");
 
 it("refuses wrong-method authentication and unknown paths before any owner can create authority", () =>
   Effect.runPromise(

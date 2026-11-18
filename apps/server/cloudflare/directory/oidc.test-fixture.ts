@@ -1,6 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 
 const millisecondsPerSecond = 1000;
 const tokenLifetimeSeconds = 600;
@@ -10,6 +10,7 @@ const tokens = new Set([
   "https://login.microsoftonline.com/common/oauth2/v2.0/token",
 ]);
 const certs = new Set([
+  "https://fixture.cloudflareaccess.com/cdn-cgi/access/certs",
   "https://www.googleapis.com/oauth2/v3/certs",
   "https://login.microsoftonline.com/common/discovery/v2.0/keys",
 ]);
@@ -17,6 +18,7 @@ const tenant = "9188040d-6c67-4c5b-b112-36a304b66dad";
 const enterpriseTenant = "aabbccdd-eeff-4567-8123-1234567890ab";
 let stalledLookup = false;
 let jwksTenant = "{tenantid}";
+const messages = new Map<string, Array<string>>();
 const keyCache = new Map<string, ReturnType<typeof generateKeyPair>>();
 const signingKeys = (id: string): ReturnType<typeof generateKeyPair> => {
   const existing = keyCache.get(id);
@@ -85,11 +87,53 @@ const makeToken = Effect.fn(function* (request: Request) {
   );
   return Response.json({ id_token: jwt });
 });
+const acceptMail = Effect.fn(function* (request: Request) {
+  const body = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ to: Schema.Array(Schema.String), text: Schema.String })
+  )(yield* Effect.tryPromise(() => request.json()));
+  for (const address of body.to) {
+    messages.set(address, [...(messages.get(address) ?? []), body.text]);
+  }
+  if (body.to.includes("lost@example.test")) throw new Error("Lost provider reply");
+  if (body.to.includes("limited@example.test")) {
+    return Option.some(Response.json({}, { status: 429 }));
+  }
+  return Option.some(Response.json({ id: "fixture-delivery" }));
+});
+const supportAndMailbox = Effect.fn(function* (request: Request) {
+  if (request.url === "https://api.resend.com/emails") return yield* acceptMail(request);
+  if (new URL(request.url).hostname === "mailbox.fixture.invalid") {
+    return Option.some(
+      Response.json(messages.get(new URL(request.url).searchParams.get("to") ?? "") ?? [])
+    );
+  }
+  if (request.url === "https://fixture.invalid/support-assertion") {
+    const keys = yield* Effect.tryPromise(() => signingKeys(keyId));
+    const now = Math.floor((yield* Clock.currentTimeMillis) / millisecondsPerSecond);
+    return Option.some(
+      new Response(
+        yield* Effect.tryPromise(() =>
+          new SignJWT({})
+            .setProtectedHeader({ alg: "RS256", kid: keyId })
+            .setIssuer("https://fixture.cloudflareaccess.com")
+            .setAudience("fixture-support")
+            .setSubject("fixture-operator")
+            .setIssuedAt(now)
+            .setExpirationTime(now + tokenLifetimeSeconds)
+            .sign(keys.privateKey)
+        )
+      )
+    );
+  }
+  return Option.none<Response>();
+});
 /** Local signed responses exercise production provider, nonce, lifetime and browser proof checks. */
 export class BrowserOidcFixture extends WorkerEntrypoint {
   override fetch(request: Request): Promise<Response> {
     return Effect.runPromise(
       Effect.gen(function* () {
+        const simulated = yield* supportAndMailbox(request);
+        if (Option.isSome(simulated)) return simulated.value;
         if (new URL(request.url).hostname === "api.kapso.ai") {
           if ((yield* Effect.tryPromise(() => request.text())).includes("573001234598")) {
             return new Response(null, { status: 503 });

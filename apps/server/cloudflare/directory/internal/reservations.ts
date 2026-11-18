@@ -23,7 +23,7 @@ export const registerBrowserSession = Effect.fn(function* (request: Request) {
   return yield* Effect.gen(function* () {
     const [route] =
       yield* sql`SELECT 1 FROM browser_pairings p WHERE p.id=${input.pairingId} AND p.user_id=${input.userId} AND p.expires_at_ms>${yield* Clock.currentTimeMillis} AND
-      (EXISTS(SELECT 1 FROM provider_attempts a WHERE a.id=${input.attemptId} AND a.pairing_id=p.id AND a.state='bound') OR EXISTS(SELECT 1 FROM channel_approvals c WHERE c.id=${input.attemptId} AND c.pairing_id=p.id AND c.user_id=p.user_id))`;
+      (EXISTS(SELECT 1 FROM provider_attempts a WHERE a.id=${input.attemptId} AND a.pairing_id=p.id AND a.state='bound') OR EXISTS(SELECT 1 FROM support_handoffs h WHERE h.id=${input.attemptId} AND h.pairing_id=p.id AND h.user_id=p.user_id) OR EXISTS(SELECT 1 FROM channel_approvals c WHERE c.id=${input.attemptId} AND c.pairing_id=p.id AND c.user_id=p.user_id))`;
     if (route === undefined) return invalidProvider();
     yield* sql`INSERT INTO session_routes(token_digest,user_id,session_id,reservation_id,hard_expires_at_ms) VALUES(${digest},${input.userId},${input.sessionId},${input.attemptId},${input.hard}) ON CONFLICT DO NOTHING`;
     const exact =
@@ -95,7 +95,7 @@ export const registerRecoveryCredential = Effect.fn(function* (request: Request)
     ) {
       return invalidProvider();
     }
-    yield* sql`INSERT INTO recovery_routes(code_digest,user_id,attempt_id,revision,generation) VALUES(${bytes},${input.user},${input.attempt},1,${input.generation}) ON CONFLICT(user_id) DO UPDATE SET code_digest=excluded.code_digest,generation=excluded.generation WHERE recovery_routes.attempt_id=excluded.attempt_id AND recovery_routes.revision=1 AND recovery_routes.generation<excluded.generation`;
+    yield* sql`INSERT INTO recovery_routes(code_digest,user_id,attempt_id,revision,generation) VALUES(${bytes},${input.user},${input.attempt},1,${input.generation}) ON CONFLICT(user_id) WHERE revision=1 DO UPDATE SET code_digest=excluded.code_digest,generation=excluded.generation WHERE recovery_routes.attempt_id=excluded.attempt_id AND recovery_routes.revision=1 AND recovery_routes.generation<excluded.generation`;
     const exact =
       yield* sql`SELECT 1 FROM recovery_routes WHERE user_id=${input.user} AND attempt_id=${input.attempt} AND generation=${input.generation} AND code_digest=${bytes}`;
     return exact.length === 1 ? new Response(null, { status: 204 }) : invalidProvider();

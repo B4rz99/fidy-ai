@@ -404,7 +404,8 @@ const forwardsSession = (request: Request, path: string): boolean =>
   memoryPath(path) ||
   (path === listCategoriesPath && request.headers.has("cookie"));
 
-const credentialPath = (path: string): boolean => transactionPath(path) || memoryPath(path);
+const credentialPath = (path: string): boolean =>
+  path === userPath || transactionPath(path) || memoryPath(path);
 const credentialBearerHeaders = (request: Request, path: string): Option.Option<Headers> =>
   credentialPath(path) && !request.headers.has("cookie") && request.headers.has("authorization")
     ? Option.some(
@@ -661,10 +662,12 @@ const oauthBrowserPath = (path: string): boolean =>
     oauthPaths.revoke,
     oauthPaths.revokeAll,
   ].some((owned) => owned === path);
+const bearerUserRead = (request: Request, path: string): boolean =>
+  path === userPath && request.headers.has("authorization") && !request.headers.has("cookie");
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   dedicatedBrowserPath(path) ||
   oauthBrowserPath(path) ||
-  sessionPaths.has(path) ||
+  (sessionPaths.has(path) && !bearerUserRead(request, path)) ||
   enrollmentPath(path) ||
   (cookieAdmittedPath(path) && request.headers.has("cookie")) ||
   patBrowserRoute(path);

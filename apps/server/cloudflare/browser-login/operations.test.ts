@@ -23,10 +23,7 @@ import {
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const telemetry = makeTelemetryService(DisabledTelemetryResource.adapter);
-const support = {
-  CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",
-  CLOUDFLARE_ACCESS_AUDIENCE: "support",
-};
+const support = Effect.die("Support recovery is outside this test");
 const pairingId = "30000000-0000-4000-8000-000000000001";
 
 const approvalTime = 1_800_000_000_000;

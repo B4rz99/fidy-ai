@@ -145,10 +145,18 @@ export const chatWith = Effect.fn(function* (
       phone_number_id: options.endpoint ?? "123456789012345",
     })
   );
+  return yield* signedWebhook(runtime, bytes, options.secret ?? "test-kapso-secret");
+});
+
+export const signedWebhook = Effect.fn(function* (
+  runtime: Miniflare,
+  bytes: Uint8Array<ArrayBuffer>,
+  secret: string
+) {
   const key = yield* native(() =>
     crypto.subtle.importKey(
       "raw",
-      new TextEncoder().encode(options.secret ?? "test-kapso-secret"),
+      new TextEncoder().encode(secret),
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"]

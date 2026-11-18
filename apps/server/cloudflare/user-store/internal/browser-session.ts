@@ -24,6 +24,7 @@ import { WebSessionId } from "../../../src/core/web-session/contract";
 
 const maximumInitialResponseBytes = 65536;
 
+class SessionWriteUnavailable extends Data.TaggedError("SessionWriteUnavailable") {}
 class IdentityAuditUnavailable extends Data.TaggedError("IdentityAuditUnavailable") {}
 const json = (body: object, status = 200): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -49,12 +50,17 @@ const Session = Schema.Struct({ id: WebSessionId, user_id: UserId });
 type Observation = Readonly<{ session: typeof Session.Type; url: URL; now: number }>;
 const profileRead = Effect.fn(function* ({ session, now }: Observation) {
   const sql = yield* SqliteClient;
+  const renewed =
+    yield* sql`UPDATE web_sessions SET idle_expires_at_ms=min(hard_expires_at_ms,max(idle_expires_at_ms,${DateTime.toEpochMillis(webSessionIdleRenewalCandidate(DateTime.makeUnsafe(now)))})) WHERE id=${session.id} AND user_id=${session.user_id} AND revoked_at_ms IS NULL AND idle_expires_at_ms>${now} AND hard_expires_at_ms>${now} RETURNING id`;
+  if (renewed.length !== 1) return yield* new SessionWriteUnavailable();
+  const live =
+    yield* sql`SELECT 1 FROM web_sessions WHERE id=${session.id} AND user_id=${session.user_id} AND revoked_at_ms IS NULL AND hard_expires_at_ms>${now} AND idle_expires_at_ms>${now} AND NOT EXISTS(SELECT 1 FROM erasure_requests)`;
+  if (live.length !== 1) return noAuthority();
   const caller = { sql: "SELECT ? AS id,? AS userId", params: [session.id, session.user_id] };
   const query = prepareSelectedCurrentUser(caller);
   const user = yield* query.decode(yield* sql.unsafe(query.statement.sql, query.statement.params));
   const categories = yield* listCategoriesResponse;
   const profile = { ...user, categories: Option.some(categories.data) };
-  yield* sql`UPDATE web_sessions SET idle_expires_at_ms=min(hard_expires_at_ms,max(idle_expires_at_ms,${DateTime.toEpochMillis(webSessionIdleRenewalCandidate(DateTime.makeUnsafe(now)))})) WHERE id=${session.id}`;
   const audit =
     yield* sql`INSERT INTO audit_entries(id,user_id,session_id,record_type,occurred_at_ms) VALUES(${newId()},${session.user_id},${session.id},'identity_read',${now}) RETURNING id`;
   if (audit.length !== 1) return yield* new IdentityAuditUnavailable();
@@ -101,6 +107,7 @@ const observe = Effect.fn(function* (input: Observation) {
       : noAuthority();
   }
   const profile = yield* profileRead(input);
+  if (profile instanceof Response) return profile;
   if (!binding) return json(yield* Schema.encodeEffect(CurrentUserMetadata)(profile));
   const transactions = yield* contextPage(input, profile);
   const initial = { ...consent.value, profile, transactions };
@@ -139,10 +146,11 @@ export const browserSessionRequest = Effect.fn(
       const session = yield* Schema.decodeUnknownEffect(Session)(raw);
       if (!owns(session.user_id)) return absentSessionResponse(url.pathname);
       const expected = request.headers.get(browserSessionBindingHeader);
-      if (expected !== null && expected !== session.id) return noAuthority();
+      if (expected !== session.id) return noAuthority();
       if (url.pathname === "/web/session/logout") {
-        if (expected !== session.id) return noAuthority();
-        yield* sql`UPDATE web_sessions SET revoked_at_ms=${now} WHERE id=${session.id}`;
+        const revoked =
+          yield* sql`UPDATE web_sessions SET revoked_at_ms=${now} WHERE id=${session.id} AND user_id=${session.user_id} AND revoked_at_ms IS NULL RETURNING id`;
+        if (revoked.length !== 1) return yield* new SessionWriteUnavailable();
         return absentSessionResponse("/web/session/logout");
       }
       if (bareBinding(url)) return json({ binding: session.id });

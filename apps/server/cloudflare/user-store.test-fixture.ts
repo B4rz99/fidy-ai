@@ -95,6 +95,17 @@ const billingBindings = {
 };
 
 const browserBindings = {
+  FIXTURE_PROVIDER: {
+    type: "worker",
+    worker: "browser-oidc-fixture",
+    exportName: "BrowserOidcFixture",
+  },
+  RESEND_API_KEY: { type: "text" as const, value: "fixture-resend-key" },
+  CLOUDFLARE_ACCESS_ISSUER: {
+    type: "text" as const,
+    value: "https://fixture.cloudflareaccess.com",
+  },
+  CLOUDFLARE_ACCESS_AUDIENCE: { type: "text" as const, value: "fixture-support" },
   KAPSO_API_KEY: { type: "text", value: "test-kapso-key" },
   KAPSO_WEBHOOK_SECRET: { type: "text", value: "test-kapso-secret" },
   WHATSAPP_BUSINESS_PORTFOLIO_ID: { type: "text", value: "portfolio" },

@@ -1,3 +1,4 @@
+import { prepareLocalPreferences } from "../../identity/operations";
 import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect, Option, Schema } from "effect";
 import type { OperationId } from "../../../src/shell/api";
@@ -46,6 +47,9 @@ const owner = <Id extends OperationId, E>(
 ];
 /** Only local, transaction-composable commands. Catalog policy controls eligibility and disclosure. */
 export const localBatchOwners = new Map<string, Prepare>([
+  owner("identity.updateUserPreferences", ({ payload }, { user }) =>
+    Effect.succeed(prepareLocalPreferences({ user, preferences: payload }))
+  ),
   owner("transactions.createTransaction", ({ payload }, { user, current }) =>
     prepareLocalCapture(payload, user, current)
   ),

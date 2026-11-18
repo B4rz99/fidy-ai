@@ -1,3 +1,4 @@
+import { browserSessionBindingHeader } from "../../src/shell/browser-transport/contract";
 import {
   DirectoryWriteUnavailable,
   ExternalEventKey,
@@ -143,6 +144,13 @@ const browserContextRefusal = ({
   }
   return Option.none();
 };
+const matchesMountedRoute = (request: Request, session: string): boolean => {
+  const expected = request.headers.get(browserSessionBindingHeader);
+  return (
+    expected === session ||
+    (expected === null && new URL(request.url).pathname === "/web/session/binding")
+  );
+};
 /** Resolve the bearer for bootstrap and logout. The named User checks the exact current cookie and optional mounted binding. */
 export const routeBrowserSession = Effect.fn(
   function* (
@@ -169,8 +177,11 @@ export const routeBrowserSession = Effect.fn(
     const route = yield* Schema.decodeUnknownEffect(SessionRoute)(
       yield* Effect.tryPromise(() => response.json())
     );
+    if (!matchesMountedRoute(request, route.sessionId)) return noAuthority();
+    const headers = new Headers(request.headers);
+    headers.set(browserSessionBindingHeader, route.sessionId);
     return yield* Effect.tryPromise((signal) =>
-      USER_STORE.getByName(route.userId).fetch(new Request(request, { signal }))
+      USER_STORE.getByName(route.userId).fetch(new Request(request, { headers, signal }))
     );
   },
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))

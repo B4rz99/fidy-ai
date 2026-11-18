@@ -2,8 +2,66 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "d9ea42f5bd1121bb553177b372ca4af961fce929fe047ff7ed1aa1a477528ccd";
+const expectedEdgePolicyDigest = "a6b8b40dda2e1cdec173a1a42b63e905b776d048c042aaa5f241bce6a6a03a24";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/recovery-rotation.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/replacement.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/support.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/email-authentication/internal/local-mailbox.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/email-authentication/internal/local-replacement.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/email-authentication/internal/native-mail-delivery.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/email-authentication/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/email-authentication/runtime.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/identity/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recovery/internal/local-rotation.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recovery/internal/local-support.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recovery/internal/support-recovery.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/recovery/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/internal/identity-change.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/web-authentication/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/web-authentication/operations.ts", import.meta.url)
+  ).text(),
+
   await Bun.file(
     new URL(
       "../../apps/server/cloudflare/canonical-admission/internal/local-batch.ts",

@@ -92,6 +92,82 @@ export const reserveRecoveryUrl = "https://directory.invalid/bootstrap/recovery"
 
 export class DirectoryWriteUnavailable extends Data.TaggedError("DirectoryWriteUnavailable") {}
 
+export const rotateRecoveryRouteUrl = "https://directory.invalid/recovery/rotation";
+const recoveryDigest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+export const RecoveryRotation = Schema.Struct({
+  id: Schema.String.check(Schema.isUUID()),
+  user_id: UserId,
+  prior_digest: recoveryDigest,
+  next_digest: recoveryDigest,
+  revision: Schema.Int,
+  expires_at_ms: Schema.Int,
+});
+export const RecoveryRouteDecision = Schema.Struct({
+  ...RecoveryRotation.fields,
+  decision: Schema.Literals(["reserve", "committed", "cancelled"]),
+});
+
+export const supportAdmissionUrl = "https://directory.invalid/recovery/operator";
+export const supportApprovalUrl = "https://directory.invalid/recovery/approval";
+export const localSupportUrl = "https://user.invalid/recovery/approval";
+export const SupportOperator = Schema.Struct({
+  issuer: Schema.String,
+  subject: Schema.String,
+  issuedAtMs: Schema.Int,
+  expiresAtMs: Schema.Int,
+});
+export const SupportApproval = Schema.Struct({
+  operator: SupportOperator,
+  publicCode: Schema.String,
+  digest: recoveryDigest,
+});
+export const FrozenRecovery = Schema.Struct({
+  id: Schema.String,
+  user_id: UserId,
+  pairing_id: Schema.String,
+  ordinal: Schema.Int,
+  verifier_digest: Schema.String,
+  expires_at_ms: Schema.Int,
+  wrong_attempts: Schema.Int,
+  last_poll_ms: Schema.NullOr(Schema.Int),
+  minimum_poll_seconds: Schema.Int,
+  credential_digest: recoveryDigest,
+  revision: Schema.Int,
+  operator_issuer: Schema.String,
+  operator_subject: Schema.String,
+  operator_issued_ms: Schema.Int,
+  operator_expires_ms: Schema.Int,
+});
+
+export const replaceIdentityUrl = "https://directory.invalid/identity/replace";
+export const localIdentityCommitUrl = "https://user.invalid/identity/commit";
+export const localIdentityCancelUrl = "https://user.invalid/identity/cancel";
+export const emailRouteUrl = "https://directory.invalid/email/route";
+export const ReplacementInput = Schema.Struct({
+  id: Schema.String,
+  kind: Schema.Literals(["email", "whatsapp"]),
+  scope: Schema.String,
+  prior_key: Schema.String,
+  next_key: Schema.String,
+  occurred_at_ms: Schema.Int,
+  expires_at_ms: Schema.Int,
+  expected_user: Schema.NullOr(UserId),
+});
+export const ReservedIdentity = Schema.Struct({
+  ...ReplacementInput.fields,
+  user_id: UserId,
+  revision: Schema.Int,
+  prior_reservation: Schema.String,
+});
+export const IdentityOutcome = Schema.Literals(["committed", "cancelled"]);
+
+export const localRecoveryCheckUrl = "https://user.invalid/recovery/check";
+export const RecoveryCandidate = Schema.Struct({
+  user_id: UserId,
+  digest: recoveryDigest,
+  revision: Schema.Int,
+});
+
 const maximumCallbackIdentifierLength = 200;
 const callbackIdentifier = Schema.NonEmptyString.check(
   Schema.isMaxLength(maximumCallbackIdentifierLength)

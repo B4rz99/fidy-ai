@@ -1,3 +1,4 @@
+import { readLocalProfile } from "../identity/operations";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
 import { localBatchOwners } from "./internal/local-owners";
 import { keywordRuleIdFromPath, localKeywordRules } from "../categories/operations";
@@ -728,6 +729,8 @@ export const executeCanonicalQuery = ({
 const successfulMutationStatus = 200;
 export const isLocalBatchRoute = (id: string): boolean =>
   id === atomicBatchOperation ||
+  id === "identity.updateUserPreferences" ||
+  id === "identity.getCurrentUser" ||
   id === "transactions.updateTransactions" ||
   [
     "categories.createKeywordRule",
@@ -744,6 +747,13 @@ export const dispatchLocalBatchRoute = Effect.fn(
   }) {
     if (unit.operation.id === atomicBatchOperation) {
       return yield* runLocalBatch(unit, localBatchOwners);
+    }
+    if (unit.operation.id === "identity.getCurrentUser") {
+      return yield* runLocalMutation({
+        ...unit,
+        input: Effect.succeedSome(true),
+        work: (_input, user) => readLocalProfile(user),
+      });
     }
     if (unit.operation.id === "categories.listKeywordRules") {
       return yield* runLocalMutation({

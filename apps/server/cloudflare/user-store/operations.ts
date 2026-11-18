@@ -875,6 +875,30 @@ export const userStoreHistory: StoreHistory = {
     { version: 11, id: "native-recurring", statements: recurringSchema },
     { version: 12, id: "atomic-batch-receipts", statements: atomicBatchReceipts },
     { version: 13, id: "external-callback-owners", statements: externalEventSchema() },
+    {
+      version: 14,
+      id: "identity-security-operations",
+      statements: [
+        "CREATE TABLE recovery_rotations(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),prior_digest TEXT NOT NULL,next_digest TEXT NOT NULL,revision INTEGER NOT NULL,expires_at_ms INTEGER NOT NULL,state TEXT NOT NULL CHECK(state IN ('pending','committed','cancelled'))) STRICT",
+        "ALTER TABLE users ADD COLUMN whatsapp_revision INTEGER NOT NULL DEFAULT 1",
+        "CREATE TABLE verified_email_credentials(user_id TEXT PRIMARY KEY REFERENCES users(id),normalized_address TEXT NOT NULL UNIQUE,revision INTEGER NOT NULL,verified_at_ms INTEGER NOT NULL) STRICT",
+        "CREATE TABLE email_replacements(user_id TEXT PRIMARY KEY REFERENCES users(id),work_id TEXT NOT NULL UNIQUE,session_id TEXT NOT NULL REFERENCES web_sessions(id),prior_key TEXT NOT NULL,revision INTEGER NOT NULL,candidate TEXT NOT NULL,created_at_ms INTEGER NOT NULL,expires_at_ms INTEGER NOT NULL,state TEXT NOT NULL CHECK(state IN ('awaiting_delivery','sending','awaiting_proof','rejected','ambiguous','proven')),public_code TEXT,proof_digest BLOB,wrong_attempts INTEGER NOT NULL DEFAULT 0) STRICT",
+        "CREATE TABLE email_replacement_limits(user_id TEXT PRIMARY KEY REFERENCES users(id),reset_at_ms INTEGER NOT NULL,used INTEGER NOT NULL) STRICT",
+        "CREATE TABLE identity_change_outcomes(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL,context_digest BLOB NOT NULL,expires_at_ms INTEGER NOT NULL,state TEXT NOT NULL CHECK(state IN ('committed','cancelled'))) STRICT",
+        "CREATE INDEX local_identity_change_deadline ON identity_change_outcomes(expires_at_ms)",
+        "CREATE TABLE support_recovery_cases(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),pairing_id TEXT NOT NULL UNIQUE,operator_issuer TEXT NOT NULL,operator_subject TEXT NOT NULL,credential_revision INTEGER NOT NULL,opened_at_ms INTEGER NOT NULL,expires_at_ms INTEGER NOT NULL,state TEXT NOT NULL CHECK(state='approved'),closed_at_ms INTEGER NOT NULL) STRICT",
+        "CREATE INDEX recovery_rotation_expiry ON recovery_rotations(state,expires_at_ms)",
+        "ALTER TABLE audit_entries RENAME TO pre_rotation_audit",
+        `CREATE TABLE audit_entries(id TEXT PRIMARY KEY NOT NULL,user_id TEXT NOT NULL REFERENCES users(id),record_type TEXT NOT NULL,session_id TEXT REFERENCES web_sessions(id),pat_id TEXT REFERENCES pats(id),
+        operation TEXT,outcome TEXT,occurred_at_ms INTEGER NOT NULL,CHECK((record_type='session_call' AND session_id IS NOT NULL AND pat_id IS NULL AND ((operation='emailAuthentication.requestEmailReplacement' AND outcome='accepted') OR (operation='emailAuthentication.completeEmailReplacement' AND outcome IN ('replaced','rejected')))) OR (record_type='security_mutation' AND session_id IS NOT NULL AND pat_id IS NULL AND operation='recovery.rotateBackupRecoveryCode' AND outcome IS NULL) OR (record_type='identity_read' AND session_id IS NOT NULL AND pat_id IS NULL AND operation IS NULL AND outcome IS NULL) OR
+        (operation IS NOT NULL AND ((record_type='session_call' AND session_id IS NOT NULL AND pat_id IS NULL AND outcome IS NOT NULL AND outcome IN ('success','validation_failed','not_found')) OR
+        (record_type='credential_call' AND pat_id IS NOT NULL AND session_id IS NULL AND outcome IS NOT NULL AND outcome IN ('accepted','rejected')) OR
+        (record_type='request_admission' AND pat_id IS NOT NULL AND session_id IS NULL AND outcome IS NULL))))) STRICT`,
+        "INSERT INTO audit_entries SELECT * FROM pre_rotation_audit",
+        "DROP TABLE pre_rotation_audit",
+        "CREATE TRIGGER audit_entries_immutable BEFORE UPDATE ON audit_entries BEGIN SELECT RAISE(ABORT,'audit_immutable'); END",
+      ],
+    },
   ],
 };
 

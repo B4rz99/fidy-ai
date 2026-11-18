@@ -9,11 +9,7 @@ import {
   startBrowserPairingEmail,
 } from "../email-authentication/operations";
 import { supportRecoveryPath } from "../recovery/contract";
-import {
-  handleSupportRecovery,
-  retainedRecoveryPairingsQuery,
-  rotateBackupRecoveryCode,
-} from "../recovery/operations";
+import { retainedRecoveryPairingsQuery, rotateBackupRecoveryCode } from "../recovery/operations";
 import { handlePATRequest, patRoute } from "../tokens/operations";
 import { currentWebSessionUser, logoutWebSession } from "../web-session/operations";
 import type { WebAuthenticationRequest } from "./contract";
@@ -79,7 +75,6 @@ const methodNotAllowed = (): Response =>
 
 const supportResponse = ({
   request,
-  db,
   support,
   telemetry,
 }: WebAuthenticationRequest): Effect.Effect<Response, never, HttpClient.HttpClient> => {
@@ -93,7 +88,7 @@ const supportResponse = ({
       workKind: "http_request",
       metadata: { _tag: "Http", method: "POST", route: supportRecoveryPath, status: Option.none() },
     },
-    handleSupportRecovery({ request, db, config: support }).pipe(
+    support.pipe(
       Effect.catchCauseIf(Cause.hasDies, () =>
         telemetry
           .captureFailure({

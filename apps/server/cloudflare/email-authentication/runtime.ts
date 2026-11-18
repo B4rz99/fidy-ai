@@ -1,3 +1,4 @@
+import { deliverPendingReplacement as deliverLocal } from "./internal/native-mail-delivery";
 import { withErasureRecovery } from "../erasure/runtime";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -114,3 +115,5 @@ export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
 
 export const makeEmailAuthenticationErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+export const deliverPendingReplacement: typeof deliverLocal = (...args) => deliverLocal(...args);

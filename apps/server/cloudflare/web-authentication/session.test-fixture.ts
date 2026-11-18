@@ -24,10 +24,7 @@ export const sessionRequest = ({
   }),
   db,
   telemetry,
-  support: {
-    CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",
-    CLOUDFLARE_ACCESS_AUDIENCE: "support",
-  },
+  support: Effect.die("Support recovery is outside this test"),
   publish: () => {
     throw new Error("Session use must not publish authentication work");
   },

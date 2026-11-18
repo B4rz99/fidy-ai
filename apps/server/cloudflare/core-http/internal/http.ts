@@ -1,3 +1,8 @@
+import { nativeSupportRecovery } from "../../recovery/operations";
+import {
+  emailReplacementCompletionPath,
+  emailReplacementPath,
+} from "../../../src/shell/email-authentication/contract";
 import {
   isLocalForwardingOperation,
   prepareBoundReviewItem,
@@ -2050,11 +2055,13 @@ const dispatchCoreHttp = ({
     return bound(
       handleWebAuthentication({
         request,
+
         db: environment.DB,
-        support: {
-          CLOUDFLARE_ACCESS_ISSUER: environment.CLOUDFLARE_ACCESS_ISSUER,
-          CLOUDFLARE_ACCESS_AUDIENCE: environment.CLOUDFLARE_ACCESS_AUDIENCE,
-        },
+        support: nativeSupportRecovery({
+          request,
+          config: environment,
+          directory: Option.fromUndefinedOr(environment.DIRECTORY),
+        }),
         telemetry,
         publish,
       })
@@ -2063,15 +2070,39 @@ const dispatchCoreHttp = ({
   return canonicalOrHealthResponse(request, environment, url.pathname);
 };
 
+const nativeIdentityResponse = (
+  input: RequestExecution
+): Option.Option<Effect.Effect<Response>> => {
+  const { request, environment } = input;
+  const path = new URL(request.url).pathname;
+  if (
+    request.method === "POST" &&
+    ["/recovery/backup-code/rotate", emailReplacementPath, emailReplacementCompletionPath].includes(
+      path
+    )
+  ) {
+    return Option.some(routeSessionRequest({ request, environment }));
+  }
+  if (request.method === "GET" && path === "/user" && request.headers.has("authorization")) {
+    return Option.some(routePATRequest({ request, environment }));
+  }
+  if (
+    ["GET /user", "GET /web/session/binding", "POST /web/session/logout"].includes(
+      request.method + " " + path
+    )
+  ) {
+    return Option.some(routeBrowserSession(request, environment));
+  }
+  return Option.none();
+};
+
 /** Each owner validates browser binding before dispatch; canonical admission combines it with pressure. */
 export const executeCoreHttp = (
   input: RequestExecution
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
-  (input.request.method === "GET" &&
-    ["/web/session/binding", "/user"].includes(new URL(input.request.url).pathname)) ||
-  (input.request.method === "POST" && new URL(input.request.url).pathname === "/web/session/logout")
-    ? routeBrowserSession(input.request, input.environment)
-    : initialBrowserSessionBindingResponse({
+  nativeIdentityResponse(input).pipe(
+    Option.getOrElse(() =>
+      initialBrowserSessionBindingResponse({
         request: input.request,
         db: input.environment.DB,
         browserOrigin: input.environment.BROWSER_ORIGIN,
@@ -2079,4 +2110,6 @@ export const executeCoreHttp = (
         Effect.flatMap(
           Option.match({ onNone: () => dispatchCoreHttp(input), onSome: Effect.succeed })
         )
-      );
+      )
+    )
+  );

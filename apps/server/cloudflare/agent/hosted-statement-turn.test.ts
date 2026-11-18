@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import { TranscriptText } from "../../src/core/agent/contract";
 import {
   UserId,
@@ -254,6 +255,7 @@ it.each([
               executeMutation: Option.none(),
               deliver: {
                 _tag: "WhatsApp",
+                callbackOwner: retainedAgentCallbackOwner,
                 contextualReplyQuery: Option.none(),
                 send: sends,
               },
@@ -268,7 +270,12 @@ it.each([
           checkpoint: publication,
           start: startDocument,
           inference: inferenceModel,
-          deliver: () => ({ _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends }),
+          deliver: () => ({
+            _tag: "WhatsApp",
+            callbackOwner: retainedAgentCallbackOwner,
+            contextualReplyQuery: Option.none(),
+            send: sends,
+          }),
         }).pipe(
           assertStatementPublicationWake({ refused: refusal !== "none", checkpoint: publication })
         );
@@ -283,7 +290,12 @@ it.each([
           db,
           bucket,
           inference: inferenceModel,
-          deliver: () => ({ _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends }),
+          deliver: () => ({
+            _tag: "WhatsApp",
+            callbackOwner: retainedAgentCallbackOwner,
+            contextualReplyQuery: Option.none(),
+            send: sends,
+          }),
         });
         yield* finishLatestWhatsAppFixture({ db, subject: caller });
         const review = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(
@@ -381,6 +393,7 @@ it.each([
             executeMutation: Option.none(),
             deliver: {
               _tag: "WhatsApp",
+              callbackOwner: retainedAgentCallbackOwner,
               contextualReplyQuery: Option.none(),
               send: () =>
                 Effect.succeed({
@@ -428,6 +441,7 @@ it.each([
             executeMutation: Option.none(),
             deliver: {
               _tag: "WhatsApp",
+              callbackOwner: retainedAgentCallbackOwner,
               contextualReplyQuery: Option.none(),
               send: () =>
                 Effect.succeed({
@@ -531,7 +545,12 @@ it.each([
               text,
               inference: model,
               executeMutation: Option.none(),
-              deliver: { _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends },
+              deliver: {
+                _tag: "WhatsApp",
+                callbackOwner: retainedAgentCallbackOwner,
+                contextualReplyQuery: Option.none(),
+                send: sends,
+              },
               signal: makeAbortController().signal,
               scheduleRecovery: () => Promise.resolve(),
             },
@@ -622,6 +641,7 @@ it.each([
             executeMutation: Option.none(),
             deliver: {
               _tag: "WhatsApp",
+              callbackOwner: retainedAgentCallbackOwner,
               contextualReplyQuery: Option.none(),
               send: () => Effect.die(new Error("Foreign confirmation must not deliver")),
             },
@@ -665,6 +685,7 @@ it.each([
             inference: inferenceModel,
             deliver: () => ({
               _tag: "WhatsApp",
+              callbackOwner: retainedAgentCallbackOwner,
               contextualReplyQuery: Option.none(),
               send: sends,
             }),

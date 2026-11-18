@@ -1,9 +1,11 @@
+import type { ExternalEventBindings } from "../directory/contract";
 import type { ProactivityDeliveryWork } from "../insights/contract";
 
 /** Queue composition receives only native handoff bindings. */
 import type { BillingWorkRouting } from "../subscription/contract";
 
 export type CoreQueueEnvironment = BillingWorkRouting &
+  Partial<ExternalEventBindings> &
   Readonly<{
     DB: D1Database;
     RELEASE_GIT_SHA: string;

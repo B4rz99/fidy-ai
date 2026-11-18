@@ -1,4 +1,7 @@
-import { expect, it } from "vitest";
+import type { BillingObservationWorkflow } from "./contract";
+import { offerNativeBillingWork } from "./runtime";
+import { receiveWompiBillingEvent } from "./internal/billing-workflow";
+import { expect, it, vi } from "vitest";
 import { Effect, Option } from "effect";
 import { verifiedWompiEventHint } from "./internal/wompi-event";
 
@@ -70,5 +73,72 @@ it("rejects changed status, forged checksum, unsigned ids and a different provid
       expect(yield* Effect.tryPromise(() => verify({ ...event, environment: "test" }))).toEqual(
         Option.none()
       );
+    })
+  ));
+
+it("acknowledges the signed Wompi event only after the billing Queue accepts its bounded lookup hint", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const messages: unknown[] = [];
+      const ingress = (send: (value: unknown) => Promise<void>): Effect.Effect<Response> =>
+        receiveWompiBillingEvent({
+          request: request(event),
+          environment: {
+            WOMPI_ENVIRONMENT: "production",
+            WOMPI_EVENT_SECRET: secret,
+            BILLING_COLLECTION_QUEUE: { send },
+          },
+        });
+      expect((yield* ingress(() => Promise.reject(new Error("queue unavailable")))).status).toBe(
+        503
+      );
+      expect(
+        (yield* ingress((value) => {
+          messages.push(value);
+          return Promise.resolve();
+        })).status
+      ).toBe(200);
+      expect(messages).toEqual([
+        {
+          _tag: "WompiBillingEvent",
+          environment: "production",
+          transactionId: "1234-1610641025-49201",
+          signedAt: 1530291411,
+          signedStatus: "APPROVED",
+        },
+      ]);
+    })
+  ));
+
+it("acknowledges duplicate billing work only when its Workflow is active, complete, or successfully restarted", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let status: InstanceStatus["status"] = "unknown";
+      const restart = vi.fn(() => Promise.resolve());
+      const workflow: BillingObservationWorkflow = {
+        create: () => Promise.reject(new Error("creation unavailable")),
+        get: () => Promise.resolve({ status: () => Promise.resolve({ status }), restart }),
+      };
+      const offer = offerNativeBillingWork(workflow, {
+        _tag: "WompiBillingEvent",
+        environment: "production",
+        signedStatus: "APPROVED",
+        signedAt: event.timestamp,
+        transactionId: event.data.transaction.id,
+      });
+      for (const unavailable of ["unknown", "paused", "terminated"] as const) {
+        status = unavailable;
+        expect(yield* Effect.isFailure(offer)).toBe(true);
+      }
+      for (const confirmed of ["queued", "running", "waiting", "complete"] as const) {
+        status = confirmed;
+        expect(yield* Effect.isSuccess(offer)).toBe(true);
+      }
+      expect(restart).not.toHaveBeenCalled();
+      status = "errored";
+      restart.mockRejectedValueOnce(new Error("restart unavailable"));
+      expect(yield* Effect.isFailure(offer)).toBe(true);
+      expect(yield* Effect.isSuccess(offer)).toBe(true);
+      expect(restart).toHaveBeenCalledTimes(2);
     })
   ));

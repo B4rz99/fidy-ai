@@ -1,4 +1,8 @@
 import {
+  dispatchLocalForwarding as dispatchLocalForwardingOwned,
+  isLocalForwardingOperation as isLocalForwardingOperationOwned,
+} from "./internal/native-forwarding";
+import {
   browseReviewPageContext as browseContext,
   prepareBoundReviewPageContext as prepareContext,
 } from "./internal/review-page-context";
@@ -284,3 +288,8 @@ export const advanceStatementExtraction = (
     });
     return result === "continue" ? "continue" : "settled";
   });
+
+export const dispatchLocalForwarding: typeof dispatchLocalForwardingOwned = (...args) =>
+  dispatchLocalForwardingOwned(...args);
+export const isLocalForwardingOperation = (id: string): boolean =>
+  isLocalForwardingOperationOwned(id);

@@ -30,12 +30,9 @@ import {
   generateInsight,
   recordWeeklySummaryDecision,
 } from "./insights/operations";
-import { UserTransactionCoordinator } from "./transactions/runtime";
+import { RetainedWhatsAppCoordinator as UserTransactionCoordinator } from "./coordinator-test-harness";
 import { categoryIds } from "../src/core/categories/contract";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
-import {} from "cloudflare:workers";
-
-import {} from "./insights/contract";
 
 export type ProactivityCoordinator = Pick<UserTransactionCoordinator, "fetch">;
 /** Compose the real coordinator with deliberately unavailable inference. */

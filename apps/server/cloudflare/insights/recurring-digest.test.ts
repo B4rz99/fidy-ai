@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import { executeHostedStatementQuery } from "../canonical-operations/operations";
 import type { WorkflowStep } from "cloudflare:workers";
 import type { Cause } from "effect";
@@ -548,6 +549,7 @@ const setupDigestCoordinator = (
       userId: proactivityTestUsers[0],
       environment: {
         DB: db,
+        ...retainedAgentCallbackOwner,
         PROACTIVITY_ENABLED: "enabled",
         KAPSO_API_KEY: "test-only",
         PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
@@ -1105,6 +1107,7 @@ it("recovers recurring work independently through Maintenance, identity-only Que
       const environment = {
         WEEKLY_DELIVERY_WORKFLOW: workflow,
         DB: db,
+        ...retainedAgentCallbackOwner,
         PROACTIVITY_ENABLED: "enabled",
         KAPSO_API_KEY: "test-only",
         PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(

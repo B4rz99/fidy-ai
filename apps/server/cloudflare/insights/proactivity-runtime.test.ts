@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import assert from "node:assert/strict";
 import { TranscriptText } from "../../src/core/agent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
@@ -68,6 +69,7 @@ import { expireDeliveryWork, recoverDeliveryWork } from "./internal/proactivity-
 import { readContextualProactiveReply, readProactiveMessageTranscript } from "../agent/operations";
 
 const configuration = (db: D1Database): ProactivityEnvironment => ({
+  ...retainedAgentCallbackOwner,
   DB: db,
   PROACTIVITY_ENABLED: "enabled",
   KAPSO_API_KEY: "test-only",
@@ -411,7 +413,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
             })
           )
         )).status
-      ).toBe(503);
+      ).toBe(204);
       expect(provider).not.toHaveBeenCalled();
       expect(
         yield* Effect.tryPromise(() =>

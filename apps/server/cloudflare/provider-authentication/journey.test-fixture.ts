@@ -1,4 +1,8 @@
-import { type Journey, registeredChatDirectory } from "./legacy-disclosure.test-fixture";
+import {
+  type Journey,
+  legacyCallbackBindings,
+  registeredChatDirectory,
+} from "./legacy-disclosure.test-fixture";
 import { openAiTestKey } from "../openai.test-fixture";
 import { Effect, Option, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -47,15 +51,16 @@ const sendThroughWorkers =
           fetch: (request): Promise<Response> =>
             coreWorker.fetch(new Request(request), {
               DB: db,
-              ...(Option.isSome(hosted)
-                ? {
-                    DIRECTORY: registeredChatDirectory({
-                      userId: hosted.value.userId,
-                      portfolio: "portfolio",
-                      bsuid: "CO.Person1",
-                    }),
-                  }
-                : {}),
+              ...legacyCallbackBindings({
+                db,
+                identity: Option.map(hosted, (subject) =>
+                  registeredChatDirectory({
+                    userId: subject.userId,
+                    portfolio: "portfolio",
+                    bsuid: "CO.Person1",
+                  })
+                ),
+              }),
               OPENAI_API_KEY: openAiTestKey({ run: () => Promise.reject(new Error("unused")) }),
               CONTRACT_DIGEST: "a".repeat(contractDigestLength),
               RELEASE_GIT_SHA: "a".repeat(gitRevisionLength),

@@ -42,7 +42,7 @@ export type CoreHttpEnvironment = ProviderEnvironment &
       BROWSER_PAIRING_EMAIL_QUEUE: Queue;
       EMAIL_REPLACEMENT_QUEUE: Queue;
       BILLING_COLLECTION_QUEUE: Queue;
-      HOSTED_WHATSAPP_QUEUE: Queue;
+      HOSTED_WHATSAPP_QUEUE: Readonly<{ send: (body: unknown) => Promise<unknown> }>;
       STATEMENT_STAGING_BUCKET: R2Bucket;
       EMAIL_BUCKET: R2Bucket;
     }>

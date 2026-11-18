@@ -1,4 +1,4 @@
-import type { UserStoreBindings } from "../directory/contract";
+import { type ExternalEventBindings, type UserStoreBindings } from "../directory/contract";
 import {
   type HostedAgentSessionId,
   TranscriptText,
@@ -247,7 +247,14 @@ export type WhatsAppAuthenticatedInbound = Readonly<{
 }>;
 
 /** Binding and callbacks required by the authenticated Consent ingress composition. */
-export type WhatsAppIngressEnvironment = Partial<Pick<UserStoreBindings, "DIRECTORY">> &
+export type WhatsAppIngressEnvironment = Partial<
+  Pick<UserStoreBindings, "DIRECTORY"> &
+    Readonly<{
+      HOSTED_WHATSAPP_QUEUE: Readonly<{
+        send: (event: typeof WhatsAppLifecycleWork.Type) => Promise<unknown>;
+      }>;
+    }>
+> &
   Readonly<{
     readonly BROWSER_ORIGIN: string;
     readonly DB: D1Database;
@@ -258,7 +265,6 @@ export type WhatsAppIngressEnvironment = Partial<Pick<UserStoreBindings, "DIRECT
     readonly onHostedText: (
       admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission
     ) => Promise<Response>;
-    readonly onHostedStatus: (admission: WhatsAppStatusAdmission) => Promise<Response>;
   }>;
 
 /** Bounded operational sample containing no User identity, exact text, routing or provider evidence. */
@@ -280,3 +286,59 @@ export class WhatsAppUnavailable extends Data.TaggedError("WhatsAppUnavailable")
 
 /** Existing free-form reply window from original verified inbound activity, in milliseconds. */
 export const whatsAppServiceWindowMilliseconds = 86_400_000;
+
+export const DeliveryFamily = Schema.Literals([
+  "hosted",
+  "proactivity",
+  "insight",
+  "weekly-question",
+  "disclosure",
+]);
+const maximumDeliveryOperationLength = 128;
+const deliveryOperation = Schema.NonEmptyString.check(
+  Schema.isMaxLength(maximumDeliveryOperationLength)
+);
+export const DeliverySend = Schema.Struct({
+  userId: UserId,
+  family: DeliveryFamily,
+  operationId: deliveryOperation,
+  correlation: HostedDeliveryCorrelationToken,
+  portfolio: WhatsAppBusinessPortfolioId,
+  bsuid: WhatsAppBusinessScopedUserId,
+  endpoint: WhatsAppBusinessPhoneNumberId,
+  sandboxPhone: Schema.NullOr(E164PhoneNumber),
+  deadline: Schema.NullOr(Schema.Int),
+  contentDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+});
+export const WhatsAppLifecycleWork = Schema.TaggedStruct("WhatsAppLifecycleEvent", {
+  portfolio: WhatsAppBusinessPortfolioId,
+  correlationToken: HostedDeliveryCorrelationToken,
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
+  providerMessageId: WhatsAppProviderMessageId,
+  recipientUserId: Schema.optionalKey(WhatsAppBusinessScopedUserId),
+  recipientPhone: Schema.optionalKey(E164PhoneNumber),
+  outcome: Schema.Literals(["sent", "delivered", "failed"]),
+  occurredAtMs: Schema.Int,
+  receivedAtMs: Schema.Int,
+});
+export const DeliveredObservation = Schema.Struct({
+  userId: UserId,
+  operationId: deliveryOperation,
+  family: DeliveryFamily,
+  evidence: WhatsAppLifecycleWork,
+});
+export const SendReply = Schema.Struct({
+  userId: UserId,
+  operationId: deliveryOperation,
+  family: DeliveryFamily,
+  endpoint: WhatsAppBusinessPhoneNumberId,
+  correlation: HostedDeliveryCorrelationToken,
+  state: Schema.Literals(["accepted", "rejected", "ambiguous"]),
+  message: Schema.NullOr(WhatsAppProviderMessageId),
+});
+export const reserveDeliveryUrl = "https://user.invalid/work/whatsapp/reserve";
+export const claimDeliveryUrl = "https://user.invalid/work/whatsapp/claim";
+export const statusDeliveryUrl = "https://user.invalid/work/whatsapp/status";
+export const replyDeliveryUrl = "https://user.invalid/work/whatsapp/reply";
+
+export type NativeDeliveryOwner = Readonly<{ callbackOwner: Partial<ExternalEventBindings> }>;

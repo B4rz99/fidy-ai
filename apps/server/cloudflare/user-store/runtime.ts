@@ -6,6 +6,21 @@ import {
   repairLocalRecurringAlarm,
 } from "../recurring/operations";
 import { dispatchLocalRecurringPlans, isLocalRecurringPlan } from "../recurring-plans/operations";
+import {
+  claimDeliveryUrl,
+  replyDeliveryUrl,
+  reserveDeliveryUrl,
+  statusDeliveryUrl,
+} from "../whatsapp/contract";
+import { nativeDeliveryRequest } from "../whatsapp/runtime";
+import {
+  type LocalSourceCancellationWork,
+  type WompiBindings,
+  collectUserBillingUrl,
+  settleUserBillingUrl,
+} from "../subscription/contract";
+import { handleNativeBillingCallback, handleSourceCancellationWork } from "../subscription/runtime";
+import { dispatchLocalForwarding, isLocalForwardingOperation } from "../ingestion/operations";
 import { dispatchLocalDashboard, isLocalDashboardOperation } from "../dashboard/operations";
 import { dispatchLocalBudget, isLocalBudgetOperation } from "../budgets/operations";
 import { browserSessionRequest } from "./internal/browser-session";
@@ -17,8 +32,6 @@ import {
   offerDueSourceCancellations,
   repairCancellationAlarm,
 } from "../subscription/operations";
-import { handleSourceCancellationWork } from "../subscription/runtime";
-import type { LocalSourceCancellationWork, WompiBindings } from "../subscription/contract";
 import { DurableObject } from "cloudflare:workers";
 import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
 import { Clock, Effect, Option, Result } from "effect";
@@ -141,6 +154,20 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if (isLocalBudgetOperation(selected.id)) {
       return Option.some(this.runtime.runPromise(dispatchLocalBudget(unit)));
     }
+    return this.financialOperation(unit);
+  }
+  private financialOperation(unit: {
+    request: Request;
+    owns: (id: string) => boolean;
+    operation: CatalogOperation;
+    storage: DurableObjectStorage;
+  }): Option.Option<Promise<Response>> {
+    const selected = unit.operation;
+    if (isLocalForwardingOperation(selected.id)) {
+      return Option.some(
+        this.runtime.runPromise(dispatchLocalForwarding({ ...unit, directory: this.env.DIRECTORY }))
+      );
+    }
     if (isLocalTransactionOperation(selected.id)) {
       return Option.some(this.runtime.runPromise(dispatchLocalTransaction(unit)));
     }
@@ -185,7 +212,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         if (registration === "unavailable" && ownerCheckRequest(request)) {
           return new Response(null, { status: uncertainCheckStatus });
         }
-        return this.dispatch(request, registration === "registered");
+        return this.registeredRequest(request, registration === "registered");
       },
       () => canonicalAdmissionUnavailable()
     );
@@ -213,6 +240,33 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         );
       })
     );
+  }
+
+  private registeredRequest(request: Request, registered: boolean): Promise<Response> {
+    const owns = (userId: string): boolean => registered && this.owns(userId);
+    if (
+      request.method === "POST" &&
+      [claimDeliveryUrl, reserveDeliveryUrl, replyDeliveryUrl, statusDeliveryUrl].includes(
+        request.url
+      )
+    ) {
+      return this.runtime.runPromise(
+        nativeDeliveryRequest(request, this.env, owns).pipe(
+          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+        )
+      );
+    }
+    if (
+      request.method === "POST" &&
+      [collectUserBillingUrl, settleUserBillingUrl].includes(request.url)
+    ) {
+      return this.runtime.runPromise(
+        handleNativeBillingCallback(request, this.env, owns).pipe(
+          Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+        )
+      );
+    }
+    return this.dispatch(request, registered);
   }
 
   private dispatch(request: Request, registered: boolean): Promise<Response> {

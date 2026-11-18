@@ -1,3 +1,4 @@
+import type { ExternalEventBindings } from "../../directory/contract";
 import { SecureRandom } from "effect/crypto";
 import { plainReply } from "./plain-reply";
 import { captureWithoutCommit, transactionReceipt } from "./capture-reply";
@@ -9,7 +10,11 @@ import { TelemetryAttempt, boundedTelemetryCount } from "../../../src/shell/obse
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { readReminderPauseNotice, readWeeklyPauseNotice } from "../../insights/operations";
 import type { InsightUnavailable } from "../../insights/contract";
-import type { WhatsAppDocument } from "../../../src/shell/channels/whatsapp/contract";
+import {
+  type HostedDeliveryCorrelationToken,
+  type WhatsAppDocument,
+  type WhatsAppProviderMessageId,
+} from "../../../src/shell/channels/whatsapp/contract";
 import type { OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import {
   prepareStatementDocumentReply,
@@ -67,10 +72,6 @@ import {
 import { Cause, Clock, DateTime, Duration, Effect, Exit, Option, Schedule, Schema } from "effect";
 
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
-import {
-  type HostedDeliveryCorrelationToken,
-  type WhatsAppProviderMessageId,
-} from "../../../src/shell/channels/whatsapp/contract";
 import { type TransactionSubject } from "../../canonical-work/operations";
 import { newId } from "../../secret-material/operations";
 import { makeSecureRandom } from "../../secret-material/runtime";
@@ -206,6 +207,7 @@ export const browserHostedDelivery: HostedDelivery = (proposal) =>
   Promise.resolve(Response.json(proposal, { status: 202, headers: noStore }));
 
 type WhatsAppHostedDelivery = Readonly<{
+  callbackOwner: Partial<ExternalEventBindings>;
   _tag: "WhatsApp";
   contextualReplyQuery: Option.Option<OwnedStatement>;
   send: (
@@ -2010,6 +2012,7 @@ const proposeWhatsAppDelivery = ({
 }>): Effect.Effect<Response, HostedWorkFailure> =>
   Effect.gen(function* () {
     const submitted = yield* submitHostedReply({
+      callbackOwner: deliver.callbackOwner,
       db,
       userId,
       turnId,

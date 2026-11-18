@@ -5,9 +5,12 @@ import {
   withStoreAdmission,
   withStoreCapacity,
 } from "../../runtime/sqlite/operations";
-import type { QuotaStatus } from "../../../src/core/quotas/contract";
+import {
+  CanonicalRetryKey,
+  type QuotaStatus,
+  canonicalRetryLifetimeMs,
+} from "../../../src/core/quotas/contract";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { CanonicalRetryKey, canonicalRetryLifetimeMs } from "../../../src/core/quotas/contract";
 import { allowancePeriod } from "../../../src/core/quotas/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
@@ -329,7 +332,7 @@ export const complete = Effect.fn(function* (
     current,
   });
 });
-const deniedAccess = (call: Call): boolean =>
+const deniedAccess = (call: Pick<Call, "subject" | "operation">): boolean =>
   "patId" in call.subject &&
   decideOperationAccess(call.operation.policy.access, {
     _tag: "PAT",
@@ -337,6 +340,18 @@ const deniedAccess = (call: Call): boolean =>
   })._tag !== "Allowed";
 export const localRetryKey = (request: Request): ReturnType<Headers["get"]> =>
   request.headers.has("authorization") ? request.headers.get("Fidy-Retry-Key") : null;
+/** Preliminary check before an external reservation. The canonical unit resolves live proof again after the RPC. */
+export const localPreparationSubject = Effect.fn(function* (
+  request: Request,
+  owns: (user: string) => boolean,
+  operation: CatalogOperation
+) {
+  const resolve = yield* localProof(request, owns);
+  const subject = yield* resolve(yield* Clock.currentTimeMillis);
+  return typeof subject === "string" || deniedAccess({ subject, operation })
+    ? Option.none<UserId>()
+    : Option.some(subject.userId);
+});
 const prepareIdentity = Effect.fn(function* (request: Request, operation: CatalogOperation) {
   const valid = yield* validatedCanonicalInput({ request, operation });
   const key = operation.method !== "GET" ? localRetryKey(request) : null;

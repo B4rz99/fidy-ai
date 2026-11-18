@@ -1,11 +1,10 @@
-import { directoryDeadline, drainBootstrapExpiry } from "./internal/expiry";
-import { unavailable } from "../browser-login/operations";
-import { channelApprovalEvidence } from "./internal/channel";
 import {
   PATRoute,
   SessionRoute,
   channelInspectUrl,
   directoryName,
+  externalLookupUrl,
+  externalReserveUrl,
   handoffCancelUrl,
   handoffInspectUrl,
   patRouteUrl,
@@ -13,8 +12,13 @@ import {
   reserveRecoveryUrl,
   sessionRouteUrl,
   sourcePressureUrl,
+  statusLookupAdmissionUrl,
   whatsappBootstrapUrl,
 } from "./contract";
+import { externalEventRequest } from "./internal/external-events";
+import { directoryDeadline, drainBootstrapExpiry } from "./internal/expiry";
+import { unavailable } from "../browser-login/operations";
+import { channelApprovalEvidence } from "./internal/channel";
 import { whatsappBootstrap } from "./internal/whatsapp";
 
 import { admitBootstrap } from "./internal/admission";
@@ -196,6 +200,9 @@ const pairRequest = Effect.fn(function* (request: Request, environment: Director
     : pollPairing(request, environment.USER_STORE);
 });
 const internalRequest = Effect.fn(function* (request: Request, environment: DirectoryEnvironment) {
+  if ([statusLookupAdmissionUrl, externalLookupUrl, externalReserveUrl].includes(request.url)) {
+    return yield* externalEventRequest(request);
+  }
   switch (request.url) {
     case handoffInspectUrl:
     case channelInspectUrl:

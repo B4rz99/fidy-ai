@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import {
   publishOwnedStatement,
   stageOwnedStatement,
@@ -72,6 +73,7 @@ export const exerciseTurn = Effect.fn(function* ({
     inference: model,
     deliver: () => ({
       _tag: "WhatsApp",
+      callbackOwner: retainedAgentCallbackOwner,
       contextualReplyQuery: Option.none(),
       send: ({
         text,

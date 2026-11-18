@@ -1,3 +1,4 @@
+import { externalEventSchema } from "./internal/external-event-schema";
 import { registerUserLifetime as registerReservedLifetime } from "./internal/registration";
 import { Effect, Exit, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
@@ -873,6 +874,7 @@ export const userStoreHistory: StoreHistory = {
     },
     { version: 11, id: "native-recurring", statements: recurringSchema },
     { version: 12, id: "atomic-batch-receipts", statements: atomicBatchReceipts },
+    { version: 13, id: "external-callback-owners", statements: externalEventSchema() },
   ],
 };
 

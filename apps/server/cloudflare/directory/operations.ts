@@ -1,4 +1,20 @@
 import {
+  DirectoryWriteUnavailable,
+  ExternalEventKey,
+  type ExternalEventNamespace,
+  ExternalEventRoute,
+  PATRoute,
+  SessionRoute,
+  type UserStoreBindings,
+  directoryName,
+  externalLookupUrl,
+  externalReserveUrl,
+  patRouteHeader,
+  patRouteUrl,
+  sessionRouteUrl,
+  sourcePressureUrl,
+} from "./contract";
+import {
   absentSessionResponse,
   readBoundWebSessionProof,
   sessionCookie,
@@ -13,16 +29,7 @@ import {
   rateLimited,
 } from "../canonical-admission/operations";
 
-import {
-  PATRoute,
-  SessionRoute,
-  type UserStoreBindings,
-  directoryName,
-  patRouteHeader,
-  patRouteUrl,
-  sessionRouteUrl,
-  sourcePressureUrl,
-} from "./contract";
+const noContentStatus = 204;
 
 const missingStatus = 404;
 
@@ -168,3 +175,30 @@ export const routeBrowserSession = Effect.fn(
   },
   Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
 );
+
+export const reserveExternalEventRoute = Effect.fn(function* (
+  directory: ExternalEventNamespace,
+  route: typeof ExternalEventRoute.Type
+) {
+  const body = yield* Schema.encodeEffect(Schema.fromJsonString(ExternalEventRoute))(route);
+  const reply = yield* Effect.tryPromise((signal) =>
+    directory.getByName(directoryName).fetch(externalReserveUrl, { method: "POST", body, signal })
+  );
+  if (reply.status !== noContentStatus) return yield* new DirectoryWriteUnavailable();
+});
+export const lookupExternalEventRoute = Effect.fn(function* (
+  directory: ExternalEventNamespace,
+  key: typeof ExternalEventKey.Type
+) {
+  const body = yield* Schema.encodeEffect(Schema.fromJsonString(ExternalEventKey))(key);
+  const reply = yield* Effect.tryPromise((signal) =>
+    directory.getByName(directoryName).fetch(externalLookupUrl, { method: "POST", body, signal })
+  );
+  if (reply.status === missingRouteStatus) return Option.none<typeof ExternalEventRoute.Type>();
+  if (!reply.ok) return yield* new DirectoryWriteUnavailable();
+  return Option.some(
+    yield* Schema.decodeUnknownEffect(ExternalEventRoute)(
+      yield* Effect.tryPromise(() => reply.json())
+    )
+  );
+});

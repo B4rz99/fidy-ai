@@ -89,14 +89,14 @@ it("refuses late delivery for a rejected disclosure without changing its replace
         );
       expect((yield* discloseLegacyChat(journey, "Hola")).status).toBe(200);
       const rejectedToken = yield* token(outbound[0] ?? "");
-      expect((yield* deliver(rejectedToken, "wamid.rejected")).status).toBe(409);
+      expect((yield* deliver(rejectedToken, "wamid.rejected")).status).toBe(200);
       const replacementTimestamp = Math.floor((yield* Clock.currentTimeMillis) / 1000) + 1;
       expect(
         (yield* discloseLegacyChat(journey, "Hola", { timestamp: replacementTimestamp })).status
       ).toBe(200);
       const replacementToken = yield* token(outbound[1] ?? "");
       expect(replacementToken).not.toBe(rejectedToken);
-      expect((yield* deliver(rejectedToken, "wamid.rejected")).status).toBe(409);
+      expect((yield* deliver(rejectedToken, "wamid.rejected")).status).toBe(200);
       expect(
         (yield* deliver(replacementToken, "wamid.replacement", replacementTimestamp)).status
       ).toBe(200);

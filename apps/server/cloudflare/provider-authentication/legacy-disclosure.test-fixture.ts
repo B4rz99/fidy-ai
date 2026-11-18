@@ -1,4 +1,19 @@
-import { type UserStoreBindings, directoryName, whatsappBootstrapUrl } from "../directory/contract";
+import { admitStatusLookup } from "../whatsapp/operations";
+import { WhatsAppLifecycleWork } from "../whatsapp/contract";
+import { recordConsentDelivery } from "../consent/ingress/operations";
+import { DisclosureDeliveryCorrelationToken } from "../../src/core/provider-evidence/contract";
+import {
+  StatusLookupCoordinates,
+  type UserStoreBindings,
+  directoryName,
+  statusLookupAdmissionUrl,
+  whatsappBootstrapUrl,
+} from "../directory/contract";
+import {
+  WhatsAppBusinessPhoneNumberId,
+  WhatsAppProviderMessageId,
+  maxWhatsAppFutureTimestampMinutes,
+} from "../../src/shell/channels/whatsapp/contract";
 import { type Digest, type SecureRandom } from "effect/crypto";
 import {
   type Cause,
@@ -16,7 +31,6 @@ import { makeConsentIngress } from "../consent/ingress/runtime";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { authenticateWhatsAppInbound } from "../../src/shell/channels/whatsapp/operations";
 import { Sha256Digest } from "../../src/shell/consent/contract";
-import { maxWhatsAppFutureTimestampMinutes } from "../../src/shell/channels/whatsapp/contract";
 import { receiveHandoffText } from "./internal/whatsapp-handoff";
 import { makeProviderHandoffSender } from "../../src/shell/provider-authentication/runtime";
 import { TestCrypto } from "../../src/shell/testing/crypto-harness";
@@ -205,4 +219,66 @@ export const registeredChatDirectory = ({
       });
     },
   }),
+});
+
+/** Bind the retained D1 disclosure fixtures to their historical resource counters. Live callbacks use the Directory and native Queue. */
+export const legacyCallbackBindings = ({
+  db,
+  identity,
+}: {
+  db: D1Database;
+  identity: Option.Option<UserStoreBindings["DIRECTORY"]>;
+}): Readonly<{ DIRECTORY: UserStoreBindings["DIRECTORY"]; HOSTED_WHATSAPP_QUEUE: Queue }> => ({
+  DIRECTORY: {
+    getByName: (name: string) => ({
+      fetch: (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const request = new Request(url, init);
+        if (request.url !== statusLookupAdmissionUrl) {
+          return Option.isSome(identity)
+            ? identity.value.getByName(name).fetch(request)
+            : Promise.resolve(new Response(null, { status: 404 }));
+        }
+        return Effect.runPromise(
+          Effect.gen(function* () {
+            const proof = yield* Schema.decodeUnknownEffect(StatusLookupCoordinates)(
+              yield* Effect.tryPromise(() => request.json())
+            );
+            yield* admitStatusLookup({
+              database: db,
+              request: {
+                receivedAt: yield* DateTime.now,
+                status: proof.status,
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make(proof.endpoint),
+                messageId: WhatsAppProviderMessageId.make(proof.messageId),
+              },
+            });
+            return new Response(null, { status: 204 });
+          }).pipe(Effect.orElseSucceed(() => new Response(null, { status: 503 })))
+        );
+      },
+    }),
+  },
+  HOSTED_WHATSAPP_QUEUE: {
+    metrics: () => Promise.resolve({ backlogBytes: 0, backlogCount: 0 }),
+    sendBatch: () => Promise.reject(new Error("Unexpected batch")),
+    send: (body: unknown) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const event = Schema.decodeUnknownOption(WhatsAppLifecycleWork)(body);
+          if (Option.isNone(event) || event.value.outcome !== "delivered") return;
+          yield* recordConsentDelivery({
+            db,
+            input: {
+              phoneNumberId: event.value.businessPhoneNumberId,
+              correlationToken: DisclosureDeliveryCorrelationToken.make(
+                event.value.correlationToken
+              ),
+              messageId: event.value.providerMessageId,
+              occurredAtMs: event.value.occurredAtMs,
+              receivedAtMs: event.value.receivedAtMs,
+            },
+          });
+        })
+      ).then(() => ({ metadata: { metrics: { backlogBytes: 0, backlogCount: 0 } } })),
+  },
 });

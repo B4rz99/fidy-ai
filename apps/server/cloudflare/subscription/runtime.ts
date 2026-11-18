@@ -1,3 +1,29 @@
+import { Hex } from "effect/encoding";
+import { digestBytes } from "../secret-material/operations";
+import {
+  type BillingCollectionFailure,
+  type BillingObservationWorkflow,
+  type BillingQueuePublisher,
+  type BillingRuntime,
+  type BillingWorkRouting,
+  type BillingWorkflowActivity,
+  type EnrollmentEnvironment,
+  type LocalBillingCollection,
+  LocalSourceCancellationWork,
+  type PricingEnvironment,
+  type RefundDispatchInput,
+  type RefundReceiveInput,
+  type RefundSupportEnvironment,
+  RefundWorkFailure,
+  type RefundWorkflowExecution,
+  type SubscriptionCancellationDispatchInput,
+  type SubscriptionRenewalDispatchInput,
+  WompiBillingEvent,
+  type WompiBindings,
+  type WompiEventEnvironment,
+  pricingName,
+} from "./contract";
+import { nativeBillingRequest } from "./internal/native-billing";
 import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
 import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
 
@@ -12,14 +38,6 @@ import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
 import { makeWompiTransport } from "./internal/wompi-runtime";
-import {
-  type BillingWorkRouting,
-  type BillingWorkflowActivity,
-  LocalSourceCancellationWork,
-  type PricingEnvironment,
-  type WompiBindings,
-  pricingName,
-} from "./contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { dispatchCancellations } from "./internal/source-cancellation";
 import { dispatchSubscriptionRenewals as dispatchRenewals } from "./internal/subscription-renewal";
@@ -31,33 +49,14 @@ import {
   isRefundWork as recognizesRefund,
 } from "./internal/refund-workflow";
 import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment";
-import type {
-  EnrollmentEnvironment,
-  SubscriptionCancellationDispatchInput,
-  SubscriptionRenewalDispatchInput,
-} from "./contract";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { type Cause, Clock, Context, Effect, Layer, Option, Schema } from "effect";
+import { type Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   makeAccessSigningKeysOutboundHttp,
   type makeWompiOutboundHttp,
 } from "../../src/shell/outbound-http/operations";
-import {
-  type RefundDispatchInput,
-  type RefundReceiveInput,
-  type RefundSupportEnvironment,
-  RefundWorkFailure,
-  type RefundWorkflowExecution,
-} from "./contract";
 import { handleRefundSupport as supportRefund } from "./internal/refund-support";
-import {
-  type BillingCollectionEnvironment,
-  type BillingCollectionFailure,
-  type BillingObservationWorkflow,
-  type BillingQueuePublisher,
-  type BillingRuntime,
-} from "./contract";
 import {
   captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
@@ -196,7 +195,7 @@ export const receiveBillingCollection = (
 export const receiveWompiBillingEvent = (
   input: Readonly<{
     request: Request;
-    environment: BillingRuntime & Pick<BillingCollectionEnvironment, "WOMPI_EVENT_SECRET">;
+    environment: WompiEventEnvironment;
   }>
 ): Effect.Effect<Response> => acceptEvent(input);
 /** Start bounded reconciliation of retained unresolved billing identities. */
@@ -351,4 +350,48 @@ export const handleSourceCancellationWork = Effect.fnUntraced(function* (
   }
   const pending = yield* pendingCancellation(body.value);
   return new Response(null, { status: pending ? workPendingStatus : workAbsentStatus });
+});
+
+export const handleNativeBillingCallback = Effect.fn(function* (
+  request: Request,
+  env: Parameters<typeof nativeBillingRequest>[0]["env"],
+  owns: (id: string) => boolean
+) {
+  return yield* nativeBillingRequest({ request, env, owns, transport: wompiOutboundHttp });
+});
+const callbackWorkflowId = Effect.fn(function* (event: typeof WompiBillingEvent.Type) {
+  const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(WompiBillingEvent))(event);
+  return "wompi-event-" + Hex.encode(yield* digestBytes(new TextEncoder().encode(encoded)));
+});
+
+const acceptedWorkflowStates: ReadonlySet<InstanceStatus["status"]> = new Set([
+  "queued",
+  "running",
+  "waiting",
+  "complete",
+]);
+
+export const offerNativeBillingWork = Effect.fn(function* (
+  workflow: BillingObservationWorkflow,
+  work: typeof LocalBillingCollection.Type | typeof WompiBillingEvent.Type
+) {
+  const id =
+    work._tag === "WompiBillingEvent"
+      ? yield* callbackWorkflowId(work)
+      : "collect-" + work.userId + "-" + work.attemptId;
+  const started = yield* Effect.result(
+    Effect.tryPromise(() =>
+      workflow.create({
+        id,
+        params: work,
+        retention: { successRetention: "3 days", errorRetention: "3 days" },
+      })
+    )
+  );
+  if (Result.isSuccess(started)) return;
+  const instance = yield* Effect.tryPromise(() => workflow.get(id));
+  const { status } = yield* Effect.tryPromise(() => instance.status());
+  if (acceptedWorkflowStates.has(status)) return;
+  if (status === "errored") return yield* Effect.tryPromise(() => instance.restart());
+  return yield* Effect.fail("billing-workflow-unavailable" as const);
 });

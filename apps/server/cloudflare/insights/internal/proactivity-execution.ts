@@ -1,3 +1,16 @@
+import {
+  type NativeDeliveryOwner,
+  type ProactivityChannelClaim,
+  type ProactivityChannelScope,
+} from "../../whatsapp/contract";
+import {
+  findQueuedInsightRecipient,
+  recordProactivitySend,
+  recordRegisteredSend,
+  stageProactivityMessage,
+  startProactivitySend,
+} from "../../whatsapp/operations";
+import type { ExternalEventBindings } from "../../directory/contract";
 import { summariesDue } from "./cadence";
 import { settleDeliveryWork } from "./proactivity-delivery-work";
 import { continueQueuedDelivery, queuedDeliveryQuery } from "./queued-delivery";
@@ -13,13 +26,6 @@ import {
 import { advanceReminderDue } from "./reminder-schedule";
 import { admitWeeklyResource } from "./weekly-admission";
 import { deliveryQuery, findQueuedReport } from "./proactivity-reports";
-import {
-  findQueuedInsightRecipient,
-  recordProactivitySend,
-  stageProactivityMessage,
-  startProactivitySend,
-} from "../../whatsapp/operations";
-import type { ProactivityChannelClaim, ProactivityChannelScope } from "../../whatsapp/contract";
 import type { ProactivityTemplateSender } from "../../../src/shell/channels/whatsapp/contract";
 import { sendEvidence } from "./weekly-execution";
 import { generateReminderQuestion } from "./reminder-question";
@@ -54,6 +60,7 @@ export const generateProactivity = (
 
 const finishSend = (
   input: ProactivityChannelScope &
+    NativeDeliveryOwner &
     Readonly<{
       work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }>;
       sender: ProactivityTemplateSender;
@@ -63,6 +70,16 @@ const finishSend = (
   Effect.gen(function* () {
     if (claim._tag === "Ready") {
       const sent = sendEvidence(yield* Effect.exit(input.sender.send(claim.request)));
+      yield* recordRegisteredSend(input.callbackOwner, {
+        userId: input.userId,
+        operationId: input.id,
+        family: "proactivity",
+        endpoint: claim.request.businessPhoneNumberId,
+        correlation: claim.correlationToken,
+        state: sent.certainty,
+        message: Option.getOrNull(sent.providerMessageId),
+      });
+
       yield* recordProactivitySend({
         ...input,
         correlationToken: claim.correlationToken,
@@ -75,15 +92,17 @@ const finishSend = (
     return { _tag: "Done" } as const;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
+type ProactivityExecution = Readonly<{
+  callbackOwner: Partial<ExternalEventBindings>;
+  db: D1Database;
+  userId: UserId;
+  now: DateTime.Utc;
+  work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }>;
+  sender: ProactivityTemplateSender;
+}>;
 /** Frozen report content is claimed once under current purpose, recipient and resource authority. */
 export const deliverProactivity = (
-  input: Readonly<{
-    db: D1Database;
-    userId: UserId;
-    now: DateTime.Utc;
-    work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }>;
-    sender: ProactivityTemplateSender;
-  }>
+  input: ProactivityExecution
 ): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     if (input.userId !== input.work.userId) return yield* new InsightUnavailable();

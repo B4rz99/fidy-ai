@@ -1,3 +1,7 @@
+import {
+  nativeDeliveryRequest as nativeDeliveryRequestOwned,
+  routeWhatsAppStatus as routeWhatsAppStatusOwned,
+} from "./internal/native-delivery";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
 import type { ErasureStore } from "../erasure-store/contract";
@@ -32,3 +36,8 @@ export const sweepExpiredWhatsAppWindows = (
 
 export const makeWhatsappErasureStores = (db: D1Database): ReadonlyArray<ErasureStore> =>
   erasureProjections.map((projection) => makeErasureStore({ db, projection }));
+
+export const nativeDeliveryRequest: typeof nativeDeliveryRequestOwned = (...args) =>
+  nativeDeliveryRequestOwned(...args);
+export const routeWhatsAppStatus: typeof routeWhatsAppStatusOwned = (...args) =>
+  routeWhatsAppStatusOwned(...args);

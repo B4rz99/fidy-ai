@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import { PolicyRevision } from "../../src/shell/consent/contract";
 import { withOpenAiFetch } from "../openai.test-fixture";
 import {
@@ -1258,6 +1259,7 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
           executeMutation: Option.none(),
           deliver: {
             _tag: "WhatsApp",
+            callbackOwner: retainedAgentCallbackOwner,
             contextualReplyQuery: Option.none(),
             send: ({ correlationToken }) =>
               Effect.sync(() => {
@@ -1748,6 +1750,7 @@ it("refuses a free-form reply when the verified inbound event is outside its 24-
           executeMutation: Option.none(),
           deliver: {
             _tag: "WhatsApp",
+            callbackOwner: retainedAgentCallbackOwner,
             contextualReplyQuery: Option.none(),
             send: () => Effect.tryPromise(sends).pipe(Effect.orDie),
           },
@@ -1926,6 +1929,7 @@ it("does not send when recovery interrupts a staged reply during scheduling", ()
           executeMutation: Option.none(),
           deliver: {
             _tag: "WhatsApp",
+            callbackOwner: retainedAgentCallbackOwner,
             contextualReplyQuery: Option.none(),
             send: () => Effect.tryPromise(sends).pipe(Effect.orDie),
           },
@@ -2003,6 +2007,7 @@ it.each(["window", "business-phone", "proposal-deadline"] as const)(
             executeMutation: Option.none(),
             deliver: {
               _tag: "WhatsApp",
+              callbackOwner: retainedAgentCallbackOwner,
               contextualReplyQuery: Option.none(),
               send: () => Effect.tryPromise(sends).pipe(Effect.orDie),
             },
@@ -2093,6 +2098,7 @@ it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a 
           executeMutation: Option.none(),
           deliver: {
             _tag: "WhatsApp",
+            callbackOwner: retainedAgentCallbackOwner,
             contextualReplyQuery: Option.none(),
             send: ({ correlationToken }) =>
               Effect.sync(() => {
@@ -2399,6 +2405,7 @@ it.each(["sent", "delivered", "failed"] as const)(
         let correlationToken = HostedDeliveryCorrelationToken.make(newId());
         const submit = (replyText: TranscriptText): ReturnType<typeof submitHostedReply> =>
           submitHostedReply({
+            callbackOwner: retainedAgentCallbackOwner,
             db,
             userId,
             turnId,
@@ -2509,6 +2516,7 @@ it("refuses foreign or absent hosted locators before scheduling or provider I/O"
       ]) {
         expect(
           yield* submitHostedReply({
+            callbackOwner: retainedAgentCallbackOwner,
             db,
             ...locator,
             text: TranscriptText.make("Locator is not authority"),
@@ -2540,6 +2548,7 @@ it.each([false, true])(
         const text = TranscriptText.make("Respuesta para el destinatario verificado");
         let sends = 0;
         yield* submitHostedReply({
+          callbackOwner: retainedAgentCallbackOwner,
           db,
           userId,
           turnId,

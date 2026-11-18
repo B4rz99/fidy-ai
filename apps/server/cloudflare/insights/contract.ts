@@ -1,4 +1,5 @@
-import { Data, Schema } from "effect";
+import type { UserStoreBindings } from "../directory/contract";
+import { Data, type Option, Schema } from "effect";
 import { ConsentRecordId } from "../../src/core/consent/contract";
 import {
   InsightEventId,
@@ -15,7 +16,6 @@ import { WeeklySummaryPayload } from "../../src/core/insights/weekly-summary/con
 import { InsightTemplateSummary } from "../../src/shell/channels/whatsapp/contract";
 import type { QueryAuthority } from "../canonical-work/contract";
 import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
-import type { Option } from "effect";
 
 const messageContext = {
   id: Schema.String.check(Schema.isUUID()),
@@ -206,7 +206,8 @@ export const ProactivityActivityResult = Schema.Union([
 ]);
 export type ProactivityActivityResult = typeof ProactivityActivityResult.Type;
 /** Both approved templates and an explicit enablement gate are required before native execution. */
-export type ProactivityEnvironment = Readonly<{ DB: D1Database }> &
+export type ProactivityEnvironment = Partial<UserStoreBindings> &
+  Readonly<{ DB: D1Database }> &
   Partial<
     Readonly<{
       PROACTIVITY_ENABLED: string;

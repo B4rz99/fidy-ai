@@ -1,3 +1,20 @@
+import {
+  type InsightWhatsAppClaim,
+  type InsightWhatsAppSendResult,
+  type InsightWhatsAppStart,
+  type NativeDeliveryOwner,
+} from "../../whatsapp/contract";
+import {
+  findQueuedInsightRecipient,
+  recordInsightSend,
+  recordRegisteredSend,
+  recordWeeklyQuestionSend,
+  stageInsightDelivery,
+  stageWeeklyQuestion,
+  startInsightSend,
+  startWeeklyQuestion,
+} from "../../whatsapp/operations";
+import type { ExternalEventBindings } from "../../directory/contract";
 import { continueQueuedDelivery, queuedDeliveryQuery } from "./queued-delivery";
 import { Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { type UserId } from "../../../src/core/identity/contract";
@@ -19,24 +36,10 @@ import {
   type WhatsAppSentMessage,
 } from "../../../src/shell/channels/whatsapp/contract";
 import {
-  type InsightWhatsAppClaim,
-  type InsightWhatsAppSendResult,
-  type InsightWhatsAppStart,
-} from "../../whatsapp/contract";
-import {
   createQueuedWeeklyGovernorConsentOffer,
   type createWeeklyGovernorConsentOffer,
   findWeeklyConsentGrant,
 } from "../../consent/operations";
-import {
-  findQueuedInsightRecipient,
-  recordInsightSend,
-  recordWeeklyQuestionSend,
-  stageInsightDelivery,
-  stageWeeklyQuestion,
-  startInsightSend,
-  startWeeklyQuestion,
-} from "../../whatsapp/operations";
 import {
   InsightUnavailable,
   type ProactivityActivity,
@@ -57,6 +60,7 @@ export type WeeklySenders = Readonly<{
   question: WeeklyQuestionSender;
 }>;
 type Execution = Readonly<{
+  callbackOwner: Partial<ExternalEventBindings>;
   db: D1Database;
   userId: UserId;
   work: Exclude<
@@ -107,12 +111,22 @@ const summaryOutcome = (sent: SendEvidence): InsightWhatsAppSendResult["outcome"
     : { kind: sent.certainty === "rejected" ? "rejected" : "ambiguous" };
 
 const sendSummaryClaim = (
-  input: InsightWhatsAppStart & Readonly<{ sender: InsightTemplateSender }>,
+  input: InsightWhatsAppStart & NativeDeliveryOwner & Readonly<{ sender: InsightTemplateSender }>,
   claim: InsightWhatsAppClaim
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     if (claim._tag !== "Ready") return;
     const sent = sendEvidence(yield* Effect.exit(input.sender.send(claim.request)));
+    yield* recordRegisteredSend(input.callbackOwner, {
+      userId: input.userId,
+      operationId: input.insightEventId,
+      family: "insight",
+      endpoint: claim.request.businessPhoneNumberId,
+      correlation: claim.correlationToken,
+      state: sent.certainty,
+      message: Option.getOrNull(sent.providerMessageId),
+    });
+
     yield* recordInsightSend({
       ...input,
       correlationToken: claim.correlationToken,
@@ -140,6 +154,7 @@ const deliverSummary = (
       db,
       userId,
       insightEventId: work.insightEventId,
+      callbackOwner: input.callbackOwner,
       grantId: report.value.consentGrantId,
       now,
       guard,
@@ -296,6 +311,7 @@ const sendQuestionClaim = (
     yield* admitWeeklyResource({ db, userId, now, phase: "send" });
     const sendAt = yield* DateTime.now;
     const claim = yield* startWeeklyQuestion({
+      callbackOwner: input.callbackOwner,
       db,
       userId,
       id: work.id,
@@ -308,6 +324,16 @@ const sendQuestionClaim = (
     if (claim._tag === "Deferred") return claim;
     if (claim._tag === "Ready") {
       const sent = sendEvidence(yield* Effect.exit(senders.question.send(claim.request)));
+      yield* recordRegisteredSend(input.callbackOwner, {
+        userId,
+        operationId: work.id,
+        family: "weekly-question",
+        endpoint: claim.request.businessPhoneNumberId,
+        correlation: claim.request.correlationToken,
+        state: sent.certainty,
+        message: Option.getOrNull(sent.providerMessageId),
+      });
+
       yield* recordWeeklyQuestionSend({
         db,
         userId,

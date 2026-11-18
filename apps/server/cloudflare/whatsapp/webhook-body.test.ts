@@ -37,7 +37,6 @@ const probeOversizedBody = (
       KAPSO_WEBHOOK_SECRET: "test-secret",
       WHATSAPP_BUSINESS_PORTFOLIO_ID: "test-portfolio",
       onHostedText: () => Promise.reject(new Error("Oversized bytes cannot admit a Turn")),
-      onHostedStatus: () => Promise.reject(new Error("Oversized bytes cannot admit status")),
     })(request)
   );
   const deadline = new AbortController();

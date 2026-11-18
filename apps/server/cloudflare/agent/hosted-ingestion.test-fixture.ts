@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { expect } from "vitest";
 import * as XLSX from "xlsx/xlsx.mjs";
@@ -88,6 +89,7 @@ const prepareFixture = Effect.fnUntraced(function* () {
 
 const deliver = (): ReturnType<Parameters<typeof resumeWhatsAppTurn>[0]["deliver"]> => ({
   _tag: "WhatsApp",
+  callbackOwner: retainedAgentCallbackOwner,
   contextualReplyQuery: Option.none(),
   send: () =>
     Effect.succeed({

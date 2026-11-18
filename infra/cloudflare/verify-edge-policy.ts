@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "29afae1fa36144ed1d145b3a510061cb3939f90938534f9c9a4bc2a2fb343090";
+const expectedEdgePolicyDigest = "d9ea42f5bd1121bb553177b372ca4af961fce929fe047ff7ed1aa1a477528ccd";
 const securityArtifacts = [
   await Bun.file(
     new URL(
@@ -141,6 +141,51 @@ const securityArtifacts = [
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/user-store/internal/browser-session.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/internal/external-events.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/directory/schema/external-events.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/whatsapp/internal/native-delivery.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/whatsapp/internal/registered-send.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/subscription/internal/native-billing.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/user-store/internal/billing-callback-schema.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/billing-settlement.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/billing-workflow.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/subscription/internal/wompi-event.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/native-forwarding.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/user-store/internal/external-event-schema.ts",
+      import.meta.url
+    )
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/whatsapp/internal/ingress.ts", import.meta.url)

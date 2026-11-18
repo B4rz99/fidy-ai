@@ -1,3 +1,4 @@
+import type { ExternalEventBindings } from "../directory/contract";
 import { type WompiEnvironment } from "../../src/shell/secret-material/contract";
 import { UserId } from "../../src/core/identity/contract";
 import {
@@ -124,6 +125,7 @@ export type RefundReceiveInput = Readonly<{
 }>;
 
 export type BillingRuntime = BillingWorkRouting &
+  Partial<ExternalEventBindings> &
   Pick<
     BillingCollectionEnvironment,
     "DB" | "WOMPI_ENVIRONMENT" | "WOMPI_PUBLIC_KEY" | "WOMPI_PRIVATE_KEY" | "WOMPI_INTEGRITY_SECRET"
@@ -141,7 +143,7 @@ export class BillingCollectionFailure extends Data.TaggedError("BillingCollectio
 
 /** Queue publication consumes only a versioned Fidy BillingAttempt identity. */
 export type BillingQueuePublisher = Readonly<{
-  send: (work: Readonly<{ version: 1; attemptId: BillingAttemptId }>) => Promise<unknown>;
+  send: (work: typeof LocalBillingCollection.Type) => Promise<unknown>;
 }>;
 
 /** Native Workflow handoff accepts opaque versioned work; its payload is validated by the owner. */
@@ -246,3 +248,29 @@ export type BillingWorkflowActivity<Value extends boolean | void = void> = (
   options: WorkflowStepConfig,
   run: () => Promise<Value>
 ) => Promise<Value>;
+
+const maximumProviderIdentity = 128;
+const maximumEventStatus = 64;
+export const WompiBillingEvent = Schema.TaggedStruct("WompiBillingEvent", {
+  environment: Schema.Literals(["sandbox", "production"]),
+  transactionId: Schema.NonEmptyString.check(Schema.isMaxLength(maximumProviderIdentity)),
+  signedAt: Schema.Int,
+  signedStatus: Schema.NonEmptyString.check(Schema.isMaxLength(maximumEventStatus)),
+});
+export type WompiEventEnvironment = Readonly<{
+  WOMPI_ENVIRONMENT: string;
+  WOMPI_EVENT_SECRET: string;
+}> &
+  Partial<
+    Readonly<{
+      BILLING_COLLECTION_QUEUE: Readonly<{
+        send: (event: typeof WompiBillingEvent.Type) => Promise<unknown>;
+      }>;
+    }>
+  >;
+export const LocalBillingCollection = Schema.TaggedStruct("CollectUserBillingAttempt", {
+  userId: UserId,
+  attemptId: BillingAttemptId,
+});
+export const collectUserBillingUrl = "https://user.invalid/work/billing/collect";
+export const settleUserBillingUrl = "https://user.invalid/work/billing/observe";

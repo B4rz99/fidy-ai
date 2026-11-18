@@ -71,6 +71,12 @@ const billingTrigger = {
 };
 
 const billingBindings = {
+  WOMPI_EVENT_SECRET: { type: "text" as const, value: "test_events_callback_fixture" },
+  HOSTED_WHATSAPP_QUEUE: { type: "queue" as const, name: "billing-test" },
+  WHATSAPP_BUSINESS_PORTFOLIO_ID: { type: "text" as const, value: "123456789012345" },
+  KAPSO_WEBHOOK_SECRET: { type: "text" as const, value: "callback-fixture-secret" },
+  KAPSO_API_KEY: { type: "text" as const, value: "fixture" },
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: { type: "text" as const, value: "987654321012345" },
   DB: { type: "d1" as const, id: "unused-legacy" },
   BILLING_COLLECTION_QUEUE: { type: "queue" as const, name: "billing-test" },
   BILLING_COLLECTION_WORKFLOW: {

@@ -1,3 +1,7 @@
+import {
+  receiveBillingCollection,
+  runBillingCollectionWorkflow,
+} from "./historical-collection.test-fixture";
 import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { type OAuthConfirmationWork } from "../oauth-confirmation/contract";
@@ -26,18 +30,12 @@ import {
   makePaymentEnrollmentD1,
   replaceD1FixturePrice,
 } from "./payment-enrollment-d1.test-fixture";
-import {
-  dispatchSubscriptionCancellations,
-  dispatchSubscriptionRenewals,
-  receiveBillingCollection,
-  runBillingCollectionWorkflow,
-} from "./runtime";
+import { dispatchSubscriptionCancellations, dispatchSubscriptionRenewals } from "./runtime";
 import { Price, PriceId } from "../../src/core/subscription/contract";
 import {
   executeProtectedSubscriptionQuery,
   executeSubscriptionRenewalAdmission,
 } from "./operations";
-import {} from "./contract";
 
 const RecordedTransaction = Schema.Struct({
   data: Schema.Struct({

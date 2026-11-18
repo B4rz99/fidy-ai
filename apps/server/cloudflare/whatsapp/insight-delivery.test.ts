@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import { afterAll } from "vitest";
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
@@ -141,7 +142,9 @@ it.live("refuses corrupt staged claim dates without consuming send authority", (
           .run()
       );
       assert.deepStrictEqual(
-        yield* Effect.exit(startInsightSend(input)),
+        yield* Effect.exit(
+          startInsightSend({ ...input, callbackOwner: retainedAgentCallbackOwner })
+        ),
         Exit.fail(new WhatsAppUnavailable())
       );
       expect(
@@ -168,7 +171,9 @@ it.live("refuses corrupt staged claim dates without consuming send authority", (
           .run()
       );
     }
-    expect((yield* startInsightSend(input))._tag).toBe("Ready");
+    expect(
+      (yield* startInsightSend({ ...input, callbackOwner: retainedAgentCallbackOwner }))._tag
+    ).toBe("Ready");
   })
 );
 it.live("refuses corrupt weekly question dates before consuming send authority", () =>
@@ -211,7 +216,9 @@ it.live("refuses corrupt weekly question dates before consuming send authority",
           .run()
       );
       assert.deepStrictEqual(
-        yield* Effect.exit(startWeeklyQuestion(claim)),
+        yield* Effect.exit(
+          startWeeklyQuestion({ ...claim, callbackOwner: retainedAgentCallbackOwner })
+        ),
         Exit.fail(new WhatsAppUnavailable())
       );
       expect(
@@ -233,14 +240,23 @@ it.live(
     Effect.gen(function* () {
       const input = yield* prepare(yield* weeklySummaryTestDatabase);
       expect(yield* stageInsightDelivery(input)).toBe(true);
-      expect((yield* startInsightSend({ ...input, userId: weeklySummaryOtherUser }))._tag).toBe(
-        "NotClaimed"
-      );
-      const claim = yield* startInsightSend(input);
+      expect(
+        (yield* startInsightSend({
+          callbackOwner: retainedAgentCallbackOwner,
+          ...input,
+          userId: weeklySummaryOtherUser,
+        }))._tag
+      ).toBe("NotClaimed");
+      const claim = yield* startInsightSend({
+        ...input,
+        callbackOwner: retainedAgentCallbackOwner,
+      });
       if (claim._tag !== "Ready") {
         return yield* Effect.die("Expected ready claim");
       }
-      expect((yield* startInsightSend(input))._tag).toBe("NotClaimed");
+      expect(
+        (yield* startInsightSend({ ...input, callbackOwner: retainedAgentCallbackOwner }))._tag
+      ).toBe("NotClaimed");
       const providerMessageId = WhatsAppProviderMessageId.make("wamid.summary");
       yield* recordInsightSend({
         ...input,
@@ -290,8 +306,11 @@ it.live(
         }))._tag
       ).toBe("VerifiedDelivery");
       expect(
-        (yield* startInsightSend({ ...input, now: DateTime.add(input.expiresAt, { days: 1 }) }))
-          ._tag
+        (yield* startInsightSend({
+          callbackOwner: retainedAgentCallbackOwner,
+          ...input,
+          now: DateTime.add(input.expiresAt, { days: 1 }),
+        }))._tag
       ).toBe("NotClaimed");
     })
 );
@@ -302,6 +321,7 @@ it.live(
       const input = yield* prepare(yield* weeklySummaryTestDatabase);
       yield* stageInsightDelivery(input);
       const deferred = yield* startInsightSend({
+        callbackOwner: retainedAgentCallbackOwner,
         ...input,
         now: DateTime.add(input.now, { hours: 1 }),
       });
@@ -309,9 +329,16 @@ it.live(
         return yield* Effect.die("Expected deferred claim");
       }
       expect(DateTime.formatIso(deferred.nextEligibleAt)).toBe("2026-08-10T14:00:00.000Z");
-      expect((yield* startInsightSend({ ...input, now: input.expiresAt }))._tag).toBe("Expired");
       expect(
         (yield* startInsightSend({
+          callbackOwner: retainedAgentCallbackOwner,
+          ...input,
+          now: input.expiresAt,
+        }))._tag
+      ).toBe("Expired");
+      expect(
+        (yield* startInsightSend({
+          callbackOwner: retainedAgentCallbackOwner,
           ...input,
           now: DateTime.subtract(input.expiresAt, { minutes: 1 }),
         }))._tag
@@ -344,7 +371,9 @@ it.live("a staged report cannot send after explicit revocation", () =>
       choice: offer.revokeChoice,
       decisionMessageId: "revoke",
     });
-    expect((yield* startInsightSend(input))._tag).toBe("NotClaimed");
+    expect(
+      (yield* startInsightSend({ ...input, callbackOwner: retainedAgentCallbackOwner }))._tag
+    ).toBe("NotClaimed");
   })
 );
 

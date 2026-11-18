@@ -1,3 +1,4 @@
+import { runBillingCollectionWorkflow } from "./historical-collection.test-fixture";
 import { registeredConnectionInstitutionIds } from "../../src/shell/connections/contract";
 import { type TransactionSubject } from "../canonical-work/contract";
 import { newId } from "../secret-material/operations";
@@ -15,7 +16,6 @@ import { billingAttemptIdFor, paymentEnrollmentWork } from "./internal/payment-e
 import {
   handlePaymentEnrollment,
   reconcileBillingCandidates,
-  runBillingCollectionWorkflow,
   sweepExpiredEnrollmentAdmission,
   wompiOutboundHttp,
 } from "./runtime";

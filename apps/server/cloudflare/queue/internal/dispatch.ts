@@ -1,3 +1,13 @@
+import { WhatsAppLifecycleWork, WhatsAppWork } from "../../whatsapp/contract";
+import { receiveWhatsAppWork, routeWhatsAppStatus } from "../../whatsapp/runtime";
+import { LocalBillingCollection, WompiBillingEvent } from "../../subscription/contract";
+import {
+  isBillingCollectionWork,
+  isRefundWork,
+  offerNativeBillingWork,
+  receiveBillingCollection,
+  receiveRefunds,
+} from "../../subscription/runtime";
 import { workTraceParent } from "../../runtime/telemetry/operations";
 import { Telemetry } from "../../../src/shell/observability/operations";
 import {
@@ -23,14 +33,6 @@ import {
   receiveForwardedEmailWork,
   receiveStatementExtraction,
 } from "../../ingestion/runtime";
-import { WhatsAppWork } from "../../whatsapp/contract";
-import { receiveWhatsAppWork } from "../../whatsapp/runtime";
-import {
-  isBillingCollectionWork,
-  isRefundWork,
-  receiveBillingCollection,
-  receiveRefunds,
-} from "../../subscription/runtime";
 
 /** Retain a native rejection privately; the runtime unwraps it after closed telemetry observation. */
 export class QueueDeliveryUnavailable extends Data.TaggedError("QueueDeliveryUnavailable")<{
@@ -293,14 +295,57 @@ const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryU
     : receiveEmailQueue(input);
 };
 
+const CallbackWork = Schema.Union([
+  WhatsAppLifecycleWork,
+  WompiBillingEvent,
+  LocalBillingCollection,
+]);
+const callbackWork = Schema.is(CallbackWork);
+const deliverCallback = Effect.fn(function* (packet: unknown, environment: CoreQueueEnvironment) {
+  const body = yield* Schema.decodeUnknownEffect(CallbackWork)(packet);
+  if (Schema.is(WhatsAppLifecycleWork)(body)) {
+    const { DIRECTORY, USER_STORE, USER_TRANSACTION_COORDINATOR } = environment;
+    if (DIRECTORY === undefined || USER_STORE === undefined) {
+      return yield* deliveryFailure("Callback routing unavailable");
+    }
+    return yield* routeWhatsAppStatus(body, {
+      DIRECTORY,
+      USER_STORE,
+      USER_TRANSACTION_COORDINATOR,
+    });
+  }
+  const workflow = environment.BILLING_COLLECTION_WORKFLOW;
+  if (workflow === undefined) return yield* deliveryFailure("Billing workflow unavailable");
+  yield* offerNativeBillingWork(workflow, body);
+});
+const receiveCallbackBatch = ({
+  batch,
+  environment,
+}: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> =>
+  receiveWorkflowBatch(batch, (entry) =>
+    Effect.gen(function* () {
+      const [message] = entry.messages;
+      if (message === undefined) return;
+      if (!callbackWork(message.body)) {
+        return yield* receiveWorkQueue({ batch: entry, environment });
+      }
+      yield* deliverCallback(message.body, environment);
+      message.ack();
+    }).pipe(Effect.mapError(deliveryFailure))
+  );
+const selectQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryUnavailable> => {
+  if (input.batch.queue === input.environment.OPERATIONAL_CANARY_QUEUE_NAME) {
+    return receiveCanaryBatch(input);
+  }
+  return input.batch.messages.some((message) => callbackWork(message.body))
+    ? receiveCallbackBatch(input)
+    : receiveWorkQueue(input);
+};
 /** Preserve native Queue selection order inside the telemetry-owned Effect; payload validation and acknowledgment stay owner-held. */
 export const dispatchCoreQueue = (
   input: QueueInput
 ): Effect.Effect<void, QueueDeliveryUnavailable> =>
-  (input.batch.queue === input.environment.OPERATIONAL_CANARY_QUEUE_NAME
-    ? receiveCanaryBatch(input)
-    : receiveWorkQueue(input)
-  ).pipe(
+  selectQueue(input).pipe(
     Effect.provideService(
       QueueRelease,
       Option.getOrElse(

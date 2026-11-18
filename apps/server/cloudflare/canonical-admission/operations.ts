@@ -14,6 +14,7 @@ import {
 import {
   admitLocalRequest as admitLocal,
   repairReceiptAlarm as inspectReceipts,
+  localPreparationSubject as localPreparationSubjectOwned,
   runLocalMutation as mutateLocal,
   sweepReceiptWork as recoverReceipts,
   sweepLocalReceipts as sweepReceipts,
@@ -1312,3 +1313,6 @@ export const repairReceiptAlarm = Effect.fnUntraced(function* (
 ) {
   return yield* withStoreCapacity("required")(inspectReceipts(current, storage));
 });
+
+export const localPreparationSubject: typeof localPreparationSubjectOwned = (...args) =>
+  localPreparationSubjectOwned(...args);

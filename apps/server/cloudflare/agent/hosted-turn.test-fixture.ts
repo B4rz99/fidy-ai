@@ -45,7 +45,7 @@ import {
 import { makeCloudflareHostedInference } from "../ai/runtime";
 import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "../d1-test-fixture";
 import { newId } from "../secret-material/operations";
-import { UserTransactionCoordinator } from "../transactions/runtime";
+import { RetainedWhatsAppCoordinator as UserTransactionCoordinator } from "../coordinator-test-harness";
 import { WhatsAppHostedSubject, WhatsAppInboundEvidence } from "../whatsapp/contract";
 import { recordWhatsAppStatus } from "../whatsapp/operations";
 import {

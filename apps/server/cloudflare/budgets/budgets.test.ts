@@ -81,6 +81,7 @@ import { Transaction } from "../../src/core/transactions/contract";
 import { Money, encodeMoneyAmount } from "../../src/core/_shared/money";
 import { AtomicBatchRejected } from "../../src/shell/operations/contract";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
@@ -753,6 +754,7 @@ it.each([
         );
         const environment = {
           DB: db,
+          ...retainedAgentCallbackOwner,
           PROACTIVITY_ENABLED: "enabled",
           KAPSO_API_KEY: "test-only",
           WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
@@ -2034,6 +2036,7 @@ it("installed category generation atomically materializes two Budget events and 
         vi.stubGlobal("fetch", withOpenAiFetch(provider));
         const environment = {
           DB: db,
+          ...retainedAgentCallbackOwner,
           PROACTIVITY_ENABLED: "enabled",
           KAPSO_API_KEY: "test-key",
           WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
@@ -2237,6 +2240,7 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
       if (group === undefined) return yield* Effect.die("Expected Budget crossings");
       const environment = {
         DB: db,
+        ...retainedAgentCallbackOwner,
         PROACTIVITY_ENABLED: "enabled",
         KAPSO_API_KEY: "test-only",
         WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",

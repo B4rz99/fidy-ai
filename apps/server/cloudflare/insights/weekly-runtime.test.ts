@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import assert from "node:assert/strict";
 import { newId } from "../secret-material/operations";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
@@ -57,6 +58,7 @@ const questionTemplate = {
   body: "Fidy te avisa: {{1}} Más en Fidy.",
 };
 const configuration = (db: D1Database): ProactivityEnvironment => ({
+  ...retainedAgentCallbackOwner,
   DB: db,
   KAPSO_API_KEY: "provider-test-key",
   WEEKLY_SUMMARY_ENABLED: "enabled",

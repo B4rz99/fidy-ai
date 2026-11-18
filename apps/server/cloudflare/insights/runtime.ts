@@ -90,6 +90,7 @@ const executeCategory = (
       input.environment.PROACTIVITY_TEMPLATE_JSON ?? ""
     );
     return yield* deliverProactivity({
+      callbackOwner: input.environment,
       ...input,
       db: input.environment.DB,
       sender: makeProactivityTemplateSender({ configuration, outboundHttp }),
@@ -127,6 +128,7 @@ const executeScheduledSummary = (
     )(environment.WEEKLY_QUESTION_TEMPLATE_JSON ?? "");
     const outboundHttp = yield* nativeOutbound(environment);
     return yield* executeWeeklyActivity({
+      callbackOwner: environment,
       ...input,
       work: input.work,
       db: environment.DB,

@@ -107,6 +107,19 @@ stops the tick. Maintenance flushes its progress before resetting the object to 
 I/O. A stalled shared owner runs after the User page budget on the next tick. A stalled User
 restores shared-owner priority.
 
+The Directory reserves a Wompi environment and billing reference, a WhatsApp business endpoint
+and delivery correlation, or a forwarding local part at the configured domain. Each route names
+one User and one retained operation. The route must exist before a charge, message send, or
+forwarding-address disclosure. The Email Worker continues to refuse inbound forwarded messages.
+
+Core verifies provider proof before awaiting durable Queue acceptance. A billing Workflow looks up
+the signed Wompi transaction ID and routes its verified reference. The User checks the captured
+payment facts and commits settlement, standing, and billing Audit together. The WhatsApp consumer
+routes authenticated lifecycle evidence to the named User. The User checks its one-shot send,
+portfolio, endpoint, recipient, provider message, and event time before recording the result.
+Verified delivery can resume the Agent’s retained Turn or proactive occurrence through its private
+coordinator. In-flight and rejected effects keep their original identity.
+
 Unmigrated paths still use D1. Canonical mutation units commit live authority, owner
 changes, accounting and Audit together. Database guards enforce ownership and revisions alongside
 per-User coordination. Shared reads preserve the same authorization and accountability boundaries.

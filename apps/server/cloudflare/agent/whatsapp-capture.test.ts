@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import { UserId } from "../../src/core/identity/contract";
@@ -80,6 +81,7 @@ const exerciseTurn = Effect.fn(function* ({
     inference: model,
     deliver: () => ({
       _tag: "WhatsApp",
+      callbackOwner: retainedAgentCallbackOwner,
       contextualReplyQuery: Option.none(),
       send: ({
         text,
@@ -141,6 +143,7 @@ it.each([
         inference: model,
         deliver: () => ({
           _tag: "WhatsApp",
+          callbackOwner: retainedAgentCallbackOwner,
           contextualReplyQuery: Option.none(),
           send: ({
             text,
@@ -227,6 +230,7 @@ it("commits a WhatsApp capture once, confirms its stored local date, and retriev
       const sent: Array<string> = [];
       const delivery: Parameters<typeof resumeWhatsAppTurn>[0]["deliver"] = () => ({
         _tag: "WhatsApp",
+        callbackOwner: retainedAgentCallbackOwner,
         contextualReplyQuery: Option.none(),
         send: ({
           text,

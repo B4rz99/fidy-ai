@@ -22,7 +22,7 @@ import { Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { type WompiTransportFactory } from "./wompi-runtime";
 import { BillingCollectionFailure, type BillingRuntime } from "../contract";
 
-const Snapshot = Schema.Struct({
+export const Snapshot = Schema.Struct({
   id: BillingAttemptId,
   user_id: Schema.String.check(Schema.isUUID()),
   amount: Schema.String,
@@ -38,7 +38,7 @@ const Snapshot = Schema.Struct({
   period_starts_at_ms: Schema.OptionFromNullOr(Schema.Int),
   period_ends_at_ms: Schema.OptionFromNullOr(Schema.Int),
 });
-const billingAmount = (
+export const billingAmount = (
   captured: typeof Snapshot.Type
 ): Effect.Effect<number, BillingCollectionFailure> =>
   Effect.flatMap(decode(Money, { amount: captured.amount, currency: captured.currency }), (money) =>
@@ -87,7 +87,7 @@ const snapshot = (
     return yield* decode(Snapshot, row);
   });
 
-const matchesSnapshot = (
+export const matchesSnapshot = (
   input: Readonly<{
     found: WompiTransaction;
     captured: typeof Snapshot.Type;
@@ -149,6 +149,38 @@ const verifiedSnapshot = (
     return captured;
   });
 
+export const verifiedOutcome = Effect.fn(function* (
+  captured: typeof Snapshot.Type,
+  found: WompiTransaction
+) {
+  let settlement: VerifiedOutcome;
+  if (found.status === "APPROVED") {
+    if (Option.isNone(found.finalizedAt)) return yield* failure();
+    const period = Option.isSome(captured.previous_paid_attempt_id)
+      ? {
+          startsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_starts_at_ms)),
+          endsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
+          renewalAnchor: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
+        }
+      : yield* paidPeriodFor(captured.billing_period, captured.time_zone, found.finalizedAt.value);
+    settlement = {
+      status: "APPROVED",
+      finalizedAtMs: DateTime.toEpochMillis(found.finalizedAt.value),
+      paidPeriod: {
+        startsAtMs: DateTime.toEpochMillis(period.startsAt),
+        endsAtMs: DateTime.toEpochMillis(period.endsAt),
+        renewalAnchorMs: DateTime.toEpochMillis(period.renewalAnchor),
+      },
+    };
+  } else {
+    settlement = {
+      status: found.status,
+      finalizedAtMs: Option.map(found.finalizedAt, DateTime.toEpochMillis),
+    };
+  }
+  return settlement;
+});
+
 /** A provider id is a lookup hint only: provider GET and the full captured snapshot authorize evidence. */
 const reconcileBillingTransaction = (
   input: Readonly<{
@@ -163,35 +195,7 @@ const reconcileBillingTransaction = (
       .pipe(Effect.mapError((cause) => failure(Option.some(cause))));
     const captured = yield* verifiedSnapshot({ ...input, found });
     const now = yield* Clock.currentTimeMillis;
-    let settlement: VerifiedOutcome;
-    if (found.status === "APPROVED") {
-      if (Option.isNone(found.finalizedAt)) return yield* failure();
-      const period = Option.isSome(captured.previous_paid_attempt_id)
-        ? {
-            startsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_starts_at_ms)),
-            endsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
-            renewalAnchor: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
-          }
-        : yield* paidPeriodFor(
-            captured.billing_period,
-            captured.time_zone,
-            found.finalizedAt.value
-          );
-      settlement = {
-        status: "APPROVED",
-        finalizedAtMs: DateTime.toEpochMillis(found.finalizedAt.value),
-        paidPeriod: {
-          startsAtMs: DateTime.toEpochMillis(period.startsAt),
-          endsAtMs: DateTime.toEpochMillis(period.endsAt),
-          renewalAnchorMs: DateTime.toEpochMillis(period.renewalAnchor),
-        },
-      };
-    } else {
-      settlement = {
-        status: found.status,
-        finalizedAtMs: Option.map(found.finalizedAt, DateTime.toEpochMillis),
-      };
-    }
+    const settlement = yield* verifiedOutcome(captured, found);
     yield* attempt(() =>
       recordVerifiedBillingEvidence({
         db: input.db,

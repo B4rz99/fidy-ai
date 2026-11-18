@@ -1,3 +1,4 @@
+import { retainedAgentCallbackOwner } from "../coordinator-test-harness";
 import { type InsightUnavailable } from "../insights/contract";
 import {
   InsightRecipient,
@@ -120,7 +121,7 @@ const verify = (
 ): Effect.Effect<InsightWhatsAppReconciliation, WhatsAppUnavailable> =>
   Effect.gen(function* () {
     yield* stageInsightDelivery(input);
-    const claim = yield* startInsightSend(input);
+    const claim = yield* startInsightSend({ ...input, callbackOwner: retainedAgentCallbackOwner });
     if (claim._tag !== "Ready") {
       return yield* Effect.die("Expected ready claim");
     }

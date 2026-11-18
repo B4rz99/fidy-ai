@@ -1,3 +1,4 @@
+import { externalRoutesSchema } from "./external-events";
 import type { StoreHistory } from "../../runtime/sqlite/contract";
 
 const initialDirectorySchema = [
@@ -44,5 +45,6 @@ export const directoryHistory: StoreHistory = {
         "CREATE INDEX pairing_expiry ON browser_pairings(expires_at_ms)",
       ],
     },
+    { version: 4, id: "external-event-routes", statements: externalRoutesSchema() },
   ],
 };

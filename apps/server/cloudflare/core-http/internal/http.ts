@@ -1,4 +1,12 @@
 import {
+  isLocalForwardingOperation,
+  prepareBoundReviewItem,
+  prepareBoundReviewMaterial,
+  prepareBoundReviewPageContext,
+  prepareBoundReviewWorkspace,
+  validationFailed,
+} from "../../ingestion/operations";
+import {
   executeCanonicalHttpQuery,
   isLocalBatchRoute,
 } from "../../canonical-operations/operations";
@@ -15,13 +23,6 @@ import {
   isLocalRecurringPlan,
   prepareBoundRecurringWorkspace,
 } from "../../recurring-plans/operations";
-import {
-  prepareBoundReviewItem,
-  prepareBoundReviewMaterial,
-  prepareBoundReviewPageContext,
-  prepareBoundReviewWorkspace,
-  validationFailed,
-} from "../../ingestion/operations";
 import {
   browseDashboard,
   isLocalDashboardOperation,
@@ -324,8 +325,6 @@ const callbackEffect = (
                 return response;
               }
             ),
-          onHostedStatus: (admission) =>
-            forwardHostedWhatsApp(environment, "whatsapp/status", { admission, traceHeaders }),
         })(request)
       )
     : Effect.succeed(methodNotAllowed());
@@ -1754,6 +1753,7 @@ const browserCanonicalResponse = (
 
 const isUserStoreOperation = (id: string): boolean =>
   isLocalBatchRoute(id) ||
+  isLocalForwardingOperation(id) ||
   isLocalTransactionOperation(id) ||
   isLocalDashboardOperation(id) ||
   isLocalRecurringPlan(id) ||

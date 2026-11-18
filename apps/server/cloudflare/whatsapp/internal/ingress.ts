@@ -1,6 +1,11 @@
+import {
+  type WhatsAppIngressEnvironment as Environment,
+  type WhatsAppAuthenticatedInbound as WebhookInbound,
+  WhatsAppLifecycleWork,
+} from "../contract";
 import { Digest, SecureRandom } from "effect/crypto";
 import { OutboundHttpLive } from "../../outbound-http/runtime";
-import { makeStatusLookupAdmission } from "./status-admission";
+import { makeNativeStatusAdmission } from "./registered-send";
 import { routeNativeInvitation } from "../../provider-authentication/runtime";
 import { TranscriptText } from "../../../src/core/agent/contract";
 import { Sha256Digest } from "../../../src/shell/consent/contract";
@@ -15,7 +20,6 @@ import {
   makeLifecycleVerifier,
   makeVoiceUnavailableSender,
 } from "../../../src/shell/channels/whatsapp/runtime";
-import { DisclosureDeliveryCorrelationToken } from "../../../src/core/provider-evidence/contract";
 import {
   Context,
   DateTime,
@@ -31,21 +35,12 @@ import {
 import { Hex } from "effect/encoding";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { type UserId } from "../../../src/core/identity/contract";
-import { recordConsentDelivery } from "../../consent/ingress/operations";
 import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
 import {
   captureObservedProviderFetch,
   cloudflareWorkerTelemetry,
 } from "../../runtime/telemetry/operations";
-import {
-  type WhatsAppIngressEnvironment as Environment,
-  type WhatsAppAuthenticatedInbound as WebhookInbound,
-} from "../contract";
 import { acceptWhatsAppMedia } from "../../ingestion/operations";
-import { findInsightDeliveryUser } from "./insight-delivery";
-import { findDeliveryUser } from "./proactivity-delivery";
-import { findWeeklyQuestionUser } from "./weekly-question";
-import { findWhatsAppDeliveryUser } from "./whatsapp-turn";
 
 const HTTP_OK = 200;
 const HTTP_UNAUTHORIZED = 401;
@@ -328,23 +323,6 @@ const handleInbound = (
     });
   });
 
-const findHostedStatusUser = (
-  input: Parameters<typeof findInsightDeliveryUser>[0]
-): Effect.Effect<Option.Option<UserId>, void> =>
-  Effect.gen(function* () {
-    const candidates = [
-      findDeliveryUser(input).pipe(Effect.mapError(() => undefined)),
-      findInsightDeliveryUser(input).pipe(Effect.mapError(() => undefined)),
-      findWeeklyQuestionUser(input).pipe(Effect.mapError(() => undefined)),
-      findWhatsAppDeliveryUser(input).pipe(Effect.mapError(() => undefined)),
-    ];
-    for (const candidate of candidates) {
-      const user = yield* candidate;
-      if (Option.isSome(user)) return user;
-    }
-    return Option.none();
-  });
-
 const handleHostedLifecycle = (
   base: WebhookBase,
   eventName: string,
@@ -354,7 +332,7 @@ const handleHostedLifecycle = (
     const httpClient = yield* HttpClient.HttpClient;
     const hosted = yield* Effect.result(
       makeLifecycleVerifier({
-        admitLookup: makeStatusLookupAdmission(environment.DB),
+        admitLookup: makeNativeStatusAdmission(environment),
         apiKey: Redacted.make(environment.KAPSO_API_KEY),
         httpClient,
       })({ ...base, eventName })
@@ -366,43 +344,27 @@ const handleHostedLifecycle = (
     }
     if (Option.isNone(hosted.success)) return answer(HTTP_OK);
     const evidence = hosted.success.value;
-    const lookup = {
-      db: environment.DB,
+    const queue = environment.HOSTED_WHATSAPP_QUEUE;
+    if (queue === undefined) return answer(HTTP_UNAVAILABLE);
+    const work = yield* Schema.decodeEffect(WhatsAppLifecycleWork)({
+      _tag: "WhatsAppLifecycleEvent",
+      portfolio: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
+      ...(Option.isNone(evidence.recipientUserId)
+        ? {}
+        : { recipientUserId: evidence.recipientUserId.value }),
+      ...(evidence.businessPhoneNumberId !== environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID ||
+      Option.isNone(evidence.recipientPhone)
+        ? {}
+        : { recipientPhone: evidence.recipientPhone.value }),
       correlationToken: evidence.correlationToken,
       businessPhoneNumberId: evidence.businessPhoneNumberId,
-    };
-    const user = yield* findHostedStatusUser(lookup);
-    if (Option.isSome(user)) {
-      return yield* attempt(() =>
-        environment.onHostedStatus({
-          userId: user.value,
-          ...(Option.isNone(evidence.recipientUserId)
-            ? {}
-            : { recipientUserId: evidence.recipientUserId.value }),
-          ...(Option.isNone(evidence.recipientPhone)
-            ? {}
-            : { recipientPhone: evidence.recipientPhone.value }),
-          correlationToken: evidence.correlationToken,
-          businessPhoneNumberId: evidence.businessPhoneNumberId,
-          providerMessageId: evidence.messageEvidence.providerMessageId,
-          outcome: evidence.outcome,
-          occurredAtMs: DateTime.toEpochMillis(evidence.occurredAt),
-          receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
-        })
-      );
-    }
-    return eventName === "whatsapp.message.delivered"
-      ? yield* recordConsentDelivery({
-          db: environment.DB,
-          input: {
-            correlationToken: DisclosureDeliveryCorrelationToken.make(evidence.correlationToken),
-            phoneNumberId: evidence.businessPhoneNumberId,
-            messageId: evidence.messageEvidence.providerMessageId,
-            occurredAtMs: DateTime.toEpochMillis(evidence.occurredAt),
-            receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
-          },
-        })
-      : answer(HTTP_OK);
+      providerMessageId: evidence.messageEvidence.providerMessageId,
+      outcome: evidence.outcome,
+      occurredAtMs: DateTime.toEpochMillis(evidence.occurredAt),
+      receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
+    }).pipe(Effect.mapError(() => undefined));
+    yield* attempt(() => queue.send(work));
+    return answer(HTTP_OK);
   });
 
 const isLifecycleEvent = (name: string): boolean =>

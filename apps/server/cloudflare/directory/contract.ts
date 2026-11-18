@@ -1,3 +1,4 @@
+import { EmailForwardingLocalPart } from "../../src/core/ingestion/contract";
 import { PATId } from "../../src/core/tokens/contract";
 import { Data, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
@@ -9,7 +10,7 @@ export const SessionRoute = Schema.Struct({ userId: UserId, sessionId: WebSessio
 
 export type UserStoreBindings = Readonly<{
   DIRECTORY: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-  USER_STORE: Pick<DurableObjectNamespace, "getByName">;
+  USER_STORE: Readonly<{ getByName: (id: string) => Pick<Fetcher, "fetch"> }>;
 }>;
 
 export const patRouteUrl = "https://directory.invalid/pat-route";
@@ -90,3 +91,51 @@ export const FrozenChannelApproval = Schema.Struct({
 export const reserveRecoveryUrl = "https://directory.invalid/bootstrap/recovery";
 
 export class DirectoryWriteUnavailable extends Data.TaggedError("DirectoryWriteUnavailable") {}
+
+const maximumCallbackIdentifierLength = 200;
+const callbackIdentifier = Schema.NonEmptyString.check(
+  Schema.isMaxLength(maximumCallbackIdentifierLength)
+);
+const forwardingKey = Schema.Struct({
+  kind: Schema.Literal("forwarding"),
+  endpoint: Schema.Literal("fidyapp.com"),
+  lookup: EmailForwardingLocalPart,
+});
+const wompiKey = Schema.Struct({
+  kind: Schema.Literal("wompi"),
+  endpoint: Schema.Literals(["sandbox", "production"]),
+  lookup: Schema.String.check(Schema.isPattern(/^fidy-[a-f0-9-]{36}$/u)),
+});
+const whatsappKey = Schema.Struct({
+  kind: Schema.Literal("whatsapp"),
+  endpoint: callbackIdentifier,
+  lookup: Schema.String.check(Schema.isUUID()),
+});
+export const ExternalEventKey = Schema.Union([forwardingKey, wompiKey, whatsappKey]);
+const destination = { userId: UserId, operationId: callbackIdentifier };
+export const ExternalEventRoute = Schema.Union([
+  Schema.Struct({ ...forwardingKey.fields, ...destination, family: Schema.Literal("forwarding") }),
+  Schema.Struct({ ...wompiKey.fields, ...destination, family: Schema.Literal("billing") }),
+  Schema.Struct({
+    ...whatsappKey.fields,
+    ...destination,
+    family: Schema.Literals(["hosted", "proactivity", "insight", "weekly-question", "disclosure"]),
+  }),
+]);
+export const externalReserveUrl = "https://directory.invalid/external/reserve";
+export const externalLookupUrl = "https://directory.invalid/external/lookup";
+
+export type ExternalEventNamespace = Readonly<{
+  getByName: (id: string) => Pick<Fetcher, "fetch">;
+}>;
+export type ExternalEventBindings = Readonly<{
+  DIRECTORY: ExternalEventNamespace;
+  USER_STORE: ExternalEventNamespace;
+}>;
+
+export const statusLookupAdmissionUrl = "https://directory.invalid/external/kapso-lookup";
+export const StatusLookupCoordinates = Schema.Struct({
+  endpoint: callbackIdentifier,
+  messageId: callbackIdentifier,
+  status: Schema.Literals(["sent", "delivered", "failed"]),
+});

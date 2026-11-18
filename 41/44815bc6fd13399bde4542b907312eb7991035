@@ -1,0 +1,19 @@
+apps/server/cloudflare/runtime/sqlite/migrations.test.ts
+  s_a1be23a656acf0::t_ccdbe57a4bbcf6 1-2,241,248-249
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4144815bc6fd13399bde4542b907312eb7991035",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "a6b8b40dda2e1cdec173a1a42b63e905b776d048c042aaa5f241bce6a6a03a24";
+const expectedEdgePolicyDigest = "d806192f2010184b0a68075c23d68086331002cf66b47b4e06602dff189a2f31";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/directory/internal/recovery-rotation.ts", import.meta.url)

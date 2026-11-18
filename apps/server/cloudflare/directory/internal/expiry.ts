@@ -26,14 +26,15 @@ export const drainBootstrapExpiry = Effect.fn(function* (now: number) {
 export const directoryDeadline = Effect.gen(function* () {
   const sql = yield* SqliteClient;
   const [row] = yield* sql.unsafe(
-    `SELECT min(deadline) AS deadline FROM(
-    SELECT min(expires_at_ms) AS deadline FROM identity_replacements UNION ALL
-    SELECT min(hard_expires_at_ms) AS deadline FROM session_routes UNION ALL
-    SELECT min(expires_at_ms) FROM recovery_rotations WHERE state<>'reserved' UNION ALL
-    SELECT min(virtual_at_ms) AS deadline FROM unresolved_source_buckets UNION ALL
-    SELECT min(expires_at_ms) FROM bootstrap_admissions UNION ALL
-    SELECT min(expires_at_ms) FROM (${settledPairings}) UNION ALL
-    SELECT min(expires_at_ms)+? FROM (${settledInvitations}))`,
+    `SELECT min(column1) AS deadline FROM (VALUES
+      ((SELECT min(expires_at_ms) FROM identity_replacements)),
+      ((SELECT min(hard_expires_at_ms) FROM session_routes)),
+      ((SELECT min(expires_at_ms) FROM recovery_rotations WHERE state<>'reserved')),
+      ((SELECT min(virtual_at_ms) FROM unresolved_source_buckets)),
+      ((SELECT min(expires_at_ms) FROM bootstrap_admissions)),
+      ((SELECT min(expires_at_ms) FROM (${settledPairings}))),
+      ((SELECT min(expires_at_ms)+? FROM (${settledInvitations})))
+    )`,
     [retentionAfterExpiryMs]
   );
   return yield* Schema.decodeUnknownEffect(

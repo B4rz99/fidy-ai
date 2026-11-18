@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, bob, nativeTransactionJourney } from "../financial-user-store.test-fixture";
 import { native } from "../user-store.test-fixture";
@@ -58,10 +58,13 @@ const scenario = Effect.gen(function* () {
   const headers = { cookie, [binding]: alice.session };
   const response = yield* send(headers);
   expect(response.status).toBe(200);
-  expect(yield* native(() => response.json())).toMatchObject({
-    data: { id: alice.user },
-    categories: expect.any(Array),
-  });
+  const profile = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      data: Schema.Struct({ id: Schema.String }),
+      categories: Schema.Array(Schema.Unknown),
+    })
+  )(yield* native(() => response.json()));
+  expect(profile.data.id).toBe(alice.user);
   const now = yield* Clock.currentTimeMillis;
   yield* native(() =>
     db.exec(

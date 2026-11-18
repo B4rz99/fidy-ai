@@ -8,13 +8,13 @@
         "@babel/parser": "8.1.0",
         "@babel/traverse": "8.1.0",
         "@babel/types": "8.1.0",
-        "@effect/platform-bun": "4.1.3",
+        "@effect/platform-bun": "4.1.4",
         "@effect/tsgo": "0.67.7",
         "@playwright/test": "1.65.0",
         "@shadcn/lint": "0.2.5",
         "@types/istanbul-lib-coverage": "2.0.6",
         "bun-types": "1.4.4",
-        "effect": "4.1.3",
+        "effect": "4.1.4",
         "istanbul-lib-coverage": "3.2.2",
         "lefthook": "2.2.2",
         "oxfmt": "0.78.0",
@@ -30,12 +30,12 @@
         "fidy": "src/main.ts",
       },
       "dependencies": {
-        "@effect/platform-bun": "4.1.3",
+        "@effect/platform-bun": "4.1.4",
         "@fidy/server": "workspace:0.0.0",
-        "effect": "4.1.3",
+        "effect": "4.1.4",
       },
       "devDependencies": {
-        "@effect/vitest": "4.1.3",
+        "@effect/vitest": "4.1.4",
         "vitest": "5.1.0",
       },
     },
@@ -51,10 +51,10 @@
       "name": "@fidy/server",
       "version": "0.0.0",
       "dependencies": {
-        "@effect/sql-d1": "4.1.3",
-        "@effect/sql-sqlite-do": "4.1.3",
+        "@effect/sql-d1": "4.1.4",
+        "@effect/sql-sqlite-do": "4.1.4",
         "csv-parse": "7.0.3",
-        "effect": "4.1.3",
+        "effect": "4.1.4",
         "fflate": "0.8.3",
         "jose": "6.2.17",
         "mupdf": "1.28.6",
@@ -65,9 +65,9 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "5.20261110.1",
-        "@effect/platform-bun": "4.1.3",
-        "@effect/platform-node": "4.1.3",
-        "@effect/vitest": "4.1.3",
+        "@effect/platform-bun": "4.1.4",
+        "@effect/platform-node": "4.1.4",
+        "@effect/vitest": "4.1.4",
         "@vitest/coverage-istanbul": "5.1.0",
         "bun-types": "1.4.4",
         "esbuild": "0.28.2",
@@ -104,8 +104,8 @@
         "@base-ui/react": "1.9.0",
         "@dnd-kit/dom": "0.5.3",
         "@dnd-kit/react": "0.5.3",
-        "@effect/atom-react": "4.1.3",
-        "@effect/platform-browser": "4.1.3",
+        "@effect/atom-react": "4.1.4",
+        "@effect/platform-browser": "4.1.4",
         "@fidy/server": "workspace:0.0.0",
         "@hugeicons/core-free-icons": "4.4.0",
         "@hugeicons/react": "1.1.10",
@@ -114,7 +114,7 @@
         "class-variance-authority": "0.7.1",
         "clsx": "2.1.1",
         "date-fns": "4.4.0",
-        "effect": "4.1.3",
+        "effect": "4.1.4",
         "react": "19.3.1",
         "react-day-picker": "10.0.2",
         "react-dom": "19.3.1",
@@ -126,7 +126,7 @@
         "use-stick-to-bottom": "1.1.6",
       },
       "devDependencies": {
-        "@effect/platform-bun": "4.1.3",
+        "@effect/platform-bun": "4.1.4",
         "@tailwindcss/vite": "4.3.5",
         "@types/react": "19.3.0",
         "@types/react-dom": "19.3.0",
@@ -147,12 +147,12 @@
       "version": "0.0.0",
       "dependencies": {
         "@fidy/server": "workspace:0.0.0",
-        "effect": "4.1.3",
+        "effect": "4.1.4",
       },
       "devDependencies": {
         "@cloudflare/workers-types": "5.20261110.1",
-        "@effect/platform-bun": "4.1.3",
-        "@effect/vitest": "4.1.3",
+        "@effect/platform-bun": "4.1.4",
+        "@effect/vitest": "4.1.4",
         "alchemy": "2.0.0-beta.80",
         "typescript": "7.0.2",
         "vitest": "5.1.0",
@@ -164,7 +164,7 @@
       "version": "0.0.0",
       "dependencies": {
         "alchemy": "2.0.0-beta.80",
-        "effect": "4.1.3",
+        "effect": "4.1.4",
       },
     },
   },
@@ -174,9 +174,9 @@
     "@distilled.cloud/aws@1.0.0-rc.13": "patches/@distilled.cloud-aws@1.0.0-rc.13.patch",
   },
   "overrides": {
-    "@effect/platform-browser": "4.1.3",
-    "@effect/platform-node-shared": "4.1.3",
-    "@effect/sql-sqlite-do": "4.1.3",
+    "@effect/platform-browser": "4.1.4",
+    "@effect/platform-node-shared": "4.1.4",
+    "@effect/sql-sqlite-do": "4.1.4",
     "@hono/node-server": "2.1.6",
     "@modelcontextprotocol/sdk": "1.32.0",
     "body-parser": "2.4.0",
@@ -447,19 +447,19 @@
 
     "@dotenvx/primitives": ["@dotenvx/primitives@0.8.0", "", {}, "sha512-VYJy0uhFm9zTJ1TxBaW/pA8bjbOM/OttaNMwZ1RHG4JKyRG7DhSdiqD1ipQoAyoD22olUtxbP78W9xY3Wd11bg=="],
 
-    "@effect/atom-react": ["@effect/atom-react@4.1.3", "", { "peerDependencies": { "effect": "^4.1.3", "react": ">=19.0.0 <20.0.0", "scheduler": ">=0.25.0 <0.29.0" } }, "sha512-sEAsM6NylBJWbd1VlVwKV8QLZB6pIt37PjGfwphQzoVdrAjJnWrJzirBW+B65ndzybnCl8g69t7aY1SGOJxoaA=="],
+    "@effect/atom-react": ["@effect/atom-react@4.1.4", "", { "peerDependencies": { "effect": "^4.1.4", "react": ">=19.0.0 <20.0.0", "scheduler": ">=0.25.0 <0.29.0" } }, "sha512-Xj58DcAzKsysHhzBCPaz2v1QAJq6NvMdGVmG7SV4zkw1RMiTZv8gaOXA1VqIRlpmvdspMwRe/BQ4eayuzRZTpQ=="],
 
-    "@effect/platform-browser": ["@effect/platform-browser@4.1.3", "", { "peerDependencies": { "effect": "^4.1.3" } }, "sha512-y2ppxixD2ngd1cMW5bs8KMinz3TTBX6P6n4yTiF3Hap/QHBysIPwbWHBM35Cf+2CS8SyMnLtEyDqnXBgEJ5xCg=="],
+    "@effect/platform-browser": ["@effect/platform-browser@4.1.4", "", { "peerDependencies": { "effect": "^4.1.4" } }, "sha512-oh6SxR62VaU8xzpVloHRJwK4ADBXCzlnjgcvV6zHc9h4PwmdhQvlfrXFu38tvqJTgK31Z1VnzbkLtymWHbEUSA=="],
 
-    "@effect/platform-bun": ["@effect/platform-bun@4.1.3", "", { "dependencies": { "@effect/platform-node-shared": "4.1.3" }, "peerDependencies": { "effect": "^4.1.3" } }, "sha512-ypcQxupTHyJsaJ/LJyCiyknjh7rCq8e961MgD3A3kEzEhH65RLoSBsD6YzzKgV3sjJwAeG8z4jdS3Id+g/7WXA=="],
+    "@effect/platform-bun": ["@effect/platform-bun@4.1.4", "", { "dependencies": { "@effect/platform-node-shared": "4.1.4" }, "peerDependencies": { "effect": "^4.1.4" } }, "sha512-Vdq82GOrD5HVF43aXVwHeX+4uIOrgAnjju9MEyizzFZ3yt3A6x9prtmHej1q/zAOaeNddtkpPr2ExHEvZ13S6Q=="],
 
-    "@effect/platform-node": ["@effect/platform-node@4.1.3", "", { "dependencies": { "@effect/platform-node-shared": "4.1.3", "undici": "^8.12.4" }, "peerDependencies": { "effect": "^4.1.3", "redis": ">=5.1.0 <7.0.0" } }, "sha512-1hT2k2piMmqU3aHnJgVH4zhgmGVCgB1sUw63Pry8/U5QQvehr0ohp9DokSjWXM5MpafQbFv6n+4sEF4I44e+5A=="],
+    "@effect/platform-node": ["@effect/platform-node@4.1.4", "", { "dependencies": { "@effect/platform-node-shared": "4.1.4", "undici": "^8.12.4" }, "peerDependencies": { "effect": "^4.1.4", "redis": ">=5.1.0 <7.0.0" } }, "sha512-h7QExTPq/RfYtHP/8tMlgfBvqYsuJKhxfkU6w0+NaF/ihqQ8Y3GH9t28ltupQjoqMM7P6W5gy8rOji7F0qVrmg=="],
 
-    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.1.3", "", { "dependencies": { "@types/ws": "^8.18.2", "ws": "^8.22.1" }, "peerDependencies": { "effect": "^4.1.3" } }, "sha512-zcFjbgWuT66NJHi6cCx8/BywQ/pR8I3wSd4GsNolMjwlvMRDELUodTxEPOhwt+sAVekueFPf1lyCS2I05Svnfw=="],
+    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.1.4", "", { "dependencies": { "@types/ws": "^8.18.2", "ws": "^8.22.1" }, "peerDependencies": { "effect": "^4.1.4" } }, "sha512-DWdfphHGOFJNj/mYadgpT3jIm8aRXDcPrQiGXFBH4p2H4XmA7iYMrPsI8NxVgZ7kNX0q1+FGJZJama0tINHRAg=="],
 
-    "@effect/sql-d1": ["@effect/sql-d1@4.1.3", "", { "dependencies": { "@cloudflare/workers-types": "^5.20261107.1" }, "peerDependencies": { "effect": "^4.1.3" } }, "sha512-W0pb44ZoGUhXrLnF/xGXZwuyb3a1TF8YHvfzAEV9ikUk2HJpyKBu7xg7ZCTfAkG6NHjq6a7kEGg4GGedbLglxA=="],
+    "@effect/sql-d1": ["@effect/sql-d1@4.1.4", "", { "dependencies": { "@cloudflare/workers-types": "^5.20261107.1" }, "peerDependencies": { "effect": "^4.1.4" } }, "sha512-x7UtDPNCgcAz6lvGbrf0INHxztV0qV8i4qleqPb31ADeilz7MnGYJ5Qhprqod+ySBUNPdsvXNRE9vm36TznIdg=="],
 
-    "@effect/sql-sqlite-do": ["@effect/sql-sqlite-do@4.1.3", "", { "peerDependencies": { "effect": "^4.1.3" } }, "sha512-Bw6ZRHceCHAwjBNmjJjkPc+PacavFARVk/DepfPlj6u0uMsUNedsoIq5s+8Ab7vYluqzIw24c6psG6uvA4IC5A=="],
+    "@effect/sql-sqlite-do": ["@effect/sql-sqlite-do@4.1.4", "", { "peerDependencies": { "effect": "^4.1.4" } }, "sha512-qeL9J7hgjvKmZu86d6jnzjts+lqxz/Lm/KOPka71++fl30sx9QoQLdHgmzC92S0TydC5EGO7i7rJRhLv4FV+qw=="],
 
     "@effect/tsgo": ["@effect/tsgo@0.67.7", "", { "optionalDependencies": { "@effect/tsgo-darwin-arm64": "0.67.7", "@effect/tsgo-darwin-x64": "0.67.7", "@effect/tsgo-linux-arm": "0.67.7", "@effect/tsgo-linux-arm64": "0.67.7", "@effect/tsgo-linux-x64": "0.67.7", "@effect/tsgo-win32-arm64": "0.67.7", "@effect/tsgo-win32-x64": "0.67.7" }, "bin": { "effect-tsgo": "dist/effect-tsgo.cjs" } }, "sha512-1OPkF+7L11BGGonHsgVgfplCqEq0AkoXWcr55hfs4KomhTdRhfSAzuHbRXWoloobVRNF3i7ZgABHm6xeJ5H9Tg=="],
 
@@ -477,7 +477,7 @@
 
     "@effect/tsgo-win32-x64": ["@effect/tsgo-win32-x64@0.67.7", "", { "os": "win32", "cpu": "x64" }, "sha512-42Z+8gL9JR6ntmeAoZXHaJ/5fb+F9i9HMJaa9yY8lBbtns1RHTT807qV//RISm7M5pUloM9qzAmNbGJB2FbIbA=="],
 
-    "@effect/vitest": ["@effect/vitest@4.1.3", "", { "peerDependencies": { "effect": "^4.1.3", "vitest": ">=5.0.0 <6.0.0" } }, "sha512-HgwaaL0BqPX1/tXWQxa1+AfWjcWdJs/+sgxkOTXVDOJuqYpgqDkvZfVdwh1CJ9iNAS7Xx370ranRcNC4X+3v+A=="],
+    "@effect/vitest": ["@effect/vitest@4.1.4", "", { "peerDependencies": { "effect": "^4.1.4", "vitest": ">=5.0.0 <6.0.0" } }, "sha512-AKpZ6zKihCRhY7hDbiQ2yp/krw+afIkxDRjFMwwzMiyhd0iYk0WaHa9J6GGC7TUF/C7HP2dZyMVq5xC0Qm/2/g=="],
 
     "@electric-sql/pglite": ["@electric-sql/pglite@0.3.15", "", {}, "sha512-Cj++n1Mekf9ETfdc16TlDi+cDDQF0W7EcbyRHYOAeZdsAe8M/FJg18itDTSwyHfar2WIezawM9o0EKaRGVKygQ=="],
 
@@ -1357,7 +1357,7 @@
 
     "dset": ["dset@3.1.4", "", {}, "sha512-2QF/g9/zTaPDc3BjNcVTGoBbXBgYfMTTceLaYcFJ/W9kggFUkhxD/hMEeuLKbugyef9SqAx8cpgwlIP/jinUTA=="],
 
-    "effect": ["effect@4.1.3", "", {}, "sha512-QWNEu35groH/78Ejq01lZGt8U0sF1P4nrhbcAZz5WffcS27bUUK9C/db+xWWUwNYUvFD5SrSLE0mFGtwyP0PCQ=="],
+    "effect": ["effect@4.1.4", "", {}, "sha512-Tgrv/9FN+TZYyOn8XSli+fVqAfwDrDAkiX5Uu9vztINb675VTQdhD0gWI5Kzvhlh9QqzjZvw72iugqw5pwoghQ=="],
 
     "electron-to-chromium": ["electron-to-chromium@1.5.456", "", {}, "sha512-8hboqI6xesozteFb8aa7OGknvxUtTeRJLz0FoePysUEh/oWbddykIGdgpEJRbPRg/nIMfBf2DFos+H2MtvJl2A=="],
 

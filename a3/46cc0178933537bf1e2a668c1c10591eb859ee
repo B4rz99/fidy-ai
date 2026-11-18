@@ -1,0 +1,105 @@
+apps/server/cloudflare/subscription/pricing.test.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 2,6,34,61-69,121-128,132-212,217,251,275,299-300,350
+.patterns/effect-4-stable.md
+  s_a1be23a656acf0::t_c5e51d14b73894 3-4,22
+apps/server/cloudflare/subscription/internal/local-renewal.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-189
+apps/server/cloudflare/subscription/internal/native-billing.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 8,72-75,110-150,171,195,197,202,223-235,260,275,278-285,293,299,304,308,350-400
+apps/server/cloudflare/user-store/internal/billing-admission-schema.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-34
+apps/server/cloudflare/subscription/pricing/operations.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 54-65
+apps/cli/package.json
+  s_a1be23a656acf0::t_c5e51d14b73894 18,20,23
+apps/server/cloudflare/subscription/internal/enrollment-session.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-89
+apps/server/cloudflare/subscription/internal/pricing-object.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 2-6,11,15-18,20-24,91-107,109-114,118-179,181-189,191-240,242-277
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 119,125-133,148-149,180,189-191,275-277,398,477,708-713,736-765,772-773
+apps/server/cloudflare/subscription/native-callback.test.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 42,198-208
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 27-32,36,82-109,306,308-311,313,329-335,346,401,403
+apps/server/cloudflare/maintenance/schedule.test.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 20-22,33-34,36,78,108
+  s_a1be23a656acf0::t_42ec19c95e98be 19
+apps/server/cloudflare/subscription/pricing.test-fixture.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 16-47,82
+apps/web/src/features/subscription/enrollment-gateway.test.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1273-1315
+apps/server/cloudflare/subscription/internal/local-enrollment-form.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-291
+apps/web/src/features/subscription/payment-details.tsx
+  s_a1be23a656acf0::t_c5e51d14b73894 593-602
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 114-115,118,247-259,305-309,312,337,347-348,351
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 5,428-481
+apps/server/cloudflare/maintenance/watchdog.test.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 144-147
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 119-123,189,1727,1963,2002-2004
+apps/server/cloudflare/subscription/internal/local-billing-work.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-116
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-11,342,904,1114
+infra/docs/package.json
+  s_a1be23a656acf0::t_c5e51d14b73894 13
+apps/server/cloudflare/subscription/internal/local-billing-admission.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-180
+apps/server/cloudflare/subscription/internal/native-enrollment.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-107
+apps/server/cloudflare/subscription/contract.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 6-7,9,280-295
+apps/server/cloudflare/subscription/operations.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-6,27-28,36,171-210
+  s_a1be23a656acf0::t_ea8ce35a46d1a0 211
+apps/server/cloudflare/queue/failure-isolation.test.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 36,144-145,148,191,234-237
+infra/cloudflare/package.json
+  s_a1be23a656acf0::t_c5e51d14b73894 17,21-22
+apps/server/cloudflare/subscription/internal/enrollment-policy.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-157
+apps/server/cloudflare/subscription/native-enrollment.test.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-673
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 579
+.patterns/INDEX.md
+  s_a1be23a656acf0::t_c5e51d14b73894 6
+.patterns/sources.json
+  s_a1be23a656acf0::t_c5e51d14b73894 4,17,22
+package.json
+  s_a1be23a656acf0::t_c5e51d14b73894 68,74,83-85
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 14-15
+apps/web/package.json
+  s_a1be23a656acf0::t_c5e51d14b73894 24-25,34,46
+apps/server/cloudflare/subscription/internal/local-enrollment-submit.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 1-447
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_c5e51d14b73894 2,9-16,18-22,51-111,122-124,126-127,133
+apps/server/package.json
+  s_a1be23a656acf0::t_c5e51d14b73894 320-321,323,334-336
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_2241b9351d58bc 2,954,956
+bun.lock
+  s_a1be23a656acf0::t_cc6a917950a0e1 11,17,33,35,38,54-55,57,68-70,107-108,117,129,150,154-155,167,177-179,450,452,454,456,458,460,462,480,1360
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a346cc0178933537bf1e2a668c1c10591eb859ee",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+apps/server/cloudflare/budgets/internal/sqlite-planning.ts
+  s_a1be23a656acf0::t_2a72acbd742f6d 314-334,336-352
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_a1be23a656acf0::t_c2f725d71edcff 1290-1297
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_2179d3f4f601ac 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3a3332c1b9d2d8f3295b2e7a42bd92a8bb922ab3",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

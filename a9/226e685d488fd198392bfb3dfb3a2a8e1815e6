@@ -1,0 +1,23 @@
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_2f1a98786ea5b1 227-234
+apps/server/cloudflare/erasure/native-purge.test.ts
+  s_a1be23a656acf0::t_0d76d2fc52ebab 4,9-12,90-148,157,159,190
+apps/server/cloudflare/erasure/purge-worker.test-fixture.ts
+  s_a1be23a656acf0::t_21ea58bb62aa6c 19-21,42-46,51-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a9226e685d488fd198392bfb3dfb3a2a8e1815e6",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

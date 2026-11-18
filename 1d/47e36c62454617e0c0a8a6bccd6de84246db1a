@@ -1,0 +1,27 @@
+apps/server/cloudflare/whatsapp/internal/native-delivery.ts
+  s_a1be23a656acf0::t_7b4e6af0481976 39,49,58
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_a1be23a656acf0::t_265285829c5aa7 839-841
+apps/server/cloudflare/insights/internal/local-reminder.ts
+  s_a1be23a656acf0::t_41c40d9dcdb453 152
+apps/server/cloudflare/insights/native-reminder-consent.test.ts
+  s_a1be23a656acf0::t_16104f88cde27e 83-85
+apps/server/cloudflare/memory/user-store.test.ts
+  s_a1be23a656acf0::t_94a5dc4dbbe83a 3,130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1d47e36c62454617e0c0a8a6bccd6de84246db1a",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

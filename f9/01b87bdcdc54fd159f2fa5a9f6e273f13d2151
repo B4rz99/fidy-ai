@@ -1,0 +1,29 @@
+apps/server/cloudflare/browser-bootstrap.test-fixture.ts
+  s_a1be23a656acf0::t_e73b5e6b3f708e 1,123
+apps/server/cloudflare/signed-whatsapp.test-fixture.ts
+  s_a1be23a656acf0::t_226a1a4e1d9c0e 1-81
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_9e84a8f3de2003 221-227,235,537
+docs/guides/local-browser.md
+  s_a1be23a656acf0::t_7f4ac39a666990 3,30
+scripts/dev-browser-api.ts
+  s_a1be23a656acf0::t_2ef395389ee644 1-126
+scripts/dev-browser-server.ts
+  s_a1be23a656acf0::t_00fe99d3b87cbf 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f901b87bdcdc54fd159f2fa5a9f6e273f13d2151",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

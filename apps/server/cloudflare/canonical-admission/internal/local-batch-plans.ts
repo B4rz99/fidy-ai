@@ -1,5 +1,5 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import type {
   CanonicalAdmissionUnavailable,
   LocalMutationPlan,
@@ -90,6 +90,18 @@ export const prepareChildren = Effect.fn(function* (
   for (const child of children) {
     const plan = yield* child.prepare(child.input, context);
     if (!("commit" in plan)) return yield* childFailure(child, plan);
+    if (
+      plans.some(
+        ({ plan: prior }) =>
+          Option.isSome(prior.removedTarget) && plan.targets.includes(prior.removedTarget.value)
+      )
+    ) {
+      return yield* new ChildRefused({
+        ...child,
+        code: "not_found",
+        message: "The requested record is unavailable.",
+      });
+    }
     if (!reserveTargets(plan, targets, premises)) {
       return yield* new ChildRefused({
         ...child,

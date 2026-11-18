@@ -967,83 +967,18 @@ it("reports corrupt retained Budget state as unavailable without false caller re
     })
   ));
 
-it("attributes the second Budget create when the first fills the owner capacity", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 126)
-    INSERT INTO categories (id, label, display_order)
-    SELECT printf('10000000-0000-4000-8000-%012d', n + 1000), 'Fixture ' || n, n + 1000 FROM seq`)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM seq WHERE n < 126)
-    INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at_ms, updated_at_ms)
-    SELECT printf('40000000-0000-4000-8000-%012d', n), ?,
-      printf('10000000-0000-4000-8000-%012d', n + 1000), 'COP', '100',
-      1788220800000,1788220800000 FROM seq`)
-          .bind(users[0])
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db.prepare("DELETE FROM budget_evaluation_work WHERE user_id = ?").bind(users[0]).run()
-      );
-      const limited = yield* Effect.tryPromise(() =>
-        send(
-          db,
-          budgetBatch([
-            budgetCall(1, "budgets.createBudget", { payload: payload() }),
-            budgetCall(2, "budgets.createBudget", {
-              payload: {
-                categoryId: "10000000-0000-4000-8000-000000000001",
-                cap: { amount: "200", currency: "COP" },
-              },
-            }),
-          ])
-        )
-      );
-      expect(limited.status).toBe(400);
-      const rejection = yield* Schema.decodeUnknownEffect(AtomicBatchRejected)(
-        yield* Effect.tryPromise(() => limited.json())
-      );
-      expect(rejection.error.failedCallIndex).toBe(1);
-      expect(rejection.error.operation).toBe("budgets.createBudget");
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM budgets WHERE user_id = ?")
-            .bind(users[0])
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(127);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*'"
-            )
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-    })
-  ));
-
 it("classifies a skipped Budget update after an earlier deletion as not_found without partial state", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* setup();
+      const db = yield* nativeTransactionJourney;
       const createResponse5 = yield* Effect.tryPromise(() =>
-        send(db, request(0, "/budgets", "POST", payload()))
+        db.send(request(0, "/budgets", "POST", payload()))
       );
       const created = yield* Schema.decodeUnknownEffect(Created)(
         yield* Effect.tryPromise(() => createResponse5.json())
       );
       const refused = yield* Effect.tryPromise(() =>
-        send(
-          db,
+        db.send(
           budgetBatch([
             budgetCall(1, "budgets.deleteBudget", { params: { id: created.data.id } }),
             budgetCall(2, "budgets.updateBudget", {
@@ -1061,32 +996,21 @@ it("classifies a skipped Budget update after an earlier deletion as not_found wi
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("budgets.updateBudget");
       expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT cap FROM budgets WHERE id = ?")
-            .bind(created.data.id)
-            .first<{ cap: string }>()
-        ))?.cap
-      ).toBe("100");
+        yield* Effect.tryPromise(() =>
+          db.exec("SELECT cap FROM budgets WHERE id=?", created.data.id)
+        )
+      ).toEqual([{ cap: "100" }]);
       expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND outcome = 'accepted'"
-            )
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS count FROM (SELECT id,user_id,session_id,operation,outcome,occurred_at_ms FROM audit_entries WHERE record_type='session_call') AS session_audit WHERE operation GLOB 'budgets.*' AND outcome = 'rejected'"
-            )
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-    })
+        yield* Effect.tryPromise(() =>
+          db.exec(
+            "SELECT outcome,count(*) AS n FROM audit_entries WHERE record_type='session_call' AND operation GLOB 'budgets.*' GROUP BY outcome ORDER BY outcome"
+          )
+        )
+      ).toEqual([
+        { outcome: "not_found", n: 1 },
+        { outcome: "success", n: 1 },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
   ));
 
 it("classifies a Budget deleted between preparation and its indexed D1 write as not_found", () =>
@@ -1312,14 +1236,14 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* nativeTransactionJourney;
         const call = (operation: string, input: object, index: number): object => ({
           callId: `30000000-0000-4000-8000-00000000000${index}`,
           operation,
           input,
         });
         const batch = (calls: ReadonlyArray<object>): Promise<Response> =>
-          send(db, request(0, "/operations/atomic-batch", "POST", { calls }));
+          db.send(request(0, "/operations/atomic-batch", "POST", { calls }));
         const created = yield* Effect.tryPromise(() =>
           batch([call("budgets.createBudget", { payload: payload() }, 1)])
         );
@@ -1364,7 +1288,7 @@ it(
         const first = updated.data.results[0];
         if (first === undefined) throw new Error("Missing batch Budget result");
         expect(encodeMoneyAmount(first.output.data.cap.amount)).toBe("250.25");
-        const foreign = yield* Effect.tryPromise(() => send(db, request(1, `/budgets/${id}`)));
+        const foreign = yield* Effect.tryPromise(() => db.send(request(1, `/budgets/${id}`)));
         expect(foreign.status).toBe(404);
         const removed = yield* Effect.tryPromise(() =>
           batch([call("budgets.deleteBudget", { params: { id } }, 3)])
@@ -1373,10 +1297,10 @@ it(
         expect(yield* Effect.tryPromise(() => removed.json())).toMatchObject({
           data: { results: [{ output: { data: id } }] },
         });
-        expect(
-          (yield* Effect.tryPromise(() => send(db, request(0, `/budgets/${id}`)))).status
-        ).toBe(404);
-      })
+        expect((yield* Effect.tryPromise(() => db.send(request(0, `/budgets/${id}`)))).status).toBe(
+          404
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer))
     ),
   30_000
 );

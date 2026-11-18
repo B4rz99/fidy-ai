@@ -108,6 +108,8 @@ export type LocalMutationPlan = Readonly<{
   /** Multiple children may rely on a premise unless another child changes it. */
   premises: ReadonlyArray<string>;
   targets: ReadonlyArray<string>;
+  /** A later child addressing a removed record observes its absence. */
+  removedTarget: Option.Option<string>;
   commit: Effect.Effect<LocalMutationResult, CanonicalAdmissionUnavailable, SqliteClient>;
 }>;
 export type LocalMutationPreparation = LocalMutationResult | LocalMutationPlan;

@@ -1304,6 +1304,7 @@ export const prepareLocalWrite = <E, Failure = never>(
         review: Effect.Effect<{ effect: string; revision: string }, Failure, SqliteClient>;
       })
 ): LocalMutationPlan => ({
+  removedTarget: Option.none(),
   premises: "premises" in write ? write.premises : [],
   targets: write.targets,
   review:

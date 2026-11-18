@@ -406,7 +406,7 @@ export const prepareLocalBudgetDeletion = Effect.fn(function* (id: BudgetId, use
   if ((yield* plannedBudgets(user, Option.none(), Option.some(id))).budgets.length === 0) {
     return missingBudget();
   }
-  return prepareLocalWrite({
+  const plan = prepareLocalWrite({
     targets: ["budget:" + id],
     review: budgetReview({ user, id, action: "Eliminar", members: [] }),
     commit: Effect.gen(function* () {
@@ -416,6 +416,7 @@ export const prepareLocalBudgetDeletion = Effect.fn(function* (id: BudgetId, use
       return budgetSuccess(id);
     }),
   });
+  return { ...plan, removedTarget: Option.some("budget:" + id) };
 });
 export const deleteLocalBudget = Effect.fnUntraced(function* (id: BudgetId, user: UserId) {
   return yield* prepareLocalBudgetDeletion(id, user).pipe(Effect.flatMap(commitLocalWrite));

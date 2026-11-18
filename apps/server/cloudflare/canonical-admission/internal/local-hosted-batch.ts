@@ -112,6 +112,7 @@ export const prepareHostedBatch = Effect.fn(
     return yield* prepareChildren(selected.children, context).pipe(
       Effect.map((plans): LocalMutationPlan => ({
         targets: [],
+        removedTarget: Option.none(),
         premises: [],
         review: Option.some(
           reviewPlans(plans, context.describe).pipe(

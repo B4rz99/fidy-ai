@@ -306,6 +306,13 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* readJson(refused)).toMatchObject({
           error: { failedCallIndex: 1, operation: "budgets.createBudget" },
         });
+        expect(
+          yield* native(() =>
+            db.exec(
+              "SELECT count(*) AS n FROM audit_entries WHERE outcome='validation_failed' AND operation='budgets.createBudget'"
+            )
+          )
+        ).toEqual([{ n: 1 }]);
         expect(yield* native(() => db.exec("SELECT count(*) AS budgets FROM budgets"))).toEqual([
           { budgets: 127 },
         ]);

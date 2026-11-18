@@ -19,7 +19,7 @@ import {
   type Scope,
 } from "effect";
 import { expect, it as scenario } from "vitest";
-import { native } from "../user-store.test-fixture";
+import { native, nativeCapacityPlatform } from "../user-store.test-fixture";
 import {
   alice,
   bob,
@@ -716,7 +716,8 @@ scenario(
   () =>
     runNative(
       Effect.gen(function* () {
-        const store = yield* makeNativeTransactionJourney("1000000");
+        const ceiling = 4 * 1024 * 1024;
+        const store = yield* makeNativeTransactionJourney(String(ceiling), nativeCapacityPlatform);
         const token = "fin_dbwrites_" + "x".repeat(43);
         yield* seedNativePAT({
           db: store,
@@ -743,11 +744,50 @@ scenario(
           post("/dashboard/initialize", "original-initialize", {});
         const edit = (): Effect.Effect<Response> =>
           post("/dashboard/edits", "original-edit", { op: "set-title", title: "Mi tablero" });
+        const namespace = yield* native(() =>
+          store.runtime.getDurableObjectNamespace("USER_STORE", "core")
+        );
+        const readBytes = Effect.fn(function* () {
+          const response = yield* native(() =>
+            namespace.getByName(alice.user).fetch("https://fixture.invalid/database-size")
+          );
+          expect(response.status).toBe(200);
+          return yield* Schema.decodeUnknownEffect(Schema.Int)(
+            yield* native(() => response.json())
+          );
+        });
+        const warning = ceiling * 0.7;
+        const restricted = ceiling * 0.8;
+        const initialBytes = yield* readBytes();
+        expect(initialBytes).toBeLessThan(warning);
         const original = yield* initialize();
         const changed = yield* edit();
         expect([original.status, changed.status]).toEqual([200, 200]);
         yield* native(() => store.exec("CREATE TABLE storage_pressure (padding BLOB)"));
-        yield* native(() => store.exec("INSERT INTO storage_pressure VALUES(zeroblob(400000))"));
+        const healthyBytes = yield* readBytes();
+        expect(healthyBytes).toBeLessThan(warning);
+        // Padding crosses the restricted band while leaving room for required replay accounting.
+        const target = Math.ceil(ceiling * 0.85);
+        const chunk = 256 * 1024;
+        const padding = target - healthyBytes;
+        for (let remaining = padding; remaining > 0; remaining -= chunk) {
+          yield* native(() =>
+            store.exec(
+              "INSERT INTO storage_pressure VALUES(zeroblob(?))",
+              Math.min(chunk, remaining)
+            )
+          );
+        }
+        const pressureBytes = yield* readBytes();
+        expect(pressureBytes).toBeGreaterThanOrEqual(restricted);
+        expect(pressureBytes).toBeLessThan(ceiling);
+        const measurement = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+          initialBytes,
+          healthyBytes,
+          pressureBytes,
+          ceilingBytes: ceiling,
+        });
+        process.stdout.write(`DASHBOARD_CAPACITY ${measurement}\n`);
         for (const [retry, response] of [
           [initialize, original],
           [edit, changed],

@@ -230,6 +230,7 @@ const manifests = Effect.fnUntraced(function* (module: string) {
 
 type NativeFixture =
   | "erasure"
+  | "capacity"
   | "connection"
   | "hosted"
   | "user"
@@ -310,6 +311,7 @@ const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean)
 
 const fixtureModule = (mode: NativeFixture): string => {
   if (mode === "erasure") return "./erasure-worker.test-fixture.ts";
+  if (mode === "capacity") return "./capacity-worker.test-fixture.ts";
   if (mode === "login") return "./login-email-worker.test-fixture.ts";
   if (mode === "connection") return "./connection-worker.test-fixture.ts";
   return "./core-worker.ts";
@@ -537,6 +539,7 @@ export const nativePurgePlatform = createUserPlatform("erasure");
 export const nativeLoginPlatform = createUserPlatform("login");
 export const nativeBrowserPlatform = createUserPlatform("browser");
 export const nativeConnectionPlatform = createUserPlatform("connection");
+export const nativeCapacityPlatform = createUserPlatform("capacity");
 export const nativeUserPlatform = createUserPlatform("user");
 export const nativeBillingPlatform = createUserPlatform("billing");
 

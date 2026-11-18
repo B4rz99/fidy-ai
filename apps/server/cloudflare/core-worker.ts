@@ -81,6 +81,9 @@ type CoreEnvironment = Pick<SharedBindings, "MAINTENANCE"> &
     Readonly<{
       RECOVERY_ISOLATION: string;
       SAMPLE_REVIEW_AUDIENCE: string;
+      STORAGE_OPERATOR_EMAIL: string;
+      STORAGE_OPERATOR_AUDIENCE: string;
+      STORAGE_REPAIR_ENABLED: string;
       SAMPLE_REVIEWER_EMAIL: string;
       SAMPLE_BUCKET: R2Bucket;
       BILLING_SUPPORT_AUDIENCE: string;
@@ -436,6 +439,31 @@ export class UserTransactionCoordinator {
   }
 }
 
+const maintenanceTick = (
+  scheduledTime: number,
+  nativeOnly: boolean
+): ((
+  executor: NonNullable<SharedBindings["MAINTENANCE"]>,
+  url: string
+) => Effect.Effect<void, ScheduledWorkFailed>) =>
+  Effect.fnUntraced(function* (executor: NonNullable<SharedBindings["MAINTENANCE"]>, url: string) {
+    const response = yield* Effect.tryPromise({
+      try: (signal) =>
+        executor.getByName(maintenanceName).fetch(
+          new Request(url, {
+            method: "POST",
+            headers: {
+              "x-maintenance-scheduled-at": String(scheduledTime),
+              "fidy-native-inspection": nativeOnly ? "1" : "0",
+            },
+            signal,
+          })
+        ),
+      catch: () => new ScheduledWorkFailed(),
+    });
+    if (response.status !== completedCheckStatus) return yield* new ScheduledWorkFailed();
+  });
+
 export const makeCoreWorker = ({
   telemetry,
   institutions,
@@ -445,29 +473,27 @@ export const makeCoreWorker = ({
   scheduled: (controller, environment) =>
     Effect.gen(function* () {
       if (environment.RECOVERY_ISOLATION === "isolated") return;
-      const tick = Effect.fnUntraced(function* (
-        executor: NonNullable<SharedBindings["MAINTENANCE"]>,
-        url: string
-      ) {
-        const response = yield* Effect.tryPromise({
-          try: (signal) =>
-            executor.getByName(maintenanceName).fetch(
-              new Request(url, {
-                method: "POST",
-                headers: { "x-maintenance-scheduled-at": String(controller.scheduledTime) },
-                signal,
-              })
-            ),
-          catch: () => new ScheduledWorkFailed(),
-        });
-        if (response.status !== completedCheckStatus) return yield* new ScheduledWorkFailed();
-      });
+      const legacy = Option.fromNullishOr(environment.USER_TRANSACTION_COORDINATOR);
+      const tick = maintenanceTick(controller.scheduledTime, Option.isNone(legacy));
       const results = yield* Effect.all(
         [
-          tick(environment.USER_TRANSACTION_COORDINATOR, "https://maintenance.invalid/tick"),
+          Option.match(legacy, {
+            onNone: () => Effect.void,
+            onSome: (executor) => tick(executor, "https://maintenance.invalid/tick"),
+          }),
           environment.MAINTENANCE === undefined
-            ? Effect.void
-            : tick(environment.MAINTENANCE, watchdogUrl),
+            ? Effect.logError({
+                message:
+                  "fidy.operational component=watchdog operation=maintenance state=unbound severity=critical",
+              })
+            : tick(environment.MAINTENANCE, watchdogUrl).pipe(
+                Effect.tapError(() =>
+                  Effect.logError({
+                    message:
+                      "fidy.operational component=watchdog operation=maintenance state=unavailable severity=critical",
+                  })
+                )
+              ),
         ],
         { concurrency: 2, mode: "result" }
       );

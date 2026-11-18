@@ -1,3 +1,5 @@
+import { ownerCheckRequest } from "../maintenance/contract";
+import { createStorageControl } from "../storage-operations/runtime";
 import {
   fenceErasureParticipant,
   handleSharedCleanup,
@@ -36,7 +38,6 @@ import {
 import { nativeBillingRequest } from "./internal/native-billing";
 import {
   createStoreRuntime,
-  openSqliteStore,
   storeReadiness,
   withStoreCapacity,
 } from "../runtime/sqlite/operations";
@@ -45,6 +46,7 @@ import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqli
 import { pricingHistory } from "./pricing/operations";
 import {
   cleanPricingCase,
+  inspectPricingOperation,
   outstandingPricingRegistrations,
   pricingResponse,
   recoverPricing,
@@ -320,6 +322,7 @@ export class Pricing {
   private readonly state: DurableObjectState;
   private readonly erasure: Option.Option<DurableObjectNamespace>;
   private readonly users: Option.Option<DurableObjectNamespace>;
+  private readonly control;
   private readonly runtime;
   constructor(
     state: DurableObjectState,
@@ -335,16 +338,21 @@ export class Pricing {
       owner: "pricing",
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
+    this.control = createStorageControl({
+      state,
+      runtime: this.runtime,
+      history: pricingHistory,
+      release: env.CF_VERSION_METADATA.id,
+    });
     if (state.id.name === pricingName) {
       state.waitUntil(
-        state.blockConcurrencyWhile(() =>
-          this.runtime.runPromise(openSqliteStore(pricingHistory, env.CF_VERSION_METADATA.id))
-        )
+        state.blockConcurrencyWhile(() => this.runtime.runPromise(this.control.open()))
       );
     }
   }
 
   alarm(): Promise<void> {
+    if (this.control.failed()) return Promise.reject(new Error("Store schema unavailable"));
     return Option.match(this.users, {
       onNone: () => Promise.resolve(),
       onSome: (users) =>
@@ -379,6 +387,10 @@ export class Pricing {
     if (this.state.id.name !== pricingName) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+    const controlled = this.control.guard(request, (command, deadline) =>
+      this.runtime.runPromise(inspectPricingOperation(command, this.users, deadline))
+    );
+    if (Option.isSome(controlled)) return controlled.value;
     if (
       request.method === "POST" &&
       [participantCleanupUrl, participantDrainedUrl, participantFenceUrl].includes(request.url)
@@ -390,8 +402,9 @@ export class Pricing {
         storeReadiness({ history: pricingHistory, release: this.version })
       );
     }
+    const operation = pricingResponse(request, this.state.storage, Option.isSome(this.users));
     return this.runtime.runPromise(
-      pricingResponse(request, this.state.storage, Option.isSome(this.users)).pipe(
+      (ownerCheckRequest(request) ? this.control.observeCheck(operation) : operation).pipe(
         Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
       )
     );

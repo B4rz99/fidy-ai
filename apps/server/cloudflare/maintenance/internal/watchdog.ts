@@ -1,3 +1,4 @@
+import { watchdogCoverage } from "./coverage";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Option, Schema } from "effect";
 import { directoryName } from "../../directory/contract";
@@ -21,7 +22,27 @@ type Target = Readonly<{
 }>;
 type Outcome = "observed" | "repaired" | "failed" | "unsupported" | "unknown";
 const unsupportedStatus = 404;
-type Probe = Readonly<{ outcome: Outcome; unsettled: boolean }>;
+const Sample = Schema.Struct({
+  version: Schema.Int.check(Schema.isGreaterThan(0)),
+  release: Schema.String.check(Schema.isUUID()),
+  band: Schema.Literals(["normal", "warning", "restricted"]),
+  uncertain: Schema.NullOr(Schema.Int),
+});
+type Probe = Readonly<{
+  outcome: Outcome;
+  unsettled: boolean;
+  sample: Option.Option<typeof Sample.Type>;
+}>;
+const sampleFrom = (response: Response): Option.Option<typeof Sample.Type> => {
+  if (response.status !== completedCheckStatus) return Option.none();
+  const uncertain = response.headers.get("fidy-uncertain-sample-count");
+  return Schema.decodeUnknownOption(Sample)({
+    version: Number(response.headers.get("fidy-schema-version")),
+    release: response.headers.get("fidy-schema-release"),
+    band: response.headers.get("fidy-storage-band"),
+    uncertain: uncertain === null ? null : Number(uncertain),
+  });
+};
 
 const inspect = (response: Response): Promise<Outcome> => {
   // The protocol is bodyless. Cancel even an error body and keep its promise inside the budget.
@@ -40,16 +61,26 @@ const inspect = (response: Response): Promise<Outcome> => {
 
 /** The abort and body cancellation share the original deadline. Only settled cleanup frees the slot. */
 const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<unknown>>) {
-  if (target.binding === undefined) return { outcome: "failed", unsettled: false } satisfies Probe;
+  if (target.binding === undefined) {
+    return {
+      outcome: "failed",
+      unsettled: false,
+      sample: Option.none<typeof Sample.Type>(),
+    } satisfies Probe;
+  }
 
   const binding = target.binding;
+  let sample = Option.none<typeof Sample.Type>();
   const started = yield* Clock.currentTimeMillis;
   const { result, observed } = yield* Effect.scoped(
     Effect.gen(function* () {
       const signal = yield* Effect.abortSignal;
       const work = Promise.resolve()
         .then(() => binding.getByName(target.name).fetch(ownerCheckUrl, { method: "POST", signal }))
-        .then(inspect)
+        .then((response) => {
+          sample = sampleFrom(response);
+          return inspect(response);
+        })
         .catch((): Outcome => "unknown");
       pending.add(work);
       const released = work.finally(() => {
@@ -60,11 +91,15 @@ const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<
       return { result, observed };
     })
   );
-  if (Option.isSome(observed)) return { outcome: observed.value, unsettled: false };
+  if (Option.isSome(observed)) return { outcome: observed.value, unsettled: false, sample };
 
   const remaining = Math.max(0, started + probeMs - (yield* Clock.currentTimeMillis));
   const settled = yield* result.pipe(Effect.timeoutOption(remaining));
-  return { outcome: "unknown", unsettled: Option.isNone(settled) } satisfies Probe;
+  return {
+    outcome: "unknown",
+    unsettled: Option.isNone(settled),
+    sample: Option.none<typeof Sample.Type>(),
+  } satisfies Probe;
 });
 
 const Window = Schema.Struct({
@@ -79,6 +114,97 @@ const fixedTargets = (bindings: SharedBindings): Target[] => [
   { binding: bindings.ERASURE, name: erasureRegistryName, family: "erasure" },
 ];
 
+const familyAt = (batch: ReadonlyArray<Target>, index: number): string =>
+  batch[index]?.family ?? "unknown";
+const reportSamples = Effect.fnUntraced(function* (
+  batch: ReadonlyArray<Target>,
+  replies: ReadonlyArray<Probe>
+) {
+  const inspected = new Map<
+    string,
+    {
+      owner: string;
+      version: number;
+      release: string;
+      band: string;
+      stores: number;
+      measuredUncertainty: number;
+      uncertain: number;
+    }
+  >();
+  for (const [index, reply] of replies.entries()) {
+    if (Option.isNone(reply.sample)) continue;
+    const sample = reply.sample.value;
+    const owner = familyAt(batch, index);
+    const key = [owner, sample.version, sample.release, sample.band].join("/");
+    const group = inspected.get(key) ?? {
+      owner,
+      version: sample.version,
+      release: sample.release,
+      band: sample.band,
+      stores: 0,
+      measuredUncertainty: 0,
+      uncertain: 0,
+    };
+    group.stores++;
+    if (sample.uncertain !== null) {
+      group.uncertain += sample.uncertain;
+      group.measuredUncertainty++;
+    }
+    inspected.set(key, group);
+  }
+  for (const group of inspected.values()) {
+    const severity = { normal: "none", warning: "warning", restricted: "critical" }[group.band];
+    yield* Effect.logInfo({
+      ...group,
+      uncertain: group.measuredUncertainty > 0 ? group.uncertain : null,
+      message: `fidy.operational component=sqlite operation=${group.owner} state=${group.band} severity=${severity}`,
+    });
+  }
+});
+const saveUserObservations = Effect.fnUntraced(function* (
+  batch: ReadonlyArray<Target>,
+  replies: ReadonlyArray<Probe>,
+  now: number
+) {
+  const sql = yield* SqliteClient;
+  const successfulUsers = batch
+    .filter(
+      (target, index) =>
+        target.family === "user" && Option.isSome(replies[index]?.sample ?? Option.none())
+    )
+    .map((target) => target.name);
+  if (successfulUsers.length > 0) {
+    const ids = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.String)))(
+      successfulUsers
+    );
+    yield* sql`UPDATE lifetime_registry SET observed_ms=${now} WHERE user_id IN (SELECT value FROM json_each(${ids})) AND retired=0`;
+  }
+});
+const reportShared = Effect.fnUntraced(function* (
+  batch: ReadonlyArray<Target>,
+  replies: ReadonlyArray<Probe>
+) {
+  let shared = 0;
+  for (const [index, target] of batch.entries()) {
+    const reply = replies[index];
+    if (target.family !== "user" && reply !== undefined) {
+      if (Option.isSome(reply.sample)) shared++;
+      const outcome = reply.outcome;
+      const severity =
+        ["observed", "repaired"].includes(outcome) && Option.isSome(reply.sample)
+          ? "none"
+          : "critical";
+      yield* Effect.logInfo({
+        message: `fidy.operational component=watchdog operation=${target.family} state=${outcome} severity=${severity}`,
+        component: "watchdog",
+        owner: target.family,
+        outcome,
+      });
+    }
+  }
+  return shared;
+});
 const inspectBatch = Effect.fnUntraced(function* (
   cursor: Option.Option<string>,
   batch: ReadonlyArray<Target>,
@@ -103,16 +229,11 @@ const inspectBatch = Effect.fnUntraced(function* (
   const updatePriority = unsettled || containsShared;
   const nextPriority = updatePriority ? Number(sharedStalled) : null;
   const attempted = batch.filter((target) => target.binding !== undefined).length;
-  for (const [index, target] of batch.entries()) {
-    if (target.family !== "user") {
-      yield* Effect.logInfo({
-        component: "watchdog",
-        owner: target.family,
-        outcome: replies[index]?.outcome,
-      });
-    }
-  }
-  yield* sql`UPDATE watchdog_progress SET attempted=attempted+${attempted}, observed=observed+${observed},
+  yield* reportSamples(batch, replies);
+  const now = yield* Clock.currentTimeMillis;
+  yield* saveUserObservations(batch, replies, now);
+  const shared = yield* reportShared(batch, replies);
+  yield* sql`UPDATE watchdog_progress SET shared_observed=shared_observed+${shared},last_attempt_ms=CASE WHEN ${attempted}>0 THEN ${now} ELSE last_attempt_ms END,last_observed_ms=CASE WHEN ${observed}>0 THEN ${now} ELSE last_observed_ms END,attempted=attempted+${attempted}, observed=observed+${observed},
         failed=failed+${failed}, unsupported=unsupported+${unsupported}, unknown=unknown-${observed + failed + unsupported},
         repaired=repaired+${repaired}, defer_fixed=coalesce(${nextPriority},defer_fixed) WHERE singleton=1`;
   return unsettled;
@@ -201,8 +322,8 @@ export const runWatchdog = Effect.fn(function* (
   const started = yield* Clock.currentTimeMillis;
   const minute = Math.floor(started / minuteMs);
   const claimed =
-    yield* sql`UPDATE watchdog_progress SET minute=${minute},scheduled=${scheduled},halt='running',
-    admitted=0,attempted=0,observed=0,failed=0,unsupported=0,unknown=0,repaired=0
+    yield* sql`UPDATE watchdog_progress SET minute=${minute},scheduled=${scheduled},started_ms=CASE WHEN started_ms=0 THEN ${started} ELSE started_ms END,halt='running',
+    shared_observed=0,admitted=0,attempted=0,observed=0,failed=0,unsupported=0,unknown=0,repaired=0
     WHERE singleton=1 AND minute<${minute} AND scheduled<${scheduled} RETURNING cursor,defer_fixed,coalesce((SELECT max(user_id) FROM lifetime_registry WHERE retired=0),'') AS last_user`;
   if (claimed.length === 0) return "coalesced" as const;
   const [window] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Window]))(claimed);
@@ -227,11 +348,28 @@ export const runWatchdog = Effect.fn(function* (
 });
 
 export const reportWatchdog = Effect.fnUntraced(function* (
-  halt: Effect.Success<ReturnType<typeof runWatchdog>>
+  halt: Effect.Success<ReturnType<typeof runWatchdog>>,
+  nativeCoverage: boolean
 ) {
   if (halt === "coalesced") return;
   const sql = yield* SqliteClient;
   const [counts] =
     yield* sql`UPDATE watchdog_progress SET halt=${halt} WHERE singleton=1 RETURNING halt,admitted,attempted,observed,failed,unsupported,unknown,repaired,wraps,wrapped_at`;
-  yield* Effect.logInfo({ component: "watchdog", ...counts });
+  const coverage = yield* watchdogCoverage;
+  if (nativeCoverage && halt === "wrapped" && coverage.severity === "none") {
+    const [observed] =
+      yield* sql`SELECT 1 FROM watchdog_progress WHERE singleton=1 AND failed=0 AND unsupported=0 AND unknown=0 AND shared_observed=3 AND NOT EXISTS(SELECT 1 FROM lifetime_registry WHERE retired=0 AND observed_ms=0)`;
+    if (observed !== undefined) {
+      yield* Effect.logInfo({
+        message:
+          "fidy.operational component=inspection-coverage operation=ownerInspections state=complete",
+      });
+    }
+  }
+  yield* Effect.logInfo({
+    component: "watchdog",
+    ...counts,
+    ...coverage,
+    message: `fidy.operational component=watchdog operation=coverage state=${halt} severity=${coverage.severity}`,
+  });
 });

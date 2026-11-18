@@ -7,6 +7,7 @@ import {
   Effect,
   Layer,
   ManagedRuntime,
+  Option,
   type PlatformError,
   Predicate,
   Ref,
@@ -123,21 +124,39 @@ const retryable = (error: unknown): boolean => {
     (Predicate.hasProperty(cause, "overloaded") && cause.overloaded === true)
   );
 };
+type ManualRetry = Readonly<{
+  version: number;
+  attempt: number;
+  retryAtMs: number;
+  deadline: number;
+}>;
 const tryStep = Effect.fnUntraced(function* ({
   history,
   step,
   digest,
   release,
-}: Readonly<{ history: StoreHistory; step: StoreMigration; digest: string; release: string }>) {
+  manual,
+}: Readonly<{
+  history: StoreHistory;
+  step: StoreMigration;
+  digest: string;
+  release: string;
+  manual: Option.Option<ManualRetry>;
+}>) {
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;
   // A lost reply or crash cannot move the next attempt earlier than a full activation plus its delay.
-  const claim =
-    yield* sql.withTransaction(sql`INSERT INTO store_migration_attempts(version,release,attempts,retry_at_ms,terminal)
+  const claim = yield* sql.withTransaction(
+    Option.isSome(manual) && manual.value.version === step.version
+      ? sql`UPDATE store_migration_attempts SET attempts=min(attempts+1,3),terminal=1,retry_at_ms=max(retry_at_ms+1,${now + activationLimitMs})
+        WHERE version=${step.version} AND release=${release} AND attempts=${manual.value.attempt}
+        AND retry_at_ms=${manual.value.retryAtMs} AND (terminal=1 OR attempts=3) AND ${now}<${manual.value.deadline} RETURNING attempts`
+      : sql`INSERT INTO store_migration_attempts(version,release,attempts,retry_at_ms,terminal)
     VALUES(${step.version},${release},1,${now + activationLimitMs + firstRetryMs},0)
     ON CONFLICT(version,release) DO UPDATE SET attempts=attempts+1,retry_at_ms=${now + activationLimitMs + secondRetryMs}
     WHERE terminal=0 AND attempts<3 AND retry_at_ms<=${now}
-    RETURNING attempts`);
+    RETURNING attempts`
+  );
   if (claim.length === 0) return yield* refuse("attempt_refused");
   const [attempt] = yield* Schema.decodeUnknownEffect(
     Schema.Tuple([Schema.Struct({ attempts: Schema.Int })])
@@ -147,7 +166,7 @@ const tryStep = Effect.fnUntraced(function* ({
       Effect.gen(function* () {
         const failedAt = yield* Clock.currentTimeMillis;
         yield* sql.withTransaction(sql`UPDATE store_migration_attempts
-      SET terminal=${retryable(error) ? 0 : 1},retry_at_ms=${failedAt + (attempt.attempts === 1 ? firstRetryMs : secondRetryMs)}
+      SET terminal=${retryable(error) ? 0 : 1},retry_at_ms=CASE WHEN ${Option.isNone(manual) ? 0 : 1}=1 THEN max(retry_at_ms,${failedAt + secondRetryMs}) ELSE ${failedAt + (attempt.attempts === 1 ? firstRetryMs : secondRetryMs)} END
       WHERE version=${step.version} AND release=${release} AND attempts=${attempt.attempts}`);
         return yield* refuse("step_failed");
       })
@@ -156,7 +175,7 @@ const tryStep = Effect.fnUntraced(function* ({
 });
 /** A constructor owns this gate. Reconstructing an object always checks the full retained prefix. */
 export const openSqliteStore = Effect.fnUntraced(
-  function* (history: StoreHistory, release: string) {
+  function* (history: StoreHistory, release: string, manual?: ManualRetry) {
     if (
       release.length === 0 ||
       history.steps.length === 0 ||
@@ -170,10 +189,13 @@ export const openSqliteStore = Effect.fnUntraced(
       checksum([history.owner, step.version, step.id, step.statements])
     );
     const completed = yield* readProgress(history, digests);
+    if (manual !== undefined && completed + 1 !== manual.version) {
+      return yield* refuse("attempt_refused");
+    }
     for (const step of history.steps.slice(completed)) {
       const digest = digests[step.version - 1];
       if (digest === undefined) return yield* refuse("invalid_history");
-      yield* tryStep({ history, step, digest, release });
+      yield* tryStep({ history, step, digest, release, manual: Option.fromUndefinedOr(manual) });
     }
     yield* capacity.observe;
   },

@@ -48,7 +48,8 @@ export const releaseBrowserSession = Effect.fn(function* (request: Request) {
 
 export const cancelProviderHandoff = Effect.fn(function* (
   id: string,
-  users: Pick<DurableObjectNamespace, "getByName">
+  users: Pick<DurableObjectNamespace, "getByName">,
+  deadline = Number.POSITIVE_INFINITY
 ) {
   const handoff = yield* inspectHandoff(id);
   if (handoff === null) return invalidProvider();
@@ -64,29 +65,31 @@ export const cancelProviderHandoff = Effect.fn(function* (
       signal,
     })
   );
-  if (!result.ok) return unavailable();
+  if (!result.ok || (yield* Clock.currentTimeMillis) >= deadline) return unavailable();
   const { outcome } = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ outcome: Schema.Literals(["committed", "cancelled"]) })
   )(yield* Effect.tryPromise(() => result.json()));
   const sql = yield* SqliteClient;
-  yield* sql.withTransaction(
+  const acknowledged = yield* sql.withTransaction(
     Effect.gen(function* () {
+      if ((yield* Clock.currentTimeMillis) >= deadline) return false;
       const fenced = yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${handoff.user_id}`;
       if (outcome === "committed") {
         yield* sql`UPDATE provider_attempts SET acknowledged=1 WHERE id=${id} AND state='bound'`;
-        if (fenced.length !== 0) return;
+        if (fenced.length !== 0) return true;
         yield* sql`UPDATE whatsapp_routes SET established=1 WHERE user_id=${handoff.user_id} AND attempt_id=${id}`;
         yield* sql`UPDATE provider_routes SET established=1 WHERE user_id=${handoff.user_id} AND creation_attempt=${id}`;
       } else {
         yield* sql`UPDATE provider_attempts SET state='cancelled' WHERE id=${id} AND state='bound'`;
-        if (fenced.length !== 0) return;
+        if (fenced.length !== 0) return true;
         yield* sql`DELETE FROM recovery_routes WHERE user_id=${handoff.user_id} AND attempt_id=${id}`;
         yield* sql`DELETE FROM whatsapp_routes WHERE user_id=${handoff.user_id} AND attempt_id=${id} AND established=0`;
         yield* sql`DELETE FROM provider_routes WHERE user_id=${handoff.user_id} AND creation_attempt=${id} AND established=0`;
       }
+      return true;
     })
   );
-  return Response.json({ outcome });
+  return acknowledged ? Response.json({ outcome }) : unavailable();
 });
 
 export const registerRecoveryCredential = Effect.fn(function* (request: Request) {
@@ -116,4 +119,38 @@ export const registerRecoveryCredential = Effect.fn(function* (request: Request)
       yield* sql`SELECT 1 FROM recovery_routes WHERE user_id=${input.user} AND attempt_id=${input.attempt} AND generation=${input.generation} AND code_digest=${bytes}`;
     return exact.length === 1 ? new Response(null, { status: 204 }) : invalidProvider();
   }).pipe(withStoreCapacity("growth"));
+});
+
+const eligibleHandoff = (row: Readonly<Record<string, unknown>>, now: number): boolean =>
+  row.state === "bound" && (Number(row.deadlineMs) <= now || row.fenced === 1);
+export const inspectBootstrapReservation = Effect.fn(function* ({
+  id,
+  repair,
+  users,
+  deadline,
+}: {
+  id: string;
+  repair: boolean;
+  users: Pick<DurableObjectNamespace, "getByName">;
+  deadline: number;
+}) {
+  const sql = yield* SqliteClient;
+  const [row] =
+    yield* sql`SELECT a.id,a.state,a.acknowledged,a.expires_at_ms AS deadlineMs,EXISTS(SELECT 1 FROM erasure_barriers WHERE user_id=p.user_id) AS fenced FROM provider_attempts a JOIN browser_pairings p ON p.id=a.pairing_id WHERE a.pairing_id=${id} AND p.user_id IS NOT NULL AND a.state IN ('bound','cancelled')`;
+  if (row === undefined) return new Response(null, { status: 404 });
+  if (!repair || row.state === "cancelled" || row.acknowledged === 1) {
+    return Response.json({
+      outcome: row.acknowledged === 1 ? "committed" : row.state,
+      deadlineMs: row.deadlineMs,
+    });
+  }
+  const now = yield* Clock.currentTimeMillis;
+  if (!eligibleHandoff(row, now) || now >= deadline) {
+    return new Response(null, { status: 409 });
+  }
+  return yield* cancelProviderHandoff(
+    yield* Schema.decodeUnknownEffect(Schema.String)(row.id),
+    users,
+    deadline
+  );
 });

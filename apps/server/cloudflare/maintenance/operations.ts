@@ -77,6 +77,20 @@ export const maintenanceStoreHistory: StoreHistory = {
         "INSERT INTO watchdog_progress(singleton) VALUES(1)",
       ],
     },
+    {
+      version: 4,
+      id: "watchdog-observation-age",
+      statements: [
+        "ALTER TABLE watchdog_progress ADD COLUMN started_ms INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE watchdog_progress ADD COLUMN last_attempt_ms INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE watchdog_progress ADD COLUMN last_observed_ms INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE lifetime_registry ADD COLUMN registered_ms INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE lifetime_registry ADD COLUMN observed_ms INTEGER NOT NULL DEFAULT 0",
+        "CREATE INDEX lifetime_observation_age ON lifetime_registry(max(observed_ms,registered_ms)) WHERE retired=0",
+        "CREATE INDEX lifetime_schema_unobserved ON lifetime_registry(user_id) WHERE retired=0 AND observed_ms=0",
+        "ALTER TABLE watchdog_progress ADD COLUMN shared_observed INTEGER NOT NULL DEFAULT 0",
+      ],
+    },
   ],
 };
 
@@ -118,7 +132,7 @@ export const handleLifetimeRegistration = Effect.fn(function* (
           return acknowledgement(state.live === 1);
         }
         yield* admitGrowth;
-        yield* sql`INSERT INTO lifetime_registry(user_id) VALUES(${userId})`;
+        yield* sql`INSERT INTO lifetime_registry(user_id,registered_ms) VALUES(${userId},${issuedAt})`;
         return acknowledgement(true);
       })
     );

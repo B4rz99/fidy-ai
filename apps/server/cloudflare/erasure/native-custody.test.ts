@@ -33,6 +33,25 @@ const readWompiScope = Effect.fn(function* (runtime: Miniflare, reference: strin
     })
   );
 });
+const privateCaseAction = Effect.fnUntraced(function* (
+  runtime: Miniflare,
+  reference: string,
+  action: "Receipt" | "Continue"
+) {
+  const { FIXTURE_PROVIDER: signer } = yield* native(() =>
+    runtime.getBindings<{ FIXTURE_PROVIDER: Fetcher }>("core")
+  );
+  const token = yield* native(() =>
+    signer.fetch("https://fixture.invalid/erasure-assertion").then((res) => res.text())
+  );
+  return yield* native(() =>
+    runtime.dispatchFetch("https://api.fidyapp.com/internal/titular-erasure", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-access-jwt-assertion": token },
+      body: JSON.stringify({ action, userId: alice.user, reference }),
+    })
+  );
+});
 const custodyJourney = Effect.fn(function* () {
   const runtime = yield* (yield* nativeCustodyPlatform)(undefined, [], {
     ERASURE_SUPPORT_AUDIENCE: "fixture-erasure",
@@ -251,7 +270,25 @@ const verifyRelease = Effect.fn(function* (
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("an unresolved custodian remains pending beyond the platform recovery horizon", () =>
     Effect.gen(function* () {
-      const { submit, reference, tick } = yield* custodyJourney();
+      const { submit, reference, tick, runtime, driver } = yield* custodyJourney();
+      for (const [action, status] of [
+        ["Receipt", 200],
+        ["Continue", 202],
+        ["Receipt", 200],
+      ] as const) {
+        expect((yield* privateCaseAction(runtime, reference, action)).status).toBe(status);
+      }
+      const operations = yield* native(() =>
+        driver.storage.exec(
+          "SELECT action,outcome FROM erasure_case_operations WHERE reference=? ORDER BY rowid",
+          reference
+        )
+      );
+      expect(operations).toEqual([
+        { action: "Receipt", outcome: "observed" },
+        { action: "Continue", outcome: "pending" },
+        { action: "Receipt", outcome: "observed" },
+      ]);
       const unresolved = {
         reference,
         custodian: "Resend",

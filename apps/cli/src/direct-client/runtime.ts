@@ -59,6 +59,18 @@ const retryDelay = (header: unknown, now: number): Option.Option<number> => {
   );
 };
 
+const acceptedStatus = 202;
+/** A native erasure continuation can legitimately acknowledge with a bodyless 202. */
+const acceptedEmptyBody = (
+  response: HttpClientResponse.HttpClientResponse
+): typeof response.stream =>
+  response.stream.pipe(
+    Stream.catch((error) =>
+      response.status === acceptedStatus && error.reason._tag === "EmptyBodyError"
+        ? Stream.empty
+        : Stream.fail(error)
+    )
+  );
 const collectResponse = Effect.fn(function* (
   response: HttpClientResponse.HttpClientResponse,
   byteLimit: number
@@ -66,7 +78,7 @@ const collectResponse = Effect.fn(function* (
   const chunks: Array<Uint8Array> = [];
   let size = 0;
   if (!noBodyStatuses.has(response.status)) {
-    yield* Stream.runForEachWhile(response.stream, (chunk) =>
+    yield* Stream.runForEachWhile(acceptedEmptyBody(response), (chunk) =>
       Effect.sync(() => {
         size += chunk.byteLength;
         if (size > byteLimit) return false;

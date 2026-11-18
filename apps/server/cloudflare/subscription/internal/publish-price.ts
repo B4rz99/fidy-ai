@@ -10,6 +10,9 @@ import {
   pricingName,
 } from "../contract";
 
+const storageAudiences = (env: PricingEnvironment): ReadonlyArray<string> => [
+  env.STORAGE_OPERATOR_AUDIENCE ?? "",
+];
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 4096,
   deadlineMilliseconds: 5000,
@@ -35,6 +38,7 @@ export const publishPrice = (
         requiredEmail: Option.none(),
         audience: environment.PRICING_PUBLISH_AUDIENCE ?? "",
         otherAudiences: [
+          ...storageAudiences(environment),
           environment.CLOUDFLARE_ACCESS_AUDIENCE,
           environment.BILLING_SUPPORT_AUDIENCE ?? "",
           environment.ERASURE_SUPPORT_AUDIENCE ?? "",

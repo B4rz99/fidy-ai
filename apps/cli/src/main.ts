@@ -17,6 +17,7 @@ import { makeCredentialStore, supportedBunRevision } from "./credential/runtime"
 import { makePairingClient } from "./direct-client/runtime";
 import { runOperationCommand } from "./canonical/operations";
 import { makeCanonicalClient, readOperationInput } from "./canonical/runtime";
+import { runStorageOperator } from "./storage-operations/runtime";
 import { runSampleReview } from "./sample-review/operations";
 import { makeReviewer } from "./sample-review/runtime";
 import { runSupportRecovery } from "./support-recovery/operations";
@@ -45,6 +46,7 @@ const runOperator = Effect.fn(function* () {
         process.stderr.write(message);
       }),
   };
+  if (commandArgs[0] === "storage") return yield* runStorageOperator(args, terminalOutput);
   if (commandArgs[0] === "sample-review") {
     return yield* runSampleReview(args, yield* makeReviewer(terminalOutput));
   }
@@ -61,7 +63,7 @@ const localCredentialStore = Effect.gen(function* () {
 });
 const authenticatedProgram = Effect.gen(function* () {
   yield* validateFlags();
-  if (commandArgs[0] === "sample-review" || commandArgs[0] === "support-recovery") {
+  if (["storage", "sample-review", "support-recovery"].includes(commandArgs[0] ?? "")) {
     return yield* runOperator();
   }
   const credential = yield* localCredentialStore;

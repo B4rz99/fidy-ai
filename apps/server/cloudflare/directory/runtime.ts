@@ -1,3 +1,4 @@
+import { createStorageControl } from "../storage-operations/runtime";
 import { scopeDirectoryUrl } from "../erasure/contract";
 import { providerAllowanceUrl } from "../resource-admission/contract";
 import { admitSharedProvider } from "../resource-admission/operations";
@@ -47,7 +48,11 @@ import {
   whatsappBootstrapUrl,
   whatsappOwnerUrl,
 } from "./contract";
-import { directoryIdentityRequest, reconcileIdentityReplacements } from "./internal/replacement";
+import {
+  directoryIdentityRequest,
+  inspectReplacement,
+  reconcileIdentityReplacements,
+} from "./internal/replacement";
 
 import { loginAllowanceUrl } from "../email-authentication/contract";
 import { chargeLoginAttempt, directoryLoginEmail } from "./internal/login-email";
@@ -66,6 +71,7 @@ import { whatsappBootstrap, whatsappOwner } from "./internal/whatsapp";
 import { admitBootstrap } from "./internal/admission";
 import {
   cancelProviderHandoff,
+  inspectBootstrapReservation,
   registerBrowserSession,
   registerRecoveryCredential,
   releaseBrowserSession,
@@ -81,7 +87,6 @@ import { pollPairing, startPairing } from "./internal/pairing";
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 import {
   createStoreRuntime,
-  openSqliteStore,
   preserveStoreAlarm,
   storeReadiness,
   withStoreAdmission,
@@ -156,6 +161,7 @@ const inspectPressure = Effect.fnUntraced(function* (
 });
 
 export class Directory extends DurableObject<DirectoryEnvironment> {
+  private readonly control;
   private readonly runtime;
   constructor(state: DurableObjectState, env: DirectoryEnvironment) {
     super(state, env);
@@ -164,13 +170,18 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       owner: "directory",
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
+    this.control = createStorageControl({
+      state,
+      runtime: this.runtime,
+      history: directoryHistory,
+      release: env.CF_VERSION_METADATA.id,
+    });
     state.waitUntil(
-      state.blockConcurrencyWhile(() =>
-        this.runtime.runPromise(openSqliteStore(directoryHistory, env.CF_VERSION_METADATA.id))
-      )
+      state.blockConcurrencyWhile(() => this.runtime.runPromise(this.control.open()))
     );
   }
   override alarm(): Promise<void> {
+    if (this.control.failed()) return Promise.reject(new Error("Store schema unavailable"));
     return this.runtime.runPromise(
       Effect.andThen(
         Effect.andThen(
@@ -215,6 +226,19 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+    const controlled = this.control.guard(request, (command, deadline) =>
+      command.owner === "directory" && "family" in command
+        ? this.runtime.runPromise(
+            (command.family === "bootstrap" ? inspectBootstrapReservation : inspectReplacement)({
+              id: command.operationId,
+              repair: command.action === "reconcile-reservation",
+              users: this.env.USER_STORE,
+              deadline,
+            })
+          )
+        : Promise.resolve(new Response(null, { status: 409 }))
+    );
+    if (Option.isSome(controlled)) return controlled.value;
     if (
       request.method === "POST" &&
       [
@@ -228,7 +252,10 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
     }
     if (ownerCheckRequest(request)) {
       return this.runtime.runPromise(
-        inspectPressure(this.ctx.storage, false).pipe(Effect.map(ownerCheckResponse))
+        inspectPressure(this.ctx.storage, false).pipe(
+          Effect.map(ownerCheckResponse),
+          this.control.observeCheck
+        )
       );
     }
     return this.runtime.runPromise(

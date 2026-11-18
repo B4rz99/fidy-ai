@@ -710,14 +710,30 @@ const browserHistoryStatements = (
   ];
 };
 
-const presentPrivacyPage = (
-  rows: D1Result,
-  reference: string,
-  display: Pick<PrivacyTransactionPage, "presentation" | "categories">
-): Effect.Effect<Response> =>
+export const privacyQuery = Effect.fnUntraced(function* (
+  request: PrivacyTransactionsRead["request"]
+) {
+  return yield* Schema.decodeEffect(Query)(
+    request.cursor === null
+      ? {}
+      : {
+          cursor: `${DateTime.formatIso(request.cursor.occurredAt)}|${DateTime.formatIso(request.cursor.createdAt)}|${request.cursor.id}`,
+        }
+  );
+});
+
+export const presentPrivacyPage = ({
+  rows,
+  reference,
+  display,
+}: Readonly<{
+  rows: ReadonlyArray<unknown>;
+  reference: string;
+  display: Pick<PrivacyTransactionPage, "presentation" | "categories">;
+}>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    if (rows.results.length > boundarySize) return unavailable();
-    const decoded = Option.all(rows.results.map(decodeTransactionRow));
+    if (rows.length > boundarySize) return unavailable();
+    const decoded = Option.all(rows.map(decodeTransactionRow));
     if (Option.isNone(decoded)) return unavailable();
     const data = decoded.value.slice(0, pageSize);
     const last = data.at(-1);
@@ -754,13 +770,7 @@ export const readPrivacyTransactions = ({
       predicate: `${base.predicate} AND ${fresh.sql}`,
       bindings: [...base.bindings, ...fresh.params],
     };
-    const query = yield* Schema.decodeEffect(Query)(
-      request.cursor === null
-        ? {}
-        : {
-            cursor: `${DateTime.formatIso(request.cursor.occurredAt)}|${DateTime.formatIso(request.cursor.createdAt)}|${request.cursor.id}`,
-          }
-    );
+    const query = yield* privacyQuery(request);
     const reference = uuid();
     const [rows, audit] = yield* Effect.uninterruptible(
       Effect.tryPromise(() =>
@@ -780,7 +790,11 @@ export const readPrivacyTransactions = ({
     );
     if (audit?.meta.changes !== 1) return noSession();
     if (rows === undefined) return unavailable();
-    return yield* presentPrivacyPage(rows, reference, { presentation, categories });
+    return yield* presentPrivacyPage({
+      rows: rows.results,
+      reference,
+      display: { presentation, categories },
+    });
   }).pipe(Effect.orElseSucceed(unavailable));
 
 type PATSelection = Selection & Readonly<{ subject: AuthorizedPAT }>;

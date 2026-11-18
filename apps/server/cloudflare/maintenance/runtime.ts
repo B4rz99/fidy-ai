@@ -1,3 +1,5 @@
+import { watchProgress } from "./internal/coverage";
+import { createStorageControl } from "../storage-operations/runtime";
 import { reportWatchdog, runWatchdog } from "./internal/watchdog";
 import type { SharedBindings } from "../storage-bootstrap/contract";
 import {
@@ -7,7 +9,7 @@ import {
   maintenanceStoreHistory,
 } from "./operations";
 import { DurableObject } from "cloudflare:workers";
-import { createStoreRuntime, openSqliteStore, storeReadiness } from "../runtime/sqlite/operations";
+import { createStoreRuntime, storeReadiness } from "../runtime/sqlite/operations";
 import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
 
 import { makeBancolombiaSandboxCleanup } from "../bancolombia-authentication/runtime";
@@ -311,6 +313,7 @@ type MaintenanceEnvironment = StoreReleaseEnvironment &
   SharedBindings &
   Partial<Readonly<{ RECOVERY_ISOLATION: string }>>;
 export class Maintenance extends DurableObject<MaintenanceEnvironment> {
+  private readonly control;
   private readonly runtime;
   private sweeping = false;
   private readonly pending = new Set<Promise<unknown>>();
@@ -321,13 +324,16 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
       owner: maintenanceStoreHistory.owner,
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
+    this.control = createStorageControl({
+      watchdog: watchProgress,
+      state,
+      runtime: this.runtime,
+      history: maintenanceStoreHistory,
+      release: env.CF_VERSION_METADATA.id,
+    });
     if (state.id.name === maintenanceName) {
       state.waitUntil(
-        state.blockConcurrencyWhile(() =>
-          this.runtime.runPromise(
-            openSqliteStore(maintenanceStoreHistory, env.CF_VERSION_METADATA.id)
-          )
-        )
+        state.blockConcurrencyWhile(() => this.runtime.runPromise(this.control.open()))
       );
     }
   }
@@ -345,8 +351,11 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
     this.sweeping = true;
     return this.runtime
       .runPromise(
-        runWatchdog(this.env, scheduled, this.pending).pipe(
-          Effect.tap(reportWatchdog),
+        this.control.prune.pipe(
+          Effect.andThen(runWatchdog(this.env, scheduled, this.pending)),
+          Effect.tap((halt) =>
+            reportWatchdog(halt, request.headers.get("fidy-native-inspection") === "1")
+          ),
           // Flush progress before a forced reset, inside the same tick deadline.
           Effect.tap(() =>
             this.pending.size > 0 ? Effect.tryPromise(() => this.ctx.storage.sync()) : Effect.void
@@ -368,6 +377,8 @@ export class Maintenance extends DurableObject<MaintenanceEnvironment> {
     if (this.ctx.id.name !== maintenanceName) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
+    const controlled = this.control.guard(request);
+    if (Option.isSome(controlled)) return controlled.value;
     if (watchdogRequest(request)) return this.watchdog(request);
     if (lifetimeRequest(request)) {
       return this.runtime.runPromise(

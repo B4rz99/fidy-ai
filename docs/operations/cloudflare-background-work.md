@@ -82,6 +82,8 @@ and canonical MCP 4xx results qualify; discovery and forged boundary labels do n
 backward-clock protection bound emission. Isolate restarts/distributed traffic can hide bursts.
 No D1 presence write, counter, retry, acknowledgement or email delivery state is retained.
 
+The SQLite watchdog reports native schema, capacity, coverage, alarm and uncertainty observations through the same platform monitors. Its private commands and escalation thresholds are in [SQLite storage operations](sqlite-storage-operations.md).
+
 ### Platform monitors (#1491)
 
 Cloudflare enforces five custom analytics policies on this account. The deployed policies use the

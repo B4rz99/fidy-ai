@@ -127,6 +127,15 @@ export const erasureStoreHistory: StoreHistory = {
         "CREATE TABLE erasure_case_evidence(id TEXT PRIMARY KEY,reference TEXT NOT NULL,custodian TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL,operator_ref TEXT NOT NULL,recorded_at_ms INTEGER NOT NULL,FOREIGN KEY(reference,custodian) REFERENCES erasure_case_custodians(reference,custodian) ON DELETE CASCADE,UNIQUE(reference,custodian,status,reason)) STRICT",
       ],
     },
+    {
+      version: 5,
+      id: "case-operator-observations",
+      statements: [
+        "CREATE TABLE erasure_case_operations(reference TEXT NOT NULL REFERENCES erasure_cases(reference) ON DELETE CASCADE,action TEXT NOT NULL CHECK(action IN('Receipt','Continue')),operator_ref TEXT NOT NULL,occurred_at_ms INTEGER NOT NULL,outcome TEXT NOT NULL CHECK(outcome IN('observed','pending'))) STRICT",
+        "CREATE INDEX case_operations_reference ON erasure_case_operations(reference)",
+        "CREATE INDEX case_operations_expiry ON erasure_case_operations(occurred_at_ms)",
+      ],
+    },
   ],
 };
 

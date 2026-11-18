@@ -1,3 +1,4 @@
+import { readPrivacyPage } from "./internal/sqlite-privacy";
 import { CurrentOAuthInvocation } from "../oauth-agents/contract";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
 import type { LocalMutationResult } from "../canonical-admission/contract";
@@ -153,6 +154,8 @@ export const browseTransactions: typeof ownerBrowseTransactions = (...args) =>
   ownerBrowseTransactions(...args);
 
 /** Run the browser History query with live authority and accountability in the destination User's transaction. */
+/** Read one explicit Transactions privacy page with its fresh browser proof and local Audit. */
+export const readScopedPrivacyPage: typeof readPrivacyPage = (...args) => readPrivacyPage(...args);
 export const readUserHistory: typeof readLocalHistory = (...args) => readLocalHistory(...args);
 
 /** Return bounded same-User financial history for an explicit Titular access request; every page requires fresh browser proof and atomic Audit, never renewed processing Consent. */

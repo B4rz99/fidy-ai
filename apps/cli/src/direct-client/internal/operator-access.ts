@@ -30,6 +30,8 @@ const readToken = Effect.fn(function* (
 export const authenticateAccess = (
   operatorUrl:
     | "https://api.fidyapp.com/internal/support-recovery"
+    | "https://api.fidyapp.com/internal/storage-operations"
+    | "https://api.fidyapp.com/internal/titular-erasure"
     | "https://api.fidyapp.com/internal/sample-review"
 ): Effect.Effect<Redacted.Redacted<string>, CliFailure, ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {

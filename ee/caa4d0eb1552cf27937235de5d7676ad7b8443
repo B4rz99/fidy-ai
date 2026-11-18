@@ -1,0 +1,81 @@
+apps/cli/.dependency-cruiser.mjs
+  s_a1be23a656acf0::t_0593404595ab48 26
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_0593404595ab48 429-431,644-646
+infra/cloudflare/alchemy.run.ts
+  s_a1be23a656acf0::t_0593404595ab48 155
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_f6354bc8c57cb6 1
+  s_a1be23a656acf0::t_600d3850e8f242 181-186,610-616
+  s_a1be23a656acf0::t_0593404595ab48 302-304
+apps/cli/src/main.ts
+  s_a1be23a656acf0::t_0593404595ab48 64
+apps/server/cloudflare/user-store/internal/uncertainty.ts
+  s_a1be23a656acf0::t_600d3850e8f242 3-4
+  s_a1be23a656acf0::t_7104a8ed589114 15,18
+  s_a1be23a656acf0::t_0593404595ab48 1-2,5-14,16-17,19-35
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a1be23a656acf0::t_0593404595ab48 1760
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_0593404595ab48 430,432,528-536
+apps/server/cloudflare/runtime/sqlite/migrations.test.ts
+  s_a1be23a656acf0::t_2052fb94465843 28,31-32,80
+  s_a1be23a656acf0::t_ad2d113cc5bd10 10-11,30,182
+apps/server/cloudflare/directory/internal/replacement.ts
+  s_a1be23a656acf0::t_0593404595ab48 63,76,109,135,150
+apps/server/cloudflare/erasure/operations.ts
+  s_a1be23a656acf0::t_0593404595ab48 332
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_600d3850e8f242 40-41,395,397-406
+  s_a1be23a656acf0::t_0593404595ab48 342-344
+docs/adr/0041-per-user-durable-object-storage-direction.md
+  s_a1be23a656acf0::t_0593404595ab48 380-387
+  s_a1be23a656acf0::t_4813880dd3075b 427,455-456
+apps/server/cloudflare/directory/internal/reservations.ts
+  s_a1be23a656acf0::t_0593404595ab48 51,67,72,77,82,89
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_0593404595ab48 10,326-330,348
+docs/operations/cloudflare-background-work.md
+  s_a1be23a656acf0::t_0593404595ab48 44-51
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_7104a8ed589114 5
+  s_a1be23a656acf0::t_600d3850e8f242 11
+apps/server/cloudflare/erasure/native-custody.test.ts
+  s_a1be23a656acf0::t_0593404595ab48 273
+apps/server/cloudflare/maintenance/watchdog.test.ts
+  s_a1be23a656acf0::t_600d3850e8f242 153-229,231
+  s_a1be23a656acf0::t_5064ec440c5ac4 6,152,230,232-259
+apps/server/cloudflare/runtime/sqlite/operations.ts
+  s_a1be23a656acf0::t_2052fb94465843 208-212,214-227,239,244-248
+  s_a1be23a656acf0::t_f6354bc8c57cb6 176,204,228,230
+  s_a1be23a656acf0::t_600d3850e8f242 158-175,205-206,229,231-238,240-243,249-254
+  s_a1be23a656acf0::t_0593404595ab48 132,136-137,141,151,179,196
+  s_a1be23a656acf0::t_ad2d113cc5bd10 213
+  s_a1be23a656acf0::t_3817ce5b1a7847 1
+apps/cli/src/direct-client/runtime.ts
+  s_a1be23a656acf0::t_0593404595ab48 69
+apps/server/cloudflare/erasure-store/runtime.ts
+  s_a1be23a656acf0::t_0593404595ab48 12,81-83
+  s_a1be23a656acf0::t_600d3850e8f242 22-27,122-126
+apps/server/cloudflare/subscription/internal/pricing-object.ts
+  s_a1be23a656acf0::t_0593404595ab48 175,266,282,286
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_600d3850e8f242 84-85,234-238
+  s_a1be23a656acf0::t_0593404595ab48 50,169-171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eecaa4d0eb1552cf27937235de5d7676ad7b8443",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

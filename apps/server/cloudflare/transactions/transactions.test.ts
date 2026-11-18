@@ -590,16 +590,20 @@ const nativeCountRows = (
     .owner(bindings[0] ?? users[0] ?? "")
     .exec(sql, ...bindings)
     .then(([row]) => row?.count);
+const AuditedOperations = Schema.Array(
+  Schema.Struct({ operation: Schema.String, outcome: Schema.String })
+);
 const nativeAuditedOperations = (
   db: NativeJourney,
   user: string
-): ReturnType<NativeJourney["exec"]> =>
+): Promise<typeof AuditedOperations.Type> =>
   db
     .owner(user)
     .exec(
       "SELECT operation,outcome FROM audit_entries WHERE user_id=? AND record_type='session_call' ORDER BY occurred_at_ms,rowid",
       user
-    );
+    )
+    .then(Schema.decodeUnknownSync(AuditedOperations));
 const nativeRefusedChildren = (
   db: NativeJourney,
   user: string

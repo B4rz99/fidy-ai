@@ -1,0 +1,27 @@
+apps/server/cloudflare/canonical-admission/internal/local-mutation.ts
+  s_a1be23a656acf0::t_36b683dbabbedc 249,676-683,693-695
+apps/server/cloudflare/erasure-worker.test-fixture.ts
+  s_a1be23a656acf0::t_36d17f980c7cac 113-117
+apps/server/cloudflare/tokens/internal/native-expiry.ts
+  s_a1be23a656acf0::t_9ebe779329db91 22,59-60
+apps/server/cloudflare/tokens/native-retention.test.ts
+  s_a1be23a656acf0::t_1dd6afc55b8799 1-278
+apps/server/cloudflare/tokens/pats.test.ts
+  s_a1be23a656acf0::t_4df3d2241f51f3 1444
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a75bf3031ad7e516a8f3ff0836bf73cffd073385",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

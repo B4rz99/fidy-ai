@@ -1,0 +1,19 @@
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a1be23a656acf0::t_5d3d1871976c7d 593-595,599,605-606
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "11a9b424ba71724e70806ab33aa53119cc1973d7",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

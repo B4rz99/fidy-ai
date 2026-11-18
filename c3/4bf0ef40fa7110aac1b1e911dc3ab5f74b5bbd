@@ -1,0 +1,19 @@
+apps/server/cloudflare/directory/internal/expiry.ts
+  s_a1be23a656acf0::t_3ea1a031b3c921 37-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c34bf0ef40fa7110aac1b1e911dc3ab5f74b5bbd",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

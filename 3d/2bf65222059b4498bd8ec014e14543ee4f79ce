@@ -1,0 +1,45 @@
+apps/server/cloudflare/budgets/internal/native-thresholds.ts
+  s_a1be23a656acf0::t_504246c0f22f0e 2,129-136
+apps/server/cloudflare/budgets/operations.ts
+  s_a1be23a656acf0::t_dafc31771e85e8 1-3,875-882
+apps/server/cloudflare/erasure/internal/operator-request.ts
+  s_a1be23a656acf0::t_4b2e3d070962b7 72-78,80
+apps/server/cloudflare/ingestion/native-media.test.ts
+  s_a1be23a656acf0::t_6af8e796e09b58 10
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_3c1708b522f081 1,39-42
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_a1be23a656acf0::t_f558bebe7fc850 230
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_a1be23a656acf0::t_4b1b4e0fc59da7 10,271
+apps/server/cloudflare/release-isolation/runtime.ts
+  s_a1be23a656acf0::t_3b2f6e50f10134 1-2,5,61-71
+apps/server/cloudflare/runtime/contract.ts
+  s_a1be23a656acf0::t_53b25780fa6576 6-7
+apps/server/cloudflare/runtime/release-smoke/contract.ts
+  s_a1be23a656acf0::t_ab7085a89682e5 6
+apps/server/cloudflare/storage-bootstrap/contract.ts
+  s_a1be23a656acf0::t_8ed6fcaa2492f0 2
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_e68e3fe6e88ab4 104-107,582-594
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_5ace2a171f1343 873-996
+infra/cloudflare/verify-edge-smoke.test.ts
+  s_a1be23a656acf0::t_ced204f4fa3a13 372
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3d2bf65222059b4498bd8ec014e14543ee4f79ce",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

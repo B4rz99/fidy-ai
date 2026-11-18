@@ -53,6 +53,20 @@ export class UserStore extends NativeUser {
   override fetch(request: Request): Promise<Response> {
     const store = this.ctx.storage;
     switch (request.url) {
+      case "https://fixture.invalid/user-alarm": {
+        const original = Date.now;
+        const instant = request.headers.get("fixture-clock");
+        if (instant !== null) Date.now = (): number => Number(instant);
+        return super
+          .alarm()
+          .then(
+            () => new Response(null, { status: 204 }),
+            () => new Response(null, { status: 503 })
+          )
+          .finally(() => {
+            Date.now = original;
+          });
+      }
       case "https://fixture.invalid/hold-sample":
         return store.put("hold-sample", true).then(() => new Response(null, { status: 204 }));
       case "https://fixture.invalid/release-sample":

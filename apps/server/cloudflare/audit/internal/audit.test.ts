@@ -1,4 +1,3 @@
-import { openAiTestKey } from "../../openai.test-fixture";
 import assert from "node:assert/strict";
 import { AuditUnavailable } from "../../../src/shell/audit/contract";
 import { afterAll, expect, it } from "vitest";
@@ -11,8 +10,6 @@ import {
   isolatedTestDatabases,
   observeRetentionCost,
 } from "../../d1-test-fixture";
-import { fixtureWorker as coreWorker } from "../../core-worker.test-fixture";
-import { approvedOpenAiModel } from "../../../src/shell/hosted-inference/contract";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -506,64 +503,6 @@ it("observes subject-scoped publication evidence without inventing a missing cre
         occurredAt: DateTime.makeUnsafe(current),
       });
       expect(yield* audit.publications({ userId: otherUserId, limit: 10 })).toEqual([]);
-    })
-  ));
-
-it("runs scheduled Audit retention independently of a failed earlier maintenance activity", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* setup();
-      const statement = recordOwnerCall({
-        id: "30000000-0000-4000-8000-000000000009",
-        userId,
-        caller: { _tag: "WebSession", id: sessionId },
-        operation: "transactions.listTransactions",
-        outcome: "success",
-        current: current - 366 * 86400000,
-        when: { sql: "SELECT 1", params: [] },
-        afterOwnerWrite: false,
-      });
-      yield* attempt(() =>
-        db
-          .prepare(statement.sql)
-          .bind(...statement.params)
-          .run()
-      );
-      const result = yield* Effect.result(
-        attempt(() =>
-          coreWorker.scheduled(
-            { cron: "* * * * *", scheduledTime: current, noRetry: () => {} },
-            {
-              DB: db,
-              ASYNC_HEALTH_ENABLED: "enabled",
-              OPENAI_API_KEY: openAiTestKey({
-                run: () => Promise.reject(new Error("unused model")),
-              }),
-              USER_TRANSACTION_COORDINATOR: {
-                getByName: (): Pick<Fetcher, "fetch"> => ({
-                  fetch: () => Promise.reject(new Error("unused coordinator")),
-                }),
-              },
-              CONTRACT_DIGEST: "a".repeat(64),
-              RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-              HOSTED_AI_MODEL: approvedOpenAiModel,
-              BROWSER_ORIGIN: "https://app.fidyapp.com",
-              WOMPI_ENVIRONMENT: "",
-              WOMPI_PUBLIC_KEY: "",
-              WOMPI_PRIVATE_KEY: "",
-              WOMPI_INTEGRITY_SECRET: "",
-              KAPSO_API_KEY: "",
-              WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
-              KAPSO_WEBHOOK_SECRET: "unused",
-              WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
-              CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",
-              CLOUDFLARE_ACCESS_AUDIENCE: "test",
-            }
-          )
-        )
-      );
-      expect(result._tag).toBe("Failure");
-      expect(yield* makeAudit({ database: db }).query({ userId, limit: 10 })).toEqual([]);
     })
   ));
 

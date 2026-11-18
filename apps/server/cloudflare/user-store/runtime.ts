@@ -8,6 +8,7 @@ import {
 import { verifyReleaseTransaction } from "../storage-bootstrap/operations";
 import { handleLocalProcessingConsent } from "../consent/runtime";
 import { processingConsentTransport } from "../../src/shell/processing-consent/runtime";
+import { recoverLocalAudit, repairLocalAuditAlarm } from "../audit/operations";
 import { inspectUncertainty } from "./internal/uncertainty";
 import { pendingExecutionRecoveryMs } from "../agent/contract";
 import {
@@ -408,6 +409,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           ),
           recoverLocalRecurringSeries(current, this.ctx.storage, this.owns),
           recoverLocalReceipts(current, this.ctx.storage),
+          recoverLocalAudit(current, this.ctx.storage, this.owns),
           Effect.scoped(
             Effect.flatMap(Layer.build(OutboundHttpLive), (clients) =>
               recoverLocalIngestion(current, this.ctx.storage, this.env).pipe(
@@ -651,6 +653,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             repairReplacementAlarm(current, storage),
             repairRecoveryAlarm(current, storage),
             repairReceiptAlarm(current, storage),
+            repairLocalAuditAlarm(current, storage),
             repairLocalIngestionAlarm(current, storage),
             checkConnectionAlarm(storage),
             repairConnectionRetention({ storage, adapters }),

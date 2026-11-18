@@ -1,3 +1,4 @@
+import { auditRetentionSchema } from "../audit/contract";
 import { acceptanceSubject } from "../release-isolation/operations";
 import type { NativeAcceptanceSettings } from "../release-isolation/contract";
 import { refundSchema } from "./internal/refund-schema";
@@ -1057,6 +1058,7 @@ export const userStoreHistory: StoreHistory = {
         "CREATE TRIGGER consent_history_no_delete BEFORE DELETE ON consent_history BEGIN SELECT RAISE(ABORT,'consent_history_retention_required'); END",
       ],
     },
+    { version: 30, id: "user-audit-retention", statements: auditRetentionSchema },
   ],
 };
 

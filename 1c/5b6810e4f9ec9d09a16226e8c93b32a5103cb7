@@ -1,0 +1,47 @@
+apps/server/cloudflare/subscription/internal/enrollment-policy.ts
+  s_a1be23a656acf0::t_477ec618a826ee 1-157
+apps/server/cloudflare/subscription/internal/local-billing-admission.ts
+  s_a1be23a656acf0::t_46fd6520b95e2b 66-67,120-122,144-146,170-172
+apps/server/cloudflare/subscription/internal/local-enrollment-form.ts
+  s_a1be23a656acf0::t_a185cf1c92ff3f 19
+apps/server/cloudflare/subscription/internal/local-enrollment-submit.ts
+  s_a1be23a656acf0::t_af7d3de8f1df70 23,153-155,338
+apps/server/cloudflare/subscription/internal/local-renewal.ts
+  s_a1be23a656acf0::t_4df3a6e7524280 15,28-32,70-75,77-81,89,96,134
+apps/server/cloudflare/subscription/internal/native-billing.ts
+  s_a1be23a656acf0::t_9e6723fb6aab8b 164
+apps/server/cloudflare/subscription/internal/native-enrollment.ts
+  s_a1be23a656acf0::t_4bef1f658e7993 10,15,17-18,28,33,41,49,72-73,95,100
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_a1be23a656acf0::t_b9c097d2a8b3cd 1-11,1114
+apps/server/cloudflare/subscription/native-enrollment.test.ts
+  s_a1be23a656acf0::t_3d3cde6b8bba20 25-101,260-261,265,291,310,320,325,351,372,474-485,489
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_a1be23a656acf0::t_0d5bc4907e0aed 14-15
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_95859595f66f06 27-32,84-85,101-109
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_03b3ad54d50935 89-90,93
+apps/server/cloudflare/user-store/internal/billing-admission-schema.ts
+  s_a1be23a656acf0::t_4c988fbc6d29d8 1-3,8-21,24-34
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_3d44d361e612de 921
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_8d3dec2a8f04fc 593-595,598-601
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1c5b6810e4f9ec9d09a16226e8c93b32a5103cb7",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

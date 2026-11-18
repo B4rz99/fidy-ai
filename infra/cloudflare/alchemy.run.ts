@@ -431,7 +431,7 @@ export default Alchemy.Stack(
       compatibility: { date: "2026-09-08" },
       workersDev: false,
       env: {
-        DB: database,
+        SMOKE_BUCKET: smokeBucket,
         CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
         SMOKE_QUEUE_NAME: smokeQueue.queueName,
         SMOKE_WORKFLOW: smokeWorkflow,

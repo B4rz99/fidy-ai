@@ -1,7 +1,6 @@
 import { isStorageBootstrap, isStorageCompatibility } from "../storage-bootstrap/contract";
 import { initializeSharedStores } from "../storage-bootstrap/operations";
-import { smokeManifest, smokePath } from "../runtime/release-smoke/contract";
-import { smokeProofAccepted } from "../runtime/release-smoke/operations";
+import { smokeManifest, smokePath, smokeProofAccepted } from "../runtime/release-smoke/contract";
 import {
   bancolombiaSandboxAdmission,
   verifyBancolombiaSandboxAuthentication,

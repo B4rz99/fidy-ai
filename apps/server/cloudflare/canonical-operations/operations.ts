@@ -1006,10 +1006,12 @@ export const prepareHostedOwner = Effect.fn(function* (
     return Option.some(
       prepareLocalWrite({
         targets: [],
-        commit: (isNativeAccountQuery(operation.id)
-          ? readNativeAccountQuery(operation.id, context.user, context.current)
-          : readParameter(operation, input, context)
-        ).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
+        commit: Effect.gen(function* () {
+          if (isNativeAccountQuery(operation.id)) {
+            return yield* readNativeAccountQuery(operation.id, context.user, context.current);
+          }
+          return yield* readParameter(operation, input, context);
+        }).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause))),
       })
     );
   }

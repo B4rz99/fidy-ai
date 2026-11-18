@@ -5,7 +5,6 @@ import {
   SyntheticBindings,
   smokeEnvironment,
   unavailableBucket,
-  unavailableDatabase,
   unavailableQueue,
   unavailableWorkflow,
 } from "./incomplete-platform-fixture";
@@ -121,11 +120,10 @@ describe("private release smoke", () => {
           throw new Error("must not run");
         };
         const environment = smokeEnvironment({
-          DB: withMethods(unavailableDatabase, { prepare: binding }),
           SMOKE_BUCKET: withMethods(unavailableBucket, { put: binding }),
           SMOKE_QUEUE: withMethods(unavailableQueue, { send: binding }),
           SMOKE_WORKFLOW: withMethods(unavailableWorkflow, { create: binding }),
-          USER_TRANSACTION_COORDINATOR: { getByName: binding },
+          USER_STORE: { getByName: binding },
           CF_VERSION_METADATA: { id: "db7cd8d3-4425-4fe7-8c81-01bf963b6067" },
           SMOKE_QUEUE_NAME: "smoke",
           SMOKE_PROOF: proof,
@@ -275,11 +273,11 @@ describe("private release smoke", () => {
             environment: {
               ...environment,
               CF_VERSION_METADATA: { id: version },
-              DB: withMethods(unavailableDatabase, {
-                prepare: () => {
+              USER_STORE: {
+                getByName: () => {
                   throw Error("secret-provider-body");
                 },
-              }),
+              },
             },
           })
         );

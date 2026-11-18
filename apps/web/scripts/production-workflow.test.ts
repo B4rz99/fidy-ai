@@ -46,7 +46,7 @@ describe("Production release workflow policy", () => {
             message:
               "Production identity, routing and independent edge verification passed; D1 synthetic work and OAuth availability deferred: daily quota exhausted.",
             code: 0,
-            expected: true,
+            expected: false,
           },
           {
             message:

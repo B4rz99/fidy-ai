@@ -1,6 +1,5 @@
 import { Option } from "effect";
-import { smokePath } from "../runtime/release-smoke/contract";
-import { smokeProofAccepted } from "../runtime/release-smoke/operations";
+import { smokePath, smokeProofAccepted } from "../runtime/release-smoke/contract";
 
 type Environment = Readonly<{ mode: Option.Option<string>; proof: Option.Option<string> }>;
 const unavailableStatus = 503;

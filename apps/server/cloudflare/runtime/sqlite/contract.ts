@@ -36,4 +36,5 @@ export class StoreCapacity extends Context.Service<
 export const storeReadinessUrl = "https://store.invalid/release-readiness";
 
 /** Cannot equal a canonical UUID UserId. This named schema probe holds no User authority. */
+export const storeTransactionUrl = "https://store.invalid/release-transaction";
 export const releaseProbeName = "release-schema-probe-v1";

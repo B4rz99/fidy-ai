@@ -49,10 +49,10 @@ import {
   smokeIdentityHeader,
   smokeManifest,
   smokePath,
+  smokeProofAccepted,
   smokeProofHeader,
   smokeVersionHeader,
 } from "./runtime/release-smoke/contract";
-import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";

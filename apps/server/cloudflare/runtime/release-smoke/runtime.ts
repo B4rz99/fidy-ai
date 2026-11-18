@@ -2,7 +2,6 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { Clock, Effect, Option, Schema } from "effect";
 import type { SmokeCompletion, SmokeExecutorEnvironment } from "./contract";
 import { SmokeWork, smokeExecutionId, smokeLifetimeMs } from "./internal/protocol";
-import { verifySmokeDatabase } from "./internal/database";
 import { SmokeBindingFailed, platform } from "./internal/platform";
 import {
   cloudflareWorkerTelemetry,
@@ -37,7 +36,15 @@ export class ReleaseSmokeWorkflowV2 extends WorkflowEntrypoint<SmokeExecutorEnvi
             { retries: { limit: 0, delay: "1 second" }, timeout: "30 seconds" },
             () =>
               Effect.runPromiseWith(context)(
-                verifySmokeDatabase(environment.DB).pipe(
+                platform({
+                  stage: "storage",
+                  tryWork: () => environment.SMOKE_BUCKET.get("_release-smoke/marker-v1"),
+                }).pipe(
+                  Effect.flatMap((marker) =>
+                    marker === null
+                      ? Effect.fail(new SmokeBindingFailed({ stage: "storage" }))
+                      : Effect.void
+                  ),
                   Effect.as({
                     probeId: input.probeId,
                     expiresAtMs: input.expiresAtMs,

@@ -151,12 +151,12 @@ import {
   prepareBoundCategoryRead,
 } from "../../categories/operations";
 import { contractDigestPattern, gitRevisionPattern } from "../../runtime/contract";
-import { smokeFailureHeader, smokePath } from "../../runtime/release-smoke/contract";
 import {
-  handleSmoke,
+  smokeFailureHeader,
+  smokePath,
   smokeProofAccepted,
-  smokeReady,
-} from "../../runtime/release-smoke/operations";
+} from "../../runtime/release-smoke/contract";
+import { handleSmoke, smokeReady } from "../../runtime/release-smoke/operations";
 
 import {
   ResolveNeedsReviewItemInput,

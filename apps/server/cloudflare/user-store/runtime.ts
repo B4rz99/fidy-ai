@@ -1,3 +1,4 @@
+import { verifyReleaseTransaction } from "../storage-bootstrap/operations";
 import { handleLocalProcessingConsent } from "../consent/runtime";
 import { processingConsentTransport } from "../../src/shell/processing-consent/runtime";
 import { inspectUncertainty, retainedWork } from "./internal/retained-work";
@@ -201,6 +202,7 @@ import {
   type StoreReleaseEnvironment,
   releaseProbeName,
   storeReadinessUrl,
+  storeTransactionUrl,
 } from "../runtime/sqlite/contract";
 
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
@@ -497,8 +499,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
 
   private isReleaseProbe(request: Request): boolean {
     return (
-      request.method === "GET" &&
-      request.url === storeReadinessUrl &&
+      ((request.method === "GET" && request.url === storeReadinessUrl) ||
+        (request.method === "POST" && request.url === storeTransactionUrl)) &&
       this.ctx.id.equals(this.env.USER_STORE.idFromName(releaseProbeName))
     );
   }
@@ -558,6 +560,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     }
     if (this.erased) return this.erasedResponse(request);
     if (this.isReleaseProbe(request)) {
+      if (request.method === "POST") {
+        return Promise.resolve(verifyReleaseTransaction(this.ctx.storage));
+      }
       return this.runtime.runPromise(
         storeReadiness({ history: userStoreHistory, release: this.env.CF_VERSION_METADATA.id })
       );

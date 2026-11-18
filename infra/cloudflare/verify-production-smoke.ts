@@ -94,56 +94,41 @@ const awaitSyntheticWork = Effect.fn(function* (
     expectedGitRevision: config.RELEASE_GIT_SHA,
     expectedContractDigest: config.CONTRACT_DIGEST,
   });
-  const completed = yield* Effect.gen(function* () {
-    let status = yield* Effect.gen(function* () {
-      const response = yield* exchangeSmoke({ query: "", headers, body: Option.some(request) });
-      return yield* checkSmokeExchange(
-        response,
-        expectedPair(config, expectedPublic, "cloudflare-workers-version-overrides" in headers)
-      );
-    }).pipe(
-      Effect.retry({
-        times: 6,
-        schedule: Schedule.spaced("1500 millis"),
-        while: (error) =>
-          "cloudflare-workers-version-overrides" in headers &&
-          error instanceof CandidateRoutingPending,
-      })
+  let status = yield* Effect.gen(function* () {
+    const response = yield* exchangeSmoke({ query: "", headers, body: Option.some(request) });
+    return yield* checkSmokeExchange(
+      response,
+      expectedPair(config, expectedPublic, "cloudflare-workers-version-overrides" in headers)
     );
-    for (let attempt = 0; attempt < maxSyntheticPolls && status !== "passed"; attempt++) {
-      yield* Effect.sleep(`${pollDelayMs} millis`);
-      status = yield* checkSmokeExchange(
-        yield* exchangeSmoke({ query: `?probeId=${probeId}`, headers, body: Option.none() }),
-        expectedPair(config, expectedPublic)
-      );
-    }
-    if (status !== "passed") {
-      return yield* new ReleaseSmokeFailed({
-        reason: "Synthetic Queue and Workflow probe did not complete",
-      });
-    }
-    return "passed" as const;
   }).pipe(
-    Effect.catchTag("D1QuotaDeferred", () =>
-      config.VERIFY_BANCOLOMBIA_SANDBOX === "enabled"
-        ? Effect.fail(
-            new ReleaseSmokeFailed({
-              reason: "Sandbox authentication was not verified: D1 admission unavailable",
-            })
-          )
-        : Effect.succeed("deferred-d1-quota" as const)
-    )
+    Effect.retry({
+      times: 6,
+      schedule: Schedule.spaced("1500 millis"),
+      while: (error) =>
+        "cloudflare-workers-version-overrides" in headers &&
+        error instanceof CandidateRoutingPending,
+    })
   );
-  return completed;
+  for (let attempt = 0; attempt < maxSyntheticPolls && status !== "passed"; attempt++) {
+    yield* Effect.sleep(`${pollDelayMs} millis`);
+    status = yield* checkSmokeExchange(
+      yield* exchangeSmoke({ query: `?probeId=${probeId}`, headers, body: Option.none() }),
+      expectedPair(config, expectedPublic)
+    );
+  }
+  if (status !== "passed") {
+    return yield* new ReleaseSmokeFailed({
+      reason: "Synthetic Queue and Workflow probe did not complete",
+    });
+  }
+  return "passed" as const;
 });
 
 const checkEdge = Effect.fn(function* (
   config: RunnerConfig,
-  headers: Readonly<Record<string, string>>,
-  outcome: "passed" | "deferred-d1-quota"
+  headers: Readonly<Record<string, string>>
 ) {
   const result = yield* verifyEdgeSmoke({
-    d1QuotaVerified: outcome === "deferred-d1-quota",
     probe: ({ method, path, headers: probeHeaders }) =>
       Effect.gen(function* () {
         const response = yield* callEdge(
@@ -246,7 +231,7 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
   }
   const config = decoded.value;
   const headers = candidateHeaders(config, config.PUBLIC_VERSION_ID);
-  const candidate = yield* awaitSyntheticWork(config, headers, {
+  yield* awaitSyntheticWork(config, headers, {
     gitRevision: config.RELEASE_GIT_SHA,
     contractDigest: config.CONTRACT_DIGEST,
     workerVersionId: config.PUBLIC_VERSION_ID,
@@ -258,16 +243,7 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
         })
     )
   );
-  yield* checkEdge(config, headers, candidate);
-  // A previous public Worker cannot decode a newly introduced quota stage. Its exact
-  // pairing was already verified above without touching D1.
-  if (candidate === "deferred-d1-quota") {
-    yield* Effect.all(
-      [verifyReadOnlySmokeRouting(env), verifyReadOnlySmokeRouting(env, "intermediate")],
-      { concurrency: 2, discard: true }
-    );
-    return candidate;
-  }
+  yield* checkEdge(config, headers);
   return yield* awaitSyntheticWork(
     config,
     candidateHeaders(config, config.STABLE_PUBLIC_VERSION_ID),
@@ -313,8 +289,7 @@ export const verifyPromotedSmoke = Effect.fn(function* (env: unknown) {
       workerVersionId: config.PUBLIC_VERSION_ID,
     }
   );
-  if (outcome === "deferred-d1-quota") yield* verifyReadOnlySmokeRouting(env, "promoted");
-  yield* checkEdge(config, smokeHeaders({ config, publicVersion: Option.none() }), outcome);
+  yield* checkEdge(config, smokeHeaders({ config, publicVersion: Option.none() }));
   return outcome;
 });
 
@@ -364,10 +339,7 @@ if (import.meta.main) {
       : "unclassified smoke failure (no provider response logged)";
   let message = `Production smoke failed: ${safeReason}.\n`;
   if (passed) {
-    message =
-      result.value === "deferred-d1-quota"
-        ? "Production identity, routing and independent edge verification passed; D1 synthetic work and OAuth availability deferred: daily quota exhausted.\n"
-        : "Production smoke passed.\n";
+    message = "Production smoke passed.\n";
   }
   await Bun.write(passed ? Bun.stdout : Bun.stderr, message);
   if (!passed) process.exitCode = 1;

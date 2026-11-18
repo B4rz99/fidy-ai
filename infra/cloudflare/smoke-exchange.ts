@@ -21,7 +21,7 @@ const refusedStatus = 503;
 export class ReleaseSmokeFailed extends Data.TaggedError("ReleaseSmokeFailed")<{
   readonly reason: string;
 }> {}
-export class D1QuotaDeferred extends Data.TaggedError("D1QuotaDeferred")<{}> {}
+
 export class CandidateRoutingPending extends Data.TaggedError("CandidateRoutingPending")<{
   readonly reason: string;
 }> {}
@@ -168,12 +168,6 @@ const publicAccepted = (response: SmokeExchange, expectedPublic: SmokeIdentity):
   response.noStore &&
   Option.contains(response.publicVersion, expectedPublic.workerVersionId);
 
-const isQuotaRefusal = (response: SmokeExchange, expectedPublic: SmokeIdentity): boolean =>
-  response.status === refusedStatus &&
-  response.noStore &&
-  Option.contains(response.publicVersion, expectedPublic.workerVersionId) &&
-  Option.contains(response.failureStage, "d1_quota");
-
 const shouldReplay = (
   response: SmokeExchange,
   expected: Readonly<{ public: SmokeIdentity; replayIdentity: boolean }>
@@ -192,9 +186,6 @@ export const checkSmokeExchange = Effect.fn(function* (
     return yield* new CandidateRoutingPending({
       reason: smokeDiagnostic(response, expected.public),
     });
-  }
-  if (isQuotaRefusal(response, expected.public)) {
-    return yield* new D1QuotaDeferred();
   }
   if (!publicAccepted(response, expected.public)) {
     return yield* new ReleaseSmokeFailed({ reason: smokeDiagnostic(response, expected.public) });

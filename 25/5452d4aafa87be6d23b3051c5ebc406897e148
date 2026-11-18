@@ -1,0 +1,35 @@
+apps/server/cloudflare/ingestion/native-email.test.ts
+  s_a1be23a656acf0::t_80f69c2ea61e14 114-124
+  s_a1be23a656acf0::t_b251c5278a8776 125-128
+apps/server/cloudflare/ingestion/internal/local-retention.ts
+  s_a1be23a656acf0::t_6255b6d02c9827 1,96,119
+apps/server/cloudflare/ingestion/internal/original-writers.ts
+  s_a1be23a656acf0::t_edd5b3e506db2e 2,37-43
+  s_a1be23a656acf0::t_6255b6d02c9827 8,44-53
+  s_a1be23a656acf0::t_da87379a144f78 54-71
+apps/server/cloudflare/ingestion/internal/local-email.ts
+  s_a1be23a656acf0::t_edd5b3e506db2e 29,209,416
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_6255b6d02c9827 7-10
+  s_a1be23a656acf0::t_c83095ab615af2 5,11-18
+apps/server/cloudflare/erasure-worker.test-fixture.ts
+  s_a1be23a656acf0::t_80f69c2ea61e14 35-36
+apps/server/cloudflare/ingestion/internal/local-document.ts
+  s_a1be23a656acf0::t_99f5b51736fca4 20,175,219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "255452d4aafa87be6d23b3051c5ebc406897e148",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

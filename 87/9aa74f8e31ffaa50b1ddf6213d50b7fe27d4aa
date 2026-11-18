@@ -1,0 +1,23 @@
+apps/server/cloudflare/erasure/native-purge.test.ts
+  s_a1be23a656acf0::t_dd90b31d06be05 4,6-7,89-120
+apps/server/cloudflare/erasure/operations.ts
+  s_a1be23a656acf0::t_dd90b31d06be05 28,299-306,347
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_b20644bb55ccb8 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "879aa74f8e31ffaa50b1ddf6213d50b7fe27d4aa",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

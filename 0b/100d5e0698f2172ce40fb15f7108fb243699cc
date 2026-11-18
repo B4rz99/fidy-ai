@@ -1,0 +1,36 @@
+apps/server/cloudflare/subscription/pricing.test-fixture.ts
+  s_a1be23a656acf0::t_597ec807710326 16-23,29-43
+  s_a1be23a656acf0::t_6e139c5937e597 24,44-47,82
+  s_a1be23a656acf0::t_bd1be910772a07 26-28
+  s_a1be23a656acf0::t_7e9a62454c506d 25
+apps/server/cloudflare/subscription/pricing.test.ts
+  s_a1be23a656acf0::t_597ec807710326 2,6,61-69,121-128,132-162,169-212,217,251,275,299-300,350
+  s_a1be23a656acf0::t_bd1be910772a07 34,163-168
+apps/server/cloudflare/subscription/internal/pricing-object.ts
+  s_a1be23a656acf0::t_8fbd5f5896bc58 186-188,193,200-202,204,218,234
+  s_a1be23a656acf0::t_6e139c5937e597 143,145
+  s_a1be23a656acf0::t_a3db7e51d127cf 140-141,230
+  s_a1be23a656acf0::t_bd1be910772a07 144,182-185,189-192,194-199,203,205-206,217,231-233
+apps/server/cloudflare/subscription/runtime.ts
+  s_a1be23a656acf0::t_a3db7e51d127cf 346
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_6e139c5937e597 5
+apps/server/cloudflare/maintenance/watchdog.test.ts
+  s_a1be23a656acf0::t_a3db7e51d127cf 144-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0b100d5e0698f2172ce40fb15f7108fb243699cc",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

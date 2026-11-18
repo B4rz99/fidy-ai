@@ -1,0 +1,20 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_9cbd47bbf51ea4 933-935,937-948,950-959
+  s_a1be23a656acf0::t_d4f10ddd736689 5,936,949
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3c50e9a45c85f26857de687fca87b21994157526",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

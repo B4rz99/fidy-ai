@@ -1,3 +1,5 @@
+import { reviewRequest } from "./internal/sample-operator";
+import { reviewLocal } from "./internal/sample-review";
 import {
   admitLocalEmail as acceptLocalEmail,
   receivePrivateEmail as acceptPrivateEmail,
@@ -223,3 +225,6 @@ export const processLocalEmail: typeof completeLocalEmail = (...args) =>
 /** Until institution evidence can be verified, the production Email ingress refuses before reading bytes. */
 export const refuseUnverifiedEmail = (message: ForwardedEmailMessage): Effect.Effect<void> =>
   Effect.sync(() => message.setReject("Mailbox unavailable"));
+
+export const handleSampleReview: typeof reviewRequest = (...args) => reviewRequest(...args);
+export const localSampleReview: typeof reviewLocal = (...args) => reviewLocal(...args);

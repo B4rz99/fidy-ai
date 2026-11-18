@@ -1,3 +1,4 @@
+import { handleSampleReview } from "../../ingestion/runtime";
 import { nativeSupportRecovery } from "../../recovery/operations";
 import {
   emailReplacementCompletionPath,
@@ -44,7 +45,7 @@ import {
 
 import { browserSessionBindingResponse } from "../../web-session/operations";
 import type { BancolombiaAuthenticationFailed } from "../../bancolombia-authentication/contract";
-import { ReviewCommand } from "../../../src/core/ingestion/contract";
+import { ReviewCommand, sampleReviewPath } from "../../../src/core/ingestion/contract";
 import { RecurringCommand } from "../../../src/core/recurring-plans/contract";
 import { handleErasureOperator } from "../../erasure/runtime";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
@@ -599,6 +600,7 @@ const ownedCorePath = (path: string): boolean =>
   [
     "/health",
     "/internal/titular-erasure",
+    sampleReviewPath,
     pricePublicationPath,
     smokePath,
     listCategoriesPath,
@@ -1877,6 +1879,7 @@ const supportCoreResponse = (
   environment: CoreHttpEnvironment,
   path: string
 ): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
+  if (path === sampleReviewPath) return Option.some(handleSampleReview(request, environment));
   if (path === "/internal/titular-erasure") {
     return Option.some(
       handleErasureOperator({

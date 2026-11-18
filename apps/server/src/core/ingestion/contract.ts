@@ -784,3 +784,45 @@ export const ReviewCommand = Schema.Union([
 ]);
 export type ReviewCommand = typeof ReviewCommand.Type;
 export const ReviewEditResult = Schema.Array(ReviewDetail);
+
+/** Structural-tags-v1 has a closed vocabulary. No email strings or arbitrary metadata are reviewable. */
+const maximumStructuralTagCount = 9999;
+const count = Schema.Int.check(
+  Schema.isBetween({ minimum: 0, maximum: maximumStructuralTagCount })
+);
+export const SampleArtifact = Schema.Struct({
+  serviceMarket: Schema.Literal("CO"),
+  sourceFormat: Schema.Literal("notification-email"),
+  sourceProvider: Schema.Literal("cloudflare-email"),
+  parserRevision: Schema.Literal("cloudflare-mime-v1"),
+  anonymizationRevision: Schema.Literal("structural-tags-v1"),
+  structure: Schema.Struct({
+    table: count,
+    tr: count,
+    td: count,
+    p: count,
+    span: count,
+    div: count,
+  }),
+});
+const sampleRef = Schema.String.check(Schema.isUUID());
+const sampleVersion = {
+  candidateId: sampleRef,
+  revision: Schema.Int.check(Schema.isGreaterThan(0)),
+  digest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+};
+export const SampleReviewCommand = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("preview"), userId: sampleRef }),
+  Schema.Struct({
+    action: Schema.Literals(["approve", "reject"]),
+    userId: sampleRef,
+    ...sampleVersion,
+  }),
+  Schema.Struct({ action: Schema.Literal("withdraw"), sampleId: sampleRef }),
+]);
+export const SampleReviewResult = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("preview"), ...sampleVersion, artifact: SampleArtifact }),
+  Schema.Struct({ status: Schema.Literals(["approved", "published"]), sampleId: sampleRef }),
+  Schema.Struct({ status: Schema.Literals(["rejected", "withdrawn", "empty"]) }),
+]);
+export const sampleReviewPath = "/internal/sample-review";

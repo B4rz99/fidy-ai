@@ -107,16 +107,28 @@ const supportAndMailbox = Effect.fn(function* (request: Request) {
       Response.json(messages.get(new URL(request.url).searchParams.get("to") ?? "") ?? [])
     );
   }
-  if (request.url === "https://fixture.invalid/support-assertion") {
+  const reviewer = new URL(request.url).pathname === "/reviewer-assertion";
+  const scenario = new URL(request.url).searchParams.get("scenario");
+  if (reviewer || request.url === "https://fixture.invalid/support-assertion") {
     const keys = yield* Effect.tryPromise(() => signingKeys(keyId));
     const now = Math.floor((yield* Clock.currentTimeMillis) / millisecondsPerSecond);
     return Option.some(
       new Response(
         yield* Effect.tryPromise(() =>
-          new SignJWT({})
+          new SignJWT({
+            type: scenario === "organization" ? "org" : "app",
+            email:
+              reviewer && scenario !== "unassigned"
+                ? "reviewer@example.test"
+                : "operator@example.test",
+          })
             .setProtectedHeader({ alg: "RS256", kid: keyId })
             .setIssuer("https://fixture.cloudflareaccess.com")
-            .setAudience("fixture-support")
+            .setAudience(
+              scenario === "multiple"
+                ? ["fixture-review", "fixture-support"]
+                : [reviewer ? "fixture-review" : "fixture-support"]
+            )
             .setSubject("fixture-operator")
             .setIssuedAt(now)
             .setExpirationTime(now + tokenLifetimeSeconds)

@@ -138,6 +138,10 @@ const browserBindings = {
     worker: "core",
     exportName: "BrowserPairingEmailWorkflowV1",
   },
+  SAMPLE_BUCKET: { type: "r2", name: "anonymous-samples" },
+  EMAIL_BUCKET: { type: "r2", name: "sample-controls-test" },
+  SAMPLE_REVIEWER_EMAIL: { type: "text", value: "reviewer@example.test" },
+  SAMPLE_REVIEW_AUDIENCE: { type: "text", value: "fixture-review" },
   FIXTURE_PROVIDER: {
     type: "worker",
     worker: "browser-oidc-fixture",

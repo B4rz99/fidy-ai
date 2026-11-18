@@ -167,6 +167,7 @@ export const NativeStatementDocument = Schema.Struct({
 export type LocalIngestionEnvironment = Readonly<{
   DIRECTORY: DurableObjectNamespace;
   STATEMENT_STAGING_BUCKET: R2Bucket;
+  SAMPLE_BUCKET: R2Bucket;
   STATEMENT_EXTRACTION_QUEUE: Queue;
   EMAIL_BUCKET: R2Bucket;
   FORWARDED_EMAIL_QUEUE: Queue;
@@ -182,3 +183,5 @@ export type LocalIngestionRequest = Readonly<{
   owns: (user: string) => boolean;
   storage: DurableObjectStorage;
 }>;
+
+export const localSampleReviewUrl = "https://user.invalid/ingestion/sample-review";

@@ -65,7 +65,7 @@ const setup = Effect.fnUntraced(function* () {
     expires = "5m",
     claims: Readonly<Record<string, string>> = {}
   ): Promise<string> =>
-    new SignJWT({ email: "support@example.com", ...claims })
+    new SignJWT({ type: "app", email: "support@example.com", ...claims })
       .setSubject("support-operator")
       .setProtectedHeader({ alg: "RS256", kid: "billing-test" })
       .setIssuer(issuer)

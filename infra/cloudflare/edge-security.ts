@@ -143,6 +143,7 @@ const reservedRateLimitPaths = [
   emailReplacementCompletionPath,
   "/recovery/backup-code/rotate",
   "/internal/support-recovery",
+  "/internal/sample-review",
   refundSupportBasePath,
   "/user",
   "/pat-pairings",

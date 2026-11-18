@@ -14,6 +14,12 @@ const maximumLifetimeSeconds = 900;
 const millisecondsPerSecond = 1000;
 const maximumSubjectLength = 256;
 const Claims = Schema.Struct({
+  type: Schema.Literal("app"),
+  // Signature verification checks audience membership. A human operator token must name exactly one application.
+  aud: Schema.Union([
+    Schema.String,
+    Schema.NonEmptyArray(Schema.String).check(Schema.isMaxLength(1)),
+  ]),
   sub: Schema.String.check(Schema.isBetweenLength(1, maximumSubjectLength)),
   email: Schema.String.check(Schema.isPattern(/^[^@\s]+@[^@\s]+$/u)),
   iat: Schema.Int,
@@ -81,7 +87,6 @@ export const authenticateOperator = (
     if (
       !currentClaims(claims, now) ||
       "common_name" in verified.payload ||
-      verified.payload.aud !== input.configuration.audience ||
       Option.exists(input.configuration.requiredEmail, (email) => claims.email !== email)
     ) {
       return Option.none();

@@ -2,8 +2,34 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "84ad61a7e082c71e18880bb01cb588e6fae82f000aa9f10d3657b0fc4a326bcf";
+const expectedEdgePolicyDigest = "285e2174fe7d00da8d700c22865fbb07855220e8ca0e9d255560ba56901332cd";
 const securityArtifacts = [
+  await Bun.file(
+    new URL("../../apps/cli/src/direct-client/internal/operator-access.ts", import.meta.url)
+  ).text(),
+  await Bun.file(new URL("../../apps/cli/src/sample-review/operations.ts", import.meta.url)).text(),
+  await Bun.file(new URL("../../apps/cli/src/sample-review/runtime.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/sample-authority.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/sample-operator.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/sample-review.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/ingestion/internal/sample-publication.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/ingestion/internal/sample-response.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/user-store/internal/sample-schema.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/directory/internal/email-capacity.ts", import.meta.url)
   ).text(),

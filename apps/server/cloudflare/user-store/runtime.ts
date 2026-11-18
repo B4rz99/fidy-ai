@@ -5,11 +5,13 @@ import {
   type LocalIngestionEnvironment,
   localDocumentUrl,
   localEmailUrl,
+  localSampleReviewUrl,
 } from "../ingestion/contract";
 import {
   admitLocalDocument,
   admitLocalEmail,
   localPendingStatement,
+  localSampleReview,
   localStatementActivity,
   processLocalEmail,
   recoverLocalIngestion,
@@ -446,11 +448,13 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   ): Option.Option<Promise<Response>> {
     const unit = { request, env: this.env, owns, storage: this.ctx.storage };
     switch (request.url) {
+      case localSampleReviewUrl:
       case localEmailUrl:
         return Option.some(
           this.runtime.runPromise(
-            admitLocalEmail(unit).pipe(
-              Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
+            Effect.catchCause(
+              request.url === localEmailUrl ? admitLocalEmail(unit) : localSampleReview(unit),
+              () => Effect.succeed(canonicalAdmissionUnavailable())
             )
           )
         );

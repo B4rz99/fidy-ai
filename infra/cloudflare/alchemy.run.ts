@@ -151,7 +151,9 @@ const resolvePatAdmissionKey = (development: boolean): typeof patAdmissionKey =>
     : patAdmissionKey;
 
 const resolveAccessConfig = Effect.fn(function* (development: boolean) {
-  if (development) return { issuer: "", audience: "", erasureAudience: "" };
+  if (development) {
+    return { issuer: "", audience: "", erasureAudience: "", reviewAudience: "", reviewerEmail: "" };
+  }
   const issuer = yield* accessIssuer;
   const operatorEmail = yield* recoveryOperatorEmail;
   const identity = yield* Cloudflare.Access.IdentityProvider("RecoveryIdentity", {
@@ -198,7 +200,42 @@ const resolveAccessConfig = Effect.fn(function* (development: boolean) {
       },
     ],
   });
-  return { issuer, audience: application.aud, erasureAudience: erasureApplication.aud };
+  const reviewerEmail = yield* Config.String("SAMPLE_REVIEWER_EMAIL").pipe(Config.withDefault(""));
+  if (reviewerEmail === "") {
+    return {
+      issuer,
+      audience: application.aud,
+      erasureAudience: erasureApplication.aud,
+      reviewAudience: "",
+      reviewerEmail: "",
+    };
+  }
+  const assignedReviewer = yield* Config.schema(EmailAddress, "SAMPLE_REVIEWER_EMAIL");
+  const reviewApplication = yield* Cloudflare.Access.Application("IngestSampleReviewAccess", {
+    type: "self_hosted",
+    name: "Fidy IngestSample review",
+    domain: "api.fidyapp.com/internal/sample-review",
+    sessionDuration: "15m",
+    appLauncherVisible: false,
+    allowedIdps: [identity.identityProviderId],
+    autoRedirectToIdentity: true,
+    policies: [
+      {
+        name: "sample-review-operator",
+        decision: "allow",
+        precedence: 1,
+        sessionDuration: "15m",
+        include: [{ email: { email: assignedReviewer } }],
+      },
+    ],
+  });
+  return {
+    issuer,
+    audience: application.aud,
+    erasureAudience: erasureApplication.aud,
+    reviewAudience: reviewApplication.aud,
+    reviewerEmail: assignedReviewer,
+  };
 });
 
 const resolveBrowserOrigin = (production: boolean): string =>
@@ -291,6 +328,7 @@ export default Alchemy.Stack(
       readReplication: { mode: "disabled" },
     });
     const statementStagingBucket = yield* Cloudflare.R2.Bucket("StatementStagingBucket");
+    const sampleBucket = yield* Cloudflare.R2.Bucket("ApprovedIngestSamples");
     const emailBucket = yield* Cloudflare.R2.Bucket("ForwardedEmailBucket");
     const erasureBucket = yield* Cloudflare.R2.Bucket("TitularErasureBucket");
     const erasureRequired = development
@@ -506,6 +544,9 @@ export default Alchemy.Stack(
           : wompiEventSecret,
         CLOUDFLARE_ACCESS_ISSUER: accessConfig.issuer,
         CLOUDFLARE_ACCESS_AUDIENCE: accessConfig.audience,
+        SAMPLE_REVIEW_AUDIENCE: accessConfig.reviewAudience,
+        SAMPLE_REVIEWER_EMAIL: accessConfig.reviewerEmail,
+        SAMPLE_BUCKET: sampleBucket,
         WHATSAPP_BUSINESS_PORTFOLIO_ID: kapsoBindings.portfolioId,
         WHATSAPP_SANDBOX_PHONE_NUMBER_ID: kapsoBindings.sandboxPhoneNumberId,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,

@@ -1,3 +1,4 @@
+import { recoverSamples } from "./sample-publication";
 import { recoverDocumentStages, stageRetryMs } from "./local-document";
 import { activateLocalEmail, emailStageRetryMs, recoverEmailStages } from "./local-email";
 import { settleSharedEmailCapacity, updateSharedEmailCapacity } from "./email-capacity";
@@ -25,6 +26,8 @@ export const repairIngestionAlarm = Effect.fn(function* (
       ((SELECT min(expires_at_ms) FROM media_submissions WHERE capacity_held=1 OR media_id IS NOT NULL OR caption IS NOT NULL)),
       ((SELECT min(retention_expires_at_ms) FROM statement_submissions s WHERE EXISTS(SELECT 1 FROM statement_parts WHERE submission_id=s.id))),
       ((SELECT min(forget_at_ms) FROM statement_document_origins)),
+      ((SELECT min(due_ms) FROM ingest_sample_decisions)),
+      ((SELECT min(expires_at_ms) FROM ingest_sample_candidates)),
       ((SELECT min(expires_at_ms) FROM statement_documents WHERE object_key IS NOT NULL)),
       ((SELECT min(received_at_ms) FROM statement_documents WHERE disposition=1)),
       ((SELECT min(stage_checked_at_ms) FROM forwarded_email_receipts WHERE state='discarding')),
@@ -44,6 +47,7 @@ export const recoverIngestion = Effect.fn(function* (
   const sql = yield* SqliteClient;
   const due = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
+      yield* sql`DELETE FROM ingest_sample_candidates WHERE id IN(SELECT id FROM ingest_sample_candidates WHERE expires_at_ms<=${current} ORDER BY expires_at_ms LIMIT ${pageSize})`;
       yield* sql`UPDATE statement_submissions SET status='failed',started_at_ms=coalesce(started_at_ms,${current}),completed_at_ms=${current},failure_reason='retention-expired',work_published_at_ms=NULL,work_last_attempt_at_ms=NULL WHERE id IN(SELECT id FROM statement_submissions WHERE retention_expires_at_ms<=${current} AND status IN ('queued','processing') ORDER BY retention_expires_at_ms LIMIT ${pageSize})`;
       yield* sql`DELETE FROM statement_document_origins WHERE rowid IN (SELECT rowid FROM statement_document_origins WHERE forget_at_ms<=${current} ORDER BY forget_at_ms LIMIT ${pageSize})`;
       yield* sql`DELETE FROM statement_parts WHERE rowid IN(SELECT p.rowid FROM statement_parts p JOIN statement_submissions s ON s.id=p.submission_id WHERE s.retention_expires_at_ms<=${current} ORDER BY s.retention_expires_at_ms,p.part LIMIT ${pageSize})`;
@@ -67,6 +71,21 @@ export const recoverIngestion = Effect.fn(function* (
     );
     if (sent._tag === "None") failed++;
   }
+  yield* expireDocuments(current, env);
+  const documents = yield* recoverDocumentStages(current, storage, env);
+  const stagedEmails = yield* recoverEmailStages(current, env);
+  const emails = yield* recoverEmails(current, env);
+  const samples = yield* recoverSamples(current, env);
+  yield* repairIngestionAlarm(current, storage);
+  return {
+    attempted:
+      due.length + emails.attempted + documents.attempted + stagedEmails + samples.attempted,
+    failed: failed + emails.failed + documents.failed + samples.failed,
+  };
+});
+
+const expireDocuments = Effect.fn(function* (current: number, env: LocalIngestionEnvironment) {
+  const sql = yield* SqliteClient;
   const expired =
     yield* sql`SELECT id,user_id,object_key FROM statement_documents WHERE disposition=1 OR expires_at_ms<=${current} ORDER BY expires_at_ms LIMIT ${pageSize}`;
   for (const raw of expired) {
@@ -86,16 +105,7 @@ export const recoverIngestion = Effect.fn(function* (
       })
     );
   }
-  const documents = yield* recoverDocumentStages(current, storage, env);
-  const stagedEmails = yield* recoverEmailStages(current, env);
-  const emails = yield* recoverEmails(current, env);
-  yield* repairIngestionAlarm(current, storage);
-  return {
-    attempted: due.length + emails.attempted + documents.attempted + stagedEmails,
-    failed: failed + emails.failed + documents.failed,
-  };
 });
-
 const expireEmails = Effect.fn(function* (current: number, env: LocalIngestionEnvironment) {
   const sql = yield* SqliteClient;
   const expired =

@@ -48,3 +48,6 @@ and release verification; the web hosts installers and the API supplies release 
 - [Runtime evidence](../../docs/research/bun-1-4-4-runtime-compatibility-2026-10-31.md): reviewed native behavior.
 - [Security standards](../../SECURITY_STANDARDS.md): credential and transport invariants.
 - [Release tooling](../../scripts/cli-release/): packaging and verification implementation.
+
+Private IngestSample review uses its dedicated Access application and interactive decision prompts.
+See the [review and withdrawal procedure](../../docs/operations/ingest-sample-review.md).

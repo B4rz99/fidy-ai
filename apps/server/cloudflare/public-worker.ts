@@ -247,6 +247,7 @@ const replacementPaths = [
   emailReplacementOperations.request.path,
   emailReplacementOperations.complete.path,
 ] as const;
+const sampleReviewPath = "/internal/sample-review";
 const erasureSupportPath = "/internal/titular-erasure";
 const supportRecoveryPath = "/internal/support-recovery";
 const refundMethods = (path: string): ReadonlyArray<string> =>
@@ -264,6 +265,7 @@ const postPaths = new Set<string>([
   ...replacementPaths,
   supportRecoveryPath,
   erasureSupportPath,
+  sampleReviewPath,
   pricePublicationPath,
   "/web/privacy/erasure",
   microsoftProviderPaths.start,
@@ -424,7 +426,9 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
     return Option.some(providerHeaders(request, path));
   }
   if (
-    [supportRecoveryPath, erasureSupportPath, pricePublicationPath].includes(path) ||
+    [supportRecoveryPath, erasureSupportPath, pricePublicationPath, sampleReviewPath].includes(
+      path
+    ) ||
     refundSupportPath(path)
   ) {
     return Option.some(supportHeaders(request));
@@ -637,8 +641,9 @@ const isPreflight = (request: Request, path: string, origin: Option.Option<strin
   request.method === "OPTIONS" && hasPreflight(path) && Option.isSome(origin);
 
 const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): boolean =>
-  [supportRecoveryPath, erasureSupportPath, pricePublicationPath].includes(path) &&
-  Option.isSome(origin);
+  [supportRecoveryPath, erasureSupportPath, pricePublicationPath, sampleReviewPath].includes(
+    path
+  ) && Option.isSome(origin);
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);

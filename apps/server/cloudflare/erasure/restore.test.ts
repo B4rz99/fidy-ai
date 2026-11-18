@@ -562,7 +562,7 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
   });
   const http = yield* fixtureNativeHttpClient;
   const token = yield* Effect.tryPromise(() =>
-    new SignJWT({ email: "obarboza@fidyapp.com" })
+    new SignJWT({ type: "app", email: "obarboza@fidyapp.com" })
       .setProtectedHeader({ alg: "RS256", kid: "erasure-key" })
       .setIssuer(issuer)
       .setAudience(audience)
@@ -687,7 +687,7 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
     },
   ]) {
     const assertion = yield* Effect.tryPromise(() =>
-      new SignJWT(invalid)
+      new SignJWT({ type: "app", ...invalid })
         .setProtectedHeader({ alg: "RS256", kid: "erasure-key" })
         .setIssuer(issuer)
         .setSubject("operator")
@@ -713,7 +713,7 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
   }
   const forged = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
   const forgedAssertion = yield* Effect.tryPromise(() =>
-    new SignJWT({ email: "obarboza@fidyapp.com" })
+    new SignJWT({ type: "app", email: "obarboza@fidyapp.com" })
       .setProtectedHeader({ alg: "RS256", kid: "erasure-key" })
       .setIssuer(issuer)
       .setAudience(audience)

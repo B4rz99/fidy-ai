@@ -79,6 +79,9 @@ type CoreEnvironment = Pick<SharedBindings, "MAINTENANCE"> &
   } & Partial<
     Readonly<{
       RECOVERY_ISOLATION: string;
+      SAMPLE_REVIEW_AUDIENCE: string;
+      SAMPLE_REVIEWER_EMAIL: string;
+      SAMPLE_BUCKET: R2Bucket;
       BILLING_SUPPORT_AUDIENCE: string;
       PRICING_PUBLISH_AUDIENCE: string;
       PRICING: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;

@@ -1,3 +1,4 @@
+import { sampleSchema } from "./internal/sample-schema";
 import { ingestionSchema } from "./internal/ingestion-schema";
 import { billingAdmissionSchema } from "./internal/billing-admission-schema";
 import { oauthUserSchema, userPATSchema } from "./internal/credential-schema";
@@ -921,6 +922,7 @@ export const userStoreHistory: StoreHistory = {
     },
     { version: 17, id: "retained-ingestion", statements: ingestionSchema() },
     { version: 18, id: "immutable-billing-admissions", statements: billingAdmissionSchema() },
+    { version: 19, id: "human-sample-review", statements: sampleSchema() },
   ],
 };
 

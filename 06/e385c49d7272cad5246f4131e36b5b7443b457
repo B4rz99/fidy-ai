@@ -1,0 +1,25 @@
+apps/server/ARCHITECTURE.md
+  s_a1be23a656acf0::t_e6dd998714c155 208-209
+apps/server/cloudflare/whatsapp/internal/native-delivery.ts
+  s_a1be23a656acf0::t_13a69c753cb1db 101-103,110,162,168,173-175,181,202
+apps/server/cloudflare/whatsapp/native-callback.test.ts
+  s_a1be23a656acf0::t_664573ca86014a 9,67-69,134-159
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_c62b0e5a980796 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "06e385c49d7272cad5246f4131e36b5b7443b457",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

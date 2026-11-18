@@ -1,0 +1,22 @@
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_a1be23a656acf0::t_0d70733d3f1321 13
+apps/server/cloudflare/dashboard/native-batches.test.ts
+  s_a1be23a656acf0::t_007d6c04cfb8c0 5-281
+  s_a1be23a656acf0::t_a3e2615cd4442b 1-4,282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b2781eaf5897115d01a3aef70ae9d4f58ab3b265",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

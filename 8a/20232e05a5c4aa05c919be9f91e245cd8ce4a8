@@ -1,0 +1,36 @@
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_a2dd4cd090f518 5
+  s_a1be23a656acf0::t_ea9daeed2f589d 368-421
+apps/server/cloudflare/subscription/native-enrollment.test.ts
+  s_a1be23a656acf0::t_a2dd4cd090f518 104-105,107-152,423-433,439-440,584-588
+  s_a1be23a656acf0::t_7ff96c1de8df11 1,4,294,434-437,443,583,589
+  s_a1be23a656acf0::t_c77eee9c60a972 106,438,441-442
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_7ff96c1de8df11 8-15,17-19
+  s_a1be23a656acf0::t_5c6bd08c8d032c 20-21
+apps/server/cloudflare/subscription/internal/local-enrollment-submit.ts
+  s_a1be23a656acf0::t_7ff96c1de8df11 96
+apps/server/cloudflare/subscription/internal/native-billing.ts
+  s_a1be23a656acf0::t_a2dd4cd090f518 118-125,136
+apps/server/cloudflare/maintenance/schedule.test.ts
+  s_a1be23a656acf0::t_ea9daeed2f589d 20-22,33-34,36,78,108
+  s_a1be23a656acf0::t_43193dcb5d9c09 19
+apps/server/cloudflare/subscription/native-callback.test.ts
+  s_a1be23a656acf0::t_7ff96c1de8df11 42,198-208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8a20232e05a5c4aa05c919be9f91e245cd8ce4a8",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

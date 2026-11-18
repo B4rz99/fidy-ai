@@ -1,3 +1,5 @@
+import { erasureStoreHistory } from "../../erasure-store/operations";
+import { maintenanceStoreHistory } from "../../maintenance/operations";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
@@ -236,18 +238,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
     })
   );
 
-  for (const [owner, versions] of [
-    ["maintenance", [1, 2]],
-    ["erasure", [1]],
-  ] as const) {
+  for (const { owner, steps } of [maintenanceStoreHistory, erasureStoreHistory]) {
     test.effect(`initializes the independent ${owner} migration history`, () =>
       Effect.gen(function* () {
         const activate = yield* probe;
         const store = yield* activate(owner, "release");
         expect(yield* store.request).toBe(200);
         expect(
-          yield* store.exec("SELECT owner,version FROM store_migrations ORDER BY version")
-        ).toEqual(versions.map((version) => ({ owner, version })));
+          yield* store.exec("SELECT owner,version,id FROM store_migrations ORDER BY version")
+        ).toEqual(steps.map(({ version, id }) => ({ owner, version, id })));
       })
     );
   }

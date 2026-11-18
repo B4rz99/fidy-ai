@@ -1,5 +1,19 @@
-import { outstandingEmailLimit, retainedEmailLimit } from "../../directory/contract";
 import { SecureRandom } from "effect/crypto";
+import {
+  EmailUnavailable,
+  authorityUnavailable,
+  io,
+  maximumHeadersSize,
+  maximumMimeDepth,
+  maximumNestedMessageDepth,
+  maximumOutstandingUser,
+  maximumRawBytes,
+  maximumRetainedUser,
+  readBounded,
+  recipientPattern,
+  retentionMs,
+} from "./email-envelope";
+import { outstandingEmailLimit, retainedEmailLimit } from "../../directory/contract";
 import { PrivateObjectKey } from "../../private-objects/contract";
 import {
   erasePrivateObject,
@@ -17,7 +31,7 @@ import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { prepareConsentWithdrawalProjection } from "../../consent/operations";
-import { Clock, Data, Effect, Option, Result, Schema } from "effect";
+import { Clock, Effect, Option, Result, Schema } from "effect";
 import PostalMime from "postal-mime";
 import {
   maximumEmailAddressCharacters,
@@ -57,15 +71,6 @@ const authoriseOriginalWrite = (
     );
   });
 
-export const maximumRawBytes = 1_048_576;
-const millisecondsPerDay = 86_400_000;
-const retentionDays = 90;
-export const retentionMs = retentionDays * millisecondsPerDay;
-export const maximumOutstandingUser = 100;
-
-export const maximumRetainedUser = 1000;
-
-export const recipientPattern = /^[a-z0-9_-]{24,64}@fidyapp\.com$/u;
 const maximumSweep = 100;
 const millisecondsPerMinute = 60_000;
 const minutesPerHour = 60;
@@ -74,9 +79,6 @@ const storingInterruptionMinutes = 15;
 const sweepLookaheadMs = sweepLookaheadHours * minutesPerHour * millisecondsPerMinute;
 const storingInterruptionMs = storingInterruptionMinutes * millisecondsPerMinute;
 const dispatchCooldownMs = 60_000;
-export const maximumHeadersSize = 16_384;
-export const maximumMimeDepth = 8;
-export const maximumNestedMessageDepth = 0;
 const hexBase = 16;
 
 const uuid = Schema.String.check(Schema.isUUID());
@@ -104,61 +106,9 @@ const ExpiredReceipt = Schema.Struct({
   state: Schema.Literals(["storing", "queued"]),
 });
 
-class EmailUnavailable extends Data.TaggedError("EmailUnavailable")<{
-  readonly reason: "authority" | "size" | "capacity";
-}> {}
-
-const authorityUnavailable = (): EmailUnavailable => new EmailUnavailable({ reason: "authority" });
-const io = <A>(tryWork: () => Promise<A>): Effect.Effect<A, EmailUnavailable> =>
-  Effect.tryPromise({
-    try: tryWork,
-    catch: (cause) =>
-      cause instanceof Error && cause.message.includes("forwarded_email_deferred_capacity")
-        ? new EmailUnavailable({ reason: "capacity" })
-        : authorityUnavailable(),
-  });
-
-/** Worker-native entropy and digest, supplied at the Email Worker boundary. */
-export const emailSecureRandom = SecureRandom.make((size) =>
-  crypto.getRandomValues(new Uint8Array(size))
-);
 const reject = (message: ForwardedEmailMessage): void => {
   message.setReject("Mailbox unavailable");
 };
-const releaseEmailReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effect<void> =>
-  Effect.sync(() => {
-    reader.cancel().catch(() => undefined);
-    reader.releaseLock();
-  });
-
-export const readBounded = Effect.fn(function* (raw: ReadableStream) {
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  yield* Effect.acquireUseRelease(
-    Effect.try({ try: () => raw.getReader(), catch: authorityUnavailable }),
-    Effect.fnUntraced(function* (reader) {
-      let next = yield* io(() => reader.read());
-      while (!next.done) {
-        const chunk = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(next.value).pipe(
-          Effect.mapError(authorityUnavailable)
-        );
-        size += chunk.byteLength;
-        if (size > maximumRawBytes) return yield* new EmailUnavailable({ reason: "size" });
-        if (chunk.byteLength > 0) chunks.push(chunk);
-        next = yield* io(() => reader.read());
-      }
-    }),
-    releaseEmailReader
-  );
-  const result = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return result;
-});
-
 const resolveForwardingRecipient = (
   db: D1Database,
   localPart: string

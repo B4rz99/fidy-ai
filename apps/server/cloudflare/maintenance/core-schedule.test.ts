@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect } from "effect";
+import { Clock, DateTime, Effect } from "effect";
 import { expect } from "vitest";
 import { native, nativeUserPlatform } from "../user-store.test-fixture";
 import { storeReadinessUrl } from "../runtime/sqlite/contract";
@@ -16,7 +16,12 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
         const runtime = yield* start();
         const core = yield* native(() => runtime.getWorker("core"));
         for (let delivery = 0; delivery < 2; delivery++) {
-          const result = yield* native(() => core.scheduled({ cron: "* * * * *", scheduledTime }));
+          const result = yield* native(() =>
+            core.scheduled({
+              cron: "* * * * *",
+              scheduledTime: DateTime.toDate(DateTime.makeUnsafe(scheduledTime)),
+            })
+          );
           expect(result.outcome).toBe("ok");
         }
         const progress = yield* native(() =>
@@ -34,7 +39,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) =>
         const closed = yield* start("1000000000", [], { RECOVERY_ISOLATION: "isolated" });
         const held = yield* native(() => closed.getWorker("core"));
         yield* native(() =>
-          held.scheduled({ cron: "* * * * *", scheduledTime: scheduledTime + 60000 })
+          held.scheduled({
+            cron: "* * * * *",
+            scheduledTime: DateTime.toDate(DateTime.makeUnsafe(scheduledTime + 60000)),
+          })
         );
         const owners = yield* native(() => closed.getDurableObjectNamespace("MAINTENANCE", "core"));
         expect(

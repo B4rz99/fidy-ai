@@ -1,4 +1,4 @@
-import { retentionMs } from "./forwarded-email";
+import { retentionMs } from "./email-envelope";
 import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Option, Schema } from "effect";

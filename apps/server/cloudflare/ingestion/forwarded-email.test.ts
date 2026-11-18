@@ -1,15 +1,16 @@
+import { emailSecureRandom } from "./internal/email-envelope";
 import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
-import {
-  emailSecureRandom,
-  receiveForwardedEmail as receiveStored,
-} from "./internal/forwarded-email";
+import { receiveForwardedEmail as receiveStored } from "./internal/forwarded-email";
 import { SecureRandom } from "effect/crypto";
 import { openAiTestKey } from "../openai.test-fixture";
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { approvedOpenAiModel } from "../../src/shell/hosted-inference/contract";
 import { ReviewMaterial } from "../../src/shell/ingestion/contract";
-import { DurableTraceContext, type TelemetryWorkRecord } from "../../src/shell/observability/contract";
+import {
+  DurableTraceContext,
+  type TelemetryWorkRecord,
+} from "../../src/shell/observability/contract";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { TestClock } from "effect/testing";
 import { Base64 } from "effect/encoding";

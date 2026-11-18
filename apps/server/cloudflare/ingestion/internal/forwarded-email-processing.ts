@@ -9,7 +9,7 @@ import { ReceivedEmailId } from "../../../src/core/ingestion/contract";
 import { CapturedInterpretationContext } from "../../../src/core/interpretation-evidence/contract";
 import { prepareNotificationEmailCapture } from "../../transactions/operations";
 import { interpretNotificationEmail } from "../../../src/shell/ingestion/operations";
-import { emailSecureRandom } from "./forwarded-email";
+import { emailSecureRandom } from "./email-envelope";
 
 const maximumTimeZoneCharacters = 128;
 export const Receipt = Schema.Struct({

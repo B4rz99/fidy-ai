@@ -42,7 +42,7 @@ import {
   readBounded,
   recipientPattern,
   retentionMs,
-} from "./forwarded-email";
+} from "./email-envelope";
 import { claimEmailCapacity, settleSharedEmailCapacity } from "./email-capacity";
 import { Receipt, anonymizeStructure, decideEmail } from "./forwarded-email-processing";
 

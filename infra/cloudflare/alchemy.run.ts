@@ -16,6 +16,7 @@ import { ApprovedOpenAiModel } from "@fidy/server/hosted-inference-contract";
 import { EmailAddress } from "@fidy/server/email-authentication-contract";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
+import { storageNamespaces } from "./storage-installation";
 import { freeTierWorkerObservability } from "./worker-observability";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 import { resolveLocalCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/operations";
@@ -437,10 +438,7 @@ export default Alchemy.Stack(
         SQLITE_STORE_CAPACITY_BYTES: yield* Config.String("SQLITE_STORE_CAPACITY_BYTES").pipe(
           Config.withDefault("1000000000")
         ),
-        USER_STORE: Cloudflare.DurableObject("UserStore", { className: "UserStore" }),
-        MAINTENANCE: Cloudflare.DurableObject("Maintenance", { className: "Maintenance" }),
-        DIRECTORY: Cloudflare.DurableObject("Directory", { className: "Directory" }),
-        PRICING: Cloudflare.DurableObject("Pricing", { className: "Pricing" }),
+        ...(yield* storageNamespaces),
         PRICING_PUBLISH_AUDIENCE: yield* Config.String("PRICING_PUBLISH_AUDIENCE").pipe(
           Config.withDefault("")
         ),

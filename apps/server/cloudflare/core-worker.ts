@@ -1,3 +1,4 @@
+import type { SharedBindings } from "./storage-bootstrap/contract";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   type ErasureRegistry,
@@ -14,7 +15,13 @@ import {
 import { sharedStorageRead } from "./routing/runtime";
 import type { ProviderEnvironment } from "./provider-authentication/contract";
 import type { ProactivityDeliveryWork, ProactivityEnvironment } from "./insights/contract";
-import { type CoreMaintenanceInput, ScheduledWorkFailed } from "./maintenance/contract";
+import {
+  type CoreMaintenanceInput,
+  ScheduledWorkFailed,
+  completedCheckStatus,
+  maintenanceName,
+  watchdogUrl,
+} from "./maintenance/contract";
 import { runCoreMaintenance } from "./maintenance/runtime";
 import { makeCoreHttp } from "./core-http/runtime";
 import { makeCoreQueue } from "./queue/runtime";
@@ -25,7 +32,7 @@ import type {
 } from "./email-authentication/contract";
 import type { BillingCollectionEnvironment } from "./subscription/contract";
 import type { SmokeEnvironment } from "./runtime/release-smoke/contract";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
 
@@ -49,7 +56,8 @@ export {
 export { ProactivityDeliveryWorkflow } from "./insights/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
-type CoreEnvironment = ProviderEnvironment &
+type CoreEnvironment = Pick<SharedBindings, "MAINTENANCE"> &
+  ProviderEnvironment &
   WorkerTelemetryEnvironment &
   ProactivityEnvironment &
   Readonly<{ CONTRACT_DIGEST: string; RELEASE_GIT_SHA: string }> & {
@@ -432,20 +440,34 @@ export const makeCoreWorker = ({
   queue: (batch, environment) => makeCoreQueue(telemetry)(batch, withErasureRecovery(environment)),
   scheduled: (controller, environment) =>
     Effect.gen(function* () {
-      const executor = environment.USER_TRANSACTION_COORDINATOR;
-      const response = yield* Effect.tryPromise({
-        try: (signal) =>
-          executor.getByName("core-maintenance-v1").fetch(
-            new Request("https://maintenance.invalid/tick", {
-              method: "POST",
-              headers: { "x-maintenance-scheduled-at": String(controller.scheduledTime) },
-              signal,
-            })
-          ),
-        catch: () => new ScheduledWorkFailed(),
+      if (environment.RECOVERY_ISOLATION === "isolated") return;
+      const tick = Effect.fnUntraced(function* (
+        executor: NonNullable<SharedBindings["MAINTENANCE"]>,
+        url: string
+      ) {
+        const response = yield* Effect.tryPromise({
+          try: (signal) =>
+            executor.getByName(maintenanceName).fetch(
+              new Request(url, {
+                method: "POST",
+                headers: { "x-maintenance-scheduled-at": String(controller.scheduledTime) },
+                signal,
+              })
+            ),
+          catch: () => new ScheduledWorkFailed(),
+        });
+        if (response.status !== completedCheckStatus) return yield* new ScheduledWorkFailed();
       });
-      const succeededStatus = 204;
-      if (response.status !== succeededStatus) return yield* new ScheduledWorkFailed();
+      const results = yield* Effect.all(
+        [
+          tick(environment.USER_TRANSACTION_COORDINATOR, "https://maintenance.invalid/tick"),
+          environment.MAINTENANCE === undefined
+            ? Effect.void
+            : tick(environment.MAINTENANCE, watchdogUrl),
+        ],
+        { concurrency: 2, mode: "result" }
+      );
+      if (results.some(Result.isFailure)) return yield* new ScheduledWorkFailed();
     }).pipe(
       (work) =>
         observeWorkerExecution(work, {

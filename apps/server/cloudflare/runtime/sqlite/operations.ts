@@ -315,5 +315,7 @@ export const preserveStoreAlarm = Effect.fnUntraced(function* (
   const earlier = yield* Effect.tryPromise(() => storage.getAlarm());
   if (earlier === null || instant < earlier) {
     yield* Effect.tryPromise(() => storage.setAlarm(instant));
+    return true;
   }
+  return false;
 });

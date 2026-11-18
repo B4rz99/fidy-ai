@@ -2,8 +2,17 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "aa5a7ae937e5679af97d7b57b35cbe9c12b26ffa666ba3110d8fa97050f58d8f";
+const expectedEdgePolicyDigest = "22a379208234cc8f23955cf52084e82804785a68adb188d748eebad8f9912086";
 const securityArtifacts = [
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/subscription/internal/local-cancellation.ts",
+      import.meta.url
+    )
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/maintenance/internal/watchdog.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/budgets/internal/sqlite-dispatch.ts", import.meta.url)
   ).text(),

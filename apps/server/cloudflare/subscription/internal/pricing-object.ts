@@ -1,3 +1,4 @@
+import { ownerCheckRequest, ownerCheckResponse } from "../../maintenance/contract";
 import { withStoreAdmission } from "../../runtime/sqlite/operations";
 import { StoreCapacity, type StoreCapacityUnavailable } from "../../runtime/sqlite/contract";
 import { Clock, Effect, Option, Schema } from "effect";
@@ -143,6 +144,12 @@ const register = (input: typeof registration.Type): PricingResult =>
 
 export const pricingResponse = (request: Request): PricingResult =>
   Effect.gen(function* () {
+    if (ownerCheckRequest(request)) {
+      const sql = yield* SqlClient.SqlClient;
+      const outstanding = yield* sql`SELECT 1 FROM price_registrations LIMIT 1`;
+      // Exact end-of-registration reconciliation belongs to Pricing; an unresolved registration is never healthy zero.
+      return outstanding.length === 0 ? ownerCheckResponse() : new Response(null, { status: 503 });
+    }
     const command = request.method + " " + new URL(request.url).pathname;
     if (command === "GET /offers") return yield* offers;
     if (command === "POST /publish") {

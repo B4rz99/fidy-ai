@@ -81,6 +81,8 @@ const billingBindings = {
 
 const nativeOwners = {
   UserStore: { type: "durable-object", storage: "sqlite" },
+  Pricing: { type: "durable-object", storage: "sqlite" },
+  Erasure: { type: "durable-object", storage: "sqlite" },
   Maintenance: { type: "durable-object", storage: "sqlite" },
   Directory: { type: "durable-object", storage: "sqlite" },
 } as const;
@@ -130,6 +132,8 @@ const createUserPlatform = Effect.fnUntraced(function* (withBilling: boolean) {
               SQLITE_STORE_CAPACITY_BYTES: { type: "text", value: ceiling },
               ...(withBilling ? billingBindings : {}),
               USER_STORE: { type: "durable-object", worker: "core", exportName: "UserStore" },
+              PRICING: { type: "durable-object", worker: "core", exportName: "Pricing" },
+              ERASURE: { type: "durable-object", worker: "core", exportName: "Erasure" },
               MAINTENANCE: { type: "durable-object", worker: "core", exportName: "Maintenance" },
               DIRECTORY: { type: "durable-object", worker: "core", exportName: "Directory" },
             },

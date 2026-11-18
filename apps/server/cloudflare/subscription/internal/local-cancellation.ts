@@ -69,6 +69,20 @@ const offerCooldownMs = 60_000;
 const boundedOfferPage = 32;
 const DueRow = Schema.Struct({ user_id: UserId, paid_attempt_id: BillingAttemptId });
 
+export const repairCancellationAlarm = Effect.fnUntraced(function* (storage: DurableObjectStorage) {
+  const sql = yield* SqliteClient;
+  const remaining =
+    yield* sql`SELECT next_offer_at_ms FROM subscription_cancellations c JOIN subscriptions s ON s.id=c.subscription_id
+      WHERE next_offer_at_ms IS NOT NULL AND (c.void_started_at_ms IS NOT NULL OR NOT EXISTS (SELECT 1 FROM erasure_requests WHERE user_id=s.user_id)) ORDER BY next_offer_at_ms,paid_attempt_id LIMIT 1`;
+  if (remaining.length > 0) {
+    const [row] = yield* Schema.decodeUnknownEffect(
+      Schema.Tuple([Schema.Struct({ next_offer_at_ms: Schema.Int })])
+    )(remaining);
+    return yield* preserveStoreAlarm(storage, row.next_offer_at_ms);
+  }
+  return false;
+});
+
 /** Claim a bounded due page and durably schedule the next one before attempting any Queue handoff. */
 export const dispatchCancellations = Effect.fnUntraced(function* (
   input: Readonly<{
@@ -91,15 +105,7 @@ export const dispatchCancellations = Effect.fnUntraced(function* (
         yield* sql`UPDATE subscription_cancellations SET next_offer_at_ms=${input.current + offerCooldownMs}
         WHERE paid_attempt_id=${row.paid_attempt_id}`;
       }
-      const remaining =
-        yield* sql`SELECT next_offer_at_ms FROM subscription_cancellations c JOIN subscriptions s ON s.id=c.subscription_id
-      WHERE next_offer_at_ms IS NOT NULL AND (c.void_started_at_ms IS NOT NULL OR NOT EXISTS (SELECT 1 FROM erasure_requests WHERE user_id=s.user_id)) ORDER BY next_offer_at_ms,paid_attempt_id LIMIT 1`;
-      if (remaining.length > 0) {
-        const [row] = yield* Schema.decodeUnknownEffect(
-          Schema.Tuple([Schema.Struct({ next_offer_at_ms: Schema.Int })])
-        )(remaining);
-        yield* preserveStoreAlarm(input.storage, row.next_offer_at_ms);
-      }
+      yield* repairCancellationAlarm(input.storage);
       return rows;
     })
   );

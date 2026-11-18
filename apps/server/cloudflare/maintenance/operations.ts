@@ -60,6 +60,20 @@ export const maintenanceStoreHistory: StoreHistory = {
         "CREATE INDEX discoverable_users ON lifetime_registry(user_id) WHERE retired=0",
       ],
     },
+    {
+      version: 3,
+      id: "watchdog-traversal",
+      statements: [
+        `CREATE TABLE watchdog_progress (
+          singleton INTEGER PRIMARY KEY CHECK(singleton=1), minute INTEGER NOT NULL DEFAULT -1,
+          scheduled INTEGER NOT NULL DEFAULT -1, cursor TEXT NOT NULL DEFAULT '', halt TEXT NOT NULL DEFAULT 'idle',
+          wraps INTEGER NOT NULL DEFAULT 0, wrapped_at INTEGER NOT NULL DEFAULT 0, defer_fixed INTEGER NOT NULL DEFAULT 0,
+          admitted INTEGER NOT NULL DEFAULT 0, attempted INTEGER NOT NULL DEFAULT 0, observed INTEGER NOT NULL DEFAULT 0,
+          failed INTEGER NOT NULL DEFAULT 0, unsupported INTEGER NOT NULL DEFAULT 0, unknown INTEGER NOT NULL DEFAULT 0, repaired INTEGER NOT NULL DEFAULT 0
+        ) STRICT`,
+        "INSERT INTO watchdog_progress(singleton) VALUES(1)",
+      ],
+    },
   ],
 };
 

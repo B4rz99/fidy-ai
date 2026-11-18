@@ -376,25 +376,33 @@ export const runLocalMutation = Effect.fn(function* <A, E>(
   );
 });
 
-export const sweepReceiptWork = Effect.fnUntraced(function* (
+export const repairReceiptAlarm = Effect.fnUntraced(function* (
   current: number,
   storage: DurableObjectStorage
 ) {
   const sql = yield* SqliteClient;
+  const next =
+    yield* sql`SELECT accepted_at_ms FROM canonical_request_receipts ORDER BY accepted_at_ms LIMIT 1`;
+  if (next.length > 0) {
+    const [row] = yield* Schema.decodeUnknownEffect(
+      Schema.Tuple([Schema.Struct({ accepted_at_ms: Schema.Int })])
+    )(next);
+    return yield* preserveStoreAlarm(
+      storage,
+      Math.max(current, row.accepted_at_ms + canonicalRetryLifetimeMs)
+    );
+  }
+  return false;
+});
+
+export const sweepReceiptWork = Effect.fnUntraced(function* (
+  current: number,
+  storage: DurableObjectStorage
+) {
   return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       yield* sweepLocalReceipts(current);
-      const next =
-        yield* sql`SELECT accepted_at_ms FROM canonical_request_receipts ORDER BY accepted_at_ms LIMIT 1`;
-      if (next.length > 0) {
-        const [row] = yield* Schema.decodeUnknownEffect(
-          Schema.Tuple([Schema.Struct({ accepted_at_ms: Schema.Int })])
-        )(next);
-        yield* preserveStoreAlarm(
-          storage,
-          Math.max(current, row.accepted_at_ms + canonicalRetryLifetimeMs)
-        );
-      }
+      yield* repairReceiptAlarm(current, storage);
       return { attempted: 0, failed: 0 };
     })
   );

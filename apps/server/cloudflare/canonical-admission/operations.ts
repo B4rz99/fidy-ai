@@ -1,3 +1,4 @@
+import { withStoreCapacity } from "../runtime/sqlite/operations";
 import {
   exhausted,
   invalid,
@@ -9,6 +10,7 @@ import {
 } from "./internal/responses";
 import {
   admitLocalRequest as admitLocal,
+  repairReceiptAlarm as inspectReceipts,
   runLocalMutation as mutateLocal,
   sweepReceiptWork as recoverReceipts,
   sweepLocalReceipts as sweepReceipts,
@@ -1274,3 +1276,10 @@ export const sweepLocalReceipts: typeof sweepReceipts = (current) => sweepReceip
 
 export const recoverLocalReceipts: typeof recoverReceipts = (current, storage) =>
   recoverReceipts(current, storage);
+
+export const repairReceiptAlarm = Effect.fnUntraced(function* (
+  current: number,
+  storage: DurableObjectStorage
+) {
+  return yield* withStoreCapacity("required")(inspectReceipts(current, storage));
+});

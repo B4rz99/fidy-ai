@@ -84,6 +84,15 @@ that commits its Audit. Capture, Correction, linked SourceAttestations and Recon
 the effective leaves and their exact per-Currency minute and day contributions in the financial
 write. A failed write or incomplete projection withholds the view.
 
+The Core minute Cron calls Maintenance to traverse the lifetime registry and check Directory,
+Pricing and independent Erasure. A private check inspects retained owner work and repairs the
+earliest required alarm. Owner alarms execute the continuation. Maintenance persists its cursor
+before each batch and reports interrupted or unanswered checks as unknown. A repaired alarm and
+a confirmed domain outcome have separate evidence. A probe whose cancellation cannot settle
+stops the tick. Maintenance flushes its progress before resetting the object to release outstanding
+I/O. A stalled shared owner runs after the User page budget on the next tick. A stalled User
+restores shared-owner priority.
+
 Unmigrated paths still use D1. Canonical mutation units commit live authority, owner
 changes, accounting and Audit together. Database guards enforce ownership and revisions alongside
 per-User coordination. Shared reads preserve the same authorization and accountability boundaries.

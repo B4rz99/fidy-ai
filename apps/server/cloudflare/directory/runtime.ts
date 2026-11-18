@@ -1,8 +1,11 @@
+import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 import {
   createStoreRuntime,
   openSqliteStore,
+  preserveStoreAlarm,
   storeReadiness,
   withStoreAdmission,
+  withStoreCapacity,
 } from "../runtime/sqlite/operations";
 import {
   StoreCapacity,
@@ -54,6 +57,29 @@ const admitUnresolved = Effect.fn(function* (source: string) {
   );
 });
 
+/** Pressure buckets use the original virtual time. Only the owner alarm drains a bounded expired page. */
+const inspectPressure = Effect.fnUntraced(function* (
+  storage: DurableObjectStorage,
+  drain: boolean
+) {
+  const sql = yield* SqliteClient;
+  return yield* withStoreCapacity("required")(
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      if (drain) {
+        yield* sql`DELETE FROM unresolved_source_buckets WHERE subject IN (SELECT subject FROM unresolved_source_buckets WHERE virtual_at_ms<=${now} ORDER BY virtual_at_ms LIMIT ${sourceExpiryPageSize})`;
+      }
+      const [row] =
+        yield* sql`SELECT virtual_at_ms FROM unresolved_source_buckets ORDER BY virtual_at_ms LIMIT 1`;
+      if (row === undefined) return false;
+      const next = yield* Schema.decodeUnknownEffect(Schema.Struct({ virtual_at_ms: Schema.Int }))(
+        row
+      );
+      return yield* preserveStoreAlarm(storage, Math.max(next.virtual_at_ms, now));
+    })
+  );
+});
+
 export class Directory extends DurableObject<DirectoryEnvironment> {
   private readonly runtime;
   constructor(state: DurableObjectState, env: DirectoryEnvironment) {
@@ -69,20 +95,26 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
       )
     );
   }
+  override alarm(): Promise<void> {
+    return this.runtime.runPromise(inspectPressure(this.ctx.storage, true).pipe(Effect.asVoid));
+  }
   override fetch(request: Request): Promise<Response> {
-    if (
-      request.method === "GET" &&
-      request.url === storeReadinessUrl &&
-      this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))
-    ) {
+    if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (ownerCheckRequest(request)) {
+      return this.runtime.runPromise(
+        inspectPressure(this.ctx.storage, false).pipe(Effect.map(ownerCheckResponse))
+      );
+    }
+    if (request.method === "GET" && request.url === storeReadinessUrl) {
       return this.runtime.runPromise(
         storeReadiness({ history: directoryHistory, release: this.env.CF_VERSION_METADATA.id })
       );
     }
     if (
       request.method !== "POST" ||
-      ![sessionRouteUrl, patRouteUrl, sourcePressureUrl].includes(request.url) ||
-      !this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))
+      ![sessionRouteUrl, patRouteUrl, sourcePressureUrl].includes(request.url)
     ) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }

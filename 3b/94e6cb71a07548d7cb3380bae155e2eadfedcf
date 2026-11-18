@@ -1,0 +1,23 @@
+apps/server/cloudflare/connections/native-connections.test.ts
+  s_a1be23a656acf0::t_68133cbf173843 286,298-311,351-357
+apps/server/cloudflare/runtime/sqlite/migrations.test.ts
+  s_a1be23a656acf0::t_60074cc067ef01 101-167
+apps/server/cloudflare/store-migrations.test-fixture.ts
+  s_a1be23a656acf0::t_9e73f934e92239 82,85-88,97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3b94e6cb71a07548d7cb3380bae155e2eadfedcf",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

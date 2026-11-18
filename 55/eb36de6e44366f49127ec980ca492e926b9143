@@ -1,0 +1,31 @@
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a1be23a656acf0::t_b26a0a796ca8c8 5713,5857,5865
+  s_a1be23a656acf0::t_b779b4a90b369d 5349,5351,5368,5388,5397,5406,5427,5474,5477-5478,5485,5488,5506,5515-5519,5524,5533,5541,5549,5555,5561,5565-5576,5579,5592,5601-5605,5607,5610,5617-5620,5622-5623,5629,5633,5640-5646,5648,5662-5666,5671,5680,5688,5710,5718,5727-5731,5736,5743,5797,5810,5813-5819,5822,5837,5855,5863,5869,5875,5894,5897-5903,5906,5926-5929,5931,5934-5938,5943,5951-5954,5956,5961-5964,5966,5969,5976
+  s_a1be23a656acf0::t_02bacf4e3248c8 5390,5479-5480,5535,5612,5682,5706-5708,5769,5802-5804,5881-5883,5971
+  s_a1be23a656acf0::t_d169b09f8fe017 5481-5484,5805-5809,5846,5850,5884-5893
+apps/server/cloudflare/memory/user-store.test.ts
+  s_a1be23a656acf0::t_0a924824ea4804 23-27,29
+  s_a1be23a656acf0::t_be8c8f098a9433 3,10,15-22,30-36,38-48,50-95,97-99
+  s_a1be23a656acf0::t_c4bb9f5b80ad8a 28,37,49,96
+apps/server/cloudflare/memory/internal/local-memory.ts
+  s_a1be23a656acf0::t_aef137a17be2a1 105-106,108
+  s_a1be23a656acf0::t_7e927ccbc28a32 36,107
+apps/server/cloudflare/memory/memory.test.ts
+  s_a1be23a656acf0::t_be8c8f098a9433 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "55eb36de6e44366f49127ec980ca492e926b9143",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

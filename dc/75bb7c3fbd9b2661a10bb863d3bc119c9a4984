@@ -1,0 +1,33 @@
+apps/server/cloudflare/maintenance/internal/watchdog.ts
+  s_a1be23a656acf0::t_773827ebc96595 117,121,123,135-136,139,164-165,170,173,176-179,182
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_fecdc89de97dc1 5
+apps/server/cloudflare/maintenance/lifetime-registry.test.ts
+  s_a1be23a656acf0::t_395954792f5e22 78-79
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_395954792f5e22 796,803-804,808
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_395954792f5e22 72-73,134,145-150
+apps/server/cloudflare/maintenance/watchdog-traversal.test.ts
+  s_a1be23a656acf0::t_773827ebc96595 189-191
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a1be23a656acf0::t_773827ebc96595 393
+apps/server/cloudflare/maintenance/operations.ts
+  s_a1be23a656acf0::t_773827ebc96595 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dc75bb7c3fbd9b2661a10bb863d3bc119c9a4984",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

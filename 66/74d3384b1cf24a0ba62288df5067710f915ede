@@ -1,0 +1,29 @@
+apps/server/cloudflare/subscription/native-enrollment-erasure.test.ts
+  s_a1be23a656acf0::t_6bd737b28e9885 1-74
+  s_a1be23a656acf0::t_9d2b8e5446bbc4 75-118
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_6bd737b28e9885 57-79,115
+  s_a1be23a656acf0::t_34a76cb3974d59 143
+apps/server/cloudflare/subscription/internal/local-enrollment-submit.ts
+  s_a1be23a656acf0::t_5df3b38b6e33ee 98-101,158,216,248-251,253-255
+apps/server/cloudflare/user-store/internal/erasure-purge.ts
+  s_a1be23a656acf0::t_c7fd7b0fb8773f 107
+apps/server/cloudflare/user-store/operations.ts
+  s_a1be23a656acf0::t_a0f2a8b0eb134d 994-995,999
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6674d3384b1cf24a0ba62288df5067710f915ede",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

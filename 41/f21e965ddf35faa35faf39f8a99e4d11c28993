@@ -1,0 +1,37 @@
+apps/server/src/browser-transport.ts
+  s_a1be23a656acf0::t_600296858bdd00 8
+apps/server/src/shell/browser-transport/contract.ts
+  s_a1be23a656acf0::t_efd165161581ac 10-18
+apps/web/cloudflare/production/_headers
+  s_a1be23a656acf0::t_99e68df73181fc 2,12-21
+apps/web/scripts/build-production.ts
+  s_a1be23a656acf0::t_799936792ca4ee 27
+apps/web/scripts/cloudflare-adapter.test.ts
+  s_a1be23a656acf0::t_34421bc26e2274 22-32
+apps/web/src/app/application.tsx
+  s_a1be23a656acf0::t_a1480ddd3df017 51
+apps/web/src/app/mount.tsx
+  s_a1be23a656acf0::t_96853a4229b5b0 15
+apps/web/src/transport/origin.test.ts
+  s_a1be23a656acf0::t_5f2ec278cfb35b 10-23
+apps/web/src/transport/origin.ts
+  s_a1be23a656acf0::t_2025f1b1fee78e 1,9-18
+apps/web/vite.config.ts
+  s_a1be23a656acf0::t_35ee62f0f9d924 3,59-70,72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "41f21e965ddf35faa35faf39f8a99e4d11c28993",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { SecureRandom } from "effect/crypto";
 import {
   EmailUnavailable,
   authorityUnavailable,
+  emailSecureRandom,
   io,
   maximumHeadersSize,
   maximumMimeDepth,

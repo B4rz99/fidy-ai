@@ -11,7 +11,12 @@ import {
   DurableTraceContext,
   type TelemetryWorkRecord,
 } from "../../src/shell/observability/contract";
-import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
+import {
+  cloudflareWorkerTelemetry,
+  makeWorkerTelemetry,
+  observeWorkerExecution,
+  workerRelease,
+} from "../runtime/telemetry/operations";
 import { TestClock } from "effect/testing";
 import { Base64 } from "effect/encoding";
 import { allowancePeriod } from "../../src/core/quotas/operations";
@@ -65,7 +70,13 @@ const recoverStoredEmail = (
   environment: ForwardedEmailEnvironment
 ): Promise<void> =>
   Effect.runPromise(
-    runEmailMaintenance({ environment, scheduledAtEpochMs: controller.scheduledTime })
+    runEmailMaintenance({ environment, scheduledAtEpochMs: controller.scheduledTime }).pipe(
+      observeWorkerExecution({
+        environment: workerRelease(environment),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "worker.email.scheduled",
+      })
+    )
   );
 // Exercise retained storage/processing independently of the disabled native admission boundary.
 const receiveStoredEmail = (

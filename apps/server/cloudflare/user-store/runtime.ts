@@ -1,3 +1,8 @@
+import {
+  cloudflareWorkerTelemetry,
+  observeWorkerExecution,
+  workerRelease,
+} from "../runtime/telemetry/operations";
 import { verifyReleaseTransaction } from "../storage-bootstrap/operations";
 import { handleLocalProcessingConsent } from "../consent/runtime";
 import { processingConsentTransport } from "../../src/shell/processing-consent/runtime";
@@ -243,6 +248,13 @@ type UserStoreEnvironment = NativeReminderEnvironment &
 const isBrowserObservation = (command: string, request: Request): boolean =>
   ["GET /web/session/binding", "POST /web/session/logout"].includes(command) ||
   (command === "GET /user" && !request.headers.has("authorization"));
+const alarmObservation = {
+  telemetry: cloudflareWorkerTelemetry,
+  operation: "worker.core.alarm",
+} as const;
+const completedAlarm = (summary: { failedFamilies: number }): Effect.Effect<void, Error> =>
+  summary.failedFamilies > 0 ? Effect.fail(Error("User work discovery unavailable")) : Effect.void;
+
 export class UserStore extends DurableObject<UserStoreEnvironment> {
   protected connectionAdapters(): ConnectionAdapters {
     return sandboxConnectionAdapters({ environment: this.env, userId: this.ctx.id.name ?? "" });
@@ -367,9 +379,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       }),
     ] as const;
   }
-  private checkWork(): Promise<
-    Readonly<{ failedFamilies: number; attempted: number; failedOffers: number }>
-  > {
+  private checkWork(): Promise<void> {
     return this.runtime.runPromise(
       Effect.flatMap(Clock.currentTimeMillis, (current) => {
         const families = [
@@ -420,18 +430,17 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           ),
           timeoutMs: pendingExecutionRecoveryMs,
         });
-      })
+      }).pipe(
+        Effect.flatMap(completedAlarm),
+        observeWorkerExecution({ ...alarmObservation, environment: workerRelease(this.env) })
+      )
     );
   }
 
   override alarm(): Promise<void> {
     if (this.erased) return Promise.resolve();
     return this.registration().then((registration) =>
-      registration === "registered"
-        ? this.checkWork().then((summary) => {
-            if (summary.failedFamilies > 0) throw new Error("User work discovery unavailable");
-          })
-        : undefined
+      registration === "registered" ? this.checkWork() : undefined
     );
   }
 

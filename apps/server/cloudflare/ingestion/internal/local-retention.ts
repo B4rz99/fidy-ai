@@ -1,3 +1,4 @@
+import { captureWorkTrace } from "../../runtime/telemetry/operations";
 import { settleBeforeDisposal } from "./original-writers";
 import { recoverSamples } from "./sample-publication";
 import { recoverDocumentStages, stageRetryMs } from "./local-document";
@@ -183,9 +184,10 @@ const recoverEmails = Effect.fn(function* (current: number, env: LocalIngestionE
     );
     if (!claim) continue;
     attempted++;
+    const trace = yield* captureWorkTrace;
     const sent = yield* Effect.option(
       Effect.tryPromise(() =>
-        env.FORWARDED_EMAIL_QUEUE.send({ receiptId: target.id, userId: target.user_id })
+        env.FORWARDED_EMAIL_QUEUE.send({ receiptId: target.id, userId: target.user_id, ...trace })
       )
     );
     if (sent._tag === "None") failed++;

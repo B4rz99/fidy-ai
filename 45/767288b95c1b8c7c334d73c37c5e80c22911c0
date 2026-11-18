@@ -1,0 +1,21 @@
+apps/server/cloudflare/release-isolation/operations.ts
+  s_a1be23a656acf0::t_4de1728f6c4266 60-62,64-65
+infra/cloudflare/native-application-bindings.ts
+  s_a1be23a656acf0::t_47702b78dd15e0 62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "45767288b95c1b8c7c334d73c37c5e80c22911c0",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

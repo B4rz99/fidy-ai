@@ -1,0 +1,27 @@
+apps/server/cloudflare/directory/internal/expiry.ts
+  s_a1be23a656acf0::t_3f35f1810f036d 29-37
+apps/web/package.json
+  s_a1be23a656acf0::t_3f35f1810f036d 57
+apps/server/cloudflare/web-authentication/bound-user.test.ts
+  s_a1be23a656acf0::t_3f35f1810f036d 3,61-67
+infra/cloudflare/verify-edge-policy.ts
+  s_a1be23a656acf0::t_3f35f1810f036d 5
+bun.lock
+  s_a1be23a656acf0::t_81144ee2bbe7a8 140,2096
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b29a5cf9065006ed6df919dabd10c60c8f4a6705",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

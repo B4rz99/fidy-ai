@@ -128,7 +128,7 @@ const materialize = Effect.fn(function* (
   const digest = Hex.encode(yield* digestBytes(new TextEncoder().encode(encoded)));
   const correlation = HostedDeliveryCorrelationToken.make(newId());
   yield* sql`INSERT INTO insight_events(user_id,id,schedule_id,revision,scheduled_ms,event_json) VALUES(${held.user_id},${id},${schedule.id},${schedule.version},${at.epochMilliseconds},${event})`;
-  yield* sql`INSERT INTO reminder_deliveries(id,user_id,grant_id,correlation,portfolio,bsuid,endpoint,deadline_ms,offer_ms,body,digest) VALUES(${id},${held.user_id},${held.grant_id},${correlation},${held.portfolio},${held.bsuid},${held.endpoint},${until.epochMilliseconds},${now},${body},${digest})`;
+  yield* sql`INSERT INTO reminder_deliveries(id,user_id,grant_id,correlation,portfolio,bsuid,endpoint,deadline_ms,offer_ms,body,digest,created_ms) VALUES(${id},${held.user_id},${held.grant_id},${correlation},${held.portfolio},${held.bsuid},${held.endpoint},${until.epochMilliseconds},${now},${body},${digest},${now})`;
 });
 export const repairReminder = Effect.fn(function* (
   now: number,

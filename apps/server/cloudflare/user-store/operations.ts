@@ -1111,6 +1111,24 @@ export const userStoreHistory: StoreHistory = {
         "ALTER TABLE reminder_attention ADD COLUMN notice_delivered INTEGER NOT NULL DEFAULT 0",
       ],
     },
+    {
+      version: 36,
+      id: "pending-delivery-observation",
+      statements: [
+        "ALTER TABLE reminder_deliveries ADD COLUMN created_ms INTEGER",
+        "UPDATE reminder_deliveries SET created_ms=(SELECT scheduled_ms FROM insight_events e WHERE e.id=reminder_deliveries.id)",
+        "ALTER TABLE reminder_deliveries ADD COLUMN observation_kind TEXT NOT NULL DEFAULT 'proactivity-delivery'",
+        "ALTER TABLE reminder_deliveries ADD COLUMN terminal_receipt INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE reminder_disclosures ADD COLUMN terminal_receipt INTEGER NOT NULL DEFAULT 0",
+        "UPDATE reminder_deliveries SET observation_kind='weekly-summary' WHERE grant_id IN (SELECT id FROM proactive_grants WHERE kind='weekly-summary')",
+        "UPDATE reminder_deliveries SET terminal_receipt=1 WHERE EXISTS(SELECT 1 FROM whatsapp_deliveries w WHERE w.user_id=reminder_deliveries.user_id AND w.operation_id=reminder_deliveries.id AND w.family='proactivity' AND w.state IN ('delivered','rejected'))",
+        "UPDATE reminder_disclosures SET terminal_receipt=1 WHERE EXISTS(SELECT 1 FROM whatsapp_deliveries w WHERE w.user_id=reminder_disclosures.user_id AND w.operation_id=reminder_disclosures.id AND w.family='disclosure' AND w.state IN ('delivered','rejected'))",
+        "CREATE TRIGGER observe_delivery_receipt AFTER UPDATE OF state ON whatsapp_deliveries WHEN NEW.family='proactivity' AND NEW.state IN ('delivered','rejected') BEGIN UPDATE reminder_deliveries SET terminal_receipt=1 WHERE id=NEW.operation_id AND user_id=NEW.user_id; END",
+        "CREATE TRIGGER observe_disclosure_receipt AFTER UPDATE OF state ON whatsapp_deliveries WHEN NEW.family='disclosure' AND NEW.state IN ('delivered','rejected') BEGIN UPDATE reminder_disclosures SET terminal_receipt=1 WHERE id=NEW.operation_id AND user_id=NEW.user_id; END",
+        "CREATE INDEX pending_delivery_observation ON reminder_deliveries(observation_kind,created_ms,id) WHERE terminal_receipt=0 AND state IN('ready','claimed')",
+        "CREATE INDEX pending_disclosure_observation ON reminder_disclosures(kind,created_ms,id) WHERE terminal_receipt=0 AND state IN('ready','claimed')",
+      ],
+    },
   ],
 };
 

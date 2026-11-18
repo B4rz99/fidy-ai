@@ -156,7 +156,7 @@ export const materializeWeekly = Effect.fn(function* (now: number, sender: Insig
       yield* admitGrowth;
       yield* sql`INSERT INTO insight_events(user_id,id,schedule_id,revision,scheduled_ms,event_json) VALUES(${user},${id},${schedule.id},${schedule.version},${at.epochMilliseconds},${event})`;
       yield* sql`INSERT INTO weekly_summary_reports VALUES(${id},${held.grant_id},${yield* Schema.encodeEffect(Schema.fromJsonString(InsightTemplateSummary))(presentation)},${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(WeeklySummaryPayload)))(payload.value)},${expires.epochMilliseconds})`;
-      yield* sql`INSERT INTO reminder_deliveries(id,user_id,grant_id,correlation,portfolio,bsuid,endpoint,deadline_ms,offer_ms,body,digest) VALUES(${id},${user},${held.grant_id},${newId()},${held.portfolio},${held.bsuid},${held.endpoint},${expires.epochMilliseconds},${now},${body},${digest})`;
+      yield* sql`INSERT INTO reminder_deliveries(id,user_id,grant_id,correlation,portfolio,bsuid,endpoint,deadline_ms,offer_ms,body,digest,created_ms,observation_kind) VALUES(${id},${user},${held.grant_id},${newId()},${held.portfolio},${held.bsuid},${held.endpoint},${expires.epochMilliseconds},${now},${body},${digest},${now},'weekly-summary')`;
     })
   );
 });

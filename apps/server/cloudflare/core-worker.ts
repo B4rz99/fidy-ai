@@ -160,7 +160,7 @@ export const makeCoreWorker = ({
       const tick = maintenanceTick(controller.scheduledTime);
       const results = yield* Effect.all(
         [
-          inspectNativeQueues(environment),
+          inspectNativeQueues(environment).pipe(Effect.mapError(() => new ScheduledWorkFailed())),
           environment.ASYNC_HEALTH_ENABLED === "enabled"
             ? Effect.tryPromise({
                 try: (signal) => {

@@ -323,6 +323,7 @@
         "apps/server/cloudflare/user-clock.test-fixture.ts",
         "apps/server/cloudflare/transactions/addressed-read.test-fixture.ts",
         "apps/server/cloudflare/agent/hosted-alarm.test-fixture.ts",
+        "apps/server/cloudflare/maintenance/native-monitor.test-fixture.ts",
         "apps/server/cloudflare/core-http/lost-read.test-fixture.ts",
         "apps/server/cloudflare/erasure-worker.test-fixture.ts",
         "apps/server/cloudflare/storage-forward-repair.test-fixture.ts",

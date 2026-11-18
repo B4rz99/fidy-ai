@@ -100,23 +100,20 @@ const rejectedEmailWork = (
   );
 };
 
-const inspectWorkflow = (
+export const inspectWorkflow = Effect.fnUntraced(function* (
   workflow: Option.Option<WorkflowStatusBinding>,
   id: string
-): Effect.Effect<"available" | "failed" | "unavailable"> =>
-  Effect.gen(function* () {
-    if (Option.isNone(workflow)) return "unavailable";
-    const status = yield* Effect.exit(
-      Effect.tryPromise(() => workflow.value.get(id).then((instance) => instance.status())).pipe(
-        Effect.timeout("2 seconds"),
-        Effect.flatMap(Schema.decodeUnknownEffect(Status))
-      )
-    );
-    if (Exit.isFailure(status) || status.value.status === "unknown") return "unavailable";
-    return ["errored", "terminated", "paused"].includes(status.value.status)
-      ? "failed"
-      : "available";
-  });
+) {
+  if (Option.isNone(workflow)) return "unavailable";
+  const status = yield* Effect.exit(
+    Effect.tryPromise(() => workflow.value.get(id).then((instance) => instance.status())).pipe(
+      Effect.timeout("2 seconds"),
+      Effect.flatMap(Schema.decodeUnknownEffect(Status))
+    )
+  );
+  if (Exit.isFailure(status) || status.value.status === "unknown") return "unavailable";
+  return ["errored", "terminated", "paused"].includes(status.value.status) ? "failed" : "available";
+});
 
 export const inspectRetention = ({
   db,

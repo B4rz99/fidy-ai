@@ -91,6 +91,13 @@ export const maintenanceStoreHistory: StoreHistory = {
         "ALTER TABLE watchdog_progress ADD COLUMN shared_observed INTEGER NOT NULL DEFAULT 0",
       ],
     },
+    {
+      version: 5,
+      id: "bounded-workflow-observation",
+      statements: [
+        "ALTER TABLE watchdog_progress ADD COLUMN sample_cursor TEXT NOT NULL DEFAULT ''",
+      ],
+    },
   ],
 };
 

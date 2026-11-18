@@ -1,3 +1,4 @@
+import { nativePendingWork } from "./internal/native-work-observation";
 import {
   acknowledgePauseNotice,
   bindPauseNotice,
@@ -458,3 +459,6 @@ export const nativePauseNotice: PauseNoticeService = {
   acknowledge: (...args: Parameters<typeof acknowledgePauseNotice>) =>
     acknowledgePauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
 };
+
+export const localProactivityObservations: typeof nativePendingWork = (flags) =>
+  nativePendingWork(flags);

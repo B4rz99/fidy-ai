@@ -19,6 +19,7 @@ type Target = Readonly<{
   binding: SharedBindings[keyof SharedBindings];
   name: string;
   family: "directory" | "pricing" | "erasure" | "user";
+  sampleWork: boolean;
 }>;
 type Outcome = "observed" | "repaired" | "failed" | "unsupported" | "unknown";
 const unsupportedStatus = 404;
@@ -76,7 +77,13 @@ const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<
     Effect.gen(function* () {
       const signal = yield* Effect.abortSignal;
       const work = Promise.resolve()
-        .then(() => binding.getByName(target.name).fetch(ownerCheckUrl, { method: "POST", signal }))
+        .then(() =>
+          binding.getByName(target.name).fetch(ownerCheckUrl, {
+            method: "POST",
+            signal,
+            ...(target.sampleWork === true ? { headers: { "fidy-workflow-sample": "1" } } : {}),
+          })
+        )
         .then((response) => {
           sample = sampleFrom(response);
           return inspect(response);
@@ -105,13 +112,14 @@ const probe = Effect.fnUntraced(function* (target: Target, pending: Set<Promise<
 const Window = Schema.Struct({
   cursor: Schema.String,
   last_user: Schema.String,
+  sample_user: Schema.String,
   defer_fixed: Schema.Int,
 });
 const Entry = Schema.Struct({ user_id: Schema.String });
 const fixedTargets = (bindings: SharedBindings): Target[] => [
-  { binding: bindings.DIRECTORY, name: directoryName, family: "directory" },
-  { binding: bindings.PRICING, name: pricingName, family: "pricing" },
-  { binding: bindings.ERASURE, name: erasureRegistryName, family: "erasure" },
+  { binding: bindings.DIRECTORY, name: directoryName, family: "directory", sampleWork: false },
+  { binding: bindings.PRICING, name: pricingName, family: "pricing", sampleWork: false },
+  { binding: bindings.ERASURE, name: erasureRegistryName, family: "erasure", sampleWork: false },
 ];
 
 const familyAt = (batch: ReadonlyArray<Target>, index: number): string =>
@@ -215,6 +223,10 @@ const inspectBatch = Effect.fnUntraced(function* (
   // Only probes which return to this executor are counted as attempted.
   const containsShared = batch.some((target) => target.family !== "user");
   yield* sql`UPDATE watchdog_progress SET cursor=coalesce(${Option.getOrNull(cursor)},cursor),defer_fixed=coalesce(${containsShared ? 1 : null},defer_fixed),admitted=admitted+${batch.length},unknown=unknown+${batch.length} WHERE singleton=1`;
+  const selected = batch.find((target) => target.sampleWork === true);
+  if (selected !== undefined) {
+    yield* sql`UPDATE watchdog_progress SET sample_cursor=${selected.name} WHERE singleton=1`;
+  }
   const replies = yield* Effect.forEach(batch, (target) => probe(target, pending), { concurrency });
   const repaired = replies.filter(({ outcome }) => outcome === "repaired").length;
   const observed = replies.filter(({ outcome }) => outcome === "observed").length + repaired;
@@ -291,6 +303,7 @@ const scanUsers = Effect.fnUntraced(function* ({
       ...page.map(({ user_id }) => ({
         binding: bindings.USER_STORE,
         name: user_id,
+        sampleWork: user_id === window.sample_user,
         family: "user" as const,
       })),
     ];
@@ -324,7 +337,7 @@ export const runWatchdog = Effect.fn(function* (
   const claimed =
     yield* sql`UPDATE watchdog_progress SET minute=${minute},scheduled=${scheduled},started_ms=CASE WHEN started_ms=0 THEN ${started} ELSE started_ms END,halt='running',
     shared_observed=0,admitted=0,attempted=0,observed=0,failed=0,unsupported=0,unknown=0,repaired=0
-    WHERE singleton=1 AND minute<${minute} AND scheduled<${scheduled} RETURNING cursor,defer_fixed,coalesce((SELECT max(user_id) FROM lifetime_registry WHERE retired=0),'') AS last_user`;
+    WHERE singleton=1 AND minute<${minute} AND scheduled<${scheduled} RETURNING cursor,defer_fixed,coalesce((SELECT max(user_id) FROM lifetime_registry WHERE retired=0),'') AS last_user,coalesce((SELECT user_id FROM lifetime_registry WHERE retired=0 AND user_id>watchdog_progress.sample_cursor ORDER BY user_id LIMIT 1),(SELECT user_id FROM lifetime_registry WHERE retired=0 ORDER BY user_id LIMIT 1),'') AS sample_user`;
   if (claimed.length === 0) return "coalesced" as const;
   const [window] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Window]))(claimed);
   const shared = fixedTargets(bindings);

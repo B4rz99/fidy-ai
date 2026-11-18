@@ -1,3 +1,7 @@
+import {
+  type ProactivityWorkObservations,
+  proactivityObservationLimit,
+} from "../../insights/contract";
 import { inspectWhatsApp } from "../../whatsapp/operations";
 import {
   type AlertSignal,
@@ -15,6 +19,7 @@ import {
   inspectPending,
   inspectQueue,
   inspectRetention,
+  inspectWorkflow,
   unavailableSignal,
 } from "./internal/health-inspection";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
@@ -264,6 +269,24 @@ export const operationalSeverity = (signal: AlertSignal): OperationalSeverity =>
   return pendingSeverity(signal);
 };
 
+export const logOperationalSignal = Effect.fn(function* (signal: OperationalSignal) {
+  const severity = operationalSeverity(signal);
+  const observation = {
+    ...signal,
+    severity,
+    message: `fidy.operational component=${signal.component} operation=${signal.operation} state=${signal.state} severity=${severity}`,
+  };
+  yield* severity === "none" ? Effect.logInfo(observation) : Effect.logWarning(observation);
+});
+const logRequiredBindings = Effect.fnUntraced(function* (healthy: boolean) {
+  const state = healthy ? "healthy" : "unavailable";
+  const message = `fidy.operational component=capability operation=requiredBindings state=${state} severity=${healthy ? "none" : "critical"}`;
+  if (!healthy) {
+    yield* Effect.logWarning({ message });
+    return yield* Effect.fail("missing_proactivity_bindings" as const);
+  }
+  yield* Effect.logInfo({ message });
+});
 /** Queue depth is a platform measurement. Domain health and eligible recovery come from native owner inspection. */
 export const inspectNativeQueues = Effect.fn(function* (
   environment: Partial<
@@ -276,10 +299,16 @@ export const inspectNativeQueues = Effect.fn(function* (
       STATEMENT_EXTRACTION_QUEUE: Pick<Queue, "metrics">;
       HOSTED_WHATSAPP_QUEUE: Pick<Queue, "metrics">;
       WEEKLY_DELIVERY_QUEUE: Pick<Queue, "metrics">;
+      WEEKLY_DELIVERY_WORKFLOW: Pick<Workflow, "get">;
+      PROACTIVITY_ENABLED: string;
+      WEEKLY_SUMMARY_ENABLED: string;
     }>
   >
 ) {
   if (environment.ASYNC_HEALTH_ENABLED !== "enabled") return;
+  const proactivity =
+    environment.PROACTIVITY_ENABLED === "enabled" ||
+    environment.WEEKLY_SUMMARY_ENABLED === "enabled";
   const queues = [
     ["deadLetters", environment.ASYNC_DEAD_LETTERS],
     ["browserPairingQueue", environment.BROWSER_PAIRING_EMAIL_QUEUE],
@@ -287,21 +316,59 @@ export const inspectNativeQueues = Effect.fn(function* (
     ["billingQueue", environment.BILLING_COLLECTION_QUEUE],
     ["statementQueue", environment.STATEMENT_EXTRACTION_QUEUE],
     ["whatsappQueue", environment.HOSTED_WHATSAPP_QUEUE],
-    ["proactivityQueue", environment.WEEKLY_DELIVERY_QUEUE],
+    ...(proactivity ? [["proactivityQueue", environment.WEEKLY_DELIVERY_QUEUE] as const] : []),
   ] as const;
   yield* Effect.forEach(
     queues,
     ([operation, binding]) =>
       Effect.gen(function* () {
         const signal = yield* inspectQueue({ operation, queue: Option.fromUndefinedOr(binding) });
-        const severity = operationalSeverity(signal);
-        const observation = {
-          ...signal,
-          severity,
-          message: `fidy.operational component=${signal.component} operation=${signal.operation} state=${signal.state} severity=${severity}`,
-        };
-        yield* severity === "none" ? Effect.logInfo(observation) : Effect.logWarning(observation);
+        yield* logOperationalSignal(signal);
       }),
     { concurrency: 4, discard: true }
   );
+  const healthy =
+    !proactivity ||
+    (environment.WEEKLY_DELIVERY_QUEUE !== undefined &&
+      environment.WEEKLY_DELIVERY_WORKFLOW !== undefined);
+  yield* logRequiredBindings(healthy);
+});
+
+const pendingStaleMs = 120000;
+/** Only the sampled User's stale Workflow identities are inspected; logs contain aggregate values. */
+export const observeNativePending = Effect.fn(function* (
+  rows: ProactivityWorkObservations,
+  workflow: Parameters<typeof inspectWorkflow>[0],
+  now: number
+) {
+  const states = yield* Effect.forEach(
+    rows.filter((row) => now - row.created >= pendingStaleMs),
+    (row) => inspectWorkflow(workflow, row.id),
+    { concurrency: 2 }
+  );
+  const failedWorkflows = states.filter((state) => state === "failed").length,
+    unavailableWorkflows = states.filter((state) => state === "unavailable").length;
+  const oldestPendingAgeMilliseconds = Math.max(0, ...rows.map((row) => now - row.created));
+  const expiredUndelivered = rows.filter((row) =>
+    Option.exists(row.deadline, (deadline) => deadline <= now)
+  ).length;
+  yield* logOperationalSignal({
+    component: "async-health",
+    operation: "proactivity",
+    state:
+      oldestPendingAgeMilliseconds >= pendingStaleMs ||
+      expiredUndelivered > 0 ||
+      failedWorkflows > 0 ||
+      unavailableWorkflows > 0
+        ? "attention"
+        : "healthy",
+    sampledPending: rows.length,
+    sampleLimited: rows.length === proactivityObservationLimit,
+    oldestPendingAgeMilliseconds,
+    expiredUndelivered,
+    failedWorkflows,
+    unavailableWorkflows,
+    sampledRejectedEmailWork: 0,
+    rejectionSampleLimited: false,
+  });
 });

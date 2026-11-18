@@ -1,5 +1,9 @@
+import {
+  logOperationalSignal,
+  observeNativePending,
+} from "../runtime/operational-health/operations";
 import { HostedPauseNotice } from "../insights/contract";
-import { nativePauseNotice } from "../insights/operations";
+import { localProactivityObservations, nativePauseNotice } from "../insights/operations";
 import { BudgetThresholdEvaluation } from "../budgets/contract";
 import { backgroundWorkAllowed } from "../release-isolation/operations";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
@@ -247,6 +251,8 @@ type UserStoreEnvironment = AcceptanceWindowBindings & {
     PRICING: DurableObjectNamespace;
     BROWSER_ORIGIN: string;
     RESEND_API_KEY: string;
+    ASYNC_HEALTH_ENABLED: string;
+    WEEKLY_DELIVERY_WORKFLOW: Workflow;
     OPENAI_API_KEY: string;
     HOSTED_AI_MODEL: string;
     BROWSER_PAIRING_EMAIL_QUEUE: Queue<typeof NativeLoginEmailWork.Type>;
@@ -651,13 +657,43 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
 
-  private inspectWork(): Promise<Response> {
+  private observePendingWork(remindersEnabled: { category: boolean; weekly: boolean }): void {
+    if (
+      this.env.ASYNC_HEALTH_ENABLED === "enabled" &&
+      (remindersEnabled.weekly || remindersEnabled.category)
+    ) {
+      this.ctx.waitUntil(
+        this.runtime.runPromise(
+          Effect.gen({ self: this }, function* () {
+            const now = yield* Clock.currentTimeMillis,
+              rows = yield* localProactivityObservations(remindersEnabled);
+            yield* observeNativePending(
+              rows,
+              Option.fromUndefinedOr(this.env.WEEKLY_DELIVERY_WORKFLOW),
+              now
+            );
+          }).pipe(
+            Effect.catchCause(() =>
+              logOperationalSignal({
+                component: "async-health",
+                operation: "proactivity",
+                state: "unavailable",
+              })
+            )
+          )
+        )
+      );
+    }
+  }
+
+  private inspectWork(sampleWork: boolean): Promise<Response> {
     const storage = this.ctx.storage;
     const ownsUser = this.owns;
     const remindersEnabled = {
       category: this.env.PROACTIVITY_ENABLED === "enabled",
       weekly: this.env.WEEKLY_SUMMARY_ENABLED === "enabled",
     };
+    if (sampleWork) this.observePendingWork(remindersEnabled);
     const adapters = this.connectionAdapters();
     return this.runtime.runPromise(
       Effect.gen(function* () {
@@ -1163,7 +1199,9 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
   private workStatus(request: Request, registered: boolean): Promise<Response> {
     if (ownerCheckRequest(request)) {
-      return registered ? this.inspectWork() : Promise.resolve(ownerCheckResponse());
+      return registered
+        ? this.inspectWork(request.headers.get("fidy-workflow-sample") === "1")
+        : Promise.resolve(ownerCheckResponse());
     }
     return Promise.resolve(new Response(null, { status: 404 }));
   }

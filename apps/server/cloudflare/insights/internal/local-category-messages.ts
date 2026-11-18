@@ -61,7 +61,7 @@ export const publishCategoryMessages = Effect.fn(function* (
         );
         const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.String))(body);
         const digest = Hex.encode(yield* digestBytes(new TextEncoder().encode(encoded)));
-        yield* sql`INSERT INTO reminder_deliveries(id,user_id,grant_id,correlation,portfolio,bsuid,endpoint,deadline_ms,offer_ms,body,digest) VALUES(${item.id},${item.user_id},${item.grant_id},${newId()},${item.portfolio},${item.bsuid},${item.endpoint},${item.deadline_ms},${now},${body},${digest})`;
+        yield* sql`INSERT INTO reminder_deliveries(id,user_id,grant_id,correlation,portfolio,bsuid,endpoint,deadline_ms,offer_ms,body,digest,created_ms) VALUES(${item.id},${item.user_id},${item.grant_id},${newId()},${item.portfolio},${item.bsuid},${item.endpoint},${item.deadline_ms},${now},${body},${digest},${now})`;
         yield* sql`DELETE FROM category_alert_groups WHERE id=${item.id}`;
       }
     })

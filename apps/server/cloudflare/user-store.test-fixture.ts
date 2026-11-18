@@ -242,6 +242,7 @@ type NativeFixture =
   | "erasure"
   | "capacity"
   | "connection"
+  | "health"
   | "hosted"
   | "user"
   | "billing"
@@ -322,6 +323,7 @@ const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean)
 const fixtureModules: Partial<Record<NativeFixture, string>> = {
   "lost-read": "./core-http/lost-read.test-fixture.ts",
   hosted: "./agent/hosted-alarm.test-fixture.ts",
+  health: "./maintenance/native-monitor.test-fixture.ts",
   "addressed-read": "./transactions/addressed-read.test-fixture.ts",
   clock: "./user-clock.test-fixture.ts",
   capacity: "./capacity-worker.test-fixture.ts",
@@ -347,7 +349,7 @@ const fixtureWorkers = (
 });
 
 const hostedFixture = Effect.fnUntraced(function* (mode: NativeFixture) {
-  return mode === "hosted"
+  return ["hosted", "health"].includes(mode)
     ? [
         {
           config: {
@@ -443,7 +445,7 @@ const hostedOptions = (
   env: MiniflareWorkerConfig["env"];
   triggers: Pick<MiniflareWorkerConfig, "triggers"> | {};
 } =>
-  mode === "hosted"
+  ["hosted", "health"].includes(mode)
     ? {
         outbound: { dev: hostedOpenAi.dev },
         env: hostedOpenAi.env,
@@ -495,6 +497,7 @@ const privateEmailWorker = Effect.fnUntraced(function* (withBilling: boolean) {
 });
 const fixtureFeatures = Effect.fnUntraced(function* (mode: NativeFixture) {
   return {
+    capture: fixtureWorkers(mode).withOidc || mode === "health",
     providers: yield* fixtureProviders(mode),
     hostedPlatform: hostedOptions(mode),
     connection: yield* connectionPlatformOptions(mode === "connection"),
@@ -506,7 +509,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   const directory = yield* fs.makeTempDirectoryScoped({ prefix: "fidy-user-store-" });
   const [ingress, core] = yield* manifests(coreModule);
 
-  const { providers, hostedPlatform, connection } = yield* fixtureFeatures(mode);
+  const { providers, hostedPlatform, connection, capture } = yield* fixtureFeatures(mode);
   const create = (
     ceiling: string,
     logs: Array<string>,
@@ -514,7 +517,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
   ): Miniflare =>
     new Miniflare({
       ...ingressOptions,
-      ...(withOidc ? captureLogs(logs) : {}),
+      ...(capture ? captureLogs(logs) : {}),
       unsafeInspectDurableObjects: true,
       resourcePersistencePath: directory,
       workers: [
@@ -576,4 +579,5 @@ export const nativeBillingPlatform = createUserPlatform("billing");
 /** Preserve the public hostname across Miniflare's loopback HTTP bridge for MCP Host validation. */
 export const nativeOAuthPlatform = createUserPlatform("oauth");
 
+export const nativeHealthPlatform = createUserPlatform("health");
 export const nativeHostedPlatform = createUserPlatform("hosted");

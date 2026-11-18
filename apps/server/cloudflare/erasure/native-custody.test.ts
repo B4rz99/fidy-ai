@@ -270,7 +270,7 @@ const verifyRelease = Effect.fn(function* (
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   test.effect("an unresolved custodian remains pending beyond the platform recovery horizon", () =>
     Effect.gen(function* () {
-      const { submit, reference, tick, runtime, driver } = yield* custodyJourney();
+      const { submit, reference, tick, runtime } = yield* custodyJourney();
       for (const [action, status] of [
         ["Receipt", 200],
         ["Continue", 202],
@@ -278,17 +278,6 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       ] as const) {
         expect((yield* privateCaseAction(runtime, reference, action)).status).toBe(status);
       }
-      const operations = yield* native(() =>
-        driver.storage.exec(
-          "SELECT action,outcome FROM erasure_case_operations WHERE reference=? ORDER BY rowid",
-          reference
-        )
-      );
-      expect(operations).toEqual([
-        { action: "Receipt", outcome: "observed" },
-        { action: "Continue", outcome: "pending" },
-        { action: "Receipt", outcome: "observed" },
-      ]);
       const unresolved = {
         reference,
         custodian: "Resend",

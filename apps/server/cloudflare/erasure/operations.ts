@@ -329,9 +329,7 @@ const viewCase = Effect.fn(function* (request: Request, storage: DurableObjectSt
         yield* sql`SELECT state,last_erased_at_ms,connection_blocked,directory_clean,pricing_clean,identity_released FROM erasure_cases WHERE reference=${reference} AND user_id=${userId}`;
       if (record === undefined) return new Response(null, { status: 409 });
       const phase = yield* Schema.decodeUnknownEffect(ErasureReceipt.fields.state)(record.state);
-      const continuing = request.url === "https://coordinator.internal/erasure-continue";
-      yield* sql`INSERT INTO erasure_case_operations VALUES(${reference},${continuing ? "Continue" : "Receipt"},${continuation.value.authority.operatorRef},${now},${continuing ? "pending" : "observed"})`;
-      if (continuing) {
+      if (request.url === "https://coordinator.internal/erasure-continue") {
         yield* sql`UPDATE erasure_cases SET next_check_ms=${now} WHERE reference=${reference} AND user_id=${userId}`;
         yield* preserveStoreAlarm(storage, now);
         return new Response(null, { status: 202 });

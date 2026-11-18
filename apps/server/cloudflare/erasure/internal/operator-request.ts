@@ -231,7 +231,6 @@ const operatorConfiguration = (
   audience: environment.ERASURE_SUPPORT_AUDIENCE ?? "",
   requiredEmail: Option.some("obarboza@fidyapp.com"),
   otherAudiences: [
-    environment.STORAGE_OPERATOR_AUDIENCE ?? "",
     environment.CLOUDFLARE_ACCESS_AUDIENCE,
     environment.BILLING_SUPPORT_AUDIENCE ?? "",
     environment.PRICING_PUBLISH_AUDIENCE ?? "",

@@ -60,7 +60,7 @@ const reserve = Effect.fn(function* (input: typeof ReplacementInput.Type) {
 const reconcile = Effect.fn(function* (
   record: Change,
   users: Pick<DurableObjectNamespace, "getByName">,
-  { cancel, deadline }: { cancel: boolean; deadline: number }
+  cancel: boolean
 ) {
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(ReservedIdentity))(record);
   const answer = yield* Effect.tryPromise((signal) =>
@@ -73,9 +73,7 @@ const reconcile = Effect.fn(function* (
         signal,
       })
   );
-  if (!answer.ok || (yield* Clock.currentTimeMillis) >= deadline) {
-    return new Response(null, { status: 503 });
-  }
+  if (!answer.ok) return new Response(null, { status: 503 });
   const outcome = yield* Schema.decodeUnknownEffect(IdentityOutcome)(
     yield* Effect.tryPromise(() => answer.json())
   );
@@ -85,12 +83,6 @@ const reconcile = Effect.fn(function* (
   const revision = committed ? record.revision : record.revision + 1;
   const sql = yield* SqliteClient;
   yield* Effect.gen(function* () {
-    yield* Clock.currentTimeMillis.pipe(
-      Effect.filterOrFail(
-        (now) => now < deadline,
-        () => new DirectoryWriteUnavailable()
-      )
-    );
     const settled =
       yield* sql`UPDATE identity_replacements SET state=${outcome} WHERE id=${record.id} AND state='reserved' RETURNING 1`;
     if (settled.length !== 1) {
@@ -114,7 +106,7 @@ const reconcile = Effect.fn(function* (
       if (retained.length !== 0) return yield* new DirectoryWriteUnavailable();
     }
   }).pipe(withStoreCapacity("required"));
-  return cancel || committed ? new Response(null) : refusal();
+  return committed ? new Response(null) : refusal();
 });
 export const findMailboxRoute = Effect.fn(function* (address: EmailAddress) {
   const sql = yield* SqliteClient;
@@ -140,7 +132,7 @@ export const directoryIdentityRequest = Effect.fn(function* (
   );
   const record = yield* reserve(input).pipe(withStoreCapacity("growth"));
   if (record instanceof Response) return record;
-  return yield* reconcile(record, users, { cancel: false, deadline: Number.POSITIVE_INFINITY });
+  return yield* reconcile(record, users, false);
 });
 const pageSize = 16;
 const checkCooldownMs = 60_000;
@@ -155,42 +147,11 @@ export const reconcileIdentityReplacements = Effect.fn(function* (
     rows,
     (row) =>
       Schema.decodeUnknownEffect(ReservedIdentity)(row).pipe(
-        Effect.flatMap((record) =>
-          reconcile(record, users, { cancel: true, deadline: Number.POSITIVE_INFINITY })
-        ),
+        Effect.flatMap((record) => reconcile(record, users, true)),
         Effect.timeout("5 seconds"),
         Effect.result
       ),
     { concurrency: 4, discard: true }
   );
   yield* sql`DELETE FROM identity_replacements WHERE id IN(SELECT id FROM identity_replacements WHERE state<>'reserved' AND expires_at_ms<=${now} LIMIT ${pageSize})`;
-});
-
-export const inspectReplacement = Effect.fn(function* ({
-  id,
-  repair,
-  users,
-  deadline,
-}: {
-  id: string;
-  repair: boolean;
-  users: Pick<DurableObjectNamespace, "getByName">;
-  deadline: number;
-}) {
-  const sql = yield* SqliteClient;
-  const lookup = sql`SELECT state AS outcome,expires_at_ms AS deadlineMs FROM identity_replacements WHERE id=${id}`;
-  const [prior] = yield* lookup;
-  if (prior === undefined) return new Response(null, { status: 404 });
-  if (!repair || prior.outcome !== "reserved") return Response.json(prior);
-  const now = yield* Clock.currentTimeMillis;
-  const [due] =
-    yield* sql`SELECT * FROM identity_replacements WHERE id=${id} AND id IN(SELECT id FROM identity_replacement_checks WHERE id=${id} AND due_ms<=${now})`;
-  if (due === undefined || now >= deadline) return new Response(null, { status: 409 });
-  const res = yield* reconcile(yield* Schema.decodeUnknownEffect(ReservedIdentity)(due), users, {
-    cancel: true,
-    deadline,
-  });
-  if (!res.ok) return res;
-  const [actual] = yield* lookup;
-  return actual === undefined ? new Response(null, { status: 409 }) : Response.json(actual);
 });

@@ -37,14 +37,8 @@ export const registerErasureCase = Effect.fn(function* (
   );
 });
 
-const operationRetentionDays = 365;
-const dayMs = 86400000;
-const operationRetentionMs = operationRetentionDays * dayMs;
-const cleanupPageSize = 32;
 export const repairCaseAlarm = Effect.fn(function* (storage: DurableObjectStorage) {
   const sql = yield* SqliteClient;
-  const cutoff = (yield* Clock.currentTimeMillis) - operationRetentionMs;
-  yield* sql`DELETE FROM erasure_case_operations WHERE rowid IN (SELECT rowid FROM erasure_case_operations WHERE occurred_at_ms<${cutoff} ORDER BY occurred_at_ms LIMIT ${cleanupPageSize})`;
   const [next] = yield* sql`SELECT next_check_ms FROM erasure_cases ORDER BY next_check_ms LIMIT 1`;
   return next === undefined
     ? false

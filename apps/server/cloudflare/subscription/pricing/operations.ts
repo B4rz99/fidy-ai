@@ -1,4 +1,3 @@
-import { deleteTargetEvidence, operationEvidenceSchema } from "../../storage-operations/contract";
 import {
   cleanupBarrierColumns,
   deletionWitness,
@@ -88,19 +87,6 @@ export const pricingHistory: StoreHistory = {
           owner: "OLD.user_id",
         }),
         deletionWitness({ table: "enrollment_allowances", deadline: "0", owner: "OLD.user_id" }),
-      ],
-    },
-    {
-      version: 5,
-      id: "exact-operator-evidence",
-      statements: [
-        ...operationEvidenceSchema,
-        deleteTargetEvidence({
-          family: "registration",
-          table: "price_registrations",
-          column: "operation_id",
-        }),
-        deleteTargetEvidence({ family: "publication", table: "price_publications", column: "id" }),
       ],
     },
   ],

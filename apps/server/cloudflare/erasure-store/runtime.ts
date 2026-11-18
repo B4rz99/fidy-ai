@@ -1,4 +1,3 @@
-import { createStorageControl } from "../storage-operations/runtime";
 import { confirmCleanup } from "./internal/settlement";
 import { confirmPurge, emptyUserDisposition } from "./internal/local-purge";
 import {
@@ -10,7 +9,7 @@ import {
   registerCaseUrl,
 } from "./contract";
 import { caseOperatorRequest } from "../erasure/operations";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { erasureRegistryName } from "../erasure/contract";
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 import {
@@ -20,7 +19,12 @@ import {
   repairCaseAlarm,
 } from "./internal/cases";
 import { DurableObject } from "cloudflare:workers";
-import { createStoreRuntime, storeReadiness } from "../runtime/sqlite/operations";
+import {
+  createStoreRuntime,
+  observeStoreCheck,
+  openSqliteStore,
+  storeReadiness,
+} from "../runtime/sqlite/operations";
 import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
 import { erasureStoreHistory } from "./operations";
 import { remove } from "./internal/d1";
@@ -64,7 +68,6 @@ type ErasureEnvironment = StoreReleaseEnvironment & {
   MAINTENANCE: DurableObjectNamespace;
 };
 export class Erasure extends DurableObject<ErasureEnvironment> {
-  private readonly control;
   private readonly runtime;
   constructor(state: DurableObjectState, env: ErasureEnvironment) {
     super(state, env);
@@ -73,20 +76,15 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
       owner: erasureStoreHistory.owner,
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
-    this.control = createStorageControl({
-      state,
-      runtime: this.runtime,
-      history: erasureStoreHistory,
-      release: env.CF_VERSION_METADATA.id,
-    });
     if (state.id.equals(env.ERASURE.idFromName(erasureRegistryName))) {
       state.waitUntil(
-        state.blockConcurrencyWhile(() => this.runtime.runPromise(this.control.open()))
+        state.blockConcurrencyWhile(() =>
+          this.runtime.runPromise(openSqliteStore(erasureStoreHistory, env.CF_VERSION_METADATA.id))
+        )
       );
     }
   }
   override alarm(): Promise<void> {
-    if (this.control.failed()) return Promise.reject(new Error("Store schema unavailable"));
     return this.runtime.runPromise(advanceErasureCases(this.ctx.storage, this.env));
   }
   private command(request: Request): Promise<Response> {
@@ -117,13 +115,15 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     if (!this.ctx.id.equals(this.env.ERASURE.idFromName(erasureRegistryName))) {
       return Promise.resolve(new Response(null, { status: 404 }));
     }
-    const controlled = this.control.guard(request);
-    if (Option.isSome(controlled)) return controlled.value;
     if (ownerCheckRequest(request)) {
       return this.runtime.runPromise(
         repairCaseAlarm(this.ctx.storage).pipe(
           Effect.map(ownerCheckResponse),
-          this.control.observeCheck
+          observeStoreCheck({
+            storage: this.ctx.storage,
+            history: erasureStoreHistory,
+            release: this.env.CF_VERSION_METADATA.id,
+          })
         )
       );
     }

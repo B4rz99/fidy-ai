@@ -81,9 +81,6 @@ type CoreEnvironment = Pick<SharedBindings, "MAINTENANCE"> &
     Readonly<{
       RECOVERY_ISOLATION: string;
       SAMPLE_REVIEW_AUDIENCE: string;
-      STORAGE_OPERATOR_EMAIL: string;
-      STORAGE_OPERATOR_AUDIENCE: string;
-      STORAGE_REPAIR_ENABLED: string;
       SAMPLE_REVIEWER_EMAIL: string;
       SAMPLE_BUCKET: R2Bucket;
       BILLING_SUPPORT_AUDIENCE: string;

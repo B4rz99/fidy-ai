@@ -1,4 +1,3 @@
-import { deleteTargetEvidence, operationEvidenceSchema } from "../storage-operations/contract";
 import { sampleSchema } from "./internal/sample-schema";
 import { hostedSchema } from "./internal/hosted-schema";
 import { ingestionSchema } from "./internal/ingestion-schema";
@@ -1018,24 +1017,10 @@ export const userStoreHistory: StoreHistory = {
       version: 25,
       id: "operational-uncertainty-observation",
       statements: [
-        ...operationEvidenceSchema,
-        deleteTargetEvidence({
-          family: "login-email",
-          table: "login_email_proofs",
-          column: "work_id",
-        }),
-        deleteTargetEvidence({
-          family: "sample",
-          table: "ingest_sample_decisions",
-          column: "candidate_id",
-        }),
         "CREATE INDEX uncertain_login_email ON login_email_proofs(requested_at_ms) WHERE state IN ('sending','ambiguous')",
         "CREATE INDEX uncertain_replacement_email ON email_replacements(created_at_ms) WHERE state IN ('sending','ambiguous')",
         "CREATE INDEX uncertain_billing_send ON billing_attempts(collection_sent_at_ms) WHERE collection_state='sent' AND status='pending'",
         "CREATE INDEX uncertain_whatsapp_send ON whatsapp_deliveries(started_ms) WHERE state IN ('sending','accepted','ambiguous')",
-        "ALTER TABLE original_writers ADD COLUMN opened_ms INTEGER NOT NULL DEFAULT 0",
-        "CREATE TRIGGER observe_original_writer AFTER INSERT ON original_writers BEGIN UPDATE original_writers SET opened_ms=CAST(round(unixepoch('subsec')*1000) AS INTEGER) WHERE nonce=NEW.nonce; END",
-        "CREATE INDEX uncertain_original_write ON original_writers(opened_ms)",
       ],
     },
   ],

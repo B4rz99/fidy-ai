@@ -1,5 +1,4 @@
-import { inspectUncertainty, retainedWork } from "./internal/retained-work";
-import { createStorageControl } from "../storage-operations/runtime";
+import { inspectUncertainty } from "./internal/uncertainty";
 import { pendingExecutionRecoveryMs } from "../agent/contract";
 import {
   nativeReminderActivity,
@@ -179,7 +178,12 @@ import {
   repairCancellationAlarm,
 } from "../subscription/operations";
 import { DurableObject } from "cloudflare:workers";
-import { createStoreRuntime, storeReadiness } from "../runtime/sqlite/operations";
+import {
+  createStoreRuntime,
+  observeStoreCheck,
+  openSqliteStore,
+  storeReadiness,
+} from "../runtime/sqlite/operations";
 
 import { canonicalOperation } from "../routing/operations";
 import {
@@ -232,7 +236,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   protected connectionAdapters(): ConnectionAdapters {
     return sandboxConnectionAdapters({ environment: this.env, userId: this.ctx.id.name ?? "" });
   }
-  private readonly control;
   private readonly runtime;
   private erased = false;
   private mcp?: McpResidency;
@@ -290,19 +293,15 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
       owner: "user",
       ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
     });
-    this.control = createStorageControl({
-      state,
-      runtime: this.runtime,
-      history: userStoreHistory,
-      release: env.CF_VERSION_METADATA.id,
-    });
     state.waitUntil(
       state.blockConcurrencyWhile(() =>
         this.runtime.runPromise(
           keepErasedStoreEmpty(Option.fromUndefinedOr(state.id.name), env.ERASURE).pipe(
             Effect.flatMap((erased) => {
               this.erased = erased;
-              return erased ? Effect.void : this.control.open();
+              return erased
+                ? Effect.void
+                : openSqliteStore(userStoreHistory, env.CF_VERSION_METADATA.id);
             })
           )
         )
@@ -400,7 +399,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
 
   override alarm(): Promise<void> {
-    if (this.control.failed()) return Promise.reject(new Error("Store schema unavailable"));
     if (this.erased) return Promise.resolve();
     return this.registration().then((registration) =>
       registration === "registered"
@@ -542,15 +540,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     );
   }
   override fetch(request: Request): Promise<Response> {
-    if (!this.erased) {
-      const controlled = this.control.guard(request, (command, deadline) =>
-        this.runtime.runPromise(retainedWork(command, this.ctx.storage, deadline))
-      );
-      if (Option.isSome(controlled)) return controlled.value;
-    }
-    return this.domainRequest(request);
-  }
-  private domainRequest(request: Request): Promise<Response> {
     if (request.method === "POST" && [localDrainUrl, localPurgeUrl].includes(request.url)) {
       return this.erasureCommand(request);
     }
@@ -584,7 +573,6 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
 
   private inspectWork(): Promise<Response> {
-    const control = this.control;
     const storage = this.ctx.storage;
     const ownsUser = this.owns;
     const remindersEnabled = this.env.PROACTIVITY_ENABLED === "enabled";
@@ -619,7 +607,13 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
         );
         response.headers.set("fidy-uncertain-sample-count", String(yield* inspectUncertainty));
         return response;
-      }).pipe(control.observeCheck)
+      }).pipe(
+        observeStoreCheck({
+          storage,
+          history: userStoreHistory,
+          release: this.env.CF_VERSION_METADATA.id,
+        })
+      )
     );
   }
 

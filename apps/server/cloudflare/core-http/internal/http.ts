@@ -46,8 +46,6 @@ import {
 
 import { browserSessionBindingResponse } from "../../web-session/operations";
 import type { BancolombiaAuthenticationFailed } from "../../bancolombia-authentication/contract";
-import { storageOperatorRequest } from "../../storage-operations/operations";
-import { storageOperatorPath } from "../../../src/shell/storage-operations/contract";
 import { ReviewCommand, sampleReviewPath } from "../../../src/core/ingestion/contract";
 import { RecurringCommand } from "../../../src/core/recurring-plans/contract";
 import { handleErasureOperator } from "../../erasure/runtime";
@@ -557,7 +555,6 @@ const ownedCorePath = (path: string): boolean =>
     "/health",
     "/internal/titular-erasure",
     sampleReviewPath,
-    storageOperatorPath,
     pricePublicationPath,
     smokePath,
     listCategoriesPath,
@@ -1720,9 +1717,6 @@ const supportCoreResponse = (
   environment: CoreHttpEnvironment,
   path: string
 ): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
-  if (path === storageOperatorPath) {
-    return Option.some(storageOperatorRequest(request, environment));
-  }
   if (path === sampleReviewPath) return Option.some(handleSampleReview(request, environment));
   if (path === "/internal/titular-erasure") {
     return Option.some(
@@ -1763,15 +1757,7 @@ const reservedBindingResponse = <E, R>(
 const isPairingRequest = (request: Request): boolean =>
   request.method === "POST" &&
   ["/web/pairings", "/web/pairings/redeem"].includes(new URL(request.url).pathname);
-const storageAudienceCollision = (url: URL, environment: CoreHttpEnvironment): boolean => {
-  const storage = environment.STORAGE_OPERATOR_AUDIENCE;
-  if (storage === undefined || storage === "") return false;
-  if (url.pathname === "/internal/support-recovery") {
-    return storage === environment.CLOUDFLARE_ACCESS_AUDIENCE;
-  }
-  return refundSupportRoute(url.pathname) && storage === environment.BILLING_SUPPORT_AUDIENCE;
-};
-const dispatchVerifiedCoreHttp = ({
+const dispatchCoreHttp = ({
   bankAuthentication,
   request,
   environment,
@@ -1829,10 +1815,6 @@ const nativeSessionWrite = (path: string, nativePrivacy: boolean): boolean =>
   ["/recovery/backup-code/rotate", emailReplacementPath, emailReplacementCompletionPath].includes(
     path
   );
-const dispatchCoreHttp = (input: RequestExecution): ReturnType<typeof dispatchVerifiedCoreHttp> =>
-  storageAudienceCollision(new URL(input.request.url), input.environment)
-    ? Effect.succeed(new Response(null, { status: 401 }))
-    : dispatchVerifiedCoreHttp(input);
 const nativeIdentityResponse = (
   input: RequestExecution
 ): Option.Option<Effect.Effect<Response>> => {

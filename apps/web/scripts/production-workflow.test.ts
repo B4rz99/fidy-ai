@@ -167,8 +167,10 @@ describe("Production release workflow policy", () => {
     expect(driftGate).toBeLessThan(upload);
     expect(workflow).not.toContain("check-topology-drift.sh resume");
   });
-  it("serializes trunk releases without cancelling an active deployment", () => {
-    expect(workflow).toContain("branches: [trunk]");
+  it("holds incumbent deployment on trunk push while preserving serialized protected dispatch", () => {
+    expect(workflow).not.toContain("  push:");
+    expect(workflow).toContain("  workflow_dispatch:");
+    expect(workflow).toContain("github.event_name == 'workflow_dispatch'");
     expect(workflow).toContain("group: production-deployment");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain("environment: production");

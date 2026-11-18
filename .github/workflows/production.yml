@@ -1,8 +1,6 @@
 name: Deploy Production
 
 on:
-  push:
-    branches: [trunk]
   workflow_dispatch:
     inputs:
       recover_deleted_queue:
@@ -31,7 +29,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.ref == 'refs/heads/trunk' && (vars.SCHEMA_CUTOVER_PENDING != 'true' || (github.event_name == 'workflow_dispatch' && inputs.isolate_schema_cutover)) }}
+    if: ${{ github.ref == 'refs/heads/trunk' && github.event_name == 'workflow_dispatch' && (vars.SCHEMA_CUTOVER_PENDING != 'true' || (github.event_name == 'workflow_dispatch' && inputs.isolate_schema_cutover)) }}
     name: Alchemy Cloudflare topology
     runs-on: ubuntu-latest
     timeout-minutes: 30

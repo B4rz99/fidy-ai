@@ -1,3 +1,4 @@
+import { advanceLocalPurge } from "./local-purge";
 import { directoryName } from "../../directory/contract";
 import { pricingName } from "../../subscription/contract";
 import { fenceLifetimeUrl, maintenanceName } from "../../maintenance/contract";
@@ -50,6 +51,7 @@ const cooldownMs = 60_000;
 const pageSize = 8;
 const Case = Schema.Struct({
   ...ErasureHandoff.fields,
+  state: Schema.Literals(["Draining", "Sealing", "Erasing", "ExternalPending", "Complete"]),
   directory_fenced: Schema.Literals([0, 1]),
   pricing_fenced: Schema.Literals([0, 1]),
   maintenance_fenced: Schema.Literals([0, 1]),
@@ -94,22 +96,32 @@ const fenceCase = Effect.fn(function* (record: typeof Case.Type, env: Participan
 });
 export const advanceErasureCases = Effect.fn(function* (
   storage: DurableObjectStorage,
-  env: Participants
+  env: Participants & { USER_STORE: DurableObjectNamespace }
 ) {
   const sql = yield* SqliteClient;
   const now = yield* Clock.currentTimeMillis;
   const page = yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const due =
-        yield* sql`UPDATE erasure_cases SET next_check_ms=${now + cooldownMs} WHERE reference IN (SELECT reference FROM erasure_cases WHERE next_check_ms<=${now} ORDER BY next_check_ms,reference LIMIT ${pageSize}) RETURNING user_id AS userId,reference,requested_at_ms AS requestedAtMs,directory_fenced,pricing_fenced,maintenance_fenced`;
+        yield* sql`UPDATE erasure_cases SET next_check_ms=${now + cooldownMs} WHERE reference IN (SELECT reference FROM erasure_cases WHERE next_check_ms<=${now} ORDER BY next_check_ms,reference LIMIT ${pageSize}) RETURNING user_id AS userId,reference,requested_at_ms AS requestedAtMs,state,directory_fenced,pricing_fenced,maintenance_fenced`;
       yield* repairCaseAlarm(storage);
       return yield* Schema.decodeUnknownEffect(Schema.Array(Case))(due);
     })
   );
-  yield* Effect.forEach(page, (record) => fenceCase(record, env), {
-    concurrency: 4,
-    discard: true,
-  });
+  yield* Effect.forEach(
+    page,
+    (record) =>
+      (record.directory_fenced === 1 &&
+      record.pricing_fenced === 1 &&
+      record.maintenance_fenced === 1
+        ? advanceLocalPurge(record, env)
+        : fenceCase(record, env)
+      ).pipe(Effect.result),
+    {
+      concurrency: 4,
+      discard: true,
+    }
+  );
 });
 
 /** Maintenance retains discovery until this exact independent case has completed. */

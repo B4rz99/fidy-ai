@@ -49,7 +49,7 @@ const chooseSlot = Effect.fn(function* (
   );
   const sql = yield* SqliteClient;
   const saved = yield* withStoreCapacity("required")(
-    sql`UPDATE forwarded_email_receipts SET capacity_slot=${offer.slot},capacity_generation=${offer.generation} WHERE id=${row.id} AND state='storing' AND capacity_slot IS NULL RETURNING id`
+    sql`UPDATE forwarded_email_receipts SET capacity_slot=${offer.slot},capacity_generation=${offer.generation} WHERE id=${row.id} AND state='storing' AND capacity_slot IS NULL AND NOT EXISTS(SELECT 1 FROM erasure_requests) RETURNING id`
   );
   return saved.length === 1 ? offer : ("retry" as const);
 });

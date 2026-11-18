@@ -178,6 +178,53 @@ const publishApproved = Effect.fn(function* (
   }
   return yield* completePayload(id, buckets, { row, current });
 });
+const maximumArtifactBytes = 1024;
+const matchingSampleObject = (object: R2Object, digest: string): boolean =>
+  object.size <= maximumArtifactBytes &&
+  object.customMetadata?.purpose === anonymous &&
+  Object.keys(object.customMetadata).length === 1 &&
+  matchesApproval(object, digest);
+
+const safePublication = Effect.fn(function* (id: string, digest: string, buckets: Buckets) {
+  if (yield* isWithdrawnSample(id, buckets)) return false;
+  const object = yield* Effect.tryPromise(() => buckets.SAMPLE_BUCKET.get(sampleKey(id)));
+  if (object === null) return false;
+  if (!matchingSampleObject(object, digest)) {
+    yield* Effect.tryPromise(() => object.body.cancel());
+    return false;
+  }
+  const text = yield* Effect.tryPromise(() => object.text());
+  const codec = Schema.fromJsonString(SampleArtifact);
+  const sample = Schema.decodeOption(codec, { onExcessProperty: "error" })(text);
+  return Option.isSome(sample) && (yield* Schema.encodeEffect(codec)(sample.value)) === text;
+});
+
+/** Release only the exact canonical structural bytes admitted by human review.
+ * A malformed artifact follows the same independent withdrawal fence as an unfinished publication. */
+export const inspectPublishedSamples = Effect.fn(function* (
+  user: string,
+  buckets: Buckets,
+  now: number
+) {
+  const sql = yield* SqliteClient;
+  const rows =
+    yield* sql`SELECT sample_id,digest FROM ingest_sample_decisions WHERE user_id=${user} AND phase='published' AND sample_id>(SELECT sample_cursor FROM erasure_requests WHERE user_id=${user}) ORDER BY sample_id LIMIT 8`;
+  for (const raw of rows) {
+    const row = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ sample_id: Schema.String.check(Schema.isUUID()), digest: Schema.String })
+    )(raw);
+    const safe = yield* safePublication(row.sample_id, row.digest, buckets);
+    yield* withStoreCapacity("required")(
+      Effect.gen(function* () {
+        if (!safe) {
+          yield* sql`UPDATE ingest_sample_decisions SET phase='removing',due_ms=${now} WHERE sample_id=${row.sample_id} AND phase='published'`;
+        }
+        yield* sql`UPDATE erasure_requests SET sample_cursor=${row.sample_id} WHERE user_id=${user} AND state='Draining' AND sample_cursor<${row.sample_id}`;
+      })
+    );
+  }
+});
+
 export const recoverSamples = Effect.fn(function* (now: number, buckets: Buckets) {
   const sql = yield* SqliteClient;
   const rows = yield* withStoreCapacity("required")(

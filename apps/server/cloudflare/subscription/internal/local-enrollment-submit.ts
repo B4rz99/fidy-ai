@@ -95,6 +95,10 @@ const close = Effect.fn(function* (reg: Registration, reason: string) {
       if (rows.length === 1) {
         yield* sql`UPDATE payment_enrollments SET state=${reason === "expired" ? "expired" : "refused"},reason=${reason},next_lookup_ms=NULL WHERE id=${id}`;
       }
+      if (reason === "provider-declined") {
+        // The provider can answer after Pricing has already cancelled this commercial admission.
+        yield* sql`UPDATE payment_enrollments SET source_creation='settled',state=CASE WHEN state='creating' THEN 'refused' ELSE state END,reason=coalesce(reason,${reason}),next_lookup_ms=NULL WHERE id=${id} AND user_id=${reg.userId} AND source_creation='issued' AND EXISTS(SELECT 1 FROM billing_admissions WHERE operation_id=${reg.operationId} AND subject_id=${id} AND outcome='cancelled')`;
+      }
       const [saved] =
         yield* sql`SELECT report FROM billing_admissions WHERE operation_id=${reg.operationId}`;
       return typeof saved?.report === "string" ? textReport(saved.report) : refused(id, reason);
@@ -151,7 +155,7 @@ const commit = Effect.fn(function* (work: LocalWork, verified?: WompiSourceId) {
       )({ status: "payment-pending", enrollmentId: form.enrollmentId, billingAttempt: attempt });
       yield* finishAdmission({ reg, price, report, now, session: Option.some(session) });
       const completed =
-        yield* sql`UPDATE payment_enrollments SET state='available',source_id=${source},next_lookup_ms=NULL WHERE id=${form.enrollmentId} RETURNING id`;
+        yield* sql`UPDATE payment_enrollments SET state='available',source_creation=CASE WHEN source_creation='issued' THEN 'settled' ELSE source_creation END,source_id=${source},next_lookup_ms=NULL WHERE id=${form.enrollmentId} RETURNING id`;
       if (completed.length !== 1) return yield* Effect.fail("enrollment-not-completed" as const);
       return textReport(report);
     })
@@ -209,7 +213,7 @@ const claimSource = Effect.fn(function* (work: LocalWork) {
     Effect.gen(function* () {
       if (!(yield* eligible(work))) return false;
       return (
-        (yield* sql`UPDATE payment_enrollments SET state='creating' WHERE id=${form.enrollmentId} AND state='prepared' RETURNING 1`)
+        (yield* sql`UPDATE payment_enrollments SET state='creating',source_creation='issued' WHERE id=${form.enrollmentId} AND state='prepared' RETURNING 1`)
           .length === 1
       );
     })
@@ -241,11 +245,14 @@ const submitSource = Effect.fn(function* (
       contracts,
     })
   );
-  if (Result.isSuccess(response) && response.success._tag === "Refused") {
-    return yield* close(reg, "provider-declined");
+  if (Result.isFailure(response)) {
+    return response.failure.certainty === "rejected"
+      ? yield* close(reg, "provider-declined")
+      : null;
   }
-  if (Result.isFailure(response)) return null;
-  return response.success._tag === "Refused" ? null : response.success.sourceId;
+  return response.success._tag === "Refused"
+    ? yield* close(reg, "provider-declined")
+    : response.success.sourceId;
 });
 const createSource = Effect.fn(function* (
   work: LocalWork,

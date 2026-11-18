@@ -118,6 +118,7 @@ const sharedTestSupport = new Set([
   "cloudflare/d1-test-fixture.ts",
   "cloudflare/user-store.test-fixture.ts",
   "cloudflare/financial-user-store.test-fixture.ts",
+  "cloudflare/erasure-purge.test-fixture.ts",
   "cloudflare/browser-bootstrap.test-fixture.ts",
   "cloudflare/retained-planning.test-fixture.ts",
   "cloudflare/core-http/retained-credential-owners.test-fixture.ts",

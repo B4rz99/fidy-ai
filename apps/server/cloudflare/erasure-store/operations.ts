@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { preserveStoreAlarm, withStoreCapacity } from "../runtime/sqlite/operations";
 import type { StoreHistory } from "../runtime/sqlite/contract";
@@ -83,8 +84,36 @@ export const erasureStoreHistory: StoreHistory = {
         "CREATE INDEX erasure_case_wake ON erasure_cases(next_check_ms)",
       ],
     },
+    {
+      version: 3,
+      id: "sealed-user-purge",
+      statements: [
+        "ALTER TABLE erasure_cases ADD COLUMN shared_drained INTEGER NOT NULL DEFAULT 0 CHECK(shared_drained IN(0,1))",
+        "ALTER TABLE erasure_cases ADD COLUMN drained_at_ms INTEGER",
+        "ALTER TABLE erasure_cases ADD COLUMN last_erased_at_ms INTEGER",
+        "ALTER TABLE erasure_cases ADD COLUMN connection_blocked INTEGER NOT NULL DEFAULT 0 CHECK(connection_blocked IN(0,1))",
+        "CREATE TABLE erasure_resend_scope(reference TEXT NOT NULL REFERENCES erasure_cases(reference) ON DELETE CASCADE,work_id TEXT NOT NULL,requested_at_ms INTEGER NOT NULL,PRIMARY KEY(reference,work_id)) STRICT",
+        "CREATE TABLE erasure_case_custodians(reference TEXT NOT NULL REFERENCES erasure_cases(reference) ON DELETE CASCADE,custodian TEXT NOT NULL CHECK(custodian IN('Cloudflare','Kapso','Meta','Resend','Wompi')),observed_use INTEGER NOT NULL CHECK(observed_use IN(0,1)),status TEXT NOT NULL CHECK(status IN('Pending','Unresolved','Accepted','Verified','NotApplicable')),PRIMARY KEY(reference,custodian)) STRICT",
+        "CREATE TRIGGER release_resend_scope AFTER UPDATE OF status ON erasure_case_custodians WHEN NEW.custodian='Resend' AND NEW.status='Verified' BEGIN DELETE FROM erasure_resend_scope WHERE reference=NEW.reference; END",
+      ],
+    },
   ],
 };
+
+export const participantDrain = Effect.fn(function* (
+  request: Request,
+  outstanding: (userId: string) => OwnedStatement
+) {
+  const scope = yield* Schema.decodeUnknownEffect(ErasureHandoff, { onExcessProperty: "error" })(
+    yield* Effect.tryPromise(() => request.json())
+  );
+  const sql = yield* SqliteClient;
+  const check = outstanding(scope.userId);
+  const pending = sql.unsafe(check.sql, check.params);
+  const reply =
+    yield* sql`SELECT 1 FROM erasure_barriers WHERE user_id=${scope.userId} AND reference=${scope.reference} AND requested_at_ms=${scope.requestedAtMs} AND NOT (${pending})`;
+  return new Response(null, { status: reply.length === 1 ? acknowledged : conflictStatus });
+});
 
 export const erasureBarrierSchema =
   "CREATE TABLE erasure_barriers(user_id TEXT PRIMARY KEY,reference TEXT NOT NULL UNIQUE,requested_at_ms INTEGER NOT NULL) STRICT";

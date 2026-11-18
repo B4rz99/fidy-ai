@@ -1,3 +1,4 @@
+import { settleBeforeDisposal } from "./original-writers";
 import { recoverSamples } from "./sample-publication";
 import { recoverDocumentStages, stageRetryMs } from "./local-document";
 import { activateLocalEmail, emailStageRetryMs, recoverEmailStages } from "./local-email";
@@ -92,6 +93,7 @@ const expireDocuments = Effect.fn(function* (current: number, env: LocalIngestio
     const item = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ ...row.fields, object_key: Schema.String })
     )(raw);
+    yield* settleBeforeDisposal("statement", env.STATEMENT_STAGING_BUCKET, item);
     yield* erasePrivateObject({
       bucket: env.STATEMENT_STAGING_BUCKET,
       userId: item.user_id,
@@ -114,6 +116,7 @@ const expireEmails = Effect.fn(function* (current: number, env: LocalIngestionEn
     const target = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ ...row.fields, object_key: Schema.String, state: Schema.String })
     )(raw);
+    yield* settleBeforeDisposal("email", env.EMAIL_BUCKET, target);
     yield* erasePrivateObject({
       userId: target.user_id,
       key: target.object_key,

@@ -1,3 +1,4 @@
+import { drainIngestion } from "./internal/drain-originals";
 import { reviewRequest } from "./internal/sample-operator";
 import { reviewLocal } from "./internal/sample-review";
 import {
@@ -226,5 +227,6 @@ export const processLocalEmail: typeof completeLocalEmail = (...args) =>
 export const refuseUnverifiedEmail = (message: ForwardedEmailMessage): Effect.Effect<void> =>
   Effect.sync(() => message.setReject("Mailbox unavailable"));
 
+export const drainLocalIngestion: typeof drainIngestion = (...args) => drainIngestion(...args);
 export const handleSampleReview: typeof reviewRequest = (...args) => reviewRequest(...args);
 export const localSampleReview: typeof reviewLocal = (...args) => reviewLocal(...args);

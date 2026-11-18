@@ -14,7 +14,8 @@ import {
   recoverLocalHosted,
   repairLocalHostedAlarm,
 } from "../agent/runtime";
-import { confirmHandoffUrl } from "../erasure-store/contract";
+import { drainLocalUser, keepErasedStoreEmpty, purgeLocalUser } from "./internal/erasure-purge";
+import { confirmHandoffUrl, localDrainUrl, localPurgeUrl } from "../erasure-store/contract";
 import {
   confirmErasureHandoff,
   offerErasureHandoff,
@@ -226,6 +227,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return sandboxConnectionAdapters({ environment: this.env, userId: this.ctx.id.name ?? "" });
   }
   private readonly runtime;
+  private erased = false;
   private mcp?: McpResidency;
   private protocol(request: Request, owns: (id: string) => boolean): Promise<Response> {
     return this.runtime.runPromise(
@@ -283,7 +285,16 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     });
     state.waitUntil(
       state.blockConcurrencyWhile(() =>
-        this.runtime.runPromise(openSqliteStore(userStoreHistory, env.CF_VERSION_METADATA.id))
+        this.runtime.runPromise(
+          keepErasedStoreEmpty(Option.fromUndefinedOr(state.id.name), env.ERASURE).pipe(
+            Effect.flatMap((erased) => {
+              this.erased = erased;
+              return erased
+                ? Effect.void
+                : openSqliteStore(userStoreHistory, env.CF_VERSION_METADATA.id);
+            })
+          )
+        )
       )
     );
   }
@@ -378,6 +389,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
 
   override alarm(): Promise<void> {
+    if (this.erased) return Promise.resolve();
     return this.registration().then((registration) =>
       registration === "registered"
         ? this.checkWork().then((summary) => {
@@ -484,7 +496,44 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     return this.runtime.runPromise(observeUserRegistration(this.env.MAINTENANCE, this.owns));
   }
 
+  private erasedResponse(request: Request): Promise<Response> {
+    if (ownerCheckRequest(request)) return Promise.resolve(ownerCheckResponse());
+    if (
+      request.method === "POST" &&
+      [statusDeliveryUrl, replyDeliveryUrl, settleUserBillingUrl].includes(request.url)
+    ) {
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    return Promise.resolve(new Response(null, { status: 401 }));
+  }
+  private erasureCommand(request: Request): Promise<Response> {
+    const unit = { env: this.env, storage: this.ctx.storage, owns: this.owns };
+    if (request.url === localPurgeUrl) {
+      return this.runtime.runPromise(
+        purgeLocalUser(request, unit, this.retireMcp(Option.none())).pipe(
+          Effect.tap((reply) =>
+            Effect.sync(() => {
+              if (reply.ok) {
+                this.erased = true;
+                this.mcp = undefined;
+              }
+            })
+          ),
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
+      );
+    }
+    return this.runtime.runPromise(
+      drainLocalUser(request, unit).pipe(
+        Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+      )
+    );
+  }
   override fetch(request: Request): Promise<Response> {
+    if (request.method === "POST" && [localDrainUrl, localPurgeUrl].includes(request.url)) {
+      return this.erasureCommand(request);
+    }
+    if (this.erased) return this.erasedResponse(request);
     if (this.isReleaseProbe(request)) {
       return this.runtime.runPromise(
         storeReadiness({ history: userStoreHistory, release: this.env.CF_VERSION_METADATA.id })

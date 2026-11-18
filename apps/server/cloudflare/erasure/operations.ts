@@ -9,7 +9,8 @@ import { purgeCompletedCases } from "./internal/control-retention";
 import { expectedGeneration } from "./internal/generation";
 import { restoreCase } from "./internal/restore-case";
 import { submitCustodyEvidence } from "./internal/provider-evidence";
-import { receipt } from "./internal/receipt";
+import { receipt, receiptNext } from "./internal/receipt";
+import { recoveryWindowMs } from "./internal/retention-policy";
 import { Clock, Effect, Option, Schema } from "effect";
 import {
   ErasureBrowserAdmission,
@@ -24,6 +25,7 @@ import { ErasureUnavailable } from "../erasure-store/contract";
 import type { ErasureStore } from "../erasure-store/contract";
 import { admitDeletion } from "./internal/admission";
 import {
+  type ErasureClass,
   ErasureCustodian,
   ErasureOperatorReceipt,
   ErasureReceipt,
@@ -294,6 +296,14 @@ export const prepareLocalErasureRegistry = <Requirements>(
 ): Effect.Effect<void, ErasureUnavailable, Requirements> =>
   initializeRegistryStorage({ ...input, mode: "LocalStartup" });
 
+// Directory and Pricing retain User-attributed identity, credential, and registration records
+// until their separate cleanup acknowledgements. Report only classes settled by User purge.
+const localClasses = [
+  "transactions",
+  "memory",
+  "consent",
+] as const satisfies ReadonlyArray<ErasureClass>;
+
 export const caseOperatorRequest = Effect.fn(function* (
   request: Request,
   storage: DurableObjectStorage
@@ -317,8 +327,9 @@ export const caseOperatorRequest = Effect.fn(function* (
       }
       const { reference, userId } = continuation.value;
       const [record] =
-        yield* sql`SELECT state FROM erasure_cases WHERE reference=${reference} AND user_id=${userId}`;
-      if (record?.state !== "Draining") return new Response(null, { status: 409 });
+        yield* sql`SELECT state,last_erased_at_ms,connection_blocked FROM erasure_cases WHERE reference=${reference} AND user_id=${userId}`;
+      if (record === undefined) return new Response(null, { status: 409 });
+      const phase = yield* Schema.decodeUnknownEffect(ErasureReceipt.fields.state)(record.state);
       if (request.url === "https://coordinator.internal/erasure-continue") {
         yield* sql`UPDATE erasure_cases SET next_check_ms=${now} WHERE reference=${reference} AND user_id=${userId}`;
         yield* preserveStoreAlarm(storage, now);
@@ -326,14 +337,23 @@ export const caseOperatorRequest = Effect.fn(function* (
       }
       const receipt = yield* Schema.encodeEffect(ErasureOperatorReceipt)({
         reference,
-        state: "Draining",
-        next: "admitted-work",
-        completed: [],
+        state: phase,
+        next: receiptNext({
+          state: phase,
+          connectionBlocked: yield* Schema.decodeUnknownEffect(Schema.Literals([0, 1]))(
+            record.connection_blocked
+          ),
+        }),
+        completed: record.last_erased_at_ms === null ? [] : localClasses,
         custodians: ErasureCustodian.literals.map((custodian) => ({
           custodian,
           status: "Pending",
         })),
-        recoveryUntilMs: null,
+        recoveryUntilMs:
+          record.last_erased_at_ms === null
+            ? null
+            : (yield* Schema.decodeUnknownEffect(Schema.Int)(record.last_erased_at_ms)) +
+              recoveryWindowMs,
       });
       return Response.json(receipt, { headers: { "cache-control": "no-store" } });
     })

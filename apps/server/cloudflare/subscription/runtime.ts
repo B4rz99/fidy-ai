@@ -1,5 +1,5 @@
-import { fenceErasureParticipant } from "../erasure-store/operations";
-import { participantFenceUrl } from "../erasure-store/contract";
+import { fenceErasureParticipant, participantDrain } from "../erasure-store/operations";
+import { participantDrainedUrl, participantFenceUrl } from "../erasure-store/contract";
 import { Hex } from "effect/encoding";
 import { digestBytes } from "../secret-material/operations";
 import {
@@ -35,7 +35,11 @@ import {
 import { type StoreReleaseEnvironment, storeReadinessUrl } from "../runtime/sqlite/contract";
 
 import { pricingHistory } from "./pricing/operations";
-import { pricingResponse, recoverPricing } from "./internal/pricing-object";
+import {
+  outstandingPricingRegistrations,
+  pricingResponse,
+  recoverPricing,
+} from "./internal/pricing-object";
 import { observeCancellation, pendingCancellation } from "./internal/local-cancellation";
 import { RequestBodyPolicy } from "../http/contract";
 import { boundedJsonBody } from "../http/operations";
@@ -338,6 +342,13 @@ export class Pricing {
   fetch(request: Request): Promise<Response> {
     if (this.state.id.name !== pricingName) {
       return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (`${request.method} ${request.url}` === `POST ${participantDrainedUrl}`) {
+      return this.runtime.runPromise(
+        participantDrain(request, outstandingPricingRegistrations).pipe(
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
+      );
     }
     if (
       request.method === "POST" &&

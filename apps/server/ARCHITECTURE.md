@@ -210,5 +210,30 @@ Draining. The disposition stays with the User and cannot start Transcript or rem
 A verified Wompi observation can settle an already-issued charge during Draining. The original
 Subscription, immutable BillingAttempt and payment evidence stay at the User for settlement.
 The fence blocks new collection and renewal admission. Shared Price history remains with Pricing.
-Fencing all participants leaves the case Draining until the independent drain and custody
-protocol establishes the remaining deletion conditions.
+After the Directory and Pricing confirm settlement of their exact bound operations, the case records
+that acknowledgement before asking the User to seal. Each issued original R2 put has a separate
+User-local writer. A returned decision or a positive observation of its random nonce settles the
+writer. An absent object leaves it pending. The User drains sample reservations, withdraws unsafe
+publications, releases exact forwarded Email capacity slots and settles started provider work.
+Connection grants that require revocation stay encrypted at the User until checked cleanup. An
+unresolved institution suppression leaves the case Draining.
+The independent case takes bounded pages of Resend delivery idempotency keys and original request
+times while the User is fenced. Expiration of a mailbox proof still removes the address and proof
+at its original deadline. Its opaque delivery attribution survives the handoff until verified
+Resend cleanup. Wompi and WhatsApp retain their existing exact callback attribution at Directory.
+A claimed Wompi source creation keeps its own disposition through commercial enrollment expiry.
+
+Sealing records the completed drain and five fixed custodian dispositions at the independent
+owner. The evidence records known provider use. A missing use observation grants no exemption.
+The User deletes bounded pages under its own private Email and statement prefixes, retires live
+MCP sessions and clears its native alarm and storage. Only the matching independent case in
+Erasing authorizes another purge after a lost reply. A cold, empty User consults the independent
+case before allocating a schema. The case enters ExternalPending and records the latest local
+erasure time after receiving the purge acknowledgement. That time is the initial lower bound for
+the 30-day window. Directory and Pricing may still retain personal data alongside identity holds.
+Each shared participant must record the time of its last actual personal-data deletion with the
+exact case and return that retained time on retry. On acknowledgement, the independent owner
+takes the maximum of that time and `last_erased_at_ms` in the same transaction that records the
+participant's cleanup. Completion uses this maximum after all required personal-data cleanup.
+Reading a receipt, retrying an acknowledged deletion and retiring deletion metadata leave the
+timestamp unchanged.

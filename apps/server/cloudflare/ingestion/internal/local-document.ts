@@ -17,6 +17,7 @@ import {
   statementStagingLifetimeMilliseconds,
 } from "../../../src/core/ingestion/contract";
 import { makeKapsoOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { settleObservedOriginal, trackOriginalPut } from "./original-writers";
 import { resumePrivateUpload, userPrivateObjectPrefix } from "../../private-objects/operations";
 import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 import { newId } from "../../secret-material/operations";
@@ -171,6 +172,7 @@ const stageDocument = Effect.fn(function* (
     return new Response(null, { status: 409 });
   }
   const head = yield* Effect.tryPromise(() => bucket.head(row.object_key));
+  yield* settleObservedOriginal("statement", row.object_key, Option.fromNullOr(head));
   const stored = Schema.decodeUnknownOption(storedMaterial)(head?.customMetadata);
   if (
     head !== null &&
@@ -194,11 +196,12 @@ const stageDocument = Effect.fn(function* (
   if (knownUnsupportedStatementBytes(media.bytes)) return new Response(null, { status: 422 });
   const sha = media.sha256;
   const format = statementSourceFormat(media.bytes);
-  const size = media.bytes.length;
   yield* resumePrivateUpload(
     {
       bucket,
       userId: doc.userId,
+      put: (key, bytes, options) =>
+        trackOriginalPut({ bucket, kind: "statement", user: doc.userId }, { key, bytes, options }),
       key: row.object_key,
       bytes: media.bytes,
       metadata: {
@@ -213,7 +216,7 @@ const stageDocument = Effect.fn(function* (
     },
     Option.fromNullOr(head)
   );
-  return { sha256: sha, sourceFormat: format, byteLength: size };
+  return { sha256: sha, sourceFormat: format, byteLength: media.bytes.length };
 });
 const refuseUnsupported = Effect.fn(function* (id: string, user: string) {
   const sql = yield* SqliteClient;

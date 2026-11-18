@@ -54,7 +54,29 @@ const isEnrollmentPath = (path: string): boolean =>
   path.startsWith("/v1/merchants/") ||
   path.startsWith("/v1/tokens/") ||
   ["/v1/payment_sources", "/v1/payment_sources/5101", "/v1/payment_sources/5102"].includes(path);
-const enrollmentProvider = Effect.fn(function* (request: Request, path: string) {
+const createSource = Effect.fn(function* (request: Request, env: Environment) {
+  const charge = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ type: Schema.Literals(["NEQUI", "CARD"]), token: Schema.String })
+  )(yield* Effect.tryPromise(() => request.json()));
+  if (charge.token === "tok_test_held_source") {
+    const db = env.PROVIDER_STATE;
+    yield* Effect.tryPromise(() => db.prepare("UPDATE held_source SET issued=issued+1").run());
+    yield* Effect.tryPromise(() =>
+      db.prepare("SELECT released FROM held_source").first<number>("released")
+    ).pipe(
+      Effect.repeat({
+        while: (released) => released === 0,
+        schedule: Schedule.spaced("30 millis"),
+      }),
+      Effect.timeout("12 seconds")
+    );
+    return Response.json({ data: { id: syntheticSources[charge.type], status: "DECLINED" } });
+  }
+  return Response.json({
+    data: { id: syntheticSources[charge.type], status: "AVAILABLE" },
+  });
+});
+const enrollmentProvider = Effect.fn(function* (request: Request, path: string, env: Environment) {
   if (path.startsWith("/v1/tokens/nequi/")) {
     return Response.json({
       data: {
@@ -90,12 +112,7 @@ const enrollmentProvider = Effect.fn(function* (request: Request, path: string) 
     });
   }
   if (path === "/v1/payment_sources" && request.method === "POST") {
-    const charge = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ type: Schema.Literals(["NEQUI", "CARD"]) })
-    )(yield* Effect.tryPromise(() => request.json()));
-    return Response.json({
-      data: { id: syntheticSources[charge.type], status: "AVAILABLE" },
-    });
+    return yield* createSource(request, env);
   }
   if (path === "/v1/payment_sources/5101") {
     return Response.json({
@@ -123,7 +140,7 @@ export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
         }
         const path = new URL(request.url).pathname;
         if (isEnrollmentPath(path)) {
-          return yield* enrollmentProvider(request, path);
+          return yield* enrollmentProvider(request, path, env);
         }
         if (path.startsWith("/v1/transactions")) return yield* chargeFixture(request, env, path);
         const command = request.method + " " + path;

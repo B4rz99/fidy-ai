@@ -1,3 +1,4 @@
+import { caseDriver } from "../erasure-purge.test-fixture";
 import type { Miniflare } from "miniflare";
 import { settleUserBillingUrl } from "./contract";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -100,6 +101,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           );
           expect(accepted.status).toBe(202);
+          const driver = yield* caseDriver(runtime);
+          yield* driver.step();
+          expect(yield* driver.step()).toBe("Draining");
           expect(yield* owner.exec("SELECT status,collection_state FROM billing_attempts")).toEqual(
             [{ status: "pending", collection_state: "sent" }]
           );
@@ -157,6 +161,19 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(yield* owner.exec("SELECT followup_due_at_ms FROM billing_attempts")).toEqual([
             { followup_due_at_ms: null },
           ]);
+          const driver = yield* caseDriver(runtime);
+          expect(
+            yield* driver
+              .step()
+              .pipe(Effect.repeat({ until: (phase) => phase === "ExternalPending", times: 12 }))
+          ).toBe("ExternalPending");
+          expect(
+            yield* native(() =>
+              driver.storage.exec(
+                "SELECT observed_use,status FROM erasure_case_custodians WHERE custodian='Wompi'"
+              )
+            )
+          ).toEqual([{ observed_use: 1, status: "Pending" }]);
         }
 
         expect(

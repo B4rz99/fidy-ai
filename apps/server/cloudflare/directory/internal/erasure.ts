@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Schema } from "effect";
 import { cancelProviderHandoff } from "./reservations";
@@ -25,4 +26,11 @@ export const reconcileErasedHandoffs = Effect.fn(function* (
       ),
     { concurrency: 4, discard: true }
   );
+});
+
+export const outstandingDirectoryHandoffs = (userId: string): OwnedStatement => ({
+  sql: `EXISTS(SELECT 1 FROM provider_attempts a JOIN browser_pairings p ON p.id=a.pairing_id WHERE p.user_id=? AND a.state='bound' AND a.acknowledged=0)
+    OR EXISTS(SELECT 1 FROM identity_replacements WHERE user_id=? AND state='reserved')
+    OR EXISTS(SELECT 1 FROM recovery_rotations WHERE user_id=? AND state='reserved')`,
+  params: [userId, userId, userId],
 });

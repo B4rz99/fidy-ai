@@ -1,6 +1,13 @@
+import { confirmPurge, emptyUserDisposition } from "./internal/local-purge";
+import {
+  confirmDrainUrl,
+  confirmLifetimeCaseUrl,
+  confirmPurgeUrl,
+  erasedUserUrl,
+  registerCaseUrl,
+} from "./contract";
 import { caseOperatorRequest } from "../erasure/operations";
 import { Effect } from "effect";
-import { confirmLifetimeCaseUrl, registerCaseUrl } from "./contract";
 import { erasureRegistryName } from "../erasure/contract";
 import { ownerCheckRequest, ownerCheckResponse } from "../maintenance/contract";
 import {
@@ -77,7 +84,12 @@ export class Erasure extends DurableObject<ErasureEnvironment> {
     const unavailable = Effect.catchCause(() =>
       Effect.succeed(new Response(null, { status: 503 }))
     );
+    if ([confirmDrainUrl, confirmPurgeUrl].includes(request.url)) {
+      return this.runtime.runPromise(confirmPurge(request).pipe(unavailable));
+    }
     switch (request.url) {
+      case erasedUserUrl:
+        return this.runtime.runPromise(emptyUserDisposition(request).pipe(unavailable));
       case confirmLifetimeCaseUrl:
         return this.runtime.runPromise(confirmLifetimeCase(request).pipe(unavailable));
       case registerCaseUrl:

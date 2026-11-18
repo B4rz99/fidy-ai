@@ -80,6 +80,7 @@ const billingTrigger = {
 };
 
 const billingBindings = {
+  SAMPLE_BUCKET: { type: "r2" as const, name: "anonymous-samples" },
   PRIVATE_EMAIL: {
     type: "worker" as const,
     worker: "private-email-fixture",
@@ -227,7 +228,15 @@ const manifests = Effect.fnUntraced(function* (module: string) {
   });
 });
 
-type NativeFixture = "connection" | "hosted" | "user" | "billing" | "browser" | "login" | "oauth";
+type NativeFixture =
+  | "erasure"
+  | "connection"
+  | "hosted"
+  | "user"
+  | "billing"
+  | "browser"
+  | "login"
+  | "oauth";
 const minuteMs = 60000;
 const attemptLifetimeMs = 600000;
 const empty: {
@@ -300,6 +309,7 @@ const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean)
 });
 
 const fixtureModule = (mode: NativeFixture): string => {
+  if (mode === "erasure") return "./erasure-worker.test-fixture.ts";
   if (mode === "login") return "./login-email-worker.test-fixture.ts";
   if (mode === "connection") return "./connection-worker.test-fixture.ts";
   return "./core-worker.ts";
@@ -312,7 +322,7 @@ const fixtureWorkers = (
   coreModule: string;
   ingressOptions: Pick<ConstructorParameters<typeof Miniflare>[0], "upstream">;
 }> => ({
-  withBilling: mode === "billing",
+  withBilling: mode === "billing" || mode === "erasure",
   withOidc: mode === "browser" || mode === "login",
   coreModule: fixtureModule(mode),
   ingressOptions: ["oauth", "connection"].includes(mode)
@@ -523,6 +533,7 @@ const createUserPlatform = Effect.fnUntraced(function* (mode: NativeFixture) {
     );
 });
 
+export const nativePurgePlatform = createUserPlatform("erasure");
 export const nativeLoginPlatform = createUserPlatform("login");
 export const nativeBrowserPlatform = createUserPlatform("browser");
 export const nativeConnectionPlatform = createUserPlatform("connection");

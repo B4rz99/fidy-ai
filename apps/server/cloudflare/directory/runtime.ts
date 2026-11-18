@@ -1,8 +1,8 @@
 import { providerAllowanceUrl } from "../resource-admission/contract";
 import { admitSharedProvider } from "../resource-admission/operations";
-import { reconcileErasedHandoffs } from "./internal/erasure";
-import { fenceErasureParticipant } from "../erasure-store/operations";
-import { participantFenceUrl } from "../erasure-store/contract";
+import { outstandingDirectoryHandoffs, reconcileErasedHandoffs } from "./internal/erasure";
+import { fenceErasureParticipant, participantDrain } from "../erasure-store/operations";
+import { participantDrainedUrl, participantFenceUrl } from "../erasure-store/contract";
 import { nativePATDirectoryUrl } from "../tokens/contract";
 import { oauthRouteCommandUrl } from "../oauth-agents/contract";
 import { routeSessionRequest } from "./operations";
@@ -166,6 +166,13 @@ export class Directory extends DurableObject<DirectoryEnvironment> {
   override fetch(request: Request): Promise<Response> {
     if (!this.ctx.id.equals(this.env.DIRECTORY.idFromName(directoryName))) {
       return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (request.method === "POST" && request.url === participantDrainedUrl) {
+      return this.runtime.runPromise(
+        participantDrain(request, outstandingDirectoryHandoffs).pipe(
+          Effect.catchCause(() => Effect.succeed(new Response(null, { status: 503 })))
+        )
+      );
     }
     if (request.method === "POST" && request.url === participantFenceUrl) {
       return this.runtime.runPromise(

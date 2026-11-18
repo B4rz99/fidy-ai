@@ -53,4 +53,26 @@ export const registerCaseUrl = "https://erasure.invalid/case/register";
 export const confirmHandoffUrl = "https://user.invalid/erasure/confirm";
 export const participantFenceUrl = "https://owner.internal/erasure/fence";
 
+export const resendScopeLimit = 16;
+export const resendScopePageStatus = 206;
+export const resendScopeCursor = "fidy-erasure-resend-after";
+export const ResendScopePage = Schema.Array(
+  Schema.Struct({
+    work_id: Schema.String.check(Schema.isUUID()),
+    requested_at_ms: Schema.Int.check(Schema.isGreaterThan(0)),
+  })
+).check(Schema.isMinLength(1), Schema.isMaxLength(resendScopeLimit));
+
+export const LocalCustody = Schema.Struct({
+  whatsapp: Schema.Literals([0, 1]),
+  resend: Schema.Literals([0, 1]),
+  wompi: Schema.Literals([0, 1]),
+});
+export const erasedUserUrl = "https://erasure.invalid/case/empty-user";
+export const localDrainUrl = "https://user.invalid/erasure/drain";
+export const localPurgeUrl = "https://user.invalid/erasure/purge";
+export const connectionSuppressionStatus = 423;
+export const confirmDrainUrl = "https://erasure.invalid/case/confirm-drain";
+export const confirmPurgeUrl = "https://erasure.invalid/case/confirm-purge";
+export const participantDrainedUrl = "https://owner.internal/erasure/drained";
 export const confirmLifetimeCaseUrl = "https://erasure.invalid/case/lifetime";

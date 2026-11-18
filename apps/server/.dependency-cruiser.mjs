@@ -14,6 +14,7 @@ export default {
           "^cloudflare/canonical-request-observer\\.test-fixture\\.ts$",
           "^cloudflare/core-worker\\.test-fixture\\.ts$",
           "^cloudflare/connection-worker\\.test-fixture\\.ts$",
+          "^cloudflare/erasure-worker\\.test-fixture\\.ts$",
           "^cloudflare/login-email-worker\\.test-fixture\\.ts$",
           "^cloudflare/storage-forward-repair\\.test-fixture\\.ts$",
           "^cloudflare/provider-authentication/journey\\.test-fixture\\.ts$",

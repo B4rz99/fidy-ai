@@ -1,3 +1,4 @@
+import { admitPurge, caseDriver } from "../erasure-purge.test-fixture";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Clock, Effect, Schedule, Schema } from "effect";
@@ -419,11 +420,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
   );
   test.effect(
-    "reconciles a retained grant after revocation with a checked lease and clears its encrypted tokens once",
+    "erasure suppresses an active Connection and clears its encrypted tokens after checked revocation",
     () =>
       Effect.gen(function* () {
         const { journey, provider } = yield* runningSynchronization();
-        yield* native(() => journey.exec("UPDATE connection_grants SET state='cleanup_required'"));
+        expect((yield* admitPurge(journey.runtime)).status).toBe(202);
+        const driver = yield* caseDriver(journey.runtime);
+        yield* driver.step();
+        yield* driver.step();
         yield* native(() => provider.fetch("https://fixture.invalid/release"));
         yield* native(() => journey.checkWork(alice.user));
         const cleanup = (): ReturnType<typeof journey.exec> =>
@@ -438,6 +442,15 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         yield* native(() => journey.checkWork(alice.user));
         const reply = yield* native(() => provider.fetch("https://fixture.invalid/status"));
         expect(yield* native(() => reply.json())).toMatchObject({ revocations: 1 });
+        expect(yield* driver.step()).toBe("Draining");
+        expect(
+          yield* native(() => driver.storage.exec("SELECT connection_blocked FROM erasure_cases"))
+        ).toEqual([{ connection_blocked: 1 }]);
+        expect(
+          yield* native(() =>
+            driver.storage.exec("SELECT count(*) AS n FROM erasure_case_custodians")
+          )
+        ).toEqual([{ n: 0 }]);
       })
   );
 });

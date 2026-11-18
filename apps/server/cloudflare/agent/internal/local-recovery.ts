@@ -49,7 +49,10 @@ const claim = Effect.fn(function* (storage: DurableObjectStorage, owns: (id: str
   }
   const turn = yield* Schema.decodeUnknownEffect(Turn)(pending);
   if (!owns(turn.user_id)) return Option.none();
-  if (turn.deadline_ms <= current) {
+  if (
+    turn.deadline_ms <= current ||
+    (yield* sql`SELECT 1 FROM erasure_requests WHERE user_id=${turn.user_id}`).length === 1
+  ) {
     yield* finish(turn, "interrupted", current);
     yield* inspectTurns(current, storage);
     return Option.none();

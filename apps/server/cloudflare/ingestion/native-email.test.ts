@@ -1,7 +1,8 @@
+import { admitPurge, caseDriver } from "../erasure-purge.test-fixture";
 import type { Miniflare } from "miniflare";
 import { it } from "@effect/vitest";
 import { NodeFileSystem } from "@effect/platform-node";
-import { DateTime, Effect, Schedule, Schema } from "effect";
+import { DateTime, Effect, Fiber, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { freeForwardedEmailCap } from "../../src/core/ingestion/contract";
@@ -12,7 +13,7 @@ import {
   retainedEmailLimit,
 } from "../directory/contract";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
-import { native, nativeBillingPlatform } from "../user-store.test-fixture";
+import { native, nativeBillingPlatform, nativePurgePlatform } from "../user-store.test-fixture";
 
 const storedText = Schema.decodeUnknownSync(Schema.String);
 const emailRecipient = Effect.fn(function* (runtime: Miniflare, subject: typeof alice) {
@@ -58,7 +59,73 @@ const emailRecipient = Effect.fn(function* (runtime: Miniflare, subject: typeof 
 const emailJourney = Effect.fn(function* () {
   return yield* emailRecipient(yield* (yield* nativeBillingPlatform)(), alice);
 });
+const fixtureControl = Effect.fn(function* (
+  user: ReturnType<Awaited<ReturnType<Miniflare["getDurableObjectNamespace"]>>["getByName"]>,
+  path: string
+) {
+  return yield* native(() => user.fetch("https://fixture.invalid/" + path, { method: "POST" }));
+});
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "erasure waits for an issued R2 create, releases the claimed Directory slot and clears native KV and alarm",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* (yield* nativePurgePlatform)();
+        const journey = yield* emailRecipient(runtime, alice);
+        const user = (yield* native(() =>
+          runtime.getDurableObjectNamespace("USER_STORE", "core")
+        )).getByName(alice.user);
+        const cases = yield* caseDriver(runtime);
+        yield* fixtureControl(user, "hold-original");
+        const sending = yield* journey.send(false).pipe(Effect.forkScoped);
+        const [writer] = yield* journey.owner
+          .exec("SELECT nonce,object_key FROM original_writers")
+          .pipe(
+            Effect.repeat({
+              until: (rows) => rows.length === 1,
+              times: 60,
+              schedule: Schedule.spaced("30 millis"),
+            })
+          );
+        const key = yield* Schema.decodeUnknownEffect(Schema.String)(writer?.object_key);
+        const bucket = yield* native(() => runtime.getR2Bucket("EMAIL_BUCKET", "core"));
+        expect(yield* native(() => bucket.head(key))).toBeNull();
+        expect((yield* admitPurge(runtime)).status).toBe(202);
+        for (let step = 0; step < 4; step++) expect(yield* cases.step()).toBe("Draining");
+        yield* fixtureControl(user, "release-original");
+        const sent = yield* Fiber.await(sending);
+        expect(sent._tag === "Failure" || sent.value.status !== 204).toBe(true);
+        const phase = yield* cases
+          .step()
+          .pipe(Effect.repeat({ until: (value) => value === "ExternalPending", times: 12 }));
+        expect(phase).toBe("ExternalPending");
+        expect(yield* native(() => bucket.head(key))).toBeNull();
+        expect(
+          yield* native(() =>
+            journey.owner.directory.exec(
+              "SELECT receipt FROM email_capacity_slots WHERE receipt IS NOT NULL"
+            )
+          )
+        ).toEqual([]);
+        const physical = yield* fixtureControl(user, "storage");
+        expect(yield* native(() => physical.json())).toEqual({ keys: 0, alarm: null });
+      })
+  );
+  test.effect(
+    "observing an exact R2 nonce settles a lost original reply before its placeholder is replaced",
+    () =>
+      Effect.gen(function* () {
+        const { owner, send } = yield* emailJourney();
+        yield* owner.exec(
+          "CREATE TRIGGER lose_original_reply BEFORE DELETE ON original_writers BEGIN SELECT RAISE(ABORT,'fixture'); END"
+        );
+        expect((yield* Effect.exit(send(false)))._tag).toBe("Failure");
+        expect((yield* owner.exec("SELECT nonce FROM original_writers")).length).toBe(1);
+        yield* owner.exec("DROP TRIGGER lose_original_reply");
+        expect((yield* send(false)).status).toBe(204);
+        expect(yield* owner.exec("SELECT nonce FROM original_writers")).toEqual([]);
+      })
+  );
   test.effect(
     "private eligible Email stages exactly once, enforces its original 90-day deadline and refuses delayed work",
     () =>

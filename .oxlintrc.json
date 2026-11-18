@@ -319,6 +319,7 @@
         "apps/server/cloudflare/login-email-worker.test-fixture.ts",
         "apps/server/cloudflare/agent/provider.test-fixture.ts",
         "apps/server/cloudflare/connection-worker.test-fixture.ts",
+        "apps/server/cloudflare/erasure-worker.test-fixture.ts",
         "apps/server/cloudflare/storage-forward-repair.test-fixture.ts",
         "apps/server/cloudflare/ingestion/email-worker.ts",
         "apps/server/cloudflare/ingestion/private-email.test-fixture.ts",

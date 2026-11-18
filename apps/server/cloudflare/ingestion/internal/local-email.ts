@@ -26,6 +26,7 @@ import {
   localEmailUrl,
 } from "../contract";
 
+import { settleObservedOriginal, trackOriginalPut } from "./original-writers";
 import { resumePrivateUpload, userPrivateObjectPrefix } from "../../private-objects/operations";
 import { prepareSourcedCapture } from "../../transactions/operations";
 import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
@@ -205,6 +206,7 @@ const storeEmail = Effect.fn(function* (
     return stored !== undefined;
   });
   const head = yield* Effect.tryPromise(() => env.EMAIL_BUCKET.head(reserved.object_key));
+  yield* settleObservedOriginal("email", reserved.object_key, Option.fromNullOr(head));
   if (
     head?.customMetadata?.purpose !== "forwarded-email" ||
     head.customMetadata.sha256 !== digest
@@ -212,6 +214,11 @@ const storeEmail = Effect.fn(function* (
     yield* resumePrivateUpload(
       {
         bucket: env.EMAIL_BUCKET,
+        put: (key, bytes, options) =>
+          trackOriginalPut(
+            { bucket: env.EMAIL_BUCKET, kind: "email", user: userId },
+            { key, bytes, options }
+          ),
         key: reserved.object_key,
         userId,
         bytes,
@@ -406,6 +413,7 @@ export const recoverEmailStages = Effect.fn(function* (
       return yield* fail();
     }
     const head = yield* Effect.tryPromise(() => env.EMAIL_BUCKET.head(receipt.object_key));
+    yield* settleObservedOriginal("email", receipt.object_key, Option.fromNullOr(head));
     const stored =
       head?.size === receipt.byte_length &&
       head.customMetadata?.purpose === "forwarded-email" &&

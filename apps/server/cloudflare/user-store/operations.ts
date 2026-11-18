@@ -993,6 +993,26 @@ export const userStoreHistory: StoreHistory = {
         `CREATE TRIGGER hosted_batch_child_audit_immutable BEFORE UPDATE ON hosted_batch_child_audit BEGIN SELECT RAISE(ABORT,'audit_immutable'); END`,
       ],
     },
+    {
+      version: 24,
+      id: "original-write-drain",
+      statements: [
+        "ALTER TABLE erasure_requests ADD COLUMN sample_cursor TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE erasure_requests ADD COLUMN observed_custody TEXT CHECK(observed_custody IS NULL OR json_valid(observed_custody))",
+        "CREATE TABLE erasure_expired_mail(work_id TEXT PRIMARY KEY, requested_at_ms INTEGER NOT NULL) STRICT",
+        "CREATE VIEW erasure_mail_scope AS SELECT work_id,requested_at_ms FROM erasure_expired_mail UNION ALL SELECT work_id,requested_at_ms FROM login_email_proofs WHERE selector IS NOT NULL UNION ALL SELECT work_id,created_at_ms FROM email_replacements WHERE public_code IS NOT NULL",
+        "CREATE TRIGGER preserve_login_mail_scope BEFORE DELETE ON login_email_proofs WHEN OLD.selector IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests) BEGIN INSERT OR IGNORE INTO erasure_expired_mail VALUES(OLD.work_id,OLD.requested_at_ms); END",
+        "CREATE TRIGGER preserve_replacement_mail_scope BEFORE DELETE ON email_replacements WHEN OLD.public_code IS NOT NULL AND EXISTS(SELECT 1 FROM erasure_requests) BEGIN INSERT OR IGNORE INTO erasure_expired_mail VALUES(OLD.work_id,OLD.created_at_ms); END",
+        "ALTER TABLE payment_enrollments ADD COLUMN source_creation TEXT CHECK(source_creation IN('issued','settled'))",
+        "UPDATE payment_enrollments SET source_creation='issued' WHERE state IN('creating','verifying')",
+        `CREATE VIEW local_erasure_custody AS SELECT
+         EXISTS(SELECT 1 FROM whatsapp_deliveries WHERE started_ms IS NOT NULL) OR EXISTS(SELECT 1 FROM hosted_whatsapp_inbound) OR EXISTS(SELECT 1 FROM users WHERE whatsapp_bsuid IS NOT NULL) AS whatsapp,
+         EXISTS(SELECT 1 FROM login_email_proofs WHERE selector IS NOT NULL) OR EXISTS(SELECT 1 FROM email_replacements WHERE public_code IS NOT NULL) AS resend,
+         EXISTS(SELECT 1 FROM billing_attempts WHERE collection_sent_at_ms IS NOT NULL) OR EXISTS(SELECT 1 FROM payment_enrollments WHERE source_creation IS NOT NULL OR state IN ('creating','verifying','available')) OR EXISTS(SELECT 1 FROM payment_sources) AS wompi`,
+        "CREATE TABLE original_writers(nonce TEXT PRIMARY KEY,bucket TEXT NOT NULL CHECK(bucket IN('statement','email')),object_key TEXT NOT NULL,checked_ms INTEGER NOT NULL DEFAULT 0) STRICT",
+        "CREATE INDEX original_writer_check ON original_writers(checked_ms,nonce)",
+      ],
+    },
   ],
 };
 

@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { ownerCheckRequest, ownerCheckResponse } from "../../maintenance/contract";
 import {
   preserveStoreAlarm,
@@ -282,4 +283,9 @@ const recoverRegistration = Effect.fn(function* (
     yield* Effect.tryPromise(() => res.json())
   );
   if (Schema.toEquivalence(registration)(reply.request, request)) yield* acknowledge(reply);
+});
+
+export const outstandingPricingRegistrations = (userId: string): OwnedStatement => ({
+  sql: "EXISTS(SELECT 1 FROM price_registrations WHERE user_id=? AND outcome IS NULL)",
+  params: [userId],
 });

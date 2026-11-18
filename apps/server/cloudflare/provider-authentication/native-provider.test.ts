@@ -105,40 +105,56 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
   }
 });
 
+const verifyProviderDiagnostics = Effect.fn(function* (provider: "google" | "microsoft") {
+  const logs: Array<string> = [];
+  const runtime = yield* (yield* nativeBrowserPlatform)("1000000000", logs);
+  const context = browser(runtime);
+  const refused = yield* context.login("private-subject", {
+    provider,
+    scenario: "signature",
+  });
+  expect(refused.review).toEqual({ status: "rejected" });
+  if (provider === "google") expect(logs.join("\n")).toContain("signature_invalid");
+  const verified = yield* context.login("private-verified-subject", {
+    provider,
+    scenario: "valid",
+  });
+  expect(verified.review).toEqual({ status: "verified" });
+  const diagnostics = logs.join("\n");
+  expect(diagnostics).toContain("worker.public.fetch");
+  for (const secret of [
+    verified.attempt,
+    verified.proof.privateVerifier,
+    "private-verified-subject",
+    refused.attempt,
+    refused.proof.privateVerifier,
+    "private-subject",
+    "local-provider-fixture",
+  ]) {
+    expect(diagnostics).not.toContain(secret);
+  }
+  const stalled = yield* context.login("stalled-subject", {
+    provider,
+    scenario: "timeout",
+  });
+  expect(stalled.review).toEqual({ status: "rejected" });
+  const denied = yield* context.post(`/web/providers/${provider}/complete`, stalled.proof);
+  expect(denied.status).toBe(400);
+  yield* native(() => denied.arrayBuffer());
+});
+
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "keeps configured Microsoft credentials and protocol proofs out of exported diagnostics",
+    () => verifyProviderDiagnostics("microsoft"),
+    { timeout: 20000 }
+  );
+  test.effect(
+    "keeps configured Google credentials and protocol proofs out of exported diagnostics",
+    () => verifyProviderDiagnostics("google"),
+    { timeout: 20000 }
+  );
   for (const provider of ["google", "microsoft"] as const) {
-    test.effect(
-      provider + " keeps failed exchanges bounded and writes only redacted diagnostic reasons",
-      () =>
-        Effect.gen(function* () {
-          const logs: Array<string> = [];
-          const runtime = yield* (yield* nativeBrowserPlatform)("1000000000", logs);
-          const context = browser(runtime);
-          const refused = yield* context.login("private-subject", {
-            provider,
-            scenario: "signature",
-          });
-          expect(refused.review).toEqual({ status: "rejected" });
-          if (provider === "google") expect(logs.join("\n")).toContain("signature_invalid");
-          for (const secret of [
-            refused.attempt,
-            refused.proof.privateVerifier,
-            "private-subject",
-            "local-provider-fixture",
-          ]) {
-            expect(logs.join("\n")).not.toContain(secret);
-          }
-          const stalled = yield* context.login("stalled-subject", {
-            provider,
-            scenario: "timeout",
-          });
-          expect(stalled.review).toEqual({ status: "rejected" });
-          const denied = yield* context.post(`/web/providers/${provider}/complete`, stalled.proof);
-          expect(denied.status).toBe(400);
-          yield* native(() => denied.arrayBuffer());
-        }),
-      { timeout: 20000 }
-    );
     test.effect(provider + " rejects foreign or absent Origin on state-changing browser work", () =>
       Effect.gen(function* () {
         const runtime = yield* (yield* nativeBrowserPlatform)();

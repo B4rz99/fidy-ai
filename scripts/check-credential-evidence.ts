@@ -14,13 +14,13 @@ type CredentialEvidence = Readonly<{
 const credentialEvidence = [
   {
     configuration: "MICROSOFT_CLIENT_SECRET",
-    testFile: "apps/server/cloudflare/provider-authentication/microsoft.test.ts",
+    testFile: "apps/server/cloudflare/provider-authentication/native-provider.test.ts",
     testName:
       "keeps configured Microsoft credentials and protocol proofs out of exported diagnostics",
   },
   {
     configuration: "GOOGLE_CLIENT_SECRET",
-    testFile: "apps/server/cloudflare/provider-authentication/journey.test.ts",
+    testFile: "apps/server/cloudflare/provider-authentication/native-provider.test.ts",
     testName: "keeps configured Google credentials and protocol proofs out of exported diagnostics",
   },
   {

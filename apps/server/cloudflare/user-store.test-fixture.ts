@@ -236,6 +236,7 @@ const manifests = Effect.fnUntraced(function* (module: string) {
 type NativeFixture =
   | "lost-read"
   | "clock"
+  | "addressed-read"
   | "custody"
   | "erasure"
   | "capacity"
@@ -317,14 +318,15 @@ const connectionPlatformOptions = Effect.fnUntraced(function* (enabled: boolean)
   };
 });
 
-const fixtureModule = (mode: NativeFixture): string => {
-  if (mode === "lost-read") return "./core-http/lost-read.test-fixture.ts";
-  if (mode === "clock") return "./user-clock.test-fixture.ts";
-  if (mode === "capacity") return "./capacity-worker.test-fixture.ts";
-  if (mode === "erasure" || mode === "custody") return "./erasure-worker.test-fixture.ts";
-  if (mode === "login") return "./login-email-worker.test-fixture.ts";
-  if (mode === "connection") return "./connection-worker.test-fixture.ts";
-  return "./core-worker.ts";
+const fixtureModules: Partial<Record<NativeFixture, string>> = {
+  "lost-read": "./core-http/lost-read.test-fixture.ts",
+  "addressed-read": "./transactions/addressed-read.test-fixture.ts",
+  clock: "./user-clock.test-fixture.ts",
+  capacity: "./capacity-worker.test-fixture.ts",
+  erasure: "./erasure-worker.test-fixture.ts",
+  custody: "./erasure-worker.test-fixture.ts",
+  login: "./login-email-worker.test-fixture.ts",
+  connection: "./connection-worker.test-fixture.ts",
 };
 const fixtureWorkers = (
   mode: NativeFixture
@@ -336,7 +338,7 @@ const fixtureWorkers = (
 }> => ({
   withBilling: ["billing", "erasure", "custody"].includes(mode),
   withOidc: ["browser", "login", "custody"].includes(mode),
-  coreModule: fixtureModule(mode),
+  coreModule: fixtureModules[mode] ?? "./core-worker.ts",
   ingressOptions: ["oauth", "connection"].includes(mode)
     ? { upstream: "https://api.fidyapp.com" }
     : {},
@@ -552,6 +554,7 @@ export const nativeBrowserPlatform = createUserPlatform("browser");
 export const nativeConnectionPlatform = createUserPlatform("connection");
 export const nativeCapacityPlatform = createUserPlatform("capacity");
 export const nativeLostReadPlatform = createUserPlatform("lost-read");
+export const nativeTransactionReadPlatform = createUserPlatform("addressed-read");
 export const nativeClockPlatform = createUserPlatform("clock");
 export const nativeUserPlatform = createUserPlatform("user");
 export const nativeBillingPlatform = createUserPlatform("billing");

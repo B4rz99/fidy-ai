@@ -1,7 +1,12 @@
 import { canonicalRetryLifetimeMs } from "../../src/core/quotas/contract";
 import { canonicalRequestProtection } from "../canonical-admission/contract";
 import { NodeFileSystem } from "@effect/platform-node";
-import { alice, nativeTransactionJourney } from "../financial-user-store.test-fixture";
+import { nativePurgePlatform } from "../user-store.test-fixture";
+import {
+  alice,
+  makeNativeTransactionJourney,
+  nativeTransactionJourney,
+} from "../financial-user-store.test-fixture";
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { DateTime, Effect, Option, Schedule, Schema } from "effect";
@@ -148,17 +153,44 @@ const evaluate = (db: D1Database, steps = 6): Effect.Effect<void> =>
     }
   });
 
-// Bracket the alarm using the watchdog's real receipt deadlines. An equal deadline must already
-// exist after capture, and a deadline one millisecond earlier must require repair.
+// Capture schedules recurring evaluation. Earlier admission cleanup and receipt deadlines then take precedence.
 const verifyCaptureWake = Effect.fn(function* (
   db: Effect.Success<typeof nativeTransactionJourney>
 ) {
+  const users = yield* fromPromise(() =>
+    db.runtime.getDurableObjectNamespace("USER_STORE", "core")
+  );
+  const alarm = Effect.fnUntraced(function* () {
+    return yield* fromPromise(() =>
+      users
+        .getByName(alice.user)
+        .fetch("https://fixture.invalid/storage")
+        .then((response) => response.json())
+    ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ alarm: Schema.Int }))));
+  });
+  const due = yield* Schema.decodeUnknownEffect(
+    Schema.NonEmptyArray(Schema.Struct({ facts: Schema.Int, bucket: Schema.Int }))
+  )(
+    yield* fromPromise(() =>
+      db.exec(
+        "SELECT min(created_at_ms)+3600000 AS facts,(SELECT min(virtual_at_ms)+60000 FROM canonical_request_buckets) AS bucket FROM transactions WHERE user_id=?",
+        alice.user
+      )
+    )
+  );
+  expect((yield* alarm()).alarm).toBe(due[0].facts);
+  expect(due[0].bucket).toBeLessThan(due[0].facts);
+  expect(yield* fromPromise(() => db.checkWork(alice.user))).toEqual({
+    status: 204,
+    repaired: "1",
+  });
+  expect((yield* alarm()).alarm).toBe(due[0].bucket);
   yield* fromPromise(() =>
     db.exec(
-      "INSERT INTO canonical_request_receipts SELECT user_id,?,'transactions.createTransaction',?,min(created_at_ms)+3600000-?,200,NULL FROM transactions WHERE user_id=?",
+      "INSERT INTO canonical_request_receipts SELECT user_id,?,'transactions.createTransaction',?,?,200,NULL FROM transactions WHERE user_id=? LIMIT 1",
       "a".repeat(64),
       "b".repeat(64),
-      canonicalRetryLifetimeMs,
+      due[0].bucket - canonicalRetryLifetimeMs,
       alice.user
     )
   );
@@ -173,11 +205,14 @@ const verifyCaptureWake = Effect.fn(function* (
     status: 204,
     repaired: "1",
   });
+  expect((yield* alarm()).alarm).toBe(due[0].bucket - 1);
   yield* fromPromise(() => db.exec("DELETE FROM canonical_request_receipts"));
 });
 
 const historicalPatternJourney = Effect.gen(function* () {
-  const db = yield* nativeTransactionJourney.pipe(TestClock.withLive);
+  const db = yield* makeNativeTransactionJourney(undefined, nativePurgePlatform).pipe(
+    TestClock.withLive
+  );
   yield* fromPromise(() =>
     db.exec(
       "INSERT INTO consent_history(id,user_id,record_type,occurred_at_ms) VALUES(?,?,'processing_grant',0)",

@@ -1,10 +1,10 @@
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, Effect, Option, Schema } from "effect";
 import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
-import { AgentIteration, ToolCallId, TranscriptText } from "../../../src/core/agent/contract";
-import { readLocalSubmission } from "../../ingestion/operations";
+import { TranscriptText } from "../../../src/core/agent/contract";
+import { applyTool } from "./local-tool";
 import { type LocalTurn } from "./local-turn";
-import { appendEntry, entryIdentity, liveTurn, propose } from "./local-turn-store";
+import { liveTurn, propose } from "./local-turn-store";
 import { preserveStoreAlarm } from "../../runtime/sqlite/operations";
 
 const recheckMs = 1000;
@@ -39,30 +39,20 @@ export const documentReply = Effect.fn(function* (turn: LocalTurn, storage: Dura
   let text = TranscriptText.make("No se pudo procesar el archivo adjunto.");
   if (doc.id !== null) {
     const held = yield* Schema.decodeUnknownEffect(publication)(doc);
-    const toolCallId = ToolCallId.make("statement-upload:" + turn.id),
-      operation = CanonicalOperationId.make("ingestion.submitForExtraction"),
-      iteration = AgentIteration.make(1);
-    const result = yield* readLocalSubmission(turn.user_id, held.id);
-    const common = { toolCallId, iteration, operation };
-    yield* appendEntry(turn.session_id, {
-      ...entryIdentity(turn.id)(now),
-      ...common,
-      _tag: "CanonicalToolCallEntry",
-      input: {
-        payload: {
-          idempotencyKey: held.id,
-          reference: { stagingId: held.id, byteLength: held.byte_length, sha256: held.sha256 },
+    const result = yield* applyTool(
+      {
+        id: "statement-upload:" + turn.id,
+        operation: CanonicalOperationId.make("ingestion.submitForExtraction"),
+        params: {
+          payload: {
+            idempotencyKey: held.id,
+            reference: { stagingId: held.id, byteLength: held.byte_length, sha256: held.sha256 },
+          },
         },
       },
-    });
-    yield* appendEntry(turn.session_id, {
-      ...entryIdentity(turn.id)(now),
-      ...common,
-      _tag: "CanonicalToolResultEntry",
-      outcome: { _tag: "Succeeded", output: result.body },
-    });
-    yield* sql`INSERT INTO hosted_tool_calls VALUES(${turn.id},${toolCallId},${operation},'Succeeded',${now})`;
-    if (held.status === "completed") {
+      { turn, iteration: 1, storage }
+    );
+    if (result.outcome._tag === "Succeeded" && held.status === "completed") {
       text = Option.match(held.record, {
         onNone: () =>
           TranscriptText.make(

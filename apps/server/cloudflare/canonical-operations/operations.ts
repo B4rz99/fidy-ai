@@ -24,7 +24,7 @@ import { readLocalProfile } from "../identity/operations";
 import { recurringDiscoveryIntervalMs } from "../recurring/contract";
 import {
   batchOwnersFor,
-  hostedQueryOwners,
+  hostedOwners,
   localBatchOwners,
   localReviewBinding,
 } from "./internal/local-owners";
@@ -959,7 +959,7 @@ export const localHostedCatalog = (
   operationCatalog.operations.filter(
     (operation) =>
       (operation.id === atomicBatchOperation ||
-        hostedQueryOwners.has(operation.id) ||
+        hostedOwners.has(operation.id) ||
         localBatchOwners.has(operation.id) ||
         localReads.has(operation.id) ||
         parameterizedReads.includes(operation.id)) &&
@@ -1048,7 +1048,7 @@ export const prepareHostedOwner = Effect.fn(function* (
       })
     );
   }
-  const owner = hostedQueryOwners.get(operation.id) ?? localBatchOwners.get(operation.id);
+  const owner = hostedOwners.get(operation.id) ?? localBatchOwners.get(operation.id);
   if (owner === undefined) return Option.none();
   return Option.some(yield* owner(input, context));
 });

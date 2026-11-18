@@ -5,6 +5,7 @@ import {
   MediaNeedsReviewItem,
   NeedsReviewItem,
   StatementSubmission,
+  type SubmitForExtractionInput,
 } from "../../../src/core/ingestion/contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import { CanonicalAdmissionUnavailable } from "../../canonical-admission/contract";
@@ -94,4 +95,24 @@ export const localReviewPage = Effect.fn(function* (
   return result(
     yield* Schema.encodeEffect(Schema.toCodecJson(Schema.Array(NeedsReviewItem)))(items)
   );
+});
+
+/** Staging and publication share a native commit. A tool retry may observe only that exact attached file and Turn. */
+export const observeDocumentPublication = Effect.fn(function* (
+  input: SubmitForExtractionInput,
+  { user, turn, current }: { user: UserId; turn: Option.Option<string>; current: number }
+) {
+  if (Option.isNone(turn)) return missing();
+  const sql = yield* SqliteClient;
+  const { reference, idempotencyKey } = input;
+  const scope = yield* hostedStatements(turn.value, user, current);
+  const [row] = yield* sql`SELECT s.id FROM statement_submissions s
+    JOIN statement_staging_objects m ON m.id=s.staging_id AND m.user_id=s.user_id AND m.published_submission_id=s.id
+    JOIN hosted_whatsapp_inbound i ON i.turn_id=s.hosted_turn_id AND i.user_id=s.user_id
+    JOIN statement_documents d ON d.id=s.id AND d.user_id=i.user_id AND d.message=i.message AND d.portfolio=i.portfolio AND d.media_id=i.media_id
+    WHERE s.id IN (${scope}) AND s.user_id=${user} AND s.hosted_turn_id=${turn.value} AND s.idempotency_key=${idempotencyKey}
+    AND m.id=${reference.stagingId} AND m.byte_length=${reference.byteLength} AND m.sha256=${reference.sha256} AND m.expires_at_ms>${current}`;
+  if (row === undefined) return missing();
+  const id = yield* Schema.decodeUnknownEffect(Schema.String)(row.id);
+  return yield* localSubmission(user, id);
 });

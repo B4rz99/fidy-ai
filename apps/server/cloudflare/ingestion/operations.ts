@@ -1,4 +1,8 @@
-import { localReviewPage, localSubmission } from "./internal/local-review-list";
+import {
+  localReviewPage,
+  localSubmission,
+  observeDocumentPublication,
+} from "./internal/local-review-list";
 import { retainDocumentOrigin as retainOrigin } from "./internal/local-document";
 import {
   dispatchLocalForwarding as dispatchLocalForwardingOwned,
@@ -338,3 +342,6 @@ export const readLocalReviewItem: typeof readReviewItem = (...args) => readRevie
 export const readLocalReviewWorkspace: typeof reviewWorkspace = (...args) =>
   reviewWorkspace(...args);
 export const readLocalForwarding: typeof readForwarding = (...args) => readForwarding(...args);
+
+export const readLocalDocumentPublication: typeof observeDocumentPublication = (...args) =>
+  observeDocumentPublication(...args);

@@ -48,6 +48,7 @@ import {
   prepareLocalReviewEdit,
   prepareLocalStatementAbandonment,
   prepareLocalStatementDecision,
+  readLocalDocumentPublication,
   readLocalForwarding,
   readLocalReviewItem,
   readLocalReviewWorkspace,
@@ -168,21 +169,31 @@ const credentialMetadata = Effect.fnUntraced(function* ({
     },
   };
 });
-export const hostedQueryOwners = new Map<string, Prepare>([
+export const hostedOwners = new Map<string, Prepare>([
+  readOwner("ingestion.submitForExtraction", ({ payload }, { user, current, hostedTurn }) =>
+    readLocalDocumentPublication(payload, {
+      user,
+      current,
+      turn: Option.fromUndefinedOr(hostedTurn),
+    })
+  ),
+
   readOwner("subscription.getSubscriptionStatus", (_, { user }) =>
     readLocalSubscriptionStatus(user).pipe(Effect.map(subscriptionReadResult))
   ),
   readOwner("subscription.listSubscriptionOffers", (_, { commercial }) =>
     Effect.gen(function* () {
-      if (commercial === undefined || Option.isNone(commercial.offers))
-        {return yield* new CanonicalAdmissionUnavailable({ cause: "pricing_unavailable" });}
+      if (commercial === undefined || Option.isNone(commercial.offers)) {
+        return yield* new CanonicalAdmissionUnavailable({ cause: "pricing_unavailable" });
+      }
       return subscriptionReadResult(commercial.offers.value);
     })
   ),
   readOwner("subscription.getUpgradeUrl", (_, { commercial }) =>
     Effect.gen(function* () {
-      if (commercial === undefined)
-        {return yield* new CanonicalAdmissionUnavailable({ cause: "browser_origin_unavailable" });}
+      if (commercial === undefined) {
+        return yield* new CanonicalAdmissionUnavailable({ cause: "browser_origin_unavailable" });
+      }
       return subscriptionReadResult(upgradeLocation(commercial.origin));
     })
   ),

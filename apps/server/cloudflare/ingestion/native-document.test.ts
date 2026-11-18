@@ -1,3 +1,4 @@
+import { localHostedCatalog } from "../canonical-operations/operations";
 import { completeHostedClarification } from "./clarification.test-fixture";
 import { statementStagingLifetimeMilliseconds } from "../../src/core/ingestion/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
@@ -414,6 +415,16 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       })
   );
 
+  test.effect("offers publication only under verified WhatsApp authority", () =>
+    Effect.sync(() => {
+      expect(localHostedCatalog("verified-whatsapp").map((op) => op.id)).toContain(
+        "ingestion.submitForExtraction"
+      );
+      expect(localHostedCatalog("no-verified-whatsapp-authority").map((op) => op.id)).not.toContain(
+        "ingestion.submitForExtraction"
+      );
+    })
+  );
   const verifyHostedOrigin = Effect.fnUntraced(function* (batched: boolean) {
     const { owner, runtime, deliver } = yield* documentJourney();
     expect((yield* deliver()).status).toBe(202);

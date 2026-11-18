@@ -1,0 +1,35 @@
+apps/server/cloudflare/agent/hosted-alarm.test-fixture.ts
+  s_a1be23a656acf0::t_abe9448dc0983d 1,9-45,47-48
+apps/server/cloudflare/agent/native-turn-lifecycle.test.ts
+  s_a1be23a656acf0::t_8881ae91c50a3b 127-178,192,276-279
+apps/server/cloudflare/agent/provider.test-fixture.ts
+  s_a1be23a656acf0::t_fc33ecd109ab3c 2,4-5,45-46,103-133,135-136
+apps/server/cloudflare/core-http/runtime.ts
+  s_a1be23a656acf0::t_eefcb24893d708 128
+apps/server/cloudflare/directory/operations.ts
+  s_a1be23a656acf0::t_5a734d0034f8d6 73-75
+apps/server/cloudflare/public-worker.ts
+  s_a1be23a656acf0::t_f669684c5af6aa 888-889
+apps/server/cloudflare/user-store.test-fixture.ts
+  s_a1be23a656acf0::t_d84b166248ee29 211,219,356,366,524
+apps/server/cloudflare/user-store/runtime.ts
+  s_a1be23a656acf0::t_cf357442966f7b 1039-1040
+infra/cloudflare/native-application.ts
+  s_a1be23a656acf0::t_15c83f847e2099 45-48,79,188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "484c6c50954f7e0fcc92b94e4eb5d103fe0ef74e",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

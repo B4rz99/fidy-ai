@@ -5,6 +5,7 @@ import { expect } from "vitest";
 import { browser } from "../browser-bootstrap.test-fixture";
 import { native, nativeBrowserPlatform } from "../user-store.test-fixture";
 import { BackupRecoveryCode } from "../../src/core/recovery/contract";
+import { directoryName, supportAdmissionUrl } from "../directory/contract";
 import { ProviderBrowserProof } from "../../src/shell/provider-authentication/contract";
 
 const scenario = Effect.gen(function* () {
@@ -128,7 +129,68 @@ const scenario = Effect.gen(function* () {
   expect(session.status).toBe(200);
   expect(session.headers.get("set-cookie")).toContain("__Host-fidy_session=");
 });
+const supportWindows = Effect.gen(function* () {
+  const runtime = yield* (yield* nativeBrowserPlatform)();
+  const directory = (yield* native(() =>
+    runtime.getDurableObjectNamespace("DIRECTORY", "core")
+  )).getByName(directoryName);
+  const storage = yield* native(() =>
+    runtime.unsafeGetDurableObjectStorage("core", "Directory", { name: directoryName })
+  );
+  const now = yield* Clock.currentTimeMillis,
+    minute = 60_000,
+    hour = 60 * minute;
+  const admit = (subject: string): Effect.Effect<number> =>
+    native(() =>
+      directory.fetch(supportAdmissionUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          subject,
+          issuer: "https://support.example",
+          issuedAtMs: now - minute,
+          expiresAtMs: now + hour,
+        }),
+      })
+    ).pipe(Effect.map((reply) => reply.status));
+  const age = (interval: number): Effect.Effect<unknown> =>
+    native(() =>
+      storage.exec(
+        "UPDATE support_recovery_admissions SET admitted_at_ms=admitted_at_ms-?",
+        interval
+      )
+    );
+  for (let window = 0; window < 4; window++) {
+    for (const operator of ["one", "two", "three", "four"]) {
+      for (let request = 0; request < 5; request++) expect(yield* admit(operator)).toBe(204);
+      expect(yield* admit(operator)).toBe(429);
+    }
+    expect(yield* admit("extra")).toBe(429);
+    yield* age(minute + 1);
+  }
+  expect(yield* admit("one")).toBe(429);
+  for (const operator of ["five", "six", "seven", "eight"]) {
+    for (let request = 0; request < 5; request++) expect(yield* admit(operator)).toBe(204);
+  }
+  yield* age(minute + 1);
+  expect(yield* admit("extra")).toBe(429);
+  expect(
+    yield* native(() =>
+      storage.exec("SELECT count(*) AS admitted FROM support_recovery_admissions")
+    )
+  ).toEqual([{ admitted: 100 }]);
+  yield* age(hour);
+  expect(yield* admit("one")).toBe(204);
+  expect(
+    yield* native(() =>
+      storage.exec("SELECT count(*) AS admitted FROM support_recovery_admissions")
+    )
+  ).toEqual([{ admitted: 1 }]);
+});
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "enforces operator and global minute and hour windows at the Directory before reserving support work",
+    () => supportWindows
+  );
   test.effect(
     "redeems one operator-approved recovery case only through its original browser verifier",
     () => scenario

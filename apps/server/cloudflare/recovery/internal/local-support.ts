@@ -4,10 +4,10 @@ import {
   RecoveryCandidate,
   localRecoveryCheckUrl,
 } from "../../directory/contract";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 
-import { withStoreCapacity } from "../../runtime/sqlite/operations";
+import { preserveStoreAlarm, withStoreCapacity } from "../../runtime/sqlite/operations";
 
 const maximumWrongProofs = 5;
 const refused = (): Response =>
@@ -34,7 +34,8 @@ const checkCandidate = Effect.fn(function* (request: Request, owns: (id: string)
 /** The recovery credential, operator case and ordered pairing approval change in one User transaction. */
 export const localSupportApproval = Effect.fn(function* (
   request: Request,
-  owns: (user: string) => boolean
+  owns: (user: string) => boolean,
+  storage: DurableObjectStorage
 ) {
   if (request.url === localRecoveryCheckUrl) return yield* checkCandidate(request, owns);
   const handoff = yield* Schema.decodeUnknownEffect(FrozenRecovery)(
@@ -58,5 +59,46 @@ export const localSupportApproval = Effect.fn(function* (
       yield* sql`INSERT INTO support_recovery_cases VALUES(${handoff.id},${handoff.user_id},${handoff.pairing_id},${handoff.operator_issuer},${handoff.operator_subject},${handoff.revision},${now},${handoff.expires_at_ms},'approved',${now}) RETURNING 1`;
     if (ready.length !== 1 || evidence.length !== 1) return yield* new DirectoryWriteUnavailable();
     return Response.json({ status: "approved" }, { headers: { "cache-control": "no-store" } });
-  }).pipe(withStoreCapacity("growth"));
+  }).pipe(
+    withStoreCapacity("growth"),
+    Effect.tap((response) => (response.ok ? repairSupportRetention(storage) : Effect.void))
+  );
+});
+
+const supportPageSize = 32;
+const pendingCase = Effect.gen(function* () {
+  const sql = yield* SqliteClient;
+  const [first] =
+    yield* sql`SELECT user_id,retained_until_ms FROM support_recovery_cases WHERE NOT EXISTS(SELECT 1 FROM erasure_requests) ORDER BY retained_until_ms,id LIMIT 1`;
+  return yield* Schema.decodeUnknownEffect(
+    Schema.OptionFromUndefinedOr(
+      Schema.Struct({ user_id: Schema.String, retained_until_ms: Schema.Int })
+    )
+  )(first);
+});
+export const repairSupportRetention = Effect.fn(function* (storage: DurableObjectStorage) {
+  const pending = yield* pendingCase;
+  return Option.isNone(pending)
+    ? false
+    : yield* preserveStoreAlarm(storage, pending.value.retained_until_ms);
+});
+export const expireSupportCases = Effect.fn(function* (
+  current: number,
+  storage: DurableObjectStorage,
+  owns: (id: string) => boolean
+) {
+  const earliest = yield* pendingCase;
+  if (Option.isNone(earliest)) return { attempted: 0, failed: 0 };
+  const { user_id: user, retained_until_ms: due } = earliest.value;
+  if (!owns(user)) return yield* new DirectoryWriteUnavailable();
+  if (due > current) {
+    yield* preserveStoreAlarm(storage, due);
+    return { attempted: 0, failed: 0 };
+  }
+  const sql = yield* SqliteClient;
+  const removed = yield* withStoreCapacity("required")(
+    sql`DELETE FROM support_recovery_cases WHERE id IN (SELECT id FROM support_recovery_cases WHERE user_id=${user} AND retained_until_ms<=${current} AND NOT EXISTS(SELECT 1 FROM erasure_requests) ORDER BY retained_until_ms,id LIMIT ${supportPageSize}) RETURNING id`
+  );
+  yield* repairSupportRetention(storage);
+  return { attempted: removed.length, failed: 0 };
 });

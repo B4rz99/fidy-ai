@@ -3,7 +3,11 @@ import {
   repairRecoveryAlarm as nativeRepairRecoveryAlarm,
   rotateLocalRecovery as nativeRotateLocalRecovery,
 } from "./internal/local-rotation";
-import { localSupportApproval as nativeLocalSupportApproval } from "./internal/local-support";
+import {
+  expireSupportCases as nativeExpireSupportCases,
+  localSupportApproval as nativeLocalSupportApproval,
+  repairSupportRetention as nativeRepairSupportRetention,
+} from "./internal/local-support";
 
 import { Hex } from "effect/encoding";
 import {
@@ -136,3 +140,8 @@ export const recoverRotations: typeof nativeRecoverRotations = (...args) =>
 
 export const localSupportApproval: typeof nativeLocalSupportApproval = (...args) =>
   nativeLocalSupportApproval(...args);
+
+export const repairSupportRetention: typeof nativeRepairSupportRetention = (...args) =>
+  nativeRepairSupportRetention(...args);
+export const expireSupportCases: typeof nativeExpireSupportCases = (...args) =>
+  nativeExpireSupportCases(...args);

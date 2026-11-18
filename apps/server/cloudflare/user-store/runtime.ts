@@ -115,9 +115,11 @@ import {
   repairLoginAlarm,
 } from "../email-authentication/runtime";
 import {
+  expireSupportCases,
   localSupportApproval,
   recoverRotations,
   repairRecoveryAlarm,
+  repairSupportRetention,
   rotateLocalRecovery,
 } from "../recovery/operations";
 import {
@@ -434,6 +436,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           recoverLocalRecurringSeries(current, this.ctx.storage, this.owns),
           recoverLocalReceipts(current, this.ctx.storage),
           recoverLocalAudit(current, this.ctx.storage, this.owns),
+          expireSupportCases(current, this.ctx.storage, this.owns),
           Effect.scoped(
             Effect.flatMap(Layer.build(OutboundHttpLive), (clients) =>
               recoverLocalIngestion(current, this.ctx.storage, this.env).pipe(
@@ -709,6 +712,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
             repairRecoveryAlarm(current, storage),
             repairReceiptAlarm(current, storage),
             repairLocalAuditAlarm(current, storage),
+            repairSupportRetention(storage),
             repairLocalIngestionAlarm(current, storage),
             checkConnectionAlarm(storage),
             repairConnectionRetention({ storage, adapters }),
@@ -999,7 +1003,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     }
     if ([localSupportUrl, localRecoveryCheckUrl].includes(request.url)) {
       return respond(
-        localSupportApproval(request, owns).pipe(
+        localSupportApproval(request, owns, this.ctx.storage).pipe(
           Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
         )
       );

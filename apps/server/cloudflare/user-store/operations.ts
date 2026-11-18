@@ -1262,6 +1262,15 @@ export const userStoreHistory: StoreHistory = {
         "INSERT INTO category_opportunities(user_id,kind,source) SELECT user_id,'budget-threshold',id FROM (SELECT user_id,id,row_number() OVER(PARTITION BY user_id ORDER BY created_at_ms,id) AS ordinal FROM budgets) WHERE ordinal=1",
       ],
     },
+    {
+      version: 38,
+      id: "support-recovery-case-retention",
+      statements: [
+        "ALTER TABLE support_recovery_cases ADD COLUMN retained_until_ms INTEGER GENERATED ALWAYS AS (unixepoch(closed_at_ms/1000,'unixepoch','+24 months','floor')*1000+(closed_at_ms%1000)) VIRTUAL",
+        "CREATE INDEX support_case_retention ON support_recovery_cases(retained_until_ms,id)",
+        "CREATE TRIGGER immutable_support_case BEFORE UPDATE ON support_recovery_cases BEGIN SELECT RAISE(ABORT,'immutable support decision'); END",
+      ],
+    },
   ],
 };
 

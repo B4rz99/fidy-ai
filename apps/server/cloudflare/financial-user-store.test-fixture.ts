@@ -142,7 +142,7 @@ export const makeNativeTransactionJourney = Effect.fn(function* (ceiling?: strin
       .then((body) =>
         runtime.dispatchFetch(request.url, {
           method: request.method,
-          headers: Object.fromEntries(headers),
+          headers: { ...Object.fromEntries(headers), connection: "close" },
           ...body,
         })
       )

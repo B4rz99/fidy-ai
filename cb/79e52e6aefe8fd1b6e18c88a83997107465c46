@@ -1,0 +1,21 @@
+apps/server/cloudflare/subscription/native-refund.test.ts
+  s_a1be23a656acf0::t_721349d3c89d5b 18,33-35,47-90,107,197-262
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_28b5761d03b574 7-29,31-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb79e52e6aefe8fd1b6e18c88a83997107465c46",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

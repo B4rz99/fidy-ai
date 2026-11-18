@@ -26,13 +26,25 @@ const invalidStatus = 400;
 const unauthorizedStatus = 401;
 const reply = (status: number): Response =>
   new Response(null, { status, headers: { "cache-control": "no-store" } });
-export const operatorRequest = (
-  input: Readonly<{
-    request: Request;
-    environment: ErasureOperatorEnvironment;
-    storeIds: ReadonlyArray<string>;
-    http: OutboundHttpService;
-  }>
+type NativeEnvironment = Pick<
+  ErasureOperatorEnvironment,
+  | "CLOUDFLARE_ACCESS_ISSUER"
+  | "CLOUDFLARE_ACCESS_AUDIENCE"
+  | "ERASURE_SUPPORT_AUDIENCE"
+  | "BILLING_SUPPORT_AUDIENCE"
+  | "PRICING_PUBLISH_AUDIENCE"
+  | "SAMPLE_REVIEW_AUDIENCE"
+  | "ERASURE"
+>;
+type OperatorCall = { request: Request; environment: NativeEnvironment; http: OutboundHttpService };
+type Admitted = {
+  command: typeof ErasureOperatorAction.Type;
+  operator: { operatorRef: string; expiresAtMs: number };
+  current: number;
+};
+const admittedCommand = (
+  input: OperatorCall,
+  apply: (admission: Admitted) => Effect.Effect<Response, ErasureUnavailable | Schema.SchemaError>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (!validRequest(input.request)) return reply(invalidStatus);
@@ -49,16 +61,37 @@ export const operatorRequest = (
     if (Option.isNone(action)) return reply(invalidStatus);
     const current = yield* Clock.currentTimeMillis;
     if (operator.value.expiresAtMs <= current) return reply(unauthorizedStatus);
-    if (input.environment.USER_STORE !== undefined && input.environment.ERASURE === undefined) {
-      return reply(unavailableStatus);
-    }
-    return yield* dispatchOperator({
-      ...input,
-      command: action.value,
-      operator: operator.value,
-      current,
-    });
+    return yield* apply({ command: action.value, operator: operator.value, current });
   }).pipe(Effect.orElseSucceed(() => reply(unavailableStatus)));
+
+export const nativeOperatorRequest = (input: OperatorCall): Effect.Effect<Response> =>
+  admittedCommand(input, (admission) => {
+    const erasure = input.environment.ERASURE;
+    if (erasure === undefined) return Effect.succeed(reply(unavailableStatus));
+    const command = admission.command;
+    switch (command.action) {
+      case "CustodyEvidence":
+      case "CustodyScope":
+      case "Continue":
+      case "Receipt":
+        return forwardCommand({
+          ...admission,
+          command,
+          request: input.request,
+          target: () => erasure.getByName(erasureRegistryName),
+        });
+      default:
+        return Effect.succeed(reply(invalidStatus));
+    }
+  });
+export const operatorRequest = (
+  input: OperatorCall & { environment: ErasureOperatorEnvironment; storeIds: ReadonlyArray<string> }
+): Effect.Effect<Response> =>
+  admittedCommand(input, (admission) =>
+    input.environment.USER_STORE !== undefined && input.environment.ERASURE === undefined
+      ? Effect.succeed(reply(unavailableStatus))
+      : dispatchOperator({ ...input, ...admission })
+  );
 
 const dispatchOperator = (
   input: Readonly<{
@@ -103,6 +136,9 @@ const dispatchOperator = (
       });
     }
     return yield* forwardCommand({
+      target: () =>
+        input.environment.ERASURE?.getByName(erasureRegistryName) ??
+        input.environment.USER_TRANSACTION_COORDINATOR.getByName(command.userId),
       ...input,
       command,
       operator,
@@ -148,7 +184,7 @@ type UserCommand = Exclude<
 const forwardCommand = (
   input: Readonly<{
     request: Request;
-    environment: ErasureOperatorEnvironment;
+    target: () => Pick<Fetcher, "fetch">;
     command: UserCommand;
     operator: Readonly<{ operatorRef: string; expiresAtMs: number }>;
     current: number;
@@ -167,10 +203,7 @@ const forwardCommand = (
     const path = commandPath(command);
     return yield* Effect.tryPromise({
       try: () =>
-        (
-          input.environment.ERASURE?.getByName(erasureRegistryName) ??
-          input.environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId)
-        ).fetch(
+        input.target().fetch(
           new Request(`https://coordinator.internal/${path}`, {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -224,9 +257,7 @@ const commandBody = (
   return { ...admission, reference: command.reference };
 };
 
-const operatorConfiguration = (
-  environment: ErasureOperatorEnvironment
-): OperatorAccessConfiguration => ({
+const operatorConfiguration = (environment: NativeEnvironment): OperatorAccessConfiguration => ({
   issuer: environment.CLOUDFLARE_ACCESS_ISSUER,
   audience: environment.ERASURE_SUPPORT_AUDIENCE ?? "",
   requiredEmail: Option.some("obarboza@fidyapp.com"),

@@ -23,7 +23,6 @@ import {
   routeSessionRequest,
 } from "../../directory/operations";
 
-import { coordinatorErasureStoreIds } from "../../transactions/runtime";
 import { UpdateTransactionsInput } from "../../../src/shell/transactions/contract";
 import { prepareBoundRecurringWorkspace } from "../../recurring-plans/operations";
 import {
@@ -42,7 +41,7 @@ import { browserSessionBindingResponse } from "../../web-session/operations";
 import type { BancolombiaAuthenticationFailed } from "../../bancolombia-authentication/contract";
 import { ReviewCommand, sampleReviewPath } from "../../../src/core/ingestion/contract";
 import { RecurringCommand } from "../../../src/core/recurring-plans/contract";
-import { handleErasureOperator } from "../../erasure/runtime";
+import { handleNativeErasureOperator } from "../../erasure/runtime";
 import { captureTraceHeaders } from "../../runtime/telemetry/operations";
 
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
@@ -1631,14 +1630,7 @@ const supportCoreResponse = (
 ): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
   if (path === sampleReviewPath) return Option.some(handleSampleReview(request, environment));
   if (path === "/internal/titular-erasure") {
-    return Option.some(
-      handleErasureOperator({
-        request,
-        environment,
-        storeIds:
-          environment.ERASURE === undefined ? coordinatorErasureStoreIds(environment.DB) : [],
-      })
-    );
+    return Option.some(handleNativeErasureOperator(request, environment));
   }
   if (path === pricePublicationPath) {
     return Option.some(handlePricePublication({ request, environment }));

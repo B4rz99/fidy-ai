@@ -17,7 +17,7 @@ import {
 import type { ErasureUnavailable } from "../erasure-store/contract";
 import { verifyCustodyCompletion, verifyCustodyRetention } from "./custody.test-fixture";
 import { resumeErasureCases } from "./operations";
-import { handleErasureOperator, withErasureRecovery } from "./runtime";
+import { handleErasureOperator, handleNativeErasureOperator, withErasureRecovery } from "./runtime";
 import { makePublicWorker } from "../public-worker";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 
@@ -597,63 +597,64 @@ const verifyRestore = Effect.fn(function* (separated: boolean) {
     Effect.gen(function* () {
       const body = yield* Schema.encodeEffect(json)(command);
       const run = Effect.runPromiseWith(yield* Effect.context<never>());
-      const dispatch = (request: Request): Promise<Response> =>
-        run(
-          handleErasureOperator({
-            request,
-            storeIds: coordinatorErasureStoreIds(native.db),
-            environment: {
-              DB: native.db,
-              ...(["native", "native-missing"].includes(route)
-                ? { USER_STORE: native.coordinator }
-                : {}),
-              ...(route === "native"
-                ? {
-                    ERASURE: {
-                      getByName: (name: string) => ({
-                        fetch: (): Promise<Response> =>
-                          Promise.resolve(
-                            new Response(null, {
-                              status: name === "erasure-registry-v1" ? 204 : 404,
-                            })
-                          ),
-                      }),
-                    },
-                  }
-                : {}),
-              ERASURE_BUCKET: native.rawErasure,
-              ...(separated ? { ERASURE_REGISTRY: native.metadata } : {}),
-              ERASURE_REQUIRED: "true",
-              CLOUDFLARE_ACCESS_ISSUER: issuer,
-              CLOUDFLARE_ACCESS_AUDIENCE: "recovery-only",
-              ERASURE_SUPPORT_AUDIENCE: audience,
-              USER_TRANSACTION_COORDINATOR: {
-                getByName: (name) => ({
-                  fetch: (value, init) =>
-                    route === "native-missing"
-                      ? Promise.resolve(new Response(null, { status: 204 }))
-                      : native.coordinator
-                          .getByName(name)
-                          .fetch(value, init)
-                          .then((response) => {
-                            if (
-                              new URL(new Request(value, init).url).pathname ===
-                                "/erasure-restore" &&
-                              response.status === 202
-                            ) {
-                              const outcome = transport.reply;
-                              transport.reply = "Pass";
-                              if (outcome === "Lose") {
-                                throw new Error("Accepted restore reply lost");
-                              }
-                              if (outcome === "Abort") transport.cancellation.abort();
-                            }
-                            return response;
-                          }),
+      const environment: Parameters<typeof handleErasureOperator>[0]["environment"] = {
+        DB: native.db,
+        ...(["native", "native-missing"].includes(route) ? { USER_STORE: native.coordinator } : {}),
+        ...(route === "native"
+          ? {
+              ERASURE: {
+                getByName: (name: string) => ({
+                  fetch: (): Promise<Response> =>
+                    Promise.resolve(
+                      new Response(null, {
+                        status: name === "erasure-registry-v1" ? 204 : 404,
+                      })
+                    ),
                 }),
               },
-            },
-          }).pipe(Effect.provideService(HttpClient.HttpClient, http))
+            }
+          : {}),
+        ERASURE_BUCKET: native.rawErasure,
+        ...(separated ? { ERASURE_REGISTRY: native.metadata } : {}),
+        ERASURE_REQUIRED: "true",
+        CLOUDFLARE_ACCESS_ISSUER: issuer,
+        CLOUDFLARE_ACCESS_AUDIENCE: "recovery-only",
+        ERASURE_SUPPORT_AUDIENCE: audience,
+        USER_TRANSACTION_COORDINATOR: {
+          getByName: (name) => ({
+            fetch: (value, init) =>
+              route === "native-missing"
+                ? Promise.resolve(new Response(null, { status: 204 }))
+                : native.coordinator
+                    .getByName(name)
+                    .fetch(value, init)
+                    .then((response) => {
+                      if (
+                        new URL(new Request(value, init).url).pathname === "/erasure-restore" &&
+                        response.status === 202
+                      ) {
+                        const outcome = transport.reply;
+                        transport.reply = "Pass";
+                        if (outcome === "Lose") {
+                          throw new Error("Accepted restore reply lost");
+                        }
+                        if (outcome === "Abort") transport.cancellation.abort();
+                      }
+                      return response;
+                    }),
+          }),
+        },
+      };
+      const dispatch = (request: Request): Promise<Response> =>
+        run(
+          (route === "native" || route === "native-missing"
+            ? handleNativeErasureOperator(request, environment)
+            : handleErasureOperator({
+                request,
+                environment,
+                storeIds: coordinatorErasureStoreIds(native.db),
+              })
+          ).pipe(Effect.provideService(HttpClient.HttpClient, http))
         );
       const request = new Request("https://api.fidyapp.com/internal/titular-erasure", {
         method: "POST",

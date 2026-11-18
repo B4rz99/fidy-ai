@@ -1,0 +1,19 @@
+apps/server/cloudflare/email-authentication/native-login.test.ts
+  s_a1be23a656acf0::t_dc167ddcef62aa 280-291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7aed0c265f076198aa0f31087be0b6442cb6c7e7",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

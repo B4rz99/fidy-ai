@@ -5,13 +5,13 @@ import { collectUserBillingUrl } from "./contract";
 import { ownerCheckUrl } from "../maintenance/contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Schedule, Schema } from "effect";
+import { DateTime, Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
 import { alice, bob, seed } from "../financial-user-store.test-fixture";
 import { native, nativeBillingPlatform } from "../user-store.test-fixture";
 import { browserOrigins, productionTopology } from "../runtime/contract";
 
-const canonicalStatus = Effect.fn(function* (runtime: Miniflare, path: string) {
+const canonicalListing = Effect.fn(function* (runtime: Miniflare, path: string) {
   const response = yield* native(() =>
     runtime.dispatchFetch("https://" + productionTopology.ingress.hostname + path, {
       headers: {
@@ -21,7 +21,8 @@ const canonicalStatus = Effect.fn(function* (runtime: Miniflare, path: string) {
       },
     })
   );
-  return response.status;
+  expect(response.status).toBe(200);
+  return yield* native(() => response.json());
 });
 
 const assertRenewalTerms = Effect.fn(function* (
@@ -233,8 +234,41 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           owner.now + 604800000,
           alice.user
         );
-        expect(yield* canonicalStatus(runtime, "/subscription/offers")).toBe(200);
-        expect(yield* canonicalStatus(runtime, "/subscription/status")).toBe(200);
+        expect(yield* canonicalListing(runtime, "/subscription/offers")).toEqual({
+          data: [
+            { suffix: "1", period: "weekly", amount: "9900" },
+            { suffix: "2", period: "monthly", amount: "28900" },
+            { suffix: "3", period: "yearly", amount: "289900" },
+          ].map(({ suffix, period, amount }) => ({
+            id: "22700000-0000-4000-8000-00000000000" + suffix,
+            billingPeriod: period,
+            serviceMarket: "CO",
+            taxTreatment: "not-taxable",
+            money: { amount, currency: "COP" },
+            renewalTerms: {
+              automaticRenewal: true,
+              renewalReminder: "none",
+              cancellation: "future-renewals-only",
+              paidAccessEnds: "paid-period-end",
+            },
+            paymentMethods: ["card", "nequi", "daviplata"],
+          })),
+          next: [],
+        });
+        expect(yield* canonicalListing(runtime, "/subscription/status")).toEqual({
+          data: {
+            accessTier: "pro",
+            hasProGrant: false,
+            trialPeriod: {
+              startedAt: DateTime.formatIso(DateTime.makeUnsafe(owner.now)),
+              endsAt: DateTime.formatIso(DateTime.makeUnsafe(owner.now + 604800000)),
+            },
+            paidSubscription: null,
+            cancellation: null,
+            recentAttempts: [],
+          },
+          next: [],
+        });
         const replacement = {
           ...form.price,
           id: "22480000-0000-4000-8000-000000000002",

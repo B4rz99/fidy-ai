@@ -189,8 +189,28 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         expect(yield* native(() => repeated.text())).not.toContain(issued.data.bearer);
         const list = yield* browser("/pats", alice, { method: "GET" });
         expect(list.status).toBe(200);
-        expect(yield* native(() => list.json())).toMatchObject({
-          data: { pats: [{ shortId: issued.data.pat.shortId }] },
+        const dates = yield* Schema.decodeUnknownEffect(
+          Schema.Tuple([Schema.Struct({ created_at_ms: Schema.Int, expires_at_ms: Schema.Int })])
+        )(
+          yield* owner.exec(
+            "SELECT created_at_ms,expires_at_ms FROM pats WHERE short_id=?",
+            issued.data.pat.shortId
+          )
+        );
+        expect(yield* native(() => list.json())).toEqual({
+          data: {
+            pats: [
+              {
+                shortId: issued.data.pat.shortId,
+                recipientLabel: "CLI",
+                scopes: ["write"],
+                createdAt: DateTime.formatIso(DateTime.makeUnsafe(dates[0].created_at_ms)),
+                expiresAt: DateTime.formatIso(DateTime.makeUnsafe(dates[0].expires_at_ms)),
+                lastUsedAt: null,
+              },
+            ],
+          },
+          next: [],
         });
         const path = "/pats/" + issued.data.pat.shortId;
         const foreign = yield* browser(path, bob, { method: "DELETE" });

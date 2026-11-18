@@ -230,7 +230,7 @@ export const selectReviewPage = ({
 export const listNeedsReviewItems = (
   input: Readonly<{
     database: D1Database;
-    environment: Parameters<typeof commitReadAudit>[0];
+    environment: Parameters<typeof commitReadAudit>[0]["environment"];
     subject: QueryCaller;
     url: URL;
   }>
@@ -238,9 +238,13 @@ export const listNeedsReviewItems = (
   Effect.gen(function* () {
     const page = reviewPage(input.url);
     if (Option.isNone(page)) return validationFailed("Invalid review page.");
-    const refusal = yield* commitReadAudit(input.environment, input.subject, {
-      submissionId: "",
-      operation: "ingestion.listNeedsReviewItems",
+    const refusal = yield* commitReadAudit({
+      environment: input.environment,
+      subject: input.subject,
+      read: {
+        submissionId: "",
+        operation: "ingestion.listNeedsReviewItems",
+      },
     });
     if (Option.isSome(refusal)) return refusal.value;
     return yield* readCanonicalReviewPage({

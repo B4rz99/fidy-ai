@@ -16,7 +16,7 @@ import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter } from "effect/http";
 import { operationCatalog } from "../../src/shell/api";
 import { checkpointResponseSuggestions } from "../../src/shell/canonical-operations/operations";
-import { installedCanonicalOperations } from "../canonical-operations/operations";
+import { nativeMcpCatalog } from "./operations";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import {
   OAuthCanonicalAdmission,
@@ -307,7 +307,7 @@ const catalogTools = (scopes: PATScopes): Effect.Effect<CatalogProjection, Schem
     const cached = catalogProjections.get(projectionKey);
     if (cached !== undefined) return cached;
     const tools: Array<RegisteredTool> = [];
-    for (const operation of installedCanonicalOperations()
+    for (const operation of nativeMcpCatalog()
       .filter(available)
       .toSorted((left, right) => left.id.localeCompare(right.id))) {
       const projected = projectMcpSchemas({ operation, catalog: operationCatalog, allowedIds });

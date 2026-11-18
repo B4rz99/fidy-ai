@@ -1,4 +1,4 @@
-import type { CoreHttpEnvironment } from "../core-http/contract";
+import type { ErasureRegistryNamespace } from "../erasure/contract";
 import { refundResultResponse } from "./internal/refund-http-response";
 import { openAiTestKey, withOpenAiFetch } from "../openai.test-fixture";
 import { type Cause, Clock, Effect, Exit, Schema } from "effect";
@@ -93,7 +93,7 @@ const setup = Effect.fnUntraced(function* () {
 const publicSupport = (
   request: Request,
   environment: RefundSupportEnvironment &
-    Pick<CoreHttpEnvironment, "DB" | "USER_TRANSACTION_COORDINATOR">
+    Readonly<{ DB: D1Database; USER_TRANSACTION_COORDINATOR: ErasureRegistryNamespace }>
 ): Promise<Response> =>
   publicWorker.fetch(request, {
     BROWSER_ORIGIN: "https://app.fidyapp.com",

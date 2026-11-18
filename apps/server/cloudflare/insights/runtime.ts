@@ -5,7 +5,6 @@ import { dispatchDisclosure } from "./internal/local-disclosure";
 import type { WhatsAppTurnAdmission } from "../whatsapp/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { deliverReminder, processReminder, repairReminder } from "./internal/local-reminder";
-import { withErasureRecovery } from "../erasure/runtime";
 import { evidenceRetentionDue, summariesDue } from "./internal/cadence";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -458,7 +457,7 @@ export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
           coordinator,
           payload: event.payload,
           step,
-          environment: withErasureRecovery(this.env),
+          environment: this.env,
         }),
       {
         environment: workerRelease(this.env),

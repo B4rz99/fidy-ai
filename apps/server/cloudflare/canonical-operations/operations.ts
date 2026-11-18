@@ -953,20 +953,23 @@ const parameterizedReads = [
   "ingestion.getStatementSubmission",
   "ingestion.listNeedsReviewItems",
 ];
+/** Installed public operations use the same User-owned handlers that execute each catalog call. */
+export const nativeCanonicalOperations = (): ReadonlyArray<CatalogOperation> =>
+  operationCatalog.operations.filter(
+    (operation) =>
+      operation.id === atomicBatchOperation ||
+      hostedOwners.has(operation.id) ||
+      localBatchOwners.has(operation.id) ||
+      localReads.has(operation.id) ||
+      parameterizedReads.includes(operation.id)
+  );
 export const localHostedCatalog = (
   authorityRoot: CanonicalAuthorityRoot
 ): ReadonlyArray<CatalogOperation> =>
-  operationCatalog.operations.filter(
+  nativeCanonicalOperations().filter(
     (operation) =>
-      (operation.id === atomicBatchOperation ||
-        hostedOwners.has(operation.id) ||
-        localBatchOwners.has(operation.id) ||
-        localReads.has(operation.id) ||
-        parameterizedReads.includes(operation.id)) &&
-      decideOperationAccess(operation.policy.access, {
-        _tag: "HostedAgentSession",
-        authorityRoot,
-      })._tag === "Allowed"
+      decideOperationAccess(operation.policy.access, { _tag: "HostedAgentSession", authorityRoot })
+        ._tag === "Allowed"
   );
 const readParameter = Effect.fn(function* (
   operation: CatalogOperation,

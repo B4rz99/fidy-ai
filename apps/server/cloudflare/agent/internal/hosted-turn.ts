@@ -28,11 +28,7 @@ import {
 import { mintHostedStatementCaller } from "./statement-authority";
 import { confirmedOutcome, findConfirmedCall, findConfirmedOutcome } from "./confirmed-outcome";
 import { AgentUnavailable, type HostedCommitFence, pendingExecutionRecoveryMs } from "../contract";
-import {
-  executeCanonicalQuery,
-  installedCanonicalOperations,
-  installedHostedStatementOperations,
-} from "../../canonical-operations/operations";
+import { executeCanonicalQuery, localHostedCatalog } from "../../canonical-operations/operations";
 import {
   CanonicalToolCallEntry,
   CanonicalToolEvidence,
@@ -125,18 +121,10 @@ type HostedWorkFailure =
   | AgentUnavailable
   | InsightUnavailable;
 
-const hostedExecutableOperations = installedCanonicalOperations().filter(
-  ({ policy }) =>
-    decideOperationAccess(policy.access, {
-      _tag: "HostedAgentSession",
-      authorityRoot: "no-verified-whatsapp-authority",
-    })._tag === "Allowed"
-);
-
-const executableOperationsFor = (
-  subject: HostedSubject
-): Readonly<typeof hostedExecutableOperations> =>
-  isWhatsAppHosted(subject) ? installedHostedStatementOperations() : hostedExecutableOperations;
+const executableOperationsFor = (subject: HostedSubject): ReturnType<typeof localHostedCatalog> =>
+  localHostedCatalog(
+    isWhatsAppHosted(subject) ? "verified-whatsapp" : "no-verified-whatsapp-authority"
+  );
 
 const requiresHostedConfirmation = (
   subject: HostedSubject,

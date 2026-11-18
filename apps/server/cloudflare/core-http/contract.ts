@@ -1,18 +1,15 @@
 import type { SharedBindings } from "../storage-bootstrap/contract";
 import type { UserStoreBindings } from "../directory/contract";
-import type { ErasureRegistry } from "../erasure/contract";
-import type { ProviderEnvironment } from "../provider-authentication/contract";
+import type { ProviderConfiguration } from "../provider-authentication/contract";
 import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
 
 /** Private HTTP binding boundary; no model execution or scheduled maintenance authority. */
-export type CoreHttpEnvironment = ProviderEnvironment &
+export type CoreHttpEnvironment = ProviderConfiguration &
   Partial<UserStoreBindings> &
   SharedBindings &
   Readonly<{
-    DB: D1Database;
     RELEASE_GIT_SHA: string;
     CONTRACT_DIGEST: string;
-    USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
     KAPSO_API_KEY: string;
     WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
     KAPSO_WEBHOOK_SECRET: string;
@@ -38,14 +35,10 @@ export type CoreHttpEnvironment = ProviderEnvironment &
       PRICING_PUBLISH_AUDIENCE: string;
       PRICING: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
       ERASURE_SUPPORT_AUDIENCE: string;
-      ERASURE_BUCKET: R2Bucket;
-      ERASURE_REGISTRY: ErasureRegistry;
-      ERASURE_REQUIRED: string;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;
       WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
       BROWSER_PAIRING_EMAIL_QUEUE: Queue;
-      EMAIL_REPLACEMENT_QUEUE: Queue;
       BILLING_COLLECTION_QUEUE: Queue;
       HOSTED_WHATSAPP_QUEUE: Readonly<{ send: (body: unknown) => Promise<unknown> }>;
       STATEMENT_STAGING_BUCKET: R2Bucket;

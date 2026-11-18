@@ -9,8 +9,11 @@ import {
   protectCanonicalSource,
 } from "../canonical-admission/operations";
 import { canonicalOperation } from "../routing/operations";
-import { browserCanonicalResponse, executeCanonicalWork } from "./internal/http";
-import type { CoreHttpEnvironment } from "./contract";
+import {
+  browserCanonicalResponse,
+  executeCanonicalWork,
+} from "./internal/historical-canonical.test-fixture";
+import type { HistoricalHttpEnvironment as CoreHttpEnvironment } from "./internal/historical-canonical.test-fixture";
 
 const patWork = Effect.fn(function* (
   request: Request,

@@ -11,7 +11,7 @@ import {
   proactivityVerifiedDeliveryQuery,
 } from "../../whatsapp/operations";
 import { currentProactivityGrantQuery, prepareConsentAction } from "../../consent/operations";
-import { InsightUnavailable } from "../contract";
+import { InsightUnavailable, reminderPauseMention } from "../contract";
 
 type Scope = Readonly<{ db: D1Database; userId: UserId }>;
 export const findGovernor = (
@@ -181,8 +181,7 @@ export const controlReminder = (
     );
     return true;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
-export const pauseMention =
-  "Pausé tus recordatorios de registro manual porque no recibí respuesta. Puedes pedirme que los reactive.";
+export const pauseMention = reminderPauseMention;
 export const prepareNotice = (
   input: Scope & Readonly<{ turnId: string; proof: OwnedStatement }>
 ): D1PreparedStatement =>

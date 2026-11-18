@@ -1098,6 +1098,19 @@ export const userStoreHistory: StoreHistory = {
         "CREATE INDEX retained_compactions ON hosted_agent_sessions(active_ms,id) WHERE compacted_text IS NOT NULL",
       ],
     },
+    {
+      version: 35,
+      id: "weekly-summary-owner",
+      statements: [
+        "CREATE TABLE weekly_schedules(user_id TEXT PRIMARY KEY REFERENCES users(id),id TEXT UNIQUE NOT NULL,revision INTEGER NOT NULL,grant_id TEXT NOT NULL REFERENCES proactive_grants(id),snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),next_ms INTEGER NOT NULL) STRICT",
+        "CREATE TABLE weekly_summary_reports(id TEXT PRIMARY KEY REFERENCES insight_events(id),grant_id TEXT NOT NULL REFERENCES proactive_grants(id),presentation TEXT NOT NULL CHECK(json_valid(presentation)),payload TEXT NOT NULL CHECK(json_valid(payload)),expires_ms INTEGER NOT NULL) STRICT",
+        "CREATE INDEX weekly_report_expiry ON weekly_summary_reports(expires_ms)",
+        "CREATE TABLE weekly_attention(grant_id TEXT PRIMARY KEY REFERENCES proactive_grants(id),unanswered INTEGER NOT NULL DEFAULT 0,last_reply_ms INTEGER NOT NULL DEFAULT 0,ask_ms INTEGER,question_id TEXT REFERENCES reminder_disclosures(id),question_delivered_ms INTEGER,paused_ms INTEGER,notice_turn TEXT REFERENCES hosted_turns(id),notice_delivered INTEGER NOT NULL DEFAULT 0) STRICT",
+        "ALTER TABLE reminder_disclosures ADD COLUMN restarts INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE reminder_attention ADD COLUMN notice_turn TEXT REFERENCES hosted_turns(id)",
+        "ALTER TABLE reminder_attention ADD COLUMN notice_delivered INTEGER NOT NULL DEFAULT 0",
+      ],
+    },
   ],
 };
 

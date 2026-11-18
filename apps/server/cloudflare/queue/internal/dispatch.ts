@@ -191,8 +191,7 @@ const receiveIdentityOnlyQueue = ({
       receiveProactivityWork({
         messages: batch.messages,
         workflow: Option.fromUndefinedOr(environment.WEEKLY_DELIVERY_WORKFLOW),
-        ...(environment.USER_STORE === undefined ? {} : { users: environment.USER_STORE }),
-        coordinator: environment.USER_TRANSACTION_COORDINATOR,
+        users: Option.fromUndefinedOr(environment.USER_STORE),
       }).pipe(Effect.mapError(deliveryFailure))
     );
   }
@@ -256,14 +255,13 @@ const callbackWork = Schema.is(CallbackWork);
 const deliverCallback = Effect.fn(function* (packet: unknown, environment: CoreQueueEnvironment) {
   const body = yield* Schema.decodeUnknownEffect(CallbackWork)(packet);
   if (Schema.is(WhatsAppLifecycleWork)(body)) {
-    const { DIRECTORY, USER_STORE, USER_TRANSACTION_COORDINATOR } = environment;
+    const { DIRECTORY, USER_STORE } = environment;
     if (DIRECTORY === undefined || USER_STORE === undefined) {
       return yield* deliveryFailure("Callback routing unavailable");
     }
     return yield* routeWhatsAppStatus(body, {
       DIRECTORY,
       USER_STORE,
-      USER_TRANSACTION_COORDINATOR,
     });
   }
   const workflow = Schema.is(LocalRefundWork)(body)

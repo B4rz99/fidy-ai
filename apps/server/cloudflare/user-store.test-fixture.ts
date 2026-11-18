@@ -393,6 +393,16 @@ const hostedOpenAi = {
     HOSTED_AI_MODEL: { type: "text" as const, value: "gpt-6-luna" },
     PROACTIVITY_ENABLED: { type: "text" as const, value: "enabled" },
     KAPSO_API_KEY: { type: "text" as const, value: "test-kapso-key" },
+    WEEKLY_SUMMARY_TEMPLATE_JSON: {
+      type: "text" as const,
+      value:
+        '{"name":"fidy_weekly_summary","language":"es","approval":"approved","body":"Tu resumen semanal: {{1}} Consulta tus movimientos en Fidy."}',
+    },
+    WEEKLY_QUESTION_TEMPLATE_JSON: {
+      type: "text" as const,
+      value:
+        '{"name":"fidy_weekly_question","language":"es","approval":"approved","body":"Fidy te avisa: {{1}} Más en Fidy."}',
+    },
     PROACTIVITY_TEMPLATE_JSON: {
       type: "text" as const,
       value:

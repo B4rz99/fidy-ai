@@ -12,7 +12,6 @@ const Probe = Schema.Struct({
   ),
 });
 type Environment = Readonly<{ DB: D1Database; CHILD: Workflow }>;
-const unavailable = (): Promise<never> => Promise.reject(new Error("Unexpected probe operation"));
 const consume = makeCoreQueue(makeWorkerTelemetry(() => undefined));
 const userId = "10000000-0000-4000-8000-000000000001";
 
@@ -78,7 +77,6 @@ const measureHandoffs = Effect.fn(function* (environment: Environment, payload: 
   yield* Effect.tryPromise(() =>
     consume(batch, {
       RELEASE_GIT_SHA: "synthetic-handoff-proof",
-      USER_TRANSACTION_COORDINATOR: { getByName: () => ({ fetch: unavailable }) },
       STATEMENT_EXTRACTION_WORKFLOW: environment.CHILD,
     })
   );

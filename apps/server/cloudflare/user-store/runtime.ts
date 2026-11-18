@@ -1,3 +1,5 @@
+import { HostedPauseNotice } from "../insights/contract";
+import { nativePauseNotice } from "../insights/operations";
 import { BudgetThresholdEvaluation } from "../budgets/contract";
 import { backgroundWorkAllowed } from "../release-isolation/operations";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
@@ -325,7 +327,8 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
     super(state, env);
     this.runtime = ManagedRuntime.make(
-      Layer.merge(
+      Layer.mergeAll(
+        Layer.succeed(HostedPauseNotice, nativePauseNotice),
         sqliteStoreLayer({
           storage: state.storage,
           owner: "user",
@@ -651,7 +654,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   private inspectWork(): Promise<Response> {
     const storage = this.ctx.storage;
     const ownsUser = this.owns;
-    const remindersEnabled = this.env.PROACTIVITY_ENABLED === "enabled";
+    const remindersEnabled = {
+      category: this.env.PROACTIVITY_ENABLED === "enabled",
+      weekly: this.env.WEEKLY_SUMMARY_ENABLED === "enabled",
+    };
     const adapters = this.connectionAdapters();
     return this.runtime.runPromise(
       Effect.gen(function* () {
@@ -993,11 +999,10 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
           Effect.tap(() =>
             request.url === statusDeliveryUrl
               ? Effect.flatMap(Clock.currentTimeMillis, (now) =>
-                  repairLocalReminderAlarm(
-                    now,
-                    this.ctx.storage,
-                    this.env.PROACTIVITY_ENABLED === "enabled"
-                  )
+                  repairLocalReminderAlarm(now, this.ctx.storage, {
+                    category: this.env.PROACTIVITY_ENABLED === "enabled",
+                    weekly: this.env.WEEKLY_SUMMARY_ENABLED === "enabled",
+                  })
                 )
               : Effect.void
           ),
@@ -1044,7 +1049,7 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
     if (request.url === "https://coordinator/proactivity-work") {
       return Option.some(
         this.runtime.runPromise(
-          nativeReminderActivity(request, this.env, owns).pipe(
+          nativeReminderActivity(request, this.env, { owns, storage: this.ctx.storage }).pipe(
             Effect.catchCause(() => Effect.succeed(canonicalAdmissionUnavailable()))
           )
         )

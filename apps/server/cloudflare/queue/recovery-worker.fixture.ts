@@ -116,7 +116,6 @@ export default {
         yield* Effect.tryPromise(() =>
           consume(batch, {
             RELEASE_GIT_SHA: "synthetic-proof",
-            USER_TRANSACTION_COORDINATOR: { getByName: () => ({ fetch: unavailable }) },
             USER_STORE: statementOwner(environment.DB),
             STATEMENT_EXTRACTION_WORKFLOW: workflow(environment.DB),
           })

@@ -51,6 +51,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
   private requested: ReadonlyArray<{ name: string; arguments: string }> = [];
   private available: ReadonlyArray<string> = [];
   private sends = 0;
+  private readonly templates: string[] = [];
   private correlation = "";
   private readonly inference = Effect.fn({ self: this }, function* (request: Request) {
     const input = yield* Schema.decodeUnknownEffect(
@@ -131,7 +132,21 @@ export class HostedProviderControl extends DurableObject<Environment> {
     }
     return Option.none();
   }
+  private readonly templateSend = Effect.fn({ self: this }, function* (request: Request) {
+    const body = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        biz_opaque_callback_data: Schema.String,
+        template: Schema.optionalKey(Schema.Struct({ name: Schema.String })),
+      })
+    )(yield* Effect.tryPromise(() => request.json()));
+    if (body.template !== undefined) this.templates.push(body.template.name);
+    this.sends += 1;
+    this.correlation = body.biz_opaque_callback_data;
+    return new Response(null, { status: 503 });
+  });
   override fetch(request: Request): Promise<Response> {
+    if (request.url === "https://fixture.invalid/templates")
+      {return Promise.resolve(Response.json(this.templates));}
     const browser = this.browserRequest(request);
     if (Option.isSome(browser)) return browser.value;
     if (new URL(request.url).pathname === "/tools") {
@@ -166,12 +181,7 @@ export class HostedProviderControl extends DurableObject<Environment> {
           return Response.json({ sends: this.sends, correlation: this.correlation });
         }
         if (new URL(request.url).hostname === "api.kapso.ai") {
-          const body = yield* Schema.decodeUnknownEffect(
-            Schema.Struct({ biz_opaque_callback_data: Schema.String })
-          )(yield* Effect.tryPromise(() => request.json()));
-          this.sends += 1;
-          this.correlation = body.biz_opaque_callback_data;
-          return new Response(null, { status: 503 });
+          return yield* this.templateSend(request);
         }
         if (path === "/waiting") {
           return Response.json({ waiting: this.waiting, rounds: this.rounds });

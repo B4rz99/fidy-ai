@@ -8,7 +8,7 @@ import {
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import type { ExternalEventBindings, ExternalEventNamespace } from "../../directory/contract";
+import type { ExternalEventBindings } from "../../directory/contract";
 import { lookupExternalEventRoute, reserveExternalEventRoute } from "../../directory/operations";
 import { withStoreCapacity } from "../../runtime/sqlite/operations";
 import {
@@ -24,7 +24,6 @@ import {
 
 const noContentStatus = 204;
 const claimedStatus = 201;
-const pendingStatus = 202;
 const conflictStatus = 409;
 
 type Send = typeof DeliverySend.Type;
@@ -93,7 +92,7 @@ const reserve = Effect.fn(function* (work: Send, env: Pick<ExternalEventBindings
     yield* sql`UPDATE whatsapp_deliveries SET route_ready=1 WHERE user_id=${work.userId} AND family=${work.family} AND operation_id=${work.operationId} AND correlation=${work.correlation} AND content_digest=${work.contentDigest} AND state='staged' AND NOT EXISTS(SELECT 1 FROM erasure_requests) RETURNING 1`;
   return answer(ready.length === 1 ? noContentStatus : conflictStatus);
 });
-const start = Effect.fn(function* (work: Send, enabled: boolean) {
+const start = Effect.fn(function* (work: Send, enabled: { category: boolean; weekly: boolean }) {
   return yield* withStoreCapacity("required")(
     Effect.gen(function* () {
       const sql = yield* SqliteClient;
@@ -134,7 +133,13 @@ const start = Effect.fn(function* (work: Send, enabled: boolean) {
     })
   );
 });
-const settledStatus = Effect.fn(function* (work: typeof DeliveredObservation.Type) {
+type WeeklyLimits = Partial<
+  Readonly<{ PROACTIVITY_ASK_AFTER: string; PROACTIVITY_PAUSE_AFTER: string }>
+>;
+const settledStatus = Effect.fn(function* (
+  work: typeof DeliveredObservation.Type,
+  limits: WeeklyLimits
+) {
   if (
     work.family === "disclosure" &&
     (yield* isRetainedDisclosure(work.userId, work.operationId))
@@ -142,7 +147,7 @@ const settledStatus = Effect.fn(function* (work: typeof DeliveredObservation.Typ
     return answer(noContentStatus);
   }
   if (work.family === "proactivity") {
-    yield* reconcileLocalReminder(work.userId, work.operationId);
+    yield* reconcileLocalReminder(work.userId, work.operationId, limits);
     return answer(noContentStatus);
   }
   if (
@@ -151,9 +156,9 @@ const settledStatus = Effect.fn(function* (work: typeof DeliveredObservation.Typ
   ) {
     return answer(noContentStatus);
   }
-  return answer(pendingStatus);
+  return answer(noContentStatus);
 });
-const status = Effect.fn(function* (work: typeof DeliveredObservation.Type) {
+const status = Effect.fn(function* (work: typeof DeliveredObservation.Type, limits: WeeklyLimits) {
   const sql = yield* SqliteClient;
   const event = work.evidence;
   const bsuid = event.recipientUserId ?? null,
@@ -171,7 +176,7 @@ const status = Effect.fn(function* (work: typeof DeliveredObservation.Type) {
     yield* sql`INSERT INTO whatsapp_delivery_status(user_id,family,operation_id,provider_message_id,outcome,occurred_ms)
     VALUES(${work.userId},${work.family},${work.operationId},${event.providerMessageId},${event.outcome},${event.occurredAtMs}) ON CONFLICT DO NOTHING RETURNING 1`;
   const settled =
-    row.draining === 1 ? Effect.succeed(answer(noContentStatus)) : settledStatus(work);
+    row.draining === 1 ? Effect.succeed(answer(noContentStatus)) : settledStatus(work, limits);
   if (fresh === undefined) return yield* settled;
   yield* sql`UPDATE whatsapp_deliveries SET provider_message_id=coalesce(provider_message_id,${event.providerMessageId}),
     state=CASE WHEN state='delivered' OR (family='hosted' AND state='rejected') THEN state WHEN ${event.outcome}='delivered' AND (family<>'hosted' OR ${event.receivedAtMs}<=original_deadline_ms) THEN 'delivered'
@@ -183,7 +188,8 @@ const status = Effect.fn(function* (work: typeof DeliveredObservation.Type) {
 export const nativeDeliveryRequest = Effect.fn(function* (
   request: Request,
   env: Pick<ExternalEventBindings, "DIRECTORY"> &
-    Partial<Readonly<{ PROACTIVITY_ENABLED: string }>>,
+    Partial<Readonly<{ PROACTIVITY_ENABLED: string; WEEKLY_SUMMARY_ENABLED: string }>> &
+    WeeklyLimits,
   owns: (id: string) => boolean
 ) {
   const body: unknown = yield* Effect.tryPromise(() => request.json());
@@ -192,7 +198,10 @@ export const nativeDeliveryRequest = Effect.fn(function* (
     if (!owns(work.userId)) return answer(conflictStatus);
     return request.url === reserveDeliveryUrl
       ? yield* reserve(work, env)
-      : yield* start(work, env.PROACTIVITY_ENABLED === "enabled");
+      : yield* start(work, {
+          category: env.PROACTIVITY_ENABLED === "enabled",
+          weekly: env.WEEKLY_SUMMARY_ENABLED === "enabled",
+        });
   }
   if (request.url === replyDeliveryUrl) {
     const work = yield* Schema.decodeUnknownEffect(SendReply)(body);
@@ -204,12 +213,12 @@ export const nativeDeliveryRequest = Effect.fn(function* (
   }
   const work = yield* Schema.decodeUnknownEffect(DeliveredObservation)(body);
   return owns(work.userId)
-    ? yield* status(work).pipe(withStoreCapacity("required"))
+    ? yield* status(work, env).pipe(withStoreCapacity("required"))
     : answer(noContentStatus);
 });
 export const routeWhatsAppStatus = Effect.fn(function* (
   event: typeof WhatsAppLifecycleWork.Type,
-  env: ExternalEventBindings & Readonly<{ USER_TRANSACTION_COORDINATOR: ExternalEventNamespace }>
+  env: ExternalEventBindings
 ) {
   const route = yield* lookupExternalEventRoute(env.DIRECTORY, {
     kind: "whatsapp",
@@ -228,12 +237,4 @@ export const routeWhatsAppStatus = Effect.fn(function* (
     env.USER_STORE.getByName(userId).fetch(statusDeliveryUrl, { method: "POST", body, signal })
   );
   if (!response.ok) return yield* Effect.fail("delivery-status-unavailable" as const);
-  if (response.status !== pendingStatus) return;
-  const continued = yield* Effect.tryPromise((signal) =>
-    env.USER_TRANSACTION_COORDINATOR.getByName(userId).fetch(
-      "https://coordinator.internal/hosted-turn/whatsapp/status",
-      { method: "POST", body, signal }
-    )
-  );
-  if (!continued.ok) return yield* Effect.fail("delivery-status-unavailable" as const);
 });

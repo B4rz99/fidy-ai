@@ -1,3 +1,4 @@
+import { activateWeekly, weeklyQuestion } from "./native-weekly";
 import { activateDigest } from "./native-recurring-digest";
 import { ProactivityOptInKind } from "../../../src/shell/consent/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
@@ -14,10 +15,12 @@ import { nextReminderOccurrence } from "../../../src/core/insights/operations";
 import {
   proactivityDisclosureFor,
   protectConsentStatement,
+  weeklyDisclosureFor,
 } from "../../../src/shell/consent/operations";
 import {
   PreparedProactivityTemplate,
   type ProactivityTemplateSender,
+  type WeeklyQuestionSender,
 } from "../../../src/shell/channels/whatsapp/contract";
 import { WhatsAppProviderMessageId } from "../../../src/core/provider-evidence/contract";
 import type { WhatsAppTurnAdmission } from "../../whatsapp/contract";
@@ -62,13 +65,22 @@ const available = Effect.fn(function* (
       });
   return (yield* sql.unsafe(guard.sql, guard.params)).length === 1;
 });
-const commands = new Map<string, ProactivityOptInKind>([
+const OfferKind = Schema.Union([ProactivityOptInKind, Schema.Literal("weekly-summary")]);
+type OfferKind = typeof OfferKind.Type;
+type ChoiceSenders = {
+  category: Option.Option<ProactivityTemplateSender>;
+  weekly: Option.Option<WeeklyQuestionSender>;
+};
+const commands = new Map<string, OfferKind>([
+  ["resumen semanal", "weekly-summary"],
   ["recordatorios", "manual-entry-reminder"],
   ["alertas de presupuesto", "budget-threshold"],
   ["avisos de cargos recurrentes", "new-recurring-series"],
 ]);
-const requestedKind = (text: string): Option.Option<ProactivityOptInKind> =>
-  Option.fromUndefinedOr(commands.get(/^(?:re)?activar (?:los )?(.+)$/u.exec(text)?.[1] ?? ""));
+const requestedKind = (text: string): Option.Option<OfferKind> =>
+  Option.fromUndefinedOr(
+    commands.get(/^(?:re)?activar (?:(?:los|el) )?(.+)$/u.exec(text)?.[1] ?? "")
+  );
 const qualifiedChoice =
   /^p:(manual-entry-reminder|budget-threshold|new-recurring-series):([0-9a-f-]{36}):(accept|decline|revoke)$/u;
 export const activeChoiceText = (input: string): boolean => {
@@ -76,18 +88,19 @@ export const activeChoiceText = (input: string): boolean => {
   return (
     Option.isSome(requestedKind(text)) ||
     qualifiedChoice.test(text) ||
+    /^weekly:[0-9a-f-]{36}:(?:accept|decline|revoke)$/u.test(text) ||
     /^(?:s[ií]|no|desactivar)$/u.test(text)
   );
 };
 const offer = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
   {
-    sender,
+    senders,
     kind,
     storage,
   }: {
-    sender: ProactivityTemplateSender;
-    kind: ProactivityOptInKind;
+    senders: ChoiceSenders;
+    kind: OfferKind;
     storage: DurableObjectStorage;
   }
 ) {
@@ -96,15 +109,21 @@ const offer = Effect.fn(function* (
   if (!(yield* available(event, false, now))) return refused();
   const [grant] =
     yield* sql`SELECT id FROM proactive_grants WHERE user_id=${event.userId} AND kind=${kind} AND revoked_at_ms IS NULL`;
-  const disclosure = proactivityDisclosureFor(kind);
+  const disclosure =
+    kind === "weekly-summary" ? weeklyDisclosureFor() : proactivityDisclosureFor(kind);
   const instructions =
     grant === undefined
       ? " Responde a este mensaje con «Sí» para activar estos avisos o «No» para rechazarlos."
       : " Responde a este mensaje con «Sí» para continuar o «Desactivar» para dejar de recibirlos.";
-  const prepared = yield* sender.prepare(disclosure.text + instructions);
-  const body = yield* Schema.encodeEffect(Schema.fromJsonString(PreparedProactivityTemplate))(
-    prepared
-  );
+  const id = newId();
+  const body =
+    kind === "weekly-summary"
+      ? yield* weeklyQuestion(yield* Effect.fromOption(senders.weekly), id, grant !== undefined)
+      : yield* (yield* Effect.fromOption(senders.category))
+          .prepare(disclosure.text + instructions)
+          .pipe(
+            Effect.flatMap(Schema.encodeEffect(Schema.fromJsonString(PreparedProactivityTemplate)))
+          );
   const digest = Hex.encode(yield* digestBytes(new TextEncoder().encode(yield* json(body))));
   const serialized = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
     disclosure
@@ -112,15 +131,16 @@ const offer = Effect.fn(function* (
   const expires = event.occurredAtMs + life;
   if (expires <= now) return refused();
   yield* sql`INSERT INTO reminder_disclosures(id,user_id,portfolio,bsuid,endpoint,request_message,created_ms,expires_ms,attempt_ms,correlation,disclosure,body,digest,grant_id,kind)
-    SELECT ${newId()},${event.userId},${event.portfolioId},${event.bsuid},${event.businessPhoneNumberId},${event.messageId},${event.occurredAtMs},${expires},${now},${newId()},${serialized},${body},${digest},${typeof grant?.id === "string" ? grant.id : null},${kind}
+    SELECT ${id},${event.userId},${event.portfolioId},${event.bsuid},${event.businessPhoneNumberId},${event.messageId},${event.occurredAtMs},${expires},${now},${newId()},${serialized},${body},${digest},${typeof grant?.id === "string" ? grant.id : null},${kind}
     WHERE (SELECT count(*) FROM reminder_disclosures WHERE user_id=${event.userId} AND created_ms>${now - day})<8 AND NOT EXISTS(SELECT 1 FROM reminder_disclosures o WHERE o.user_id=${event.userId} AND o.kind=${kind} AND o.expires_ms>${now} AND NOT EXISTS(SELECT 1 FROM reminder_choices c WHERE c.offer_id=o.id)) ON CONFLICT DO NOTHING`;
   yield* preserveStoreAlarm(storage, now);
   return new Response(null, { status: 202 });
 });
 const activation = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
-  { grant, kind, now }: { grant: string; kind: ProactivityOptInKind; now: number }
+  { grant, kind, now }: { grant: string; kind: OfferKind; now: number }
 ) {
+  if (kind === "weekly-summary") return yield* activateWeekly(event.userId, grant, now);
   if (kind === "new-recurring-series") return yield* activateDigest(event.userId, grant, now);
   if (kind !== "manual-entry-reminder") return now;
   const sql = yield* SqliteClient;
@@ -161,7 +181,7 @@ const decisionFor = (text: string): Option.Option<Decision> => {
 };
 const disclosureRow = Schema.Struct({
   id: Schema.String,
-  kind: ProactivityOptInKind,
+  kind: OfferKind,
   expires_ms: Schema.Int,
   disclosure: Schema.fromJsonString(DisclosureSnapshot),
   provider_message_id: WhatsAppProviderMessageId,
@@ -230,6 +250,13 @@ const legalDecision = Effect.fn(function* (
   )(record);
   return { id, jsonRecord, revoke, newGrant: choice === "accept" && Option.isNone(held.live_id) };
 });
+const resetAttention = Effect.fn(function* (held: Proof, now: number) {
+  const sql = yield* SqliteClient;
+  if (held.kind === "weekly-summary") {
+    yield* sql`UPDATE weekly_attention SET unanswered=0,last_reply_ms=${now},ask_ms=NULL,question_id=NULL,question_delivered_ms=NULL,paused_ms=NULL,notice_turn=NULL,notice_delivered=0 WHERE grant_id=${Option.getOrNull(held.grant_id)} AND grant_id=${Option.getOrNull(held.live_id)}`;
+  }
+  yield* sql`UPDATE reminder_attention SET unanswered=0,last_reply_ms=${now},question_id=NULL,question_delivered_ms=NULL,notice_turn=NULL,notice_delivered=0 WHERE grant_id=${Option.getOrNull(held.live_id)} AND grant_id=${Option.getOrNull(held.grant_id)}`;
+});
 const retainDecision = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
   held: Proof,
@@ -249,9 +276,7 @@ const retainDecision = Effect.fn(function* (
     const wake = yield* activation(event, { grant: id, kind: held.kind, now });
     yield* preserveStoreAlarm(action.storage, wake);
   }
-  if (choice === "accept") {
-    yield* sql`UPDATE reminder_attention SET unanswered=0,last_reply_ms=${now},question_id=NULL,question_delivered_ms=NULL WHERE grant_id=${Option.getOrNull(held.live_id)} AND grant_id=${Option.getOrNull(held.grant_id)}`;
-  }
+  if (choice === "accept") yield* resetAttention(held, now);
   yield* sql`INSERT INTO reminder_choices VALUES(${event.userId},${event.messageId},${held.id},${choice},${revoke || newGrant ? jsonRecord : null})`;
   return success();
 });
@@ -271,6 +296,14 @@ const choiceFor = (
   choice: Option.Option<Decision>;
   offer: Option.Option<string>;
 } => {
+  const weekly = /^weekly:([0-9a-f-]{36}):(accept|decline|revoke)$/u.exec(text);
+  if (weekly !== null) {
+    return {
+      kind: Option.some("weekly-summary"),
+      choice: decisionFor(String(weekly[2])),
+      offer: Option.fromUndefinedOr(weekly[1]),
+    };
+  }
   const parts = qualifiedChoice.exec(text);
   return {
     kind: Option.fromUndefinedOr(parts?.[1]),
@@ -278,9 +311,15 @@ const choiceFor = (
     offer: Option.fromUndefinedOr(parts?.[2]),
   };
 };
+const enabledFor = (kind: unknown, senders: ChoiceSenders): boolean =>
+  kind === "weekly-summary" ? Option.isSome(senders.weekly) : Option.isSome(senders.category);
 const resolveReply = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
-  { text, enabled, storage }: { text: string; enabled: boolean; storage: DurableObjectStorage }
+  {
+    text,
+    senders,
+    storage,
+  }: { text: string; senders: ChoiceSenders; storage: DurableObjectStorage }
 ) {
   const { kind, choice, offer } = choiceFor(text);
   if (Option.isNone(choice)) return Option.none<Response>();
@@ -289,7 +328,9 @@ const resolveReply = Effect.fn(function* (
     return Option.isNone(kind) ? Option.none<Response>() : Option.some(refused());
   }
   if (Option.isSome(kind) && kind.value !== raw.kind) return Option.some(refused());
-  if (choice.value === "accept" && !enabled) return Option.some(refused());
+  if (choice.value === "accept" && !enabledFor(raw.kind, senders)) {
+    return Option.some(refused());
+  }
   return Option.some(
     yield* decide(event, yield* Schema.decodeUnknownEffect(disclosureRow)(raw), {
       choice: choice.value,
@@ -299,17 +340,21 @@ const resolveReply = Effect.fn(function* (
 });
 export const handleChoice = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
-  sender: Option.Option<ProactivityTemplateSender>,
+  senders: ChoiceSenders,
   storage: DurableObjectStorage
 ) {
   const text = event.text.trim().toLowerCase();
   const kind = requestedKind(text);
   if (Option.isSome(kind)) {
     return Option.some(
-      Option.isSome(sender)
-        ? yield* offer(event, { sender: sender.value, storage, kind: kind.value })
+      (
+        kind.value === "weekly-summary"
+          ? Option.isSome(senders.weekly)
+          : Option.isSome(senders.category)
+      )
+        ? yield* offer(event, { senders, storage, kind: kind.value })
         : refused()
     );
   }
-  return yield* resolveReply(event, { text, enabled: Option.isSome(sender), storage });
+  return yield* resolveReply(event, { text, senders, storage });
 });

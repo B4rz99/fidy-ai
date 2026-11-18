@@ -1,3 +1,4 @@
+import { HostedPauseNotice } from "../../insights/contract";
 import type { LocalTurn } from "./local-turn";
 import { visibleChallenge } from "./local-challenge";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
@@ -163,6 +164,7 @@ export const beginTurn = Effect.fn(function* (
   }
   const id = TranscriptTurnId.make(newId());
   yield* sql`INSERT INTO hosted_turns(id,user_id,session_id,browser_id,start_ms,deadline_ms,request_text,state) VALUES(${id},${user},${session},${Option.getOrNull(actor.id)},${current},${current + pendingExecutionRecoveryMs},${text},'queued')`;
+  yield* (yield* HostedPauseNotice).bind({ id, user, session }, previous === undefined);
   yield* appendEntry(session, { ...entryIdentity(id)(current), _tag: "UserTranscriptEntry", text });
   yield* preserveStoreAlarm(storage, current);
   return {
@@ -246,6 +248,7 @@ export const observeTurn = Effect.fn(function* (
       iteration: yield* Schema.decodeUnknownEffect(AgentIteration)(row.proposal_iteration),
     });
     yield* sql`UPDATE hosted_agent_sessions SET active_ms=${now} WHERE id=${session}`;
+    yield* (yield* HostedPauseNotice).acknowledge(input.turnId);
     return channelReply(channelStatus.ok)({ status: "completed" });
   }
   const receipt = Option.getOrElse(
@@ -272,11 +275,12 @@ export const propose = Effect.fn(function* (
   const current = yield* Clock.currentTimeMillis;
   yield* liveTurn(turn, current);
   const sql = yield* SqliteClient;
+  const answer = yield* (yield* HostedPauseNotice).include(turn.id, text);
   const until = current + deliveryAcknowledgmentWindowMs;
   if (Option.isNone(turn.browser_id)) {
-    const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.String))(text);
+    const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.String))(answer);
     yield* sql`UPDATE hosted_whatsapp_inbound SET offer_ms=${current},answer_digest=${yield* receiptHash(encoded)} WHERE user_id=${turn.user_id} AND turn_id=${turn.id}`;
   }
-  yield* sql`UPDATE hosted_turns SET state='proposed',answer=${text},deadline_ms=${until},proposal_iteration=${iteration} WHERE id=${turn.id} AND state='running'`;
+  yield* sql`UPDATE hosted_turns SET state='proposed',answer=${answer},deadline_ms=${until},proposal_iteration=${iteration} WHERE id=${turn.id} AND state='running'`;
   return Option.isNone(turn.browser_id) ? current : until;
 });

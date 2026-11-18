@@ -8,7 +8,6 @@ export type CoreQueueEnvironment = BillingWorkRouting &
   Partial<ExternalEventBindings> &
   Readonly<{
     RELEASE_GIT_SHA: string;
-    USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
   }> &
   Partial<
     Readonly<{

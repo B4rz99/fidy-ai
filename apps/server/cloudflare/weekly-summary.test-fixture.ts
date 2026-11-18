@@ -159,7 +159,7 @@ export const proactivityWorkflowHarness = (
 ): Readonly<{
   sweep: () => Effect.Effect<void, InsightUnavailable>;
   receive: (
-    input: Omit<Parameters<typeof receiveProactivityWork>[0], "coordinator">
+    input: Omit<Parameters<typeof receiveProactivityWork>[0], "users">
   ) => Effect.Effect<void>;
   execute: (input: Readonly<{ work: ProactivityFixtureWork; step: WorkflowStep }>) => Promise<void>;
 }> => {
@@ -184,11 +184,16 @@ export const proactivityWorkflowHarness = (
       }),
     },
   };
-  const workflow = new ProactivityDeliveryWorkflow(weeklyWorkflowFixtureContext, environment);
+  const workflow = new ProactivityDeliveryWorkflow(weeklyWorkflowFixtureContext, {
+    USER_STORE: environment.USER_TRANSACTION_COORDINATOR,
+  });
   return {
     sweep: () => advanceProactivityWork(environment),
     receive: (input) =>
-      receiveProactivityWork({ ...input, coordinator: environment.USER_TRANSACTION_COORDINATOR }),
+      receiveProactivityWork({
+        ...input,
+        users: Option.some(environment.USER_TRANSACTION_COORDINATOR),
+      }),
     execute: ({ work, step }) =>
       workflow.run(
         {

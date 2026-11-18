@@ -1,3 +1,4 @@
+import { HostedTurnProcessing, HostedTurnProposal } from "../../src/shell/agent/contract";
 import { ownerCheckUrl } from "../maintenance/contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -8,15 +9,32 @@ import { native, nativeHostedPlatform } from "../user-store.test-fixture";
 import { DisclosureSnapshot, type ProactivityOptInKind } from "../../src/shell/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 
-const commands: Record<ProactivityOptInKind, string> = {
+type OfferKind = ProactivityOptInKind | "weekly-summary";
+const commands: Record<OfferKind, string> = {
+  "weekly-summary": "Activar el resumen semanal",
   "manual-entry-reminder": "Activar recordatorios",
   "budget-threshold": "Activar alertas de presupuesto",
   "new-recurring-series": "Activar avisos de cargos recurrentes",
 };
+const launchFor = (kind: OfferKind): Readonly<Record<string, string>> =>
+  kind === "weekly-summary"
+    ? {
+        PROACTIVITY_ENABLED: "disabled",
+        WEEKLY_SUMMARY_ENABLED: "enabled",
+        PROACTIVITY_ASK_AFTER: "1",
+        PROACTIVITY_PAUSE_AFTER: "1",
+      }
+    : {};
+const buttonPrefix = (kind: OfferKind): string =>
+  kind === "weekly-summary" ? "weekly:" : "p:" + kind + ":";
+const foreignButton = (kind: OfferKind, qualified: string): string =>
+  kind === "weekly-summary"
+    ? qualified.replace("weekly:", "p:manual-entry-reminder:")
+    : qualified.replace(kind, "manual-entry-reminder");
 const signedReminderJourney = Effect.fnUntraced(function* (
-  kind: ProactivityOptInKind = "manual-entry-reminder"
+  kind: OfferKind = "manual-entry-reminder"
 ) {
-  const runtime = yield* (yield* nativeHostedPlatform)(),
+  const runtime = yield* (yield* nativeHostedPlatform)(undefined, [], launchFor(kind)),
     owner = yield* seed(runtime, alice);
   const portfolio = "123456789012345",
     bsuid = "CO.13491208655302741918",
@@ -89,7 +107,7 @@ const signedReminderJourney = Effect.fnUntraced(function* (
     );
   if (claim === undefined) return yield* Effect.die("missing disclosure claim");
   const qualified =
-    "p:" + kind + ":" + (yield* Schema.decodeUnknownEffect(Schema.String)(claim.operation_id));
+    buttonPrefix(kind) + (yield* Schema.decodeUnknownEffect(Schema.String)(claim.operation_id));
   expect((yield* say("wamid.early", qualified + ":accept")).status).toBe(422);
   const providerMessage = "wamid.reminder-disclosure";
   const settle = Effect.fn(function* (message: string, correlation: unknown) {
@@ -144,8 +162,7 @@ const signedReminderJourney = Effect.fnUntraced(function* (
       { portfolio, bsuid, endpoint },
     ]);
     expect(
-      (yield* say("wamid.cross-kind", qualified.replace(kind, "manual-entry-reminder") + ":revoke"))
-        .status
+      (yield* say("wamid.cross-kind", foreignButton(kind, qualified) + ":revoke")).status
     ).toBe(422);
   }
   const deliverBudget = Effect.gen(function* () {
@@ -305,16 +322,209 @@ const signedReminderJourney = Effect.fnUntraced(function* (
       );
     expect(receipts).toEqual([{ id: frozen.event_id }]);
   });
+  const deliverWeekly = Effect.gen(function* () {
+    expect(
+      yield* owner.exec(
+        "SELECT revision,json_extract(snapshot_json,'$.timing.weekday') AS weekday FROM weekly_schedules"
+      )
+    ).toEqual([{ revision: 1, weekday: 0 }]);
+    const now = yield* DateTime.now;
+    const offset = 12 - DateTime.getPartUtc(now, "hour");
+    const zone = offset === 0 ? "Etc/UTC" : "Etc/GMT" + (offset > 0 ? "-" : "+") + Math.abs(offset);
+    const local = DateTime.setZoneNamedUnsafe(now, zone);
+    const before = DateTime.subtract(now, { minutes: 2 });
+    const timing = DateTime.setZoneNamedUnsafe(before, zone);
+    yield* owner.exec(
+      "UPDATE weekly_schedules SET next_ms=?,snapshot_json=json_set(snapshot_json,'$.timeZone',?,'$.timing.weekday',?,'$.timing.hour',?,'$.timing.minute',?,'$.nextScheduledAt',?)",
+      before.epochMilliseconds,
+      zone,
+      DateTime.getPart(local, "weekDay"),
+      DateTime.getPart(timing, "hour"),
+      DateTime.getPart(timing, "minute"),
+      DateTime.formatIso(before)
+    );
+    const insert =
+      "INSERT INTO transactions(id,user_id,amount,currency,direction,category_id,occurred_at_ms,created_at_ms) VALUES(?,?,?,?,'outflow',?,?,?)";
+    yield* owner.exec(
+      insert,
+      alice.session,
+      alice.user,
+      "9007199254740993.15",
+      "USD",
+      category,
+      before.epochMilliseconds - 86400000,
+      owner.now
+    );
+    yield* owner.exec(
+      insert,
+      alice.user,
+      alice.user,
+      "53",
+      "COP",
+      category,
+      before.epochMilliseconds - 86400000,
+      owner.now
+    );
+    const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+    expect(
+      (yield* native(() => users.getByName(alice.user).fetch(ownerCheckUrl, { method: "POST" })))
+        .status
+    ).toBe(204);
+    const [work] = yield* owner
+      .exec(
+        "SELECT w.correlation,w.operation_id,r.presentation FROM whatsapp_deliveries w JOIN weekly_summary_reports r ON r.id=w.operation_id WHERE w.family='proactivity' AND w.started_ms IS NOT NULL"
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (rows) => rows.length === 1,
+          () => "weekly summary not delivered"
+        ),
+        Effect.retry({ times: 100, schedule: Schedule.spaced("50 millis") })
+      );
+    if (work === undefined) return yield* Effect.die("missing weekly report");
+    const presentation = yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(Schema.Struct({ currencies: Schema.Array(Schema.String) }))
+    )(work.presentation);
+    expect(presentation.currencies).toEqual(["COP", "USD"]);
+    expect((yield* settle("wamid.weekly-summary", work.correlation)).status).toBe(200);
+    const receipt = yield* owner
+      .exec(
+        "SELECT json_extract(receipt_json,'$.providerMessageId') AS provider FROM insight_events WHERE id=? AND receipt_json IS NOT NULL",
+        work.operation_id
+      )
+      .pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 1,
+          times: 100,
+          schedule: Schedule.spaced("50 millis"),
+        })
+      );
+    expect(receipt).toEqual([{ provider: "wamid.weekly-summary" }]);
+    const [question] = yield* owner
+      .exec(
+        "SELECT a.unanswered,a.question_delivered_ms,w.correlation FROM weekly_attention a JOIN whatsapp_deliveries w ON w.operation_id=a.question_id AND w.started_ms IS NOT NULL"
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (rows) => rows.length === 1,
+          () => "waiting for governor question"
+        ),
+        Effect.retry({ times: 80, schedule: Schedule.spaced("50 millis") })
+      );
+    if (question === undefined) return yield* Effect.die("Missing question");
+    expect(question.unanswered).toBe(1);
+    expect(question.question_delivered_ms).toBeNull();
+    expect((yield* settle("wamid.weekly-governor-question", question.correlation)).status).toBe(
+      200
+    );
+    const seen = yield* owner
+      .exec("SELECT 1 AS yes FROM weekly_attention WHERE question_delivered_ms IS NOT NULL")
+      .pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 1,
+          times: 80,
+          schedule: Schedule.spaced("50 millis"),
+        })
+      );
+    expect(seen).toEqual([{ yes: 1 }]);
+    yield* Effect.sleep("1100 millis");
+    const after = DateTime.subtract(now, { minutes: 1 }),
+      later = DateTime.setZoneNamedUnsafe(after, zone);
+    yield* owner.exec(
+      "UPDATE weekly_schedules SET next_ms=?,snapshot_json=json_set(snapshot_json,'$.timing.hour',?,'$.timing.minute',?,'$.nextScheduledAt',?)",
+      after.epochMilliseconds,
+      DateTime.getPart(later, "hour"),
+      DateTime.getPart(later, "minute"),
+      DateTime.formatIso(after)
+    );
+    yield* native(() => users.getByName(alice.user).fetch(ownerCheckUrl, { method: "POST" }));
+    const [last] = yield* owner
+      .exec(
+        "SELECT correlation FROM whatsapp_deliveries WHERE family='proactivity' AND started_ms IS NOT NULL AND operation_id<>?",
+        work.operation_id
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (rows) => rows.length === 1,
+          () => "waiting for second occurrence"
+        ),
+        Effect.retry({ times: 80, schedule: Schedule.spaced("50 millis") })
+      );
+    if (last === undefined) return yield* Effect.die("Missing second occurrence");
+    expect((yield* settle("wamid.weekly-second", last.correlation)).status).toBe(200);
+    expect(
+      yield* owner.exec("SELECT unanswered FROM weekly_attention WHERE paused_ms IS NOT NULL").pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 1,
+          times: 80,
+          schedule: Schedule.spaced("50 millis"),
+        })
+      )
+    ).toEqual([{ unanswered: 2 }]);
+    const provider = (yield* native(() =>
+      runtime.getDurableObjectNamespace("CONTROL", "hosted-provider")
+    )).getByName("provider");
+    expect(
+      yield* native(() =>
+        provider.fetch("https://fixture.invalid/templates").then((reply) => reply.json())
+      )
+    ).toEqual([
+      "fidy_weekly_question",
+      "fidy_weekly_summary",
+      "fidy_weekly_question",
+      "fidy_weekly_summary",
+    ]);
+    const browserTurn = Effect.fn(function* (path: string, body: unknown) {
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body);
+      return yield* native(() =>
+        runtime.dispatchFetch("https://api.fidyapp.com/web/hosted-turns" + path, {
+          method: "POST",
+          headers: {
+            origin: "https://app.fidyapp.com",
+            cookie: "__Host-fidy_session=" + alice.bearer,
+            "Fidy-Session-Binding": alice.session,
+            "content-type": "application/json",
+          },
+          body: encoded,
+        })
+      );
+    });
+    const accepted = yield* browserTurn("", { text: "¿Por qué dejaron de llegar los resúmenes?" });
+    const { turnId } = yield* Schema.decodeUnknownEffect(HostedTurnProcessing)(
+      yield* native(() => accepted.json())
+    );
+    yield* native(() => provider.fetch("https://fixture.invalid/release"));
+    const notice = yield* Effect.retry(
+      Effect.gen(function* () {
+        const response = yield* browserTurn("/progress", { turnId });
+        return yield* Schema.decodeUnknownEffect(HostedTurnProposal)(
+          yield* native(() => response.json())
+        );
+      }),
+      { times: 80, schedule: Schedule.spaced("50 millis") }
+    );
+    expect(notice.text).toContain("Pausé tus resúmenes semanales");
+    expect(yield* owner.exec("SELECT notice_delivered FROM weekly_attention")).toEqual([
+      { notice_delivered: 0 },
+    ]);
+    expect((yield* browserTurn("/delivery", { turnId, receipt: notice.receipt })).status).toBe(200);
+    expect(yield* owner.exec("SELECT notice_delivered FROM weekly_attention")).toEqual([
+      { notice_delivered: 1 },
+    ]);
+  });
   yield* {
     "new-recurring-series": materializeDigest,
     "budget-threshold": deliverBudget,
     "manual-entry-reminder": Effect.void,
+    "weekly-summary": deliverWeekly,
   }[kind];
   expect((yield* say("wamid.revoke", qualified + ":revoke")).status).toBe(200);
   expect(
     yield* owner.exec("SELECT count(*) AS active FROM proactive_grants WHERE revoked_at_ms IS NULL")
   ).toEqual([{ active: 0 }]);
-  expect(yield* owner.exec("SELECT count(*) AS turns FROM hosted_turns")).toEqual([{ turns: 0 }]);
+  expect(yield* owner.exec("SELECT count(*) AS turns FROM hosted_turns")).toEqual([
+    { turns: kind === "weekly-summary" ? 1 : 0 },
+  ]);
   if (kind !== "manual-entry-reminder") return;
   const chat = yield* say("wamid.chat", "¿Qué recuerdas?");
   expect(chat.status).toBe(202);
@@ -375,6 +585,10 @@ const signedReminderJourney = Effect.fnUntraced(function* (
   ).toEqual([{ n: 1 }]);
 });
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
+  test.effect(
+    "requests and decides the original signed weekly question through the approved template and actual workflow with category delivery disabled",
+    () => signedReminderJourney("weekly-summary")
+  );
   test.effect(
     "activates a Reminder only from a signed explicit reply to the delivered original disclosure and revokes the same grant",
     () => signedReminderJourney()

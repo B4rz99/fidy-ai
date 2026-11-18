@@ -1,3 +1,4 @@
+import { HostedPauseNotice } from "../../insights/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Effect, Schema } from "effect";
 import {
@@ -30,6 +31,7 @@ export const foldHostedReceipt = Effect.fn(function* (user: string, id: string) 
     iteration: value.proposal_iteration,
   });
   yield* sql`UPDATE hosted_turns SET state='completed',terminal_ms=${value.at} WHERE user_id=${user} AND id=${value.id} AND state='proposed'`;
+  yield* (yield* HostedPauseNotice).acknowledge(value.id);
   yield* sql`UPDATE hosted_agent_sessions SET active_ms=max(active_ms,${value.at}) WHERE user_id=${user} AND id=${value.session_id}`;
   return true;
 });

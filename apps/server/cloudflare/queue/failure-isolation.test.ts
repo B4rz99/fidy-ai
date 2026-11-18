@@ -100,7 +100,7 @@ const seed = Effect.fn(function* () {
 });
 const environment = (workflow: Workflow, coordinatorCalls: () => void): CoreQueueEnvironment => ({
   RELEASE_GIT_SHA: "test",
-  USER_TRANSACTION_COORDINATOR: {
+  USER_STORE: {
     getByName: () => ({
       fetch: () => {
         coordinatorCalls();

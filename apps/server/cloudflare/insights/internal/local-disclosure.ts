@@ -10,6 +10,8 @@ import {
   HostedDeliveryCorrelationToken,
   PreparedProactivityTemplate,
   type ProactivityTemplateSender,
+  WeeklyQuestionOffer,
+  type WeeklyQuestionSender,
 } from "../../../src/shell/channels/whatsapp/contract";
 import type { ExternalEventBindings } from "../../directory/contract";
 import { claimRegisteredSend, recordRegisteredSend } from "../../whatsapp/operations";
@@ -34,14 +36,15 @@ const offer = Schema.Struct({
 });
 export const dispatchDisclosure = Effect.fn(function* (
   env: ExternalEventBindings,
-  sender: ProactivityTemplateSender,
+  delivery: { category: ProactivityTemplateSender } | { weekly: WeeklyQuestionSender; id: string },
   store: DurableObjectStorage
 ) {
   const sql = yield* SqliteClient,
     now = yield* Clock.currentTimeMillis;
   yield* sql`UPDATE reminder_disclosures SET state='expired' WHERE state='ready' AND expires_ms<=${now}`;
+  const id = "weekly" in delivery ? delivery.id : null;
   const [raw] =
-    yield* sql`UPDATE reminder_disclosures SET attempt_ms=min(expires_ms,${now + retryMs}) WHERE id=(SELECT id FROM reminder_disclosures WHERE state='ready' AND attempt_ms<=${now} ORDER BY attempt_ms LIMIT 1) RETURNING *`;
+    yield* sql`UPDATE reminder_disclosures SET attempt_ms=min(expires_ms,${now + retryMs}) WHERE id=(SELECT id FROM reminder_disclosures WHERE state='ready' AND ((${id} IS NULL AND kind<>'weekly-summary' AND attempt_ms<=${now}) OR (kind='weekly-summary' AND id=${id})) ORDER BY attempt_ms LIMIT 1) RETURNING *`;
   if (raw === undefined) return;
   const held = yield* Schema.decodeUnknownEffect(offer)(raw);
   yield* preserveStoreAlarm(store, Math.min(held.expires_ms, now + retryMs));
@@ -55,9 +58,6 @@ export const dispatchDisclosure = Effect.fn(function* (
     operationId: held.id,
     correlation: held.correlation,
   };
-  const template = yield* Schema.decodeEffect(Schema.fromJsonString(PreparedProactivityTemplate))(
-    held.body
-  );
   const one = yield* claimRegisteredSend(env, {
     ...binding,
     portfolio: held.portfolio,
@@ -67,16 +67,26 @@ export const dispatchDisclosure = Effect.fn(function* (
     deadline: held.expires_ms,
   });
   yield* one.claim;
-  const outcome = sendEvidence(
-    yield* Effect.exit(
-      sender.send({
-        template,
-        recipient: held.bsuid,
-        businessPhoneNumberId: held.endpoint,
-        correlationToken: held.correlation,
-      })
-    )
-  );
+  const channel = {
+    recipient: held.bsuid,
+    businessPhoneNumberId: held.endpoint,
+    correlationToken: held.correlation,
+  };
+  const sent =
+    "weekly" in delivery
+      ? delivery.weekly.send({
+          ...channel,
+          offer: (yield* Schema.decodeEffect(
+            Schema.fromJsonString(Schema.Struct({ offer: WeeklyQuestionOffer }))
+          )(held.body)).offer,
+        })
+      : delivery.category.send({
+          ...channel,
+          template: yield* Schema.decodeEffect(Schema.fromJsonString(PreparedProactivityTemplate))(
+            held.body
+          ),
+        });
+  const outcome = sendEvidence(yield* Effect.exit(sent));
   yield* recordRegisteredSend(env, {
     ...binding,
     state: outcome.certainty,
@@ -85,14 +95,14 @@ export const dispatchDisclosure = Effect.fn(function* (
 });
 export const claimDisclosure = Effect.fn(function* (
   work: typeof DeliverySend.Type,
-  enabled: boolean
+  enabled: { category: boolean; weekly: boolean }
 ) {
   const sql = yield* SqliteClient,
     now = yield* Clock.currentTimeMillis;
   const [offer] =
-    yield* sql`SELECT id FROM reminder_disclosures WHERE id=${work.operationId} AND user_id=${work.userId}`;
+    yield* sql`SELECT id,kind FROM reminder_disclosures WHERE id=${work.operationId} AND user_id=${work.userId}`;
   if (offer === undefined) return true;
-  if (!enabled) return false;
+  if (!(offer.kind === "weekly-summary" ? enabled.weekly : enabled.category)) return false;
   const [ready] =
     yield* sql`SELECT 1 FROM reminder_disclosures o JOIN whatsapp_deliveries w ON w.user_id=o.user_id AND w.operation_id=o.id AND w.family='disclosure' AND w.state='staged' AND w.route_ready=1 AND w.started_ms IS NULL WHERE o.id=${work.operationId} AND o.state='ready' AND (o.grant_id IS NULL OR EXISTS(SELECT 1 FROM proactive_grants g WHERE g.id=o.grant_id AND g.user_id=o.user_id AND g.revoked_at_ms IS NULL)) AND o.user_id=${work.userId} AND o.portfolio=${work.portfolio} AND o.bsuid=${work.bsuid} AND o.endpoint=${work.endpoint} AND o.correlation=${work.correlation} AND o.digest=${work.contentDigest} AND o.expires_ms=${work.deadline} AND o.expires_ms>${now} AND ${work.sandboxPhone} IS NULL`;
   if (ready === undefined) return false;
@@ -104,6 +114,7 @@ export const claimDisclosure = Effect.fn(function* (
 });
 export const retainedDisclosure = Effect.fn(function* (user: string, id: string) {
   const sql = yield* SqliteClient;
+  yield* sql`UPDATE weekly_attention AS a SET question_delivered_ms=w.delivered_at_ms FROM whatsapp_deliveries w WHERE w.user_id=${user} AND w.operation_id=${id} AND w.family='disclosure' AND w.state='delivered' AND a.question_id=w.operation_id AND a.question_delivered_ms IS NULL`;
   yield* sql`UPDATE reminder_attention AS a SET question_delivered_ms=w.delivered_at_ms FROM whatsapp_deliveries w WHERE w.user_id=${user} AND w.operation_id=${id} AND w.family='disclosure' AND w.state='delivered' AND a.question_id=w.operation_id AND a.unanswered=3 AND a.question_delivered_ms IS NULL`;
   return (
     (yield* sql`SELECT id FROM reminder_disclosures WHERE user_id=${user} AND id=${id}`).length ===

@@ -1,3 +1,8 @@
+import {
+  acknowledgePauseNotice,
+  bindPauseNotice,
+  includePauseNotice,
+} from "./internal/native-pause-notice";
 import { readLocalReport } from "./internal/recurring-report";
 import { claimDisclosure, retainedDisclosure } from "./internal/local-disclosure";
 import { claimPurpose, reconcileReceipt } from "./internal/reminder-claim";
@@ -8,7 +13,7 @@ import {
   readSchedule,
 } from "./internal/local-insights";
 import { readAssociatedProactiveTranscript } from "../agent/operations";
-import { ProactivityWorkObservations } from "./contract";
+import { type PauseNoticeService, ProactivityWorkObservations } from "./contract";
 import {
   PendingDeliveryObservations,
   prepareProactivityWorkObservation,
@@ -444,3 +449,12 @@ export const readLocalPendingInsights: typeof pendingInsights = (...args) =>
   pendingInsights(...args);
 
 export const readLocalDigestReport: typeof readLocalReport = (input) => readLocalReport(input);
+
+export const nativePauseNotice: PauseNoticeService = {
+  bind: (...args: Parameters<typeof bindPauseNotice>) =>
+    bindPauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
+  include: (...args: Parameters<typeof includePauseNotice>) =>
+    includePauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
+  acknowledge: (...args: Parameters<typeof acknowledgePauseNotice>) =>
+    acknowledgePauseNotice(...args).pipe(Effect.mapError(() => new InsightUnavailable())),
+};

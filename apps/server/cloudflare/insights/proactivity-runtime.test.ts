@@ -160,7 +160,6 @@ it("strips untrusted diagnostic fields before persisting proactivity Workflow pa
 it("strips untrusted diagnostic fields before forwarding proactivity coordinator work", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* proactivityDatabase;
       const now = yield* Clock.currentTimeMillis;
       const services = yield* Effect.context<never>();
       const run = Effect.runPromiseWith(services);
@@ -181,8 +180,7 @@ it("strips untrusted diagnostic fields before forwarding proactivity coordinator
           },
         },
         {
-          DB: db,
-          USER_TRANSACTION_COORDINATOR: {
+          USER_STORE: {
             getByName: (): Pick<Fetcher, "fetch"> => ({
               fetch: (input, init): Promise<Response> => {
                 const request = input instanceof Request ? input : new Request(input, init);

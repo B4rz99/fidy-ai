@@ -1,5 +1,6 @@
+import type { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import type { UserStoreBindings } from "../directory/contract";
-import { Data, type Option, Schema } from "effect";
+import { Context, Data, Effect, type Option, Schema } from "effect";
 import { ConsentRecordId } from "../../src/core/consent/contract";
 import {
   InsightEventId,
@@ -240,6 +241,41 @@ export type RecurringDigestAdvanceResult =
 export type NativeReminderEnvironment = UserStoreBindings &
   Pick<
     ProactivityEnvironment,
-    "KAPSO_API_KEY" | "PROACTIVITY_ENABLED" | "PROACTIVITY_TEMPLATE_JSON"
+    | "KAPSO_API_KEY"
+    | "PROACTIVITY_ENABLED"
+    | "PROACTIVITY_TEMPLATE_JSON"
+    | "WEEKLY_SUMMARY_ENABLED"
+    | "WEEKLY_QUESTION_TEMPLATE_JSON"
+    | "WEEKLY_SUMMARY_TEMPLATE_JSON"
+    | "PROACTIVITY_ASK_AFTER"
+    | "PROACTIVITY_PAUSE_AFTER"
   > &
   Partial<{ WEEKLY_DELIVERY_QUEUE: Pick<Queue<ProactivityDeliveryWork>, "send"> }>;
+
+export const weeklyPauseMention =
+  "Pausé tus resúmenes semanales porque no recibí respuesta. Puedes pedirme que los reactive.";
+export const reminderPauseMention =
+  "Pausé tus recordatorios de registro manual porque no recibí respuesta. Puedes pedirme que los reactive.";
+export type PauseNoticeService = {
+  bind: (
+    turn: { id: string; user: string; session: string },
+    newSession: boolean
+  ) => Effect.Effect<void, InsightUnavailable, SqliteClient>;
+  include: (
+    turn: string,
+    text: TranscriptText
+  ) => Effect.Effect<TranscriptText, InsightUnavailable, SqliteClient>;
+  acknowledge: (turn: string) => Effect.Effect<void, InsightUnavailable, SqliteClient>;
+};
+export const HostedPauseNotice = Context.Reference<PauseNoticeService>(
+  "@fidy/server/cloudflare/insights/contract/HostedPauseNotice",
+  {
+    defaultValue: (): PauseNoticeService => ({
+      bind: (): Effect.Effect<never, InsightUnavailable> => Effect.fail(new InsightUnavailable()),
+      include: (): Effect.Effect<never, InsightUnavailable> =>
+        Effect.fail(new InsightUnavailable()),
+      acknowledge: (): Effect.Effect<never, InsightUnavailable> =>
+        Effect.fail(new InsightUnavailable()),
+    }),
+  }
+);

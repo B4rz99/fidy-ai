@@ -1,10 +1,23 @@
+import { materializeWeekly } from "./internal/native-weekly-summary";
+import type { UserStoreBindings } from "../directory/contract";
+import {
+  offerWeeklyQuestions,
+  prepareGovernorQuestion,
+  recordWeeklyReply,
+  repairWeekly,
+} from "./internal/native-weekly";
 import { recordReminderReply } from "./internal/local-reminder-attention";
 import { withStoreCapacity } from "../runtime/sqlite/operations";
 import { activeChoiceText, handleChoice } from "./internal/local-reminder-choice";
 import { dispatchDisclosure } from "./internal/local-disclosure";
 import type { WhatsAppTurnAdmission } from "../whatsapp/contract";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
-import { deliverReminder, processReminder, repairReminder } from "./internal/local-reminder";
+import {
+  deliverReminder,
+  offerDeliveries,
+  processReminder,
+  repairReminder,
+} from "./internal/local-reminder";
 import { evidenceRetentionDue, summariesDue } from "./internal/cadence";
 import { projections as erasureProjections } from "./internal/erasure";
 import { makeErasureStore } from "../erasure-store/runtime";
@@ -12,7 +25,17 @@ import type { ErasureStore } from "../erasure-store/contract";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import { proactivityWorkflowId } from "./internal/proactivity-workflow";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Context, DateTime, Effect, Layer, Option, Redacted, Schema, type Scope } from "effect";
+import {
+  Clock,
+  Context,
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+  type Scope,
+} from "effect";
 import { HttpClient } from "effect/http";
 import { type UserId } from "../../src/core/identity/contract";
 import {
@@ -47,7 +70,6 @@ import {
   runWeeklyGeneration,
 } from "./operations";
 import {
-  type CategoryDeliveryWork,
   type DueWeeklySchedule,
   InsightUnavailable,
   type NativeReminderEnvironment,
@@ -373,25 +395,25 @@ export const startProactivityWorkflow = (
     }
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-const isNativeWork = (work: ProactivityActivity): work is CategoryDeliveryWork =>
-  work.kind === "proactivity-delivery" && work.owner === "user";
 /** Per-message acknowledgment follows durable Workflow handoff; failures remain eligible for bounded native retries. */
 export const receiveProactivityWork = (
   input: Readonly<{
     messages: ReadonlyArray<Pick<Message<unknown>, "body" | "ack" | "retry">>;
     workflow: Option.Option<Workflow<ProactivityDeliveryWork>>;
-    coordinator: Coordinator;
-  }> &
-    Partial<{ users: Coordinator }>
+    users: Option.Option<Coordinator>;
+  }>
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     for (const message of input.messages) {
-      const native = Schema.is(ProactivityDeliveryWork)(message.body) && isNativeWork(message.body);
-      const coordinator = native ? input.users : input.coordinator;
+      const coordinator = input.users;
       const outcome = yield* Effect.exit(
-        coordinator === undefined
+        Option.isNone(coordinator)
           ? Effect.fail(new InsightUnavailable())
-          : startProactivityWorkflow({ body: message.body, workflow: input.workflow, coordinator })
+          : startProactivityWorkflow({
+              body: message.body,
+              workflow: input.workflow,
+              coordinator: coordinator.value,
+            })
       );
       if (outcome._tag === "Success") message.ack();
       else message.retry({ delaySeconds: 60 });
@@ -443,14 +465,11 @@ const runProactivityWorkflow = ({
 
 /** Native Workflow persists identities and wake-up instants only; every wake rechecks live User authority. */
 export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
-  ProactivityBackgroundEnvironment,
+  Pick<UserStoreBindings, "USER_STORE">,
   ProactivityDeliveryWork
 > {
   run(event: WorkflowEvent<ProactivityDeliveryWork>, step: WorkflowStep): Promise<void> {
-    const coordinator = isNativeWork(event.payload)
-      ? this.env.USER_STORE
-      : this.env.USER_TRANSACTION_COORDINATOR;
-    if (coordinator === undefined) return Promise.reject(new InsightUnavailable());
+    const coordinator = this.env.USER_STORE;
     return observeWorkerPromise(
       () =>
         runProactivityWorkflow({
@@ -481,73 +500,184 @@ const localSender = Effect.fn(function* (env: NativeReminderEnvironment) {
     outboundHttp: yield* nativeOutbound(env),
   });
 });
+const weeklySummarySender = Effect.fn(function* (env: NativeReminderEnvironment) {
+  const configuration = yield* Schema.decodeEffect(
+    Schema.fromJsonString(InsightTemplateConfiguration)
+  )(env.WEEKLY_SUMMARY_TEMPLATE_JSON ?? "");
+  return makeInsightTemplateSender({ configuration, outboundHttp: yield* nativeOutbound(env) });
+});
+const recoverWeekly = Effect.fn(function* (
+  environment: NativeReminderEnvironment,
+  storage: DurableObjectStorage
+) {
+  const now = yield* Clock.currentTimeMillis;
+  yield* Effect.scoped(
+    Effect.flatMap(weeklyQuestionSender(environment), (sender) =>
+      prepareGovernorQuestion(sender, now).pipe(withStoreCapacity("required"))
+    )
+  );
+  const questions = yield* offerWeeklyQuestions(now, storage, environment);
+  const summaries = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const sql = yield* SqliteClient;
+      yield* sql`DELETE FROM weekly_summary_reports WHERE id IN(SELECT id FROM weekly_summary_reports WHERE expires_ms<=${now} ORDER BY expires_ms LIMIT 8)`;
+      yield* materializeWeekly(now, yield* weeklySummarySender(environment));
+      return yield* offerDeliveries(environment, now, true);
+    })
+  );
+  yield* repairWeekly(now, storage);
+  return {
+    attempted: summaries.attempted + questions.attempted,
+    failed: summaries.failed + questions.failed,
+  };
+});
+const weeklyQuestionSender = Effect.fn(function* (env: NativeReminderEnvironment) {
+  const configuration = yield* Schema.decodeEffect(
+    Schema.fromJsonString(WeeklyQuestionTemplateConfiguration)
+  )(env.WEEKLY_QUESTION_TEMPLATE_JSON ?? "");
+  return makeWeeklyQuestionSender({ configuration, outboundHttp: yield* nativeOutbound(env) });
+});
 export const observedReminderChoice = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
   environment: NativeReminderEnvironment,
   storage: DurableObjectStorage
 ) {
+  yield* recordWeeklyReply(event).pipe(withStoreCapacity("required"));
   yield* recordReminderReply(event).pipe(withStoreCapacity("required"));
   if (!activeChoiceText(event.text)) {
     return Option.none<Response>();
   }
-  const privacyChoice =
-    /^(?:no|desactivar)$|^p:(?:manual-entry-reminder|budget-threshold|new-recurring-series):[0-9a-f-]{36}:(?:decline|revoke)$/iu.test(
+  const negative =
+    /^(?:no|desactivar)$|^(?:weekly|p:(?:manual-entry-reminder|budget-threshold|new-recurring-series)):[0-9a-f-]{36}:(?:decline|revoke)$/iu.test(
       event.text.trim()
     );
-  if (privacyChoice || environment.PROACTIVITY_ENABLED !== "enabled") {
-    return yield* handleChoice(event, Option.none(), storage).pipe(withStoreCapacity("required"));
-  }
   return yield* Effect.scoped(
-    Effect.flatMap(localSender(environment), (sender) =>
-      handleChoice(event, Option.some(sender), storage).pipe(withStoreCapacity("growth"))
-    )
+    Effect.gen(function* () {
+      const senders = {
+        category:
+          !negative && environment.PROACTIVITY_ENABLED === "enabled"
+            ? yield* Effect.option(localSender(environment))
+            : Option.none(),
+        weekly:
+          !negative && environment.WEEKLY_SUMMARY_ENABLED === "enabled"
+            ? yield* Effect.option(weeklyQuestionSender(environment))
+            : Option.none(),
+      };
+      return yield* handleChoice(event, senders, storage).pipe(
+        withStoreCapacity(negative ? "required" : "growth")
+      );
+    })
   );
 });
-export const repairLocalReminderAlarm: typeof repairReminder = (...input) =>
-  repairReminder(...input);
+export const repairLocalReminderAlarm = Effect.fn(function* (
+  current: number,
+  storage: DurableObjectStorage,
+  flags: { category: boolean; weekly: boolean }
+) {
+  const category = yield* repairReminder(current, storage, flags.category);
+  const weekly = flags.weekly ? yield* repairWeekly(current, storage) : false;
+  return category || weekly;
+});
 export const recoverLocalReminders = Effect.fn(function* (
   environment: NativeReminderEnvironment,
   storage: DurableObjectStorage,
   owns: (id: string) => boolean
 ) {
-  if (environment.PROACTIVITY_ENABLED !== "enabled") return { attempted: 0, failed: 0 };
-  return yield* Effect.scoped(
-    Effect.flatMap(localSender(environment), (sender) =>
-      Effect.gen(function* () {
-        const offer = yield* dispatchDisclosure(environment, sender, storage).pipe(Effect.result);
-        const recovered = yield* processReminder({ environment, storage, owns, sender });
-        return { ...recovered, failed: recovered.failed + Number(offer._tag === "Failure") };
-      })
+  const empty = { attempted: 0, failed: 0 };
+  const weekly =
+    environment.WEEKLY_SUMMARY_ENABLED === "enabled"
+      ? yield* recoverWeekly(environment, storage).pipe(Effect.result)
+      : undefined;
+  const category =
+    environment.PROACTIVITY_ENABLED !== "enabled"
+      ? empty
+      : yield* Effect.scoped(
+          Effect.flatMap(localSender(environment), (sender) =>
+            Effect.gen(function* () {
+              const offer = yield* dispatchDisclosure(
+                environment,
+                { category: sender },
+                storage
+              ).pipe(Effect.result);
+              const recovered = yield* processReminder({ environment, storage, owns, sender });
+              return { ...recovered, failed: recovered.failed + Number(offer._tag === "Failure") };
+            })
+          )
+        );
+  return {
+    attempted: category.attempted + (weekly?._tag === "Success" ? weekly.success.attempted : 0),
+    failed:
+      category.failed +
+      (weekly?._tag === "Success" ? weekly.success.failed : Number(weekly?._tag === "Failure")),
+  };
+});
+const recoverDelivery = Effect.fn(function* (
+  work: Extract<ProactivityActivity, { kind: "proactivity-recover" }>,
+  environment: NativeReminderEnvironment
+) {
+  const job = work.work;
+  if (
+    job.userId !== work.userId ||
+    (job.kind === "proactivity-delivery"
+      ? environment.PROACTIVITY_ENABLED
+      : environment.WEEKLY_SUMMARY_ENABLED) !== "enabled"
+  ) {
+    return Response.json({ _tag: "Done" });
+  }
+  const sql = yield* SqliteClient,
+    now = yield* Clock.currentTimeMillis;
+  const rows =
+    job.kind === "weekly-question"
+      ? yield* sql`UPDATE reminder_disclosures SET restarts=restarts+1 WHERE user_id=${work.userId} AND id=${job.id} AND kind='weekly-summary' AND state='ready' AND expires_ms>${now} AND restarts<3 RETURNING id`
+      : yield* sql`UPDATE reminder_deliveries SET restarts=restarts+1 WHERE user_id=${work.userId} AND id=${job.kind === "weekly-summary" ? job.insightEventId : job.id} AND state='ready' AND deadline_ms>${now} AND restarts<3 AND EXISTS(SELECT 1 FROM proactive_grants g WHERE g.id=grant_id AND (g.kind='weekly-summary')=${Number(job.kind === "weekly-summary")} AND g.revoked_at_ms IS NULL) RETURNING id`;
+  return Response.json({ _tag: rows.length === 1 ? "RecoveryAdmitted" : "Done" });
+});
+const weeklyActivity = Effect.fn(function* (
+  work: Extract<ProactivityDeliveryWork, { kind: "weekly-summary" | "weekly-question" }>,
+  environment: NativeReminderEnvironment,
+  storage: DurableObjectStorage
+) {
+  if (work.kind === "weekly-question") {
+    yield* Effect.scoped(
+      Effect.flatMap(weeklyQuestionSender(environment), (sender) =>
+        dispatchDisclosure(environment, { weekly: sender, id: work.id }, storage)
+      )
+    );
+    return Response.json({ _tag: "Done" });
+  }
+  return Response.json(
+    yield* Effect.scoped(
+      Effect.flatMap(weeklySummarySender(environment), (sender) =>
+        deliverReminder(
+          environment,
+          { userId: work.userId, id: work.insightEventId },
+          { weekly: sender }
+        )
+      )
     )
   );
 });
 export const nativeReminderActivity = Effect.fn(function* (
   request: Request,
   environment: NativeReminderEnvironment,
-  owns: (id: string) => boolean
+  { owns, storage }: { owns: (id: string) => boolean; storage: DurableObjectStorage }
 ) {
   const work = yield* Schema.decodeUnknownEffect(ProactivityActivity)(
     yield* Effect.tryPromise(() => request.json())
   );
-  if (!owns(work.userId) || environment.PROACTIVITY_ENABLED !== "enabled") {
-    return Response.json({ _tag: "Done" });
-  }
-  if (work.kind === "proactivity-recover") {
-    if (!isNativeWork(work.work) || work.work.userId !== work.userId) {
-      return Response.json({ _tag: "Done" });
-    }
-    const sql = yield* SqliteClient;
-    const rows =
-      yield* sql`UPDATE reminder_deliveries SET restarts=restarts+1 WHERE user_id=${work.userId} AND id=${work.work.id} AND state='ready' AND deadline_ms>${DateTime.toEpochMillis(yield* DateTime.now)} AND restarts<3 RETURNING id`;
-    return Response.json({ _tag: rows.length === 1 ? "RecoveryAdmitted" : "Done" });
-  }
-  if (!isNativeWork(work)) {
+  if (!owns(work.userId)) return Response.json({ _tag: "Done" });
+  if (work.kind === "weekly-question" || work.kind === "weekly-summary")
+    {return environment.WEEKLY_SUMMARY_ENABLED === "enabled"
+      ? yield* weeklyActivity(work, environment, storage)
+      : Response.json({ _tag: "Done" });}
+  if (work.kind === "proactivity-recover") return yield* recoverDelivery(work, environment);
+  if (work.kind !== "proactivity-delivery" || environment.PROACTIVITY_ENABLED !== "enabled") {
     return Response.json({ _tag: "Done" });
   }
   return Response.json(
     yield* Effect.scoped(
       Effect.flatMap(localSender(environment), (sender) =>
-        deliverReminder(environment, work, sender)
+        deliverReminder(environment, work, { category: sender })
       )
     )
   );

@@ -43,7 +43,7 @@ it("inherits the Queue owner's Clock when validating a native canary handoff", (
       const created: unknown[] = [];
       const environment: CoreQueueEnvironment = {
         RELEASE_GIT_SHA: "test",
-        USER_TRANSACTION_COORDINATOR: {
+        USER_STORE: {
           getByName: () => ({ fetch: () => Promise.resolve(new Response()) }),
         },
         OPERATIONAL_CANARY_QUEUE_NAME: "canary",

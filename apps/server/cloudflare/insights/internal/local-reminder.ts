@@ -22,6 +22,8 @@ import {
 } from "../../../src/core/identity/contract";
 import {
   HostedDeliveryCorrelationToken,
+  type InsightTemplateSender,
+  InsightTemplateSummary,
   PreparedProactivityTemplate,
   type ProactivityTemplateSender,
 } from "../../../src/shell/channels/whatsapp/contract";
@@ -145,7 +147,7 @@ export const repairReminder = Effect.fn(function* (
     },
   });
   const [time] = yield* sql.unsafe(
-    `SELECT min(at) AS at FROM (${schedule.sql} UNION ALL SELECT offer_ms FROM reminder_deliveries WHERE state='ready' UNION ALL SELECT attempt_ms FROM reminder_disclosures WHERE state='ready' UNION ALL SELECT due_ms FROM category_alert_groups UNION ALL SELECT i.next_ms FROM recurring_digest_instructions i JOIN proactive_grants g ON g.id=i.grant_id AND g.revoked_at_ms IS NULL WHERE i.next_ms IS NOT NULL)`,
+    `SELECT min(at) AS at FROM (${schedule.sql} UNION ALL SELECT d.offer_ms FROM reminder_deliveries d JOIN proactive_grants g ON g.id=d.grant_id WHERE d.state='ready' AND g.kind<>'weekly-summary' UNION ALL SELECT attempt_ms FROM reminder_disclosures WHERE state='ready' AND kind<>'weekly-summary' UNION ALL SELECT due_ms FROM category_alert_groups UNION ALL SELECT i.next_ms FROM recurring_digest_instructions i JOIN proactive_grants g ON g.id=i.grant_id AND g.revoked_at_ms IS NULL WHERE i.next_ms IS NOT NULL)`,
     schedule.params
   );
   const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ at: Schema.NullOr(Schema.Int) }))(
@@ -157,27 +159,35 @@ export const repairReminder = Effect.fn(function* (
 });
 const postOffer = Effect.fn(function* (
   queue: NonNullable<QueueEnv["WEEKLY_DELIVERY_QUEUE"]>,
-  row: { id: InsightEventId; user_id: UserId },
+  row: { id: InsightEventId; user_id: UserId; weekly: number },
   now: number
 ) {
   const sql = yield* SqliteClient;
-  const work = CategoryDeliveryWork.make({
-    kind: "proactivity-delivery",
-    version: 1,
-    owner: "user",
-    userId: row.user_id,
-    id: row.id,
-  });
+  const work =
+    row.weekly === 1
+      ? {
+          kind: "weekly-summary" as const,
+          version: 1 as const,
+          userId: row.user_id,
+          insightEventId: row.id,
+        }
+      : CategoryDeliveryWork.make({
+          kind: "proactivity-delivery",
+          version: 1,
+          owner: "user",
+          userId: row.user_id,
+          id: row.id,
+        });
   yield* sql`UPDATE reminder_deliveries SET offer_ms=min(deadline_ms,${now + secondOfferMs}) WHERE id=${row.id} AND state='ready'`;
   yield* Effect.tryPromise(() => queue.send(work));
 });
-const offer = Effect.fn(function* (env: QueueEnv, now: number) {
+export const offerDeliveries = Effect.fn(function* (env: QueueEnv, now: number, weekly: boolean) {
   const sql = yield* SqliteClient;
   yield* sql`UPDATE reminder_deliveries SET state='expired' WHERE state='ready' AND deadline_ms<=${now}`;
   const rows = yield* Schema.decodeUnknownEffect(
-    Schema.Array(Schema.Struct({ id: InsightEventId, user_id: UserId }))
+    Schema.Array(Schema.Struct({ id: InsightEventId, user_id: UserId, weekly: Schema.Int }))
   )(
-    yield* sql`SELECT id,user_id FROM reminder_deliveries WHERE state='ready' AND offer_ms<=${now} ORDER BY offer_ms,id LIMIT ${offerPage}`
+    yield* sql`SELECT d.id,d.user_id,(g.kind='weekly-summary') AS weekly FROM reminder_deliveries d JOIN proactive_grants g ON g.id=d.grant_id WHERE d.state='ready' AND d.offer_ms<=${now} AND (g.kind='weekly-summary')=${Number(weekly)} ORDER BY d.offer_ms,d.id LIMIT ${offerPage}`
   );
   const queue = env.WEEKLY_DELIVERY_QUEUE;
   if (rows.length > 0 && queue === undefined) return yield* new InsightUnavailable();
@@ -223,7 +233,7 @@ export const processReminder = Effect.fn(function* (input: {
   }
   yield* produceDigest(now, storage);
   yield* publishCategoryMessages(now, input.sender);
-  const results = yield* offer(environment, now);
+  const results = yield* offerDeliveries(environment, now, false);
   yield* repairReminder(now, storage, true);
   return results;
 });
@@ -248,15 +258,35 @@ const sendBinding = (held: typeof deliveryRow.Type): Parameters<typeof claimRegi
   deadline: held.deadline_ms,
   content: held.body,
 });
+type NativeSender = { category: ProactivityTemplateSender } | { weekly: InsightTemplateSender };
+const preparedSend = Effect.fn(function* (held: typeof deliveryRow.Type, sender: NativeSender) {
+  const channel = {
+    recipient: held.bsuid,
+    businessPhoneNumberId: held.endpoint,
+    correlationToken: held.correlation,
+  };
+  if ("weekly" in sender) {
+    const { summary } = yield* Schema.decodeEffect(
+      Schema.fromJsonString(Schema.Struct({ summary: InsightTemplateSummary }))
+    )(held.body);
+    return (): ReturnType<InsightTemplateSender["send"]> =>
+      sender.weekly.send({ ...channel, summary });
+  }
+  const template = yield* Schema.decodeEffect(Schema.fromJsonString(PreparedProactivityTemplate))(
+    held.body
+  );
+  return (): ReturnType<ProactivityTemplateSender["send"]> =>
+    sender.category.send({ ...channel, template });
+});
 export const deliverReminder = Effect.fn(function* (
   env: Owners,
-  work: CategoryDeliveryWork,
-  sender: ProactivityTemplateSender
+  work: { userId: UserId; id: string },
+  sender: { category: ProactivityTemplateSender } | { weekly: InsightTemplateSender }
 ) {
   const sql = yield* SqliteClient,
     now = yield* DateTime.now;
   const [raw] =
-    yield* sql`SELECT d.*,e.event_json FROM reminder_deliveries d JOIN insight_events e ON e.user_id=d.user_id AND e.id=d.id JOIN proactive_grants g ON g.id=d.grant_id AND g.user_id=d.user_id AND g.revoked_at_ms IS NULL WHERE d.user_id=${work.userId} AND d.id=${work.id} AND d.state='ready'`;
+    yield* sql`SELECT d.*,e.event_json FROM reminder_deliveries d JOIN insight_events e ON e.user_id=d.user_id AND e.id=d.id JOIN proactive_grants g ON g.id=d.grant_id AND g.user_id=d.user_id AND g.revoked_at_ms IS NULL WHERE d.user_id=${work.userId} AND d.id=${work.id} AND d.state='ready' AND (g.kind='weekly-summary')=${Number("weekly" in sender)}`;
   if (raw === undefined) return { _tag: "Done" } as const;
   const held = yield* Schema.decodeUnknownEffect(deliveryRow)(raw);
   const decision = decideInsightDelivery({
@@ -272,9 +302,7 @@ export const deliverReminder = Effect.fn(function* (
     } as const;
   }
   if (decision._tag === "Expired") return { _tag: "Done" } as const;
-  const template = yield* Schema.decodeEffect(Schema.fromJsonString(PreparedProactivityTemplate))(
-    held.body
-  );
+  const send = yield* preparedSend(held, sender);
   const prepared = sendBinding(held);
   const claim = yield* claimRegisteredSend(env, prepared);
   if (!(yield* reserveSharedProviderSpend(env.DIRECTORY, { phase: "reminderSend", units: 4096 }))) {
@@ -282,16 +310,7 @@ export const deliverReminder = Effect.fn(function* (
   }
   yield* sql`UPDATE reminder_deliveries SET spend_ready=1 WHERE id=${held.id} AND user_id=${held.user_id} AND state='ready'`;
   yield* claim.claim;
-  const outcome = sendEvidence(
-    yield* Effect.exit(
-      sender.send({
-        recipient: held.bsuid,
-        businessPhoneNumberId: held.endpoint,
-        correlationToken: held.correlation,
-        template,
-      })
-    )
-  );
+  const outcome = sendEvidence(yield* Effect.exit(send()));
   yield* recordRegisteredSend(env, {
     userId: held.user_id,
     operationId: held.id,

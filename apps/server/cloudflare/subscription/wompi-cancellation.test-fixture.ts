@@ -1,10 +1,10 @@
-import { WorkerEntrypoint } from "cloudflare:workers";
+import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Clock, DateTime, Effect, Schedule, Schema } from "effect";
 import { Hex } from "effect/encoding";
 
-type Environment = Readonly<{ PROVIDER_STATE: D1Database }>;
+type Environment = { PROVIDER_STATE: DurableObjectNamespace };
 
-const chargeFixture = Effect.fn(function* (request: Request, env: Environment, path: string) {
+const chargeFixture = Effect.fn(function* (request: Request, db: SqlStorage, path: string) {
   if (request.method === "POST" && path === "/v1/transactions") {
     const charge = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
@@ -14,15 +14,17 @@ const chargeFixture = Effect.fn(function* (request: Request, env: Environment, p
         payment_source_id: Schema.Int,
       })
     )(yield* Effect.tryPromise(() => request.json()));
-    yield* Effect.tryPromise(() =>
-      env.PROVIDER_STATE.prepare(
-        "INSERT INTO charge_posts(reference,amount,currency,source) VALUES(?,?,?,?)"
+    yield* Effect.sync(() =>
+      db.exec(
+        "INSERT INTO charge_posts(reference,amount,currency,source) VALUES(?,?,?,?)",
+        charge.reference,
+        charge.amount_in_cents,
+        charge.currency,
+        charge.payment_source_id
       )
-        .bind(charge.reference, charge.amount_in_cents, charge.currency, charge.payment_source_id)
-        .run()
     );
-    const released = Effect.tryPromise(() =>
-      env.PROVIDER_STATE.prepare("SELECT released FROM charge_control").first()
+    const released = Effect.sync(
+      () => db.exec("SELECT released FROM charge_control").toArray()[0]
     ).pipe(
       Effect.flatMap((row) => (row?.released === 1 ? Effect.void : Effect.fail("waiting" as const)))
     );
@@ -30,10 +32,10 @@ const chargeFixture = Effect.fn(function* (request: Request, env: Environment, p
     return new Response(null, { status: 503 });
   }
   if (request.method === "GET" && path === "/v1/transactions/provider-callback-id") {
-    const row = yield* Effect.tryPromise(() =>
-      env.PROVIDER_STATE.prepare("SELECT reference,amount,source FROM charge_control").first()
+    const row = yield* Effect.sync(
+      () => db.exec("SELECT reference,amount,source FROM charge_control").toArray()[0]
     );
-    if (row === null) return new Response(null, { status: 404 });
+    if (row === undefined) return new Response(null, { status: 404 });
     return Response.json({
       data: {
         id: "provider-callback-id",
@@ -54,16 +56,13 @@ const isEnrollmentPath = (path: string): boolean =>
   path.startsWith("/v1/merchants/") ||
   path.startsWith("/v1/tokens/") ||
   ["/v1/payment_sources", "/v1/payment_sources/5101", "/v1/payment_sources/5102"].includes(path);
-const createSource = Effect.fn(function* (request: Request, env: Environment) {
+const createSource = Effect.fn(function* (request: Request, db: SqlStorage) {
   const charge = yield* Schema.decodeUnknownEffect(
     Schema.Struct({ type: Schema.Literals(["NEQUI", "CARD"]), token: Schema.String })
   )(yield* Effect.tryPromise(() => request.json()));
   if (charge.token === "tok_test_held_source") {
-    const db = env.PROVIDER_STATE;
-    yield* Effect.tryPromise(() => db.prepare("UPDATE held_source SET issued=issued+1").run());
-    yield* Effect.tryPromise(() =>
-      db.prepare("SELECT released FROM held_source").first<number>("released")
-    ).pipe(
+    yield* Effect.sync(() => db.exec("UPDATE held_source SET issued=issued+1"));
+    yield* Effect.sync(() => db.exec("SELECT released FROM held_source").one().released).pipe(
       Effect.repeat({
         while: (released) => released === 0,
         schedule: Schedule.spaced("30 millis"),
@@ -76,7 +75,7 @@ const createSource = Effect.fn(function* (request: Request, env: Environment) {
     data: { id: syntheticSources[charge.type], status: "AVAILABLE" },
   });
 });
-const enrollmentProvider = Effect.fn(function* (request: Request, path: string, env: Environment) {
+const enrollmentProvider = Effect.fn(function* (request: Request, path: string, db: SqlStorage) {
   if (path.startsWith("/v1/tokens/nequi/")) {
     return Response.json({
       data: {
@@ -112,7 +111,7 @@ const enrollmentProvider = Effect.fn(function* (request: Request, path: string, 
     });
   }
   if (path === "/v1/payment_sources" && request.method === "POST") {
-    return yield* createSource(request, env);
+    return yield* createSource(request, db);
   }
   if (path === "/v1/payment_sources/5101") {
     return Response.json({
@@ -127,7 +126,7 @@ const enrollmentProvider = Effect.fn(function* (request: Request, path: string, 
   return new Response(null, { status: 404 });
 });
 /** Local outbound Worker only. Accept a void and lose its response, then expose the independent provider state. */
-const refundFixture = Effect.fnUntraced(function* (request: Request, env: Environment) {
+const refundFixture = Effect.fnUntraced(function* (request: Request, db: SqlStorage) {
   const material = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       transaction_id: Schema.String,
@@ -135,10 +134,12 @@ const refundFixture = Effect.fnUntraced(function* (request: Request, env: Enviro
       reference: Schema.String,
     })
   )(yield* Effect.tryPromise(() => request.json()));
-  yield* Effect.tryPromise(() =>
-    env.PROVIDER_STATE.prepare("INSERT INTO refund_requests(reference,amount) VALUES(?,?)")
-      .bind(material.reference, material.amount_in_cents)
-      .run()
+  yield* Effect.sync(() =>
+    db.exec(
+      "INSERT INTO refund_requests(reference,amount) VALUES(?,?)",
+      material.reference,
+      material.amount_in_cents
+    )
   );
   return Response.json(
     { data: { ...material, id: 91, v2_refund_id: "verified-sandbox-refund", status: "APPROVED" } },
@@ -147,25 +148,23 @@ const refundFixture = Effect.fnUntraced(function* (request: Request, env: Enviro
 });
 const cancellationResponse = Effect.fnUntraced(function* (
   request: Request,
-  env: Environment,
+  db: SqlStorage,
   path: string
 ) {
   const command = request.method + " " + path;
   if (command === "PUT /v1/payment_sources/78001/void") {
-    yield* Effect.tryPromise(() =>
-      env.PROVIDER_STATE.prepare("INSERT INTO received_voids(source) VALUES (78001)").run()
-    );
+    yield* Effect.sync(() => db.exec("INSERT INTO received_voids(source) VALUES (78001)"));
     return new Response(null, { status: 503 });
   }
   if (command === "GET /v1/payment_sources/78001") {
-    const present = yield* Effect.tryPromise(() =>
-      env.PROVIDER_STATE.prepare("SELECT 1 FROM received_voids WHERE source=78001 LIMIT 1").first()
+    const present = yield* Effect.sync(
+      () => db.exec("SELECT 1 FROM received_voids WHERE source=78001 LIMIT 1").toArray()[0]
     );
     return Response.json({
       data: {
         id: 78001,
         type: "DAVIPLATA",
-        status: present === null ? "AVAILABLE" : "VOIDED",
+        status: present === undefined ? "AVAILABLE" : "VOIDED",
       },
     });
   }
@@ -173,7 +172,13 @@ const cancellationResponse = Effect.fnUntraced(function* (
 });
 export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
   override fetch(request: Request): Promise<Response> {
-    const env = this.env;
+    return this.env.PROVIDER_STATE.getByName("provider").fetch(request);
+  }
+}
+export default CancellationProviderFixture;
+export class ProviderState extends DurableObject {
+  override fetch(request: Request): Promise<Response> {
+    const db = this.ctx.storage.sql;
     return Effect.runPromise(
       Effect.gen(function* () {
         if (request.url === "https://api.openai.com/v1/chat/completions") {
@@ -184,13 +189,13 @@ export class CancellationProviderFixture extends WorkerEntrypoint<Environment> {
         }
         const path = new URL(request.url).pathname;
         if (request.method === "POST" && path === "/v1/refunds") {
-          return yield* refundFixture(request, env);
+          return yield* refundFixture(request, db);
         }
         if (isEnrollmentPath(path)) {
-          return yield* enrollmentProvider(request, path, env);
+          return yield* enrollmentProvider(request, path, db);
         }
-        if (path.startsWith("/v1/transactions")) return yield* chargeFixture(request, env, path);
-        return yield* cancellationResponse(request, env, path);
+        if (path.startsWith("/v1/transactions")) return yield* chargeFixture(request, db, path);
+        return yield* cancellationResponse(request, db, path);
       })
     );
   }

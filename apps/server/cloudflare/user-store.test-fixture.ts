@@ -29,8 +29,17 @@ const billingProvider = Effect.fnUntraced(function* (withBilling: boolean) {
             type: "worker" as const,
             name: "wompi-fixture",
             compatibilityDate: "2026-09-08",
-            exports: { CancellationProviderFixture: { type: "worker" as const } },
-            env: { PROVIDER_STATE: { type: "d1" as const, id: "wompi-cancellation-fixture" } },
+            exports: {
+              CancellationProviderFixture: { type: "worker" as const },
+              ProviderState: { type: "durable-object" as const, storage: "sqlite" as const },
+            },
+            env: {
+              PROVIDER_STATE: {
+                type: "durable-object" as const,
+                worker: "wompi-fixture",
+                exportName: "ProviderState",
+              },
+            },
             manifest: yield* workerManifest("./subscription/wompi-cancellation.test-fixture.ts"),
           },
         },

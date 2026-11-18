@@ -37,15 +37,15 @@ const callbackFixture = Effect.fn(function* () {
     attemptId,
     reference
   );
-  const db = yield* native(() => runtime.getD1Database("PROVIDER_STATE", "wompi-fixture"));
+  const db = yield* native(() =>
+    runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", { name: "provider" })
+  );
   yield* native(() =>
     db.exec(
       "CREATE TABLE charge_posts(reference TEXT,amount INTEGER,currency TEXT,source INTEGER); CREATE TABLE charge_control(released INTEGER,reference TEXT,amount INTEGER,source INTEGER)"
     )
   );
-  yield* native(() =>
-    db.prepare("INSERT INTO charge_control VALUES(0,?,2990000,5101)").bind(reference).run()
-  );
+  yield* native(() => db.exec("INSERT INTO charge_control VALUES(0,?,2990000,5101)", reference));
   return { owner, runtime, db };
 });
 
@@ -72,8 +72,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         );
         yield* native(() => queue.send(work));
         yield* until(
-          native(() => db.prepare("SELECT count(*) AS n FROM charge_posts").first()).pipe(
-            Effect.map((row) => row?.n === 1)
+          native(() => db.exec("SELECT count(*) AS n FROM charge_posts")).pipe(
+            Effect.map((rows) => rows[0]?.n === 1)
           )
         );
         expect(
@@ -149,7 +149,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             .pipe(Effect.map((rows) => rows[0]?.status === "succeeded"))
         );
         expect((yield* notify("test", checksum)).status).toBe(200);
-        yield* native(() => db.prepare("UPDATE charge_control SET released=1").run());
+        yield* native(() => db.exec("UPDATE charge_control SET released=1"));
         yield* native(() => queue.send(work));
         expect(
           yield* owner.exec("SELECT attempt_id,transition FROM billing_transition_audit")
@@ -176,9 +176,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           ).toEqual([{ observed_use: 1, status: "Pending" }]);
         }
 
-        expect(
-          yield* native(() => db.prepare("SELECT count(*) AS n FROM charge_posts").first())
-        ).toEqual({ n: 1 });
+        expect(yield* native(() => db.exec("SELECT count(*) AS n FROM charge_posts"))).toEqual([
+          { n: 1 },
+        ]);
       }),
     30000
   );

@@ -24,10 +24,10 @@ const paidUser = Effect.fnUntraced(function* (runtime: Miniflare) {
     ...args: Parameters<typeof store.exec>
   ): Effect.Effect<Awaited<ReturnType<typeof store.exec>>> => native(() => store.exec(...args));
   const now = yield* Clock.currentTimeMillis;
-  const provider = yield* native(() => runtime.getD1Database("PROVIDER_STATE", "wompi-fixture"));
-  yield* native(() =>
-    provider.prepare("CREATE TABLE received_voids(source INTEGER NOT NULL)").run()
+  const provider = yield* native(() =>
+    runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", { name: "provider" })
   );
+  yield* native(() => provider.exec("CREATE TABLE received_voids(source INTEGER NOT NULL)"));
   yield* exec(
     "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',0)",
     user
@@ -297,10 +297,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           next_offer_at_ms: null,
         });
         expect(
-          yield* native(() =>
-            provider.prepare("SELECT COUNT(*) AS total FROM received_voids").first()
-          )
-        ).toEqual({ total: 1 });
+          yield* native(() => provider.exec("SELECT COUNT(*) AS total FROM received_voids"))
+        ).toEqual([{ total: 1 }]);
       }),
     25000
   );

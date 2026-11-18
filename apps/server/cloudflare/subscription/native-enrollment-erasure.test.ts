@@ -21,7 +21,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           owner.now
         );
         const provider = yield* native(() =>
-          runtime.getD1Database("PROVIDER_STATE", "wompi-fixture")
+          runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", {
+            name: "provider",
+          })
         );
         yield* native(() =>
           provider.exec(
@@ -67,16 +69,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             authorizedRecurringCharges: true,
           },
         }).pipe(Effect.forkChild({ startImmediately: true }));
-        const issued = yield* native(() =>
-          provider.prepare("SELECT issued FROM held_source").first<number>("issued")
-        ).pipe(
+        const issued = yield* native(() => provider.exec("SELECT issued FROM held_source")).pipe(
           Effect.repeat({
-            until: (count) => count === 1,
+            until: (rows) => rows[0]?.issued === 1,
             times: 100,
             schedule: Schedule.spaced("30 millis"),
           })
         );
-        expect(issued).toBe(1);
+        expect(issued).toEqual([{ issued: 1 }]);
         if (eraseFirst) expect((yield* admitPurge(runtime)).status).toBe(202);
         const [registration] = yield* owner.exec(
           "SELECT request FROM billing_admissions WHERE subject_id=?",
@@ -93,7 +93,7 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
         if (!eraseFirst) expect((yield* admitPurge(runtime)).status).toBe(202);
         const driver = yield* caseDriver(runtime);
         expect(yield* driver.step().pipe(Effect.repeat({ times: 5 }))).toBe("Draining");
-        yield* native(() => provider.prepare("UPDATE held_source SET released=1").run());
+        yield* native(() => provider.exec("UPDATE held_source SET released=1"));
         yield* Fiber.join(submitted);
         expect(
           yield* driver
@@ -107,11 +107,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             )
           )
         ).toEqual([{ observed_use: 1, status: "Pending" }]);
-        expect(
-          yield* native(() =>
-            provider.prepare("SELECT issued FROM held_source").first<number>("issued")
-          )
-        ).toBe(1);
+        expect(yield* native(() => provider.exec("SELECT issued FROM held_source"))).toEqual([
+          { issued: 1 },
+        ]);
       }),
     30000
   );

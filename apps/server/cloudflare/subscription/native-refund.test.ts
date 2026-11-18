@@ -49,14 +49,14 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
       Effect.gen(function* () {
         const runtime = yield* (yield* nativeBillingPlatform)();
         const provider = yield* native(() =>
-          runtime.getD1Database("PROVIDER_STATE", "wompi-fixture")
+          runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", {
+            name: "provider",
+          })
         );
         yield* native(() =>
-          provider
-            .prepare(
-              "CREATE TABLE refund_requests(reference TEXT NOT NULL,amount INTEGER NOT NULL)"
-            )
-            .run()
+          provider.exec(
+            "CREATE TABLE refund_requests(reference TEXT NOT NULL,amount INTEGER NOT NULL)"
+          )
         );
         const owner = yield* seed(runtime, alice, false);
         yield* seed(runtime, bob, false);
@@ -123,10 +123,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             Effect.retry({ times: 100, schedule: Schedule.spaced("60 millis") })
           );
         expect(
-          yield* native(() =>
-            provider.prepare("SELECT count(*) AS count FROM refund_requests").first()
-          )
-        ).toEqual({ count: 1 });
+          yield* native(() => provider.exec("SELECT count(*) AS count FROM refund_requests"))
+        ).toEqual([{ count: 1 }]);
         expect(
           yield* owner.exec(
             "SELECT count(*) AS count FROM subscription_renewal_fences WHERE user_id=?",
@@ -164,10 +162,8 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           expect(retry.status).toBe(204);
         }
         expect(
-          yield* native(() =>
-            provider.prepare("SELECT count(*) AS count FROM refund_requests").first()
-          )
-        ).toEqual({ count: 1 });
+          yield* native(() => provider.exec("SELECT count(*) AS count FROM refund_requests"))
+        ).toEqual([{ count: 1 }]);
         expect(yield* native(() => receipt.json())).toMatchObject({
           data: {
             id: accepted.data.id,

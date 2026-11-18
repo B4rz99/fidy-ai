@@ -144,7 +144,9 @@ const recoverEnrollment = Effect.fn(function* (
     ...args: Parameters<typeof reopened.exec>
   ): ReturnType<Effect.Success<ReturnType<typeof seed>>["exec"]> =>
     native(() => reopened.exec(...args));
-  const db = yield* native(() => restarted.getD1Database("PROVIDER_STATE", "wompi-fixture"));
+  const db = yield* native(() =>
+    restarted.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", { name: "provider" })
+  );
   const users = yield* native(() => restarted.getDurableObjectNamespace("USER_STORE", "core"));
   const work = {
     _tag: "CollectUserBillingAttempt",
@@ -158,9 +160,9 @@ const recoverEnrollment = Effect.fn(function* (
         .fetch(collectUserBillingUrl, { method: "POST", body: JSON.stringify(work) })
     )).status
   ).toBe(204);
-  expect(yield* native(() => db.prepare("SELECT count(*) AS n FROM charge_posts").first())).toEqual(
-    { n: 1 }
-  );
+  expect(yield* native(() => db.exec("SELECT count(*) AS n FROM charge_posts"))).toEqual([
+    { n: 1 },
+  ]);
   return exec;
 });
 
@@ -334,7 +336,9 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
           Schema.Struct({ enrollmentId: Schema.String })
         )(yield* native(() => fresh.json()));
         const provider = yield* native(() =>
-          runtime.getD1Database("PROVIDER_STATE", "wompi-fixture")
+          runtime.unsafeGetDurableObjectStorage("wompi-fixture", "ProviderState", {
+            name: "provider",
+          })
         );
         yield* native(() =>
           provider.exec(
@@ -457,27 +461,23 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })((test) => {
             stores.getByName(alice.user).fetch(ownerCheckUrl, { method: "POST" })
           )).status
         ).toBe(204);
-        yield* native(() =>
-          provider.prepare("SELECT count(*) AS n FROM charge_posts").first()
-        ).pipe(
-          Effect.flatMap((row) => (row?.n === 1 ? Effect.void : Effect.fail("waiting" as const))),
+        yield* native(() => provider.exec("SELECT count(*) AS n FROM charge_posts")).pipe(
+          Effect.flatMap((rows) =>
+            rows[0]?.n === 1 ? Effect.void : Effect.fail("waiting" as const)
+          ),
           Effect.retry({ times: 80, schedule: Schedule.spaced("50 millis") })
         );
         expect(yield* owner.exec("SELECT collection_state,status FROM billing_attempts")).toEqual([
           { collection_state: "sent", status: "pending" },
         ]);
-        expect(
-          yield* native(() => provider.prepare("SELECT * FROM charge_posts").all())
-        ).toMatchObject({
-          results: [
-            {
-              reference: "fidy-" + register.operationId,
-              amount: 3190000,
-              currency: "COP",
-              source: 5101,
-            },
-          ],
-        });
+        expect(yield* native(() => provider.exec("SELECT * FROM charge_posts"))).toEqual([
+          {
+            reference: "fidy-" + register.operationId,
+            amount: 3190000,
+            currency: "COP",
+            source: 5101,
+          },
+        ]);
 
         yield* native(() => runtime.dispose());
         const restarted = yield* create();

@@ -1,0 +1,47 @@
+apps/server/cloudflare/directory/internal/whatsapp.ts
+  s_a1be23a656acf0::t_9aa5aae8a4ea9b 84-86,107-115
+  s_a1be23a656acf0::t_2767e929bf692c 116-117,127
+apps/server/cloudflare/directory/schema/operations.ts
+  s_a1be23a656acf0::t_9aa5aae8a4ea9b 210-212
+  s_a1be23a656acf0::t_9fda965acfcb5f 207-209,213
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_a1be23a656acf0::t_9aa5aae8a4ea9b 13-20,22-23,25-28,30-43,45-48,50-57,60-87,89-99,101-103,106-113,115-121,123-135,137-144,146-162,164-178,180-202,204-205,207-248
+  s_a1be23a656acf0::t_4aab4af799987e 1-12,249
+apps/server/cloudflare/subscription/wompi-cancellation.test-fixture.ts
+  s_a1be23a656acf0::t_9aa5aae8a4ea9b 260-261
+  s_a1be23a656acf0::t_ed00fb19fef411 262
+apps/server/cloudflare/ingestion/native-media.test.ts
+  s_a1be23a656acf0::t_9aa5aae8a4ea9b 171-182
+  s_a1be23a656acf0::t_65216a0b9ab4d3 10,14,183-185
+apps/server/cloudflare/directory/runtime.ts
+  s_a1be23a656acf0::t_9aa5aae8a4ea9b 41,68
+  s_a1be23a656acf0::t_b552d071feb17e 325,330
+apps/server/cloudflare/provider-authentication/runtime.ts
+  s_a1be23a656acf0::t_9aa5aae8a4ea9b 1-5
+  s_a1be23a656acf0::t_fc01b976420195 68-96,128
+apps/server/cloudflare/browser-bootstrap.test-fixture.ts
+  s_a1be23a656acf0::t_9aa5aae8a4ea9b 127-134
+  s_a1be23a656acf0::t_4007e092b9e0fc 144-145,162,164-167,186
+apps/server/cloudflare/directory/contract.ts
+  s_a1be23a656acf0::t_3646215ae8b96f 60
+apps/server/cloudflare/directory/internal/provider.ts
+  s_a1be23a656acf0::t_8b9bd79832ccca 157
+apps/server/cloudflare/directory/oidc.test-fixture.ts
+  s_a1be23a656acf0::t_a7affbd8ba862c 145-157,166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "db5b4245c4fb1cb4d9cf8c9d71c902d5031a1217",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

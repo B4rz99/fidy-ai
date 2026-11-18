@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "e4db851a6a6a2cb042ae8b7161410eaaec70954087e672f5a9c5efee1ed5ee19";
+const expectedEdgePolicyDigest = "eee47e014797d0ca86bb4b79d2fa49991a723433dd6d685e283bb7d6badbdaeb";
 const securityArtifacts = [
   await Bun.file(
     new URL("../../apps/server/cloudflare/transactions/internal/sqlite-privacy.ts", import.meta.url)

@@ -928,12 +928,10 @@ const invokeResidentHandler = (
       }
       return owner.handler.handler(request, context).then(Option.some);
     }).pipe(
-      Effect.onExit((exit) =>
-        exit._tag === "Success"
-          ? Effect.void
-          : Effect.sync(() => {
-              owner.retiring = true;
-            })
+      Effect.onError(() =>
+        Effect.sync(() => {
+          owner.retiring = true;
+        })
       )
     );
   });

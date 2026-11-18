@@ -1078,6 +1078,18 @@ export const userStoreHistory: StoreHistory = {
         "CREATE TRIGGER frozen_budget_crossing BEFORE UPDATE ON budget_threshold_crossings BEGIN SELECT RAISE(ABORT,'immutable_budget_threshold'); END",
       ],
     },
+    {
+      version: 33,
+      id: "native-recurring-digests",
+      statements: [
+        "ALTER TABLE budget_alert_groups RENAME TO category_alert_groups",
+        "CREATE TABLE recurring_digest_instructions(user_id TEXT PRIMARY KEY REFERENCES users(id),id TEXT NOT NULL UNIQUE,revision INTEGER NOT NULL,grant_id TEXT NOT NULL REFERENCES proactive_grants(id),acceptance_from_ms INTEGER NOT NULL,next_ms INTEGER) STRICT",
+        "CREATE TABLE recurring_digest_claims(confirmation_id TEXT PRIMARY KEY,from_ms INTEGER NOT NULL,to_ms INTEGER NOT NULL,disposition TEXT NOT NULL CHECK(disposition IN('included','suppressed','invalid','excluded'))) STRICT",
+        "CREATE TABLE recurring_digest_days(from_ms INTEGER NOT NULL,to_ms INTEGER NOT NULL,event_id TEXT REFERENCES insight_events(id),PRIMARY KEY(from_ms,to_ms)) STRICT",
+        "CREATE TRIGGER new_digest_source AFTER UPDATE OF evaluated_at_ms ON recurring_evaluation_records WHEN NEW.kind='progress' AND NEW.phase='complete' AND NEW.evaluated_at_ms IS NOT NULL BEGIN UPDATE recurring_digest_instructions SET next_ms=min(coalesce(next_ms,NEW.evaluated_at_ms),NEW.evaluated_at_ms) WHERE user_id=NEW.user_id; END",
+        "CREATE TRIGGER initial_digest_source AFTER INSERT ON recurring_evaluation_records WHEN NEW.kind='progress' AND NEW.phase='complete' AND NEW.evaluated_at_ms IS NOT NULL BEGIN UPDATE recurring_digest_instructions SET next_ms=min(coalesce(next_ms,NEW.evaluated_at_ms),NEW.evaluated_at_ms) WHERE user_id=NEW.user_id; END",
+      ],
+    },
   ],
 };
 

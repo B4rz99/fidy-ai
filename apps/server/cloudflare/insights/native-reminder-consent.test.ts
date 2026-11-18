@@ -1,3 +1,4 @@
+import { ownerCheckUrl } from "../maintenance/contract";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Clock, DateTime, Effect, Schedule, Schema } from "effect";
@@ -203,7 +204,112 @@ const signedReminderJourney = Effect.fnUntraced(function* (
     expect(delivered).toEqual([{ provider: "wamid.thresholds" }, { provider: "wamid.thresholds" }]);
     expect(yield* owner.exec("SELECT count(*) n FROM proactive_transcript")).toEqual([{ n: 1 }]);
   });
-  if (kind === "budget-threshold") yield* deliverBudget;
+  const materializeDigest = Effect.gen(function* () {
+    const now = yield* DateTime.now,
+      offset = 12 - DateTime.getPartUtc(now, "hour"),
+      zone = offset === 0 ? "Etc/UTC" : "Etc/GMT" + (offset > 0 ? "-" : "+") + Math.abs(offset);
+    const yesterday = DateTime.subtract(now, { days: 1 });
+    yield* owner.exec(
+      "UPDATE recurring_digest_instructions SET acceptance_from_ms=?,next_ms=0",
+      yesterday.epochMilliseconds - 86400000
+    );
+    const schema =
+      "INSERT INTO recurring_series(user_id,id,currency,counterparty_key,series_json,evidence_json,reference_json,valid,confirmation_id,confirmed_at_ms,confirmation_context_json,confirmation_json,digest_excluded,confirmation_sequence) VALUES(?,?,'COP',?,'{}','{}','{}',1,?,?,?, ?,0,?)";
+    const context = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+      serviceMarket: "CO",
+      locale: "es-CO",
+      timeZone: zone,
+    });
+    const merchants = ["Banco", "Café", "Excluido"];
+    for (const [index, merchant] of merchants.entries()) {
+      const id = "22570000-0000-4000-8000-00000000010" + index,
+        series = "22570000-0000-4000-8000-00000000020" + index;
+      const snapshot = {
+        id,
+        seriesId: series,
+        money: { amount: "25.15", currency: "COP" },
+        counterparty: merchant,
+        confirmedAt: DateTime.formatIso(yesterday),
+        cadence: { kind: "monthly" },
+        announcement:
+          index === 2 ? { kind: "suppressed", reason: "backfill" } : { kind: "eligible" },
+      };
+      yield* owner.exec(
+        schema,
+        alice.user,
+        series,
+        merchant,
+        id,
+        yesterday.epochMilliseconds,
+        context,
+        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(snapshot),
+        index + 1
+      );
+    }
+    const [projection] = yield* owner.exec(
+      "SELECT fact_revision,first_captured_at_ms,time_zone FROM transaction_projection_state WHERE user_id=?",
+      alice.user
+    );
+    if (projection === undefined) return yield* Effect.die("Missing registered ledger");
+    yield* owner.exec(
+      "INSERT INTO recurring_evaluation_records(kind,id,group_key,user_id,revision,phase,cursor_id,evaluated_revision,evaluated_at_ms,first_captured_at_ms,time_zone) VALUES('progress','progress','',?,?,'complete','',?,?,?,?) ON CONFLICT DO UPDATE SET revision=excluded.revision,phase='complete',evaluated_revision=excluded.evaluated_revision,evaluated_at_ms=excluded.evaluated_at_ms",
+      alice.user,
+      projection.fact_revision,
+      projection.fact_revision,
+      now.epochMilliseconds,
+      projection.first_captured_at_ms,
+      zone
+    );
+    const users = yield* native(() => runtime.getDurableObjectNamespace("USER_STORE", "core"));
+    yield* native(() => users.getByName(alice.user).fetch(ownerCheckUrl, { method: "POST" }));
+    const [frozen] = yield* owner
+      .exec(
+        "SELECT event_id,json_extract(report_json,'$.payload.items') AS items FROM recurring_digest_reports"
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (rows) => rows.length === 1,
+          () => "waiting for recurring digest"
+        ),
+        Effect.retry({ times: 100, schedule: Schedule.spaced("60 millis") })
+      );
+    if (frozen === undefined) return yield* Effect.die("Missing frozen digest report");
+    const items = yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(Schema.Array(Schema.Struct({ counterparty: Schema.String })))
+    )(frozen.items);
+    expect(items.map((item) => item.counterparty)).toEqual(["Banco", "Café"]);
+    const [claim] = yield* owner
+      .exec(
+        "SELECT correlation FROM whatsapp_deliveries WHERE family='proactivity' AND started_ms IS NOT NULL AND operation_id=?",
+        frozen.event_id
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (rows) => rows.length === 1,
+          () => "waiting for digest delivery"
+        ),
+        Effect.retry({ times: 100, schedule: Schedule.spaced("60 millis") })
+      );
+    if (claim === undefined) return yield* Effect.die("Missing digest claim");
+    expect((yield* settle("wamid.recurring-digest", claim.correlation)).status).toBe(200);
+    const receipts = yield* owner
+      .exec(
+        "SELECT id FROM insight_events WHERE receipt_json IS NOT NULL AND json_extract(receipt_json,'$.providerMessageId')='wamid.recurring-digest'"
+      )
+      .pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 1,
+          times: 100,
+          schedule: Schedule.spaced("60 millis"),
+        })
+      );
+    expect(receipts).toEqual([{ id: frozen.event_id }]);
+  });
+  yield* {
+    "new-recurring-series": materializeDigest,
+    "budget-threshold": deliverBudget,
+    "manual-entry-reminder": Effect.void,
+  }[kind];
   expect((yield* say("wamid.revoke", qualified + ":revoke")).status).toBe(200);
   expect(
     yield* owner.exec("SELECT count(*) AS active FROM proactive_grants WHERE revoked_at_ms IS NULL")

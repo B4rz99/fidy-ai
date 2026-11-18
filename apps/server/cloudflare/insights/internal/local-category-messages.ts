@@ -30,7 +30,7 @@ export const publishCategoryMessages = Effect.fn(function* (
   return yield* withStoreAdmission((admitGrowth) =>
     Effect.gen(function* () {
       const sql = yield* SqliteClient;
-      yield* sql`DELETE FROM budget_alert_groups WHERE id IN(SELECT q.id FROM budget_alert_groups q JOIN proactive_grants g ON g.id=q.grant_id WHERE g.revoked_at_ms IS NOT NULL OR q.deadline_ms<=${now} ORDER BY q.due_ms LIMIT 16)`;
+      yield* sql`DELETE FROM category_alert_groups WHERE id IN(SELECT q.id FROM category_alert_groups q JOIN proactive_grants g ON g.id=q.grant_id WHERE g.revoked_at_ms IS NOT NULL OR q.deadline_ms<=${now} ORDER BY q.due_ms LIMIT 16)`;
       const live = protectConsentStatement({
         subject: { _tag: "Owner", column: "u.id" },
         requirement: "active",
@@ -40,14 +40,14 @@ export const publishCategoryMessages = Effect.fn(function* (
         },
       });
       yield* sql.unsafe(
-        `DELETE FROM budget_alert_groups WHERE id IN(SELECT q.id FROM budget_alert_groups q WHERE q.due_ms<=? AND NOT EXISTS(${live.sql}) ORDER BY q.due_ms LIMIT 16)`,
+        `DELETE FROM category_alert_groups WHERE id IN(SELECT q.id FROM category_alert_groups q WHERE q.due_ms<=? AND NOT EXISTS(${live.sql}) ORDER BY q.due_ms LIMIT 16)`,
         [now, ...live.params]
       );
       const guard = protectConsentStatement({
         subject: { _tag: "Owner", column: "u.id" },
         requirement: "active",
         statement: {
-          sql: "SELECT q.*,g.user_id,c.portfolio,c.bsuid,c.endpoint FROM budget_alert_groups q JOIN proactive_grants g ON g.id=q.grant_id AND g.kind='budget-threshold' AND g.revoked_at_ms IS NULL JOIN reminder_channels c ON c.grant_id=g.id JOIN users u ON u.id=g.user_id AND u.whatsapp_portfolio_id=c.portfolio AND u.whatsapp_bsuid=c.bsuid WHERE q.due_ms<=? AND q.deadline_ms>? AND NOT EXISTS(SELECT 1 FROM erasure_requests)",
+          sql: "SELECT q.*,g.user_id,c.portfolio,c.bsuid,c.endpoint FROM category_alert_groups q JOIN insight_events e ON e.id=q.id JOIN proactive_grants g ON g.id=q.grant_id AND g.user_id=e.user_id AND g.kind=json_extract(e.event_json,'$.kind') AND g.revoked_at_ms IS NULL JOIN reminder_channels c ON c.grant_id=g.id JOIN users u ON u.id=g.user_id AND u.whatsapp_portfolio_id=c.portfolio AND u.whatsapp_bsuid=c.bsuid WHERE q.due_ms<=? AND q.deadline_ms>? AND NOT EXISTS(SELECT 1 FROM erasure_requests)",
           params: [now, now],
         },
       });
@@ -62,7 +62,7 @@ export const publishCategoryMessages = Effect.fn(function* (
         const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.String))(body);
         const digest = Hex.encode(yield* digestBytes(new TextEncoder().encode(encoded)));
         yield* sql`INSERT INTO reminder_deliveries(id,user_id,grant_id,correlation,portfolio,bsuid,endpoint,deadline_ms,offer_ms,body,digest) VALUES(${item.id},${item.user_id},${item.grant_id},${newId()},${item.portfolio},${item.bsuid},${item.endpoint},${item.deadline_ms},${now},${body},${digest})`;
-        yield* sql`DELETE FROM budget_alert_groups WHERE id=${item.id}`;
+        yield* sql`DELETE FROM category_alert_groups WHERE id=${item.id}`;
       }
     })
   );

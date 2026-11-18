@@ -1,3 +1,4 @@
+import { activateDigest } from "./native-recurring-digest";
 import { ProactivityOptInKind } from "../../../src/shell/consent/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
@@ -120,6 +121,7 @@ const activation = Effect.fn(function* (
   event: WhatsAppTurnAdmission,
   { grant, kind, now }: { grant: string; kind: ProactivityOptInKind; now: number }
 ) {
+  if (kind === "new-recurring-series") return yield* activateDigest(event.userId, grant, now);
   if (kind !== "manual-entry-reminder") return now;
   const sql = yield* SqliteClient;
   const [old] =
@@ -283,8 +285,9 @@ const resolveReply = Effect.fn(function* (
   const { kind, choice, offer } = choiceFor(text);
   if (Option.isNone(choice)) return Option.none<Response>();
   const raw = yield* deliveredOffer(event, offer);
-  if (raw === undefined)
-    {return Option.isNone(kind) ? Option.none<Response>() : Option.some(refused());}
+  if (raw === undefined) {
+    return Option.isNone(kind) ? Option.none<Response>() : Option.some(refused());
+  }
   if (Option.isSome(kind) && kind.value !== raw.kind) return Option.some(refused());
   if (choice.value === "accept" && !enabled) return Option.some(refused());
   return Option.some(

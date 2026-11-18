@@ -1,6 +1,7 @@
+import { presentation, sortedDigestItems } from "./recurring-presentation";
 import { prepareChangedRowAssertion } from "../../../src/shell/sql-assertions/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { MoneyGroups, encodeMoneyAmount } from "../../../src/core/_shared/money";
+import { MoneyGroups } from "../../../src/core/_shared/money";
 import {
   type ConfirmationDay,
   InsightEventId,
@@ -12,7 +13,6 @@ import {
   captureConfirmationDay,
   recurringDigestTiming,
 } from "../../../src/core/insights/operations";
-import { PreparedProactivityTemplate } from "../../../src/shell/channels/whatsapp/contract";
 import { prepareRecurringDigestSourceGuard } from "../../recurring/operations";
 import { prepareProactivityConsentAction } from "../../consent/operations";
 import { newId } from "../../secret-material/operations";
@@ -166,26 +166,6 @@ const disposition = (row: StageView, items: ReadonlyArray<RecurringDigestItem>):
   if (row.eligible === "invalid") return "invalid";
   return "excluded";
 };
-const compareItems = (left: RecurringDigestItem, right: RecurringDigestItem): number => {
-  const pairs: ReadonlyArray<readonly [string, string]> = [
-    [left.money.currency, right.money.currency],
-    [left.counterparty, right.counterparty],
-    [left.confirmationId, right.confirmationId],
-  ];
-  for (const [leftValue, rightValue] of pairs) {
-    if (leftValue < rightValue) return -1;
-    if (leftValue > rightValue) return 1;
-  }
-  return 0;
-};
-const presentation = (report: RecurringDigestReport): string => {
-  const heading = `Nuevos patrones históricos de cargos recurrentes del ${report.payload.confirmationDay.localDate}. No indica que sigan activos.`;
-  const text = `${heading} ${report.payload.items.map((item) => `${item.counterparty}: ${encodeMoneyAmount(item.money.amount)} ${item.money.currency}; mensual.`).join(" ")}`;
-  return Option.isSome(Schema.decodeOption(PreparedProactivityTemplate.fields.parameter)(text))
-    ? text
-    : `${heading} ${report.payload.items.length} patrones. Informe completo: https://app.fidyapp.com/insights/recurring/${report.insightEventId}`;
-};
-
 export const materializeDay = (
   work: Readonly<{
     input: Scope;
@@ -207,8 +187,7 @@ export const materializeDay = (
         (row) =>
           row.eligible === "eligible" && row.confirmed_at_ms >= instruction.acceptance_from_ms
       )
-      .flatMap((row) => (Option.isSome(row.item_json) ? [row.item_json.value] : []))
-      .sort(compareItems);
+      .flatMap((row) => (Option.isSome(row.item_json) ? [row.item_json.value] : []));
     const id = InsightEventId.make(newId());
     const statements = yield* prepareDay({
       input,
@@ -220,7 +199,7 @@ export const materializeDay = (
     if (items.length > 0) {
       const payload = yield* Schema.decodeUnknownEffect(Schema.toType(RecurringDigestPayload))({
         confirmationDay: day,
-        items,
+        items: sortedDigestItems(items),
       });
       const report = RecurringDigestReport.make({
         insightEventId: id,

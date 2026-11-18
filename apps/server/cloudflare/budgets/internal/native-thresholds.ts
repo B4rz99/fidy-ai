@@ -125,7 +125,7 @@ const evaluate = Effect.fn(function* (
     localMonth({ now: period.from, zone: period.timeZone }) + "-01"
   ).replace(/^1 de /u, "");
   const message = `Llevas ${formatWhatsAppMoney(status.spent)} de los ${formatWhatsAppMoney(budget.cap)} de tu presupuesto de ${label} para ${monthName}. Alcanzaste el ${newlyReached.map((threshold) => threshold + "%").join(" y el ")}.`;
-  yield* sql`INSERT INTO budget_alert_groups VALUES(${group},${grantId.value},${message},${budgetAlertDeadline({ detectedAt: now, monthEnd: period.to }).epochMilliseconds},${now.epochMilliseconds})`;
+  yield* sql`INSERT INTO category_alert_groups VALUES(${group},${grantId.value},${message},${budgetAlertDeadline({ detectedAt: now, monthEnd: period.to }).epochMilliseconds},${now.epochMilliseconds})`;
   return true;
 });
 export const retainLocalBudgetThresholds = Effect.fn(

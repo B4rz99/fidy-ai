@@ -1,0 +1,39 @@
+apps/server/cloudflare/agent/user-store.test.ts
+  s_a1be23a656acf0::t_c4def780cf7dc6 51-57,59-83,98-99,102-130,132-133,135-140,179,189,253,347-350
+  s_a1be23a656acf0::t_164db14164d2a7 58,84-97,100-101,134
+apps/server/cloudflare/agent/provider.test-fixture.ts
+  s_a1be23a656acf0::t_c4def780cf7dc6 49-50,55-60,65,74-77,79-81,99-102
+  s_a1be23a656acf0::t_ff4f52d422f76e 82-85,87,95-98,103-105,110-116
+apps/server/cloudflare/budgets/operations.ts
+  s_a1be23a656acf0::t_e241d7c60ea3bc 1,869-870
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_a1be23a656acf0::t_ec9d1ef05dbf1a 20-25,944,1033
+apps/server/cloudflare/dashboard/internal/sqlite-dashboard.ts
+  s_a1be23a656acf0::t_787f588b55ce89 202-212
+apps/server/cloudflare/dashboard/operations.ts
+  s_a1be23a656acf0::t_65174ca7656af6 473-475
+apps/server/cloudflare/recurring-plans/internal/sqlite-plans.ts
+  s_a1be23a656acf0::t_a971a52d2875dc 151
+apps/server/cloudflare/recurring-plans/operations.ts
+  s_a1be23a656acf0::t_6b4fefa377bf01 276-278
+apps/server/cloudflare/recurring/internal/sqlite-series.ts
+  s_a1be23a656acf0::t_e3deb9a6c4ba31 176-180
+apps/server/cloudflare/recurring/operations.ts
+  s_a1be23a656acf0::t_a6f5471c368fee 2-7,326-327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6df04dde035fef71c38e2baa573166e0a4e14eca",
+  "prompts": {},
+  "sessions": {
+    "s_a1be23a656acf0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1eb35-75eb-7ed2-95d7-b52bbc8f5a4b",
+        "model": "gpt-6.2-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

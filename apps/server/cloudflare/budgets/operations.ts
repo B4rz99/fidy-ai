@@ -868,3 +868,5 @@ export const prepareLocalBudgetDeletion: typeof prepareDeletionInStore = (id, us
   prepareDeletionInStore(id, user);
 
 export const readLocalBudget: typeof queryLocalBudget = (...args) => queryLocalBudget(...args);
+
+export { retainLocalBudgetThresholds } from "./internal/native-thresholds";

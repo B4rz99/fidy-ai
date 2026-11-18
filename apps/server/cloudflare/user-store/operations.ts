@@ -1067,6 +1067,17 @@ export const userStoreHistory: StoreHistory = {
         "CREATE INDEX native_disclosure_purpose ON reminder_disclosures(user_id,kind,expires_ms)",
       ],
     },
+    {
+      version: 32,
+      id: "user-budget-thresholds",
+      statements: [
+        "CREATE TABLE budget_threshold_crossings(budget_id TEXT NOT NULL,month_start INTEGER NOT NULL,zone TEXT NOT NULL,threshold INTEGER NOT NULL CHECK(threshold IN(80,100)),event_id TEXT NOT NULL UNIQUE REFERENCES insight_events(id),group_id TEXT NOT NULL,grant_id TEXT REFERENCES proactive_grants(id),crossing_json TEXT NOT NULL CHECK(json_valid(crossing_json)),PRIMARY KEY(budget_id,month_start,zone,threshold)) STRICT",
+        "CREATE INDEX budget_crossing_group ON budget_threshold_crossings(group_id,threshold)",
+        "CREATE TABLE budget_alert_groups(id TEXT PRIMARY KEY REFERENCES insight_events(id),grant_id TEXT NOT NULL REFERENCES proactive_grants(id),parameter TEXT NOT NULL,deadline_ms INTEGER NOT NULL,due_ms INTEGER NOT NULL) STRICT",
+        "CREATE INDEX budget_alert_due ON budget_alert_groups(due_ms)",
+        "CREATE TRIGGER frozen_budget_crossing BEFORE UPDATE ON budget_threshold_crossings BEGIN SELECT RAISE(ABORT,'immutable_budget_threshold'); END",
+      ],
+    },
   ],
 };
 

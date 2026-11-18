@@ -1,8 +1,8 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Clock, Effect, Schedule, Schema } from "effect";
+import { Clock, DateTime, Effect, Schedule, Schema } from "effect";
 import { expect } from "vitest";
-import { alice, seed } from "../financial-user-store.test-fixture";
+import { alice, category, seed } from "../financial-user-store.test-fixture";
 import { native, nativeHostedPlatform } from "../user-store.test-fixture";
 import { DisclosureSnapshot, type ProactivityOptInKind } from "../../src/shell/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
@@ -91,27 +91,28 @@ const signedReminderJourney = Effect.fnUntraced(function* (
     "p:" + kind + ":" + (yield* Schema.decodeUnknownEffect(Schema.String)(claim.operation_id));
   expect((yield* say("wamid.early", qualified + ":accept")).status).toBe(422);
   const providerMessage = "wamid.reminder-disclosure";
-  expect(
-    (yield* webhook("whatsapp.message.delivered", {
+  const settle = Effect.fn(function* (message: string, correlation: unknown) {
+    return yield* webhook("whatsapp.message.delivered", {
       phone_number_id: endpoint,
       message: {
-        id: providerMessage,
+        id: message,
         kapso: {
           direction: "outbound",
           status: "delivered",
           statuses: [
             {
-              id: providerMessage,
+              id: message,
               status: "delivered",
               timestamp: String(Math.floor((yield* Clock.currentTimeMillis) / 1000)),
               recipient_user_id: bsuid,
-              biz_opaque_callback_data: claim.correlation,
+              biz_opaque_callback_data: correlation,
             },
           ],
         },
       },
-    })).status
-  ).toBe(200);
+    });
+  });
+  expect((yield* settle(providerMessage, claim.correlation)).status).toBe(200);
   yield* owner.exec("SELECT 1 FROM whatsapp_deliveries WHERE state='delivered'").pipe(
     Effect.filterOrFail(
       (rows) => rows.length === 1,
@@ -146,6 +147,63 @@ const signedReminderJourney = Effect.fnUntraced(function* (
         .status
     ).toBe(422);
   }
+  const deliverBudget = Effect.gen(function* () {
+    const current = yield* DateTime.now,
+      offset = 12 - DateTime.getPartUtc(current, "hour");
+    const zone = offset === 0 ? "Etc/UTC" : "Etc/GMT" + (offset > 0 ? "-" : "+") + Math.abs(offset);
+    yield* owner.exec("UPDATE users SET time_zone=?", zone);
+    const post = Effect.fn(function* (path: string, body: object) {
+      return yield* native(() =>
+        runtime.dispatchFetch("https://api.fidyapp.com" + path, {
+          method: "POST",
+          headers: {
+            origin: "https://app.fidyapp.com",
+            cookie: "__Host-fidy_session=" + alice.bearer,
+            "Fidy-Session-Binding": alice.session,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        })
+      );
+    });
+    const cap = { amount: "100", currency: "COP" };
+    expect((yield* post("/budgets", { categoryId: category, cap })).status).toBe(201);
+    expect(
+      (yield* post("/transactions", {
+        money: cap,
+        direction: "outflow",
+        categoryId: category,
+        occurredAt: DateTime.formatIso(current),
+      })).status
+    ).toBe(201);
+    const [message] = yield* owner
+      .exec(
+        "SELECT correlation,operation_id FROM whatsapp_deliveries WHERE family='proactivity' AND started_ms IS NOT NULL"
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (rows) => rows.length === 1,
+          () => "waiting for the Budget delivery"
+        ),
+        Effect.retry({ times: 100, schedule: Schedule.spaced("60 millis") })
+      );
+    if (message === undefined) return yield* Effect.die("Missing claimed Budget delivery");
+    expect((yield* settle("wamid.thresholds", message.correlation)).status).toBe(200);
+    const delivered = yield* owner
+      .exec(
+        "SELECT json_extract(receipt_json,'$.providerMessageId') AS provider FROM insight_events WHERE json_extract(event_json,'$.kind')='budget-threshold' AND receipt_json IS NOT NULL"
+      )
+      .pipe(
+        Effect.repeat({
+          until: (rows) => rows.length === 2,
+          times: 100,
+          schedule: Schedule.spaced("60 millis"),
+        })
+      );
+    expect(delivered).toEqual([{ provider: "wamid.thresholds" }, { provider: "wamid.thresholds" }]);
+    expect(yield* owner.exec("SELECT count(*) n FROM proactive_transcript")).toEqual([{ n: 1 }]);
+  });
+  if (kind === "budget-threshold") yield* deliverBudget;
   expect((yield* say("wamid.revoke", qualified + ":revoke")).status).toBe(200);
   expect(
     yield* owner.exec("SELECT count(*) AS active FROM proactive_grants WHERE revoked_at_ms IS NULL")

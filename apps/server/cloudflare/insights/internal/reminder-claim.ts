@@ -24,7 +24,7 @@ export const claimPurpose = Effect.fn(function* (work: Work, enabled: boolean) {
     sql = yield* SqliteClient;
   const [held] =
     yield* sql`SELECT e.event_json FROM reminder_deliveries d JOIN insight_events e ON e.id=d.id AND e.user_id=d.user_id
-   JOIN proactive_grants g ON g.id=d.grant_id AND g.user_id=d.user_id AND g.kind='manual-entry-reminder' AND g.revoked_at_ms IS NULL
+   JOIN proactive_grants g ON g.id=d.grant_id AND g.user_id=d.user_id AND g.kind=json_extract(e.event_json,'$.kind') AND g.revoked_at_ms IS NULL
    WHERE d.id=${work.operationId} AND d.user_id=${work.userId} AND NOT EXISTS(SELECT 1 FROM reminder_attention a WHERE a.grant_id=d.grant_id AND (a.unanswered=5 OR (a.unanswered=3 AND a.question_delivered_ms IS NULL))) AND d.state='ready' AND d.spend_ready=1 AND d.correlation=${work.correlation} AND d.deadline_ms=${work.deadline} AND d.deadline_ms>${now}
    AND d.portfolio=${work.portfolio} AND d.bsuid=${work.bsuid} AND d.endpoint=${work.endpoint} AND d.digest=${work.contentDigest} AND ${work.sandboxPhone} IS NULL`;
   if (held === undefined || work.deadline === null) return false;
@@ -48,6 +48,34 @@ export const claimPurpose = Effect.fn(function* (work: Work, enabled: boolean) {
   const changed =
     yield* sql`UPDATE reminder_deliveries SET state='claimed' WHERE user_id=${work.userId} AND id=${work.operationId} AND state='ready' RETURNING id`;
   return changed.length === 1;
+});
+const retainReceipts = Effect.fn(function* (
+  user: string,
+  event: InsightEvent,
+  seen: { started_ms: number; provider_message_id: string }
+) {
+  const sql = yield* SqliteClient;
+  const siblings =
+    event.kind === "budget-threshold"
+      ? yield* sql`SELECT c.event_id FROM budget_threshold_crossings c JOIN insight_events e ON e.id=c.event_id AND e.user_id=${user} WHERE c.group_id=${event.id} AND c.event_id<>${event.id} AND e.receipt_json IS NULL`
+      : [];
+  const ids = yield* Schema.decodeUnknownEffect(Schema.Array(InsightEvent.fields.id))([
+    event.id,
+    ...siblings.map((child) => child.event_id),
+  ]);
+  for (const id of ids) {
+    const receipt = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(InsightDeliveryAttempt))
+    )({
+      id: DeliveryAttemptId.make(newId()),
+      insightEventId: id,
+      sentAt: DateTime.makeUnsafe(seen.started_ms),
+      channel: "whatsapp",
+      provider: "kapso",
+      providerMessageId: seen.provider_message_id,
+    });
+    yield* sql`UPDATE insight_events SET receipt_json=${receipt},event_json=CASE WHEN json_extract(event_json,'$.lifecycleState')='pending' THEN json_set(event_json,'$.lifecycleState','delivered') ELSE event_json END WHERE user_id=${user} AND id=${id} AND receipt_json IS NULL`;
+  }
 });
 export const reconcileReceipt = Effect.fn(function* (user: string, id: string) {
   const sql = yield* SqliteClient;
@@ -77,18 +105,7 @@ export const reconcileReceipt = Effect.fn(function* (user: string, id: string) {
       return;
     }
   }
-  const receipt = {
-    id: DeliveryAttemptId.make(newId()),
-    insightEventId: event.id,
-    sentAt: DateTime.makeUnsafe(seen.started_ms),
-    channel: "whatsapp",
-    provider: "kapso",
-    providerMessageId: seen.provider_message_id,
-  };
-  const bytes = yield* Schema.encodeEffect(
-    Schema.fromJsonString(Schema.toCodecJson(InsightDeliveryAttempt))
-  )(receipt);
-  yield* sql`UPDATE insight_events SET receipt_json=${bytes},event_json=CASE WHEN json_extract(event_json,'$.lifecycleState')='pending' THEN json_set(event_json,'$.lifecycleState','delivered') ELSE event_json END WHERE user_id=${user} AND id=${id} AND receipt_json IS NULL`;
+  yield* retainReceipts(user, event, seen);
   const retained = yield* Schema.encodeEffect(
     Schema.fromJsonString(Schema.toCodecJson(ProactiveInsightTranscriptEntry))
   )({

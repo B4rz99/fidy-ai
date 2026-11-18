@@ -1,3 +1,4 @@
+import { BudgetThresholdEvaluation } from "../budgets/contract";
 import { backgroundWorkAllowed } from "../release-isolation/operations";
 import type { AcceptanceWindowBindings } from "../release-isolation/contract";
 import {
@@ -35,7 +36,7 @@ import {
 } from "./internal/erasure-handoff";
 import { requestLocalErasure } from "./internal/erasure-request";
 import { HttpClient } from "effect/http";
-import { Cause, Clock, Context, Effect, Layer, Option, Result } from "effect";
+import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Option, Result } from "effect";
 import { OutboundHttpLive } from "../outbound-http/runtime";
 import {
   type LocalIngestionEnvironment,
@@ -184,7 +185,11 @@ import {
   isLocalReviewOperation,
 } from "../ingestion/operations";
 import { dispatchLocalDashboard, isLocalDashboardOperation } from "../dashboard/operations";
-import { dispatchLocalBudget, isLocalBudgetOperation } from "../budgets/operations";
+import {
+  dispatchLocalBudget,
+  isLocalBudgetOperation,
+  retainLocalBudgetThresholds,
+} from "../budgets/operations";
 import { browserSessionRequest } from "./internal/browser-session";
 import { localChannelRequest, redeemLocalPairing } from "../browser-login/operations";
 import { completeLocalBootstrap } from "./internal/bootstrap";
@@ -198,9 +203,9 @@ import {
 } from "../subscription/operations";
 import { DurableObject } from "cloudflare:workers";
 import {
-  createStoreRuntime,
   observeStoreCheck,
   openSqliteStore,
+  sqliteStoreLayer,
   storeReadiness,
 } from "../runtime/sqlite/operations";
 
@@ -319,11 +324,18 @@ export class UserStore extends DurableObject<UserStoreEnvironment> {
   }
   constructor(state: DurableObjectState, env: UserStoreEnvironment) {
     super(state, env);
-    this.runtime = createStoreRuntime({
-      storage: state.storage,
-      owner: "user",
-      ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
-    });
+    this.runtime = ManagedRuntime.make(
+      Layer.merge(
+        sqliteStoreLayer({
+          storage: state.storage,
+          owner: "user",
+          ceilingBytes: env.SQLITE_STORE_CAPACITY_BYTES,
+        }),
+        Layer.succeed(BudgetThresholdEvaluation, (user, current) =>
+          retainLocalBudgetThresholds(user, current, state.storage)
+        )
+      )
+    );
     state.waitUntil(
       state.blockConcurrencyWhile(() =>
         this.runtime.runPromise(

@@ -1,3 +1,4 @@
+import { BudgetThresholdEvaluation } from "../contract";
 import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
@@ -384,6 +385,7 @@ export const prepareLocalBudget = Effect.fn(function* (
             Option.some(budgetId)
           )).budgets;
           if (saved === undefined) return yield* budgetUnavailable();
+          yield* (yield* BudgetThresholdEvaluation)(user, current);
           return {
             ...budgetSuccess(yield* Schema.encodeEffect(Schema.toCodecJson(Budget))(saved)),
             status: Option.isNone(id) ? createdStatus : updatedStatus,

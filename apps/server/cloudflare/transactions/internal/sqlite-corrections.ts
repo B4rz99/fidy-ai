@@ -1,3 +1,4 @@
+import { BudgetThresholdEvaluation } from "../../budgets/contract";
 import { localCorrectionReview } from "./oauth-review";
 import { CategoryReference } from "../../../src/core/categories/contract";
 import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
@@ -186,6 +187,7 @@ export const prepareLocalCorrection = Effect.fn(function* (
         return yield* unavailable("correction_commit");
       }
       yield* refreshCorrectedProjection(user, id, owned.value);
+      yield* (yield* BudgetThresholdEvaluation)(user, current);
       return success(yield* Schema.encodeEffect(TransactionOutput)(updated));
     }),
   });
@@ -236,6 +238,7 @@ const linkPair = Effect.fn(function* ({ user, current, first, second, left, righ
       WHERE user_id=${user} AND id IN (${first},${second}) AND reconciliation_first_id IS NULL RETURNING id`;
       if (written.length !== 1 || members.length !== 2) return yield* unavailable("link_commit");
       yield* refresh(user, { first, second }, 1);
+      yield* (yield* BudgetThresholdEvaluation)(user, current);
       const [row] =
         yield* sql`SELECT * FROM transaction_effective_source WHERE user_id=${user} AND id=${visible}`;
       const effective = yield* Effect.fromOption(decodeTransactionRow(row), () =>
@@ -271,6 +274,7 @@ const unlinkPair = Effect.fn(function* ({ user, current, first, second, left, ri
     WHERE user_id=${user} AND first_transaction_id=${first} AND second_transaction_id=${second} AND state='linked' RETURNING state`;
       if (written.length !== 1 || members.length !== 2) return yield* unavailable("unlink_commit");
       yield* refresh(user, { first, second }, 2);
+      yield* (yield* BudgetThresholdEvaluation)(user, current);
       return success(
         yield* Schema.encodeEffect(Schema.toCodecJson(RestoredTransactionPair))({
           firstTransaction: { ...left.record, presentation: { kind: "independent" } },
@@ -323,6 +327,7 @@ export const prepareLocalDeletion = Effect.fn(function* (
         yield* sql`UPDATE transactions SET deleted_at_ms=${current} WHERE user_id=${user} AND id=${id} AND revision=${owned.value.record.revision} AND deleted_at_ms IS NULL AND reconciliation_first_id IS NULL RETURNING id`;
       if (changed.length !== 1) return yield* unavailable("transaction_delete");
       yield* refresh(user, { first: id, second: id }, 0);
+      yield* (yield* BudgetThresholdEvaluation)(user, current);
       return success(id);
     }),
   });

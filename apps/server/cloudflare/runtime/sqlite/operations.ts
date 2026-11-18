@@ -343,7 +343,7 @@ export const withStoreCapacity =
     withStoreAdmission((admitGrowth) =>
       admission === "growth" ? Effect.andThen(admitGrowth, work) : work
     );
-export const createStoreRuntime = ({
+export const sqliteStoreLayer = ({
   storage,
   owner,
   ceilingBytes,
@@ -351,13 +351,15 @@ export const createStoreRuntime = ({
   storage: DurableObjectStorage;
   owner: StoreHistory["owner"];
   ceilingBytes: string;
-}>): ManagedRuntime.ManagedRuntime<SqliteClient | Sql.SqlClient | StoreCapacity, never> =>
-  ManagedRuntime.make(
-    Layer.merge(
-      layer({ storage }),
-      Layer.succeed(StoreCapacity, makeCapacity(storage, owner, ceilingBytes))
-    )
+}>): Layer.Layer<SqliteClient | Sql.SqlClient | StoreCapacity> =>
+  Layer.merge(
+    layer({ storage }),
+    Layer.succeed(StoreCapacity, makeCapacity(storage, owner, ceilingBytes))
   );
+export const createStoreRuntime = (
+  input: Parameters<typeof sqliteStoreLayer>[0]
+): ManagedRuntime.ManagedRuntime<SqliteClient | Sql.SqlClient | StoreCapacity, never> =>
+  ManagedRuntime.make(sqliteStoreLayer(input));
 
 export const storeReadiness = Effect.fn(function* ({
   history,

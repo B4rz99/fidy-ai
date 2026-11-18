@@ -1,3 +1,4 @@
+import { publishCategoryMessages } from "./local-category-messages";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { Hex } from "effect/encoding";
@@ -143,7 +144,7 @@ export const repairReminder = Effect.fn(function* (
     },
   });
   const [time] = yield* sql.unsafe(
-    `SELECT min(at) AS at FROM (${schedule.sql} UNION ALL SELECT offer_ms FROM reminder_deliveries WHERE state='ready' UNION ALL SELECT attempt_ms FROM reminder_disclosures WHERE state='ready')`,
+    `SELECT min(at) AS at FROM (${schedule.sql} UNION ALL SELECT offer_ms FROM reminder_deliveries WHERE state='ready' UNION ALL SELECT attempt_ms FROM reminder_disclosures WHERE state='ready' UNION ALL SELECT due_ms FROM budget_alert_groups)`,
     schedule.params
   );
   const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ at: Schema.NullOr(Schema.Int) }))(
@@ -219,6 +220,7 @@ export const processReminder = Effect.fn(function* (input: {
       }).pipe(withStoreCapacity("growth"));
     }
   }
+  yield* publishCategoryMessages(now, input.sender);
   const results = yield* offer(environment, now);
   yield* repairReminder(now, storage, true);
   return results;

@@ -1,3 +1,4 @@
+import { BudgetThresholdEvaluation } from "../../budgets/contract";
 import { commitLocalWrite, prepareLocalWrite } from "../../canonical-admission/operations";
 import { SqliteClient } from "@effect/sql-sqlite-do/SqliteClient";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -88,7 +89,7 @@ const sourceFields = Effect.fnUntraced(function* (
       };
   }
 });
-const captureReadback = Effect.fn(function* (userId: UserId, id: string) {
+const captureReadback = Effect.fn(function* (userId: UserId, id: string, current: number) {
   const sql = yield* SqliteClient;
   const [row] =
     yield* sql`SELECT * FROM transaction_effective_source WHERE user_id=${userId} AND id=${id}`;
@@ -97,6 +98,7 @@ const captureReadback = Effect.fn(function* (userId: UserId, id: string) {
     return yield* new CanonicalAdmissionUnavailable({ cause: "capture_readback" });
   }
   const data = yield* Schema.encodeEffect(TransactionOutput)(decoded.value);
+  yield* (yield* BudgetThresholdEvaluation)(userId, current);
   return { status: 201, outcome: "success" as const, body: { data, next: [] } };
 });
 const captureProvenance = (
@@ -165,7 +167,7 @@ const prepareCapture = Effect.fn(function* (
       if (sources.length !== 1) {
         return yield* new CanonicalAdmissionUnavailable({ cause: "capture_source" });
       }
-      return yield* captureReadback(userId, id);
+      return yield* captureReadback(userId, id, current);
     }),
   });
 });
